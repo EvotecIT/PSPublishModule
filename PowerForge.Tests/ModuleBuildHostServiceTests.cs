@@ -23,6 +23,7 @@ public sealed class ModuleBuildHostServiceTests
 
         Assert.NotNull(captured);
         Assert.Equal(PowerShellInvocationMode.Command, captured!.InvocationMode);
+        Assert.Equal(!FrameworkCompatibility.IsWindows(), captured.PreferPwsh);
         Assert.Equal(@"C:\repo", captured.WorkingDirectory);
         Assert.Contains("JsonOnly = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("JsonPath = $targetJson", captured.CommandText!, StringComparison.Ordinal);
@@ -91,6 +92,78 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('SignModule')", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptArguments['SignModule'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("$buildScriptArguments += '-SignModule'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task ExecuteBuildAsync_ForwardsRunModeAndUnifiedReleaseStage()
+    {
+        PowerShellRunRequest? captured = null;
+        var runner = new StubPowerShellRunner(request => {
+            captured = request;
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        });
+        var service = new ModuleBuildHostService(runner);
+
+        var result = await service.ExecuteBuildAsync(new ModuleBuildHostBuildRequest {
+            RepositoryRoot = @"C:\repo",
+            ScriptPath = @"C:\repo\Build\Build-Module.ps1",
+            ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
+            Framework = "net10.0",
+            RunMode = ConfigurationGateMode.Publish,
+            PowerForgeReleaseStage = true
+        });
+
+        Assert.NotNull(captured);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('Framework')", captured!.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['Framework'] = 'net10.0'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('RunMode')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['RunMode'] = 'Publish'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('PowerForgeReleaseStage')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['PowerForgeReleaseStage'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task ExecuteBuildAsync_ForwardsReleaseScopeOverridesAndTimeout()
+    {
+        PowerShellRunRequest? captured = null;
+        var runner = new StubPowerShellRunner(request => {
+            captured = request;
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        });
+        var service = new ModuleBuildHostService(runner);
+
+        var result = await service.ExecuteBuildAsync(new ModuleBuildHostBuildRequest {
+            RepositoryRoot = @"C:\repo",
+            ScriptPath = @"C:\repo\Build\Build-Module.ps1",
+            ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
+            IncludeProjectPackages = false,
+            Timeout = TimeSpan.FromHours(3),
+            CertificateThumbprint = "ABC123",
+            SignIncludeBinaries = true,
+            SignIncludeInternals = false,
+            SignIncludeExe = true,
+            DiagnosticsBaselinePath = @".powerforge\diagnostics.json",
+            GenerateDiagnosticsBaseline = false,
+            UpdateDiagnosticsBaseline = true,
+            FailOnNewDiagnostics = true,
+            FailOnDiagnosticsSeverity = "Error"
+        });
+
+        Assert.NotNull(captured);
+        Assert.Equal(TimeSpan.FromHours(3), captured!.Timeout);
+        Assert.Equal(!FrameworkCompatibility.IsWindows(), captured.PreferPwsh);
+        Assert.Contains("$buildScriptArguments['IncludeProjectPackages'] = $false", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['CertificateThumbprint'] = 'ABC123'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['SignIncludeBinaries'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['SignIncludeInternals'] = $false", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['SignIncludeExe'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['DiagnosticsBaselinePath'] = '.powerforge\\diagnostics.json'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['GenerateDiagnosticsBaseline'] = $false", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['UpdateDiagnosticsBaseline'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['FailOnNewDiagnostics'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['FailOnDiagnosticsSeverity'] = 'Error'", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(result.Succeeded);
     }
 

@@ -384,7 +384,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                                 BundleId = "com.evotecit.tactra.mac",
                                 ProjectPath = "Tactra.xcodeproj",
                                 Scheme = "TactraMac",
-                                Platform = ApplePlatform.macOS
+                                Platform = ApplePlatform.macOS,
+                                ArchiveVariant = AppleArchiveVariant.MacCatalyst
                             }
                         }
                     }
@@ -412,7 +413,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("8ZPGZ79T7J", phone.TeamId);
 
             var mac = result.AppleAppPlan.Apps[1];
-            Assert.Equal("generic/platform=macOS", mac.Destination);
+            Assert.Equal(AppleArchiveVariant.MacCatalyst, mac.ArchiveVariant);
+            Assert.Equal("generic/platform=macOS,variant=Mac Catalyst", mac.Destination);
             Assert.Equal(Path.Combine(root, "Artifacts", "Apple", "Archives", "macOS", "Tactra-Mac.xcarchive"), mac.ArchivePath);
         }
         finally

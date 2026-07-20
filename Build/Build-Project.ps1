@@ -15,6 +15,10 @@ param(
     [switch] $PublishNuget,
     [switch] $PublishGitHub,
     [switch] $PublishToolGitHub,
+    [ValidateSet('auto', 'net10.0', 'net8.0')]
+    [string] $ModuleFramework,
+    [ValidateSet('Manifest', 'Documentation', 'Build', 'Publish')]
+    [string] $ModuleRunMode,
     [string[]] $Target,
     [string[]] $Runtime,
     [string[]] $Framework,
@@ -28,11 +32,11 @@ if (-not $PSBoundParameters.ContainsKey('ConfigPath') -or [string]::IsNullOrWhit
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $moduleProject = Join-Path $repoRoot 'PSPublishModule\PSPublishModule.csproj'
-$moduleFramework = if ($PSEdition -eq 'Desktop') { 'net472' } else { 'net8.0' }
-$moduleBinary = Join-Path $repoRoot ("PSPublishModule\bin\{0}\{1}\PSPublishModule.dll" -f $Configuration, $moduleFramework)
+$cmdletFramework = if ($PSEdition -eq 'Desktop') { 'net472' } else { 'net8.0' }
+$moduleBinary = Join-Path $repoRoot ("PSPublishModule\bin\{0}\{1}\PSPublishModule.dll" -f $Configuration, $cmdletFramework)
 
-Write-Verbose "Building PSPublishModule cmdlets ($moduleFramework, $Configuration)."
-$buildOutput = & dotnet build $moduleProject -c $Configuration -f $moduleFramework --nologo --verbosity quiet 2>&1
+Write-Verbose "Building PSPublishModule cmdlets ($cmdletFramework, $Configuration)."
+$buildOutput = & dotnet build $moduleProject -c $Configuration -f $cmdletFramework --nologo --verbosity quiet 2>&1
 if ($LASTEXITCODE -ne 0) {
     $buildOutput | Out-Host
     exit $LASTEXITCODE
@@ -60,9 +64,11 @@ if ($PSBoundParameters.ContainsKey('ModuleSignModule')) { $invokeParams.ModuleSi
 if ($PackagesOnly) { $invokeParams.PackagesOnly = $true }
 if ($ModuleOnly) { $invokeParams.ModuleOnly = $true }
 if ($ToolsOnly) { $invokeParams.ToolsOnly = $true }
-if ($PublishNuget) { $invokeParams.PublishNuget = $true }
-if ($PublishGitHub) { $invokeParams.PublishProjectGitHub = $true }
-if ($PublishToolGitHub) { $invokeParams.PublishToolGitHub = $true }
+if ($PSBoundParameters.ContainsKey('PublishNuget')) { $invokeParams.PublishNuget = $PublishNuget.IsPresent }
+if ($PSBoundParameters.ContainsKey('PublishGitHub')) { $invokeParams.PublishProjectGitHub = $PublishGitHub.IsPresent }
+if ($PSBoundParameters.ContainsKey('PublishToolGitHub')) { $invokeParams.PublishToolGitHub = $PublishToolGitHub.IsPresent }
+if ($PSBoundParameters.ContainsKey('ModuleFramework')) { $invokeParams.ModuleFramework = $ModuleFramework }
+if ($PSBoundParameters.ContainsKey('ModuleRunMode')) { $invokeParams.ModuleRunMode = $ModuleRunMode }
 if ($Target) { $invokeParams.Target = $Target }
 if ($Runtime) { $invokeParams.Runtimes = $Runtime }
 if ($Framework) { $invokeParams.Frameworks = $Framework }

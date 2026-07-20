@@ -249,6 +249,12 @@ internal sealed partial class PowerForgeReleaseService
             runModule = false;
             runPackages = false;
         }
+        else if (runModule &&
+                 spec.Module!.IncludesPackages &&
+                 (!request.PlanOnly && !request.ValidateOnly || request.ModuleOnly))
+        {
+            runPackages = false;
+        }
 
         var willRunTools = runTools && ShouldRunSectionForTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
         var willRunAppleApps = runAppleApps && ShouldRunSectionForTargets(selectedTargets, appleTargetMatches, runTools, toolTargetMatches);
@@ -297,7 +303,16 @@ internal sealed partial class PowerForgeReleaseService
 
         if (runModule)
         {
-            var module = PrepareModuleRelease(spec.Module!, configPath, request, configurationOverride);
+            var packagePublishingRequested =
+                !request.ModuleOnly &&
+                ((request.PublishNuget ?? spec.Packages?.PublishNuget) == true ||
+                 (request.PublishProjectGitHub ?? spec.Packages?.PublishGitHub) == true);
+            var module = PrepareModuleRelease(
+                spec.Module!,
+                configPath,
+                request,
+                configurationOverride,
+                packagePublishingRequested);
             result.ModulePlan = module.Plan;
             result.ModuleAssets = module.ArtifactPaths;
 
@@ -708,7 +723,8 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeModuleReleaseOptions options,
         string releaseConfigPath,
         PowerForgeReleaseRequest request,
-        string? configurationOverride)
+        string? configurationOverride,
+        bool packagePublishingRequested)
     {
         var configDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
         var repositoryRoot = Path.GetFullPath(Path.IsPathRooted(options.RepositoryRoot)
@@ -733,6 +749,10 @@ internal sealed partial class PowerForgeReleaseService
                 : Path.Combine(repositoryRoot, path)))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var timeoutSeconds = request.ModuleTimeoutSeconds ?? options.TimeoutSeconds;
+        if (timeoutSeconds <= 0)
+            throw new InvalidOperationException("Module TimeoutSeconds must be greater than zero.");
+        var includeProjectPackages = options.IncludesPackages && !request.ModuleOnly;
 
         var buildRequest = new ModuleBuildHostBuildRequest
         {
@@ -740,11 +760,25 @@ internal sealed partial class PowerForgeReleaseService
             ScriptPath = scriptPath,
             ModulePath = modulePath,
             Configuration = configurationOverride,
+            Framework = request.ModuleFramework ?? options.Framework,
+            RunMode = ResolveModuleRunMode(options, request, packagePublishingRequested),
+            PowerForgeReleaseStage = true,
             NoDotnetBuild = request.ModuleNoDotnetBuild ?? options.NoDotnetBuild ?? false,
             ModuleVersion = request.ModuleVersion ?? options.ModuleVersion,
             PreReleaseTag = request.ModulePreReleaseTag ?? options.PreReleaseTag,
             NoSign = request.ModuleNoSign ?? options.NoSign ?? false,
-            SignModule = request.ModuleSignModule ?? options.SignModule ?? false
+            SignModule = request.ModuleSignModule ?? options.SignModule ?? false,
+            IncludeProjectPackages = includeProjectPackages,
+            Timeout = TimeSpan.FromSeconds(timeoutSeconds),
+            CertificateThumbprint = request.ModuleCertificateThumbprint,
+            SignIncludeBinaries = request.ModuleSignIncludeBinaries,
+            SignIncludeInternals = request.ModuleSignIncludeInternals,
+            SignIncludeExe = request.ModuleSignIncludeExe,
+            DiagnosticsBaselinePath = request.ModuleDiagnosticsBaselinePath,
+            GenerateDiagnosticsBaseline = request.ModuleGenerateDiagnosticsBaseline,
+            UpdateDiagnosticsBaseline = request.ModuleUpdateDiagnosticsBaseline,
+            FailOnNewDiagnostics = request.ModuleFailOnNewDiagnostics,
+            FailOnDiagnosticsSeverity = request.ModuleFailOnDiagnosticsSeverity
         };
 
         var plan = new PowerForgeModuleReleasePlanSummary
@@ -753,6 +787,11 @@ internal sealed partial class PowerForgeReleaseService
             ScriptPath = scriptPath,
             ModulePath = modulePath,
             Configuration = buildRequest.Configuration,
+            Framework = buildRequest.Framework,
+            RunMode = buildRequest.RunMode ?? ConfigurationGateMode.Build,
+            IncludesPackages = options.IncludesPackages,
+            IncludesProjectPackages = includeProjectPackages,
+            TimeoutSeconds = timeoutSeconds,
             NoDotnetBuild = buildRequest.NoDotnetBuild,
             ModuleVersion = buildRequest.ModuleVersion,
             PreReleaseTag = buildRequest.PreReleaseTag,
@@ -762,6 +801,19 @@ internal sealed partial class PowerForgeReleaseService
         };
 
         return (buildRequest, plan, artifactPaths);
+    }
+
+    private static ConfigurationGateMode ResolveModuleRunMode(
+        PowerForgeModuleReleaseOptions options,
+        PowerForgeReleaseRequest request,
+        bool packagePublishingRequested)
+    {
+        if (request.ModuleRunMode.HasValue)
+            return request.ModuleRunMode.Value;
+
+        return options.IncludesPackages && packagePublishingRequested
+            ? ConfigurationGateMode.Publish
+            : ConfigurationGateMode.Build;
     }
 
     private static PowerForgeAppleReleasePlan PrepareAppleRelease(
@@ -1025,7 +1077,8 @@ internal sealed partial class PowerForgeReleaseService
         if (string.IsNullOrWhiteSpace(safeName))
             safeName = "AppleApp";
         var platform = app.Platform;
-        var destination = AppleAppArchiveService.GetGenericDestination(platform);
+        var archiveVariant = app.ArchiveVariant;
+        var destination = AppleAppArchiveService.GetGenericDestination(platform, archiveVariant);
         var archivePath = Path.Combine(archiveRoot, platform.ToString(), $"{safeName}.xcarchive");
         var exportPath = Path.Combine(exportRoot, platform.ToString(), safeName);
         var versionUpdateRequested = !allowMissingProject &&
@@ -1053,6 +1106,7 @@ internal sealed partial class PowerForgeReleaseService
             Name = name,
             BundleId = app.BundleId,
             Platform = platform,
+            ArchiveVariant = archiveVariant,
             AppStoreConnectAppId = string.IsNullOrWhiteSpace(app.AppStoreConnectAppId) ? null : app.AppStoreConnectAppId!.Trim(),
             ProjectPath = projectPath,
             IsWorkspace = isWorkspace,
@@ -1262,6 +1316,7 @@ internal sealed partial class PowerForgeReleaseService
                     Scheme = app.Scheme,
                     Configuration = app.Configuration,
                     Platform = app.Platform,
+                    ArchiveVariant = app.ArchiveVariant,
                     Destination = app.Destination,
                     ArchivePath = app.ArchivePath,
                     XcodeBuildExecutable = plan.XcodeBuildExecutable,
@@ -3726,6 +3781,7 @@ internal sealed partial class PowerForgeReleaseService
                     app.Name,
                     app.BundleId,
                     Platform = app.Platform.ToString(),
+                    ArchiveVariant = app.ArchiveVariant.ToString(),
                     app.AppStoreConnectAppId,
                     app.ProjectPath,
                     app.IsWorkspace,

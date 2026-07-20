@@ -5,9 +5,23 @@ param(
     [string] $RunMode = 'Build',
     [ValidateSet('auto', 'net10.0', 'net8.0')][string] $Framework = 'auto',
     [ValidateSet('Release', 'Debug')][string] $Configuration = 'Release',
-    [switch] $NoBuild,
+    [Alias('NoDotnetBuild')][switch] $NoBuild,
     [Alias('JsonOnly')][switch] $Json,
-    [string] $JsonPath
+    [string] $JsonPath,
+    [switch] $NoSign,
+    [switch] $SignModule,
+    [string] $ModuleVersion,
+    [string] $PreReleaseTag,
+    [string] $CertificateThumbprint = '92e95fb58effa6a4a75e77a33cdd6bfe6dd30f1a',
+    [switch] $SignIncludeBinaries,
+    [switch] $SignIncludeInternals,
+    [switch] $SignIncludeExe,
+    [string] $DiagnosticsBaselinePath,
+    [switch] $GenerateDiagnosticsBaseline,
+    [switch] $UpdateDiagnosticsBaseline,
+    [switch] $FailOnNewDiagnostics,
+    [ValidateSet('Warning', 'Error')]
+    [string] $FailOnDiagnosticsSeverity
 )
 
 $script = Join-Path $PSScriptRoot '..\Module\Build\Build-ModuleSelf.ps1'
@@ -26,6 +40,25 @@ $invoke = @{
 }
 if ($NoBuild) { $invoke.NoBuild = $true }
 if ($Json) { $invoke.Json = $true }
+foreach ($parameterName in @(
+        'NoSign',
+        'SignModule',
+        'ModuleVersion',
+        'PreReleaseTag',
+        'CertificateThumbprint',
+        'SignIncludeBinaries',
+        'SignIncludeInternals',
+        'SignIncludeExe',
+        'DiagnosticsBaselinePath',
+        'GenerateDiagnosticsBaseline',
+        'UpdateDiagnosticsBaseline',
+        'FailOnNewDiagnostics',
+        'FailOnDiagnosticsSeverity'
+    )) {
+    if ($PSBoundParameters.ContainsKey($parameterName)) {
+        $invoke[$parameterName] = $PSBoundParameters[$parameterName]
+    }
+}
 
 & $script @invoke
 if ($LASTEXITCODE -ne 0) {

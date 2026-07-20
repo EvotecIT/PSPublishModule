@@ -8,7 +8,9 @@
       "Module/Artefacts/Packed",
       "Module/Artefacts/PackedWithModules",
       "Module/Artefacts/Unpacked"
-    ]
+    ],
+    "IncludesPackages": true,
+    "TimeoutSeconds": 7200
   },
   "Packages": {
     "RootPath": "..",

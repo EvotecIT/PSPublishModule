@@ -202,6 +202,9 @@ public sealed class AppleAppConfiguration
     /// <summary>Apple platform for this app target.</summary>
     public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
 
+    /// <summary>Optional archive destination variant, such as Mac Catalyst.</summary>
+    public AppleArchiveVariant ArchiveVariant { get; set; } = AppleArchiveVariant.Default;
+
     /// <summary>Path to a .xcodeproj directory or project.pbxproj file. Relative paths resolve from the pipeline project root.</summary>
     public string ProjectPath { get; set; } = string.Empty;
 

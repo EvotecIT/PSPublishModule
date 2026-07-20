@@ -16,6 +16,10 @@
     [switch] $PublishNuget,
     [switch] $PublishGitHub,
     [switch] $PublishToolGitHub,
+    [ValidateSet('auto', 'net10.0', 'net8.0')]
+    [string] $ModuleFramework,
+    [ValidateSet('Manifest', 'Documentation', 'Build', 'Publish')]
+    [string] $ModuleRunMode,
     [string[]] $Target,
     [string[]] $Runtime,
     [string[]] $Framework,
@@ -79,9 +83,15 @@ if ($PSBoundParameters.ContainsKey('SignModule')) { $releaseParams.ModuleSignMod
 if ($PackagesOnly) { $releaseParams.PackagesOnly = $true }
 if ($ModuleOnly) { $releaseParams.ModuleOnly = $true }
 if ($ToolsOnly) { $releaseParams.ToolsOnly = $true }
-if ($PublishNuget) { $releaseParams.PublishNuget = $true }
-if ($PublishGitHub) { $releaseParams.PublishGitHub = $true }
-if ($PublishToolGitHub) { $releaseParams.PublishToolGitHub = $true }
+if ($PSBoundParameters.ContainsKey('PublishNuget')) { $releaseParams.PublishNuget = $PublishNuget.IsPresent }
+if ($PSBoundParameters.ContainsKey('PublishGitHub')) { $releaseParams.PublishGitHub = $PublishGitHub.IsPresent }
+if ($PSBoundParameters.ContainsKey('PublishToolGitHub')) { $releaseParams.PublishToolGitHub = $PublishToolGitHub.IsPresent }
+if ($PSBoundParameters.ContainsKey('ModuleFramework')) { $releaseParams.ModuleFramework = $ModuleFramework }
+if ($PSBoundParameters.ContainsKey('ModuleRunMode')) {
+    $releaseParams.ModuleRunMode = $ModuleRunMode
+} elseif ($PublishNuget -or $PublishGitHub) {
+    $releaseParams.ModuleRunMode = 'Publish'
+}
 if ($Target) { $releaseParams.Target = $Target }
 if ($Runtime) { $releaseParams.Runtime = $Runtime }
 if ($Framework) { $releaseParams.Framework = $Framework }

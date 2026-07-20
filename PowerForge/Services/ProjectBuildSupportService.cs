@@ -36,7 +36,19 @@ internal sealed class ProjectBuildSupportService
             AllowTrailingCommas = true
         };
 
-        var config = JsonSerializer.Deserialize<ProjectBuildConfiguration>(json, options);
+        using var document = JsonDocument.Parse(json, new JsonDocumentOptions
+        {
+            CommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true
+        });
+        var packages = document.RootElement.ValueKind == JsonValueKind.Object
+            ? document.RootElement.EnumerateObject()
+                .FirstOrDefault(static property => property.Name.Equals("Packages", StringComparison.OrdinalIgnoreCase))
+                .Value
+            : default;
+        var configurationJson = packages.ValueKind == JsonValueKind.Object ? packages.GetRawText() : json;
+
+        var config = JsonSerializer.Deserialize<ProjectBuildConfiguration>(configurationJson, options);
         if (config is null)
             throw new InvalidOperationException("Config file could not be parsed.");
         return config;

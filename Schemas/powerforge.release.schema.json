@@ -13,11 +13,24 @@
         "RepositoryRoot": { "type": [ "string", "null" ] },
         "ScriptPath": { "type": [ "string", "null" ] },
         "ModulePath": { "type": [ "string", "null" ] },
+        "IncludesPackages": {
+          "type": "boolean",
+          "description": "When true, the module pipeline owns the configured Packages lane and the outer release skips running that lane a second time."
+        },
+        "Framework": {
+          "type": [ "string", "null" ],
+          "enum": [ "auto", "net10.0", "net8.0", null ]
+        },
         "NoDotnetBuild": { "type": [ "boolean", "null" ] },
         "ModuleVersion": { "type": [ "string", "null" ] },
         "PreReleaseTag": { "type": [ "string", "null" ] },
         "NoSign": { "type": [ "boolean", "null" ] },
         "SignModule": { "type": [ "boolean", "null" ] },
+        "TimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum runtime for the out-of-process module build/publish lane. Defaults to 7200 seconds."
+        },
         "ArtifactPaths": {
           "type": "array",
           "items": { "type": "string" }

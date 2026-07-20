@@ -95,4 +95,52 @@ public sealed class PowerForgeReleaseRequestMapperTests
         Assert.Equal(15, request.ApplePollIntervalSeconds);
         Assert.True(request.AppleSummaryOnly);
     }
+
+    [Fact]
+    public void Build_MapsModuleRunMode()
+    {
+        var request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
+            "/repo/powerforge.release.json",
+            defaults: null,
+            new PSPublishModule.PowerForgeReleaseInvocationOptions
+            {
+                ModuleFramework = "net10.0",
+                ModuleRunMode = ConfigurationGateMode.Publish
+            });
+
+        Assert.Equal("net10.0", request.ModuleFramework);
+        Assert.Equal(ConfigurationGateMode.Publish, request.ModuleRunMode);
+    }
+
+    [Fact]
+    public void Build_MapsModuleReleaseOverrides()
+    {
+        var request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
+            "/repo/powerforge.release.json",
+            defaults: null,
+            new PSPublishModule.PowerForgeReleaseInvocationOptions
+            {
+                ModuleTimeoutSeconds = 10800,
+                ModuleCertificateThumbprint = "ABC123",
+                ModuleSignIncludeBinaries = true,
+                ModuleSignIncludeInternals = false,
+                ModuleSignIncludeExe = true,
+                ModuleDiagnosticsBaselinePath = ".powerforge/diagnostics.json",
+                ModuleGenerateDiagnosticsBaseline = false,
+                ModuleUpdateDiagnosticsBaseline = true,
+                ModuleFailOnNewDiagnostics = true,
+                ModuleFailOnDiagnosticsSeverity = "Error"
+            });
+
+        Assert.Equal(10800, request.ModuleTimeoutSeconds);
+        Assert.Equal("ABC123", request.ModuleCertificateThumbprint);
+        Assert.True(request.ModuleSignIncludeBinaries);
+        Assert.False(request.ModuleSignIncludeInternals);
+        Assert.True(request.ModuleSignIncludeExe);
+        Assert.Equal(".powerforge/diagnostics.json", request.ModuleDiagnosticsBaselinePath);
+        Assert.False(request.ModuleGenerateDiagnosticsBaseline);
+        Assert.True(request.ModuleUpdateDiagnosticsBaseline);
+        Assert.True(request.ModuleFailOnNewDiagnostics);
+        Assert.Equal("Error", request.ModuleFailOnDiagnosticsSeverity);
+    }
 }

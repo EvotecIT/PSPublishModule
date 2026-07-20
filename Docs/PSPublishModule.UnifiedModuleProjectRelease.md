@@ -48,6 +48,13 @@ Internally, `Build-Module {}` keeps using the module pipeline and carries packag
 segments in the same runtime. This keeps the user-facing DSL in one place without turning the module script into
 a second package engine.
 
+Repositories that also ship native CLI archives can keep those targets in the broader
+`Invoke-PowerForgeRelease` configuration. Their publish wrapper should select the module `Publish` gate and the
+tool GitHub publisher in the same engine invocation. The module pipeline still owns NuGet, PowerShell Gallery,
+and the coordinated module GitHub asset set; the tool lane owns runtime-specific Windows, Linux, and macOS
+archives. This is one operator command with one release owner, even when independent product version lines require
+separate GitHub tags.
+
 ## Recommended Build-Module Shape
 
 The Build-Module-first workflow supports both JSON-backed and PowerShell-authored package configuration.

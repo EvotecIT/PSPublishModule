@@ -80,6 +80,9 @@ Publish-AppleAppArchive `
 `New-AppleAppArchive` derives the generic destination from `-Platform` unless
 `-Destination` is supplied. `iPadOS` intentionally maps to `generic/platform=iOS`
 because Xcode archives universal iOS/iPadOS apps through the iOS destination.
+For a Catalyst archive, use `-Platform macOS -ArchiveVariant MacCatalyst`;
+PowerForge emits `generic/platform=macOS,variant=Mac Catalyst` while preserving
+the macOS App Store Connect platform.
 
 `Publish-AppleAppArchive` writes a temporary export options plist and passes it to
 `xcodebuild -exportArchive` using:
@@ -161,12 +164,13 @@ submitting a version.
         "Scheme": "Product"
       },
       {
-        "Name": "Example Mac",
+        "Name": "Example Mac Catalyst",
         "BundleId": "com.example.product",
         "AppStoreConnectAppId": "1234567890",
         "Platform": "macOS",
+        "ArchiveVariant": "MacCatalyst",
         "ProjectPath": "Product.xcodeproj",
-        "Scheme": "ProductMac"
+        "Scheme": "Product"
       }
     ]
   }

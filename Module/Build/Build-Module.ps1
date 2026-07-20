@@ -21,6 +21,8 @@
     [Alias('ConfigurationGateMode')]
     [ValidateSet('Manifest', 'Documentation', 'Build', 'Publish')]
     [string] $RunMode = 'Build',
+    [switch] $PowerForgeReleaseStage,
+    [bool] $IncludeProjectPackages = $true,
     [string] $DiagnosticsBaselinePath,
     [switch] $GenerateDiagnosticsBaseline,
     [switch] $UpdateDiagnosticsBaseline,
@@ -28,6 +30,42 @@
     [ValidateSet('Warning', 'Error')]
     [string] $FailOnDiagnosticsSeverity
 )
+
+if ($RunMode -eq 'Publish' -and -not $JsonOnly -and -not $PowerForgeReleaseStage) {
+    $releaseEntryPoint = Join-Path $PSScriptRoot '../../Build/Build-Module.ps1'
+    if (-not (Test-Path -LiteralPath $releaseEntryPoint)) {
+        throw "Unified release entry point not found: $releaseEntryPoint"
+    }
+
+    $releaseArguments = @{
+        RunMode       = 'Publish'
+        Framework     = $Framework
+        Configuration = $Configuration
+    }
+    if ($NoDotnetBuild) { $releaseArguments.NoBuild = $true }
+    foreach ($parameterName in @(
+            'ModuleVersion',
+            'PreReleaseTag',
+            'SignModule',
+            'NoSign',
+            'CertificateThumbprint',
+            'SignIncludeBinaries',
+            'SignIncludeInternals',
+            'SignIncludeExe',
+            'DiagnosticsBaselinePath',
+            'GenerateDiagnosticsBaseline',
+            'UpdateDiagnosticsBaseline',
+            'FailOnNewDiagnostics',
+            'FailOnDiagnosticsSeverity'
+        )) {
+        if ($PSBoundParameters.ContainsKey($parameterName)) {
+            $releaseArguments[$parameterName] = $PSBoundParameters[$parameterName]
+        }
+    }
+
+    & $releaseEntryPoint @releaseArguments
+    exit $LASTEXITCODE
+}
 
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $moduleRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -220,6 +258,15 @@ Invoke-ModuleBuild @buildParams -Settings {
     } -CopyFilesRelative -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>-FullPackage.zip"
 
     New-ConfigurationArtefact -Type Packed -Enable -Path (Join-Path $artefactsRoot 'Packed') -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
+
+    if ($RunMode -in @('Build', 'Publish')) {
+        if ($IncludeProjectPackages) {
+            New-ConfigurationProjectBuild -Name 'PowerForge' -ConfigPath '../Build/release.json' -BuildBeforeModule -PublishNuget
+            New-ConfigurationRelease -StageRoot 'Module/Artefacts/UploadReady' -VersionSource Module -BuildOrder 'Packages', 'Module' -PublishOrder 'NuGet', 'PowerShellGallery', 'GitHub'
+        } else {
+            New-ConfigurationRelease -StageRoot 'Module/Artefacts/UploadReady' -VersionSource Module -BuildOrder 'Module' -PublishOrder 'PowerShellGallery', 'GitHub'
+        }
+    }
 
     #New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Utility', 'ActiveDirectory' -IgnoreFunctionName 'Get-ADUser'
     # Disabled because PSPublishModule testing itself after build causes multiple module instances

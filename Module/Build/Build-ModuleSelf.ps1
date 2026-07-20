@@ -93,14 +93,79 @@ if (-not $NoBuild) {
     }
 }
 
-$cliDir = Join-Path -Path $repoRoot -ChildPath ("PowerForge.Cli\\bin\\{0}\\{1}" -f $Configuration, $Framework)
-$cliExe = Join-Path -Path $cliDir -ChildPath 'PowerForge.Cli.exe'
-$cliDll = Join-Path -Path $cliDir -ChildPath 'PowerForge.Cli.dll'
-
-$configPath = $null
 $buildScript = Join-Path -Path $repoRoot -ChildPath 'Module\Build\Build-Module.ps1'
 if (-not (Test-Path -LiteralPath $buildScript)) { throw "Build-Module.ps1 not found: $buildScript" }
+
+$cliDir = Join-Path -Path $repoRoot -ChildPath ("PowerForge.Cli\\bin\\{0}\\{1}" -f $Configuration, $Framework)
+$cliSourceDll = Join-Path -Path $cliDir -ChildPath 'PowerForge.Cli.dll'
+
+if (-not (Test-Path -LiteralPath $cliSourceDll)) {
+    throw "CLI build output not found: $cliSourceDll"
+}
+
+# The coordinated build can rebuild/package PowerForge.Cli itself. Run the coordinator
+# from a temporary copy so Windows does not lock the source output that it must replace.
+$cliHostDir = Join-Path -Path ([IO.Path]::GetTempPath()) -ChildPath ("PowerForge.Cli.self-build.{0}" -f [Guid]::NewGuid().ToString('N'))
 try {
+    New-Item -ItemType Directory -Path $cliHostDir -Force | Out-Null
+    $oldProgressPreference = $ProgressPreference
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        Copy-Item -Path (Join-Path $cliDir '*') -Destination $cliHostDir -Recurse -Force
+    } finally {
+        $ProgressPreference = $oldProgressPreference
+    }
+} catch {
+    if (Test-Path -LiteralPath $cliHostDir) {
+        Remove-Item -LiteralPath $cliHostDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    throw
+}
+$cliExe = Join-Path -Path $cliHostDir -ChildPath 'PowerForge.Cli.exe'
+$cliDll = Join-Path -Path $cliHostDir -ChildPath 'PowerForge.Cli.dll'
+
+$configPath = $null
+try {
+    if ($RunMode -eq 'Publish') {
+        $releaseConfig = Join-Path -Path $repoRoot -ChildPath 'Build/release.json'
+        if (-not (Test-Path -LiteralPath $releaseConfig)) {
+            throw "Unified release configuration not found: $releaseConfig"
+        }
+
+        $cmd = @(
+            'release',
+            '--config', $releaseConfig,
+            '--configuration', $Configuration,
+            '--module-framework', $Framework,
+            '--module-run-mode', 'Publish',
+            '--module-no-dotnet-build',
+            '--publish-tool-github'
+        )
+        if ($PSBoundParameters.ContainsKey('ModuleVersion')) { $cmd += @('--module-version', $ModuleVersion) }
+        if ($PSBoundParameters.ContainsKey('PreReleaseTag')) { $cmd += @('--module-prerelease-tag', $PreReleaseTag) }
+        if ($NoSign) { $cmd += '--module-no-sign' }
+        if ($SignModule) { $cmd += '--module-sign' }
+        if ($PSBoundParameters.ContainsKey('CertificateThumbprint')) { $cmd += @('--module-certificate-thumbprint', $CertificateThumbprint) }
+        if ($PSBoundParameters.ContainsKey('SignIncludeBinaries')) { $cmd += $(if ($SignIncludeBinaries) { '--module-sign-include-binaries' } else { '--module-no-sign-include-binaries' }) }
+        if ($PSBoundParameters.ContainsKey('SignIncludeInternals')) { $cmd += $(if ($SignIncludeInternals) { '--module-sign-include-internals' } else { '--module-no-sign-include-internals' }) }
+        if ($PSBoundParameters.ContainsKey('SignIncludeExe')) { $cmd += $(if ($SignIncludeExe) { '--module-sign-include-exe' } else { '--module-no-sign-include-exe' }) }
+        if ($PSBoundParameters.ContainsKey('DiagnosticsBaselinePath')) { $cmd += @('--module-diagnostics-baseline', $DiagnosticsBaselinePath) }
+        if ($PSBoundParameters.ContainsKey('GenerateDiagnosticsBaseline')) { $cmd += $(if ($GenerateDiagnosticsBaseline) { '--module-diagnostics-baseline-generate' } else { '--module-no-diagnostics-baseline-generate' }) }
+        if ($PSBoundParameters.ContainsKey('UpdateDiagnosticsBaseline')) { $cmd += $(if ($UpdateDiagnosticsBaseline) { '--module-diagnostics-baseline-update' } else { '--module-no-diagnostics-baseline-update' }) }
+        if ($PSBoundParameters.ContainsKey('FailOnNewDiagnostics')) { $cmd += $(if ($FailOnNewDiagnostics) { '--module-fail-on-new-diagnostics' } else { '--module-no-fail-on-new-diagnostics' }) }
+        if ($PSBoundParameters.ContainsKey('FailOnDiagnosticsSeverity')) { $cmd += @('--module-fail-on-diagnostics-severity', $FailOnDiagnosticsSeverity) }
+        if ($Json) { $cmd += @('--output', 'json') }
+
+        if ([IO.Path]::DirectorySeparatorChar -eq '\' -and (Test-Path -LiteralPath $cliExe)) {
+            & $cliExe @cmd
+            exit $LASTEXITCODE
+        }
+
+        if (-not (Test-Path -LiteralPath $cliDll)) { throw "CLI build output not found: $cliDll" }
+        dotnet $cliDll @cmd
+        exit $LASTEXITCODE
+    }
+
     # Keep the generated config in the repo root so relative paths (e.g. "Module") resolve correctly.
     $configPath = Join-Path -Path $repoRoot -ChildPath ("powerforge.pipeline.self.{0}.json" -f [Guid]::NewGuid().ToString('N'))
     $buildArgs = @{
@@ -152,6 +217,9 @@ try {
 } finally {
     if ($configPath -and (Test-Path -LiteralPath $configPath)) {
         try { Remove-Item -LiteralPath $configPath -Force -ErrorAction SilentlyContinue } catch { }
+    }
+    if ($cliHostDir -and (Test-Path -LiteralPath $cliHostDir)) {
+        try { Remove-Item -LiteralPath $cliHostDir -Recurse -Force -ErrorAction SilentlyContinue } catch { }
     }
 
     # Restore console settings (best-effort).
