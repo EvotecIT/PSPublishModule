@@ -195,9 +195,19 @@
           "HtmlTinkerX": "[2.2.0, )",
           "Magick.NET-Q8-AnyCPU": "[14.14.0, )",
           "OfficeIMO.Markdown": "[0.6.13, )",
-          "PowerForge": "[1.0.5, )",
+          "PowerForge": "[1.0.6, )",
           "Scriban": "[7.2.5, )",
           "YamlDotNet": "[15.1.2, )"
+        }
+      }
+    },
+    "net10.0/win-x64": {
+      "Magick.NET-Q8-AnyCPU": {
+        "type": "Transitive",
+        "resolved": "14.14.0",
+        "contentHash": "Af7QdAb1AfLN09gpr4lzrTjioDez1hW1IQN3Tb0qJWi8NY3ywTJyteoH/8P/mripXq4D5Khz0uWBEX5O59i5Zw==",
+        "dependencies": {
+          "Magick.NET.Core": "14.14.0"
         }
       }
     }

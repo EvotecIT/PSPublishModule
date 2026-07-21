@@ -633,7 +633,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.1, )",
-          "PowerForge": "[1.0.5, )",
+          "PowerForge": "[1.0.6, )",
           "System.Security.Cryptography.Xml": "[10.0.10, )"
         }
       }
@@ -1598,7 +1598,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.1, )",
-          "PowerForge": "[1.0.5, )",
+          "PowerForge": "[1.0.6, )",
           "System.Security.Cryptography.Xml": "[10.0.10, )"
         }
       }

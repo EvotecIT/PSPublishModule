@@ -7,7 +7,7 @@
     <LangVersion>latest</LangVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>CS1591</WarningsAsErrors>
-    <VersionPrefix>1.0.5</VersionPrefix>
+    <VersionPrefix>1.0.6</VersionPrefix>
     <PackageId>PowerForge</PackageId>
     <Description>PowerForge core library: reusable engine for building, formatting, packaging and publishing PowerShell modules.</Description>
     <AssemblyName>PowerForge</AssemblyName>

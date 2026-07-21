@@ -147,6 +147,7 @@
         "contentHash": "yQgmjfFximrNm9LIV3mL6T5MzjeC+epeE5rl4hXxAlYmxby7RM1dPSkIKXk9HNkl6G54h2JHOmLD46+Pey+IRg=="
       }
     },
+    ".NETFramework,Version=v4.7.2/win-x64": {},
     "net10.0": {
       "NuGet.Configuration": {
         "type": "Direct",
@@ -190,6 +191,7 @@
         "contentHash": "rJ7QtKN45XzLXCrMATve6eFLiUyUGEkA1rFSb6U6Fw6laM4hEAcKOrcdbgWlcFUlCK2158qP1LF00hg/ivF3nw=="
       }
     },
+    "net10.0/win-x64": {},
     "net8.0": {
       "NuGet.Configuration": {
         "type": "Direct",
@@ -232,6 +234,7 @@
         "resolved": "7.6.0",
         "contentHash": "rJ7QtKN45XzLXCrMATve6eFLiUyUGEkA1rFSb6U6Fw6laM4hEAcKOrcdbgWlcFUlCK2158qP1LF00hg/ivF3nw=="
       }
-    }
+    },
+    "net8.0/win-x64": {}
   }
 }
