@@ -10,6 +10,9 @@ namespace PowerForge;
 /// </summary>
 internal sealed class PowerForgeToolReleaseService
 {
+    // ZIP stores the Unix file type and mode in the upper 16 bits: regular file + 0755.
+    private const int UnixExecutableExternalAttributes = unchecked((int)0x81ED0000u);
+
     private readonly ILogger _logger;
     private readonly Func<ProcessStartInfo, ProcessExecutionResult> _runProcess;
 
@@ -282,6 +285,14 @@ internal sealed class PowerForgeToolReleaseService
                 if (File.Exists(combination.ZipPath!))
                     File.Delete(combination.ZipPath!);
                 ZipFile.CreateFromDirectory(combination.OutputPath, combination.ZipPath!);
+                ApplyArchiveExecutablePermissions(
+                    combination.Runtime,
+                    combination.OutputPath,
+                    combination.ZipPath!,
+                    finalExecutablePath,
+                    string.Equals(aliasPath, finalExecutablePath, StringComparison.OrdinalIgnoreCase)
+                        ? null
+                        : aliasPath);
                 zipPath = combination.ZipPath;
             }
 
@@ -315,6 +326,30 @@ internal sealed class PowerForgeToolReleaseService
                     // best effort
                 }
             }
+        }
+    }
+
+    internal static void ApplyArchiveExecutablePermissions(
+        string runtime,
+        string outputRoot,
+        string archivePath,
+        params string?[] executablePaths)
+    {
+        if (runtime.StartsWith("win-", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var entryNames = executablePaths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => FrameworkCompatibility.GetRelativePath(outputRoot, path!).Replace('\\', '/'))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        using var archive = ZipFile.Open(archivePath, ZipArchiveMode.Update);
+        foreach (var entryName in entryNames)
+        {
+            var entry = archive.GetEntry(entryName)
+                ?? throw new InvalidOperationException($"Executable '{entryName}' was not found in archive '{archivePath}'.");
+            entry.ExternalAttributes = UnixExecutableExternalAttributes;
         }
     }
 
