@@ -433,7 +433,8 @@ Header/footer fragments can use nav tokens when `nav` is provided:
 - `{{SITE_NAME}}`, `{{BRAND_NAME}}`, `{{BRAND_URL}}`, `{{BRAND_ICON}}`
 - `{{NAV_LINKS}}`, `{{NAV_ACTIONS}}`
 - `{{FOOTER_PRODUCT}}`, `{{FOOTER_RESOURCES}}`, `{{FOOTER_COMPANY}}` for the legacy three-column footer contract
-- every exported footer menu also receives a deterministic token derived from its menu name: uppercase letters and digits with other characters normalized to `_` (for example, `footer-products` becomes `{{FOOTER_PRODUCTS}}` and `footer-community` becomes `{{FOOTER_COMMUNITY}}`)
+- every exported footer menu also receives deterministic tokens derived from its menu name: uppercase letters and digits with other characters normalized to `_` (for example, `footer-products` becomes `{{FOOTER_PRODUCTS}}` and `{{FOOTER_PRODUCTS_LIST_ITEMS}}`)
+- use the base named token when a fragment needs bare links; use its `_LIST_ITEMS` form inside a semantic `<ul>` or `<ol>` so generated API footers can share the exact markup and spacing of the main site footer
 - `{{YEAR}}`
 
 Project.json example (metadata you can reuse across repos):

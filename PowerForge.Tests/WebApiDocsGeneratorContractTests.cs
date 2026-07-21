@@ -624,7 +624,7 @@ public class WebApiDocsGeneratorContractTests
         File.WriteAllText(headerPath, "<header>{{NAV_LINKS}}{{NAV_ACTIONS}}</header>");
         var footerPath = Path.Combine(root, "api-footer.html");
         File.WriteAllText(footerPath,
-            "<footer>{{FOOTER_PRODUCTS}}{{FOOTER_DOCS}}{{FOOTER_RESOURCES}}{{FOOTER_COMMUNITY}}</footer>");
+            "<footer><ul>{{FOOTER_PRODUCTS_LIST_ITEMS}}</ul><ul>{{FOOTER_DOCS_LIST_ITEMS}}</ul><ul>{{FOOTER_RESOURCES_LIST_ITEMS}}</ul><ul>{{FOOTER_COMMUNITY_LIST_ITEMS}}</ul></footer>");
 
         var xmlPath = Path.Combine(root, "test.xml");
         File.WriteAllText(xmlPath,
@@ -669,6 +669,8 @@ public class WebApiDocsGeneratorContractTests
             Assert.Contains("href=\"/docs/getting-started/\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"/benchmarks/\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"https://example.test/repository\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<li><a href=\"/products/word/\">Word</a></li>", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<li><a href=\"/docs/getting-started/\">Getting Started</a></li>", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("{{FOOTER_", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(">Home<", html, StringComparison.OrdinalIgnoreCase);
         }

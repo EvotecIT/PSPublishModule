@@ -92,7 +92,10 @@ public static partial class WebApiDocsGenerator
         {
             var tokenName = BuildFooterMenuTokenName(footerMenu.Key);
             if (!string.IsNullOrWhiteSpace(tokenName))
+            {
                 tokens[tokenName] = BuildLinkHtml(footerMenu.Value);
+                tokens[tokenName + "_LIST_ITEMS"] = BuildListItemHtml(footerMenu.Value);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(header))
@@ -147,6 +150,22 @@ public static partial class WebApiDocsGenerator
             return string.Empty;
 
         return string.Concat(items.Select(BuildNavItemHtml));
+    }
+
+    private static string BuildListItemHtml(IReadOnlyList<NavItem> items)
+    {
+        if (items.Count == 0)
+            return string.Empty;
+
+        var fragments = new List<string>(items.Count);
+        foreach (var item in items)
+        {
+            var itemHtml = BuildNavItemHtml(item);
+            if (!string.IsNullOrWhiteSpace(itemHtml))
+                fragments.Add("<li>" + itemHtml + "</li>");
+        }
+
+        return string.Concat(fragments);
     }
 
     private static string BuildNavItemHtml(NavItem item)
