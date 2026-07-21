@@ -4,7 +4,7 @@
 
 [CmdletBinding()] param(
     [switch] $JsonOnly,
-    [string] $JsonPath = (Join-Path $PSScriptRoot '../../powerforge.json'),
+    [string] $JsonPath,
     [ValidateSet('Release', 'Debug')][string] $Configuration = 'Release',
     [ValidateSet('auto', 'net10.0', 'net8.0')][string] $Framework = 'auto',
     [switch] $NoDotnetBuild,
@@ -30,6 +30,13 @@
     [ValidateSet('Warning', 'Error')]
     [string] $FailOnDiagnosticsSeverity
 )
+
+if ([string]::IsNullOrWhiteSpace($JsonPath)) {
+    # Windows PowerShell 5.1 does not populate $PSScriptRoot while parameter
+    # default expressions are evaluated. Resolve script-relative defaults only
+    # after binding so hosted release builds work in both Windows PowerShell and pwsh.
+    $JsonPath = Join-Path $PSScriptRoot '../../powerforge.json'
+}
 
 if ($RunMode -eq 'Publish' -and -not $JsonOnly -and -not $PowerForgeReleaseStage) {
     $releaseEntryPoint = Join-Path $PSScriptRoot '../../Build/Build-Module.ps1'
