@@ -152,6 +152,8 @@ public class WebApiDocsGeneratorSourceAndCssTests
             Assert.Contains("id=\"api-namespace\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("initNamespaceCombobox", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("initNavDropdowns", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("!sidebar.classList.contains('sidebar-open')", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("if (toggle) toggle.focus();", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("PowerForge API docs first-paint control stability", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("body.pf-api-docs .namespace-select", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("<style>body.pf-api-docs", html, StringComparison.OrdinalIgnoreCase);

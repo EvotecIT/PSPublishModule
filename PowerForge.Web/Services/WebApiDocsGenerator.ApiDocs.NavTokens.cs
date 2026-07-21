@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 
 namespace PowerForge.Web;
 
@@ -25,14 +26,18 @@ public static partial class WebApiDocsGenerator
         // Fail-fast (in CI via apidocs failOnWarnings): if fragments expect nav injection but the step
         // forgot to provide navJsonPath, we should emit a deterministic warning instead of silently
         // producing API pages without navigation.
-        var needsNavTokens =
-            ContainsTemplateToken(header, "NAV_LINKS") ||
-            ContainsTemplateToken(header, "NAV_ACTIONS") ||
-            ContainsTemplateToken(footer, "NAV_LINKS") ||
-            ContainsTemplateToken(footer, "NAV_ACTIONS");
+        var headerNeedsNavTokens =
+            ContainsUnprovidedTemplateToken(header, "NAV_LINKS", tokens) ||
+            ContainsUnprovidedTemplateToken(header, "NAV_ACTIONS", tokens) ||
+            ContainsUnprovidedTemplateTokenPrefix(header, "FOOTER_", tokens);
+        var footerNeedsNavTokens =
+            ContainsUnprovidedTemplateToken(footer, "NAV_LINKS", tokens) ||
+            ContainsUnprovidedTemplateToken(footer, "NAV_ACTIONS", tokens) ||
+            ContainsUnprovidedTemplateTokenPrefix(footer, "FOOTER_", tokens);
+        var needsNavTokens = headerNeedsNavTokens || footerNeedsNavTokens;
         if (needsNavTokens && string.IsNullOrWhiteSpace(options.NavJsonPath))
         {
-            warnings?.Add("API docs nav required: header/footer fragments contain {{NAV_*}} placeholders but NavJsonPath is not set. Set apidocs.nav (or apidocs.config) so navigation can be injected.");
+            warnings?.Add("API docs nav required: header/footer fragments contain {{NAV_*}} or {{FOOTER_*}} placeholders but NavJsonPath is not set. Set apidocs.nav (or apidocs.config) so navigation can be injected.");
             if (!string.IsNullOrWhiteSpace(header))
                 header = ApplyTemplate(header, tokens);
             if (!string.IsNullOrWhiteSpace(footer))
@@ -60,7 +65,10 @@ public static partial class WebApiDocsGenerator
         {
             // If the site provides custom header/footer fragments but forgets to include navigation placeholders,
             // nav injection will be a no-op and API pages may render without expected site navigation.
-            if (!needsNavTokens)
+            var customFragmentMissingNavTokens =
+                (!string.IsNullOrWhiteSpace(options.HeaderHtmlPath) && !headerNeedsNavTokens) ||
+                (!string.IsNullOrWhiteSpace(options.FooterHtmlPath) && !footerNeedsNavTokens);
+            if (customFragmentMissingNavTokens)
             {
                 warnings?.Add("API docs nav: header/footer fragments do not contain {{NAV_LINKS}} or {{NAV_ACTIONS}} placeholders; nav injection may be empty.");
             }
@@ -85,6 +93,37 @@ public static partial class WebApiDocsGenerator
         tokens["FOOTER_PRODUCT"] = BuildLinkHtml(nav.FooterProduct);
         tokens["FOOTER_RESOURCES"] = BuildLinkHtml(nav.FooterResources);
         tokens["FOOTER_COMPANY"] = BuildLinkHtml(nav.FooterCompany);
+        var footerTokenOwners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var footerMenu in nav.FooterMenus)
+        {
+            var tokenName = BuildFooterMenuTokenName(footerMenu.Key);
+            if (!string.IsNullOrWhiteSpace(tokenName))
+            {
+                var listTokenName = tokenName + "_LIST_ITEMS";
+                string? conflictingToken = null;
+                string? conflictingMenu = null;
+                foreach (var candidate in new[] { tokenName, listTokenName })
+                {
+                    if (footerTokenOwners.TryGetValue(candidate, out var owner))
+                    {
+                        conflictingToken = candidate;
+                        conflictingMenu = owner;
+                        break;
+                    }
+                }
+
+                if (conflictingToken is not null)
+                {
+                    warnings?.Add($"API docs nav: footer menu names '{conflictingMenu}' and '{footerMenu.Key}' both map to the generated token '{conflictingToken}'. Rename one menu so every footer token is unambiguous.");
+                    continue;
+                }
+
+                footerTokenOwners[tokenName] = footerMenu.Key;
+                footerTokenOwners[listTokenName] = footerMenu.Key;
+                tokens[tokenName] = BuildLinkHtml(footerMenu.Value);
+                tokens[listTokenName] = BuildListItemHtml(footerMenu.Value);
+            }
+        }
 
         if (!string.IsNullOrWhiteSpace(header))
             header = ApplyTemplate(header, tokens);
@@ -100,12 +139,90 @@ public static partial class WebApiDocsGenerator
         return html.IndexOf("{{" + token + "}}", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
+    private static bool ContainsUnprovidedTemplateToken(
+        string html,
+        string token,
+        IReadOnlyDictionary<string, string?> providedTokens)
+    {
+        return !providedTokens.ContainsKey(token) && ContainsTemplateToken(html, token);
+    }
+
+    private static bool ContainsUnprovidedTemplateTokenPrefix(
+        string html,
+        string prefix,
+        IReadOnlyDictionary<string, string?> providedTokens)
+    {
+        if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(prefix))
+            return false;
+
+        var searchStart = 0;
+        while (searchStart < html.Length)
+        {
+            var open = html.IndexOf("{{", searchStart, StringComparison.Ordinal);
+            if (open < 0)
+                return false;
+
+            var close = html.IndexOf("}}", open + 2, StringComparison.Ordinal);
+            if (close < 0)
+                return false;
+
+            var token = html.Substring(open + 2, close - open - 2).Trim();
+            if (token.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && !providedTokens.ContainsKey(token))
+                return true;
+
+            searchStart = close + 2;
+        }
+
+        return false;
+    }
+
+    private static string BuildFooterMenuTokenName(string menuName)
+    {
+        if (string.IsNullOrWhiteSpace(menuName))
+            return string.Empty;
+
+        var builder = new StringBuilder(menuName.Length);
+        var separatorPending = false;
+        foreach (var character in menuName.Trim())
+        {
+            if (char.IsLetterOrDigit(character))
+            {
+                if (separatorPending && builder.Length > 0)
+                    builder.Append('_');
+                builder.Append(char.ToUpperInvariant(character));
+                separatorPending = false;
+            }
+            else
+            {
+                separatorPending = true;
+            }
+        }
+
+        return builder.ToString();
+    }
+
     private static string BuildLinkHtml(IReadOnlyList<NavItem> items)
     {
         if (items.Count == 0)
             return string.Empty;
 
         return string.Concat(items.Select(BuildNavItemHtml));
+    }
+
+    private static string BuildListItemHtml(IReadOnlyList<NavItem> items)
+    {
+        if (items.Count == 0)
+            return string.Empty;
+
+        var fragments = new List<string>(items.Count);
+        foreach (var item in items)
+        {
+            var itemHtml = BuildNavItemHtml(item);
+            if (!string.IsNullOrWhiteSpace(itemHtml))
+                fragments.Add("<li>" + itemHtml + "</li>");
+        }
+
+        return string.Concat(fragments);
     }
 
     private static string BuildNavItemHtml(NavItem item)

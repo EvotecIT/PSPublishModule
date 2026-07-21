@@ -600,11 +600,31 @@ public class WebApiDocsGeneratorContractTests
                   ],
                   "actions": [
                     { "text": "Install", "href": "https://example.test/install", "external": true }
-                  ]
+                  ],
+                  "footer": {
+                    "footer-products": [
+                      { "text": "Word", "href": "/products/word/" }
+                    ],
+                    "footer-docs": [
+                      { "text": "Getting Started", "href": "/docs/getting-started/" }
+                    ],
+                    "footer-resources": [
+                      { "text": "Benchmarks", "href": "/benchmarks/" }
+                    ],
+                    "footer-community": [
+                      { "text": "GitHub", "href": "https://example.test/repository", "external": true }
+                    ]
+                  }
                 }
               }
             }
             """);
+
+        var headerPath = Path.Combine(root, "api-header.html");
+        File.WriteAllText(headerPath, "<header>{{NAV_LINKS}}{{NAV_ACTIONS}}</header>");
+        var footerPath = Path.Combine(root, "api-footer.html");
+        File.WriteAllText(footerPath,
+            "<footer><ul>{{FOOTER_PRODUCTS_LIST_ITEMS}}</ul><ul>{{FOOTER_DOCS_LIST_ITEMS}}</ul><ul>{{FOOTER_RESOURCES_LIST_ITEMS}}</ul><ul>{{FOOTER_COMMUNITY_LIST_ITEMS}}</ul></footer>");
 
         var xmlPath = Path.Combine(root, "test.xml");
         File.WriteAllText(xmlPath,
@@ -628,7 +648,9 @@ public class WebApiDocsGeneratorContractTests
             Template = "docs",
             BaseUrl = "/api",
             NavJsonPath = navJsonPath,
-            NavContextPath = "/api/"
+            NavContextPath = "/api/",
+            HeaderHtmlPath = headerPath,
+            FooterHtmlPath = footerPath
         };
 
         try
@@ -643,6 +665,13 @@ public class WebApiDocsGeneratorContractTests
             Assert.Contains("href=\"/api/\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"/docs/\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"https://example.test/install\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/products/word/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/docs/getting-started/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/benchmarks/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"https://example.test/repository\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<li><a href=\"/products/word/\">Word</a></li>", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<li><a href=\"/docs/getting-started/\">Getting Started</a></li>", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("{{FOOTER_", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(">Home<", html, StringComparison.OrdinalIgnoreCase);
         }
         finally

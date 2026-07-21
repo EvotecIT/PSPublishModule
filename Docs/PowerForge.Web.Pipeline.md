@@ -432,7 +432,12 @@ Docs templates (`template: docs`):
 Header/footer fragments can use nav tokens when `nav` is provided:
 - `{{SITE_NAME}}`, `{{BRAND_NAME}}`, `{{BRAND_URL}}`, `{{BRAND_ICON}}`
 - `{{NAV_LINKS}}`, `{{NAV_ACTIONS}}`
-- `{{FOOTER_PRODUCT}}`, `{{FOOTER_RESOURCES}}`, `{{FOOTER_COMPANY}}`
+- `{{FOOTER_PRODUCT}}`, `{{FOOTER_RESOURCES}}`, `{{FOOTER_COMPANY}}` for the legacy three-column footer contract
+- every exported footer menu also receives deterministic tokens derived from its menu name: uppercase letters and digits with other characters normalized to `_` (for example, `footer-products` becomes `{{FOOTER_PRODUCTS}}` and `{{FOOTER_PRODUCTS_LIST_ITEMS}}`)
+- use the base named token when a fragment needs bare links; use its `_LIST_ITEMS` form inside a semantic `<ul>` or `<ol>` so generated API footers can share the exact markup and spacing of the main site footer
+- configured empty footer menus still resolve both named tokens to an empty string, so temporary navigation changes cannot leak unresolved placeholders
+- menu names must remain distinct after normalization; collisions emit a generator warning and therefore fail pipelines that enable `failOnWarnings`
+- a footer placeholder supplied explicitly through `templateTokens` is treated as caller-owned and does not require a navigation file
 - `{{YEAR}}`
 
 Project.json example (metadata you can reuse across repos):
