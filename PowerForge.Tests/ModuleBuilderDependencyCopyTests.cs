@@ -279,6 +279,121 @@ public sealed class ModuleBuilderDependencyCopyTests
     }
 
     [Fact]
+    public void CopyPublishOutputBinaries_PreservesDependencySharedWithExcludedPowerShellClosure()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var publishDir = Path.Combine(root, "publish");
+        var targetDir = Path.Combine(root, "target");
+
+        Directory.CreateDirectory(publishDir);
+        Directory.CreateDirectory(targetDir);
+
+        try
+        {
+            foreach (var fileName in new[]
+            {
+                "TestModule.dll",
+                "ADPlayground.dll",
+                "System.ServiceModel.NetTcp.dll",
+                "System.ServiceModel.Primitives.dll",
+                "System.Private.ServiceModel.dll"
+            })
+            {
+                File.WriteAllText(Path.Combine(publishDir, fileName), fileName);
+            }
+
+            var depsPath = Path.Combine(publishDir, "TestModule.deps.json");
+            File.WriteAllText(depsPath, """
+                                        {
+                                          "targets": {
+                                            ".NETCoreApp,Version=v8.0": {
+                                              "TestModule/1.0.0": {
+                                                "dependencies": {
+                                                  "ADPlayground": "1.0.0",
+                                                  "Microsoft.PowerShell.SDK": "7.4.6"
+                                                },
+                                                "runtime": {
+                                                  "TestModule.dll": {}
+                                                }
+                                              },
+                                              "ADPlayground/1.0.0": {
+                                                "dependencies": {
+                                                  "System.ServiceModel.NetTcp": "4.10.3"
+                                                },
+                                                "runtime": {
+                                                  "ADPlayground.dll": {}
+                                                }
+                                              },
+                                              "Microsoft.PowerShell.SDK/7.4.6": {
+                                                "dependencies": {
+                                                  "System.Private.ServiceModel": "4.10.3",
+                                                  "System.ServiceModel.NetTcp": "4.10.3",
+                                                  "System.ServiceModel.Primitives": "4.10.3"
+                                                }
+                                              },
+                                              "System.ServiceModel.NetTcp/4.10.3": {
+                                                "dependencies": {
+                                                  "System.Private.ServiceModel": "4.10.3",
+                                                  "System.ServiceModel.Primitives": "4.10.3"
+                                                },
+                                                "runtime": {
+                                                  "lib/net6.0/System.ServiceModel.NetTcp.dll": {}
+                                                }
+                                              },
+                                              "System.ServiceModel.Primitives/4.10.3": {
+                                                "dependencies": {
+                                                  "System.Private.ServiceModel": "4.10.3"
+                                                },
+                                                "runtime": {
+                                                  "lib/net6.0/System.ServiceModel.Primitives.dll": {}
+                                                }
+                                              },
+                                              "System.Private.ServiceModel/4.10.3": {
+                                                "runtime": {
+                                                  "lib/netstandard2.0/System.Private.ServiceModel.dll": {}
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                        """);
+
+            var builder = ModuleBuilderTestDependencies.Create();
+            var copyMethod = typeof(ModuleBuilder).GetMethod(
+                "CopyPublishOutputBinaries",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(copyMethod);
+
+            copyMethod!.Invoke(builder, new object[]
+            {
+                publishDir,
+                targetDir,
+                "net8.0",
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                null!
+            });
+
+            Assert.True(File.Exists(Path.Combine(targetDir, "TestModule.dll")));
+            Assert.True(File.Exists(Path.Combine(targetDir, "ADPlayground.dll")));
+            Assert.True(File.Exists(Path.Combine(targetDir, "System.ServiceModel.NetTcp.dll")));
+            Assert.True(File.Exists(Path.Combine(targetDir, "System.ServiceModel.Primitives.dll")));
+            Assert.True(File.Exists(Path.Combine(targetDir, "System.Private.ServiceModel.dll")));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort cleanup
+            }
+        }
+    }
+
+    [Fact]
     public void BuildInPlace_WarnsWhenUsingExistingLibPayloadWithoutCsproj()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));

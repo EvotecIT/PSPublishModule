@@ -1046,7 +1046,7 @@ public sealed class ModuleBuilder
             if (!root.TryGetProperty("targets", out var targets) || targets.ValueKind != JsonValueKind.Object)
                 return plan;
 
-            var appAssemblyName = Path.GetFileNameWithoutExtension(depsPath);
+            var appAssemblyName = GetDepsApplicationAssemblyName(depsPath);
             var excluded = ComputeExcludedLibraries(targets, appAssemblyName, options.ExcludeLibraryFilters);
 
             foreach (var target in targets.EnumerateObject())
@@ -1081,6 +1081,15 @@ public sealed class ModuleBuilder
             _logger.Warn($"Failed to parse deps.json for {tfm} ({depsPath}): {ex.Message}. Falling back to copying top-level binaries.");
             return null;
         }
+    }
+
+    private static string GetDepsApplicationAssemblyName(string depsPath)
+    {
+        var fileName = Path.GetFileName(depsPath);
+        const string suffix = ".deps.json";
+        return fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+            ? fileName.Substring(0, fileName.Length - suffix.Length)
+            : Path.GetFileNameWithoutExtension(fileName);
     }
 
     private static bool IsPowerShellRuntimeLibraryId(string id)
