@@ -412,8 +412,7 @@ public static partial class WebApiDocsGenerator
             return;
 
         foreach (var footer in menuMap.Where(kvp =>
-                     kvp.Key.StartsWith("footer", StringComparison.OrdinalIgnoreCase) &&
-                     kvp.Value.Count > 0))
+                     kvp.Key.StartsWith("footer", StringComparison.OrdinalIgnoreCase)))
         {
             nav.FooterMenus[footer.Key] = footer.Value;
         }
@@ -824,7 +823,7 @@ public static partial class WebApiDocsGenerator
         {
             var name = kvp.Key ?? string.Empty;
             var items = kvp.Value ?? new List<NavItem>();
-            if (name.StartsWith("footer", StringComparison.OrdinalIgnoreCase) && items.Count > 0)
+            if (name.StartsWith("footer", StringComparison.OrdinalIgnoreCase))
                 nav.FooterMenus[name] = items;
 
             if (name.Equals("footer-product", StringComparison.OrdinalIgnoreCase))
