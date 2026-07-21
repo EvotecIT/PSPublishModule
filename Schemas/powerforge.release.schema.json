@@ -13,6 +13,10 @@
         "RepositoryRoot": { "type": [ "string", "null" ] },
         "ScriptPath": { "type": [ "string", "null" ] },
         "ModulePath": { "type": [ "string", "null" ] },
+        "ManifestPath": {
+          "type": [ "string", "null" ],
+          "description": "Module manifest used to resolve the final module version after the module build completes. Relative paths are resolved from RepositoryRoot."
+        },
         "IncludesPackages": {
           "type": "boolean",
           "description": "When true, the module pipeline owns the configured Packages lane and the outer release skips running that lane a second time."
@@ -59,6 +63,11 @@
       "additionalProperties": false,
       "properties": {
         "Publish": { "type": "boolean" },
+        "VersionSource": {
+          "type": "string",
+          "enum": [ "Auto", "Module", "Packages", "Assets" ],
+          "description": "Selects the version used by the unified GitHub release. Auto prefers the package release, then the resolved module version, then a single asset version."
+        },
         "Owner": { "type": [ "string", "null" ] },
         "Repository": { "type": [ "string", "null" ] },
         "Token": { "type": [ "string", "null" ] },

@@ -326,6 +326,8 @@ internal sealed partial class PowerForgeReleaseService
                     result.ErrorMessage = BuildModuleFailureMessage(module.Request.ScriptPath, moduleResult);
                     return result;
                 }
+
+                UpdateResolvedModuleVersion(result.ModulePlan);
             }
         }
 
@@ -738,9 +740,16 @@ internal sealed partial class PowerForgeReleaseService
             : Path.IsPathRooted(options.ModulePath)
                 ? options.ModulePath!
                 : Path.Combine(repositoryRoot, options.ModulePath!);
+        var manifestPath = string.IsNullOrWhiteSpace(options.ManifestPath)
+            ? null
+            : Path.GetFullPath(Path.IsPathRooted(options.ManifestPath)
+                ? options.ManifestPath!
+                : Path.Combine(repositoryRoot, options.ManifestPath!));
 
         if (!File.Exists(scriptPath))
             throw new FileNotFoundException($"Module build script was not found: {scriptPath}", scriptPath);
+        if (!string.IsNullOrWhiteSpace(manifestPath) && !File.Exists(manifestPath))
+            throw new FileNotFoundException($"Module manifest was not found: {manifestPath}", manifestPath);
 
         var artifactPaths = (options.ArtifactPaths ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path))
@@ -786,6 +795,7 @@ internal sealed partial class PowerForgeReleaseService
             RepositoryRoot = repositoryRoot,
             ScriptPath = scriptPath,
             ModulePath = modulePath,
+            ManifestPath = manifestPath,
             Configuration = buildRequest.Configuration,
             Framework = buildRequest.Framework,
             RunMode = buildRequest.RunMode ?? ConfigurationGateMode.Build,
@@ -2273,7 +2283,7 @@ internal sealed partial class PowerForgeReleaseService
         string? sharedReleaseVersion)
     {
         var gitHub = spec.GitHub ?? throw new InvalidOperationException("Unified GitHub release options were not configured.");
-        var version = ResolveUnifiedReleaseVersion(result, sharedReleaseVersion);
+        var version = ResolveUnifiedReleaseVersion(gitHub, result, sharedReleaseVersion);
         if (string.IsNullOrWhiteSpace(version))
         {
             return new PowerForgeUnifiedGitHubReleaseResult
@@ -3199,22 +3209,6 @@ internal sealed partial class PowerForgeReleaseService
             .Replace("{UtcTimestamp}", utcNow.ToString("yyyyMMddHHmmss"));
     }
 
-    private static string? ResolveUnifiedReleaseVersion(PowerForgeReleaseResult result, string? sharedReleaseVersion)
-    {
-        if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
-            return sharedReleaseVersion;
-
-        var versions = result.ReleaseAssetEntries
-            .Select(entry => entry.Version)
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (versions.Length == 1)
-            return versions[0];
-
-        return null;
-    }
-
     private static (string? Owner, string? Repository, string? Token, PowerForgeUnifiedGitHubReleaseResult? Error) ResolveUnifiedGitHubConfiguration(
         PowerForgeReleaseSpec spec,
         PowerForgeReleaseGitHubOptions gitHub,
@@ -3306,17 +3300,6 @@ internal sealed partial class PowerForgeReleaseService
             .SelectMany(artifact => CreateLegacyToolAssetEntries(artifact)));
 
         assets.AddRange(
-            result.Tools?.ManifestPaths
-            ?.Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-            .Select(path => new PowerForgeReleaseAssetEntry
-            {
-                Path = path!,
-                Category = PowerForgeReleaseAssetCategory.Metadata,
-                Source = "LegacyTools"
-            })
-            ?? Array.Empty<PowerForgeReleaseAssetEntry>());
-
-        assets.AddRange(
             (result.DotNetTools?.Artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
             .SelectMany(artifact => CreateDotNetArtefactEntries(artifact, dotNetPlan, sharedReleaseVersion)));
 
@@ -3392,7 +3375,11 @@ internal sealed partial class PowerForgeReleaseService
 
     private static IEnumerable<PowerForgeReleaseAssetEntry> CreateLegacyToolAssetEntries(PowerForgeToolReleaseArtifactResult artifact)
     {
-        foreach (var path in new[] { artifact.ZipPath, artifact.ExecutablePath, artifact.CommandAliasPath }
+        var paths = !string.IsNullOrWhiteSpace(artifact.ZipPath) && File.Exists(artifact.ZipPath)
+            ? new[] { artifact.ZipPath }
+            : new[] { artifact.ExecutablePath, artifact.CommandAliasPath };
+
+        foreach (var path in paths
             .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
         {
             yield return new PowerForgeReleaseAssetEntry

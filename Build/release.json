@@ -4,6 +4,7 @@
   "Module": {
     "RepositoryRoot": "..",
     "ScriptPath": "Module/Build/Build-Module.ps1",
+    "ManifestPath": "Module/PSPublishModule.psd1",
     "ArtifactPaths": [
       "Module/Artefacts/Packed",
       "Module/Artefacts/PackedWithModules",
@@ -97,5 +98,17 @@
       "TagTemplate": "{Target}-v{Version}",
       "ReleaseNameTemplate": "{Target} {Version}"
     }
+  },
+  "GitHub": {
+    "Publish": true,
+    "VersionSource": "Module",
+    "Owner": "EvotecIT",
+    "Repository": "PSPublishModule",
+    "TokenFilePath": "C:\\Support\\Important\\GithubAPI.txt",
+    "GenerateReleaseNotes": true,
+    "IsPreRelease": false,
+    "ReplaceExistingAssets": true,
+    "TagTemplate": "v{Version}",
+    "ReleaseNameTemplate": "PSPublishModule {Version}"
   }
 }

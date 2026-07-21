@@ -138,8 +138,7 @@ try {
             '--configuration', $Configuration,
             '--module-framework', $Framework,
             '--module-run-mode', 'Publish',
-            '--module-no-dotnet-build',
-            '--publish-tool-github'
+            '--module-no-dotnet-build'
         )
         if ($PSBoundParameters.ContainsKey('ModuleVersion')) { $cmd += @('--module-version', $ModuleVersion) }
         if ($PSBoundParameters.ContainsKey('PreReleaseTag')) { $cmd += @('--module-prerelease-tag', $PreReleaseTag) }

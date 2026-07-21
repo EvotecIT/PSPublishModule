@@ -1,4 +1,5 @@
 using System.Management.Automation.Language;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using PowerForge;
 
@@ -180,9 +181,10 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.Contains("-PublishOrder 'NuGet', 'PowerShellGallery', 'GitHub'", buildScript, StringComparison.Ordinal);
         Assert.Contains("if ($RunMode -in @('Build', 'Publish'))", buildScript, StringComparison.Ordinal);
         Assert.Contains("$PowerForgeReleaseStage", buildScript, StringComparison.Ordinal);
+        Assert.Contains("-Enabled:(-not $PowerForgeReleaseStage)", buildScript, StringComparison.Ordinal);
         Assert.Contains("'--module-framework', $Framework", selfBuildScript, StringComparison.Ordinal);
         Assert.Contains("'--module-run-mode', 'Publish'", selfBuildScript, StringComparison.Ordinal);
-        Assert.Contains("'--publish-tool-github'", selfBuildScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("'--publish-tool-github'", selfBuildScript, StringComparison.Ordinal);
         Assert.Contains("'--module-certificate-thumbprint', $CertificateThumbprint", selfBuildScript, StringComparison.Ordinal);
         Assert.Contains("'--module-sign-include-binaries'", selfBuildScript, StringComparison.Ordinal);
         Assert.Contains("'--module-diagnostics-baseline'", selfBuildScript, StringComparison.Ordinal);
@@ -196,6 +198,15 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.Contains("if ($PSBoundParameters.ContainsKey('PublishNuget')) { $invokeParams.PublishNuget = $PublishNuget.IsPresent }", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("if ($PSBoundParameters.ContainsKey('PublishGitHub')) { $invokeParams.PublishProjectGitHub = $PublishGitHub.IsPresent }", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("\"IncludesPackages\": true", releaseConfig, StringComparison.Ordinal);
+        using var releaseDocument = JsonDocument.Parse(releaseConfig);
+        var releaseRoot = releaseDocument.RootElement;
+        Assert.Equal("Module/PSPublishModule.psd1", releaseRoot.GetProperty("Module").GetProperty("ManifestPath").GetString());
+        Assert.False(releaseRoot.GetProperty("Packages").GetProperty("PublishGitHub").GetBoolean());
+        Assert.False(releaseRoot.GetProperty("Tools").GetProperty("GitHub").GetProperty("Publish").GetBoolean());
+        var unifiedGitHub = releaseRoot.GetProperty("GitHub");
+        Assert.True(unifiedGitHub.GetProperty("Publish").GetBoolean());
+        Assert.Equal("Module", unifiedGitHub.GetProperty("VersionSource").GetString());
+        Assert.Equal("v{Version}", unifiedGitHub.GetProperty("TagTemplate").GetString());
     }
 
     [Fact]
