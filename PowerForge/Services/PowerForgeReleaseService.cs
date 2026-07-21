@@ -312,7 +312,8 @@ internal sealed partial class PowerForgeReleaseService
                 configPath,
                 request,
                 configurationOverride,
-                packagePublishingRequested);
+                packagePublishingRequested,
+                publishUnifiedGitHub);
             result.ModulePlan = module.Plan;
             result.ModuleAssets = module.ArtifactPaths;
 
@@ -726,7 +727,8 @@ internal sealed partial class PowerForgeReleaseService
         string releaseConfigPath,
         PowerForgeReleaseRequest request,
         string? configurationOverride,
-        bool packagePublishingRequested)
+        bool packagePublishingRequested,
+        bool publishUnifiedGitHub)
     {
         var configDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
         var repositoryRoot = Path.GetFullPath(Path.IsPathRooted(options.RepositoryRoot)
@@ -772,6 +774,7 @@ internal sealed partial class PowerForgeReleaseService
             Framework = request.ModuleFramework ?? options.Framework,
             RunMode = ResolveModuleRunMode(options, request, packagePublishingRequested),
             PowerForgeReleaseStage = true,
+            UnifiedGitHubRelease = publishUnifiedGitHub,
             NoDotnetBuild = request.ModuleNoDotnetBuild ?? options.NoDotnetBuild ?? false,
             ModuleVersion = request.ModuleVersion ?? options.ModuleVersion,
             PreReleaseTag = request.ModulePreReleaseTag ?? options.PreReleaseTag,
@@ -807,6 +810,8 @@ internal sealed partial class PowerForgeReleaseService
             PreReleaseTag = buildRequest.PreReleaseTag,
             NoSign = buildRequest.NoSign,
             SignModule = buildRequest.SignModule,
+            PowerForgeReleaseStage = buildRequest.PowerForgeReleaseStage,
+            UnifiedGitHubRelease = buildRequest.UnifiedGitHubRelease,
             ArtifactPaths = artifactPaths
         };
 
@@ -3295,7 +3300,7 @@ internal sealed partial class PowerForgeReleaseService
 
         assets.AddRange(
             (result.ModuleAssets ?? Array.Empty<string>())
-            .SelectMany(CreateModuleAssetEntries));
+            .SelectMany(path => CreateModuleAssetEntries(path, result.ModulePlan)));
 
         assets.AddRange(
             (result.Packages?.Result.Release?.Projects ?? new List<DotNetRepositoryProjectResult>())
@@ -3448,7 +3453,9 @@ internal sealed partial class PowerForgeReleaseService
         }
     }
 
-    internal static IEnumerable<PowerForgeReleaseAssetEntry> CreateModuleAssetEntries(string path)
+    internal static IEnumerable<PowerForgeReleaseAssetEntry> CreateModuleAssetEntries(
+        string path,
+        PowerForgeModuleReleasePlanSummary? plan = null)
     {
         if (string.IsNullOrWhiteSpace(path))
             yield break;
@@ -3469,6 +3476,7 @@ internal sealed partial class PowerForgeReleaseService
 
         foreach (var file in Directory
             .EnumerateFiles(path, "*", SearchOption.TopDirectoryOnly)
+            .Where(file => IsModuleArtifactForResolvedVersion(file, plan))
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase))
         {
             yield return new PowerForgeReleaseAssetEntry

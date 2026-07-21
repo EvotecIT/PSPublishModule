@@ -181,7 +181,8 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.Contains("-PublishOrder 'NuGet', 'PowerShellGallery', 'GitHub'", buildScript, StringComparison.Ordinal);
         Assert.Contains("if ($RunMode -in @('Build', 'Publish'))", buildScript, StringComparison.Ordinal);
         Assert.Contains("$PowerForgeReleaseStage", buildScript, StringComparison.Ordinal);
-        Assert.Contains("-Enabled:(-not $PowerForgeReleaseStage)", buildScript, StringComparison.Ordinal);
+        Assert.Contains("$PowerForgeUnifiedGitHubRelease", buildScript, StringComparison.Ordinal);
+        Assert.Contains("-Enabled:(-not $PowerForgeUnifiedGitHubRelease)", buildScript, StringComparison.Ordinal);
         Assert.Contains("'--module-framework', $Framework", selfBuildScript, StringComparison.Ordinal);
         Assert.Contains("'--module-run-mode', 'Publish'", selfBuildScript, StringComparison.Ordinal);
         Assert.DoesNotContain("'--publish-tool-github'", selfBuildScript, StringComparison.Ordinal);

@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -56,6 +57,52 @@ internal sealed partial class PowerForgeReleaseService
             return moduleVersion;
 
         return moduleVersion + "-" + preReleaseTag;
+    }
+
+    private static bool IsModuleArtifactForResolvedVersion(
+        string path,
+        PowerForgeModuleReleasePlanSummary? plan)
+    {
+        var resolvedVersion = ResolveModuleReleaseVersion(plan);
+        if (string.IsNullOrWhiteSpace(resolvedVersion))
+            return true;
+
+        var manifestName = Path.GetFileName(plan?.ManifestPath);
+        if (!string.IsNullOrWhiteSpace(manifestName) &&
+            string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            var manifestText = ReadModuleManifestText(path, manifestName!);
+            if (!string.IsNullOrWhiteSpace(manifestText))
+            {
+                var artifactVersion = ResolveModuleManifestVersion(manifestText!);
+                return string.Equals(artifactVersion, resolvedVersion, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        var fileName = Path.GetFileNameWithoutExtension(path);
+        return Regex.IsMatch(
+            fileName,
+            $@"(?:^|[._-])v?{Regex.Escape(resolvedVersion!)}(?:$|[._-])",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    private static string? ResolveModuleManifestVersion(string manifestText)
+    {
+        if (!ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText, "ModuleVersion", out var value))
+            return null;
+
+        var version = NormalizeReleaseVersion(value);
+        if (string.IsNullOrWhiteSpace(version) || version!.Contains('-'))
+            return version;
+
+        var preReleaseTag = ModuleManifestValueReader
+            .ReadPsDataStringOrArrayFromText(manifestText, "Prerelease")
+            .FirstOrDefault()?
+            .Trim()
+            .TrimStart('-');
+        return string.IsNullOrWhiteSpace(preReleaseTag)
+            ? version
+            : version + "-" + preReleaseTag;
     }
 
     private static string? ResolveUniqueAssetVersion(IEnumerable<PowerForgeReleaseAssetEntry> entries)

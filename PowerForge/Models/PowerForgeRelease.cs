@@ -884,6 +884,10 @@ internal sealed class PowerForgeModuleReleasePlanSummary
 
     public bool SignModule { get; set; }
 
+    public bool PowerForgeReleaseStage { get; set; }
+
+    public bool UnifiedGitHubRelease { get; set; }
+
     public string[] ArtifactPaths { get; set; } = Array.Empty<string>();
 }
 

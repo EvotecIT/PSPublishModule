@@ -152,6 +152,94 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void UnifiedGitHubRelease_FiltersModuleArchiveDirectoryToResolvedBuildVersion()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var manifestPath = Path.Combine(root, "Company.Tools.psd1");
+            File.WriteAllText(manifestPath, "@{ ModuleVersion = '3.0.74' }");
+            var stalePath = Path.Combine(root, "Company.Tools.v3.0.73.zip");
+            var currentPath = Path.Combine(root, "Company.Tools.v3.0.74.zip");
+            var currentFullPath = Path.Combine(root, "Company.Tools.v3.0.74-FullPackage.zip");
+
+            CreateModuleArchive(stalePath, "3.0.73");
+            CreateModuleArchive(currentPath, "3.0.74");
+            CreateModuleArchive(currentFullPath, "3.0.74");
+
+            var plan = new PowerForgeModuleReleasePlanSummary
+            {
+                ManifestPath = manifestPath,
+                ModuleVersion = "3.0.74"
+            };
+            var entries = PowerForgeReleaseService.CreateModuleAssetEntries(root, plan).ToArray();
+
+            Assert.Equal(
+                new[] { currentFullPath, currentPath }.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase),
+                entries.Select(static entry => entry.Path));
+            Assert.DoesNotContain(entries, entry => string.Equals(entry.Path, stalePath, StringComparison.OrdinalIgnoreCase));
+
+            void CreateModuleArchive(string archivePath, string version)
+            {
+                using var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create);
+                var entry = archive.CreateEntry("Company.Tools/Company.Tools.psd1");
+                using var writer = new StreamWriter(entry.Open());
+                writer.Write($"@{{ ModuleVersion = '{version}' }}");
+            }
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ModuleReleaseStage_TracksUnifiedGitHubPublishing(bool publishUnifiedGitHub)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var configPath = Path.Combine(root, "release.json");
+            var scriptPath = Path.Combine(root, "Build-Module.ps1");
+            var manifestPath = Path.Combine(root, "Company.Tools.psd1");
+            File.WriteAllText(configPath, "{}");
+            File.WriteAllText(scriptPath, "param([switch] $PowerForgeReleaseStage)");
+            File.WriteAllText(manifestPath, "@{ ModuleVersion = '1.0.0' }");
+
+            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = root,
+                        ScriptPath = scriptPath,
+                        ManifestPath = manifestPath
+                    },
+                    GitHub = publishUnifiedGitHub
+                        ? new PowerForgeReleaseGitHubOptions { Publish = true }
+                        : null
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = configPath,
+                    ModuleOnly = true,
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success);
+            Assert.NotNull(result.ModulePlan);
+            Assert.True(result.ModulePlan!.PowerForgeReleaseStage);
+            Assert.Equal(publishUnifiedGitHub, result.ModulePlan.UnifiedGitHubRelease);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void UnifiedGitHubRelease_PublishesAllZippedToolFamiliesToOneRelease()
     {
         var root = CreateSandbox();
