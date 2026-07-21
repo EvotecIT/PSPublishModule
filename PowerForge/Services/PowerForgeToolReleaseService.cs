@@ -10,9 +10,6 @@ namespace PowerForge;
 /// </summary>
 internal sealed class PowerForgeToolReleaseService
 {
-    // ZIP stores the Unix file type and mode in the upper 16 bits: regular file + 0755.
-    private const int UnixExecutableExternalAttributes = unchecked((int)0x81ED0000u);
-
     private readonly ILogger _logger;
     private readonly Func<ProcessStartInfo, ProcessExecutionResult> _runProcess;
 
@@ -344,13 +341,7 @@ internal sealed class PowerForgeToolReleaseService
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        using var archive = ZipFile.Open(archivePath, ZipArchiveMode.Update);
-        foreach (var entryName in entryNames)
-        {
-            var entry = archive.GetEntry(entryName)
-                ?? throw new InvalidOperationException($"Executable '{entryName}' was not found in archive '{archivePath}'.");
-            entry.ExternalAttributes = UnixExecutableExternalAttributes;
-        }
+        ZipArchiveUnixPermissionPatcher.ApplyExecutablePermissions(archivePath, entryNames);
     }
 
     private void ExecutePublish(
@@ -400,6 +391,8 @@ internal sealed class PowerForgeToolReleaseService
         args.Add("/p:CopyDocumentationFiles=false");
         args.Add("/p:ExcludeSymbolsFromSingleFile=true");
         args.Add("/p:ErrorOnDuplicatePublishOutputFiles=false");
+        args.Add("/p:RestoreLockedMode=false");
+        args.Add("/p:NuGetLockFilePath=obj/PowerForge.ToolRelease.packages.lock.json");
         args.Add("/p:UseAppHost=true");
         args.Add($"/p:PublishDir={Quote(publishDir)}");
 

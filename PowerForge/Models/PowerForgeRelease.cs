@@ -586,6 +586,8 @@ internal sealed class PowerForgeReleaseGitHubOptions
 {
     public bool Publish { get; set; }
 
+    public PowerForgeReleaseVersionSource VersionSource { get; set; } = PowerForgeReleaseVersionSource.Auto;
+
     public string? Owner { get; set; }
 
     public string? Repository { get; set; }
@@ -605,6 +607,14 @@ internal sealed class PowerForgeReleaseGitHubOptions
     public string? TagTemplate { get; set; }
 
     public string? ReleaseNameTemplate { get; set; }
+}
+
+internal enum PowerForgeReleaseVersionSource
+{
+    Auto,
+    Module,
+    Packages,
+    Assets
 }
 
 internal sealed class PowerForgeReleaseWingetOptions
@@ -821,6 +831,8 @@ internal sealed class PowerForgeModuleReleaseOptions
 
     public string? ModulePath { get; set; }
 
+    public string? ManifestPath { get; set; }
+
     public bool IncludesPackages { get; set; }
 
     public string? Framework { get; set; }
@@ -848,6 +860,8 @@ internal sealed class PowerForgeModuleReleasePlanSummary
 
     public string ModulePath { get; set; } = string.Empty;
 
+    public string? ManifestPath { get; set; }
+
     public string? Configuration { get; set; }
 
     public string? Framework { get; set; }
@@ -869,6 +883,10 @@ internal sealed class PowerForgeModuleReleasePlanSummary
     public bool NoSign { get; set; }
 
     public bool SignModule { get; set; }
+
+    public bool PowerForgeReleaseStage { get; set; }
+
+    public bool UnifiedGitHubRelease { get; set; }
 
     public string[] ArtifactPaths { get; set; } = Array.Empty<string>();
 }

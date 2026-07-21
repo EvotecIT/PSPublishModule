@@ -281,6 +281,11 @@ public sealed class ModuleBuildHostService
             arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('PowerForgeReleaseStage')) { $buildScriptArguments['PowerForgeReleaseStage'] = $true }");
         }
 
+        if (request.UnifiedGitHubRelease)
+        {
+            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('PowerForgeUnifiedGitHubRelease')) { $buildScriptArguments['PowerForgeUnifiedGitHubRelease'] = $true }");
+        }
+
         if (request.NoDotnetBuild)
         {
             arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('NoDotnetBuild')) { $buildScriptArguments['NoDotnetBuild'] = $true }");

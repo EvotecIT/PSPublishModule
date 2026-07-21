@@ -312,7 +312,8 @@ internal sealed partial class PowerForgeReleaseService
                 configPath,
                 request,
                 configurationOverride,
-                packagePublishingRequested);
+                packagePublishingRequested,
+                publishUnifiedGitHub);
             result.ModulePlan = module.Plan;
             result.ModuleAssets = module.ArtifactPaths;
 
@@ -326,6 +327,8 @@ internal sealed partial class PowerForgeReleaseService
                     result.ErrorMessage = BuildModuleFailureMessage(module.Request.ScriptPath, moduleResult);
                     return result;
                 }
+
+                UpdateResolvedModuleVersion(result.ModulePlan, result.ModuleAssets);
             }
         }
 
@@ -724,7 +727,8 @@ internal sealed partial class PowerForgeReleaseService
         string releaseConfigPath,
         PowerForgeReleaseRequest request,
         string? configurationOverride,
-        bool packagePublishingRequested)
+        bool packagePublishingRequested,
+        bool publishUnifiedGitHub)
     {
         var configDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
         var repositoryRoot = Path.GetFullPath(Path.IsPathRooted(options.RepositoryRoot)
@@ -738,9 +742,16 @@ internal sealed partial class PowerForgeReleaseService
             : Path.IsPathRooted(options.ModulePath)
                 ? options.ModulePath!
                 : Path.Combine(repositoryRoot, options.ModulePath!);
+        var manifestPath = string.IsNullOrWhiteSpace(options.ManifestPath)
+            ? null
+            : Path.GetFullPath(Path.IsPathRooted(options.ManifestPath)
+                ? options.ManifestPath!
+                : Path.Combine(repositoryRoot, options.ManifestPath!));
 
         if (!File.Exists(scriptPath))
             throw new FileNotFoundException($"Module build script was not found: {scriptPath}", scriptPath);
+        if (!string.IsNullOrWhiteSpace(manifestPath) && !File.Exists(manifestPath))
+            throw new FileNotFoundException($"Module manifest was not found: {manifestPath}", manifestPath);
 
         var artifactPaths = (options.ArtifactPaths ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path))
@@ -763,6 +774,7 @@ internal sealed partial class PowerForgeReleaseService
             Framework = request.ModuleFramework ?? options.Framework,
             RunMode = ResolveModuleRunMode(options, request, packagePublishingRequested),
             PowerForgeReleaseStage = true,
+            UnifiedGitHubRelease = publishUnifiedGitHub,
             NoDotnetBuild = request.ModuleNoDotnetBuild ?? options.NoDotnetBuild ?? false,
             ModuleVersion = request.ModuleVersion ?? options.ModuleVersion,
             PreReleaseTag = request.ModulePreReleaseTag ?? options.PreReleaseTag,
@@ -786,6 +798,7 @@ internal sealed partial class PowerForgeReleaseService
             RepositoryRoot = repositoryRoot,
             ScriptPath = scriptPath,
             ModulePath = modulePath,
+            ManifestPath = manifestPath,
             Configuration = buildRequest.Configuration,
             Framework = buildRequest.Framework,
             RunMode = buildRequest.RunMode ?? ConfigurationGateMode.Build,
@@ -797,6 +810,8 @@ internal sealed partial class PowerForgeReleaseService
             PreReleaseTag = buildRequest.PreReleaseTag,
             NoSign = buildRequest.NoSign,
             SignModule = buildRequest.SignModule,
+            PowerForgeReleaseStage = buildRequest.PowerForgeReleaseStage,
+            UnifiedGitHubRelease = buildRequest.UnifiedGitHubRelease,
             ArtifactPaths = artifactPaths
         };
 
@@ -2101,6 +2116,12 @@ internal sealed partial class PowerForgeReleaseService
 
     private static bool ShouldPublishUnifiedGitHub(PowerForgeReleaseSpec spec, PowerForgeReleaseRequest request)
     {
+        if (request.ToolsOnly && request.PublishToolGitHub == true)
+            return false;
+
+        if (request.PackagesOnly && request.PublishProjectGitHub == true)
+            return false;
+
         return spec.GitHub is not null && (request.PublishProjectGitHub ?? spec.GitHub.Publish);
     }
 
@@ -2273,7 +2294,7 @@ internal sealed partial class PowerForgeReleaseService
         string? sharedReleaseVersion)
     {
         var gitHub = spec.GitHub ?? throw new InvalidOperationException("Unified GitHub release options were not configured.");
-        var version = ResolveUnifiedReleaseVersion(result, sharedReleaseVersion);
+        var version = ResolveUnifiedReleaseVersion(gitHub, result, sharedReleaseVersion);
         if (string.IsNullOrWhiteSpace(version))
         {
             return new PowerForgeUnifiedGitHubReleaseResult
@@ -3199,22 +3220,6 @@ internal sealed partial class PowerForgeReleaseService
             .Replace("{UtcTimestamp}", utcNow.ToString("yyyyMMddHHmmss"));
     }
 
-    private static string? ResolveUnifiedReleaseVersion(PowerForgeReleaseResult result, string? sharedReleaseVersion)
-    {
-        if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
-            return sharedReleaseVersion;
-
-        var versions = result.ReleaseAssetEntries
-            .Select(entry => entry.Version)
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (versions.Length == 1)
-            return versions[0];
-
-        return null;
-    }
-
     private static (string? Owner, string? Repository, string? Token, PowerForgeUnifiedGitHubReleaseResult? Error) ResolveUnifiedGitHubConfiguration(
         PowerForgeReleaseSpec spec,
         PowerForgeReleaseGitHubOptions gitHub,
@@ -3295,7 +3300,7 @@ internal sealed partial class PowerForgeReleaseService
 
         assets.AddRange(
             (result.ModuleAssets ?? Array.Empty<string>())
-            .SelectMany(CreateModuleAssetEntries));
+            .SelectMany(path => CreateModuleAssetEntries(path, result.ModulePlan)));
 
         assets.AddRange(
             (result.Packages?.Result.Release?.Projects ?? new List<DotNetRepositoryProjectResult>())
@@ -3304,17 +3309,6 @@ internal sealed partial class PowerForgeReleaseService
         assets.AddRange(
             (result.Tools?.Artefacts ?? Array.Empty<PowerForgeToolReleaseArtifactResult>())
             .SelectMany(artifact => CreateLegacyToolAssetEntries(artifact)));
-
-        assets.AddRange(
-            result.Tools?.ManifestPaths
-            ?.Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-            .Select(path => new PowerForgeReleaseAssetEntry
-            {
-                Path = path!,
-                Category = PowerForgeReleaseAssetCategory.Metadata,
-                Source = "LegacyTools"
-            })
-            ?? Array.Empty<PowerForgeReleaseAssetEntry>());
 
         assets.AddRange(
             (result.DotNetTools?.Artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
@@ -3392,7 +3386,11 @@ internal sealed partial class PowerForgeReleaseService
 
     private static IEnumerable<PowerForgeReleaseAssetEntry> CreateLegacyToolAssetEntries(PowerForgeToolReleaseArtifactResult artifact)
     {
-        foreach (var path in new[] { artifact.ZipPath, artifact.ExecutablePath, artifact.CommandAliasPath }
+        var paths = !string.IsNullOrWhiteSpace(artifact.ZipPath) && File.Exists(artifact.ZipPath)
+            ? new[] { artifact.ZipPath }
+            : new[] { artifact.ExecutablePath, artifact.CommandAliasPath };
+
+        foreach (var path in paths
             .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
         {
             yield return new PowerForgeReleaseAssetEntry
@@ -3455,20 +3453,39 @@ internal sealed partial class PowerForgeReleaseService
         }
     }
 
-    private static IEnumerable<PowerForgeReleaseAssetEntry> CreateModuleAssetEntries(string path)
+    internal static IEnumerable<PowerForgeReleaseAssetEntry> CreateModuleAssetEntries(
+        string path,
+        PowerForgeModuleReleasePlanSummary? plan = null)
     {
         if (string.IsNullOrWhiteSpace(path))
             yield break;
 
-        if (!File.Exists(path) && !Directory.Exists(path))
+        if (File.Exists(path))
+        {
+            yield return new PowerForgeReleaseAssetEntry
+            {
+                Path = path,
+                Category = PowerForgeReleaseAssetCategory.Module,
+                Source = "Module"
+            };
+            yield break;
+        }
+
+        if (!Directory.Exists(path))
             yield break;
 
-        yield return new PowerForgeReleaseAssetEntry
+        foreach (var file in Directory
+            .EnumerateFiles(path, "*", SearchOption.TopDirectoryOnly)
+            .Where(file => IsModuleArtifactForResolvedVersion(file, plan))
+            .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase))
         {
-            Path = path,
-            Category = PowerForgeReleaseAssetCategory.Module,
-            Source = "Module"
-        };
+            yield return new PowerForgeReleaseAssetEntry
+            {
+                Path = file,
+                Category = PowerForgeReleaseAssetCategory.Module,
+                Source = "Module"
+            };
+        }
     }
 
     private static IEnumerable<PowerForgeReleaseAssetEntry> StageReleaseAssets(

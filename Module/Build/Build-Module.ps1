@@ -22,6 +22,7 @@
     [ValidateSet('Manifest', 'Documentation', 'Build', 'Publish')]
     [string] $RunMode = 'Build',
     [switch] $PowerForgeReleaseStage,
+    [switch] $PowerForgeUnifiedGitHubRelease,
     [bool] $IncludeProjectPackages = $true,
     [string] $DiagnosticsBaselinePath,
     [switch] $GenerateDiagnosticsBaseline,
@@ -283,7 +284,9 @@ Invoke-ModuleBuild @buildParams -Settings {
     # global options for publishing to github/psgallery
     # you can use FilePath where APIKey are saved in clear text or use APIKey directly
     New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$true
-    New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHub' -OverwriteTagName '<TagModuleVersionWithPreRelease>' -GenerateReleaseNotes
+    # Suppress the module's legacy GitHub publisher only when the outer workflow
+    # will actually publish these artifacts through its unified GitHub release.
+    New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:(-not $PowerForgeUnifiedGitHubRelease) -ID 'ToGitHub' -OverwriteTagName '<TagModuleVersionWithPreRelease>' -GenerateReleaseNotes
 
 
     # Optional one-time maintainer preflight: installs prerequisites, registers/probes the feed, and primes cached Entra/Azure DevOps auth when needed.

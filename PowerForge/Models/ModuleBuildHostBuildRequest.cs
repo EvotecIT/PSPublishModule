@@ -42,6 +42,12 @@ public sealed class ModuleBuildHostBuildRequest
     public bool PowerForgeReleaseStage { get; set; }
 
     /// <summary>
+    /// Indicates that the parent release workflow will publish the module artifacts
+    /// through its unified GitHub release instead of the module's legacy publisher.
+    /// </summary>
+    public bool UnifiedGitHubRelease { get; set; }
+
+    /// <summary>
     /// Skips the preliminary dotnet build step inside the module script.
     /// </summary>
     public bool NoDotnetBuild { get; set; }
