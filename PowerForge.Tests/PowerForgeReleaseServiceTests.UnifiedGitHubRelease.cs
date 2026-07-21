@@ -1,3 +1,5 @@
+using System.IO.Compression;
+
 namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests
@@ -50,6 +52,98 @@ public sealed partial class PowerForgeReleaseServiceTests
             };
             PowerForgeReleaseService.UpdateResolvedModuleVersion(explicitPlan);
             Assert.Equal("4.0.0", explicitPlan.ModuleVersion);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void UnifiedGitHubRelease_ModuleVersionSourcePrefersBuiltArchiveManifest()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var sourceManifestPath = Path.Combine(root, "Company.Tools.psd1");
+            File.WriteAllText(sourceManifestPath, "@{ ModuleVersion = '3.0.73' }");
+            var packedPath = Path.Combine(root, "Company.Tools.3.0.74.zip");
+            using (var archive = ZipFile.Open(packedPath, ZipArchiveMode.Create))
+            {
+                var entry = archive.CreateEntry("Company.Tools/Company.Tools.psd1");
+                using var writer = new StreamWriter(entry.Open());
+                writer.Write("""
+@{
+    ModuleVersion = '3.0.74'
+    PrivateData = @{
+        PSData = @{
+            Prerelease = 'preview1'
+        }
+    }
+}
+""");
+            }
+
+            var plan = new PowerForgeModuleReleasePlanSummary
+            {
+                ManifestPath = sourceManifestPath,
+                ModuleVersion = "3.0.X"
+            };
+            var result = new PowerForgeReleaseResult { ModulePlan = plan };
+
+            PowerForgeReleaseService.UpdateResolvedModuleVersion(plan, new[] { packedPath });
+            var version = PowerForgeReleaseService.ResolveUnifiedReleaseVersion(
+                new PowerForgeReleaseGitHubOptions { VersionSource = PowerForgeReleaseVersionSource.Module },
+                result,
+                sharedReleaseVersion: null);
+
+            Assert.Equal("3.0.74", plan.ModuleVersion);
+            Assert.Equal("preview1", plan.PreReleaseTag);
+            Assert.Equal("3.0.74-preview1", version);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void UnifiedGitHubRelease_AcceptsXInsidePrereleaseLabel()
+    {
+        var result = new PowerForgeReleaseResult
+        {
+            ReleaseAssetEntries = new[]
+            {
+                new PowerForgeReleaseAssetEntry { Version = "1.2.3-next.1" }
+            }
+        };
+
+        var version = PowerForgeReleaseService.ResolveUnifiedReleaseVersion(
+            new PowerForgeReleaseGitHubOptions { VersionSource = PowerForgeReleaseVersionSource.Assets },
+            result,
+            sharedReleaseVersion: null);
+
+        Assert.Equal("1.2.3-next.1", version);
+    }
+
+    [Fact]
+    public void UnifiedGitHubRelease_ExpandsTopLevelModuleArchiveDirectoryToFiles()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var packedPath = Path.Combine(root, "Company.Tools.3.0.74.zip");
+            File.WriteAllText(packedPath, "zip");
+            var unpackedPath = Path.Combine(root, "3.0.74", "Company.Tools.psd1");
+            Directory.CreateDirectory(Path.GetDirectoryName(unpackedPath)!);
+            File.WriteAllText(unpackedPath, "manifest");
+
+            var entries = PowerForgeReleaseService.CreateModuleAssetEntries(root).ToArray();
+
+            var entry = Assert.Single(entries);
+            Assert.Equal(packedPath, entry.Path);
+            Assert.Equal(PowerForgeReleaseAssetCategory.Module, entry.Category);
+            Assert.Equal("Module", entry.Source);
         }
         finally
         {

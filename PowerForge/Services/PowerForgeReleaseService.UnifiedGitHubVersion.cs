@@ -1,20 +1,28 @@
+using System.IO.Compression;
+
 namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
-    internal static void UpdateResolvedModuleVersion(PowerForgeModuleReleasePlanSummary? plan)
+    internal static void UpdateResolvedModuleVersion(
+        PowerForgeModuleReleasePlanSummary? plan,
+        IEnumerable<string>? artifactPaths = null)
     {
-        if (plan is null || string.IsNullOrWhiteSpace(plan.ManifestPath) || !File.Exists(plan.ManifestPath))
+        if (plan is null)
             return;
 
-        var moduleVersion = ModuleManifestValueReader.ReadTopLevelString(plan.ManifestPath!, "ModuleVersion");
+        var manifestText = ReadBuiltModuleManifestText(plan, artifactPaths) ?? ReadSourceModuleManifestText(plan);
+        if (string.IsNullOrWhiteSpace(manifestText))
+            return;
+
+        ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText!, "ModuleVersion", out var moduleVersion);
         if (NormalizeReleaseVersion(plan.ModuleVersion) is null && !string.IsNullOrWhiteSpace(moduleVersion))
-            plan.ModuleVersion = moduleVersion;
+            plan.ModuleVersion = moduleVersion!.Trim();
 
         if (string.IsNullOrWhiteSpace(plan.PreReleaseTag))
         {
             plan.PreReleaseTag = ModuleManifestValueReader
-                .ReadPsDataStringOrArray(plan.ManifestPath!, "Prerelease")
+                .ReadPsDataStringOrArrayFromText(manifestText!, "Prerelease")
                 .FirstOrDefault();
         }
     }
@@ -66,8 +74,132 @@ internal sealed partial class PowerForgeReleaseService
             return null;
 
         var version = value!.Trim();
-        return version.IndexOf("X", StringComparison.OrdinalIgnoreCase) >= 0 || version.Contains('*')
+        var labelStart = version.IndexOfAny(new[] { '-', '+' });
+        var coreVersion = labelStart >= 0 ? version.Substring(0, labelStart) : version;
+        var hasPlaceholder = coreVersion
+            .Split('.')
+            .Any(component => string.Equals(component, "X", StringComparison.OrdinalIgnoreCase) || component == "*");
+        return hasPlaceholder
             ? null
             : version;
+    }
+
+    private static string? ReadBuiltModuleManifestText(
+        PowerForgeModuleReleasePlanSummary plan,
+        IEnumerable<string>? artifactPaths)
+    {
+        var manifestName = Path.GetFileName(plan.ManifestPath);
+        if (string.IsNullOrWhiteSpace(manifestName) || artifactPaths is null)
+            return null;
+
+        foreach (var path in EnumerateModuleManifestCandidates(artifactPaths, manifestName!)
+            .OrderByDescending(GetLastWriteTimeUtcSafe))
+        {
+            var manifestText = ReadModuleManifestText(path, manifestName!);
+            if (string.IsNullOrWhiteSpace(manifestText))
+                continue;
+
+            if (ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText!, "ModuleVersion", out var version) &&
+                NormalizeReleaseVersion(version) is not null)
+            {
+                return manifestText;
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> EnumerateModuleManifestCandidates(
+        IEnumerable<string> artifactPaths,
+        string manifestName)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var configuredPath in artifactPaths.Where(path => !string.IsNullOrWhiteSpace(path)))
+        {
+            var path = Path.GetFullPath(configuredPath);
+            if (File.Exists(path))
+            {
+                if (seen.Add(path))
+                    yield return path;
+                continue;
+            }
+
+            if (!Directory.Exists(path))
+                continue;
+
+            foreach (var file in Directory.EnumerateFiles(path, "*.zip", SearchOption.TopDirectoryOnly)
+                .Concat(Directory.EnumerateFiles(path, manifestName, SearchOption.AllDirectories)))
+            {
+                var fullPath = Path.GetFullPath(file);
+                if (seen.Add(fullPath))
+                    yield return fullPath;
+            }
+        }
+    }
+
+    private static string? ReadModuleManifestText(string path, string manifestName)
+    {
+        try
+        {
+            if (string.Equals(Path.GetFileName(path), manifestName, StringComparison.OrdinalIgnoreCase))
+                return File.ReadAllText(path);
+
+            if (!string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            using var archive = ZipFile.OpenRead(path);
+            var entry = archive.Entries
+                .Where(candidate => string.Equals(candidate.Name, manifestName, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(candidate => candidate.FullName.Length)
+                .FirstOrDefault();
+            if (entry is null)
+                return null;
+
+            using var reader = new StreamReader(entry.Open());
+            return reader.ReadToEnd();
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (InvalidDataException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadSourceModuleManifestText(PowerForgeModuleReleasePlanSummary plan)
+    {
+        if (string.IsNullOrWhiteSpace(plan.ManifestPath) || !File.Exists(plan.ManifestPath))
+            return null;
+
+        try
+        {
+            return File.ReadAllText(plan.ManifestPath!);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static DateTime GetLastWriteTimeUtcSafe(string path)
+    {
+        try
+        {
+            return File.GetLastWriteTimeUtc(path);
+        }
+        catch
+        {
+            return DateTime.MinValue;
+        }
     }
 }

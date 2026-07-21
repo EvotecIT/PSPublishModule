@@ -327,7 +327,7 @@ internal sealed partial class PowerForgeReleaseService
                     return result;
                 }
 
-                UpdateResolvedModuleVersion(result.ModulePlan);
+                UpdateResolvedModuleVersion(result.ModulePlan, result.ModuleAssets);
             }
         }
 
@@ -3448,20 +3448,36 @@ internal sealed partial class PowerForgeReleaseService
         }
     }
 
-    private static IEnumerable<PowerForgeReleaseAssetEntry> CreateModuleAssetEntries(string path)
+    internal static IEnumerable<PowerForgeReleaseAssetEntry> CreateModuleAssetEntries(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
             yield break;
 
-        if (!File.Exists(path) && !Directory.Exists(path))
+        if (File.Exists(path))
+        {
+            yield return new PowerForgeReleaseAssetEntry
+            {
+                Path = path,
+                Category = PowerForgeReleaseAssetCategory.Module,
+                Source = "Module"
+            };
+            yield break;
+        }
+
+        if (!Directory.Exists(path))
             yield break;
 
-        yield return new PowerForgeReleaseAssetEntry
+        foreach (var file in Directory
+            .EnumerateFiles(path, "*", SearchOption.TopDirectoryOnly)
+            .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase))
         {
-            Path = path,
-            Category = PowerForgeReleaseAssetCategory.Module,
-            Source = "Module"
-        };
+            yield return new PowerForgeReleaseAssetEntry
+            {
+                Path = file,
+                Category = PowerForgeReleaseAssetCategory.Module,
+                Source = "Module"
+            };
+        }
     }
 
     private static IEnumerable<PowerForgeReleaseAssetEntry> StageReleaseAssets(
