@@ -1,3 +1,4 @@
+using System.Management.Automation.Language;
 using System.Text.RegularExpressions;
 using PowerForge;
 
@@ -130,6 +131,22 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.Contains("function Resolve-ImportFramework", buildScript, StringComparison.Ordinal);
         Assert.Contains("$tfm = Resolve-ImportFramework -RequestedFramework $Framework", buildScript, StringComparison.Ordinal);
         Assert.Contains("\"PSPublishModule/bin/{0}/{1}/PSPublishModule.dll\" -f $Configuration, $tfm", buildScript, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_recipe_resolves_script_relative_defaults_after_parameter_binding()
+    {
+        var repoRoot = RepoRootLocator.Find();
+        var buildScriptPath = Path.Combine(repoRoot, "Module", "Build", "Build-Module.ps1");
+        var buildScript = File.ReadAllText(buildScriptPath);
+        var scriptAst = Parser.ParseFile(buildScriptPath, out _, out ParseError[] parseErrors);
+
+        Assert.Empty(parseErrors);
+
+        var jsonPathParameter = Assert.Single(scriptAst.ParamBlock!.Parameters, parameter =>
+            string.Equals(parameter.Name.VariablePath.UserPath, "JsonPath", StringComparison.OrdinalIgnoreCase));
+        Assert.Null(jsonPathParameter.DefaultValue);
+        Assert.Contains("$JsonPath = Join-Path $PSScriptRoot '../../powerforge.json'", buildScript, StringComparison.Ordinal);
     }
 
     [Fact]
