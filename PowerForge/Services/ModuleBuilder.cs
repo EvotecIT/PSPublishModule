@@ -1034,6 +1034,7 @@ public sealed class ModuleBuilder
         }
         catch { /* ignore */ }
 
+        if (depsPath is null) return null;
         if (string.IsNullOrWhiteSpace(depsPath) || !File.Exists(depsPath)) return null;
 
         try
