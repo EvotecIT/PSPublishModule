@@ -2111,6 +2111,12 @@ internal sealed partial class PowerForgeReleaseService
 
     private static bool ShouldPublishUnifiedGitHub(PowerForgeReleaseSpec spec, PowerForgeReleaseRequest request)
     {
+        if (request.ToolsOnly && request.PublishToolGitHub == true)
+            return false;
+
+        if (request.PackagesOnly && request.PublishProjectGitHub == true)
+            return false;
+
         return spec.GitHub is not null && (request.PublishProjectGitHub ?? spec.GitHub.Publish);
     }
 

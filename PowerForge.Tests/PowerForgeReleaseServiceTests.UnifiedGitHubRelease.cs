@@ -146,4 +146,76 @@ public sealed partial class PowerForgeReleaseServiceTests
             TryDelete(root);
         }
     }
+
+    [Fact]
+    public void ToolsOnly_ExplicitToolGitHubPublishBypassesModuleVersionedUnifiedRelease()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var zipPath = Path.Combine(root, "PowerForge-1.0.7-osx-arm64.zip");
+            File.WriteAllText(zipPath, "zip");
+            var publishCalls = new List<GitHubReleasePublishRequest>();
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => new PowerForgeToolReleasePlan(),
+                runTools: _ => new PowerForgeToolReleaseResult
+                {
+                    Success = true,
+                    Artefacts = new[]
+                    {
+                        new PowerForgeToolReleaseArtifactResult
+                        {
+                            Target = "PowerForge",
+                            Version = "1.0.7",
+                            ZipPath = zipPath
+                        }
+                    }
+                },
+                publishGitHubRelease: request =>
+                {
+                    publishCalls.Add(request);
+                    return new GitHubReleasePublishResult { Succeeded = true };
+                });
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        GitHub = new PowerForgeToolReleaseGitHubOptions
+                        {
+                            Publish = false,
+                            Owner = "EvotecIT",
+                            Repository = "PSPublishModule",
+                            Token = "token"
+                        }
+                    },
+                    GitHub = new PowerForgeReleaseGitHubOptions
+                    {
+                        Publish = true,
+                        VersionSource = PowerForgeReleaseVersionSource.Module,
+                        Owner = "EvotecIT",
+                        Repository = "PSPublishModule",
+                        Token = "token"
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ToolsOnly = true,
+                    PublishToolGitHub = true
+                });
+
+            Assert.True(result.Success);
+            Assert.Null(result.UnifiedGitHubRelease);
+            var publish = Assert.Single(publishCalls);
+            Assert.Equal("PowerForge-v1.0.7", publish.TagName);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
 }

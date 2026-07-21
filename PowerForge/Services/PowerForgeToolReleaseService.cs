@@ -391,6 +391,8 @@ internal sealed class PowerForgeToolReleaseService
         args.Add("/p:CopyDocumentationFiles=false");
         args.Add("/p:ExcludeSymbolsFromSingleFile=true");
         args.Add("/p:ErrorOnDuplicatePublishOutputFiles=false");
+        args.Add("/p:RestoreLockedMode=false");
+        args.Add("/p:NuGetLockFilePath=obj/PowerForge.ToolRelease.packages.lock.json");
         args.Add("/p:UseAppHost=true");
         args.Add($"/p:PublishDir={Quote(publishDir)}");
 
