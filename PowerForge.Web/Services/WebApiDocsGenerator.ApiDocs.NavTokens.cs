@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 
 namespace PowerForge.Web;
 
@@ -29,10 +30,12 @@ public static partial class WebApiDocsGenerator
             ContainsTemplateToken(header, "NAV_LINKS") ||
             ContainsTemplateToken(header, "NAV_ACTIONS") ||
             ContainsTemplateToken(footer, "NAV_LINKS") ||
-            ContainsTemplateToken(footer, "NAV_ACTIONS");
+            ContainsTemplateToken(footer, "NAV_ACTIONS") ||
+            ContainsTemplateTokenPrefix(header, "FOOTER_") ||
+            ContainsTemplateTokenPrefix(footer, "FOOTER_");
         if (needsNavTokens && string.IsNullOrWhiteSpace(options.NavJsonPath))
         {
-            warnings?.Add("API docs nav required: header/footer fragments contain {{NAV_*}} placeholders but NavJsonPath is not set. Set apidocs.nav (or apidocs.config) so navigation can be injected.");
+            warnings?.Add("API docs nav required: header/footer fragments contain {{NAV_*}} or {{FOOTER_*}} placeholders but NavJsonPath is not set. Set apidocs.nav (or apidocs.config) so navigation can be injected.");
             if (!string.IsNullOrWhiteSpace(header))
                 header = ApplyTemplate(header, tokens);
             if (!string.IsNullOrWhiteSpace(footer))
@@ -85,6 +88,12 @@ public static partial class WebApiDocsGenerator
         tokens["FOOTER_PRODUCT"] = BuildLinkHtml(nav.FooterProduct);
         tokens["FOOTER_RESOURCES"] = BuildLinkHtml(nav.FooterResources);
         tokens["FOOTER_COMPANY"] = BuildLinkHtml(nav.FooterCompany);
+        foreach (var footerMenu in nav.FooterMenus)
+        {
+            var tokenName = BuildFooterMenuTokenName(footerMenu.Key);
+            if (!string.IsNullOrWhiteSpace(tokenName))
+                tokens[tokenName] = BuildLinkHtml(footerMenu.Value);
+        }
 
         if (!string.IsNullOrWhiteSpace(header))
             header = ApplyTemplate(header, tokens);
@@ -98,6 +107,38 @@ public static partial class WebApiDocsGenerator
             return false;
         // Tokens are case-insensitive and appear as {{TOKEN}} in fragments.
         return html.IndexOf("{{" + token + "}}", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool ContainsTemplateTokenPrefix(string html, string prefix)
+    {
+        if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(prefix))
+            return false;
+        return html.IndexOf("{{" + prefix, StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static string BuildFooterMenuTokenName(string menuName)
+    {
+        if (string.IsNullOrWhiteSpace(menuName))
+            return string.Empty;
+
+        var builder = new StringBuilder(menuName.Length);
+        var separatorPending = false;
+        foreach (var character in menuName.Trim())
+        {
+            if (char.IsLetterOrDigit(character))
+            {
+                if (separatorPending && builder.Length > 0)
+                    builder.Append('_');
+                builder.Append(char.ToUpperInvariant(character));
+                separatorPending = false;
+            }
+            else
+            {
+                separatorPending = true;
+            }
+        }
+
+        return builder.ToString();
     }
 
     private static string BuildLinkHtml(IReadOnlyList<NavItem> items)

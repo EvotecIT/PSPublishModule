@@ -432,7 +432,8 @@ Docs templates (`template: docs`):
 Header/footer fragments can use nav tokens when `nav` is provided:
 - `{{SITE_NAME}}`, `{{BRAND_NAME}}`, `{{BRAND_URL}}`, `{{BRAND_ICON}}`
 - `{{NAV_LINKS}}`, `{{NAV_ACTIONS}}`
-- `{{FOOTER_PRODUCT}}`, `{{FOOTER_RESOURCES}}`, `{{FOOTER_COMPANY}}`
+- `{{FOOTER_PRODUCT}}`, `{{FOOTER_RESOURCES}}`, `{{FOOTER_COMPANY}}` for the legacy three-column footer contract
+- every exported footer menu also receives a deterministic token derived from its menu name: uppercase letters and digits with other characters normalized to `_` (for example, `footer-products` becomes `{{FOOTER_PRODUCTS}}` and `footer-community` becomes `{{FOOTER_COMMUNITY}}`)
 - `{{YEAR}}`
 
 Project.json example (metadata you can reuse across repos):

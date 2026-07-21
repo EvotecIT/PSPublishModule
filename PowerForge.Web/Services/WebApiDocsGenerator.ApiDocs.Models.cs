@@ -665,6 +665,7 @@ public static partial class WebApiDocsGenerator
         public List<NavItem> FooterProduct { get; set; } = new();
         public List<NavItem> FooterResources { get; set; } = new();
         public List<NavItem> FooterCompany { get; set; } = new();
+        public Dictionary<string, List<NavItem>> FooterMenus { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     private readonly record struct ApiSocialProfile(
