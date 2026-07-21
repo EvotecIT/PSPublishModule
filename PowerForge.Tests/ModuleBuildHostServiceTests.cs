@@ -115,12 +115,42 @@ public sealed class ModuleBuildHostServiceTests
         });
 
         Assert.NotNull(captured);
-        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('Framework')", captured!.CommandText!, StringComparison.Ordinal);
+        Assert.True(captured!.PreferPwsh);
+        Assert.Equal(10, captured.RequiredRuntimeMajor);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('Framework')", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptArguments['Framework'] = 'net10.0'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('RunMode')", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptArguments['RunMode'] = 'Publish'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('PowerForgeReleaseStage')", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptArguments['PowerForgeReleaseStage'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.True(result.Succeeded);
+    }
+
+    [Theory]
+    [InlineData("net472", false, 0)]
+    [InlineData("netcoreapp3.1", true, 3)]
+    [InlineData("net8.0", true, 8)]
+    [InlineData("net10.0-windows", true, 10)]
+    [InlineData("auto", true, 8)]
+    public async Task ExecuteBuildAsync_SelectsHostCompatibleWithTargetFramework(string framework, bool modernDotNet, int requiredRuntimeMajor)
+    {
+        PowerShellRunRequest? captured = null;
+        var runner = new StubPowerShellRunner(request => {
+            captured = request;
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        });
+        var service = new ModuleBuildHostService(runner);
+
+        var result = await service.ExecuteBuildAsync(new ModuleBuildHostBuildRequest {
+            RepositoryRoot = @"C:\repo",
+            ScriptPath = @"C:\repo\Build\Build-Module.ps1",
+            ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
+            Framework = framework
+        });
+
+        Assert.NotNull(captured);
+        Assert.Equal(!FrameworkCompatibility.IsWindows() || modernDotNet, captured!.PreferPwsh);
+        Assert.Equal(requiredRuntimeMajor, captured.RequiredRuntimeMajor);
         Assert.True(result.Succeeded);
     }
 
