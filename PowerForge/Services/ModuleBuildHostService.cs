@@ -35,7 +35,13 @@ public sealed class ModuleBuildHostService
         ValidateRequiredPath(request.OutputPath, nameof(request.OutputPath));
 
         var script = BuildExportScript(request.RepositoryRoot, request.ScriptPath, request.OutputPath, request.ModulePath);
-        return RunCommandAsync(request.RepositoryRoot, script, TimeSpan.FromMinutes(15), cancellationToken);
+        return RunCommandAsync(
+            request.RepositoryRoot,
+            script,
+            TimeSpan.FromMinutes(15),
+            preferPwsh: !FrameworkCompatibility.IsWindows(),
+            requiredRuntimeMajor: 0,
+            cancellationToken);
     }
 
     /// <summary>
@@ -50,22 +56,40 @@ public sealed class ModuleBuildHostService
 
         var script = BuildBuildScript(request.RepositoryRoot, request.ScriptPath, request.ModulePath, request);
         var timeout = request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(2) : request.Timeout;
-        return RunCommandAsync(request.RepositoryRoot, script, timeout, cancellationToken);
+        var hostRequirements = ResolveHostRequirements(request.Framework);
+        return RunCommandAsync(
+            request.RepositoryRoot,
+            script,
+            timeout,
+            preferPwsh: hostRequirements.PreferPwsh,
+            requiredRuntimeMajor: hostRequirements.RequiredRuntimeMajor,
+            cancellationToken);
     }
 
     private async Task<ModuleBuildHostExecutionResult> RunCommandAsync(
         string workingDirectory,
         string script,
         TimeSpan timeout,
+        bool preferPwsh,
+        int requiredRuntimeMajor,
         CancellationToken cancellationToken)
     {
         var startedAt = Stopwatch.StartNew();
-        var result = await Task.Run(() => _powerShellRunner.Run(PowerShellRunRequest.ForCommand(
-            commandText: script,
-            timeout: timeout,
-            preferPwsh: !FrameworkCompatibility.IsWindows(),
-            workingDirectory: workingDirectory,
-            executableOverride: Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE"))), cancellationToken).ConfigureAwait(false);
+        var executableOverride = Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE");
+        var runRequest = requiredRuntimeMajor > 0
+            ? PowerShellRunRequest.ForCompatibleCommand(
+                commandText: script,
+                timeout: timeout,
+                requiredRuntimeMajor: requiredRuntimeMajor,
+                workingDirectory: workingDirectory,
+                executableOverride: executableOverride)
+            : PowerShellRunRequest.ForCommand(
+                commandText: script,
+                timeout: timeout,
+                preferPwsh: preferPwsh,
+                workingDirectory: workingDirectory,
+                executableOverride: executableOverride);
+        var result = await Task.Run(() => _powerShellRunner.Run(runRequest), cancellationToken).ConfigureAwait(false);
         startedAt.Stop();
 
         return new ModuleBuildHostExecutionResult {
@@ -75,6 +99,59 @@ public sealed class ModuleBuildHostService
             StandardError = result.StdErr,
             Executable = result.Executable
         };
+    }
+
+    private static PowerShellHostRequirements ResolveHostRequirements(string? framework)
+    {
+        var defaultPreference = !FrameworkCompatibility.IsWindows();
+
+        if (string.IsNullOrWhiteSpace(framework))
+            return new PowerShellHostRequirements(defaultPreference, 0);
+
+        var targetFramework = framework!.Trim();
+        if (string.Equals(targetFramework, "auto", StringComparison.OrdinalIgnoreCase))
+            return new PowerShellHostRequirements(preferPwsh: true, requiredRuntimeMajor: 8);
+
+        if (targetFramework.StartsWith("netcoreapp", StringComparison.OrdinalIgnoreCase))
+        {
+            var coreVersionText = targetFramework.Substring("netcoreapp".Length);
+            return Version.TryParse(coreVersionText, out var coreVersion)
+                ? new PowerShellHostRequirements(preferPwsh: true, requiredRuntimeMajor: coreVersion.Major)
+                : new PowerShellHostRequirements(preferPwsh: true, requiredRuntimeMajor: 0);
+        }
+
+        if (!targetFramework.StartsWith("net", StringComparison.OrdinalIgnoreCase))
+            return new PowerShellHostRequirements(defaultPreference, 0);
+
+        var versionText = targetFramework.Substring(3);
+        var platformSeparator = versionText.IndexOf('-');
+        if (platformSeparator >= 0)
+            versionText = versionText.Substring(0, platformSeparator);
+
+        // Compact TFMs such as net472 target .NET Framework. Modern .NET TFMs
+        // use a dotted version (net8.0, net10.0) and require pwsh on Windows.
+        // This also prevents self-release from preloading an installed net472
+        // PSPublishModule assembly that cannot be unloaded before the local build.
+        if (versionText.IndexOf('.') >= 0
+            && Version.TryParse(versionText, out var version)
+            && version.Major >= 5)
+        {
+            return new PowerShellHostRequirements(preferPwsh: true, requiredRuntimeMajor: version.Major);
+        }
+
+        return new PowerShellHostRequirements(defaultPreference, 0);
+    }
+
+    private sealed class PowerShellHostRequirements
+    {
+        public PowerShellHostRequirements(bool preferPwsh, int requiredRuntimeMajor)
+        {
+            PreferPwsh = preferPwsh;
+            RequiredRuntimeMajor = requiredRuntimeMajor;
+        }
+
+        public bool PreferPwsh { get; }
+        public int RequiredRuntimeMajor { get; }
     }
 
     private static string BuildExportScript(string repositoryRoot, string scriptPath, string outputPath, string modulePath)
