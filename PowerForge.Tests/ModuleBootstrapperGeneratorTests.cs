@@ -30,6 +30,18 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PSScriptRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
             Assert.Contains("$FunctionsToExport = @('Get-Demo')", bootstrapper);
             Assert.Contains("$AliasesToExport = @('gdemo')", bootstrapper);
+            Assert.Contains("[AppDomain]::CurrentDomain.add_AssemblyResolve($PowerForgeDesktopAssemblyResolver)", bootstrapper);
+            Assert.Contains("$EventArgs.RequestingAssembly.Location", bootstrapper);
+            Assert.Contains("$PowerForgeDesktopAssemblyResolverState = [pscustomobject]@{", bootstrapper);
+            Assert.Contains("if (-not $PowerForgeDesktopAssemblyResolverState.BootstrapActive)", bootstrapper);
+            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.BootstrapActive = $false", bootstrapper);
+            Assert.Contains("StartsWith($PowerForgeDesktopAssemblyRootPrefix, [StringComparison]::OrdinalIgnoreCase)", bootstrapper);
+            Assert.Contains("$PowerForgeRequestedAssemblyName -ne [IO.Path]::GetFileName($PowerForgeRequestedAssemblyName)", bootstrapper);
+            Assert.Contains("$PowerForgeRequestedAssemblyName.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0", bootstrapper);
+            Assert.Contains("$PowerForgeAssemblyCandidate = [IO.Path]::GetFullPath(", bootstrapper);
+            Assert.Contains("$PowerForgeAssemblyCandidate.StartsWith($PowerForgeDesktopAssemblyRootPrefix, [StringComparison]::OrdinalIgnoreCase)", bootstrapper);
+            Assert.Contains("[AppDomain]::CurrentDomain.remove_AssemblyResolve($PowerForgeResolverForRemoval)", bootstrapper);
+            Assert.Contains("$ExecutionContext.SessionState.Module.OnRemove", bootstrapper);
             Assert.DoesNotContain("ProcessArchitecture", bootstrapper);
         }
         finally
@@ -62,6 +74,10 @@ public class ModuleBootstrapperGeneratorTests
             var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
             Assert.Contains("Lib\\Default\\DemoModule.dll", libraries);
             Assert.Contains("Lib\\Default\\Dependency.dll", libraries);
+            Assert.True(
+                libraries.IndexOf("Lib\\Default\\Dependency.dll", StringComparison.Ordinal) <
+                libraries.IndexOf("Lib\\Default\\DemoModule.dll", StringComparison.Ordinal),
+                "Private dependencies must be preloaded before the exported module assembly on Desktop PowerShell.");
             Assert.DoesNotContain("libgcc_s_seh-1.dll", libraries);
         }
         finally
@@ -176,7 +192,13 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("Falling back to direct Import-Module", bootstrapper);
             Assert.Contains("will load from the default context", bootstrapper);
             Assert.Contains("$PSEdition -ne 'Core'", bootstrapper);
+            Assert.Contains("[AppDomain]::CurrentDomain.add_AssemblyResolve($PowerForgeDesktopAssemblyResolver)", bootstrapper);
+            Assert.Contains("[AppDomain]::CurrentDomain.remove_AssemblyResolve($PowerForgeResolverForRemoval)", bootstrapper);
             Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PSScriptRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
+            Assert.True(
+                bootstrapper.IndexOf(". $LibrariesScript", StringComparison.Ordinal) <
+                bootstrapper.IndexOf("& $ImportModule $ModuleAssemblyPath", StringComparison.Ordinal),
+                "Desktop dependencies must load before the exported binary module.");
 
             Assert.True(File.Exists(Path.Combine(root, "Lib", "Core", "DemoModule.ModuleLoadContext.dll")));
             Assert.False(File.Exists(Path.Combine(root, "Lib", "Default", "DemoModule.ModuleLoadContext.dll")));

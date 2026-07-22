@@ -211,21 +211,9 @@ internal static partial class ModuleBootstrapperGenerator
         foreach (var ignored in ignoredLibraryFileNames)
             excluded.Add(ignored);
 
-        var exportFirst = new HashSet<string>(exportAssemblyFileNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
-        foreach (var name in exportAssemblyFileNames ?? Array.Empty<string>())
-        {
-            if (string.IsNullOrWhiteSpace(name)) continue;
-            if (excluded.Contains(name)) continue;
-            if (!dllFiles.Contains(name, StringComparer.OrdinalIgnoreCase)) continue;
+        var exportLast = new HashSet<string>(exportAssemblyFileNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        foreach (var name in OrderManagedLibrariesForDesktopPreload(dir, dllFiles, excluded, exportLast))
             list.Add(RelativeLibPath(folderName, name));
-        }
-
-        foreach (var name in dllFiles.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
-        {
-            if (excluded.Contains(name)) continue;
-            if (exportFirst.Contains(name)) continue;
-            list.Add(RelativeLibPath(folderName, name));
-        }
 
         return list;
 
@@ -287,6 +275,7 @@ internal static partial class ModuleBootstrapperGenerator
                     ["ModuleName"] = EscapePsSingleQuoted(moduleName),
                     ["LoaderAssemblyName"] = EscapePsSingleQuoted(loaderIdentity?.AssemblyName ?? string.Empty),
                     ["LoaderTypeName"] = loaderIdentity?.TypeName ?? string.Empty,
+                    ["DesktopAssemblyResolverBlock"] = BuildDesktopAssemblyResolverBlock(),
                     ["RuntimeHandlerBlock"] = handleRuntimes ? BuildRuntimeHandlerBlock() : string.Empty,
                     ["TypeAcceleratorBlock"] = BuildTypeAcceleratorBlock(
                         assemblyTypeAcceleratorMode,
@@ -1153,6 +1142,14 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
                        "}",
                        string.Empty
                    });
+    }
+
+    private static string BuildDesktopAssemblyResolverBlock()
+    {
+        return RenderModuleBootstrapperTemplate(
+            "DesktopAssemblyResolver",
+            "Scripts/ModuleBootstrapper/DesktopAssemblyResolver.Template.ps1",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
     }
 
     internal static string BuildTypeAcceleratorBlock(

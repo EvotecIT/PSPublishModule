@@ -50,7 +50,22 @@ if ($PSEdition -eq 'Core') {
     $LibFolder = $FrameworkNet
 }
 
-{{RuntimeHandlerBlock}}try {
+{{DesktopAssemblyResolverBlock}}{{RuntimeHandlerBlock}}$PowerForgeDesktopLibrariesLoaded = $false
+if ($PSEdition -ne 'Core') {
+    $LibrariesScript = [IO.Path]::Combine($PSScriptRoot, '{{ModuleName}}.Libraries.ps1')
+    if (Test-Path -LiteralPath $LibrariesScript) {
+        try {
+            . $LibrariesScript
+            $PowerForgeDesktopLibrariesLoaded = $true
+        } catch {
+            if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
+                & $UnregisterPowerForgeDesktopAssemblyResolver
+            }
+            throw
+        }
+    }
+}
+try {
     $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
 
     if (-not ($Class -as [type])) {
@@ -61,6 +76,9 @@ if ($PSEdition -eq 'Core') {
     }
 } catch {
     if ($ErrorActionPreference -eq 'Stop') {
+        if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
+            & $UnregisterPowerForgeDesktopAssemblyResolver
+        }
         throw
     } else {
         Write-Warning -Message "Importing module $Library failed. Fix errors before continuing. Error: $($_.Exception.Message)"
@@ -69,6 +87,16 @@ if ($PSEdition -eq 'Core') {
 
 # Dot source all libraries by loading external file
 $LibrariesScript = [IO.Path]::Combine($PSScriptRoot, '{{ModuleName}}.Libraries.ps1')
-if (Test-Path -LiteralPath $LibrariesScript) {
-    . $LibrariesScript
+if (-not $PowerForgeDesktopLibrariesLoaded -and (Test-Path -LiteralPath $LibrariesScript)) {
+    try {
+        . $LibrariesScript
+    } catch {
+        if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
+            & $UnregisterPowerForgeDesktopAssemblyResolver
+        }
+        throw
+    }
+}
+if ($PSEdition -ne 'Core' -and $null -ne $PowerForgeDesktopAssemblyResolverState) {
+    $PowerForgeDesktopAssemblyResolverState.BootstrapActive = $false
 }
