@@ -169,7 +169,11 @@ public static partial class WebAssetOptimizer
 
         var hashSpec = ResolveHashSpec(options, policy);
         Dictionary<string, string>? hashMap = null;
-        if (hashSpec.Enabled)
+        // Fingerprinting moves shared assets and therefore requires every generated HTML
+        // reference to be rewritten in the same pass. A sampled/incremental HTML scope
+        // must never hash assets because untouched pages would retain broken old URLs.
+        var hasCompleteHtmlScope = htmlFiles.Length == allHtmlFiles.Length;
+        if (hashSpec.Enabled && hasCompleteHtmlScope)
         {
             hashMap = HashAssets(siteRoot, hashSpec, out var hashedAssetCount, out var hashedAssets, MarkUpdated);
             result.HashedAssetCount = hashedAssetCount;
