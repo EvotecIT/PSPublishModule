@@ -648,17 +648,28 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
 
         var resolvedPath = _resolver?.ResolveAssemblyToPath(assemblyName);
         if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+        {{
+            // A package can place a compile-time facade beside the module and the real
+            // implementation under runtimes/<rid>/lib. Replace only that adjacent
+            // facade; preserve every non-adjacent path selected by the dependency resolver.
+            var runtimePath = IsAdjacentAssemblyPath(resolvedPath, assemblyName.Name)
+                ? ResolvePackagedRuntimeAssembly(assemblyName.Name)
+                : null;
+            if (!string.IsNullOrWhiteSpace(runtimePath) && File.Exists(runtimePath))
+                return LoadFromAssemblyPath(runtimePath);
+
             return LoadFromAssemblyPath(resolvedPath);
+        }}
 
         resolvedPath = _manifestResolver?.ResolveAssemblyToPath(assemblyName);
         if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
             return LoadFromAssemblyPath(resolvedPath);
 
-        resolvedPath = ResolvePackagedRuntimeAssembly(assemblyName.Name);
-        if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
-            return LoadFromAssemblyPath(resolvedPath);
-
         var assemblyPath = Path.Combine(_assemblyDirectory, assemblyName.Name + "".dll"");
+        var packagedRuntimePath = ResolvePackagedRuntimeAssembly(assemblyName.Name);
+        if (!string.IsNullOrWhiteSpace(packagedRuntimePath) && File.Exists(packagedRuntimePath))
+            return LoadFromAssemblyPath(packagedRuntimePath);
+
         return File.Exists(assemblyPath) ? LoadFromAssemblyPath(assemblyPath) : null;
     }}
 
@@ -946,6 +957,18 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         }}
 
         return null;
+    }}
+
+    private bool IsAdjacentAssemblyPath(string resolvedPath, string assemblyName)
+    {{
+        if (string.IsNullOrWhiteSpace(resolvedPath) || string.IsNullOrWhiteSpace(assemblyName))
+            return false;
+
+        var adjacentPath = Path.Combine(_assemblyDirectory, assemblyName + "".dll"");
+        return string.Equals(
+            Path.GetFullPath(resolvedPath),
+            Path.GetFullPath(adjacentPath),
+            StringComparison.OrdinalIgnoreCase);
     }}
 
     private IntPtr LoadPackagedNativeLibrary(string unmanagedDllName)

@@ -267,6 +267,19 @@ public class ModuleBootstrapperGeneratorTests
                 }
                 """);
 
+            var competingRuntimeDependencyPath = BuildFixtureProject(
+                root,
+                "NestedDependencyCompetingRuntime",
+                "NestedDependency",
+                """
+                namespace NestedDependency;
+
+                public static class Marker
+                {
+                    public static string Value => "wrong-runtime";
+                }
+                """);
+
             var modulePath = BuildFixtureProject(
                 root,
                 "DemoModule",
@@ -285,6 +298,9 @@ public class ModuleBootstrapperGeneratorTests
             var nestedDependencyPath = Path.Combine(libCore, "lib", "net8.0", "NestedDependency.dll");
             Directory.CreateDirectory(Path.GetDirectoryName(nestedDependencyPath)!);
             File.Copy(dependencyPath, nestedDependencyPath, overwrite: true);
+            var competingRuntimePath = Path.Combine(libCore, "runtimes", GetCurrentRuntimeAssetRid(), "lib", "net9.0", "NestedDependency.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(competingRuntimePath)!);
+            File.Copy(competingRuntimeDependencyPath, competingRuntimePath, overwrite: true);
             WriteDepsJson(Path.Combine(libCore, "DemoModule.deps.json"));
 
             var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
@@ -298,6 +314,7 @@ public class ModuleBootstrapperGeneratorTests
                 targetFrameworks: new[] { "net8.0" });
 
             var loaderAssembly = System.Reflection.Assembly.LoadFile(Path.Combine(libCore, "DemoModule.ModuleLoadContext.dll"));
+            var contextType = loaderAssembly.GetType("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", throwOnError: true)!;
             var resolverType = loaderAssembly.GetType("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext+DependencyManifestResolver", throwOnError: true)!;
             var tryCreate = resolverType.GetMethod("TryCreate", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;
             var resolver = tryCreate.Invoke(null, new object[] { Path.Combine(libCore, "DemoModule.dll") });
@@ -307,6 +324,14 @@ public class ModuleBootstrapperGeneratorTests
             var resolved = (string?)resolveAssembly.Invoke(resolver, new object[] { new System.Reflection.AssemblyName("NestedDependency") });
 
             Assert.Equal(nestedDependencyPath, resolved);
+
+            var loadModule = contextType.GetMethod("LoadModule", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;
+            var moduleAssembly = (System.Reflection.Assembly)loadModule.Invoke(null, new object?[] { Path.Combine(libCore, "DemoModule.dll"), "DemoModule" })!;
+            var value = moduleAssembly.GetType("DemoModule.Entry", throwOnError: true)!
+                .GetMethod("Read", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!
+                .Invoke(null, null);
+
+            Assert.Equal("deps", value);
         }
         finally
         {
@@ -327,9 +352,9 @@ public class ModuleBootstrapperGeneratorTests
 
         try
         {
-            var dependencyPath = BuildFixtureProject(
+            var runtimeDependencyPath = BuildFixtureProject(
                 root,
-                "NestedDependency",
+                "NestedDependencyRuntime",
                 "NestedDependency",
                 """
                 namespace NestedDependency;
@@ -337,6 +362,19 @@ public class ModuleBootstrapperGeneratorTests
                 public static class Marker
                 {
                     public static string Value => "runtime-probe";
+                }
+                """);
+
+            var facadeDependencyPath = BuildFixtureProject(
+                root,
+                "NestedDependencyFacade",
+                "NestedDependency",
+                """
+                namespace NestedDependency;
+
+                public static class Marker
+                {
+                    public static string Value => "facade";
                 }
                 """);
 
@@ -352,12 +390,13 @@ public class ModuleBootstrapperGeneratorTests
                     public static string Read() => NestedDependency.Marker.Value;
                 }
                 """,
-                new[] { dependencyPath });
+                new[] { facadeDependencyPath });
 
             File.Copy(modulePath, Path.Combine(libCore, "DemoModule.dll"), overwrite: true);
+            File.Copy(facadeDependencyPath, Path.Combine(libCore, "NestedDependency.dll"), overwrite: true);
             var nestedDependencyPath = Path.Combine(libCore, "runtimes", GetCurrentRuntimeAssetRid(), "lib", "net8.0", "NestedDependency.dll");
             Directory.CreateDirectory(Path.GetDirectoryName(nestedDependencyPath)!);
-            File.Copy(dependencyPath, nestedDependencyPath, overwrite: true);
+            File.Copy(runtimeDependencyPath, nestedDependencyPath, overwrite: true);
 
             var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
             ModuleBootstrapperGenerator.Generate(
