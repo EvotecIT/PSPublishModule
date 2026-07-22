@@ -256,6 +256,8 @@ internal sealed partial class PowerForgeReleaseService
             runPackages = false;
         }
 
+        ValidateVersionCoordinationConfiguration(spec, runModule);
+
         var willRunTools = runTools && ShouldRunSectionForTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
         var willRunAppleApps = runAppleApps && ShouldRunSectionForTargets(selectedTargets, appleTargetMatches, runTools, toolTargetMatches);
         var hasNonAppleConfigurationConsumer = runWorkspaceValidation || runModule || runPackages || willRunTools;
@@ -301,8 +303,45 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
 
+        var coordinateModuleAndPackageVersions = ShouldCoordinateModuleAndPackageVersions(spec, runModule, runPackages);
+        if (coordinateModuleAndPackageVersions)
+        {
+            var versionFloor = ResolveCoordinatedModuleVersionFloor(spec.Module!, configPath, request);
+            request.Progress?.PhaseStarted(
+                PowerForgeReleaseProgressPhase.Versioning,
+                CountConfiguredPackageProjects(spec.Packages!),
+                $"Resolving shared version from {spec.Module!.VersionPrimaryProject}");
+            var packages = ExecutePackageRelease(
+                spec.Packages!,
+                configPath,
+                request,
+                configurationOverride,
+                publishUnifiedGitHub,
+                versionFloor,
+                spec.Module!.VersionPrimaryProject,
+                forcePlanOnly: true,
+                suppressPublishing: true);
+            result.Packages = packages;
+            if (!packages.Success)
+            {
+                request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.Versioning, packages.ErrorMessage);
+                result.Success = false;
+                result.ErrorMessage = packages.ErrorMessage ?? "Package release workflow failed.";
+                return result;
+            }
+
+            request.ResolvedReleaseVersion = ResolveCoordinatedPackageVersion(spec.Module!, packages, versionFloor);
+            request.Progress?.PhaseCompleted(
+                PowerForgeReleaseProgressPhase.Versioning,
+                $"Shared version {request.ResolvedReleaseVersion}");
+        }
+
         if (runModule)
         {
+            request.Progress?.PhaseStarted(
+                PowerForgeReleaseProgressPhase.Module,
+                1,
+                request.PlanOnly || request.ValidateOnly ? "Planning module build" : "Building PowerShell module");
             var packagePublishingRequested =
                 !request.ModuleOnly &&
                 ((request.PublishNuget ?? spec.Packages?.PublishNuget) == true ||
@@ -323,6 +362,9 @@ internal sealed partial class PowerForgeReleaseService
                 result.Module = moduleResult;
                 if (!moduleResult.Succeeded)
                 {
+                    request.Progress?.PhaseFailed(
+                        PowerForgeReleaseProgressPhase.Module,
+                        BuildModuleFailureMessage(module.Request.ScriptPath, moduleResult));
                     result.Success = false;
                     result.ErrorMessage = BuildModuleFailureMessage(module.Request.ScriptPath, moduleResult);
                     return result;
@@ -330,6 +372,11 @@ internal sealed partial class PowerForgeReleaseService
 
                 UpdateResolvedModuleVersion(result.ModulePlan, result.ModuleAssets);
             }
+            request.Progress?.PhaseCompleted(
+                PowerForgeReleaseProgressPhase.Module,
+                string.IsNullOrWhiteSpace(result.ModulePlan?.ModuleVersion)
+                    ? "Module lane complete"
+                    : $"Version {result.ModulePlan!.ModuleVersion}");
         }
 
         var earlyAppleReleaseVersion = ResolveAppleSharedReleaseVersion(spec, request, result);
@@ -348,29 +395,35 @@ internal sealed partial class PowerForgeReleaseService
                 validateReusableArchives: !request.PlanOnly && !request.ValidateOnly);
         }
 
-        if (runPackages)
+        if (runPackages && result.Packages is null)
         {
-            ApplyPackageRequestOverrides(spec.Packages!, request, configurationOverride);
-            var packageRequest = new ProjectBuildHostRequest
-            {
-                ConfigPath = configPath,
-                ExecuteBuild = !request.PlanOnly && !request.ValidateOnly,
-                PlanOnly = request.PlanOnly || request.ValidateOnly ? true : null,
-                PublishNuget = request.PublishNuget,
-                PublishGitHub = publishUnifiedGitHub ? false : request.PublishProjectGitHub
-            };
-
-            var packages = _executePackages(packageRequest, spec.Packages!, configPath);
+            request.Progress?.PhaseStarted(
+                PowerForgeReleaseProgressPhase.Packages,
+                CountConfiguredPackageProjects(spec.Packages!),
+                request.PlanOnly || request.ValidateOnly ? "Planning package build" : "Building project packages");
+            var packages = ExecutePackageRelease(
+                spec.Packages!,
+                configPath,
+                request,
+                configurationOverride,
+                publishUnifiedGitHub);
             result.Packages = packages;
             if (!packages.Success)
             {
+                request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.Packages, packages.ErrorMessage);
                 result.Success = false;
                 result.ErrorMessage = packages.ErrorMessage ?? "Package release workflow failed.";
                 return result;
             }
+            request.Progress?.PhaseCompleted(
+                PowerForgeReleaseProgressPhase.Packages,
+                string.IsNullOrWhiteSpace(ResolveSharedReleaseVersion(spec, result))
+                    ? "Package lane complete"
+                    : $"Version {ResolveSharedReleaseVersion(spec, result)}");
         }
 
-        var sharedReleaseVersion = ResolveSharedReleaseVersion(spec, result);
+        var sharedReleaseVersion = request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, result);
+        request.ResolvedReleaseVersion ??= sharedReleaseVersion;
 
         PowerForgeAppleReleasePlan? applePlan = null;
         if (willRunAppleApps)
@@ -393,6 +446,13 @@ internal sealed partial class PowerForgeReleaseService
 
         if (runTools)
         {
+            if (willRunTools)
+            {
+                request.Progress?.PhaseStarted(
+                    PowerForgeReleaseProgressPhase.Tools,
+                    CountConfiguredToolOutputs(spec.Tools!, dotNetSpecForTools),
+                    request.PlanOnly || request.ValidateOnly ? "Planning executable outputs" : "Publishing executable outputs");
+            }
             if (UsesDotNetToolWorkflow(spec.Tools!))
             {
                 if (dotNetSpecForTools is not null &&
@@ -415,6 +475,7 @@ internal sealed partial class PowerForgeReleaseService
                         result.DotNetTools = dotNetTools;
                         if (!dotNetTools.Succeeded)
                         {
+                            request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.Tools, dotNetTools.ErrorMessage);
                             result.Success = false;
                             result.ErrorMessage = dotNetTools.ErrorMessage ?? "DotNet tool release workflow failed.";
                             return result;
@@ -428,6 +489,7 @@ internal sealed partial class PowerForgeReleaseService
                             var failures = releases.Where(entry => !entry.Success).ToArray();
                             if (failures.Length > 0)
                             {
+                                request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.Tools, failures[0].ErrorMessage);
                                 result.Success = false;
                                 result.ErrorMessage = failures[0].ErrorMessage ?? "Tool GitHub release publishing failed.";
                                 return result;
@@ -453,6 +515,7 @@ internal sealed partial class PowerForgeReleaseService
                         result.Tools = tools;
                         if (!tools.Success)
                         {
+                            request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.Tools, tools.ErrorMessage);
                             result.Success = false;
                             result.ErrorMessage = tools.ErrorMessage ?? "Tool release workflow failed.";
                             return result;
@@ -466,6 +529,7 @@ internal sealed partial class PowerForgeReleaseService
                             var failures = releases.Where(entry => !entry.Success).ToArray();
                             if (failures.Length > 0)
                             {
+                                request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.Tools, failures[0].ErrorMessage);
                                 result.Success = false;
                                 result.ErrorMessage = failures[0].ErrorMessage ?? "Tool GitHub release publishing failed.";
                                 return result;
@@ -474,6 +538,43 @@ internal sealed partial class PowerForgeReleaseService
                     }
                 }
             }
+            if (willRunTools)
+            {
+                var outputCount = result.ToolPlan?.Targets.Sum(target => target.Combinations.Length)
+                    ?? result.DotNetToolPlan?.Steps.Length
+                    ?? CountConfiguredToolOutputs(spec.Tools!, dotNetSpecForTools);
+                var outputDetail = request.PlanOnly || request.ValidateOnly
+                    ? $"{outputCount} planned output step(s)"
+                    : $"{outputCount} output step(s) completed";
+                request.Progress?.PhaseCompleted(PowerForgeReleaseProgressPhase.Tools, outputDetail);
+            }
+        }
+        if (coordinateModuleAndPackageVersions && !request.PlanOnly && !request.ValidateOnly)
+        {
+            request.Progress?.PhaseStarted(
+                PowerForgeReleaseProgressPhase.Packages,
+                CountConfiguredPackageProjects(spec.Packages!),
+                $"Building and publishing version {request.ResolvedReleaseVersion}");
+            var packages = ExecutePackageRelease(
+                spec.Packages!,
+                configPath,
+                request,
+                configurationOverride,
+                publishUnifiedGitHub,
+                request.ResolvedReleaseVersion,
+                spec.Module!.VersionPrimaryProject);
+            result.Packages = packages;
+            if (!packages.Success)
+            {
+                request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.Packages, packages.ErrorMessage);
+                result.Success = false;
+                result.ErrorMessage = packages.ErrorMessage ?? "Package release workflow failed.";
+                return result;
+            }
+
+            request.Progress?.PhaseCompleted(
+                PowerForgeReleaseProgressPhase.Packages,
+                $"Version {request.ResolvedReleaseVersion}");
         }
         if (applePlan is not null)
         {
@@ -535,14 +636,22 @@ internal sealed partial class PowerForgeReleaseService
             IncludeWingetOutputsInReleaseAssets(result);
             if (publishUnifiedGitHub)
             {
+                request.Progress?.PhaseStarted(
+                    PowerForgeReleaseProgressPhase.GitHub,
+                    result.ReleaseAssets.Length,
+                    $"Uploading {result.ReleaseAssets.Length} release asset(s)");
                 var unifiedGitHubRelease = PublishUnifiedGitHubRelease(spec, configDirectory, result, sharedReleaseVersion);
                 result.UnifiedGitHubRelease = unifiedGitHubRelease;
                 if (!unifiedGitHubRelease.Success)
                 {
+                    request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.GitHub, unifiedGitHubRelease.ErrorMessage);
                     result.Success = false;
                     result.ErrorMessage = unifiedGitHubRelease.ErrorMessage ?? "Unified GitHub release publishing failed.";
                     return result;
                 }
+                request.Progress?.PhaseCompleted(
+                    PowerForgeReleaseProgressPhase.GitHub,
+                    unifiedGitHubRelease.ReleaseUrl ?? "GitHub release published");
             }
             SubmitWingetOutputs(spec, request, configDirectory, result);
             RewriteReleaseSummaryFiles(result);
@@ -776,8 +885,12 @@ internal sealed partial class PowerForgeReleaseService
             PowerForgeReleaseStage = true,
             UnifiedGitHubRelease = publishUnifiedGitHub,
             NoDotnetBuild = request.ModuleNoDotnetBuild ?? options.NoDotnetBuild ?? false,
-            ModuleVersion = request.ModuleVersion ?? options.ModuleVersion,
-            PreReleaseTag = request.ModulePreReleaseTag ?? options.PreReleaseTag,
+            ModuleVersion = string.IsNullOrWhiteSpace(request.ResolvedReleaseVersion)
+                ? request.ModuleVersion ?? options.ModuleVersion
+                : PackageVersionUtility.GetNumericVersion(request.ResolvedReleaseVersion!),
+            PreReleaseTag = string.IsNullOrWhiteSpace(request.ResolvedReleaseVersion)
+                ? request.ModulePreReleaseTag ?? options.PreReleaseTag
+                : NullIfEmpty(PackageVersionUtility.GetPrereleaseVersion(request.ResolvedReleaseVersion!)),
             NoSign = request.ModuleNoSign ?? options.NoSign ?? false,
             SignModule = request.ModuleSignModule ?? options.SignModule ?? false,
             IncludeProjectPackages = includeProjectPackages,

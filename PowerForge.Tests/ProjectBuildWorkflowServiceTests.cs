@@ -8,7 +8,9 @@ public sealed class ProjectBuildWorkflowServiceTests
     public void Execute_returns_plan_result_when_execution_is_skipped()
     {
         var plan = new DotNetRepositoryReleaseResult { Success = true };
+        plan.Projects.Add(new DotNetRepositoryProjectResult { ProjectName = "ProjectA", IsPackable = true });
         var executeCalls = 0;
+        var progress = new RecordingProjectBuildProgress();
         var service = new ProjectBuildWorkflowService(
             new NullLogger(),
             executeRelease: spec =>
@@ -27,12 +29,33 @@ public sealed class ProjectBuildWorkflowServiceTests
                 RootPath = Directory.GetCurrentDirectory(),
                 Spec = new DotNetRepositoryReleaseSpec { RootPath = Directory.GetCurrentDirectory() }
             },
-            executeBuild: false);
+            executeBuild: false,
+            progress: progress);
 
         Assert.Equal(1, executeCalls);
         Assert.True(workflow.Result.Success);
         Assert.Same(plan, workflow.Result.Release);
         Assert.Null(workflow.GitHubPublishSummary);
+        Assert.Equal(
+            new[] { "start:Plan:1", "complete:Plan" },
+            progress.Events);
+    }
+
+    private sealed class RecordingProjectBuildProgress : IProjectBuildProgressReporter
+    {
+        public List<string> Events { get; } = new();
+
+        public void PhaseStarted(ProjectBuildProgressPhase phase, int totalItems, string? detail = null)
+            => Events.Add($"start:{phase}:{totalItems}");
+
+        public void PhaseUpdated(ProjectBuildProgressPhase phase, int completedItems, int totalItems, string? detail = null)
+            => Events.Add($"update:{phase}:{completedItems}/{totalItems}");
+
+        public void PhaseCompleted(ProjectBuildProgressPhase phase, string? detail = null)
+            => Events.Add($"complete:{phase}");
+
+        public void PhaseFailed(ProjectBuildProgressPhase phase, string? detail = null)
+            => Events.Add($"fail:{phase}");
     }
 
     [Fact]

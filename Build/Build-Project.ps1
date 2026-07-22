@@ -7,8 +7,19 @@ param(
     [string] $ModulePreReleaseTag,
     [switch] $ModuleNoSign,
     [switch] $ModuleSignModule,
+    [string] $CertificateThumbprint,
+    [switch] $SignIncludeBinaries,
+    [switch] $SignIncludeInternals,
+    [switch] $SignIncludeExe,
+    [string] $DiagnosticsBaselinePath,
+    [switch] $GenerateDiagnosticsBaseline,
+    [switch] $UpdateDiagnosticsBaseline,
+    [switch] $FailOnNewDiagnostics,
+    [ValidateSet('Warning', 'Error')]
+    [string] $FailOnDiagnosticsSeverity,
     [switch] $Plan,
     [switch] $Validate,
+    [switch] $Json,
     [switch] $PackagesOnly,
     [switch] $ModuleOnly,
     [switch] $ToolsOnly,
@@ -54,6 +65,10 @@ $invokeParams = @{
     Configuration = $Configuration
     ErrorAction = 'Stop'
 }
+if ($Json) {
+    $invokeParams.NoInteractive = $true
+    $invokeParams.WarningAction = 'SilentlyContinue'
+}
 if ($Plan) { $invokeParams.Plan = $true }
 if ($Validate) { $invokeParams.Validate = $true }
 if ($ModuleNoDotnetBuild) { $invokeParams.ModuleNoDotnetBuild = $true }
@@ -61,6 +76,15 @@ if ($PSBoundParameters.ContainsKey('ModuleVersion')) { $invokeParams.ModuleVersi
 if ($PSBoundParameters.ContainsKey('ModulePreReleaseTag')) { $invokeParams.ModulePreReleaseTag = $ModulePreReleaseTag }
 if ($PSBoundParameters.ContainsKey('ModuleNoSign')) { $invokeParams.ModuleNoSign = $ModuleNoSign.IsPresent }
 if ($PSBoundParameters.ContainsKey('ModuleSignModule')) { $invokeParams.ModuleSignModule = $ModuleSignModule.IsPresent }
+if ($PSBoundParameters.ContainsKey('CertificateThumbprint')) { $invokeParams.ModuleCertificateThumbprint = $CertificateThumbprint }
+if ($PSBoundParameters.ContainsKey('SignIncludeBinaries')) { $invokeParams.ModuleSignIncludeBinaries = $SignIncludeBinaries.IsPresent }
+if ($PSBoundParameters.ContainsKey('SignIncludeInternals')) { $invokeParams.ModuleSignIncludeInternals = $SignIncludeInternals.IsPresent }
+if ($PSBoundParameters.ContainsKey('SignIncludeExe')) { $invokeParams.ModuleSignIncludeExe = $SignIncludeExe.IsPresent }
+if ($PSBoundParameters.ContainsKey('DiagnosticsBaselinePath')) { $invokeParams.ModuleDiagnosticsBaselinePath = $DiagnosticsBaselinePath }
+if ($PSBoundParameters.ContainsKey('GenerateDiagnosticsBaseline')) { $invokeParams.ModuleGenerateDiagnosticsBaseline = $GenerateDiagnosticsBaseline.IsPresent }
+if ($PSBoundParameters.ContainsKey('UpdateDiagnosticsBaseline')) { $invokeParams.ModuleUpdateDiagnosticsBaseline = $UpdateDiagnosticsBaseline.IsPresent }
+if ($PSBoundParameters.ContainsKey('FailOnNewDiagnostics')) { $invokeParams.ModuleFailOnNewDiagnostics = $FailOnNewDiagnostics.IsPresent }
+if ($PSBoundParameters.ContainsKey('FailOnDiagnosticsSeverity')) { $invokeParams.ModuleFailOnDiagnosticsSeverity = $FailOnDiagnosticsSeverity }
 if ($PackagesOnly) { $invokeParams.PackagesOnly = $true }
 if ($ModuleOnly) { $invokeParams.ModuleOnly = $true }
 if ($ToolsOnly) { $invokeParams.ToolsOnly = $true }
@@ -76,8 +100,20 @@ if ($Flavor) { $invokeParams.Flavors = $Flavor }
 if ($VerbosePreference -ne 'SilentlyContinue') { $invokeParams.Verbose = $true }
 
 try {
-    Invoke-PowerForgeRelease @invokeParams
+    $result = Invoke-PowerForgeRelease @invokeParams
+    if ($Json) {
+        $result | ConvertTo-Json -Depth 20
+    } else {
+        $result
+    }
 } catch {
-    Write-Error $_
+    if ($Json) {
+        [ordered]@{
+            Success = $false
+            ErrorMessage = $_.Exception.Message
+        } | ConvertTo-Json -Depth 5
+    } else {
+        Write-Error $_
+    }
     exit 1
 }

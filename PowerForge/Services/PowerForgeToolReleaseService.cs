@@ -73,8 +73,17 @@ internal sealed class PowerForgeToolReleaseService
             if (!File.Exists(projectPath))
                 throw new FileNotFoundException($"Tool release project not found for target '{name}': {projectPath}", projectPath);
 
-            if (!CsprojVersionEditor.TryGetVersion(projectPath, out var version) || string.IsNullOrWhiteSpace(version))
-                throw new InvalidOperationException($"Unable to resolve Version/VersionPrefix from '{projectPath}'.");
+            string version;
+            if (!string.IsNullOrWhiteSpace(request?.ResolvedReleaseVersion))
+            {
+                version = request!.ResolvedReleaseVersion!.Trim();
+            }
+            else
+            {
+                if (!CsprojVersionEditor.TryGetVersion(projectPath, out var projectVersion) || string.IsNullOrWhiteSpace(projectVersion))
+                    throw new InvalidOperationException($"Unable to resolve Version/VersionPrefix from '{projectPath}'.");
+                version = projectVersion!;
+            }
 
             var outputName = string.IsNullOrWhiteSpace(target.OutputName) ? name : target.OutputName.Trim();
             var commandAlias = string.IsNullOrWhiteSpace(target.CommandAlias) ? null : target.CommandAlias!.Trim();
@@ -108,6 +117,12 @@ internal sealed class PowerForgeToolReleaseService
                     continue;
 
                 msbuildProperties[kv.Key.Trim()] = kv.Value ?? string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(request?.ResolvedReleaseVersion))
+            {
+                foreach (var entry in BuildVersionProperties(version!))
+                    msbuildProperties[entry.Key] = entry.Value;
             }
 
             var combinations = new List<PowerForgeToolReleaseCombinationPlan>();
@@ -179,6 +194,26 @@ internal sealed class PowerForgeToolReleaseService
             Configuration = configuration,
             Targets = plans.ToArray()
         };
+    }
+
+    private static Dictionary<string, string> BuildVersionProperties(string version)
+    {
+        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Version"] = version,
+            ["PackageVersion"] = version,
+            ["InformationalVersion"] = version
+        };
+
+        var numericVersion = PackageVersionUtility.GetNumericVersion(version);
+        if (!string.IsNullOrWhiteSpace(numericVersion))
+        {
+            properties["VersionPrefix"] = numericVersion;
+            properties["AssemblyVersion"] = numericVersion;
+            properties["FileVersion"] = numericVersion;
+        }
+
+        return properties;
     }
 
     /// <summary>

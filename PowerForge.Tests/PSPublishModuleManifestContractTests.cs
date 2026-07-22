@@ -121,13 +121,13 @@ public sealed class PSPublishModuleManifestContractTests
     }
 
     [Fact]
-    public void Self_build_forwards_selected_framework_to_json_export()
+    public void Root_build_forwards_selected_framework_to_the_module_recipe()
     {
         var repoRoot = RepoRootLocator.Find();
-        var selfBuildScript = File.ReadAllText(Path.Combine(repoRoot, "Module", "Build", "Build-ModuleSelf.ps1"));
+        var wrapperScript = File.ReadAllText(Path.Combine(repoRoot, "Build", "Build-Module.ps1"));
         var buildScript = File.ReadAllText(Path.Combine(repoRoot, "Module", "Build", "Build-Module.ps1"));
 
-        Assert.Contains("Framework      = $Framework", selfBuildScript, StringComparison.Ordinal);
+        Assert.Contains("Framework = $Framework", wrapperScript, StringComparison.Ordinal);
         Assert.Contains("[ValidateSet('auto', 'net10.0', 'net8.0')][string] $Framework = 'auto'", buildScript, StringComparison.Ordinal);
         Assert.Contains("function Resolve-ImportFramework", buildScript, StringComparison.Ordinal);
         Assert.Contains("$tfm = Resolve-ImportFramework -RequestedFramework $Framework", buildScript, StringComparison.Ordinal);
@@ -151,17 +151,14 @@ public sealed class PSPublishModuleManifestContractTests
     }
 
     [Fact]
-    public void Self_build_defaults_to_build_gate_and_forwards_run_mode_once()
+    public void Root_build_defaults_to_build_gate_and_forwards_run_mode_once()
     {
         var repoRoot = RepoRootLocator.Find();
         var wrapperScript = File.ReadAllText(Path.Combine(repoRoot, "Build", "Build-Module.ps1"));
-        var selfBuildScript = File.ReadAllText(Path.Combine(repoRoot, "Module", "Build", "Build-ModuleSelf.ps1"));
         var buildScript = File.ReadAllText(Path.Combine(repoRoot, "Module", "Build", "Build-Module.ps1"));
 
         Assert.Contains("[string] $RunMode = 'Build'", wrapperScript, StringComparison.Ordinal);
-        Assert.Contains("RunMode        = $RunMode", wrapperScript, StringComparison.Ordinal);
-        Assert.Contains("[string] $RunMode = 'Build'", selfBuildScript, StringComparison.Ordinal);
-        Assert.Contains("RunMode        = $RunMode", selfBuildScript, StringComparison.Ordinal);
+        Assert.Contains("RunMode = $RunMode", wrapperScript, StringComparison.Ordinal);
         Assert.Contains("New-ConfigurationGate -Mode $RunMode", buildScript, StringComparison.Ordinal);
         Assert.DoesNotContain("$buildParams.RunMode", buildScript, StringComparison.Ordinal);
     }
@@ -172,36 +169,45 @@ public sealed class PSPublishModuleManifestContractTests
         var repoRoot = RepoRootLocator.Find();
         var wrapperScript = File.ReadAllText(Path.Combine(repoRoot, "Build", "Build-Module.ps1"));
         var projectWrapperScript = File.ReadAllText(Path.Combine(repoRoot, "Build", "Build-Project.ps1"));
-        var selfBuildScript = File.ReadAllText(Path.Combine(repoRoot, "Module", "Build", "Build-ModuleSelf.ps1"));
         var buildScript = File.ReadAllText(Path.Combine(repoRoot, "Module", "Build", "Build-Module.ps1"));
         var releaseConfig = File.ReadAllText(Path.Combine(repoRoot, "Build", "release.json"));
 
-        Assert.Contains("New-ConfigurationProjectBuild -Name 'PowerForge' -ConfigPath '../Build/release.json' -BuildBeforeModule -PublishNuget", buildScript, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(repoRoot, "Module", "Build", "Build-ModuleSelf.ps1")));
+        Assert.Contains("New-ConfigurationProjectBuild -Name 'PowerForge' -ConfigPath '../Build/release.json' -BuildBeforeModule -UseAsReleaseVersionSource -PublishNuget", buildScript, StringComparison.Ordinal);
         Assert.Contains("New-ConfigurationRelease -StageRoot 'Module/Artefacts/UploadReady'", buildScript, StringComparison.Ordinal);
+        Assert.Contains("-VersionSource ProjectBuild -PrimaryProject 'PowerForge' -SynchronizeModuleVersion", buildScript, StringComparison.Ordinal);
         Assert.Contains("-PublishOrder 'NuGet', 'PowerShellGallery', 'GitHub'", buildScript, StringComparison.Ordinal);
         Assert.Contains("if ($RunMode -in @('Build', 'Publish'))", buildScript, StringComparison.Ordinal);
         Assert.Contains("$PowerForgeReleaseStage", buildScript, StringComparison.Ordinal);
         Assert.Contains("$PowerForgeUnifiedGitHubRelease", buildScript, StringComparison.Ordinal);
         Assert.Contains("-Enabled:(-not $PowerForgeUnifiedGitHubRelease)", buildScript, StringComparison.Ordinal);
-        Assert.Contains("'--module-framework', $Framework", selfBuildScript, StringComparison.Ordinal);
-        Assert.Contains("'--module-run-mode', 'Publish'", selfBuildScript, StringComparison.Ordinal);
-        Assert.DoesNotContain("'--publish-tool-github'", selfBuildScript, StringComparison.Ordinal);
-        Assert.Contains("'--module-certificate-thumbprint', $CertificateThumbprint", selfBuildScript, StringComparison.Ordinal);
-        Assert.Contains("'--module-sign-include-binaries'", selfBuildScript, StringComparison.Ordinal);
-        Assert.Contains("'--module-diagnostics-baseline'", selfBuildScript, StringComparison.Ordinal);
-        Assert.Contains("'--module-fail-on-new-diagnostics'", selfBuildScript, StringComparison.Ordinal);
-        Assert.DoesNotContain("Unified publishing does not accept module-only override", selfBuildScript, StringComparison.Ordinal);
+        Assert.Contains("$releaseBuildScript", wrapperScript, StringComparison.Ordinal);
+        Assert.Contains("ModuleRunMode = 'Publish'", wrapperScript, StringComparison.Ordinal);
+        Assert.Contains("PublishNuget = $true", wrapperScript, StringComparison.Ordinal);
+        Assert.Contains("$invoke.NoInteractive = $true", wrapperScript, StringComparison.Ordinal);
+        Assert.Contains("$invoke.Quiet = $true", wrapperScript, StringComparison.Ordinal);
+        Assert.Contains("$invoke.PassThru = $true", wrapperScript, StringComparison.Ordinal);
+        Assert.Contains("$invoke.ErrorAction = 'Stop'", wrapperScript, StringComparison.Ordinal);
+        Assert.Contains("if ($null -eq $result)", wrapperScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("if ($Json) { $invoke.JsonOnly = $true }", wrapperScript, StringComparison.Ordinal);
         Assert.Contains("[bool] $IncludeProjectPackages = $true", buildScript, StringComparison.Ordinal);
         Assert.Contains("if ($IncludeProjectPackages)", buildScript, StringComparison.Ordinal);
-        Assert.Contains("RunMode        = $RunMode", wrapperScript, StringComparison.Ordinal);
+        Assert.Contains("RunMode = $RunMode", wrapperScript, StringComparison.Ordinal);
         Assert.Contains("$cmdletFramework = if ($PSEdition -eq 'Desktop')", projectWrapperScript, StringComparison.Ordinal);
         Assert.DoesNotContain("$moduleFramework = if ($PSEdition -eq 'Desktop')", projectWrapperScript, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("if ($PSBoundParameters.ContainsKey('PublishNuget')) { $invokeParams.PublishNuget = $PublishNuget.IsPresent }", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("if ($PSBoundParameters.ContainsKey('PublishGitHub')) { $invokeParams.PublishProjectGitHub = $PublishGitHub.IsPresent }", projectWrapperScript, StringComparison.Ordinal);
-        Assert.Contains("\"IncludesPackages\": true", releaseConfig, StringComparison.Ordinal);
+        Assert.Contains("$invokeParams.NoInteractive = $true", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("$invokeParams.WarningAction = 'SilentlyContinue'", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("\"IncludesPackages\": false", releaseConfig, StringComparison.Ordinal);
         using var releaseDocument = JsonDocument.Parse(releaseConfig);
         var releaseRoot = releaseDocument.RootElement;
-        Assert.Equal("Module/PSPublishModule.psd1", releaseRoot.GetProperty("Module").GetProperty("ManifestPath").GetString());
+        var module = releaseRoot.GetProperty("Module");
+        Assert.Equal("Module/PSPublishModule.psd1", module.GetProperty("ManifestPath").GetString());
+        Assert.True(module.GetProperty("SynchronizeVersionWithPackages").GetBoolean());
+        Assert.Equal("PowerForge", module.GetProperty("VersionPrimaryProject").GetString());
+        Assert.Equal("3.0.X", module.GetProperty("ModuleVersion").GetString());
+        Assert.True(releaseRoot.GetProperty("Packages").GetProperty("AlignPackageVersions").GetBoolean());
         Assert.False(releaseRoot.GetProperty("Packages").GetProperty("PublishGitHub").GetBoolean());
         Assert.False(releaseRoot.GetProperty("Tools").GetProperty("GitHub").GetProperty("Publish").GetBoolean());
         var unifiedGitHub = releaseRoot.GetProperty("GitHub");

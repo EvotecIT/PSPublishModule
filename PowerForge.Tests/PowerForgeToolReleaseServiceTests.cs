@@ -6,6 +6,55 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeToolReleaseServiceTests
 {
     [Fact]
+    public void Plan_AppliesSharedReleaseVersionToLegacyToolOutputsAndMsBuild()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.ToolReleaseTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var projectPath = Path.Combine(root, "Sample.Tool.csproj");
+            File.WriteAllText(projectPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Version>1.2.3</Version>
+  </PropertyGroup>
+</Project>
+""", new UTF8Encoding(false));
+
+            var service = new PowerForgeToolReleaseService(new NullLogger());
+            var plan = service.Plan(
+                new PowerForgeToolReleaseSpec
+                {
+                    ProjectRoot = root,
+                    Targets = new[]
+                    {
+                        new PowerForgeToolReleaseTarget
+                        {
+                            Name = "Sample.Tool",
+                            ProjectPath = "Sample.Tool.csproj",
+                            Frameworks = new[] { "net10.0" },
+                            Runtimes = new[] { "win-x64" },
+                            OutputPath = "artifacts/{version}/{rid}"
+                        }
+                    }
+                },
+                Path.Combine(root, "release.json"),
+                new PowerForgeReleaseRequest { ResolvedReleaseVersion = "3.1.0-preview.2" });
+
+            var target = Assert.Single(plan.Targets);
+            Assert.Equal("3.1.0-preview.2", target.Version);
+            Assert.Equal("3.1.0-preview.2", target.MsBuildProperties["Version"]);
+            Assert.Equal("3.1.0", target.MsBuildProperties["VersionPrefix"]);
+            Assert.Contains(Path.Combine("artifacts", "3.1.0-preview.2", "win-x64"), Assert.Single(target.Combinations).OutputPath, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_UsesAnIsolatedNuGetLockFileForRuntimePublishes()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.ToolReleaseTests", Guid.NewGuid().ToString("N"));

@@ -83,6 +83,7 @@ namespace PSPublishModule;
 /// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "ModuleBuild", DefaultParameterSetName = ParameterSetModern)]
 [Alias("New-PrepareModule", "Build-Module", "Invoke-ModuleBuilder")]
+[OutputType(typeof(ModulePipelineResult))]
 public sealed partial class InvokeModuleBuildCommand : PSCmdlet
 {
     private const string ParameterSetModern = "Modern";
@@ -248,6 +249,18 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetConfig)]
     public SwitchParameter NoInteractive { get; set; }
 
+    /// <summary>Suppresses host rendering and log output. Intended for callers that request structured results.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter Quiet { get; set; }
+
+    /// <summary>Writes the completed module pipeline result to the PowerShell success stream.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter PassThru { get; set; }
+
     /// <summary>Staging directory for the PowerForge pipeline. When omitted, a temporary folder is generated.</summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
     public string? StagingPath { get; set; }
@@ -390,7 +403,9 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         {
             // best effort only
         }
-        ILogger logger = new SpectreConsoleLogger { IsVerbose = isVerbose };
+        ILogger logger = Quiet.IsPresent
+            ? new NullLogger { IsVerbose = isVerbose }
+            : new SpectreConsoleLogger { IsVerbose = isVerbose };
         var preparation = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
         {
             ParameterSetName = ParameterSetName,
@@ -460,7 +475,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         }
         else
         {
-            var interactive = !NoInteractive.IsPresent &&
+            var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&
                 SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
 
             workflow = new ModuleBuildWorkflowService(
@@ -470,7 +485,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                     spec: spec,
                     plan: plan,
                     configLabel: configLabel),
-                writeSummary: SpectrePipelineConsoleUi.WriteSummary)
+                writeSummary: Quiet.IsPresent ? null : SpectrePipelineConsoleUi.WriteSummary)
                 .Execute(preparation, interactive, preparation.ConfigLabel);
         }
 #pragma warning restore CA1031
@@ -502,6 +517,9 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             logger.Success(outcome.CompletionMessage);
         else
             logger.Error(outcome.CompletionMessage);
+
+        if (PassThru.IsPresent && workflow?.Result is not null)
+            WriteObject(workflow.Result);
 
         if (outcome.ShouldSetExitCode)
             Host.SetShouldExit(outcome.ExitCode);
