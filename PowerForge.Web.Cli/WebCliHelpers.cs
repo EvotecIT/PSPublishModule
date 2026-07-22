@@ -122,7 +122,8 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web links promote-404 --source <404-suggestions.json> --config <site.json> [--out <redirects.json>] [--review-csv <file>] [--enable] [--output json]");
         Console.WriteLine("  powerforge-web links ignore-404 --source <404-suggestions.json> --config <site.json> (--path <url>|--without-suggestions|--all) [--reason <text>] [--review-csv <file>] [--output json]");
         Console.WriteLine("  powerforge-web contributions validate --root <dir> [--fail-on-warnings|--strict] [--output json]");
-        Console.WriteLine("  powerforge-web llms --site-root <dir> [--project <path>] [--api-index <path>] [--api-base /api]");
+        Console.WriteLine("  powerforge-web llms --site-root <dir> [--project <path>] [--api-index <path>] [--api-indexes <path[,path...]>]");
+        Console.WriteLine("                     [--api-base /api]");
         Console.WriteLine("                     [--name <Name>] [--package <Id>] [--version <X.Y.Z>] [--quickstart <file>]");
         Console.WriteLine("                     [--overview <text>] [--license <text>] [--targets <text>] [--extra <file>]");
         Console.WriteLine("                     [--api-level none|summary|full] [--api-max-types <n>] [--api-max-members <n>]");

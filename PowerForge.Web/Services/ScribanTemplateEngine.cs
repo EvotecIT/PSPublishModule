@@ -89,7 +89,11 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         var templateContext = new TemplateContext
         {
             TemplateLoader = new InlineTemplateLoader(partialResolver),
-            StrictVariables = false
+            StrictVariables = false,
+            // HTML fragments such as rendered Markdown and code samples already carry
+            // intentional whitespace. Scriban's automatic indentation would otherwise
+            // inject the template line's leading spaces after every newline in a fragment.
+            AutoIndent = false
         };
         templateContext.PushGlobal(globals);
 
