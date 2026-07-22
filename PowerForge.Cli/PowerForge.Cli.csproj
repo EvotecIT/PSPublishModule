@@ -11,7 +11,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>powerforge</ToolCommandName>
     <Description>PowerForge command-line interface for building and publishing PowerShell modules.</Description>
-    <VersionPrefix>1.0.6</VersionPrefix>
+    <VersionPrefix>1.0.7</VersionPrefix>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Authors>Przemyslaw Klys</Authors>
     <Company>Evotec Services sp. z o.o.</Company>

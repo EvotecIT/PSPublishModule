@@ -1,13 +1,13 @@
 {
   "Success": true,
-  "ResolvedVersion": "1.0.6",
+  "ResolvedVersion": "1.0.7",
   "ResolvedVersionsByProject": {
-    "PowerForge.Web.Cli": "1.0.6",
-    "PowerForge.Web": "1.0.6",
-    "PowerForge.PowerShell": "1.0.6",
-    "PowerForge.Cli": "1.0.6",
-    "PowerForge.Blazor": "1.0.6",
-    "PowerForge": "1.0.6"
+    "PowerForge.Web.Cli": "1.0.7",
+    "PowerForge.Web": "1.0.7",
+    "PowerForge.PowerShell": "1.0.7",
+    "PowerForge.Cli": "1.0.7",
+    "PowerForge.Blazor": "1.0.7",
+    "PowerForge": "1.0.7"
   },
   "Projects": [
     {
@@ -15,10 +15,10 @@
       "CsprojPath": "C:\\Support\\GitHub\\PSPublishModule\\PowerForge.Web.Cli\\PowerForge.Web.Cli.csproj",
       "PackageId": "PowerForge.Web.Build",
       "IsPackable": true,
-      "OldVersion": "1.0.5",
-      "NewVersion": "1.0.6",
+      "OldVersion": "1.0.6",
+      "NewVersion": "1.0.7",
       "Packages": [
-        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.Web.Build.1.0.6.nupkg"
+        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.Web.Build.1.0.7.nupkg"
       ],
       "SymbolPackages": []
     },
@@ -27,10 +27,10 @@
       "CsprojPath": "C:\\Support\\GitHub\\PSPublishModule\\PowerForge.Web\\PowerForge.Web.csproj",
       "PackageId": "PowerForge.Web",
       "IsPackable": true,
-      "OldVersion": "1.0.5",
-      "NewVersion": "1.0.6",
+      "OldVersion": "1.0.6",
+      "NewVersion": "1.0.7",
       "Packages": [
-        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.Web.1.0.6.nupkg"
+        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.Web.1.0.7.nupkg"
       ],
       "SymbolPackages": []
     },
@@ -39,10 +39,10 @@
       "CsprojPath": "C:\\Support\\GitHub\\PSPublishModule\\PowerForge.PowerShell\\PowerForge.PowerShell.csproj",
       "PackageId": "PowerForge.PowerShell",
       "IsPackable": true,
-      "OldVersion": "1.0.5",
-      "NewVersion": "1.0.6",
+      "OldVersion": "1.0.6",
+      "NewVersion": "1.0.7",
       "Packages": [
-        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.PowerShell.1.0.6.nupkg"
+        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.PowerShell.1.0.7.nupkg"
       ],
       "SymbolPackages": []
     },
@@ -51,10 +51,10 @@
       "CsprojPath": "C:\\Support\\GitHub\\PSPublishModule\\PowerForge.Cli\\PowerForge.Cli.csproj",
       "PackageId": "PowerForge.Build",
       "IsPackable": true,
-      "OldVersion": "1.0.5",
-      "NewVersion": "1.0.6",
+      "OldVersion": "1.0.6",
+      "NewVersion": "1.0.7",
       "Packages": [
-        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.Build.1.0.6.nupkg"
+        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.Build.1.0.7.nupkg"
       ],
       "SymbolPackages": []
     },
@@ -63,10 +63,10 @@
       "CsprojPath": "C:\\Support\\GitHub\\PSPublishModule\\PowerForge.Blazor\\PowerForge.Blazor.csproj",
       "PackageId": "PowerForge.Blazor",
       "IsPackable": true,
-      "OldVersion": "1.0.5",
-      "NewVersion": "1.0.6",
+      "OldVersion": "1.0.6",
+      "NewVersion": "1.0.7",
       "Packages": [
-        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.Blazor.1.0.6.nupkg"
+        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.Blazor.1.0.7.nupkg"
       ],
       "SymbolPackages": []
     },
@@ -75,10 +75,10 @@
       "CsprojPath": "C:\\Support\\GitHub\\PSPublishModule\\PowerForge\\PowerForge.csproj",
       "PackageId": "PowerForge",
       "IsPackable": true,
-      "OldVersion": "1.0.5",
-      "NewVersion": "1.0.6",
+      "OldVersion": "1.0.6",
+      "NewVersion": "1.0.7",
       "Packages": [
-        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.1.0.6.nupkg"
+        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.1.0.7.nupkg"
       ],
       "SymbolPackages": []
     }
