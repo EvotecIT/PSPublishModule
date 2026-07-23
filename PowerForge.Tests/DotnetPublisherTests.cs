@@ -22,7 +22,8 @@ public sealed class DotnetPublisherTests
             artifacts: Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "artifacts"),
             maxCpuCountArgument: "-m:1",
             publishDir: Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "publish"),
-            restoreSources: new[] { sourceA, sourceB, sourceA });
+            restoreSources: new[] { sourceA, sourceB, sourceA },
+            existingPathMap: "C:\\source=/_/PowerForge/source");
 
         Assert.Contains(args, arg => string.Equals(
             arg,
@@ -37,7 +38,7 @@ public sealed class DotnetPublisherTests
         Assert.Contains("-p:_GlobalPropertiesToRemoveFromProjectReferences=%3BVersion%3BAssemblyVersion%3BFileVersion", args);
         Assert.Contains("-p:ContinuousIntegrationBuild=true", args);
         Assert.Contains(
-            $"-p:PathMap={Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "artifacts")}=/_/PowerForge/artifacts",
+            $"-p:PathMap=C:\\source=/_/PowerForge/source%2C{Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "artifacts")}=/_/PowerForge/artifacts",
             args);
         Assert.DoesNotContain(args, arg => arg.StartsWith("-p:PublishProfile", StringComparison.Ordinal));
         Assert.DoesNotContain(args, arg => arg.StartsWith("-p:CustomAfterMicrosoftCommonTargets=", StringComparison.Ordinal));
@@ -51,36 +52,46 @@ public sealed class DotnetPublisherTests
             "PowerForge.Tests",
             "DotnetPublisherDeterminism",
             Guid.NewGuid().ToString("N"));
-        var dependencyDirectory = Path.Combine(root, "Dependency");
-        var moduleDirectory = Path.Combine(root, "Module");
-        Directory.CreateDirectory(dependencyDirectory);
-        Directory.CreateDirectory(moduleDirectory);
-
         try
         {
-            File.WriteAllText(
-                Path.Combine(dependencyDirectory, "Dependency.csproj"),
-                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Deterministic>true</Deterministic><DebugType>portable</DebugType></PropertyGroup></Project>");
-            File.WriteAllText(
-                Path.Combine(dependencyDirectory, "Dependency.cs"),
-                "namespace Dependency; public sealed class Value { public string Text => \"stable\"; }");
-            var moduleProject = Path.Combine(moduleDirectory, "Module.csproj");
-            File.WriteAllText(
-                moduleProject,
-                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Deterministic>true</Deterministic><DebugType>portable</DebugType></PropertyGroup><ItemGroup><ProjectReference Include=\"..\\Dependency\\Dependency.csproj\" /></ItemGroup></Project>");
-            File.WriteAllText(
-                Path.Combine(moduleDirectory, "Module.cs"),
-                "namespace Module; public sealed class Value { public string Text => new Dependency.Value().Text; }");
+            static string CreateSourceTree(string sourceRoot)
+            {
+                var dependencyDirectory = Path.Combine(sourceRoot, "Dependency");
+                var moduleDirectory = Path.Combine(sourceRoot, "Module");
+                Directory.CreateDirectory(dependencyDirectory);
+                Directory.CreateDirectory(moduleDirectory);
+                var escapedRoot = System.Security.SecurityElement.Escape(sourceRoot);
+                File.WriteAllText(
+                    Path.Combine(sourceRoot, "Directory.Build.props"),
+                    $"<Project><PropertyGroup><PathMap>{escapedRoot}=/_/PowerForge/source</PathMap></PropertyGroup></Project>");
+                File.WriteAllText(
+                    Path.Combine(dependencyDirectory, "Dependency.csproj"),
+                    "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Deterministic>true</Deterministic><DebugType>portable</DebugType></PropertyGroup></Project>");
+                File.WriteAllText(
+                    Path.Combine(dependencyDirectory, "Dependency.cs"),
+                    "namespace Dependency; public sealed class Value { public string Text => \"stable\"; }");
+                var moduleProject = Path.Combine(moduleDirectory, "Module.csproj");
+                File.WriteAllText(
+                    moduleProject,
+                    "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Deterministic>true</Deterministic><DebugType>portable</DebugType></PropertyGroup><ItemGroup><ProjectReference Include=\"..\\Dependency\\Dependency.csproj\" /></ItemGroup></Project>");
+                File.WriteAllText(
+                    Path.Combine(moduleDirectory, "Module.cs"),
+                    "namespace Module; public sealed class Value { public string Text => new Dependency.Value().Text; }");
+                return moduleProject;
+            }
+
+            var firstProject = CreateSourceTree(Path.Combine(root, "source-a"));
+            var secondProject = CreateSourceTree(Path.Combine(root, "source-b"));
 
             var publisher = new DotnetPublisher(new NullLogger());
             var first = publisher.Publish(
-                moduleProject,
+                firstProject,
                 "Release",
                 new[] { "net8.0" },
                 "1.2.3",
                 Path.Combine(root, "artifacts-a"))["net8.0"];
             var second = publisher.Publish(
-                moduleProject,
+                secondProject,
                 "Release",
                 new[] { "net8.0" },
                 "1.2.3",
