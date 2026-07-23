@@ -490,6 +490,15 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                 versionStatePath,
                 initialState.Value,
                 Convert.ToHexString(SHA256.HashData(writerBytes)));
+            File.WriteAllBytes(versionStatePath, hookBytes);
+            RunGit(root, "add Build/versioning/app.msi.state.json");
+            File.WriteAllBytes(versionStatePath, writerBytes);
+            Assert.Empty(DotNetPublishPipelineRunner.GetVerifiedMsiVersionStateWrites(
+                root,
+                initiallyCleanState,
+                reservationOwner));
+
+            RunGit(root, "reset HEAD -- Build/versioning/app.msi.state.json");
             RunGit(root, "update-index --chmod=+x Build/versioning/app.msi.state.json");
             Assert.Empty(DotNetPublishPipelineRunner.GetVerifiedMsiVersionStateWrites(
                 root,

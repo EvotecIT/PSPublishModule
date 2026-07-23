@@ -157,7 +157,7 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (var version in plan.MsiVersions.Values)
             yield return version.StatePath ?? string.Empty;
 
-        foreach (var step in plan.Steps)
+        foreach (var step in plan.Steps ?? Array.Empty<DotNetPublishStep>())
         {
             yield return step.StagingPath ?? string.Empty;
             yield return step.ManifestPath ?? string.Empty;
@@ -209,7 +209,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
     internal static IEnumerable<string> EnumeratePlannedMsiVersionStatePaths(DotNetPublishPlan plan)
     {
-        foreach (var step in plan.Steps.Where(step => step.Kind == DotNetPublishStepKind.MsiBuild))
+        foreach (var step in (plan.Steps ?? Array.Empty<DotNetPublishStep>())
+                     .Where(step => step.Kind == DotNetPublishStepKind.MsiBuild))
         {
             var installer = plan.Installers.FirstOrDefault(candidate =>
                 string.Equals(candidate.Id, step.InstallerId, StringComparison.OrdinalIgnoreCase));
@@ -280,13 +281,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 var workingTreeMetadataDiff = ReadGitRawText(
                     gitRoot!,
                     $"diff --summary HEAD -- {QuoteGitPath(gitRelativePath!)}");
-                var indexMetadataDiff = ReadGitRawText(
+                var indexDiff = ReadGitRawText(
                     gitRoot!,
-                    $"diff --cached --summary HEAD -- {QuoteGitPath(gitRelativePath!)}");
+                    $"diff --cached --name-only HEAD -- {QuoteGitPath(gitRelativePath!)}");
                 if (workingTreeMetadataDiff is null
-                    || indexMetadataDiff is null
+                    || indexDiff is null
                     || !string.IsNullOrWhiteSpace(workingTreeMetadataDiff)
-                    || !string.IsNullOrWhiteSpace(indexMetadataDiff))
+                    || !string.IsNullOrWhiteSpace(indexDiff))
                     continue;
 
                 var actualHash = ComputeSha256Hex(File.ReadAllBytes(fullPath));
@@ -469,13 +470,30 @@ public sealed partial class DotNetPublishPipelineRunner
         if (string.IsNullOrWhiteSpace(path))
             return null;
 
-        var root = Path.GetFullPath(gitRoot)
+        var project = Path.GetFullPath(projectRoot)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var fullPath = Path.GetFullPath(
             Path.IsPathRooted(path)
                 ? path
                 : Path.Combine(projectRoot, path));
         var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+        var projectPrefix = project + Path.DirectorySeparatorChar;
+        if (fullPath.StartsWith(projectPrefix, comparison))
+        {
+            var gitProjectPrefix = ReadGitText(projectRoot, "rev-parse --show-prefix");
+            if (gitProjectPrefix is not null)
+            {
+                var relativeToProject = fullPath.Substring(projectPrefix.Length)
+                    .Replace('\\', '/')
+                    .Trim('/');
+                return (gitProjectPrefix.Trim('/', '\\') + "/" + relativeToProject)
+                    .Trim('/');
+            }
+        }
+
+        var root = Path.GetFullPath(gitRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (string.Equals(root, fullPath, comparison))
             return null;
 
