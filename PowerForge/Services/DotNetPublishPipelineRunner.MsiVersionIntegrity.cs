@@ -1,10 +1,15 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, MsiVersionStateWrite>>
+        MsiVersionStateWrites = new(StringComparer.Ordinal);
+
     internal static string CreateMsiReservationOwner()
         => Guid.NewGuid().ToString("N");
 
@@ -192,9 +197,6 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishPlan plan,
         IEnumerable<DotNetPublishMsiBuildResult> msiBuilds)
     {
-        foreach (var statePath in EnumeratePlannedMsiVersionStatePaths(plan))
-            yield return statePath;
-
         foreach (var version in plan.MsiVersions.Values)
             yield return version.StatePath ?? string.Empty;
 
@@ -202,19 +204,98 @@ public sealed partial class DotNetPublishPipelineRunner
             yield return msiBuild.VersionStatePath ?? string.Empty;
     }
 
-    private static IEnumerable<string> EnumeratePlannedMsiVersionStatePaths(DotNetPublishPlan plan)
+    internal static void RecordMsiVersionStateWrite(
+        string reservationOwner,
+        string statePath,
+        string previousContentHash,
+        string contentHash)
     {
-        foreach (var step in plan.Steps.Where(step => step.Kind == DotNetPublishStepKind.MsiBuild))
-        {
-            var installer = plan.Installers.FirstOrDefault(candidate =>
-                string.Equals(candidate.Id, step.InstallerId, StringComparison.OrdinalIgnoreCase));
-            if (installer?.Versioning is not { Enabled: true, Monotonic: true })
-                continue;
+        if (string.IsNullOrWhiteSpace(reservationOwner)
+            || string.IsNullOrWhiteSpace(statePath)
+            || string.IsNullOrWhiteSpace(previousContentHash)
+            || string.IsNullOrWhiteSpace(contentHash))
+            return;
 
-            var tokens = BuildMsiVersionTemplateTokens(plan, installer, step);
-            yield return ResolveMsiVersionStatePath(plan, installer, tokens);
-        }
+        var writes = MsiVersionStateWrites.GetOrAdd(
+            reservationOwner,
+            _ => new ConcurrentDictionary<string, MsiVersionStateWrite>(
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
+        writes.AddOrUpdate(
+            Path.GetFullPath(statePath),
+            _ => new MsiVersionStateWrite(previousContentHash, contentHash),
+            (_, priorWrite) => new MsiVersionStateWrite(priorWrite.PreviousContentHash, contentHash));
     }
+
+    internal static string[] GetVerifiedMsiVersionStateWrites(
+        IReadOnlyDictionary<string, string> cleanTrackedGeneratedPaths,
+        string reservationOwner)
+    {
+        if (!MsiVersionStateWrites.TryGetValue(reservationOwner, out var writes))
+            return Array.Empty<string>();
+
+        var verified = new List<string>();
+        foreach (var candidate in cleanTrackedGeneratedPaths)
+        {
+            try
+            {
+                var fullPath = Path.GetFullPath(candidate.Key);
+                if (!writes.TryGetValue(fullPath, out var write)
+                    || !File.Exists(fullPath))
+                    continue;
+
+                var actualHash = ComputeSha256Hex(File.ReadAllBytes(fullPath));
+                if (string.Equals(write.PreviousContentHash, candidate.Value, StringComparison.Ordinal)
+                    && string.Equals(actualHash, write.ContentHash, StringComparison.Ordinal))
+                    verified.Add(fullPath);
+            }
+            catch
+            {
+                // Fail closed: an unreadable or invalid state path remains dirty.
+            }
+        }
+
+        return verified.ToArray();
+    }
+
+    internal static IReadOnlyDictionary<string, string> CaptureCleanTrackedGeneratedProvenanceState(
+        string projectRoot,
+        IEnumerable<string>? generatedPaths)
+    {
+        var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var state = new Dictionary<string, string>(comparison);
+        foreach (var candidate in CaptureCleanTrackedGeneratedProvenancePaths(projectRoot, generatedPaths))
+        {
+            var fullPath = Path.GetFullPath(
+                Path.IsPathRooted(candidate)
+                    ? candidate
+                    : Path.Combine(projectRoot, candidate));
+            var content = File.Exists(fullPath) ? File.ReadAllBytes(fullPath) : Array.Empty<byte>();
+            state[fullPath] = ComputeSha256Hex(content);
+        }
+
+        return state;
+    }
+
+    internal static void ClearMsiVersionStateWrites(string reservationOwner)
+    {
+        if (!string.IsNullOrWhiteSpace(reservationOwner))
+            MsiVersionStateWrites.TryRemove(reservationOwner, out _);
+    }
+
+    private static string ComputeSha256Hex(byte[] content)
+    {
+        using var sha256 = SHA256.Create();
+        return ToUpperHex(sha256.ComputeHash(content));
+    }
+
+    private static string ComputeSha256Hex(Stream stream)
+    {
+        using var sha256 = SHA256.Create();
+        return ToUpperHex(sha256.ComputeHash(stream));
+    }
+
+    private static string ToUpperHex(byte[] value)
+        => BitConverter.ToString(value).Replace("-", string.Empty);
 
     internal static string[] CaptureCleanTrackedGeneratedProvenancePaths(
         string projectRoot,
@@ -393,6 +474,19 @@ public sealed partial class DotNetPublishPipelineRunner
         public string? Revision { get; }
 
         public bool? Dirty { get; }
+    }
+
+    private sealed class MsiVersionStateWrite
+    {
+        internal MsiVersionStateWrite(string previousContentHash, string contentHash)
+        {
+            PreviousContentHash = previousContentHash;
+            ContentHash = contentHash;
+        }
+
+        internal string PreviousContentHash { get; }
+
+        internal string ContentHash { get; }
     }
 
     private static void TryDeleteReservation(string path)

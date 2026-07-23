@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using PowerForge;
 using Xunit;
@@ -375,6 +377,118 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
             var entry = Assert.Single(document.RootElement.EnumerateArray());
             Assert.True(entry.GetProperty("SourceDirty").GetBoolean());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (var file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void VerifiedMsiVersionStateWrites_RequireTheExactCurrentRunWrite()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var reservationOwner = Guid.NewGuid().ToString("N");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            var versionStatePath = Path.Combine(root, "Build", "versioning", "app.msi.state.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(versionStatePath)!);
+            File.WriteAllText(versionStatePath, "{\"Version\":\"1.0.0\"}");
+            RunGit(root, "add Build/versioning/app.msi.state.json");
+            RunGit(root, "commit -m \"test source\"");
+
+            var initiallyCleanState =
+                DotNetPublishPipelineRunner.CaptureCleanTrackedGeneratedProvenanceState(
+                    root,
+                    new[] { versionStatePath });
+            var initialState = Assert.Single(initiallyCleanState);
+
+            var hookBytes = Encoding.UTF8.GetBytes(
+                "{\"Version\":\"1.0.1\",\"Source\":\"hook\"}");
+            File.WriteAllBytes(versionStatePath, hookBytes);
+
+            var writerBytes = Encoding.UTF8.GetBytes(
+                "{\"Version\":\"1.0.1\",\"Source\":\"powerforge\"}");
+            File.WriteAllBytes(versionStatePath, writerBytes);
+            DotNetPublishPipelineRunner.RecordMsiVersionStateWrite(
+                reservationOwner,
+                versionStatePath,
+                Convert.ToHexString(SHA256.HashData(hookBytes)),
+                Convert.ToHexString(SHA256.HashData(writerBytes)));
+
+            Assert.Empty(DotNetPublishPipelineRunner.GetVerifiedMsiVersionStateWrites(
+                initiallyCleanState,
+                reservationOwner));
+
+            DotNetPublishPipelineRunner.ClearMsiVersionStateWrites(reservationOwner);
+            File.WriteAllText(versionStatePath, "{\"Version\":\"1.0.0\"}");
+            File.WriteAllBytes(versionStatePath, writerBytes);
+            DotNetPublishPipelineRunner.RecordMsiVersionStateWrite(
+                reservationOwner,
+                versionStatePath,
+                initialState.Value,
+                Convert.ToHexString(SHA256.HashData(writerBytes)));
+
+            Assert.Equal(
+                new[] { initialState.Key },
+                DotNetPublishPipelineRunner.GetVerifiedMsiVersionStateWrites(
+                    initiallyCleanState,
+                    reservationOwner));
+
+            File.AppendAllText(versionStatePath, Environment.NewLine);
+            Assert.Empty(DotNetPublishPipelineRunner.GetVerifiedMsiVersionStateWrites(
+                initiallyCleanState,
+                reservationOwner));
+        }
+        finally
+        {
+            DotNetPublishPipelineRunner.ClearMsiVersionStateWrites(reservationOwner);
+            if (Directory.Exists(root))
+            {
+                foreach (var file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Run_ReportsInvalidVersionStatePathAsAFailedResult()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            File.WriteAllText(Path.Combine(root, "source.txt"), "committed");
+            RunGit(root, "add source.txt");
+            RunGit(root, "commit -m \"test source\"");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>
+                {
+                    ["app"] = new() { StatePath = "\0" }
+                }
+            };
+
+            var result = new DotNetPublishPipelineRunner(new NullLogger()).Run(plan, progress: null);
+
+            Assert.False(result.Succeeded);
+            Assert.False(string.IsNullOrWhiteSpace(result.ErrorMessage));
         }
         finally
         {
