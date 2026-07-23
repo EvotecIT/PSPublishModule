@@ -427,6 +427,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                 Convert.ToHexString(SHA256.HashData(writerBytes)));
 
             Assert.Empty(DotNetPublishPipelineRunner.GetVerifiedMsiVersionStateWrites(
+                root,
                 initiallyCleanState,
                 reservationOwner));
 
@@ -442,11 +443,56 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             Assert.Equal(
                 new[] { initialState.Key },
                 DotNetPublishPipelineRunner.GetVerifiedMsiVersionStateWrites(
+                    root,
                     initiallyCleanState,
                     reservationOwner));
 
             File.AppendAllText(versionStatePath, Environment.NewLine);
             Assert.Empty(DotNetPublishPipelineRunner.GetVerifiedMsiVersionStateWrites(
+                root,
+                initiallyCleanState,
+                reservationOwner));
+
+            File.WriteAllBytes(versionStatePath, writerBytes);
+            var secondWriterBytes = Encoding.UTF8.GetBytes(
+                "{\"Version\":\"1.0.2\",\"Source\":\"powerforge\"}");
+            File.WriteAllBytes(versionStatePath, secondWriterBytes);
+            DotNetPublishPipelineRunner.RecordMsiVersionStateWrite(
+                reservationOwner,
+                versionStatePath,
+                Convert.ToHexString(SHA256.HashData(writerBytes)),
+                Convert.ToHexString(SHA256.HashData(secondWriterBytes)));
+            Assert.Equal(
+                new[] { initialState.Key },
+                DotNetPublishPipelineRunner.GetVerifiedMsiVersionStateWrites(
+                    root,
+                    initiallyCleanState,
+                    reservationOwner));
+
+            var thirdWriterBytes = Encoding.UTF8.GetBytes(
+                "{\"Version\":\"1.0.3\",\"Source\":\"powerforge\"}");
+            File.WriteAllBytes(versionStatePath, thirdWriterBytes);
+            DotNetPublishPipelineRunner.RecordMsiVersionStateWrite(
+                reservationOwner,
+                versionStatePath,
+                Convert.ToHexString(SHA256.HashData(hookBytes)),
+                Convert.ToHexString(SHA256.HashData(thirdWriterBytes)));
+            Assert.Empty(DotNetPublishPipelineRunner.GetVerifiedMsiVersionStateWrites(
+                root,
+                initiallyCleanState,
+                reservationOwner));
+
+            DotNetPublishPipelineRunner.ClearMsiVersionStateWrites(reservationOwner);
+            File.WriteAllText(versionStatePath, "{\"Version\":\"1.0.0\"}");
+            File.WriteAllBytes(versionStatePath, writerBytes);
+            DotNetPublishPipelineRunner.RecordMsiVersionStateWrite(
+                reservationOwner,
+                versionStatePath,
+                initialState.Value,
+                Convert.ToHexString(SHA256.HashData(writerBytes)));
+            RunGit(root, "update-index --chmod=+x Build/versioning/app.msi.state.json");
+            Assert.Empty(DotNetPublishPipelineRunner.GetVerifiedMsiVersionStateWrites(
+                root,
                 initiallyCleanState,
                 reservationOwner));
         }
@@ -492,6 +538,60 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
         }
         finally
         {
+            if (Directory.Exists(root))
+            {
+                foreach (var file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void VerifiedMsiVersionStateWrites_ResolveSubdirectoryProjectFromGitRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var projectRoot = Path.Combine(root, "src", "app");
+        var reservationOwner = Guid.NewGuid().ToString("N");
+        Directory.CreateDirectory(projectRoot);
+
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            var versionStatePath = Path.Combine(projectRoot, "Build", "versioning", "app.msi.state.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(versionStatePath)!);
+            var initialBytes = Encoding.UTF8.GetBytes("{\"Version\":\"1.0.0\"}");
+            File.WriteAllBytes(versionStatePath, initialBytes);
+            RunGit(root, "add src/app/Build/versioning/app.msi.state.json");
+            RunGit(root, "commit -m \"test source\"");
+
+            var initiallyCleanState =
+                DotNetPublishPipelineRunner.CaptureCleanTrackedGeneratedProvenanceState(
+                    projectRoot,
+                    new[] { versionStatePath });
+            var initialState = Assert.Single(initiallyCleanState);
+            Assert.Equal(versionStatePath, initialState.Key);
+
+            var writerBytes = Encoding.UTF8.GetBytes("{\"Version\":\"1.0.1\"}");
+            File.WriteAllBytes(versionStatePath, writerBytes);
+            DotNetPublishPipelineRunner.RecordMsiVersionStateWrite(
+                reservationOwner,
+                versionStatePath,
+                Convert.ToHexString(SHA256.HashData(initialBytes)),
+                Convert.ToHexString(SHA256.HashData(writerBytes)));
+
+            Assert.Equal(
+                new[] { versionStatePath },
+                DotNetPublishPipelineRunner.GetVerifiedMsiVersionStateWrites(
+                    projectRoot,
+                    initiallyCleanState,
+                    reservationOwner));
+        }
+        finally
+        {
+            DotNetPublishPipelineRunner.ClearMsiVersionStateWrites(reservationOwner);
             if (Directory.Exists(root))
             {
                 foreach (var file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))

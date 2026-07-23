@@ -239,15 +239,27 @@ public sealed partial class DotNetPublishPipelineRunner
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
         writes.AddOrUpdate(
             Path.GetFullPath(statePath),
-            _ => new MsiVersionStateWrite(previousContentHash, contentHash),
-            (_, priorWrite) => new MsiVersionStateWrite(priorWrite.PreviousContentHash, contentHash));
+            _ => new MsiVersionStateWrite(previousContentHash, contentHash, isContinuous: true),
+            (_, priorWrite) => new MsiVersionStateWrite(
+                priorWrite.PreviousContentHash,
+                contentHash,
+                priorWrite.IsContinuous
+                && string.Equals(
+                    priorWrite.ContentHash,
+                    previousContentHash,
+                    StringComparison.Ordinal)));
     }
 
     internal static string[] GetVerifiedMsiVersionStateWrites(
+        string projectRoot,
         IReadOnlyDictionary<string, string> cleanTrackedGeneratedPaths,
         string reservationOwner)
     {
         if (!MsiVersionStateWrites.TryGetValue(reservationOwner, out var writes))
+            return Array.Empty<string>();
+
+        var gitRoot = ReadGitText(projectRoot, "rev-parse --show-toplevel");
+        if (string.IsNullOrWhiteSpace(gitRoot))
             return Array.Empty<string>();
 
         var verified = new List<string>();
@@ -257,7 +269,18 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 var fullPath = Path.GetFullPath(candidate.Key);
                 if (!writes.TryGetValue(fullPath, out var write)
+                    || !write.IsContinuous
                     || !File.Exists(fullPath))
+                    continue;
+
+                var gitRelativePath = ToGitRelativeExclusion(projectRoot, gitRoot!, fullPath);
+                if (string.IsNullOrWhiteSpace(gitRelativePath))
+                    continue;
+
+                var metadataDiff = ReadGitRawText(
+                    gitRoot!,
+                    $"diff --summary HEAD -- {QuoteGitPath(gitRelativePath!)}");
+                if (metadataDiff is null || !string.IsNullOrWhiteSpace(metadataDiff))
                     continue;
 
                 var actualHash = ComputeSha256Hex(File.ReadAllBytes(fullPath));
@@ -282,10 +305,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var state = new Dictionary<string, string>(comparison);
         foreach (var candidate in CaptureCleanTrackedGeneratedProvenancePaths(projectRoot, generatedPaths))
         {
-            var fullPath = Path.GetFullPath(
-                Path.IsPathRooted(candidate)
-                    ? candidate
-                    : Path.Combine(projectRoot, candidate));
+            var fullPath = Path.GetFullPath(candidate);
             var content = File.Exists(fullPath) ? File.ReadAllBytes(fullPath) : Array.Empty<byte>();
             state[fullPath] = ComputeSha256Hex(content);
         }
@@ -327,9 +347,25 @@ public sealed partial class DotNetPublishPipelineRunner
             return Array.Empty<string>();
 
         var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        return BuildGeneratedPathExclusions(projectRoot, gitRoot!, generatedPaths)
+        return (generatedPaths ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => Path.GetFullPath(
+                Path.IsPathRooted(path)
+                    ? path
+                    : Path.Combine(projectRoot, path)))
+            .Select(path => new
+            {
+                FullPath = path,
+                GitRelativePath = ToGitRelativeExclusion(projectRoot, gitRoot!, path)
+            })
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.GitRelativePath))
             .Where(candidate => !changedPaths.Any(path =>
-                IsGeneratedPath(path, new[] { candidate }, comparison)))
+                IsGeneratedPath(
+                    path,
+                    new[] { candidate.GitRelativePath! },
+                    comparison)))
+            .Select(candidate => candidate.FullPath)
+            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
             .ToArray();
     }
 
@@ -480,6 +516,9 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
+    private static string QuoteGitPath(string path)
+        => "\"" + path.Replace("\\", "/").Replace("\"", "\\\"") + "\"";
+
     internal sealed class SourceProvenance
     {
         public SourceProvenance(string? revision, bool? dirty)
@@ -495,15 +534,21 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private sealed class MsiVersionStateWrite
     {
-        internal MsiVersionStateWrite(string previousContentHash, string contentHash)
+        internal MsiVersionStateWrite(
+            string previousContentHash,
+            string contentHash,
+            bool isContinuous)
         {
             PreviousContentHash = previousContentHash;
             ContentHash = contentHash;
+            IsContinuous = isContinuous;
         }
 
         internal string PreviousContentHash { get; }
 
         internal string ContentHash { get; }
+
+        internal bool IsContinuous { get; }
     }
 
     private static void TryDeleteReservation(string path)

@@ -107,6 +107,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         case DotNetPublishStepKind.Manifest:
                         {
                             var verifiedMsiVersionStateWrites = GetVerifiedMsiVersionStateWrites(
+                                plan.ProjectRoot,
                                 cleanTrackedGeneratedProvenanceState,
                                 msiReservationOwner);
                             (manifestJson, manifestText, checksumsPath) = WriteManifestsWithProvenance(
