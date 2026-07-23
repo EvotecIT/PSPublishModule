@@ -33,7 +33,12 @@ public sealed class ModuleBootstrapperGeneratorDesktopTypeAcceleratorTests
             Assert.Contains("$ResolvedPowerForgeDesktopAssemblies = @{}", bootstrapper);
             Assert.Contains("$FailedPowerForgeDesktopAssemblies = @{}", bootstrapper);
             Assert.Contains("$AssemblyName.EndsWith('.dll', [StringComparison]::OrdinalIgnoreCase)", bootstrapper);
-            Assert.Contains("if ($Assembly.GetName().Name -eq $SimpleName -and (& $TestPowerForgeDesktopModuleAssembly -Assembly $Assembly))", bootstrapper);
+            Assert.Contains("$TestPowerForgeDesktopAssemblyContentMatch = {", bootstrapper);
+            Assert.Contains("[Reflection.AssemblyName]::GetAssemblyName($ExpectedPath)", bootstrapper);
+            Assert.Contains("[Security.Cryptography.SHA256]::Create()", bootstrapper);
+            Assert.Contains("[Diagnostics.FileVersionInfo]::GetVersionInfo($LoadedPath).ProductVersion", bootstrapper);
+            Assert.Contains("$LoadedProductVersion.Contains('+')", bootstrapper);
+            Assert.Contains("& $TestPowerForgeDesktopAssemblyContentMatch -Assembly $Assembly -ExpectedPath $AssemblyPath", bootstrapper);
             Assert.Contains("A module-owned assembly with this identity exists but could not be selected above", bootstrapper);
             Assert.Contains("if ($PSEdition -ne 'Core' -and $PowerForgeDesktopBinaryLoaded)", bootstrapper);
             Assert.Contains("$PowerForgeModuleRoot = $PSScriptRoot", bootstrapper);

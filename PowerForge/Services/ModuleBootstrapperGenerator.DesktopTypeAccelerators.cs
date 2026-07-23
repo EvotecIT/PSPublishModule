@@ -96,6 +96,65 @@ internal static partial class ModuleBootstrapperGenerator
             }}
         }}
 
+        $TestPowerForgeDesktopAssemblyContentMatch = {{
+            param(
+                [Parameter(Mandatory = $true)] $Assembly,
+                [Parameter(Mandatory = $true)][string] $ExpectedPath
+            )
+
+            if ($Assembly.IsDynamic -or
+                [string]::IsNullOrWhiteSpace($Assembly.Location) -or
+                -not (Test-Path -LiteralPath $ExpectedPath)) {{
+                return $false
+            }}
+
+            try {{
+                $ExpectedName = [Reflection.AssemblyName]::GetAssemblyName($ExpectedPath)
+                if ($Assembly.GetName().FullName -ne $ExpectedName.FullName) {{
+                    return $false
+                }}
+
+                $LoadedPath = [IO.Path]::GetFullPath($Assembly.Location)
+                $ExpectedFullPath = [IO.Path]::GetFullPath($ExpectedPath)
+                if ([string]::Equals($LoadedPath, $ExpectedFullPath, [StringComparison]::OrdinalIgnoreCase)) {{
+                    return $true
+                }}
+
+                $ComputePowerForgeDesktopAssemblyHash = {{
+                    param([Parameter(Mandatory = $true)][string] $Path)
+
+                    $Stream = $null
+                    $Hasher = $null
+                    try {{
+                        $Stream = [IO.File]::OpenRead($Path)
+                        $Hasher = [Security.Cryptography.SHA256]::Create()
+                        return [Convert]::ToBase64String($Hasher.ComputeHash($Stream))
+                    }} finally {{
+                        if ($null -ne $Hasher) {{
+                            $Hasher.Dispose()
+                        }}
+                        if ($null -ne $Stream) {{
+                            $Stream.Dispose()
+                        }}
+                    }}
+                }}
+
+                $LoadedHash = & $ComputePowerForgeDesktopAssemblyHash -Path $LoadedPath
+                $ExpectedHash = & $ComputePowerForgeDesktopAssemblyHash -Path $ExpectedFullPath
+                if ($LoadedHash -eq $ExpectedHash) {{
+                    return $true
+                }}
+
+                $LoadedProductVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($LoadedPath).ProductVersion
+                $ExpectedProductVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($ExpectedFullPath).ProductVersion
+                return -not [string]::IsNullOrWhiteSpace($LoadedProductVersion) -and
+                    $LoadedProductVersion.Contains('+') -and
+                    [string]::Equals($LoadedProductVersion, $ExpectedProductVersion, [StringComparison]::Ordinal)
+            }} catch {{
+                return $false
+            }}
+        }}
+
         $ImportPowerForgeDesktopAssembly = {{
             param([Parameter(Mandatory = $true)][string] $AssemblyName)
 
@@ -117,18 +176,22 @@ internal static partial class ModuleBootstrapperGenerator
                 return $null
             }}
 
+            $AssemblyPath = [IO.Path]::Combine($LibraryDirectory, $AssemblyFileName)
             foreach ($Assembly in [AppDomain]::CurrentDomain.GetAssemblies()) {{
-                if ($Assembly.GetName().Name -eq $SimpleName -and (& $TestPowerForgeDesktopModuleAssembly -Assembly $Assembly)) {{
-                    $ResolvedPowerForgeDesktopAssemblies[$SimpleName] = $Assembly
-                    return $Assembly
+                if ($Assembly.GetName().Name -eq $SimpleName) {{
+                    if ((& $TestPowerForgeDesktopModuleAssembly -Assembly $Assembly) -or
+                        (& $TestPowerForgeDesktopAssemblyContentMatch -Assembly $Assembly -ExpectedPath $AssemblyPath)) {{
+                        $ResolvedPowerForgeDesktopAssemblies[$SimpleName] = $Assembly
+                        return $Assembly
+                    }}
                 }}
             }}
 
-            $AssemblyPath = [IO.Path]::Combine($LibraryDirectory, $AssemblyFileName)
             if (Test-Path -LiteralPath $AssemblyPath) {{
                 try {{
                     $LoadedAssembly = [System.Reflection.Assembly]::LoadFrom($AssemblyPath)
-                    if (& $TestPowerForgeDesktopModuleAssembly -Assembly $LoadedAssembly) {{
+                    if ((& $TestPowerForgeDesktopModuleAssembly -Assembly $LoadedAssembly) -or
+                        (& $TestPowerForgeDesktopAssemblyContentMatch -Assembly $LoadedAssembly -ExpectedPath $AssemblyPath)) {{
                         $ResolvedPowerForgeDesktopAssemblies[$SimpleName] = $LoadedAssembly
                         return $LoadedAssembly
                     }}
