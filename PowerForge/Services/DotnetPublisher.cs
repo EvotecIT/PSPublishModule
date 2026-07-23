@@ -117,7 +117,7 @@ public sealed class DotnetPublisher
                 ? Path.Combine(artifacts!, "publish", tfm)
                 : Path.Combine(projDir, "bin", configuration, tfm, "publish");
             var existingPathMap = useIsolatedArtifacts
-                ? ReadProjectPathMap(projDir, projectPath, configuration, tfm)
+                ? ReadProjectPathMap(projDir, projectPath, configuration, tfm, artifacts!)
                 : null;
             var args = BuildPublishArguments(
                 projectPath,
@@ -215,7 +215,8 @@ public sealed class DotnetPublisher
         string workingDirectory,
         string projectPath,
         string configuration,
-        string tfm)
+        string tfm,
+        string artifacts)
     {
         var args = new[]
         {
@@ -225,7 +226,10 @@ public sealed class DotnetPublisher
             "-verbosity:quiet",
             "-getProperty:PathMap",
             $"-p:Configuration={configuration}",
-            $"-p:TargetFramework={tfm}"
+            $"-p:TargetFramework={tfm}",
+            "-p:UseArtifactsOutput=true",
+            $"-p:ArtifactsPath={artifacts}",
+            "-p:ContinuousIntegrationBuild=true"
         };
         var psi = new ProcessStartInfo
         {

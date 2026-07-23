@@ -63,7 +63,7 @@ public sealed class DotnetPublisherTests
                 var escapedRoot = System.Security.SecurityElement.Escape(sourceRoot);
                 File.WriteAllText(
                     Path.Combine(sourceRoot, "Directory.Build.props"),
-                    $"<Project><PropertyGroup><PathMap>{escapedRoot}=/_/PowerForge/source</PathMap></PropertyGroup></Project>");
+                    $"<Project><PropertyGroup Condition=\"'$(ContinuousIntegrationBuild)' == 'true' And '$(UseArtifactsOutput)' == 'true'\"><PathMap>{escapedRoot}=/_/PowerForge/source</PathMap></PropertyGroup></Project>");
                 File.WriteAllText(
                     Path.Combine(dependencyDirectory, "Dependency.csproj"),
                     "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Deterministic>true</Deterministic><DebugType>portable</DebugType></PropertyGroup></Project>");

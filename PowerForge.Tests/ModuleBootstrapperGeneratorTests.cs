@@ -7,7 +7,9 @@ public class ModuleBootstrapperGeneratorTests
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-lib-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+        Directory.CreateDirectory(Path.Combine(root, "Public"));
         File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Public", "Get-Demo.ps1"), "function Get-Demo { 'demo' }");
 
         try
         {
@@ -28,6 +30,12 @@ public class ModuleBootstrapperGeneratorTests
             var bootstrapper = File.ReadAllText(bootstrapperPath);
             Assert.Contains("# DemoModule bootstrapper", bootstrapper);
             Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
+            Assert.Contains("[IO.Path]::Combine($PowerForgeModuleRoot, 'Public', '*.ps1')", bootstrapper);
+            Assert.Contains("[IO.Path]::Combine($PowerForgeModuleRoot, '*.psd1')", bootstrapper);
+            Assert.True(
+                bootstrapper.IndexOf("$PowerForgeModuleRoot = $PSScriptRoot", StringComparison.Ordinal) <
+                bootstrapper.IndexOf("[IO.Path]::Combine($PowerForgeModuleRoot, 'Public', '*.ps1')", StringComparison.Ordinal),
+                "The module root must be captured before script folders are discovered.");
             Assert.Contains("$FunctionsToExport = @('Get-Demo')", bootstrapper);
             Assert.Contains("$AliasesToExport = @('gdemo')", bootstrapper);
             Assert.Contains("[AppDomain]::CurrentDomain.add_AssemblyResolve($PowerForgeDesktopAssemblyResolver)", bootstrapper);
@@ -642,6 +650,8 @@ public class ModuleBootstrapperGeneratorTests
 
             var bootstrapper = File.ReadAllText(bootstrapperPath);
             Assert.Contains("$Public  = @(", bootstrapper);
+            Assert.Contains("[IO.Path]::Combine($PSScriptRoot, 'Public', '*.ps1')", bootstrapper);
+            Assert.DoesNotContain("$PowerForgeModuleRoot", bootstrapper);
             Assert.DoesNotContain("$LibraryName =", bootstrapper);
         }
         finally

@@ -323,7 +323,12 @@ internal static partial class ModuleBootstrapperGenerator
             ? RenderModuleBootstrapperTemplate(
                 "ScriptLoader",
                 "Scripts/ModuleBootstrapper/ScriptLoader.Template.ps1",
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["ModuleRootExpression"] = includeBinaryLoader
+                        ? "$PowerForgeModuleRoot"
+                        : "$PSScriptRoot"
+                })
             : string.Empty;
 
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
