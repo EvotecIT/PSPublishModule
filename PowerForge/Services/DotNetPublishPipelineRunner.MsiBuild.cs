@@ -610,23 +610,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
         if (v.Monotonic)
         {
-            var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["installer"] = installer.Id,
-                ["target"] = step.TargetName ?? string.Empty,
-                ["rid"] = step.Runtime ?? string.Empty,
-                ["framework"] = step.Framework ?? string.Empty,
-                ["style"] = step.Style?.ToString() ?? string.Empty,
-                ["configuration"] = plan.Configuration ?? "Release"
-            };
-
-            var stateTemplate = string.IsNullOrWhiteSpace(v.StatePath)
-                ? "Artifacts/DotNetPublish/Msi/{installer}/version.state.json"
-                : v.StatePath!;
-            statePath = ResolvePath(plan.ProjectRoot, ApplyTemplate(stateTemplate, tokens));
-
-            if (!plan.AllowOutputOutsideProjectRoot)
-                EnsurePathWithinRoot(plan.ProjectRoot, statePath, $"Installer '{installer.Id}' version state path");
+            var tokens = BuildMsiVersionTemplateTokens(plan, installer, step);
+            statePath = ResolveMsiVersionStatePath(plan, installer, tokens);
 
             MsiVersionState? authorityState = null;
             if (v.Authority == DotNetPublishMsiVersionAuthorityKind.GitTags)
@@ -711,6 +696,36 @@ public sealed partial class DotNetPublishPipelineRunner
             authorityKey,
             gitRemote,
             gitTagPrefix);
+    }
+
+    private static Dictionary<string, string> BuildMsiVersionTemplateTokens(
+        DotNetPublishPlan plan,
+        DotNetPublishInstallerPlan installer,
+        DotNetPublishStep step)
+        => new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["installer"] = installer.Id,
+            ["target"] = step.TargetName ?? string.Empty,
+            ["rid"] = step.Runtime ?? string.Empty,
+            ["framework"] = step.Framework ?? string.Empty,
+            ["style"] = step.Style?.ToString() ?? string.Empty,
+            ["configuration"] = plan.Configuration ?? "Release"
+        };
+
+    private static string ResolveMsiVersionStatePath(
+        DotNetPublishPlan plan,
+        DotNetPublishInstallerPlan installer,
+        IReadOnlyDictionary<string, string> tokens)
+    {
+        var stateTemplate = string.IsNullOrWhiteSpace(installer.Versioning?.StatePath)
+            ? "Artifacts/DotNetPublish/Msi/{installer}/version.state.json"
+            : installer.Versioning!.StatePath!;
+        var statePath = ResolvePath(plan.ProjectRoot, ApplyTemplate(stateTemplate, tokens));
+
+        if (!plan.AllowOutputOutsideProjectRoot)
+            EnsurePathWithinRoot(plan.ProjectRoot, statePath, $"Installer '{installer.Id}' version state path");
+
+        return statePath;
     }
 
     private MsiVersionResolution ResolveMsiVersionForStep(
@@ -861,7 +876,16 @@ public sealed partial class DotNetPublishPipelineRunner
 
                 if (allowOutputOverwrite && string.IsNullOrWhiteSpace(previous.ReservationOwner))
                 {
-                    WriteMsiVersionState(stateStream, patch, version.Version, reservationOwner);
+                    var overwriteTransition = WriteMsiVersionState(
+                        stateStream,
+                        patch,
+                        version.Version,
+                        reservationOwner);
+                    RecordMsiVersionStateWrite(
+                        reservationOwner,
+                        version.StatePath!,
+                        overwriteTransition.PreviousContentHash,
+                        overwriteTransition.ContentHash);
                     return;
                 }
 
@@ -881,7 +905,12 @@ public sealed partial class DotNetPublishPipelineRunner
 
             ReserveMsiGitTagVersion(version, context, reservationOwner);
 
-            WriteMsiVersionState(stateStream, patch, version.Version, reservationOwner);
+            var transition = WriteMsiVersionState(stateStream, patch, version.Version, reservationOwner);
+            RecordMsiVersionStateWrite(
+                reservationOwner,
+                version.StatePath!,
+                transition.PreviousContentHash,
+                transition.ContentHash);
         }
     }
 
@@ -908,7 +937,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 return true;
             }
 
-            WriteMsiVersionState(stateStream, version.Patch.Value, version.Version, reservationOwner: null);
+            _ = WriteMsiVersionState(stateStream, version.Patch.Value, version.Version, reservationOwner: null);
             return true;
         }
         catch (IOException)
@@ -1080,12 +1109,14 @@ public sealed partial class DotNetPublishPipelineRunner
             && int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out patch);
     }
 
-    private static void WriteMsiVersionState(
+    private static (string PreviousContentHash, string ContentHash) WriteMsiVersionState(
         Stream stream,
         int patch,
         string version,
         string? reservationOwner)
     {
+        stream.Position = 0;
+        var previousContentHash = ComputeSha256Hex(stream);
         var state = new MsiVersionState
         {
             LastPatch = patch,
@@ -1095,17 +1126,16 @@ public sealed partial class DotNetPublishPipelineRunner
         };
 
         var json = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
+        var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(json);
         stream.SetLength(0);
         stream.Position = 0;
-        using var writer = new StreamWriter(
-            stream,
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-            bufferSize: 1024,
-            leaveOpen: true);
-        writer.Write(json);
-        writer.Flush();
+        stream.Write(bytes, 0, bytes.Length);
+        stream.Flush();
         if (stream is FileStream fileStream)
             fileStream.Flush(flushToDisk: true);
+        return (
+            previousContentHash,
+            ComputeSha256Hex(bytes));
     }
 
     private static DateTime ParseUtcDate(string value)
