@@ -110,7 +110,9 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static SourceProvenance ReadSourceProvenance(
         string projectRoot,
         IEnumerable<string>? generatedPaths = null,
-        IEnumerable<string>? trackedGeneratedPaths = null)
+        IEnumerable<string>? trackedGeneratedPaths = null,
+        IReadOnlyDictionary<string, string>? cleanTrackedGeneratedProvenanceState = null,
+        string? msiReservationOwner = null)
     {
         var gitRevision = ReadGitText(projectRoot, "rev-parse HEAD");
         var environmentRevision = Environment.GetEnvironmentVariable("GITHUB_SHA")?.Trim();
@@ -124,13 +126,30 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         var trackedStatus = ReadGitRawText(gitRoot!, "status --porcelain=v1 -z --untracked-files=no");
+        var hasWriterContext = cleanTrackedGeneratedProvenanceState is not null
+            && !string.IsNullOrWhiteSpace(msiReservationOwner);
+        if (hasWriterContext && trackedStatus is not null)
+        {
+            trackedGeneratedPaths = GetVerifiedMsiVersionStateWrites(
+                projectRoot,
+                cleanTrackedGeneratedProvenanceState!,
+                msiReservationOwner!,
+                trackedStatus);
+        }
+
+        var finalTrackedStatus = hasWriterContext
+            ? ReadGitRawText(gitRoot!, "status --porcelain=v1 -z --untracked-files=no")
+            : trackedStatus;
         var untrackedOutput = ReadGitText(gitRoot!, "ls-files --others --exclude-standard -z");
+        var statusChangedDuringVerification = hasWriterContext
+            && !string.Equals(trackedStatus, finalTrackedStatus, StringComparison.Ordinal);
         bool? dirty = trackedStatus is null || untrackedOutput is null
             ? null
-            : HasTrackedSourceChanges(
+            : statusChangedDuringVerification
+              || HasTrackedSourceChanges(
                 projectRoot,
                 gitRoot!,
-                trackedStatus,
+                finalTrackedStatus!,
                 trackedGeneratedPaths)
               || HasUntrackedSourceFiles(
                 projectRoot,
@@ -254,13 +273,19 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static string[] GetVerifiedMsiVersionStateWrites(
         string projectRoot,
         IReadOnlyDictionary<string, string> cleanTrackedGeneratedPaths,
-        string reservationOwner)
+        string reservationOwner,
+        string? trackedStatus = null)
     {
         if (!MsiVersionStateWrites.TryGetValue(reservationOwner, out var writes))
             return Array.Empty<string>();
 
         var gitRoot = ReadGitText(projectRoot, "rev-parse --show-toplevel");
         if (string.IsNullOrWhiteSpace(gitRoot))
+            return Array.Empty<string>();
+        trackedStatus ??= ReadGitRawText(
+            gitRoot!,
+            "status --porcelain=v1 -z --untracked-files=no");
+        if (trackedStatus is null)
             return Array.Empty<string>();
 
         var verified = new List<string>();
@@ -275,19 +300,17 @@ public sealed partial class DotNetPublishPipelineRunner
                     continue;
 
                 var gitRelativePath = ToGitRelativeExclusion(projectRoot, gitRoot!, fullPath);
-                if (string.IsNullOrWhiteSpace(gitRelativePath))
+                if (string.IsNullOrWhiteSpace(gitRelativePath)
+                    || !HasExactTrackedStatus(trackedStatus, gitRelativePath!, " M")
+                    || !IsRegularTrackedFile(gitRoot!, gitRelativePath!)
+                    || (File.GetAttributes(fullPath) & FileAttributes.ReparsePoint) != 0)
                     continue;
 
                 var workingTreeMetadataDiff = ReadGitRawText(
                     gitRoot!,
-                    $"diff --summary HEAD -- {QuoteGitPath(gitRelativePath!)}");
-                var indexDiff = ReadGitRawText(
-                    gitRoot!,
-                    $"diff --cached --name-only HEAD -- {QuoteGitPath(gitRelativePath!)}");
+                    $"diff --summary HEAD -- {QuoteLiteralGitPath(gitRelativePath!)}");
                 if (workingTreeMetadataDiff is null
-                    || indexDiff is null
-                    || !string.IsNullOrWhiteSpace(workingTreeMetadataDiff)
-                    || !string.IsNullOrWhiteSpace(indexDiff))
+                    || !string.IsNullOrWhiteSpace(workingTreeMetadataDiff))
                     continue;
 
                 var actualHash = ComputeSha256Hex(File.ReadAllBytes(fullPath));
@@ -302,6 +325,49 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return verified.ToArray();
+    }
+
+    private static bool HasExactTrackedStatus(
+        string trackedStatus,
+        string gitRelativePath,
+        string expectedStatus)
+    {
+        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var records = trackedStatus.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+        for (var index = 0; index < records.Length; index++)
+        {
+            var record = records[index];
+            if (record.Length < 4 || record[2] != ' ')
+                return false;
+
+            var status = record.Substring(0, 2);
+            var path = record.Substring(3).Replace('\\', '/').TrimStart('/');
+            if (string.Equals(path, gitRelativePath, comparison))
+                return string.Equals(status, expectedStatus, StringComparison.Ordinal);
+
+            bool renameOrCopy = status.IndexOf('R') >= 0 || status.IndexOf('C') >= 0;
+            if (renameOrCopy && ++index >= records.Length)
+                return false;
+        }
+
+        return false;
+    }
+
+    private static bool IsRegularTrackedFile(string gitRoot, string gitRelativePath)
+    {
+        var stage = ReadGitText(
+            gitRoot,
+            $"ls-files --stage -- {QuoteLiteralGitPath(gitRelativePath)}");
+        if (string.IsNullOrWhiteSpace(stage))
+            return false;
+
+        var separator = stage!.IndexOf(' ');
+        if (separator <= 0)
+            return false;
+
+        var mode = stage.Substring(0, separator);
+        return string.Equals(mode, "100644", StringComparison.Ordinal)
+            || string.Equals(mode, "100755", StringComparison.Ordinal);
     }
 
     internal static IReadOnlyDictionary<string, string> CaptureCleanTrackedGeneratedProvenanceState(
@@ -542,6 +608,9 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static string QuoteGitPath(string path)
         => "\"" + path.Replace("\\", "/").Replace("\"", "\\\"") + "\"";
+
+    private static string QuoteLiteralGitPath(string path)
+        => QuoteGitPath(":(literal)" + path.Replace('\\', '/'));
 
     internal sealed class SourceProvenance
     {

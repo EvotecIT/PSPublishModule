@@ -106,16 +106,16 @@ public sealed partial class DotNetPublishPipelineRunner
                             break;
                         case DotNetPublishStepKind.Manifest:
                         {
-                            var verifiedMsiVersionStateWrites = GetVerifiedMsiVersionStateWrites(
-                                plan.ProjectRoot,
-                                cleanTrackedGeneratedProvenanceState,
-                                msiReservationOwner);
                             (manifestJson, manifestText, checksumsPath) = WriteManifestsWithProvenance(
                                 plan,
                                 artefacts,
                                 storePackages,
                                 msiBuilds,
-                                verifiedMsiVersionStateWrites);
+                                cleanTrackedGeneratedPaths: null,
+                                cleanTrackedGeneratedProvenanceState:
+                                    cleanTrackedGeneratedProvenanceState,
+                                msiReservationOwner:
+                                    msiReservationOwner);
                             break;
                         }
                     }
