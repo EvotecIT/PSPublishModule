@@ -35,6 +35,14 @@ public static partial class WebApiDocsGenerator
             ContainsUnprovidedTemplateToken(footer, "NAV_ACTIONS", tokens) ||
             ContainsUnprovidedTemplateTokenPrefix(footer, "FOOTER_", tokens);
         var needsNavTokens = headerNeedsNavTokens || footerNeedsNavTokens;
+        var headerContainsNavTokens =
+            ContainsTemplateToken(header, "NAV_LINKS") ||
+            ContainsTemplateToken(header, "NAV_ACTIONS") ||
+            ContainsTemplateTokenPrefix(header, "FOOTER_");
+        var footerContainsNavTokens =
+            ContainsTemplateToken(footer, "NAV_LINKS") ||
+            ContainsTemplateToken(footer, "NAV_ACTIONS") ||
+            ContainsTemplateTokenPrefix(footer, "FOOTER_");
         if (needsNavTokens && string.IsNullOrWhiteSpace(options.NavJsonPath))
         {
             warnings?.Add("API docs nav required: header/footer fragments contain {{NAV_*}} or {{FOOTER_*}} placeholders but NavJsonPath is not set. Set apidocs.nav (or apidocs.config) so navigation can be injected.");
@@ -68,8 +76,8 @@ public static partial class WebApiDocsGenerator
             var hasCustomHeader = !string.IsNullOrWhiteSpace(options.HeaderHtmlPath);
             var hasCustomFooter = !string.IsNullOrWhiteSpace(options.FooterHtmlPath);
             var customFragmentsContainNavTokens =
-                (hasCustomHeader && headerNeedsNavTokens) ||
-                (hasCustomFooter && footerNeedsNavTokens);
+                (hasCustomHeader && headerContainsNavTokens) ||
+                (hasCustomFooter && footerContainsNavTokens);
             var customFragmentMissingNavTokens =
                 (hasCustomHeader || hasCustomFooter) &&
                 !customFragmentsContainNavTokens;
@@ -173,6 +181,32 @@ public static partial class WebApiDocsGenerator
 
             var token = html.Substring(open + 2, close - open - 2).Trim();
             if (token.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && !providedTokens.ContainsKey(token))
+                return true;
+
+            searchStart = close + 2;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsTemplateTokenPrefix(string html, string prefix)
+    {
+        if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(prefix))
+            return false;
+
+        var searchStart = 0;
+        while (searchStart < html.Length)
+        {
+            var open = html.IndexOf("{{", searchStart, StringComparison.Ordinal);
+            if (open < 0)
+                return false;
+
+            var close = html.IndexOf("}}", open + 2, StringComparison.Ordinal);
+            if (close < 0)
+                return false;
+
+            var token = html.Substring(open + 2, close - open - 2).Trim();
+            if (token.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 return true;
 
             searchStart = close + 2;

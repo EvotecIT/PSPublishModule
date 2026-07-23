@@ -246,6 +246,8 @@ public class WebApiDocsGeneratorContractTests
             HeaderHtmlPath = headerPath,
             FooterHtmlPath = footerPath
         };
+        options.TemplateTokens["NAV_LINKS"] = "<a href=\"/provided/\">Provided</a>";
+        options.TemplateTokens["NAV_ACTIONS"] = string.Empty;
 
         try
         {

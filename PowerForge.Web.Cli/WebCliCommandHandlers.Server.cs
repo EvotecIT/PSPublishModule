@@ -172,7 +172,7 @@ internal static partial class WebCliCommandHandlers
                 sshCommand,
                 target,
                 manifest.OperationLocks ?? Array.Empty<string>(),
-                waitSeconds: 900);
+                waitSecondsPerLock: 900);
             for (var commandIndex = 0; commandIndex < commandList.Length; commandIndex++)
             {
                 var command = commandList[commandIndex];

@@ -292,14 +292,17 @@ public sealed class WebCliServerCaptureTests
     {
         var command = WebCliCommandHandlers.BuildRemoteOperationLockCommand(
             ["/var/lock/powerforge-site-example.lock"],
-            waitSeconds: 900);
+            waitSecondsPerLock: 900);
 
         Assert.Contains("flock -w 900 '/var/lock/powerforge-site-example.lock'", command, StringComparison.Ordinal);
         Assert.DoesNotContain("flock -n", command, StringComparison.Ordinal);
+        Assert.Equal(
+            TimeSpan.FromSeconds(1830),
+            WebCliCommandHandlers.GetRemoteOperationLockMarkerTimeout(lockCount: 2, waitSecondsPerLock: 900));
         Assert.Throws<InvalidOperationException>(() =>
             WebCliCommandHandlers.BuildRemoteOperationLockCommand(
                 ["/var/lock/powerforge-site-example.lock"],
-                waitSeconds: 3601));
+                waitSecondsPerLock: 3601));
     }
 
     [Fact]
