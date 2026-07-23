@@ -3,7 +3,6 @@ $LibraryName = '{{LibraryName}}'
 $Library = "$LibraryName.dll"
 $Class = "$LibraryName.Initialize"
 
-$PowerForgeModuleRoot = $PSScriptRoot
 $LibRoot = [IO.Path]::Combine($PowerForgeModuleRoot, 'Lib')
 $AssemblyFolders = Get-ChildItem -LiteralPath $LibRoot -Directory -ErrorAction SilentlyContinue
 

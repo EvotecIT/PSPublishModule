@@ -334,6 +334,9 @@ internal static partial class ModuleBootstrapperGenerator
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["ModuleName"] = moduleName,
+            ["ModuleRootCaptureBlock"] = includeBinaryLoader
+                ? "$PowerForgeModuleRoot = $PSScriptRoot"
+                : string.Empty,
             ["BinaryLoaderBlock"] = binaryLoaderBlock,
             ["ScriptLoaderBlock"] = scriptLoaderBlock,
             ["ExportBlock"] = ModuleConditionalExportBlockBuilder.BuildExportBlock(

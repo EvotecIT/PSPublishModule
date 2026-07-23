@@ -711,6 +711,68 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void Generate_WithDevelopmentBinariesAndScriptFolders_CapturesModuleRootBeforeDevelopmentBranch()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "pf-bootstrapper-dev-script-" + Guid.NewGuid().ToString("N"));
+        var moduleRoot = Path.Combine(root, "Module");
+        Directory.CreateDirectory(Path.Combine(moduleRoot, "Lib", "Core"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot, "Public"));
+        File.WriteAllText(
+            Path.Combine(moduleRoot, "Lib", "Core", "DemoModule.dll"),
+            string.Empty);
+        File.WriteAllText(
+            Path.Combine(moduleRoot, "Public", "Get-Demo.ps1"),
+            "function Get-Demo { 'demo' }");
+
+        try
+        {
+            var exports = new ExportSet(
+                new[] { "Get-Demo" },
+                Array.Empty<string>(),
+                Array.Empty<string>());
+            var developmentOptions = new ModuleDevelopmentBinaryBootstrapperOptions(
+                ModuleDevelopmentBinaryMode.Environment,
+                Path.Combine(root, "Sources", "Demo", "bin"),
+                "DEMO_USE_DEVELOPMENT_BINARIES",
+                "DEMO_DEVELOPMENT_CONFIGURATION",
+                new[] { "net8.0", "net472" },
+                new[] { "net472", "net8.0" });
+
+            ModuleBootstrapperGenerator.Generate(
+                moduleRoot,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: false,
+                developmentBinaries: developmentOptions);
+
+            var bootstrapper = File.ReadAllText(
+                Path.Combine(moduleRoot, "DemoModule.psm1"));
+            var rootCapture = bootstrapper.IndexOf(
+                "$PowerForgeModuleRoot = $PSScriptRoot",
+                StringComparison.Ordinal);
+            var developmentBranch = bootstrapper.IndexOf(
+                "$PowerForgeDevelopmentBinaryLoaded = $false",
+                StringComparison.Ordinal);
+            var scriptDiscovery = bootstrapper.IndexOf(
+                "[IO.Path]::Combine($PowerForgeModuleRoot, 'Public', '*.ps1')",
+                StringComparison.Ordinal);
+
+            Assert.True(rootCapture >= 0);
+            Assert.True(rootCapture < developmentBranch);
+            Assert.True(developmentBranch < scriptDiscovery);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_WithDevelopmentBinaries_WritesSourceBootstrapperWithoutPackagedLib()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-dev-" + Guid.NewGuid().ToString("N"));

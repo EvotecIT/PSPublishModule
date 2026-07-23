@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 
 namespace PowerForge;
 
@@ -117,7 +118,7 @@ public sealed class DotnetPublisher
                 ? Path.Combine(artifacts!, "publish", tfm)
                 : Path.Combine(projDir, "bin", configuration, tfm, "publish");
             var existingPathMap = useIsolatedArtifacts
-                ? ReadProjectPathMap(projDir, projectPath, configuration, tfm, artifacts!)
+                ? ReadProjectGraphPathMap(projectPath, configuration, tfm, artifacts!)
                 : null;
             var args = BuildPublishArguments(
                 projectPath,
@@ -211,8 +212,43 @@ public sealed class DotnetPublisher
         }
     }
 
-    private string ReadProjectPathMap(
-        string workingDirectory,
+    private string ReadProjectGraphPathMap(
+        string projectPath,
+        string configuration,
+        string tfm,
+        string artifacts)
+    {
+        var projectQueue = new Queue<string>();
+        var visitedProjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var pathMaps = new List<string>();
+        var seenPathMaps = new HashSet<string>(StringComparer.Ordinal);
+        projectQueue.Enqueue(Path.GetFullPath(projectPath));
+
+        while (projectQueue.Count > 0)
+        {
+            var currentProject = projectQueue.Dequeue();
+            if (!visitedProjects.Add(currentProject))
+                continue;
+
+            var evaluation = ReadProjectBuildContext(
+                currentProject,
+                configuration,
+                tfm,
+                artifacts);
+            var pathMap = evaluation.PathMap.Trim().TrimEnd(',');
+            if (!string.IsNullOrWhiteSpace(pathMap) && seenPathMaps.Add(pathMap))
+                pathMaps.Add(pathMap);
+
+            foreach (var projectReference in evaluation.ProjectReferences)
+            {
+                projectQueue.Enqueue(projectReference);
+            }
+        }
+
+        return string.Join(",", pathMaps);
+    }
+
+    private ProjectBuildContext ReadProjectBuildContext(
         string projectPath,
         string configuration,
         string tfm,
@@ -225,6 +261,7 @@ public sealed class DotnetPublisher
             "-nologo",
             "-verbosity:quiet",
             "-getProperty:PathMap",
+            "-getItem:ProjectReference",
             $"-p:Configuration={configuration}",
             $"-p:TargetFramework={tfm}",
             "-p:UseArtifactsOutput=true",
@@ -234,7 +271,7 @@ public sealed class DotnetPublisher
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            WorkingDirectory = workingDirectory,
+            WorkingDirectory = Path.GetDirectoryName(projectPath)!,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -254,11 +291,57 @@ public sealed class DotnetPublisher
         var stderr = process.StandardError.ReadToEnd();
         process.WaitForExit();
         if (process.ExitCode == 0)
-            return stdout.Trim();
+        {
+            var jsonStart = stdout.IndexOf('{');
+            var jsonEnd = stdout.LastIndexOf('}');
+            if (jsonStart < 0 || jsonEnd < jsonStart)
+            {
+                throw new InvalidOperationException(
+                    $"dotnet msbuild returned an invalid PathMap/project-reference evaluation for {projectPath}.");
+            }
 
-        _logger.Error($"dotnet msbuild could not evaluate PathMap for {tfm}: {stderr}\n{stdout}");
+            using var document = JsonDocument.Parse(
+                stdout.Substring(jsonStart, jsonEnd - jsonStart + 1));
+            var root = document.RootElement;
+            var pathMap = root
+                .GetProperty("Properties")
+                .GetProperty("PathMap")
+                .GetString() ?? string.Empty;
+            var projectReferences = new List<string>();
+            if (root.GetProperty("Items").TryGetProperty("ProjectReference", out var references))
+            {
+                foreach (var reference in references.EnumerateArray())
+                {
+                    if (reference.TryGetProperty("FullPath", out var fullPath) &&
+                        !string.IsNullOrWhiteSpace(fullPath.GetString()))
+                    {
+                        projectReferences.Add(Path.GetFullPath(fullPath.GetString()!));
+                    }
+                }
+            }
+
+            return new ProjectBuildContext(pathMap, projectReferences);
+        }
+
+        _logger.Error(
+            $"dotnet msbuild could not evaluate PathMap/project references for {projectPath} ({tfm}): " +
+            $"{stderr}\n{stdout}");
         throw new InvalidOperationException(
-            $"dotnet msbuild could not evaluate PathMap for {tfm} (exit {process.ExitCode})");
+            $"dotnet msbuild could not evaluate PathMap/project references for {projectPath} " +
+            $"({tfm}, exit {process.ExitCode})");
+    }
+
+    private sealed class ProjectBuildContext
+    {
+        internal ProjectBuildContext(string pathMap, IReadOnlyList<string> projectReferences)
+        {
+            PathMap = pathMap;
+            ProjectReferences = projectReferences;
+        }
+
+        internal string PathMap { get; }
+
+        internal IReadOnlyList<string> ProjectReferences { get; }
     }
 
     private void RunDotnet(string workingDirectory, IReadOnlyList<string> args, string tfm, string phase)

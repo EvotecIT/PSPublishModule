@@ -60,10 +60,16 @@ public sealed class DotnetPublisherTests
                 var moduleDirectory = Path.Combine(sourceRoot, "Module");
                 Directory.CreateDirectory(dependencyDirectory);
                 Directory.CreateDirectory(moduleDirectory);
-                var escapedRoot = System.Security.SecurityElement.Escape(sourceRoot);
+                var escapedDependencyDirectory =
+                    System.Security.SecurityElement.Escape(dependencyDirectory);
+                var escapedModuleDirectory =
+                    System.Security.SecurityElement.Escape(moduleDirectory);
                 File.WriteAllText(
-                    Path.Combine(sourceRoot, "Directory.Build.props"),
-                    $"<Project><PropertyGroup Condition=\"'$(ContinuousIntegrationBuild)' == 'true' And '$(UseArtifactsOutput)' == 'true'\"><PathMap>{escapedRoot}=/_/PowerForge/source</PathMap></PropertyGroup></Project>");
+                    Path.Combine(dependencyDirectory, "Directory.Build.props"),
+                    $"<Project><PropertyGroup Condition=\"'$(ContinuousIntegrationBuild)' == 'true' And '$(UseArtifactsOutput)' == 'true'\"><PathMap>{escapedDependencyDirectory}=/_/PowerForge/dependency</PathMap></PropertyGroup></Project>");
+                File.WriteAllText(
+                    Path.Combine(moduleDirectory, "Directory.Build.props"),
+                    $"<Project><PropertyGroup Condition=\"'$(ContinuousIntegrationBuild)' == 'true' And '$(UseArtifactsOutput)' == 'true'\"><PathMap>{escapedModuleDirectory}=/_/PowerForge/module</PathMap></PropertyGroup></Project>");
                 File.WriteAllText(
                     Path.Combine(dependencyDirectory, "Dependency.csproj"),
                     "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Deterministic>true</Deterministic><DebugType>portable</DebugType></PropertyGroup></Project>");
