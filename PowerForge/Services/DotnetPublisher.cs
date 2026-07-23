@@ -187,6 +187,8 @@ public sealed class DotnetPublisher
         {
             args.Add("-p:UseArtifactsOutput=true");
             args.Add($"-p:ArtifactsPath={artifacts}");
+            args.Add("-p:ContinuousIntegrationBuild=true");
+            args.Add($"-p:PathMap={artifacts}=/_/PowerForge/artifacts");
             // Centralized artifacts output can make parallel project-reference builds race on generated files.
             // Serializing MSBuild trades speed for deterministic module binary publishes.
             args.Add(maxCpuCountArgument);

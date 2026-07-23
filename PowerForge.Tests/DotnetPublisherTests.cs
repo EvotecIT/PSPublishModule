@@ -35,8 +35,69 @@ public sealed class DotnetPublisherTests
         Assert.Contains("-p:AssemblyVersion=9.8.7", args);
         Assert.Contains("-p:FileVersion=9.8.7", args);
         Assert.Contains("-p:_GlobalPropertiesToRemoveFromProjectReferences=%3BVersion%3BAssemblyVersion%3BFileVersion", args);
+        Assert.Contains("-p:ContinuousIntegrationBuild=true", args);
+        Assert.Contains(
+            $"-p:PathMap={Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "artifacts")}=/_/PowerForge/artifacts",
+            args);
         Assert.DoesNotContain(args, arg => arg.StartsWith("-p:PublishProfile", StringComparison.Ordinal));
         Assert.DoesNotContain(args, arg => arg.StartsWith("-p:CustomAfterMicrosoftCommonTargets=", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Publish_ProducesIdenticalBinariesAcrossIsolatedArtifactRoots()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            "DotnetPublisherDeterminism",
+            Guid.NewGuid().ToString("N"));
+        var dependencyDirectory = Path.Combine(root, "Dependency");
+        var moduleDirectory = Path.Combine(root, "Module");
+        Directory.CreateDirectory(dependencyDirectory);
+        Directory.CreateDirectory(moduleDirectory);
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(dependencyDirectory, "Dependency.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Deterministic>true</Deterministic><DebugType>portable</DebugType></PropertyGroup></Project>");
+            File.WriteAllText(
+                Path.Combine(dependencyDirectory, "Dependency.cs"),
+                "namespace Dependency; public sealed class Value { public string Text => \"stable\"; }");
+            var moduleProject = Path.Combine(moduleDirectory, "Module.csproj");
+            File.WriteAllText(
+                moduleProject,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Deterministic>true</Deterministic><DebugType>portable</DebugType></PropertyGroup><ItemGroup><ProjectReference Include=\"..\\Dependency\\Dependency.csproj\" /></ItemGroup></Project>");
+            File.WriteAllText(
+                Path.Combine(moduleDirectory, "Module.cs"),
+                "namespace Module; public sealed class Value { public string Text => new Dependency.Value().Text; }");
+
+            var publisher = new DotnetPublisher(new NullLogger());
+            var first = publisher.Publish(
+                moduleProject,
+                "Release",
+                new[] { "net8.0" },
+                "1.2.3",
+                Path.Combine(root, "artifacts-a"))["net8.0"];
+            var second = publisher.Publish(
+                moduleProject,
+                "Release",
+                new[] { "net8.0" },
+                "1.2.3",
+                Path.Combine(root, "artifacts-b"))["net8.0"];
+
+            Assert.Equal(
+                File.ReadAllBytes(Path.Combine(first, "Dependency.dll")),
+                File.ReadAllBytes(Path.Combine(second, "Dependency.dll")));
+            Assert.Equal(
+                File.ReadAllBytes(Path.Combine(first, "Module.dll")),
+                File.ReadAllBytes(Path.Combine(second, "Module.dll")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]

@@ -36,8 +36,8 @@ public sealed class ModuleBootstrapperGeneratorDesktopTypeAcceleratorTests
             Assert.Contains("$TestPowerForgeDesktopAssemblyContentMatch = {", bootstrapper);
             Assert.Contains("[Reflection.AssemblyName]::GetAssemblyName($ExpectedPath)", bootstrapper);
             Assert.Contains("[Security.Cryptography.SHA256]::Create()", bootstrapper);
-            Assert.Contains("[Diagnostics.FileVersionInfo]::GetVersionInfo($LoadedPath).ProductVersion", bootstrapper);
-            Assert.Contains("$LoadedProductVersion.Contains('+')", bootstrapper);
+            Assert.Contains("return $LoadedHash -eq $ExpectedHash", bootstrapper);
+            Assert.DoesNotContain("[Diagnostics.FileVersionInfo]", bootstrapper);
             Assert.Contains("& $TestPowerForgeDesktopAssemblyContentMatch -Assembly $Assembly -ExpectedPath $AssemblyPath", bootstrapper);
             Assert.Contains("A module-owned assembly with this identity exists but could not be selected above", bootstrapper);
             Assert.Contains("if ($PSEdition -ne 'Core' -and $PowerForgeDesktopBinaryLoaded)", bootstrapper);

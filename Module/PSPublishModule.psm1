@@ -591,15 +591,7 @@ if ($PSEdition -ne 'Core' -and $PowerForgeDesktopBinaryLoaded) {
 
                     $LoadedHash = & $ComputePowerForgeDesktopAssemblyHash -Path $LoadedPath
                     $ExpectedHash = & $ComputePowerForgeDesktopAssemblyHash -Path $ExpectedFullPath
-                    if ($LoadedHash -eq $ExpectedHash) {
-                        return $true
-                    }
-
-                    $LoadedProductVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($LoadedPath).ProductVersion
-                    $ExpectedProductVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($ExpectedFullPath).ProductVersion
-                    return -not [string]::IsNullOrWhiteSpace($LoadedProductVersion) -and
-                    $LoadedProductVersion.Contains('+') -and
-                    [string]::Equals($LoadedProductVersion, $ExpectedProductVersion, [StringComparison]::Ordinal)
+                    return $LoadedHash -eq $ExpectedHash
                 } catch {
                     return $false
                 }
