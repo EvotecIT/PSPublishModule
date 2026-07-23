@@ -501,6 +501,54 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
         }
     }
 
+    [Fact]
+    public void PlannedMsiVersionStatePaths_IncludeDeferredPackagingVersion()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var versionStatePath = Path.Combine(root, "Build", "versioning", "app.msi.state.json");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Installers =
+                [
+                    new DotNetPublishInstallerPlan
+                    {
+                        Id = "app",
+                        Versioning = new DotNetPublishMsiVersionOptions
+                        {
+                            Enabled = true,
+                            Monotonic = true,
+                            ApplyToPublish = false,
+                            StatePath = "Build/versioning/{installer}.msi.state.json"
+                        }
+                    }
+                ],
+                Steps =
+                [
+                    new DotNetPublishStep
+                    {
+                        Kind = DotNetPublishStepKind.MsiBuild,
+                        InstallerId = "app"
+                    }
+                ]
+            };
+
+            Assert.Equal(
+                new[] { versionStatePath },
+                DotNetPublishPipelineRunner.EnumeratePlannedMsiVersionStatePaths(plan));
+            Assert.Empty(plan.MsiVersions);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static void InvokeWriteManifests(
         DotNetPublishPlan plan,
         List<DotNetPublishArtefactResult> artefacts,

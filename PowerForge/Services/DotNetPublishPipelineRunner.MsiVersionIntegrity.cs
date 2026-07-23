@@ -197,11 +197,28 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishPlan plan,
         IEnumerable<DotNetPublishMsiBuildResult> msiBuilds)
     {
+        foreach (var statePath in EnumeratePlannedMsiVersionStatePaths(plan))
+            yield return statePath;
+
         foreach (var version in plan.MsiVersions.Values)
             yield return version.StatePath ?? string.Empty;
 
         foreach (var msiBuild in msiBuilds)
             yield return msiBuild.VersionStatePath ?? string.Empty;
+    }
+
+    internal static IEnumerable<string> EnumeratePlannedMsiVersionStatePaths(DotNetPublishPlan plan)
+    {
+        foreach (var step in plan.Steps.Where(step => step.Kind == DotNetPublishStepKind.MsiBuild))
+        {
+            var installer = plan.Installers.FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, step.InstallerId, StringComparison.OrdinalIgnoreCase));
+            if (installer?.Versioning is not { Enabled: true, Monotonic: true })
+                continue;
+
+            var tokens = BuildMsiVersionTemplateTokens(plan, installer, step);
+            yield return ResolveMsiVersionStatePath(plan, installer, tokens);
+        }
     }
 
     internal static void RecordMsiVersionStateWrite(
