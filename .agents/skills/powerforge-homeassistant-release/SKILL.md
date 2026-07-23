@@ -23,6 +23,8 @@ Use PowerForge as the release owner. A receiver repository should contain only t
 - With no release label, product/config/dependency changes increment patch; docs, tests, workflows, and maintainer metadata do not release.
 - Exactly one release label overrides that default. Conflicting release labels fail closed.
 - PowerForge queues every merge trigger and runs three isolated jobs: privileged metadata prepare/push without receiver commands, read-only exact-commit build without write credentials, then privileged publish without receiver checkout or execution. It verifies the marker, tag target, conflict provenance, and required asset.
+- Published releases use GitHub-generated change and contributor notes. PowerForge
+  prepends only hidden provenance metadata needed for safe retry and recovery.
 - Treat three-part versions as the public contract. Do not introduce four-part consumer versions.
 
 ## Recover a failed run

@@ -55,9 +55,6 @@ public sealed partial class GitHubReleasePublisher
         if (string.IsNullOrWhiteSpace(token)) throw new ArgumentException("Token is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(tagName)) throw new ArgumentException("TagName is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(releaseName)) releaseName = tagName;
-        if (generateReleaseNotes && !string.IsNullOrWhiteSpace(releaseNotes))
-            throw new ArgumentException("ReleaseNotes cannot be provided when GenerateReleaseNotes is enabled.", nameof(request));
-
         var assets = (request.AssetFilePaths ?? Array.Empty<string>())
             .Where(p => !string.IsNullOrWhiteSpace(p))
             .Select(p => Path.GetFullPath(p.Trim().Trim('"')))
@@ -178,8 +175,8 @@ public sealed partial class GitHubReleasePublisher
         var uri = BuildApiUri(apiBaseUrl, $"/repos/{owner}/{repo}/releases");
 
         var normalizedCommitish = string.IsNullOrWhiteSpace(commitish) ? null : commitish!.Trim();
-        var normalizedReleaseNotes = string.IsNullOrWhiteSpace(releaseNotes) ? null : releaseNotes;
-        if (generateReleaseNotes) normalizedReleaseNotes = null;
+        var normalizedReleaseNotes =
+            string.IsNullOrWhiteSpace(releaseNotes) ? null : releaseNotes;
         var body = new CreateReleaseRequest
         {
             TagName = tagName,

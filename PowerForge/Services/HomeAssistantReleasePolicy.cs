@@ -42,11 +42,10 @@ internal static class HomeAssistantReleasePolicy {
     internal static string BuildMarker(int pullRequestNumber, string mergeCommitSha)
         => $"<!-- powerforge-homeassistant source-pr:{pullRequestNumber} merge:{mergeCommitSha} -->";
 
-    internal static string BuildReleaseNotes(HomeAssistantPullRequest pullRequest, string marker, string releaseCommitSha, string? requiredAsset)
+    internal static string BuildReleaseMetadata(string marker, string releaseCommitSha, string? requiredAsset)
         => $"{marker}{Environment.NewLine}" +
            $"<!-- powerforge-homeassistant release-commit:{releaseCommitSha} -->{Environment.NewLine}" +
-           $"<!-- powerforge-homeassistant required-asset:{Convert.ToBase64String(Encoding.UTF8.GetBytes(requiredAsset ?? string.Empty))} -->{Environment.NewLine}{Environment.NewLine}" +
-           $"Release triggered by #{pullRequest.Number}: [{pullRequest.Title}]({pullRequest.HtmlUrl}).";
+           $"<!-- powerforge-homeassistant required-asset:{Convert.ToBase64String(Encoding.UTF8.GetBytes(requiredAsset ?? string.Empty))} -->";
 
     internal static string? ReadReleaseCommit(string releaseBody) {
         if (string.IsNullOrWhiteSpace(releaseBody)) return null;

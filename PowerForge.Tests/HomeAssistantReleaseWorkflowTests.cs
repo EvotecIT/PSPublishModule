@@ -22,10 +22,10 @@ public sealed class HomeAssistantReleaseWorkflowTests {
         var action = File.ReadAllText(Path.Combine(root, ".github", "actions", "homeassistant-release", "action.yml"));
         var skill = File.ReadAllText(Path.Combine(root, ".agents", "skills", "powerforge-homeassistant-release", "SKILL.md"));
 
-        Assert.Equal(3, CountOccurrences(workflow, "powerforge-version: 1.0.4"));
+        Assert.Equal(3, CountOccurrences(workflow, "powerforge-version: 1.0.8"));
         Assert.Contains("actions: read", workflow, StringComparison.Ordinal);
         Assert.Contains("`actions: read`", skill, StringComparison.Ordinal);
-        Assert.Contains("default: \"1.0.4\"", action, StringComparison.Ordinal);
+        Assert.Contains("default: \"1.0.8\"", action, StringComparison.Ordinal);
     }
 
     [Fact]
