@@ -32,12 +32,16 @@ public sealed class ModuleBootstrapperGeneratorDesktopTypeAcceleratorTests
             Assert.Contains("$TestPowerForgeDesktopIgnoredAssembly = {", bootstrapper);
             Assert.Contains("$ResolvedPowerForgeDesktopAssemblies = @{}", bootstrapper);
             Assert.Contains("$FailedPowerForgeDesktopAssemblies = @{}", bootstrapper);
+            Assert.Contains("$AssemblyName.EndsWith('.dll', [StringComparison]::OrdinalIgnoreCase)", bootstrapper);
             Assert.Contains("if ($Assembly.GetName().Name -eq $SimpleName -and (& $TestPowerForgeDesktopModuleAssembly -Assembly $Assembly))", bootstrapper);
             Assert.Contains("A module-owned assembly with this identity exists but could not be selected above", bootstrapper);
             Assert.Contains("if ($PSEdition -ne 'Core' -and $PowerForgeDesktopBinaryLoaded)", bootstrapper);
-            Assert.Contains("& $RegisterPowerForgeDesktopAssemblyTypeAccelerators -LibraryDirectory ([IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder))", bootstrapper);
+            Assert.Contains("$PowerForgeModuleRoot = $PSScriptRoot", bootstrapper);
+            Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
+            Assert.Contains("$ModuleAssemblyPath = [IO.Path]::Combine($LibRoot, $LibFolder, $Library)", bootstrapper);
+            Assert.Contains("& $RegisterPowerForgeDesktopAssemblyTypeAccelerators -LibraryDirectory ([IO.Path]::Combine($LibRoot, $LibFolder))", bootstrapper);
             Assert.True(
-                bootstrapper.IndexOf("$PowerForgeDesktopBinaryLoaded = $true", StringComparison.Ordinal) <
+                bootstrapper.IndexOf("$PowerForgeModuleRoot = $PSScriptRoot", StringComparison.Ordinal) <
                 bootstrapper.IndexOf(". $LibrariesScript", StringComparison.Ordinal));
             Assert.True(
                 bootstrapper.IndexOf(". $LibrariesScript", StringComparison.Ordinal) <
@@ -89,4 +93,5 @@ public sealed class ModuleBootstrapperGeneratorDesktopTypeAcceleratorTests
                 Directory.Delete(root, true);
         }
     }
+
 }

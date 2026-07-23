@@ -99,7 +99,11 @@ internal static partial class ModuleBootstrapperGenerator
         $ImportPowerForgeDesktopAssembly = {{
             param([Parameter(Mandatory = $true)][string] $AssemblyName)
 
-            $SimpleName = [IO.Path]::GetFileNameWithoutExtension($AssemblyName)
+            $SimpleName = if ($AssemblyName.EndsWith('.dll', [StringComparison]::OrdinalIgnoreCase)) {{
+                [IO.Path]::GetFileNameWithoutExtension($AssemblyName)
+            }} else {{
+                $AssemblyName
+            }}
             $AssemblyFileName = $SimpleName + '.dll'
             if ($IgnoredLibraryFileNames -contains $AssemblyFileName) {{
                 $FailedPowerForgeDesktopAssemblies[$SimpleName] = $true

@@ -286,7 +286,7 @@ internal static partial class ModuleBootstrapperGenerator
                             assemblyTypeAcceleratorMode,
                             assemblyTypeAccelerators,
                             assemblyTypeAcceleratorAssemblies,
-                            "[IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder)",
+                            "[IO.Path]::Combine($LibRoot, $LibFolder)",
                             ignoreLibrariesOnLoad).TrimEnd(),
                         4)
                 })

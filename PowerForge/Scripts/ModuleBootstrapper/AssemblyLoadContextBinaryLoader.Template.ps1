@@ -3,7 +3,8 @@ $LibraryName = '{{LibraryName}}'
 $Library = "$LibraryName.dll"
 $Class = "$LibraryName.Initialize"
 
-$LibRoot = [IO.Path]::Combine($PSScriptRoot, 'Lib')
+$PowerForgeModuleRoot = $PSScriptRoot
+$LibRoot = [IO.Path]::Combine($PowerForgeModuleRoot, 'Lib')
 $AssemblyFolders = Get-ChildItem -LiteralPath $LibRoot -Directory -ErrorAction SilentlyContinue
 
 $Default = $false
@@ -51,7 +52,7 @@ if ($PSEdition -eq 'Core') {
 }
 
 {{DesktopAssemblyResolverBlock}}{{RuntimeHandlerBlock}}if ($PSEdition -ne 'Core') {
-    $LibrariesScript = [IO.Path]::Combine($PSScriptRoot, '{{ModuleName}}.Libraries.ps1')
+    $LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, '{{ModuleName}}.Libraries.ps1')
     if (Test-Path -LiteralPath $LibrariesScript) {
         try {
             . $LibrariesScript
@@ -66,10 +67,10 @@ if ($PSEdition -eq 'Core') {
 $PowerForgeDesktopBinaryLoaded = $false
 try {
     $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
-    $ModuleAssemblyPath = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder, $Library)
+    $ModuleAssemblyPath = [IO.Path]::Combine($LibRoot, $LibFolder, $Library)
 
     if ($PSEdition -eq 'Core') {
-        $LoaderAssemblyPath = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder, '{{LoaderAssemblyName}}.dll')
+        $LoaderAssemblyPath = [IO.Path]::Combine($LibRoot, $LibFolder, '{{LoaderAssemblyName}}.dll')
         if (-not ('{{LoaderTypeName}}' -as [type])) {
             Add-Type -Path $LoaderAssemblyPath -ErrorAction Stop
         }

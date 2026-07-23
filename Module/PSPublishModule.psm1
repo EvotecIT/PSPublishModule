@@ -6,7 +6,8 @@ $LibraryName = 'PSPublishModule'
 $Library = "$LibraryName.dll"
 $Class = "$LibraryName.Initialize"
 
-$LibRoot = [IO.Path]::Combine($PSScriptRoot, 'Lib')
+$PowerForgeModuleRoot = $PSScriptRoot
+$LibRoot = [IO.Path]::Combine($PowerForgeModuleRoot, 'Lib')
 $AssemblyFolders = Get-ChildItem -LiteralPath $LibRoot -Directory -ErrorAction SilentlyContinue
 
 $Default = $false
@@ -136,7 +137,7 @@ if ($PSEdition -ne 'Core' -and $LibFolder) {
     }.GetNewClosure()
 }
 if ($PSEdition -ne 'Core') {
-    $LibrariesScript = [IO.Path]::Combine($PSScriptRoot, 'PSPublishModule.Libraries.ps1')
+    $LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, 'PSPublishModule.Libraries.ps1')
     if (Test-Path -LiteralPath $LibrariesScript) {
         try {
             . $LibrariesScript
@@ -151,10 +152,10 @@ if ($PSEdition -ne 'Core') {
 $PowerForgeDesktopBinaryLoaded = $false
 try {
     $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
-    $ModuleAssemblyPath = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder, $Library)
+    $ModuleAssemblyPath = [IO.Path]::Combine($LibRoot, $LibFolder, $Library)
 
     if ($PSEdition -eq 'Core') {
-        $LoaderAssemblyPath = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder, 'PSPublishModule.ModuleLoadContext.dll')
+        $LoaderAssemblyPath = [IO.Path]::Combine($LibRoot, $LibFolder, 'PSPublishModule.ModuleLoadContext.dll')
         if (-not ('PSPublishModule.ModuleLoadContext.ModuleAssemblyLoadContext' -as [type])) {
             Add-Type -Path $LoaderAssemblyPath -ErrorAction Stop
         }
@@ -548,7 +549,11 @@ if ($PSEdition -ne 'Core' -and $PowerForgeDesktopBinaryLoaded) {
             $ImportPowerForgeDesktopAssembly = {
                 param([Parameter(Mandatory = $true)][string] $AssemblyName)
 
-                $SimpleName = [IO.Path]::GetFileNameWithoutExtension($AssemblyName)
+                $SimpleName = if ($AssemblyName.EndsWith('.dll', [StringComparison]::OrdinalIgnoreCase)) {
+                    [IO.Path]::GetFileNameWithoutExtension($AssemblyName)
+                } else {
+                    $AssemblyName
+                }
                 $AssemblyFileName = $SimpleName + '.dll'
                 if ($IgnoredLibraryFileNames -contains $AssemblyFileName) {
                     $FailedPowerForgeDesktopAssemblies[$SimpleName] = $true
@@ -748,7 +753,7 @@ if ($PSEdition -ne 'Core' -and $PowerForgeDesktopBinaryLoaded) {
         }
 
         try {
-            & $RegisterPowerForgeDesktopAssemblyTypeAccelerators -LibraryDirectory ([IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder))
+            & $RegisterPowerForgeDesktopAssemblyTypeAccelerators -LibraryDirectory ([IO.Path]::Combine($LibRoot, $LibFolder))
         } catch {
             Write-Warning -Message "Desktop type accelerator registration failed: $($_.Exception.Message)"
         }
