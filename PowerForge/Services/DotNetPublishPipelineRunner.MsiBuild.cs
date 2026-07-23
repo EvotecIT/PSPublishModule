@@ -610,23 +610,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
         if (v.Monotonic)
         {
-            var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["installer"] = installer.Id,
-                ["target"] = step.TargetName ?? string.Empty,
-                ["rid"] = step.Runtime ?? string.Empty,
-                ["framework"] = step.Framework ?? string.Empty,
-                ["style"] = step.Style?.ToString() ?? string.Empty,
-                ["configuration"] = plan.Configuration ?? "Release"
-            };
-
-            var stateTemplate = string.IsNullOrWhiteSpace(v.StatePath)
-                ? "Artifacts/DotNetPublish/Msi/{installer}/version.state.json"
-                : v.StatePath!;
-            statePath = ResolvePath(plan.ProjectRoot, ApplyTemplate(stateTemplate, tokens));
-
-            if (!plan.AllowOutputOutsideProjectRoot)
-                EnsurePathWithinRoot(plan.ProjectRoot, statePath, $"Installer '{installer.Id}' version state path");
+            var tokens = BuildMsiVersionTemplateTokens(plan, installer, step);
+            statePath = ResolveMsiVersionStatePath(plan, installer, tokens);
 
             MsiVersionState? authorityState = null;
             if (v.Authority == DotNetPublishMsiVersionAuthorityKind.GitTags)
@@ -711,6 +696,36 @@ public sealed partial class DotNetPublishPipelineRunner
             authorityKey,
             gitRemote,
             gitTagPrefix);
+    }
+
+    private static Dictionary<string, string> BuildMsiVersionTemplateTokens(
+        DotNetPublishPlan plan,
+        DotNetPublishInstallerPlan installer,
+        DotNetPublishStep step)
+        => new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["installer"] = installer.Id,
+            ["target"] = step.TargetName ?? string.Empty,
+            ["rid"] = step.Runtime ?? string.Empty,
+            ["framework"] = step.Framework ?? string.Empty,
+            ["style"] = step.Style?.ToString() ?? string.Empty,
+            ["configuration"] = plan.Configuration ?? "Release"
+        };
+
+    private static string ResolveMsiVersionStatePath(
+        DotNetPublishPlan plan,
+        DotNetPublishInstallerPlan installer,
+        IReadOnlyDictionary<string, string> tokens)
+    {
+        var stateTemplate = string.IsNullOrWhiteSpace(installer.Versioning?.StatePath)
+            ? "Artifacts/DotNetPublish/Msi/{installer}/version.state.json"
+            : installer.Versioning!.StatePath!;
+        var statePath = ResolvePath(plan.ProjectRoot, ApplyTemplate(stateTemplate, tokens));
+
+        if (!plan.AllowOutputOutsideProjectRoot)
+            EnsurePathWithinRoot(plan.ProjectRoot, statePath, $"Installer '{installer.Id}' version state path");
+
+        return statePath;
     }
 
     private MsiVersionResolution ResolveMsiVersionForStep(

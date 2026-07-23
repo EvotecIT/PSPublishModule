@@ -218,7 +218,85 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunGit(root, "commit -m \"test source\"");
             string revision = RunGit(root, "rev-parse HEAD").Trim();
 
+            var manifestPath = Path.Combine(root, "Artifacts", "manifest.json");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Outputs = new DotNetPublishOutputs { ManifestJsonPath = manifestPath },
+                MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>
+                {
+                    ["app"] = new() { StatePath = versionStatePath }
+                }
+            };
+            var cleanTrackedGeneratedPaths =
+                DotNetPublishPipelineRunner.CaptureCleanTrackedGeneratedProvenancePaths(
+                    root,
+                    new[] { versionStatePath });
             File.WriteAllText(versionStatePath, "{\"Version\":\"1.0.1\"}");
+            var msiBuilds = new List<DotNetPublishMsiBuildResult>
+            {
+                new() { InstallerId = "app", VersionStatePath = versionStatePath }
+            };
+
+            InvokeWriteManifests(
+                plan,
+                new List<DotNetPublishArtefactResult>(),
+                msiBuilds,
+                cleanTrackedGeneratedPaths);
+
+            using (var document = JsonDocument.Parse(File.ReadAllText(manifestPath)))
+            {
+                var entry = Assert.Single(document.RootElement.EnumerateArray());
+                Assert.Equal(revision, entry.GetProperty("SourceRevision").GetString());
+                Assert.False(entry.GetProperty("SourceDirty").GetBoolean());
+            }
+
+            File.WriteAllText(Path.Combine(root, "source.txt"), "modified");
+            InvokeWriteManifests(
+                plan,
+                new List<DotNetPublishArtefactResult>(),
+                msiBuilds,
+                cleanTrackedGeneratedPaths);
+
+            using var dirtyDocument = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            var dirtyEntry = Assert.Single(dirtyDocument.RootElement.EnumerateArray());
+            Assert.True(dirtyEntry.GetProperty("SourceDirty").GetBoolean());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (var file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void WriteManifests_DoesNotExcludePreexistingTrackedVersionStateChange()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            var versionStatePath = Path.Combine(root, "Build", "versioning", "app.msi.state.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(versionStatePath)!);
+            File.WriteAllText(versionStatePath, "{\"Version\":\"1.0.0\"}");
+            RunGit(root, "add Build/versioning/app.msi.state.json");
+            RunGit(root, "commit -m \"test source\"");
+
+            File.WriteAllText(versionStatePath, "{\"Version\":\"9.9.9\"}");
+            var cleanTrackedGeneratedPaths =
+                DotNetPublishPipelineRunner.CaptureCleanTrackedGeneratedProvenancePaths(
+                    root,
+                    new[] { versionStatePath });
+            Assert.Empty(cleanTrackedGeneratedPaths);
+
             var manifestPath = Path.Combine(root, "Artifacts", "manifest.json");
             var plan = new DotNetPublishPlan
             {
@@ -234,21 +312,15 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                 new() { InstallerId = "app", VersionStatePath = versionStatePath }
             };
 
-            InvokeWriteManifests(plan, new List<DotNetPublishArtefactResult>(), msiBuilds);
+            InvokeWriteManifests(
+                plan,
+                new List<DotNetPublishArtefactResult>(),
+                msiBuilds,
+                cleanTrackedGeneratedPaths);
 
-            using (var document = JsonDocument.Parse(File.ReadAllText(manifestPath)))
-            {
-                var entry = Assert.Single(document.RootElement.EnumerateArray());
-                Assert.Equal(revision, entry.GetProperty("SourceRevision").GetString());
-                Assert.False(entry.GetProperty("SourceDirty").GetBoolean());
-            }
-
-            File.WriteAllText(Path.Combine(root, "source.txt"), "modified");
-            InvokeWriteManifests(plan, new List<DotNetPublishArtefactResult>(), msiBuilds);
-
-            using var dirtyDocument = JsonDocument.Parse(File.ReadAllText(manifestPath));
-            var dirtyEntry = Assert.Single(dirtyDocument.RootElement.EnumerateArray());
-            Assert.True(dirtyEntry.GetProperty("SourceDirty").GetBoolean());
+            using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            var entry = Assert.Single(document.RootElement.EnumerateArray());
+            Assert.True(entry.GetProperty("SourceDirty").GetBoolean());
         }
         finally
         {
@@ -318,13 +390,15 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
     private static void InvokeWriteManifests(
         DotNetPublishPlan plan,
         List<DotNetPublishArtefactResult> artefacts,
-        List<DotNetPublishMsiBuildResult>? msiBuilds = null)
+        List<DotNetPublishMsiBuildResult>? msiBuilds = null,
+        IEnumerable<string>? cleanTrackedGeneratedPaths = null)
     {
         DotNetPublishPipelineRunner.WriteManifestsWithProvenance(
             plan,
             artefacts,
             new List<DotNetPublishStorePackageResult>(),
-            msiBuilds ?? new List<DotNetPublishMsiBuildResult>());
+            msiBuilds ?? new List<DotNetPublishMsiBuildResult>(),
+            cleanTrackedGeneratedPaths);
     }
 
     private static string RunGit(string root, string arguments)

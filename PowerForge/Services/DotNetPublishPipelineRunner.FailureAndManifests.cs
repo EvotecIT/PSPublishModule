@@ -322,7 +322,8 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishPlan plan,
         List<DotNetPublishArtefactResult> artefacts,
         List<DotNetPublishStorePackageResult>? storePackages,
-        List<DotNetPublishMsiBuildResult>? msiBuilds)
+        List<DotNetPublishMsiBuildResult>? msiBuilds,
+        IEnumerable<string>? cleanTrackedGeneratedPaths = null)
     {
         var orderedArtefacts = (artefacts ?? new List<DotNetPublishArtefactResult>())
             .OrderBy(a => a.Target, StringComparer.OrdinalIgnoreCase)
@@ -352,9 +353,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 orderedArtefacts,
                 orderedStorePackages,
                 orderedMsiBuilds),
-            EnumerateTrackedGeneratedProvenancePaths(
-                plan,
-                orderedMsiBuilds));
+            cleanTrackedGeneratedPaths);
         var manifestEntries = BuildManifestEntries(
             plan.ProjectRoot,
             orderedArtefacts,

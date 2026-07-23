@@ -192,11 +192,47 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishPlan plan,
         IEnumerable<DotNetPublishMsiBuildResult> msiBuilds)
     {
+        foreach (var statePath in EnumeratePlannedMsiVersionStatePaths(plan))
+            yield return statePath;
+
         foreach (var version in plan.MsiVersions.Values)
             yield return version.StatePath ?? string.Empty;
 
         foreach (var msiBuild in msiBuilds)
             yield return msiBuild.VersionStatePath ?? string.Empty;
+    }
+
+    private static IEnumerable<string> EnumeratePlannedMsiVersionStatePaths(DotNetPublishPlan plan)
+    {
+        foreach (var step in plan.Steps.Where(step => step.Kind == DotNetPublishStepKind.MsiBuild))
+        {
+            var installer = plan.Installers.FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, step.InstallerId, StringComparison.OrdinalIgnoreCase));
+            if (installer?.Versioning is not { Enabled: true, Monotonic: true })
+                continue;
+
+            var tokens = BuildMsiVersionTemplateTokens(plan, installer, step);
+            yield return ResolveMsiVersionStatePath(plan, installer, tokens);
+        }
+    }
+
+    internal static string[] CaptureCleanTrackedGeneratedProvenancePaths(
+        string projectRoot,
+        IEnumerable<string>? generatedPaths)
+    {
+        var gitRoot = ReadGitText(projectRoot, "rev-parse --show-toplevel");
+        if (string.IsNullOrWhiteSpace(gitRoot))
+            return Array.Empty<string>();
+
+        var trackedOutput = ReadGitRawText(gitRoot!, "status --porcelain=v1 -z --untracked-files=no");
+        if (trackedOutput is null || !TryParseTrackedStatusPaths(trackedOutput, out var changedPaths))
+            return Array.Empty<string>();
+
+        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return BuildGeneratedPathExclusions(projectRoot, gitRoot!, generatedPaths)
+            .Where(candidate => !changedPaths.Any(path =>
+                IsGeneratedPath(path, new[] { candidate }, comparison)))
+            .ToArray();
     }
 
     private static bool HasUntrackedSourceFiles(
@@ -226,31 +262,48 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         var exclusions = BuildGeneratedPathExclusions(projectRoot, gitRoot, generatedPaths);
+        if (!TryParseTrackedStatusPaths(trackedOutput, out var changedPaths))
+            return true;
+
+        foreach (var path in changedPaths)
+        {
+            if (!IsGeneratedPath(path, exclusions, comparison))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryParseTrackedStatusPaths(string trackedOutput, out string[] paths)
+    {
+        var parsed = new List<string>();
         var records = trackedOutput.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
         for (var index = 0; index < records.Length; index++)
         {
             var record = records[index];
-            if (record.Length < 4)
-                return true;
+            if (record.Length < 4 || record[2] != ' ')
+            {
+                paths = Array.Empty<string>();
+                return false;
+            }
 
             var status = record.Substring(0, 2);
-            var path = record.Substring(3).Replace('\\', '/').TrimStart('/');
+            parsed.Add(record.Substring(3).Replace('\\', '/').TrimStart('/'));
             bool renameOrCopy = status.IndexOf('R') >= 0 || status.IndexOf('C') >= 0;
-            if (!IsGeneratedPath(path, exclusions, comparison))
-                return true;
+            if (!renameOrCopy)
+                continue;
 
-            if (renameOrCopy)
+            if (++index >= records.Length)
             {
-                if (++index >= records.Length)
-                    return true;
-
-                var sourcePath = records[index].Replace('\\', '/').TrimStart('/');
-                if (!IsGeneratedPath(sourcePath, exclusions, comparison))
-                    return true;
+                paths = Array.Empty<string>();
+                return false;
             }
+
+            parsed.Add(records[index].Replace('\\', '/').TrimStart('/'));
         }
 
-        return false;
+        paths = parsed.ToArray();
+        return true;
     }
 
     private static string[] BuildGeneratedPathExclusions(

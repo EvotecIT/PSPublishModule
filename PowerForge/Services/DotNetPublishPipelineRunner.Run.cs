@@ -32,6 +32,11 @@ public sealed partial class DotNetPublishPipelineRunner
         var benchmarkGates = new List<DotNetPublishBenchmarkGateResult>();
         var benchmarkExtracts = new Dictionary<string, DotNetPublishBenchmarkExtractionResult>(StringComparer.OrdinalIgnoreCase);
         var stepReports = new List<DotNetPublishRunReportStep>();
+        var cleanTrackedGeneratedProvenancePaths = CaptureCleanTrackedGeneratedProvenancePaths(
+            plan.ProjectRoot,
+            EnumerateTrackedGeneratedProvenancePaths(
+                plan,
+                Array.Empty<DotNetPublishMsiBuildResult>()));
         string? manifestJson = null;
         string? manifestText = null;
         string? checksumsPath = null;
@@ -101,7 +106,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                 plan,
                                 artefacts,
                                 storePackages,
-                                msiBuilds);
+                                msiBuilds,
+                                cleanTrackedGeneratedProvenancePaths);
                             break;
                     }
 
