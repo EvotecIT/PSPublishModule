@@ -277,10 +277,16 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (string.IsNullOrWhiteSpace(gitRelativePath))
                     continue;
 
-                var metadataDiff = ReadGitRawText(
+                var workingTreeMetadataDiff = ReadGitRawText(
                     gitRoot!,
                     $"diff --summary HEAD -- {QuoteGitPath(gitRelativePath!)}");
-                if (metadataDiff is null || !string.IsNullOrWhiteSpace(metadataDiff))
+                var indexMetadataDiff = ReadGitRawText(
+                    gitRoot!,
+                    $"diff --cached --summary HEAD -- {QuoteGitPath(gitRelativePath!)}");
+                if (workingTreeMetadataDiff is null
+                    || indexMetadataDiff is null
+                    || !string.IsNullOrWhiteSpace(workingTreeMetadataDiff)
+                    || !string.IsNullOrWhiteSpace(indexMetadataDiff))
                     continue;
 
                 var actualHash = ComputeSha256Hex(File.ReadAllBytes(fullPath));
