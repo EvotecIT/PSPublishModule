@@ -5,17 +5,23 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebCliCommandHandlers
 {
-    internal static string BuildRemoteOperationLockCommand(IEnumerable<string> paths)
+    internal static string BuildRemoteOperationLockCommand(IEnumerable<string> paths, int waitSeconds = 0)
     {
         var locks = GetRemoteOperationLocks(paths);
         if (locks.Length == 0)
             throw new InvalidOperationException("At least one operation lock is required.");
+        if (waitSeconds is < 0 or > 3600)
+            throw new InvalidOperationException("Operation lock wait must be from 0 through 3600 seconds.");
 
         var builder = new StringBuilder("set -e; ");
         foreach (var path in locks)
             builder.Append(BuildOperationLockPostcondition(path)).Append("; ");
         foreach (var path in locks)
-            builder.Append("flock -n ").Append(ShellQuote(path)).Append(' ');
+        {
+            builder.Append(waitSeconds > 0 ? $"flock -w {waitSeconds} " : "flock -n ")
+                .Append(ShellQuote(path))
+                .Append(' ');
+        }
         builder.Append("sh -c ").Append(ShellQuote("printf 'POWERFORGE_OPERATION_LOCKED\\n'; cat >/dev/null"));
         return builder.ToString();
     }
@@ -23,13 +29,16 @@ internal static partial class WebCliCommandHandlers
     private static RemoteOperationLock? AcquireRemoteOperationLocks(
         string sshCommand,
         string target,
-        IEnumerable<string> paths)
+        IEnumerable<string> paths,
+        int waitSeconds = 0)
     {
         var locks = GetRemoteOperationLocks(paths);
         if (locks.Length == 0)
             return null;
 
-        var process = CreateProcess(sshCommand, BuildSshArguments(target, BuildRemoteOperationLockCommand(locks)));
+        var process = CreateProcess(
+            sshCommand,
+            BuildSshArguments(target, BuildRemoteOperationLockCommand(locks, waitSeconds)));
         process.StartInfo.RedirectStandardInput = true;
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;
@@ -40,7 +49,7 @@ internal static partial class WebCliCommandHandlers
         bool markerReady;
         try
         {
-            markerReady = markerTask.Wait(TimeSpan.FromSeconds(30));
+            markerReady = markerTask.Wait(TimeSpan.FromSeconds(Math.Max(30, waitSeconds + 30)));
         }
         catch (Exception exception)
         {

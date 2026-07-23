@@ -65,9 +65,14 @@ public static partial class WebApiDocsGenerator
         {
             // If the site provides custom header/footer fragments but forgets to include navigation placeholders,
             // nav injection will be a no-op and API pages may render without expected site navigation.
+            var hasCustomHeader = !string.IsNullOrWhiteSpace(options.HeaderHtmlPath);
+            var hasCustomFooter = !string.IsNullOrWhiteSpace(options.FooterHtmlPath);
+            var customFragmentsContainNavTokens =
+                (hasCustomHeader && headerNeedsNavTokens) ||
+                (hasCustomFooter && footerNeedsNavTokens);
             var customFragmentMissingNavTokens =
-                (!string.IsNullOrWhiteSpace(options.HeaderHtmlPath) && !headerNeedsNavTokens) ||
-                (!string.IsNullOrWhiteSpace(options.FooterHtmlPath) && !footerNeedsNavTokens);
+                (hasCustomHeader || hasCustomFooter) &&
+                !customFragmentsContainNavTokens;
             if (customFragmentMissingNavTokens)
             {
                 warnings?.Add("API docs nav: header/footer fragments do not contain {{NAV_LINKS}} or {{NAV_ACTIONS}} placeholders; nav injection may be empty.");

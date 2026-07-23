@@ -171,7 +171,8 @@ internal static partial class WebCliCommandHandlers
             using var captureLock = AcquireRemoteOperationLocks(
                 sshCommand,
                 target,
-                manifest.OperationLocks ?? Array.Empty<string>());
+                manifest.OperationLocks ?? Array.Empty<string>(),
+                waitSeconds: 900);
             for (var commandIndex = 0; commandIndex < commandList.Length; commandIndex++)
             {
                 var command = commandList[commandIndex];
