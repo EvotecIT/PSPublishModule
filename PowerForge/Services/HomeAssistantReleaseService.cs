@@ -255,8 +255,7 @@ public sealed class HomeAssistantReleaseService {
         var assets = string.IsNullOrWhiteSpace(spec.RequiredAssetName)
             ? Array.Empty<string>()
             : new[] { Path.GetFullPath(spec.AssetFilePath) };
-        var notes = HomeAssistantReleasePolicy.BuildReleaseNotes(
-            pullRequest,
+        var notes = HomeAssistantReleasePolicy.BuildReleaseMetadata(
             marker,
             spec.ReleaseCommitSha,
             string.IsNullOrWhiteSpace(spec.RequiredAssetName) ? null : spec.RequiredAssetName);
@@ -269,7 +268,7 @@ public sealed class HomeAssistantReleaseService {
             ReleaseName = tagName,
             ReleaseNotes = notes,
             Commitish = spec.ReleaseCommitSha,
-            GenerateReleaseNotes = false,
+            GenerateReleaseNotes = true,
             ReuseExistingReleaseOnConflict = true,
             ReplaceExistingAssets = true,
             RequireExpectedExistingRelease = true,

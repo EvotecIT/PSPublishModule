@@ -1,26 +1,63 @@
 using PowerForge;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Text.Json.Nodes;
 
 namespace PowerForge.Tests;
 
 public sealed class GitHubReleasePublisherTests
 {
     [Fact]
-    public void PublishRelease_ThrowsWhenReleaseNotesConflictWithGenerateReleaseNotes()
+    public async Task PublishRelease_SendsMetadataWithGeneratedReleaseNotes()
     {
-        var publisher = new GitHubReleasePublisher(new NullLogger());
-
-        var request = new GitHubReleasePublishRequest
+        var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        string? requestBody = null;
+        var server = Task.Run(async () =>
         {
-            Owner = "EvotecIT",
-            Repository = "PSPublishModule",
-            Token = "token",
-            TagName = "v1.2.3",
-            ReleaseNotes = "notes",
-            GenerateReleaseNotes = true
-        };
+            var context = await listener.GetContextAsync();
+            using var reader = new StreamReader(
+                context.Request.InputStream,
+                context.Request.ContentEncoding);
+            requestBody = await reader.ReadToEndAsync();
+            var responseBody = Encoding.UTF8.GetBytes(
+                $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}","body":"generated"}""");
+            context.Response.StatusCode = 201;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = responseBody.Length;
+            await context.Response.OutputStream.WriteAsync(responseBody);
+            context.Response.Close();
+        });
+        const string metadata = "<!-- release provenance -->";
+        try
+        {
+            var result = new GitHubReleasePublisher(new NullLogger()).PublishRelease(
+                new GitHubReleasePublishRequest
+                {
+                    Owner = "EvotecIT",
+                    Repository = "example",
+                    Token = "token",
+                    ApiBaseUrl = apiBaseUrl,
+                    TagName = "v1.2.3",
+                    ReleaseNotes = metadata,
+                    GenerateReleaseNotes = true
+                });
 
-        var ex = Assert.Throws<ArgumentException>(() => publisher.PublishRelease(request));
-        Assert.Contains("ReleaseNotes", ex.Message, StringComparison.OrdinalIgnoreCase);
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(result.Succeeded);
+            var request = JsonNode.Parse(requestBody!)!.AsObject();
+            Assert.Equal(metadata, request["body"]!.GetValue<string>());
+            Assert.True(request["generate_release_notes"]!.GetValue<bool>());
+        }
+        finally
+        {
+            listener.Stop();
+            listener.Close();
+        }
     }
 
     [Fact]
@@ -90,5 +127,19 @@ public sealed class GitHubReleasePublisherTests
             "/repos/EvotecIT/example/releases");
 
         Assert.Equal("https://github.enterprise.example/api/v3/repos/EvotecIT/example/releases", uri.AbsoluteUri);
+    }
+
+    private static int GetAvailablePort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            return ((IPEndPoint)listener.LocalEndpoint).Port;
+        }
+        finally
+        {
+            listener.Stop();
+        }
     }
 }

@@ -25,13 +25,19 @@ public sealed class GitHubReleasePublishRequest
     /// <summary>Optional release title. When omitted, <see cref="TagName"/> is used.</summary>
     public string? ReleaseName { get; set; }
 
-    /// <summary>Optional release notes body.</summary>
+    /// <summary>
+    /// Optional release notes body. GitHub prepends it when
+    /// <see cref="GenerateReleaseNotes"/> is enabled.
+    /// </summary>
     public string? ReleaseNotes { get; set; }
 
     /// <summary>Optional commitish to create the tag from.</summary>
     public string? Commitish { get; set; }
 
-    /// <summary>True to ask GitHub to generate release notes automatically.</summary>
+    /// <summary>
+    /// True to ask GitHub to generate release notes automatically after any supplied
+    /// <see cref="ReleaseNotes"/> body.
+    /// </summary>
     public bool GenerateReleaseNotes { get; set; }
 
     /// <summary>True to create a draft release.</summary>

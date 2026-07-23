@@ -109,7 +109,10 @@ When a release is required, PowerForge:
 4. rejects any tracked source mutation made by build scripts and transfers only the declared asset;
 5. starts a separate privileged publish job that never executes receiver code;
 6. preflights any existing `v<version>` release and tag for the expected PowerForge marker and commit before same-named assets may be replaced;
-7. creates or safely resumes the release and reads it back from GitHub to verify the source marker, tag target, and required asset.
+7. creates or safely resumes the release with GitHub-generated change and contributor
+   notes, while retaining hidden PowerForge provenance metadata;
+8. reads the release back from GitHub to verify the source marker, tag target, and
+   required asset.
 
 The version commit is pushed with `GITHUB_TOKEN`, so GitHub does not recursively start ordinary push workflows. Safety comes from the merged PR checks, constrained version edit, job-level credential boundary, conflict preflight, and post-publication verification.
 
