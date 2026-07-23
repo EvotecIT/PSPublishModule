@@ -199,6 +199,122 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
         }
     }
 
+    [Fact]
+    public void WriteManifests_ExcludesTrackedGeneratedVersionState()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            File.WriteAllText(Path.Combine(root, "source.txt"), "committed");
+            var versionStatePath = Path.Combine(root, "Build", "versioning", "app.msi.state.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(versionStatePath)!);
+            File.WriteAllText(versionStatePath, "{\"Version\":\"1.0.0\"}");
+            RunGit(root, "add source.txt Build/versioning/app.msi.state.json");
+            RunGit(root, "commit -m \"test source\"");
+            string revision = RunGit(root, "rev-parse HEAD").Trim();
+
+            File.WriteAllText(versionStatePath, "{\"Version\":\"1.0.1\"}");
+            var manifestPath = Path.Combine(root, "Artifacts", "manifest.json");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Outputs = new DotNetPublishOutputs { ManifestJsonPath = manifestPath },
+                MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>
+                {
+                    ["app"] = new() { StatePath = versionStatePath }
+                }
+            };
+            var msiBuilds = new List<DotNetPublishMsiBuildResult>
+            {
+                new() { InstallerId = "app", VersionStatePath = versionStatePath }
+            };
+
+            InvokeWriteManifests(plan, new List<DotNetPublishArtefactResult>(), msiBuilds);
+
+            using (var document = JsonDocument.Parse(File.ReadAllText(manifestPath)))
+            {
+                var entry = Assert.Single(document.RootElement.EnumerateArray());
+                Assert.Equal(revision, entry.GetProperty("SourceRevision").GetString());
+                Assert.False(entry.GetProperty("SourceDirty").GetBoolean());
+            }
+
+            File.WriteAllText(Path.Combine(root, "source.txt"), "modified");
+            InvokeWriteManifests(plan, new List<DotNetPublishArtefactResult>(), msiBuilds);
+
+            using var dirtyDocument = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            var dirtyEntry = Assert.Single(dirtyDocument.RootElement.EnumerateArray());
+            Assert.True(dirtyEntry.GetProperty("SourceDirty").GetBoolean());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (var file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void WriteManifests_DoesNotExcludeOtherTrackedGeneratedOutputs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            var stagingPath = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "Msi", "staging")).FullName;
+            var payloadPath = Path.Combine(stagingPath, "payload.dll");
+            File.WriteAllText(payloadPath, "committed");
+            RunGit(root, "add -f Artifacts/Msi/staging/payload.dll");
+            RunGit(root, "commit -m \"test source\"");
+
+            File.WriteAllText(payloadPath, "modified");
+            var manifestPath = Path.Combine(root, "Artifacts", "manifest.json");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Outputs = new DotNetPublishOutputs { ManifestJsonPath = manifestPath },
+                Steps =
+                [
+                    new DotNetPublishStep
+                    {
+                        Kind = DotNetPublishStepKind.MsiPrepare,
+                        StagingPath = stagingPath
+                    }
+                ]
+            };
+            var msiBuilds = new List<DotNetPublishMsiBuildResult>
+            {
+                new() { InstallerId = "app" }
+            };
+
+            InvokeWriteManifests(plan, new List<DotNetPublishArtefactResult>(), msiBuilds);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            var entry = Assert.Single(document.RootElement.EnumerateArray());
+            Assert.True(entry.GetProperty("SourceDirty").GetBoolean());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                foreach (var file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+                    file.Attributes = FileAttributes.Normal;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static void InvokeWriteManifests(
         DotNetPublishPlan plan,
         List<DotNetPublishArtefactResult> artefacts,

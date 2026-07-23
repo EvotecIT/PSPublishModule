@@ -104,7 +104,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
     internal static SourceProvenance ReadSourceProvenance(
         string projectRoot,
-        IEnumerable<string>? generatedPaths = null)
+        IEnumerable<string>? generatedPaths = null,
+        IEnumerable<string>? trackedGeneratedPaths = null)
     {
         var gitRevision = ReadGitText(projectRoot, "rev-parse HEAD");
         var environmentRevision = Environment.GetEnvironmentVariable("GITHUB_SHA")?.Trim();
@@ -117,11 +118,16 @@ public sealed partial class DotNetPublishPipelineRunner
                 null);
         }
 
-        var trackedStatus = ReadGitText(gitRoot!, "status --porcelain --untracked-files=no");
+        var trackedStatus = ReadGitRawText(gitRoot!, "status --porcelain=v1 -z --untracked-files=no");
         var untrackedOutput = ReadGitText(gitRoot!, "ls-files --others --exclude-standard -z");
         bool? dirty = trackedStatus is null || untrackedOutput is null
             ? null
-            : trackedStatus.Length > 0 || HasUntrackedSourceFiles(
+            : HasTrackedSourceChanges(
+                projectRoot,
+                gitRoot!,
+                trackedStatus,
+                trackedGeneratedPaths)
+              || HasUntrackedSourceFiles(
                 projectRoot,
                 gitRoot!,
                 untrackedOutput,
@@ -182,6 +188,17 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
+    private static IEnumerable<string> EnumerateTrackedGeneratedProvenancePaths(
+        DotNetPublishPlan plan,
+        IEnumerable<DotNetPublishMsiBuildResult> msiBuilds)
+    {
+        foreach (var version in plan.MsiVersions.Values)
+            yield return version.StatePath ?? string.Empty;
+
+        foreach (var msiBuild in msiBuilds)
+            yield return msiBuild.VersionStatePath ?? string.Empty;
+    }
+
     private static bool HasUntrackedSourceFiles(
         string projectRoot,
         string gitRoot,
@@ -189,24 +206,70 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<string>? generatedPaths)
     {
         var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        var exclusions = (generatedPaths ?? Array.Empty<string>())
-            .Select(path => ToGitRelativeExclusion(projectRoot, gitRoot, path))
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
-            .ToArray();
+        var exclusions = BuildGeneratedPathExclusions(projectRoot, gitRoot, generatedPaths);
 
         foreach (var untrackedPath in untrackedOutput.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries))
         {
             var normalizedPath = untrackedPath.Replace('\\', '/').TrimStart('/');
-            bool generated = exclusions.Any(exclusion =>
-                string.Equals(normalizedPath, exclusion, comparison)
-                || normalizedPath.StartsWith(exclusion + "/", comparison));
-            if (!generated)
+            if (!IsGeneratedPath(normalizedPath, exclusions, comparison))
                 return true;
         }
 
         return false;
     }
+
+    private static bool HasTrackedSourceChanges(
+        string projectRoot,
+        string gitRoot,
+        string trackedOutput,
+        IEnumerable<string>? generatedPaths)
+    {
+        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var exclusions = BuildGeneratedPathExclusions(projectRoot, gitRoot, generatedPaths);
+        var records = trackedOutput.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+        for (var index = 0; index < records.Length; index++)
+        {
+            var record = records[index];
+            if (record.Length < 4)
+                return true;
+
+            var status = record.Substring(0, 2);
+            var path = record.Substring(3).Replace('\\', '/').TrimStart('/');
+            bool renameOrCopy = status.IndexOf('R') >= 0 || status.IndexOf('C') >= 0;
+            if (!IsGeneratedPath(path, exclusions, comparison))
+                return true;
+
+            if (renameOrCopy)
+            {
+                if (++index >= records.Length)
+                    return true;
+
+                var sourcePath = records[index].Replace('\\', '/').TrimStart('/');
+                if (!IsGeneratedPath(sourcePath, exclusions, comparison))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string[] BuildGeneratedPathExclusions(
+        string projectRoot,
+        string gitRoot,
+        IEnumerable<string>? generatedPaths)
+        => (generatedPaths ?? Array.Empty<string>())
+            .Select(path => ToGitRelativeExclusion(projectRoot, gitRoot, path))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray()!;
+
+    private static bool IsGeneratedPath(
+        string path,
+        IEnumerable<string> exclusions,
+        StringComparison comparison)
+        => exclusions.Any(exclusion =>
+            string.Equals(path, exclusion, comparison)
+            || path.StartsWith(exclusion + "/", comparison));
 
     private static string? ToGitRelativeExclusion(string projectRoot, string gitRoot, string? path)
     {
@@ -234,6 +297,12 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static string? ReadGitText(string projectRoot, string arguments)
     {
+        var output = ReadGitRawText(projectRoot, arguments);
+        return output?.Trim();
+    }
+
+    private static string? ReadGitRawText(string projectRoot, string arguments)
+    {
         try
         {
             using var process = new Process
@@ -250,7 +319,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
             };
             if (!process.Start()) return null;
-            var output = process.StandardOutput.ReadToEnd().Trim();
+            var output = process.StandardOutput.ReadToEnd();
             if (!process.WaitForExit(5000) || process.ExitCode != 0) return null;
             return output;
         }

@@ -351,6 +351,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 plan,
                 orderedArtefacts,
                 orderedStorePackages,
+                orderedMsiBuilds),
+            EnumerateTrackedGeneratedProvenancePaths(
+                plan,
                 orderedMsiBuilds));
         var manifestEntries = BuildManifestEntries(
             plan.ProjectRoot,
