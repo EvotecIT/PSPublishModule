@@ -895,6 +895,60 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void OptimizeDetailed_HashedImages_RewritesSrcSetReferencesWithoutChangingDataUrls()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-hash-srcset-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "assets"));
+
+        try
+        {
+            var htmlPath = Path.Combine(root, "index.html");
+            File.WriteAllText(htmlPath,
+                """
+                <!doctype html>
+                <html>
+                  <head>
+                    <link rel="preload" as="image" imagesrcset="/assets/camera.png 1x, /assets/camera.png?large=1 2x" />
+                  </head>
+                  <body>
+                    <picture>
+                      <source srcset="/assets/camera.png, /assets/camera.png#wide 2x" />
+                      <img src="/assets/camera.png" srcset="data:image/png;base64,AAAA 1x, /assets/camera.png 2x" alt="Camera" />
+                      <img src="data:text/plain,/assets/camera.png" srcset="data:text/plain,/assets/camera.png 1x" alt="Inline data" />
+                    </picture>
+                  </body>
+                </html>
+                """);
+            File.WriteAllBytes(Path.Combine(root, "assets", "camera.png"), new byte[] { 1, 2, 3, 4 });
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                HashAssets = true,
+                HashExtensions = new[] { ".png" }
+            });
+
+            var html = File.ReadAllText(htmlPath);
+            var hashedAsset = Assert.Single(result.HashedAssets);
+            Assert.Equal("/assets/camera.png", hashedAsset.OriginalPath);
+            Assert.DoesNotContain("src=\"/assets/camera.png\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("srcset=\"/assets/camera.png", html, StringComparison.Ordinal);
+            Assert.Contains($"imagesrcset=\"{hashedAsset.HashedPath} 1x, {hashedAsset.HashedPath}?large=1 2x\"", html, StringComparison.Ordinal);
+            Assert.Contains($"srcset=\"{hashedAsset.HashedPath}, {hashedAsset.HashedPath}#wide 2x\"", html, StringComparison.Ordinal);
+            Assert.Contains($"srcset=\"data:image/png;base64,AAAA 1x, {hashedAsset.HashedPath} 2x\"", html, StringComparison.Ordinal);
+            Assert.Contains("src=\"data:text/plain,/assets/camera.png\"", html, StringComparison.Ordinal);
+            Assert.Contains("srcset=\"data:text/plain,/assets/camera.png 1x\"", html, StringComparison.Ordinal);
+            Assert.True(File.Exists(Path.Combine(root, hashedAsset.HashedPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar))));
+            Assert.False(File.Exists(Path.Combine(root, "assets", "camera.png")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void OptimizeDetailed_AssetRewrites_PreservesEncodedUrlWhenNoRuleMatches()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-rewrite-encoded-" + Guid.NewGuid().ToString("N"));
