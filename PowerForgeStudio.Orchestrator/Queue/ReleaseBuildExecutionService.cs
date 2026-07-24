@@ -125,7 +125,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             ScriptPath = configBacked ? null : buildInputPath,
             ModulePath = modulePath
         }, cancellationToken);
-        var artifactInfo = CollectModuleArtifacts(repository.RootPath);
+        var artifactInfo = CollectModuleArtifacts(repository.RootPath, buildInputPath);
         var succeeded = execution.Succeeded;
 
         return new ReleaseBuildAdapterResult(
@@ -164,28 +164,48 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         return new ArtifactCollection(directories.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(), files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList());
     }
 
-    private static ArtifactCollection CollectModuleArtifacts(string repositoryRoot)
+    private static ArtifactCollection CollectModuleArtifacts(string repositoryRoot, string buildInputPath)
     {
         var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var moduleRoot in new[] { repositoryRoot, Path.Combine(repositoryRoot, "Module") })
+        var candidateDirectories = string.Equals(Path.GetExtension(buildInputPath), ".json", StringComparison.OrdinalIgnoreCase) &&
+                                   new ModulePipelineConfigurationService().TryLoad(buildInputPath, out var context)
+            ? context!.ArtifactPaths
+            : new[]
+            {
+                Path.Combine(repositoryRoot, "Artefacts", "Unpacked"),
+                Path.Combine(repositoryRoot, "Artefacts", "Packed"),
+                Path.Combine(repositoryRoot, "Module", "Artefacts", "Unpacked"),
+                Path.Combine(repositoryRoot, "Module", "Artefacts", "Packed")
+            };
+        foreach (var candidateDirectory in candidateDirectories)
         {
-            var unpacked = Path.Combine(moduleRoot, "Artefacts", "Unpacked");
-            var packed = Path.Combine(moduleRoot, "Artefacts", "Packed");
-
-            if (Directory.Exists(unpacked))
-            {
-                directories.Add(unpacked);
-            }
-
-            if (Directory.Exists(packed))
-            {
-                directories.Add(packed);
-            }
+            AddModuleArtifactDirectory(candidateDirectory, directories);
         }
 
         CollectArtifactFiles(directories, files);
         return new ArtifactCollection(directories.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(), files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
+    private static void AddModuleArtifactDirectory(string path, ISet<string> directories)
+    {
+        if (Directory.Exists(path))
+        {
+            directories.Add(path);
+            return;
+        }
+
+        var tokenIndex = path.IndexOfAny(['<', '{']);
+        if (tokenIndex < 0)
+        {
+            return;
+        }
+
+        var searchRoot = path[..tokenIndex].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (Directory.Exists(searchRoot))
+        {
+            directories.Add(searchRoot);
+        }
     }
 
     private static void AddArtifactDirectory(string? path, ISet<string> directories)

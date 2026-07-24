@@ -21335,6 +21335,19 @@ Defaults to powerforge.json in the project root.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PowerForgeUnifiedGitHubRelease</maml:name>
+          <maml:description>
+            <maml:para>Indicates that a parent unified release owns GitHub publication and suppresses&#xD;
+GitHub publish segments declared by the JSON module configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PreReleaseTag</maml:name>
           <maml:description>
             <maml:para>Overrides the prerelease tag declared by a JSON configuration.</maml:para>
@@ -22195,6 +22208,19 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PowerForgeUnifiedGitHubRelease</maml:name>
+        <maml:description>
+          <maml:para>Indicates that a parent unified release owns GitHub publication and suppresses&#xD;
+GitHub publish segments declared by the JSON module configuration.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

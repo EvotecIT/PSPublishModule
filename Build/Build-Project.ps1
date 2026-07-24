@@ -131,7 +131,7 @@ try {
     }
     $invokeParams.ConfigPath = $ConfigPath
     $invokeParams.Configuration = $Configuration
-    $invokeParams.ModuleRunMode = if ($Publish -or $PublishProjectGitHub) { 'Publish' } else { $RunMode }
+$invokeParams.ModuleRunMode = if ($Publish -or $PublishNuget -or $PublishProjectGitHub) { 'Publish' } else { $RunMode }
     $invokeParams.ErrorAction = 'Stop'
     if ($Publish) {
         $invokeParams.PublishNuget = $true

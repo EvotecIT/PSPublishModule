@@ -8,7 +8,7 @@ using PSPublishModule;
 
 namespace PowerForge.Tests;
 
-public sealed class ModuleBuildPreparationServiceTests
+public sealed partial class ModuleBuildPreparationServiceTests
 {
     [Fact]
     public void Prepare_from_json_applies_release_overrides_without_mutating_the_file()

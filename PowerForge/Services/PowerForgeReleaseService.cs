@@ -909,6 +909,8 @@ internal sealed partial class PowerForgeReleaseService
 
         if (configPath is not null && !File.Exists(configPath))
             throw new FileNotFoundException($"Module build config was not found: {configPath}", configPath);
+        if (configPath is not null)
+            _ = new ModulePipelineConfigurationService().Load(configPath);
         if (scriptPath is not null && !File.Exists(scriptPath))
             throw new FileNotFoundException($"Module build script was not found: {scriptPath}", scriptPath);
         if (!request.PlanOnly &&

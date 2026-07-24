@@ -32,6 +32,10 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             """
             {
               "SchemaVersion": 1,
+              "Build": {
+                "Name": "JsonModuleRepo",
+                "SourcePath": "src/JsonModuleRepo"
+              },
               "Segments": [
                 {
                   "Type": "GalleryNuget",
@@ -39,13 +43,16 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     "Destination": "PowerShellGallery",
                     "Enabled": true,
                     "Tool": "PSResourceGet",
-                    "ApiKey": "gallery-key",
+                    "ApiKeyFilePath": "secrets/gallery.key",
                     "RepositoryName": "PSGallery"
                   }
                 }
               ]
             }
             """);
+        var moduleRoot = Directory.CreateDirectory(Path.Combine(repositoryRoot, "src", "JsonModuleRepo")).FullName;
+        var secretsDirectory = Directory.CreateDirectory(Path.Combine(moduleRoot, "secrets")).FullName;
+        File.WriteAllText(Path.Combine(secretsDirectory, "gallery.key"), "gallery-key");
 
         var packageDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Artifacts", "Packed", "JsonModuleRepo")).FullName;
         var manifestPath = Path.Combine(packageDirectory, "JsonModuleRepo.psd1");

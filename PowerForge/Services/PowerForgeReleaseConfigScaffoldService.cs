@@ -205,16 +205,7 @@ public sealed class PowerForgeReleaseConfigScaffoldService
 
     private static ModulePipelineSpec LoadModulePipelineConfig(string path)
     {
-        var json = File.ReadAllText(path);
-        var config = JsonSerializer.Deserialize<ModulePipelineSpec>(json, DeserializeOptions);
-        if (config?.Build is null)
-            throw new InvalidOperationException($"Unable to deserialize module pipeline config: {path}");
-        if (string.IsNullOrWhiteSpace(config.Build.Name))
-            throw new InvalidOperationException($"Module pipeline config requires Build.Name: {path}");
-        if (string.IsNullOrWhiteSpace(config.Build.SourcePath))
-            throw new InvalidOperationException($"Module pipeline config requires Build.SourcePath: {path}");
-
-        return config;
+        return new ModulePipelineConfigurationService().Load(path).Spec;
     }
 
     private static PowerForgeToolReleaseSpec? BuildToolsSection(
@@ -297,7 +288,7 @@ public sealed class PowerForgeReleaseConfigScaffoldService
             ManifestPath = manifestPath is not null && File.Exists(manifestPath)
                 ? GetRelativePathCompat(projectRoot, manifestPath).Replace('\\', '/')
                 : null,
-            ModuleVersion = NormalizeNullable(modulePipeline?.Build.Version),
+            ModuleVersion = NormalizeNullable(ModulePipelineConfigurationService.ResolveEffectiveVersion(modulePipeline)),
             ArtifactPaths = artifactPaths
         };
     }

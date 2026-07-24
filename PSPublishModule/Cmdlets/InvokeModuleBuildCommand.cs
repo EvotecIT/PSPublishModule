@@ -165,6 +165,13 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetConfig)]
     public bool IncludeProjectPackages { get; set; } = true;
 
+    /// <summary>
+    /// Indicates that a parent unified release owns GitHub publication and suppresses
+    /// GitHub publish segments declared by the JSON module configuration.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter PowerForgeUnifiedGitHubRelease { get; set; }
+
     /// <summary>Overrides the signing certificate thumbprint declared by a JSON configuration.</summary>
     [Parameter(ParameterSetName = ParameterSetConfig)]
     public string? CertificateThumbprint { get; set; }
@@ -478,6 +485,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             SignModule = SignModule.IsPresent,
             SignModuleWasBound = boundParameters?.ContainsKey(nameof(SignModule)) == true,
             IncludeProjectPackages = IncludeProjectPackages,
+            UnifiedGitHubRelease = PowerForgeUnifiedGitHubRelease.IsPresent,
             CertificateThumbprint = CertificateThumbprint,
             SignIncludeBinaries = SignIncludeBinaries,
             SignIncludeInternals = SignIncludeInternals,
@@ -504,10 +512,15 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             ExcludeDirectories = ExcludeDirectories ?? Array.Empty<string>(),
             ExcludeFiles = ExcludeFiles ?? Array.Empty<string>(),
             DiagnosticsBaselinePath = DiagnosticsBaselinePath,
+            DiagnosticsBaselinePathWasBound = boundParameters?.ContainsKey(nameof(DiagnosticsBaselinePath)) == true,
             GenerateDiagnosticsBaseline = GenerateDiagnosticsBaseline.IsPresent,
+            GenerateDiagnosticsBaselineWasBound = boundParameters?.ContainsKey(nameof(GenerateDiagnosticsBaseline)) == true,
             UpdateDiagnosticsBaseline = UpdateDiagnosticsBaseline.IsPresent,
+            UpdateDiagnosticsBaselineWasBound = boundParameters?.ContainsKey(nameof(UpdateDiagnosticsBaseline)) == true,
             FailOnNewDiagnostics = FailOnNewDiagnostics.IsPresent,
+            FailOnNewDiagnosticsWasBound = boundParameters?.ContainsKey(nameof(FailOnNewDiagnostics)) == true,
             FailOnDiagnosticsSeverity = FailOnDiagnosticsSeverity,
+            FailOnDiagnosticsSeverityWasBound = boundParameters?.ContainsKey(nameof(FailOnDiagnosticsSeverity)) == true,
             DiagnosticsBinaryConflictSearchRoot = DiagnosticsBinaryConflictSearchRoot,
             JsonOnly = JsonOnly.IsPresent,
             JsonPath = JsonPath,

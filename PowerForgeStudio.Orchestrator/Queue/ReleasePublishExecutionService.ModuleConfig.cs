@@ -14,7 +14,8 @@ public sealed partial class ReleasePublishExecutionService
         {
             try
             {
-                return new ModulePublishConfigurationReader().Read(buildInputPath);
+                var context = new ModulePipelineConfigurationService().Load(buildInputPath);
+                return new ModulePublishConfigurationReader().Read(context.Spec);
             }
             catch
             {

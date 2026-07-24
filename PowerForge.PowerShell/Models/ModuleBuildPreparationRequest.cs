@@ -22,6 +22,7 @@ internal sealed class ModuleBuildPreparationRequest
     public bool SignModule { get; set; }
     public bool SignModuleWasBound { get; set; }
     public bool IncludeProjectPackages { get; set; } = true;
+    public bool UnifiedGitHubRelease { get; set; }
     public string? CertificateThumbprint { get; set; }
     public bool? SignIncludeBinaries { get; set; }
     public bool? SignIncludeInternals { get; set; }
@@ -48,10 +49,15 @@ internal sealed class ModuleBuildPreparationRequest
     public string[] ExcludeDirectories { get; set; } = Array.Empty<string>();
     public string[] ExcludeFiles { get; set; } = Array.Empty<string>();
     public string? DiagnosticsBaselinePath { get; set; }
+    public bool DiagnosticsBaselinePathWasBound { get; set; }
     public bool GenerateDiagnosticsBaseline { get; set; }
+    public bool GenerateDiagnosticsBaselineWasBound { get; set; }
     public bool UpdateDiagnosticsBaseline { get; set; }
+    public bool UpdateDiagnosticsBaselineWasBound { get; set; }
     public bool FailOnNewDiagnostics { get; set; }
+    public bool FailOnNewDiagnosticsWasBound { get; set; }
     public BuildDiagnosticSeverity? FailOnDiagnosticsSeverity { get; set; }
+    public bool FailOnDiagnosticsSeverityWasBound { get; set; }
     public string[]? DiagnosticsBinaryConflictSearchRoot { get; set; }
     public bool JsonOnly { get; set; }
     public string? JsonPath { get; set; }

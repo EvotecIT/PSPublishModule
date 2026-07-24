@@ -122,7 +122,7 @@ internal sealed class ModuleBuildPreparationService
         if (!File.Exists(configFullPath))
             throw new FileNotFoundException($"Module build config file not found: {configFullPath}", configFullPath);
 
-        var spec = ReadPipelineSpecJson(configFullPath);
+        var spec = new ModulePipelineConfigurationService().Load(configFullPath).Spec;
         ResolvePipelineSpecPaths(spec, configFullPath);
         ApplyConfigOverrides(spec, request);
         spec.Segments = AddRunModeSegment(spec.Segments ?? Array.Empty<IConfigurationSegment>(), request.RunMode);
@@ -160,6 +160,7 @@ internal sealed class ModuleBuildPreparationService
         var libraryBuilds = segments.OfType<ConfigurationBuildLibrariesSegment>().ToArray();
         var moduleBuilds = segments.OfType<ConfigurationBuildSegment>().ToArray();
         var options = segments.OfType<ConfigurationOptionsSegment>().LastOrDefault();
+        spec.Diagnostics ??= new ModulePipelineDiagnosticsOptions();
 
         if (!string.IsNullOrWhiteSpace(request.ModuleVersion))
         {
@@ -225,6 +226,31 @@ internal sealed class ModuleBuildPreparationService
                 .ToArray();
             spec.Segments = segments;
         }
+
+        if (request.UnifiedGitHubRelease)
+        {
+            segments = segments
+                .Where(static segment =>
+                    segment is not ConfigurationPublishSegment publish ||
+                    publish.Configuration.Destination != PublishDestination.GitHub)
+                .ToArray();
+            spec.Segments = segments;
+        }
+
+        if (request.DiagnosticsBaselinePathWasBound)
+        {
+            spec.Diagnostics.BaselinePath = string.IsNullOrWhiteSpace(request.DiagnosticsBaselinePath)
+                ? null
+                : request.ResolvePath!(request.DiagnosticsBaselinePath!);
+        }
+        if (request.GenerateDiagnosticsBaselineWasBound)
+            spec.Diagnostics.GenerateBaseline = request.GenerateDiagnosticsBaseline;
+        if (request.UpdateDiagnosticsBaselineWasBound)
+            spec.Diagnostics.UpdateBaseline = request.UpdateDiagnosticsBaseline;
+        if (request.FailOnNewDiagnosticsWasBound)
+            spec.Diagnostics.FailOnNewDiagnostics = request.FailOnNewDiagnostics;
+        if (request.FailOnDiagnosticsSeverityWasBound)
+            spec.Diagnostics.FailOnSeverity = request.FailOnDiagnosticsSeverity;
 
         var hasSigningOptions = !string.IsNullOrWhiteSpace(request.CertificateThumbprint) ||
                                 request.SignIncludeBinaries.HasValue ||

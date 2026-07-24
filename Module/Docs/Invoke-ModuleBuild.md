@@ -16,7 +16,7 @@ Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <stri
 
 ### Config
 ```powershell
-Invoke-ModuleBuild -ConfigPath <string> [-RunMode <ConfigurationGateMode>] [-ModuleVersion <string>] [-PreReleaseTag <string>] [-BuildConfiguration <string>] [-BuildFramework <string>] [-NoDotnetBuild] [-NoSign] [-SignModule] [-IncludeProjectPackages <bool>] [-CertificateThumbprint <string>] [-SignIncludeBinaries <bool>] [-SignIncludeInternals <bool>] [-SignIncludeExe <bool>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild -ConfigPath <string> [-RunMode <ConfigurationGateMode>] [-ModuleVersion <string>] [-PreReleaseTag <string>] [-BuildConfiguration <string>] [-BuildFramework <string>] [-NoDotnetBuild] [-NoSign] [-SignModule] [-IncludeProjectPackages <bool>] [-PowerForgeUnifiedGitHubRelease] [-CertificateThumbprint <string>] [-SignIncludeBinaries <bool>] [-SignIncludeInternals <bool>] [-SignIncludeExe <bool>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Configuration
@@ -775,6 +775,23 @@ Path to the parent folder where the project exists or should be created. The mod
 ```yaml
 Type: String
 Parameter Sets: Modern
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PowerForgeUnifiedGitHubRelease
+Indicates that a parent unified release owns GitHub publication and suppresses
+GitHub publish segments declared by the JSON module configuration.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Config
 Aliases: None
 Possible values:
 

@@ -3,6 +3,38 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void Execute_ModuleValidate_RejectsInvalidJsonBuildContract()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "powerforge.json"), """{ "Build": { "Name": "MissingSource" } }""");
+            var spec = new PowerForgeReleaseSpec
+            {
+                Module = new PowerForgeModuleReleaseOptions
+                {
+                    RepositoryRoot = ".",
+                    ConfigPath = "powerforge.json"
+                }
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => new PowerForgeReleaseService(new NullLogger()).Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ValidateOnly = true
+                }));
+
+            Assert.Contains("Build.SourcePath", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_ModulePlan_AllowsConfiguredAssemblyThatWillBeBuiltLater()
     {
         var root = CreateSandbox();

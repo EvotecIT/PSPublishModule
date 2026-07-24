@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PowerForge;
 using PowerForgeStudio.Domain.Catalog;
 
 namespace PowerForgeStudio.Orchestrator.Catalog;
@@ -159,23 +160,7 @@ public sealed class RepositoryCatalogScanner
 
     private static bool IsModulePipelineConfig(string path)
     {
-        if (!File.Exists(path))
-        {
-            return false;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(
-                File.ReadAllText(path),
-                new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
-            return document.RootElement.TryGetProperty("Segments", out var segments) &&
-                   segments.ValueKind == JsonValueKind.Array;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
+        return new ModulePipelineConfigurationService().TryLoad(path, out _);
     }
 
     private static string? FindBuildScript(string directoryPath, string fileName, bool includeImmediateChildBuildFolders)

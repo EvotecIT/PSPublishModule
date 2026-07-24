@@ -27,7 +27,8 @@ public sealed class ModuleBuildHostServiceTests
             ModuleVersion = "3.1.0",
             NoDotnetBuild = true,
             NoSign = true,
-            IncludeProjectPackages = false
+            IncludeProjectPackages = false,
+            UnifiedGitHubRelease = true
         });
 
         Assert.True(result.Succeeded);
@@ -41,6 +42,7 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Contains("$moduleBuildArguments['NoDotnetBuild'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['NoSign'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['IncludeProjectPackages'] = $false", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$moduleBuildArguments['PowerForgeUnifiedGitHubRelease'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("$buildScriptPath", captured.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("$LASTEXITCODE", captured.CommandText!, StringComparison.Ordinal);
     }

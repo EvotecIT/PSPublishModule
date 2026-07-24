@@ -82,7 +82,20 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
         var buildDirectory = scope.CreateDirectory(Path.Combine("JsonModuleRepo", "Build"));
         File.WriteAllText(Path.Combine(buildDirectory, "Build-Project.ps1"), "# unified entry point");
         var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
-        File.WriteAllText(moduleConfig, """{ "SchemaVersion": 1, "Segments": [] }""");
+        var moduleRoot = scope.CreateDirectory(Path.Combine("JsonModuleRepo", "src", "JsonModuleRepo"));
+        var configuredArtifactRoot = Path.Combine(moduleRoot, "out");
+        var configuredArtifact = Path.Combine(configuredArtifactRoot, "v1.0.0");
+        File.WriteAllText(
+            moduleConfig,
+            """
+            {
+              "SchemaVersion": 1,
+              "Build": { "Name": "JsonModuleRepo", "SourcePath": "src/JsonModuleRepo" },
+              "Segments": [
+                { "Type": "Packed", "Configuration": { "Enabled": true, "Path": "out/<TagModuleVersionWithPreRelease>" } }
+              ]
+            }
+            """);
         File.WriteAllText(
             Path.Combine(buildDirectory, "release.json"),
             """
@@ -98,6 +111,8 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
         var moduleRunner = new CapturingPowerShellRunner(request =>
         {
             captured = request;
+            Directory.CreateDirectory(configuredArtifact);
+            File.WriteAllText(Path.Combine(configuredArtifact, "JsonModuleRepo.zip"), "artifact");
             return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
         });
         var service = new ReleaseBuildExecutionService(
@@ -114,6 +129,8 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.NotNull(captured);
         Assert.Contains($"ConfigPath = '{moduleConfig}'", captured!.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("$buildScriptPath =", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains(configuredArtifactRoot, adapter.ArtifactDirectories);
+        Assert.Contains(Path.Combine(configuredArtifact, "JsonModuleRepo.zip"), adapter.ArtifactFiles);
     }
 
     private sealed class TemporaryDirectoryScope : IDisposable

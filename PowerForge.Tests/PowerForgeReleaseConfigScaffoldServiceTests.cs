@@ -21,6 +21,10 @@ public sealed class PowerForgeReleaseConfigScaffoldServiceTests
                   "Build": { "Name": "Sample", "SourcePath": "CustomModule", "Version": "1.0.0" },
                   "Segments": [
                     {
+                      "Type": "Manifest",
+                      "Configuration": { "ModuleVersion": "1.2.0" }
+                    },
+                    {
                       "Type": "Packed",
                       "Configuration": {
                         "Enabled": true,
@@ -53,7 +57,7 @@ public sealed class PowerForgeReleaseConfigScaffoldServiceTests
             Assert.Equal("powerforge.json", module.GetProperty("ConfigPath").GetString());
             Assert.False(module.TryGetProperty("ScriptPath", out _));
             Assert.Equal("CustomModule/Sample.psd1", module.GetProperty("ManifestPath").GetString());
-            Assert.Equal("1.0.0", module.GetProperty("ModuleVersion").GetString());
+            Assert.Equal("1.2.0", module.GetProperty("ModuleVersion").GetString());
             Assert.Equal(
                 "CustomModule/Output/<TagModuleVersionWithPreRelease>",
                 module.GetProperty("ArtifactPaths")[0].GetString());

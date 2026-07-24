@@ -38,6 +38,16 @@ public sealed class ModulePublishConfigurationReader
             return Array.Empty<PublishConfiguration>();
 
         var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, JsonOptions);
+        return Read(spec);
+    }
+
+    /// <summary>
+    /// Reads publish configuration segments from an already loaded module pipeline.
+    /// </summary>
+    /// <param name="spec">Module pipeline specification.</param>
+    /// <returns>Publish configurations declared by the pipeline.</returns>
+    public IReadOnlyList<PublishConfiguration> Read(ModulePipelineSpec? spec)
+    {
         if (spec?.Segments is not { Length: > 0 })
             return Array.Empty<PublishConfiguration>();
 
