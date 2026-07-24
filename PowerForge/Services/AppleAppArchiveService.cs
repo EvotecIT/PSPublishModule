@@ -177,13 +177,22 @@ public sealed class AppleAppArchiveService
             RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
         var buildUploadId = deliveryMatches.Count == 0
             ? null
-            : deliveryMatches[^1].Groups["id"].Value;
+            : deliveryMatches[deliveryMatches.Count - 1].Groups["id"].Value;
         return new AppleUploadDiagnostics(logPath, buildUploadId);
     }
 
-    private readonly record struct AppleUploadDiagnostics(
-        string? DistributionLogPath,
-        string? BuildUploadId);
+    private readonly struct AppleUploadDiagnostics
+    {
+        internal AppleUploadDiagnostics(string? distributionLogPath, string? buildUploadId)
+        {
+            DistributionLogPath = distributionLogPath;
+            BuildUploadId = buildUploadId;
+        }
+
+        internal string? DistributionLogPath { get; }
+
+        internal string? BuildUploadId { get; }
+    }
 
     private static void AddAppStoreConnectAuthenticationArguments(
         string? appStoreConnectApiKeyPath,
