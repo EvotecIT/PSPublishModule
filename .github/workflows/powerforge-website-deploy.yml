@@ -338,6 +338,7 @@ jobs:
       runner_labels_json: ${{ inputs.runner_labels_json }}
       timeout_minutes: ${{ inputs.timeout_minutes }}
       dotnet_version: ${{ inputs.dotnet_version }}
+      dotnet_workloads: ${{ inputs.dotnet_workloads }}
       report_artifact_name: ${{ inputs.post_deploy_report_artifact_name }}
       powerforge_lock_path: ${{ inputs.powerforge_lock_path }}
       powerforge_repository: ${{ inputs.powerforge_repository }}

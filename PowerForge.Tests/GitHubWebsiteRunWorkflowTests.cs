@@ -77,10 +77,10 @@ public sealed class GitHubWebsiteRunWorkflowTests
     }
 
     [Theory]
-    [InlineData("powerforge-website-ci.yml")]
-    [InlineData("powerforge-website-deploy.yml")]
-    [InlineData("powerforge-website-maintenance.yml")]
-    public void WebsiteWorkflows_ShouldForwardRequestedDotNetWorkloads(string workflowFileName)
+    [InlineData("powerforge-website-ci.yml", 1)]
+    [InlineData("powerforge-website-deploy.yml", 2)]
+    [InlineData("powerforge-website-maintenance.yml", 1)]
+    public void WebsiteWorkflows_ShouldForwardRequestedDotNetWorkloads(string workflowFileName, int expectedForwardCount)
     {
         var repoRoot = FindRepoRoot();
         var workflowPath = Path.Combine(repoRoot, ".github", "workflows", workflowFileName);
@@ -90,7 +90,10 @@ public sealed class GitHubWebsiteRunWorkflowTests
         var workflowYaml = File.ReadAllText(workflowPath);
 
         Assert.Contains("dotnet_workloads:", workflowYaml, StringComparison.Ordinal);
-        Assert.Contains("dotnet_workloads: ${{ inputs.dotnet_workloads }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Equal(
+            expectedForwardCount,
+            workflowYaml.Split('\n').Count(static line =>
+                line.Trim().Equals("dotnet_workloads: ${{ inputs.dotnet_workloads }}", StringComparison.Ordinal)));
     }
 
     [Fact]
