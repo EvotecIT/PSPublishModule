@@ -45,11 +45,19 @@ public sealed partial class AppStoreConnectClient
             }
 
             var delay = ResolveTransientReadDelay(response.Headers.RetryAfter, attempt);
-            await TransientReadDelayAsync(delay, cancellationToken).ConfigureAwait(false);
+            if (!delay.HasValue)
+            {
+                return new AppStoreConnectHttpResponse(
+                    response.StatusCode,
+                    response.ReasonPhrase,
+                    content);
+            }
+
+            await TransientReadDelayAsync(delay.Value, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private static TimeSpan ResolveTransientReadDelay(RetryConditionHeaderValue? retryAfter, int attempt)
+    private static TimeSpan? ResolveTransientReadDelay(RetryConditionHeaderValue? retryAfter, int attempt)
     {
         var fallback = TimeSpan.FromSeconds(attempt);
         if (retryAfter is null)
@@ -62,7 +70,7 @@ public sealed partial class AppStoreConnectClient
             return fallback;
 
         var maximum = TimeSpan.FromMinutes(2);
-        return requested.Value <= maximum ? requested.Value : maximum;
+        return requested.Value <= maximum ? requested.Value : null;
     }
 
     private static bool IsTransientReadFailure(HttpStatusCode statusCode)

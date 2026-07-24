@@ -96,6 +96,31 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task GetVersionsAsync_DoesNotRetryBeforeLongRetryAfterExpires()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(
+                (HttpStatusCode)429,
+                """{ "errors": [{ "code": "RATE_LIMIT_EXCEEDED" }] }""",
+                TimeSpan.FromMinutes(5)));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var delays = new List<TimeSpan>();
+        client.TransientReadDelayAsync = (delay, _) =>
+        {
+            delays.Add(delay);
+            return Task.CompletedTask;
+        };
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => client.GetVersionsAsync("app-1", "1.4.0", ApplePlatform.iOS));
+
+        Assert.Contains("429", exception.Message, StringComparison.Ordinal);
+        Assert.Single(handler.RequestUris);
+        Assert.Empty(delays);
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_StopsAfterBoundedTransientRetries()
     {
         var handler = new SequenceHandler(
