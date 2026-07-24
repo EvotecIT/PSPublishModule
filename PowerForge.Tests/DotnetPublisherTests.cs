@@ -22,7 +22,8 @@ public sealed class DotnetPublisherTests
             artifacts: Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "artifacts"),
             maxCpuCountArgument: "-m:1",
             publishDir: Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "publish"),
-            restoreSources: new[] { sourceA, sourceB, sourceA });
+            restoreSources: new[] { sourceA, sourceB, sourceA },
+            existingPathMap: "C:\\source=/_/PowerForge/source");
 
         Assert.Contains(args, arg => string.Equals(
             arg,
@@ -35,8 +36,85 @@ public sealed class DotnetPublisherTests
         Assert.Contains("-p:AssemblyVersion=9.8.7", args);
         Assert.Contains("-p:FileVersion=9.8.7", args);
         Assert.Contains("-p:_GlobalPropertiesToRemoveFromProjectReferences=%3BVersion%3BAssemblyVersion%3BFileVersion", args);
+        Assert.Contains("-p:ContinuousIntegrationBuild=true", args);
+        Assert.Contains(
+            $"-p:PathMap=C:\\source=/_/PowerForge/source%2C{Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "artifacts")}=/_/PowerForge/artifacts",
+            args);
         Assert.DoesNotContain(args, arg => arg.StartsWith("-p:PublishProfile", StringComparison.Ordinal));
         Assert.DoesNotContain(args, arg => arg.StartsWith("-p:CustomAfterMicrosoftCommonTargets=", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Publish_ProducesIdenticalBinariesAcrossIsolatedArtifactRoots()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            "DotnetPublisherDeterminism",
+            Guid.NewGuid().ToString("N"));
+        try
+        {
+            static string CreateSourceTree(string sourceRoot)
+            {
+                var dependencyDirectory = Path.Combine(sourceRoot, "Dependency");
+                var moduleDirectory = Path.Combine(sourceRoot, "Module");
+                Directory.CreateDirectory(dependencyDirectory);
+                Directory.CreateDirectory(moduleDirectory);
+                var escapedDependencyDirectory =
+                    System.Security.SecurityElement.Escape(dependencyDirectory);
+                var escapedModuleDirectory =
+                    System.Security.SecurityElement.Escape(moduleDirectory);
+                File.WriteAllText(
+                    Path.Combine(moduleDirectory, "Directory.Build.props"),
+                    $"<Project><PropertyGroup Condition=\"'$(ContinuousIntegrationBuild)' == 'true' And '$(UseArtifactsOutput)' == 'true'\"><PathMap>{escapedModuleDirectory}=/_/PowerForge/module</PathMap></PropertyGroup></Project>");
+                File.WriteAllText(
+                    Path.Combine(dependencyDirectory, "Dependency.csproj"),
+                    $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>netstandard2.0</TargetFramework><Deterministic>true</Deterministic><DebugType>portable</DebugType></PropertyGroup><PropertyGroup Condition=\"'$(ContinuousIntegrationBuild)' == 'true' And '$(UseArtifactsOutput)' == 'true' And '$(TargetFramework)' == 'netstandard2.0'\"><PathMap>{escapedDependencyDirectory}=/_/PowerForge/dependency</PathMap></PropertyGroup></Project>");
+                File.WriteAllText(
+                    Path.Combine(dependencyDirectory, "Dependency.cs"),
+                    "namespace Dependency { public sealed class Value { public string Text => \"stable\"; } }");
+                var moduleProject = Path.Combine(moduleDirectory, "Module.csproj");
+                File.WriteAllText(
+                    moduleProject,
+                    "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Deterministic>true</Deterministic><DebugType>portable</DebugType></PropertyGroup><ItemGroup><ProjectReference Include=\"..\\Dependency\\Dependency.csproj\" /></ItemGroup></Project>");
+                File.WriteAllText(
+                    Path.Combine(moduleDirectory, "Module.cs"),
+                    "namespace Module; public sealed class Value { public string Text => new Dependency.Value().Text; }");
+                return moduleProject;
+            }
+
+            var firstProject = CreateSourceTree(Path.Combine(root, "source-a"));
+            var secondProject = CreateSourceTree(Path.Combine(root, "source-b"));
+
+            var publisher = new DotnetPublisher(new NullLogger());
+            var first = publisher.Publish(
+                firstProject,
+                "Release",
+                new[] { "net8.0" },
+                "1.2.3",
+                Path.Combine(root, "artifacts-a"))["net8.0"];
+            var second = publisher.Publish(
+                secondProject,
+                "Release",
+                new[] { "net8.0" },
+                "1.2.3",
+                Path.Combine(root, "artifacts-b"))["net8.0"];
+
+            Assert.Equal(
+                File.ReadAllBytes(Path.Combine(first, "Dependency.dll")),
+                File.ReadAllBytes(Path.Combine(second, "Dependency.dll")));
+            Assert.Equal(
+                File.ReadAllBytes(Path.Combine(first, "Dependency.pdb")),
+                File.ReadAllBytes(Path.Combine(second, "Dependency.pdb")));
+            Assert.Equal(
+                File.ReadAllBytes(Path.Combine(first, "Module.dll")),
+                File.ReadAllBytes(Path.Combine(second, "Module.dll")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]

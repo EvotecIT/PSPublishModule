@@ -7,7 +7,9 @@ public class ModuleBootstrapperGeneratorTests
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-lib-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+        Directory.CreateDirectory(Path.Combine(root, "Public"));
         File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Public", "Get-Demo.ps1"), "function Get-Demo { 'demo' }");
 
         try
         {
@@ -27,7 +29,13 @@ public class ModuleBootstrapperGeneratorTests
 
             var bootstrapper = File.ReadAllText(bootstrapperPath);
             Assert.Contains("# DemoModule bootstrapper", bootstrapper);
-            Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PSScriptRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
+            Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
+            Assert.Contains("[IO.Path]::Combine($PowerForgeModuleRoot, 'Public', '*.ps1')", bootstrapper);
+            Assert.Contains("[IO.Path]::Combine($PowerForgeModuleRoot, '*.psd1')", bootstrapper);
+            Assert.True(
+                bootstrapper.IndexOf("$PowerForgeModuleRoot = $PSScriptRoot", StringComparison.Ordinal) <
+                bootstrapper.IndexOf("[IO.Path]::Combine($PowerForgeModuleRoot, 'Public', '*.ps1')", StringComparison.Ordinal),
+                "The module root must be captured before script folders are discovered.");
             Assert.Contains("$FunctionsToExport = @('Get-Demo')", bootstrapper);
             Assert.Contains("$AliasesToExport = @('gdemo')", bootstrapper);
             Assert.Contains("[AppDomain]::CurrentDomain.add_AssemblyResolve($PowerForgeDesktopAssemblyResolver)", bootstrapper);
@@ -201,7 +209,7 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("$PSEdition -ne 'Core'", bootstrapper);
             Assert.Contains("[AppDomain]::CurrentDomain.add_AssemblyResolve($PowerForgeDesktopAssemblyResolver)", bootstrapper);
             Assert.Contains("[AppDomain]::CurrentDomain.remove_AssemblyResolve($PowerForgeResolverForRemoval)", bootstrapper);
-            Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PSScriptRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
+            Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
             Assert.True(
                 bootstrapper.IndexOf(". $LibrariesScript", StringComparison.Ordinal) <
                 bootstrapper.IndexOf("& $ImportModule $ModuleAssemblyPath", StringComparison.Ordinal),
@@ -649,6 +657,8 @@ public class ModuleBootstrapperGeneratorTests
 
             var bootstrapper = File.ReadAllText(bootstrapperPath);
             Assert.Contains("$Public  = @(", bootstrapper);
+            Assert.Contains("[IO.Path]::Combine($PSScriptRoot, 'Public', '*.ps1')", bootstrapper);
+            Assert.DoesNotContain("$PowerForgeModuleRoot", bootstrapper);
             Assert.DoesNotContain("$LibraryName =", bootstrapper);
         }
         finally
@@ -699,6 +709,68 @@ public class ModuleBootstrapperGeneratorTests
 
             var after = File.ReadAllText(psm1Path);
             Assert.Equal(existing, after);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_WithDevelopmentBinariesAndScriptFolders_CapturesModuleRootBeforeDevelopmentBranch()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "pf-bootstrapper-dev-script-" + Guid.NewGuid().ToString("N"));
+        var moduleRoot = Path.Combine(root, "Module");
+        Directory.CreateDirectory(Path.Combine(moduleRoot, "Lib", "Core"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot, "Public"));
+        File.WriteAllText(
+            Path.Combine(moduleRoot, "Lib", "Core", "DemoModule.dll"),
+            string.Empty);
+        File.WriteAllText(
+            Path.Combine(moduleRoot, "Public", "Get-Demo.ps1"),
+            "function Get-Demo { 'demo' }");
+
+        try
+        {
+            var exports = new ExportSet(
+                new[] { "Get-Demo" },
+                Array.Empty<string>(),
+                Array.Empty<string>());
+            var developmentOptions = new ModuleDevelopmentBinaryBootstrapperOptions(
+                ModuleDevelopmentBinaryMode.Environment,
+                Path.Combine(root, "Sources", "Demo", "bin"),
+                "DEMO_USE_DEVELOPMENT_BINARIES",
+                "DEMO_DEVELOPMENT_CONFIGURATION",
+                new[] { "net8.0", "net472" },
+                new[] { "net472", "net8.0" });
+
+            ModuleBootstrapperGenerator.Generate(
+                moduleRoot,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: false,
+                developmentBinaries: developmentOptions);
+
+            var bootstrapper = File.ReadAllText(
+                Path.Combine(moduleRoot, "DemoModule.psm1"));
+            var rootCapture = bootstrapper.IndexOf(
+                "$PowerForgeModuleRoot = $PSScriptRoot",
+                StringComparison.Ordinal);
+            var developmentBranch = bootstrapper.IndexOf(
+                "$PowerForgeDevelopmentBinaryLoaded = $false",
+                StringComparison.Ordinal);
+            var scriptDiscovery = bootstrapper.IndexOf(
+                "[IO.Path]::Combine($PowerForgeModuleRoot, 'Public', '*.ps1')",
+                StringComparison.Ordinal);
+
+            Assert.True(rootCapture >= 0);
+            Assert.True(rootCapture < developmentBranch);
+            Assert.True(developmentBranch < scriptDiscovery);
         }
         finally
         {

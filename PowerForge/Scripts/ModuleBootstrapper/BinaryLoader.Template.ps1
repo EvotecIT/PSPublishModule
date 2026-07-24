@@ -3,7 +3,7 @@ $LibraryName = '{{LibraryName}}'
 $Library = "$LibraryName.dll"
 $Class = "$LibraryName.Initialize"
 
-$LibRoot = [IO.Path]::Combine($PSScriptRoot, 'Lib')
+$LibRoot = [IO.Path]::Combine($PowerForgeModuleRoot, 'Lib')
 $AssemblyFolders = Get-ChildItem -LiteralPath $LibRoot -Directory -ErrorAction SilentlyContinue
 
 $Default = $false
@@ -52,7 +52,7 @@ if ($PSEdition -eq 'Core') {
 
 {{DesktopAssemblyResolverBlock}}{{RuntimeHandlerBlock}}$PowerForgeDesktopLibrariesLoaded = $false
 if ($PSEdition -ne 'Core') {
-    $LibrariesScript = [IO.Path]::Combine($PSScriptRoot, '{{ModuleName}}.Libraries.ps1')
+    $LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, '{{ModuleName}}.Libraries.ps1')
     if (Test-Path -LiteralPath $LibrariesScript) {
         try {
             . $LibrariesScript
@@ -69,7 +69,7 @@ try {
     $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
 
     if (-not ($Class -as [type])) {
-        & $ImportModule ([IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder, $Library)) -ErrorAction Stop
+        & $ImportModule ([IO.Path]::Combine($LibRoot, $LibFolder, $Library)) -ErrorAction Stop
     } else {
         $Type = "$Class" -as [Type]
         & $importModule -Force -Assembly ($Type.Assembly)
@@ -86,7 +86,7 @@ try {
 }
 
 # Dot source all libraries by loading external file
-$LibrariesScript = [IO.Path]::Combine($PSScriptRoot, '{{ModuleName}}.Libraries.ps1')
+$LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, '{{ModuleName}}.Libraries.ps1')
 if (-not $PowerForgeDesktopLibrariesLoaded -and (Test-Path -LiteralPath $LibrariesScript)) {
     try {
         . $LibrariesScript

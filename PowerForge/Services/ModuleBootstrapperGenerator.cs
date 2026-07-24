@@ -286,7 +286,7 @@ internal static partial class ModuleBootstrapperGenerator
                             assemblyTypeAcceleratorMode,
                             assemblyTypeAccelerators,
                             assemblyTypeAcceleratorAssemblies,
-                            "[IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder)",
+                            "[IO.Path]::Combine($LibRoot, $LibFolder)",
                             ignoreLibrariesOnLoad).TrimEnd(),
                         4)
                 })
@@ -323,12 +323,20 @@ internal static partial class ModuleBootstrapperGenerator
             ? RenderModuleBootstrapperTemplate(
                 "ScriptLoader",
                 "Scripts/ModuleBootstrapper/ScriptLoader.Template.ps1",
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["ModuleRootExpression"] = includeBinaryLoader
+                        ? "$PowerForgeModuleRoot"
+                        : "$PSScriptRoot"
+                })
             : string.Empty;
 
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["ModuleName"] = moduleName,
+            ["ModuleRootCaptureBlock"] = includeBinaryLoader
+                ? "$PowerForgeModuleRoot = $PSScriptRoot"
+                : string.Empty,
             ["BinaryLoaderBlock"] = binaryLoaderBlock,
             ["ScriptLoaderBlock"] = scriptLoaderBlock,
             ["ExportBlock"] = ModuleConditionalExportBlockBuilder.BuildExportBlock(

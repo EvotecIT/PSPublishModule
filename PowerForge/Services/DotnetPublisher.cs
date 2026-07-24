@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 
 namespace PowerForge;
 
@@ -116,6 +117,9 @@ public sealed class DotnetPublisher
             var publishDir = useIsolatedArtifacts
                 ? Path.Combine(artifacts!, "publish", tfm)
                 : Path.Combine(projDir, "bin", configuration, tfm, "publish");
+            var existingPathMap = useIsolatedArtifacts
+                ? ReadProjectGraphPathMap(projectPath, configuration, tfm, artifacts!)
+                : null;
             var args = BuildPublishArguments(
                 projectPath,
                 version,
@@ -125,7 +129,8 @@ public sealed class DotnetPublisher
                 artifacts,
                 maxCpuCountArgument,
                 publishDir,
-                restoreSources);
+                restoreSources,
+                existingPathMap);
             RunDotnet(projDir, args, tfm, "publish");
 
             if (!Directory.Exists(publishDir))
@@ -146,7 +151,8 @@ public sealed class DotnetPublisher
         string? artifacts,
         string maxCpuCountArgument,
         string publishDir,
-        IEnumerable<string>? restoreSources)
+        IEnumerable<string>? restoreSources,
+        string? existingPathMap)
     {
         var args = new List<string>
         {
@@ -162,7 +168,13 @@ public sealed class DotnetPublisher
             "--framework", tfm
         };
 
-        AppendSharedBuildArguments(args, useIsolatedArtifacts, artifacts, maxCpuCountArgument, restoreSources);
+        AppendSharedBuildArguments(
+            args,
+            useIsolatedArtifacts,
+            artifacts,
+            maxCpuCountArgument,
+            restoreSources,
+            existingPathMap);
         if (useIsolatedArtifacts)
         {
             args.Add("--output");
@@ -177,7 +189,8 @@ public sealed class DotnetPublisher
         bool useIsolatedArtifacts,
         string? artifacts,
         string maxCpuCountArgument,
-        IEnumerable<string>? restoreSources)
+        IEnumerable<string>? restoreSources,
+        string? existingPathMap)
     {
         var normalizedSources = NormalizeRestoreSources(restoreSources);
         if (normalizedSources.Length > 0)
@@ -187,10 +200,197 @@ public sealed class DotnetPublisher
         {
             args.Add("-p:UseArtifactsOutput=true");
             args.Add($"-p:ArtifactsPath={artifacts}");
+            args.Add("-p:ContinuousIntegrationBuild=true");
+            var artifactPathMap = $"{artifacts}=/_/PowerForge/artifacts";
+            var pathMap = string.IsNullOrWhiteSpace(existingPathMap)
+                ? artifactPathMap
+                : $"{existingPathMap!.Trim().TrimEnd(',')},{artifactPathMap}";
+            args.Add($"-p:PathMap={pathMap.Replace(",", "%2C")}");
             // Centralized artifacts output can make parallel project-reference builds race on generated files.
             // Serializing MSBuild trades speed for deterministic module binary publishes.
             args.Add(maxCpuCountArgument);
         }
+    }
+
+    private string ReadProjectGraphPathMap(
+        string projectPath,
+        string configuration,
+        string tfm,
+        string artifacts)
+    {
+        var projectQueue = new Queue<ProjectEvaluationRequest>();
+        var visitedEvaluations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var pathMaps = new List<string>();
+        var seenPathMaps = new HashSet<string>(StringComparer.Ordinal);
+        projectQueue.Enqueue(new ProjectEvaluationRequest(Path.GetFullPath(projectPath), tfm));
+
+        while (projectQueue.Count > 0)
+        {
+            var request = projectQueue.Dequeue();
+            var evaluationKey = $"{request.ProjectPath}|{request.TargetFramework ?? string.Empty}";
+            if (!visitedEvaluations.Add(evaluationKey))
+                continue;
+
+            var evaluation = ReadProjectBuildContext(
+                request.ProjectPath,
+                configuration,
+                request.TargetFramework,
+                artifacts);
+            var pathMap = evaluation.PathMap.Trim().TrimEnd(',');
+            if (!string.IsNullOrWhiteSpace(pathMap) && seenPathMaps.Add(pathMap))
+                pathMaps.Add(pathMap);
+
+            if (request.TargetFramework == null)
+            {
+                foreach (var targetFramework in evaluation.TargetFrameworks)
+                {
+                    projectQueue.Enqueue(new ProjectEvaluationRequest(
+                        request.ProjectPath,
+                        targetFramework));
+                }
+            }
+
+            foreach (var projectReference in evaluation.ProjectReferences)
+            {
+                // Referenced projects choose their own target framework. Evaluate their
+                // project-declared framework(s) instead of forcing the entry project's TFM.
+                projectQueue.Enqueue(new ProjectEvaluationRequest(projectReference, null));
+            }
+        }
+
+        return string.Join(",", pathMaps);
+    }
+
+    private ProjectBuildContext ReadProjectBuildContext(
+        string projectPath,
+        string configuration,
+        string? tfm,
+        string artifacts)
+    {
+        var args = new List<string>
+        {
+            "msbuild",
+            projectPath,
+            "-nologo",
+            "-verbosity:quiet",
+            "-getProperty:PathMap",
+            "-getProperty:TargetFrameworks",
+            "-getItem:ProjectReference",
+            $"-p:Configuration={configuration}",
+            "-p:UseArtifactsOutput=true",
+            $"-p:ArtifactsPath={artifacts}",
+            "-p:ContinuousIntegrationBuild=true"
+        };
+        if (!string.IsNullOrWhiteSpace(tfm))
+            args.Add($"-p:TargetFramework={tfm}");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            WorkingDirectory = Path.GetDirectoryName(projectPath)!,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        ProcessStartInfoEncoding.TryApplyUtf8(psi);
+
+#if NET472
+        psi.Arguments = BuildWindowsArgumentString(args);
+#else
+        foreach (var arg in args)
+            psi.ArgumentList.Add(arg);
+#endif
+
+        using var process = Process.Start(psi)!;
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode == 0)
+        {
+            var jsonStart = stdout.IndexOf('{');
+            var jsonEnd = stdout.LastIndexOf('}');
+            if (jsonStart < 0 || jsonEnd < jsonStart)
+            {
+                throw new InvalidOperationException(
+                    $"dotnet msbuild returned an invalid PathMap/project-reference evaluation for {projectPath}.");
+            }
+
+            using var document = JsonDocument.Parse(
+                stdout.Substring(jsonStart, jsonEnd - jsonStart + 1));
+            var root = document.RootElement;
+            var pathMap = root
+                .GetProperty("Properties")
+                .GetProperty("PathMap")
+                .GetString() ?? string.Empty;
+            var targetFrameworks = root
+                .GetProperty("Properties")
+                .GetProperty("TargetFrameworks")
+                .GetString() ?? string.Empty;
+            var projectReferences = new List<string>();
+            if (root.GetProperty("Items").TryGetProperty("ProjectReference", out var references))
+            {
+                foreach (var reference in references.EnumerateArray())
+                {
+                    if (reference.TryGetProperty("FullPath", out var fullPath) &&
+                        !string.IsNullOrWhiteSpace(fullPath.GetString()))
+                    {
+                        projectReferences.Add(Path.GetFullPath(fullPath.GetString()!));
+                    }
+                }
+            }
+
+            var declaredTargetFrameworks = string.IsNullOrWhiteSpace(targetFrameworks)
+                ? Array.Empty<string>()
+                : targetFrameworks
+                    .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(static framework => framework.Trim())
+                    .Where(static framework => framework.Length > 0)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+            return new ProjectBuildContext(pathMap, projectReferences, declaredTargetFrameworks);
+        }
+
+        _logger.Error(
+            $"dotnet msbuild could not evaluate PathMap/project references for {projectPath} " +
+            $"({tfm ?? "project-declared frameworks"}): " +
+            $"{stderr}\n{stdout}");
+        throw new InvalidOperationException(
+            $"dotnet msbuild could not evaluate PathMap/project references for {projectPath} " +
+            $"({tfm ?? "project-declared frameworks"}, exit {process.ExitCode})");
+    }
+
+    private sealed class ProjectEvaluationRequest
+    {
+        internal ProjectEvaluationRequest(string projectPath, string? targetFramework)
+        {
+            ProjectPath = projectPath;
+            TargetFramework = targetFramework;
+        }
+
+        internal string ProjectPath { get; }
+
+        internal string? TargetFramework { get; }
+    }
+
+    private sealed class ProjectBuildContext
+    {
+        internal ProjectBuildContext(
+            string pathMap,
+            IReadOnlyList<string> projectReferences,
+            IReadOnlyList<string> targetFrameworks)
+        {
+            PathMap = pathMap;
+            ProjectReferences = projectReferences;
+            TargetFrameworks = targetFrameworks;
+        }
+
+        internal string PathMap { get; }
+
+        internal IReadOnlyList<string> ProjectReferences { get; }
+
+        internal IReadOnlyList<string> TargetFrameworks { get; }
     }
 
     private void RunDotnet(string workingDirectory, IReadOnlyList<string> args, string tfm, string phase)
