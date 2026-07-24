@@ -127,6 +127,29 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Runner_DoesNotUpdateReadmeBlocksWhenValidationFails()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Artifacts = BenchmarkArtifactKind.Json;
+        suite.Validate = ScriptBlock.Create("throw 'expected validation failure'");
+        var readme = Path.Combine(CreateTempRoot(), "README.md");
+        const string original = "<!-- BENCHMARK:results:START -->\nvalidated content\n<!-- BENCHMARK:results:END -->\n";
+        File.WriteAllText(readme, original);
+        suite.ReadmeBlocks.Add(new PowerShellBenchmarkReadmeBlock
+        {
+            Path = readme,
+            BlockId = "results",
+            Renderer = "SummaryTable"
+        });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Equal(BenchmarkSampleStatus.Failed, Assert.Single(result.Samples).Status);
+        Assert.Equal(original, File.ReadAllText(readme));
+        Assert.True(result.Artifacts.ContainsKey("summary.json"));
+    }
+
+    [Fact]
     public void TemporaryUserExecutor_CapturesFileBackedCallerModules()
     {
         var modulePath = typeof(PSPublishModule.TestBenchmarkGateCommand).Assembly.Location;
