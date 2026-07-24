@@ -206,6 +206,40 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task GetBuildUploadAsync_ParsesFlatDocumentedDeliveryState()
+    {
+        var handler = new RecordingHandler(
+            """
+            {
+              "data": {
+                "id": "upload-12",
+                "type": "buildUploads",
+                "attributes": {
+                  "cfBundleShortVersionString": "1.4.0",
+                  "cfBundleVersion": "12",
+                  "platform": "IOS",
+                  "state": "FAILED",
+                  "errors": [
+                    { "code": "90683", "message": "Missing purpose string in Info.plist." }
+                  ],
+                  "warnings": []
+                }
+              }
+            }
+            """);
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var upload = await client.GetBuildUploadAsync("upload-12");
+
+        Assert.NotNull(upload);
+        Assert.Equal("FAILED", upload.State);
+        var error = Assert.Single(upload.Errors);
+        Assert.Equal("90683", error.Code);
+        Assert.Equal("Missing purpose string in Info.plist.", error.Description);
+    }
+
+    [Fact]
     public async Task CreateVersionAsync_PostsVersionPlatformAndAppRelationship()
     {
         var handler = new SequenceHandler(

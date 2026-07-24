@@ -23,11 +23,19 @@ public sealed partial class AppStoreConnectClient
     private static AppStoreConnectBuildUploadInfo ParseBuildUpload(JsonElement item)
     {
         var attributes = GetAttributes(item);
-        var state = attributes.ValueKind == JsonValueKind.Object &&
-                    attributes.TryGetProperty("state", out var stateElement) &&
-                    stateElement.ValueKind == JsonValueKind.Object
+        var stateElement = default(JsonElement);
+        var hasState = attributes.ValueKind == JsonValueKind.Object &&
+                       attributes.TryGetProperty("state", out stateElement);
+        var issueContainer = hasState && stateElement.ValueKind == JsonValueKind.Object
             ? stateElement
-            : default;
+            : attributes;
+        var state = !hasState
+            ? null
+            : stateElement.ValueKind == JsonValueKind.Object
+                ? GetString(stateElement, "state")
+                : stateElement.ValueKind == JsonValueKind.String
+                    ? stateElement.GetString()
+                    : null;
 
         return new AppStoreConnectBuildUploadInfo
         {
@@ -35,9 +43,9 @@ public sealed partial class AppStoreConnectClient
             MarketingVersion = GetString(attributes, "cfBundleShortVersionString"),
             BuildNumber = GetString(attributes, "cfBundleVersion"),
             Platform = GetString(attributes, "platform"),
-            State = state.ValueKind == JsonValueKind.Object ? GetString(state, "state") : null,
-            Errors = ParseBuildUploadIssues(state, "errors"),
-            Warnings = ParseBuildUploadIssues(state, "warnings"),
+            State = state,
+            Errors = ParseBuildUploadIssues(issueContainer, "errors"),
+            Warnings = ParseBuildUploadIssues(issueContainer, "warnings"),
             UploadedDate = GetDateTimeOffset(attributes, "uploadedDate")
         };
     }
@@ -58,7 +66,7 @@ public sealed partial class AppStoreConnectClient
             .Select(issue => new AppStoreConnectBuildUploadIssue
             {
                 Code = GetString(issue, "code"),
-                Description = GetString(issue, "description")
+                Description = GetString(issue, "description") ?? GetString(issue, "message")
             })
             .ToArray();
     }
