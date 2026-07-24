@@ -347,7 +347,6 @@ public sealed class ModuleBuildHostService
         AddDirectBooleanArgument(arguments, "FailOnNewDiagnostics", request.FailOnNewDiagnostics);
         AddDirectStringArgument(arguments, "FailOnDiagnosticsSeverity", request.FailOnDiagnosticsSeverity);
         arguments.Add("& $moduleBuildCommand @moduleBuildArguments");
-        arguments.Add("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }");
 
         return string.Join(Environment.NewLine, arguments);
     }

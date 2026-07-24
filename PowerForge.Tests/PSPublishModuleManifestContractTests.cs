@@ -132,6 +132,7 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.Contains("$bootstrapFrameworks = if ($PSEdition -eq 'Desktop')", entryPoint, StringComparison.Ordinal);
         Assert.Contains("'net472'", entryPoint, StringComparison.Ordinal);
         Assert.Contains("'net8.0'", entryPoint, StringComparison.Ordinal);
+        Assert.Contains("$desktopChildFramework = if ($ModuleFramework -eq 'auto')", entryPoint, StringComparison.Ordinal);
         Assert.Contains("dotnet build $moduleProject", entryPoint, StringComparison.Ordinal);
         Assert.Contains("Import-Module $moduleBinary", entryPoint, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgeRelease @invokeParams", entryPoint, StringComparison.Ordinal);
@@ -177,7 +178,7 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.Contains("$invokeParams.PublishNuget = $true", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("$invokeParams.ModuleSignModule = $true", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("[switch] $ModuleNoDotnetBuild", projectWrapperScript, StringComparison.Ordinal);
-        Assert.Contains("$invokeParams.ModuleRunMode = if ($Publish) { 'Publish' } else { $RunMode }", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("$invokeParams.ModuleRunMode = if ($Publish -or $PublishProjectGitHub) { 'Publish' } else { $RunMode }", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("\"IncludesPackages\": false", releaseConfig, StringComparison.Ordinal);
         using var releaseDocument = JsonDocument.Parse(releaseConfig);
         var releaseRoot = releaseDocument.RootElement;

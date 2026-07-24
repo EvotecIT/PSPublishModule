@@ -314,11 +314,11 @@ public sealed class PowerForgeReleaseConfigScaffoldService
                 var configuredPath = segment.Configuration?.Path;
                 return string.IsNullOrWhiteSpace(configuredPath)
                     ? Path.Combine(moduleRoot, "Artefacts", segment.ArtefactType.ToString())
-                    : Path.IsPathRooted(configuredPath)
+                    : IsPathRootedCompat(configuredPath!)
                         ? configuredPath!
-                        : Path.Combine(moduleRoot, configuredPath!);
+                        : CombinePathCompat(moduleRoot, configuredPath!);
             })
-            .Select(path => GetRelativePathCompat(projectRoot, Path.GetFullPath(path)).Replace('\\', '/'))
+            .Select(path => GetRelativePathCompat(projectRoot, path).Replace('\\', '/'))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -326,7 +326,52 @@ public sealed class PowerForgeReleaseConfigScaffoldService
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
 
     private static string GetRelativePathCompat(string relativeTo, string path)
-        => FrameworkCompatibility.GetRelativePath(relativeTo, path);
+    {
+        var protectedPath = ProtectPathTokens(path, out var placeholders);
+        if (placeholders.Count == 0)
+            return FrameworkCompatibility.GetRelativePath(relativeTo, path);
+
+        var relativePath = FrameworkCompatibility.GetRelativePath(relativeTo, protectedPath);
+        return RestorePathTokens(relativePath, placeholders);
+    }
+
+    private static bool IsPathRootedCompat(string path)
+        => Path.IsPathRooted(ProtectPathTokens(path, out _));
+
+    private static string CombinePathCompat(string first, string second)
+    {
+        var protectedSecond = ProtectPathTokens(second, out var placeholders);
+        return RestorePathTokens(Path.Combine(first, protectedSecond), placeholders);
+    }
+
+    private static string ProtectPathTokens(string path, out Dictionary<string, string> placeholders)
+    {
+        var tokenMatches = System.Text.RegularExpressions.Regex.Matches(
+                path,
+                @"<[^<>]+>|\{[^{}]+\}")
+            .Cast<System.Text.RegularExpressions.Match>()
+            .Select(static match => match.Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var protectedPath = path;
+        placeholders = new Dictionary<string, string>(StringComparer.Ordinal);
+        for (var index = 0; index < tokenMatches.Length; index++)
+        {
+            var placeholder = $"__POWERFORGE_PATH_TOKEN_{index}__";
+            placeholders[placeholder] = tokenMatches[index];
+            protectedPath = protectedPath.Replace(tokenMatches[index], placeholder);
+        }
+
+        return protectedPath;
+    }
+
+    private static string RestorePathTokens(string path, IReadOnlyDictionary<string, string> placeholders)
+    {
+        foreach (var entry in placeholders)
+            path = path.Replace(entry.Key, entry.Value);
+
+        return path;
+    }
 
     private static JsonSerializerOptions CreateDeserializeOptions()
     {

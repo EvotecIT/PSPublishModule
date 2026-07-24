@@ -100,6 +100,7 @@ public sealed class ModuleBuildPipeline
 
         _logger.Info($"Staging module '{spec.Name}' from '{source}' to '{staging}'");
         CopyDirectoryFiltered(source, staging, excluded, excludedFiles);
+        ValidateExistingBinaryPayloadForNoBuild(spec, staging);
         CleanReplaceSingleFileStagedBinaryPayload(spec, staging);
         var normalization = NormalizeMixedPowerShellLineEndings(staging, excluded, excludedFiles);
 
@@ -108,6 +109,38 @@ public sealed class ModuleBuildPipeline
             staging,
             normalization.Converted,
             normalization.Errors);
+    }
+
+    private static void ValidateExistingBinaryPayloadForNoBuild(ModuleBuildSpec spec, string stagingPath)
+    {
+        if (!spec.SkipDotNetBuild || spec.CsprojRequiredReasons is not { Length: > 0 })
+            return;
+
+        var libPath = Path.Combine(stagingPath, "Lib");
+        var dlls = Directory.Exists(libPath)
+            ? Directory.GetFiles(libPath, "*.dll", SearchOption.AllDirectories)
+            : Array.Empty<string>();
+        if (dlls.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"SkipDotNetBuild was requested for binary module '{spec.Name}', but the source module has no existing Lib/*.dll payload to reuse.");
+        }
+
+        var availableNames = new HashSet<string>(
+            dlls.Select(Path.GetFileName).OfType<string>(),
+            StringComparer.OrdinalIgnoreCase);
+        var missingExports = (spec.ExportAssemblies ?? Array.Empty<string>())
+            .Where(static assembly => !string.IsNullOrWhiteSpace(assembly))
+            .Select(Path.GetFileName)
+            .OfType<string>()
+            .Where(name => !availableNames.Contains(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (missingExports.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"SkipDotNetBuild was requested for binary module '{spec.Name}', but the existing Lib payload is missing: {string.Join(", ", missingExports)}.");
+        }
     }
 
     internal ModuleBuildResult BuildInStaging(ModuleBuildSpec spec, string stagingPath)
@@ -156,7 +189,9 @@ public sealed class ModuleBuildPipeline
             UseAssemblyLoadContext = useAssemblyLoadContext,
             ExcludeLibraryFilter = spec.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = spec.DoNotCopyLibrariesRecursively,
-            CsprojRequiredReasons = spec.RefreshManifestOnly ? Array.Empty<string>() : spec.CsprojRequiredReasons ?? Array.Empty<string>(),
+            CsprojRequiredReasons = spec.RefreshManifestOnly || spec.SkipDotNetBuild
+                ? Array.Empty<string>()
+                : spec.CsprojRequiredReasons ?? Array.Empty<string>(),
             EmitBinaryConflictOwnerNotes = false,
         };
         _ = builder.BuildInPlace(buildOptions);

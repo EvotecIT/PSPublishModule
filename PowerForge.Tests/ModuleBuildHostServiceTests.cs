@@ -40,6 +40,7 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Contains("$moduleBuildArguments['NoDotnetBuild'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['NoSign'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("$buildScriptPath", captured.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("$LASTEXITCODE", captured.CommandText!, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -70,6 +71,59 @@ public sealed class ModuleBuildHostServiceTests
         finally
         {
             File.Delete(modulePath);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteBuildAsync_JsonFailurePreservesCmdletProcessExitCode()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-module-host-exit-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "SampleModule";
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, moduleName + ".psm1"), string.Empty);
+            File.WriteAllText(
+                Path.Combine(moduleRoot.FullName, moduleName + ".psd1"),
+                $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '1.0.0' }}");
+            var configPath = Path.Combine(root.FullName, "powerforge.json");
+            File.WriteAllText(
+                configPath,
+                $$"""
+                {
+                  "SchemaVersion": 1,
+                  "Build": {
+                    "Name": "{{moduleName}}",
+                    "SourcePath": "Module",
+                    "CsprojPath": "Missing.csproj",
+                    "Version": "1.0.0",
+                    "Frameworks": [ "net8.0" ],
+                    "ExportAssemblies": [ "{{moduleName}}.dll" ]
+                  },
+                  "Install": { "Enabled": false },
+                  "Segments": []
+                }
+                """);
+            var repoRoot = RepoRootLocator.Find();
+            var modulePath = Path.Combine(repoRoot, "PSPublishModule", "bin", "Release", "net8.0", "PSPublishModule.dll");
+            Assert.True(File.Exists(modulePath), $"Built net8.0 module was not found: {modulePath}");
+
+            var result = await new ModuleBuildHostService().ExecuteBuildAsync(new ModuleBuildHostBuildRequest
+            {
+                RepositoryRoot = root.FullName,
+                ConfigPath = configPath,
+                ModulePath = modulePath,
+                Framework = "net8.0",
+                NoDotnetBuild = true,
+                Timeout = TimeSpan.FromMinutes(1)
+            });
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(1, result.ExitCode);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
         }
     }
 

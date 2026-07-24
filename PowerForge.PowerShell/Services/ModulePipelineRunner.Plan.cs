@@ -615,11 +615,10 @@ public sealed partial class ModulePipelineRunner
         }
 
         // Resolve .csproj path: explicit build setting wins, otherwise derive from BuildLibraries NETProjectPath/ProjectName.
-        var csproj = spec.Build.SkipDotNetBuild
-            ? null
-            : !string.IsNullOrWhiteSpace(spec.Build.CsprojPath)
-                ? spec.Build.CsprojPath
-                : ModulePipelinePlanningHelpers.TryResolveCsprojPath(projectRoot, moduleName, netProjectPath, netProjectName);
+        var configuredCsproj = !string.IsNullOrWhiteSpace(spec.Build.CsprojPath)
+            ? spec.Build.CsprojPath
+            : ModulePipelinePlanningHelpers.TryResolveCsprojPath(projectRoot, moduleName, netProjectPath, netProjectName);
+        var csproj = spec.Build.SkipDotNetBuild ? null : configuredCsproj;
 
         var dotnetConfig = !string.IsNullOrWhiteSpace(dotnetConfigFromSegments)
             ? dotnetConfigFromSegments!
@@ -671,7 +670,7 @@ public sealed partial class ModulePipelineRunner
             syncNETProjectVersion = false;
         }
 
-        var csprojRequiredReasons = refreshPsd1Only || spec.Build.SkipDotNetBuild
+        var configuredCsprojRequiredReasons = refreshPsd1Only
             ? Array.Empty<string>()
             : BuildMissingCsprojReasonList(
                 spec,
@@ -687,6 +686,11 @@ public sealed partial class ModulePipelineRunner
                 binaryModuleDocumentationRequested == true,
                 developmentBinariesMode,
                 developmentBinariesPath);
+        var csprojRequiredReasons = spec.Build.SkipDotNetBuild &&
+                                    configuredCsprojRequiredReasons.Length == 0 &&
+                                    !string.IsNullOrWhiteSpace(configuredCsproj)
+            ? new[] { "CsprojPath" }
+            : configuredCsprojRequiredReasons;
 
         var buildSpec = new ModuleBuildSpec
         {

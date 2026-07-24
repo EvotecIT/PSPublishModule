@@ -54,7 +54,9 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
             Assert.True(plan.BuildSpec.SkipDotNetBuild);
             Assert.Null(plan.ResolvedCsprojPath);
             Assert.False(plan.SyncNETProjectVersion);
-            Assert.Empty(plan.BuildSpec.CsprojRequiredReasons);
+            Assert.Equal(
+                new[] { "SyncNETProjectVersion", "NETFramework", "NETBinaryModule", "ResolveBinaryConflictsName" },
+                plan.BuildSpec.CsprojRequiredReasons);
         }
         finally
         {
@@ -936,6 +938,40 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
             });
 
             Assert.Equal("existing", File.ReadAllText(Path.Combine(result.StagingPath, "Lib", "Core", "existing-payload.txt")));
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void BuildToStaging_SkipDotNetBuild_FailsWhenConfiguredBinaryPayloadIsAbsent()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            var source = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+            var staging = Path.Combine(tempRoot.FullName, "staging");
+            File.WriteAllText(Path.Combine(source.FullName, moduleName + ".psm1"), string.Empty);
+            File.WriteAllText(
+                Path.Combine(source.FullName, moduleName + ".psd1"),
+                $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '1.0.0' }}");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                ModuleBuildPipelineFactory.Create(new NullLogger()).BuildToStaging(new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = source.FullName,
+                    StagingPath = staging,
+                    Version = "1.0.0",
+                    SkipDotNetBuild = true,
+                    ExportAssemblies = [moduleName + ".dll"],
+                    CsprojRequiredReasons = ["CsprojPath"]
+                }));
+
+            Assert.Contains("no existing Lib/*.dll payload", exception.Message, StringComparison.Ordinal);
         }
         finally
         {

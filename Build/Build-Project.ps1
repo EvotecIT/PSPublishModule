@@ -45,7 +45,8 @@ if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $bootstrapFrameworks = if ($PSEdition -eq 'Desktop') {
-    @('net472', 'net8.0')
+    $desktopChildFramework = if ($ModuleFramework -eq 'auto') { 'net8.0' } else { $ModuleFramework }
+    @('net472', $desktopChildFramework) | Select-Object -Unique
 } elseif ($ModuleFramework -eq 'net10.0') {
     @('net10.0')
 } else {
@@ -76,7 +77,7 @@ try {
     }
     $invokeParams.ConfigPath = $ConfigPath
     $invokeParams.Configuration = $Configuration
-    $invokeParams.ModuleRunMode = if ($Publish) { 'Publish' } else { $RunMode }
+    $invokeParams.ModuleRunMode = if ($Publish -or $PublishProjectGitHub) { 'Publish' } else { $RunMode }
     $invokeParams.ErrorAction = 'Stop'
     if ($Publish) {
         $invokeParams.PublishNuget = $true
