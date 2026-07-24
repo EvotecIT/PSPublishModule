@@ -219,7 +219,8 @@ internal sealed partial class PowerForgeReleaseService
     private AppStoreConnectReleaseStateResult WaitForAppleBuild(
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app,
-        AppStoreConnectReleaseStateResult? initial = null)
+        AppStoreConnectReleaseStateResult? initial = null,
+        string? buildUploadId = null)
     {
         var state = initial ?? ReadAppleReleaseState(plan, app);
         var maximumChecks = Math.Max(
@@ -237,6 +238,24 @@ internal sealed partial class PowerForgeReleaseService
                     $"App Store Connect marked build {state.VersionString} ({state.BuildNumber}) " +
                     $"as '{processingState}' for '{app.Name}'.",
                     state);
+            }
+            if (!string.IsNullOrWhiteSpace(buildUploadId))
+            {
+                var upload = _getAppleBuildUpload(CreateAppStoreConnectCredential(plan), buildUploadId!);
+                if (upload is not null && IsTerminalAppleBuildFailure(upload.State))
+                {
+                    var issues = upload.Errors
+                        .Select(static issue => FormatAppleBuildUploadIssue(issue))
+                        .Where(static issue => !string.IsNullOrWhiteSpace(issue))
+                        .ToArray();
+                    var issueDetail = issues.Length == 0
+                        ? string.Empty
+                        : $" {string.Join(" ", issues)}";
+                    throw new AppleBuildProcessingException(
+                        $"App Store Connect rejected uploaded build {state.VersionString} ({state.BuildNumber}) " +
+                        $"for '{app.Name}' in build-upload state '{upload.State}'.{issueDetail}",
+                        state);
+                }
             }
             if (check == maximumChecks - 1)
                 break;
@@ -256,6 +275,19 @@ internal sealed partial class PowerForgeReleaseService
            string.Equals(state, "FAILED", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(state, "ERROR", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(state, "REJECTED", StringComparison.OrdinalIgnoreCase);
+
+    private static string FormatAppleBuildUploadIssue(AppStoreConnectBuildUploadIssue issue)
+    {
+        var code = string.IsNullOrWhiteSpace(issue.Code) ? null : issue.Code!.Trim();
+        var description = string.IsNullOrWhiteSpace(issue.Description) ? null : issue.Description!.Trim();
+        return (code, description) switch
+        {
+            (not null, not null) => $"[{code}] {description}",
+            (not null, null) => $"[{code}]",
+            (null, not null) => description,
+            _ => string.Empty
+        };
+    }
 
     private static AppStoreConnectPlatformReleaseState AssertSinglePlatformState(
         AppStoreConnectReleaseStateResult state,
@@ -368,6 +400,7 @@ internal sealed partial class PowerForgeReleaseService
                 Build = state?.BuildNumber ?? values.BuildNumber,
                 BuildId = build?.Id,
                 BuildProcessingState = build?.ProcessingState,
+                BuildUploadId = result?.Upload?.BuildUploadId,
                 DistributionVersionId = platform?.Version?.Id,
                 DistributionState = platform?.Version?.AppStoreState ?? platform?.Version?.AppVersionState,
                 BuildSelected = platform?.MatchedBuildSelected,
@@ -498,6 +531,14 @@ internal sealed partial class PowerForgeReleaseService
 
         using var client = new AppStoreConnectClient(request.Credential);
         return new AppStoreConnectReleaseStateService(client).GetAsync(request).GetAwaiter().GetResult();
+    }
+
+    private static AppStoreConnectBuildUploadInfo? GetAppleBuildUpload(
+        AppStoreConnectApiCredential credential,
+        string buildUploadId)
+    {
+        using var client = new AppStoreConnectClient(credential);
+        return client.GetBuildUploadAsync(buildUploadId).GetAwaiter().GetResult();
     }
 
     private sealed class AppleBuildProcessingException : InvalidOperationException

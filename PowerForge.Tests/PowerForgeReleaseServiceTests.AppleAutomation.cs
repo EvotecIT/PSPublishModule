@@ -481,6 +481,62 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleUpload_BuildUploadFailureReportsAppleValidationIssueImmediately()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var upload = CreateSuccessfulUpload(new AppleAppArchiveUploadRequest
+            {
+                ArchivePath = Path.Combine(root, "build", "CasaRay.xcarchive"),
+                ExportPath = Path.Combine(root, "build", "export")
+            });
+            upload.BuildUploadId = "upload-9";
+            var delays = 0;
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, processingState: null),
+                delay: _ => delays++,
+                archiveAppleApp: CreateSuccessfulArchive,
+                uploadAppleApp: _ => upload,
+                getAppleBuildUpload: (_, id) => new AppStoreConnectBuildUploadInfo
+                {
+                    Id = id,
+                    State = "FAILED",
+                    Errors = new[]
+                    {
+                        new AppStoreConnectBuildUploadIssue
+                        {
+                            Code = "90683",
+                            Description = "Missing purpose string in Info.plist."
+                        }
+                    }
+                });
+
+            var result = service.Execute(
+                CreateAppleAutomationSpec(root, keyPath),
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Upload
+                });
+
+            Assert.False(result.Success);
+            Assert.Equal(0, delays);
+            var target = Assert.Single(Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt).Targets);
+            Assert.Equal("upload-9", target.BuildUploadId);
+            Assert.Contains("90683", Assert.IsType<string>(target.ErrorMessage), StringComparison.Ordinal);
+            Assert.Contains("Missing purpose string", target.ErrorMessage, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleUpload_ProcessingTimeoutWritesLastKnownStateReceipt()
     {
         var root = CreateSandbox();
@@ -601,6 +657,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         Func<AppleAppArchiveRequest, AppleAppArchiveResult>? archiveAppleApp = null,
         Func<AppleAppArchiveUploadRequest, AppleAppArchiveUploadResult>? uploadAppleApp = null,
         Func<AppStoreConnectReleasePreparationRequest, AppStoreConnectReleasePreparationResult>? prepareAppleDistribution = null,
+        Func<AppStoreConnectApiCredential, string, AppStoreConnectBuildUploadInfo?>? getAppleBuildUpload = null,
         Func<PowerForgeAppleAppReleaseTargetPlan, bool>? generateAppleProject = null)
         => new(
             new NullLogger(),
@@ -615,6 +672,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             uploadAppleApp: uploadAppleApp ?? (_ => throw new InvalidOperationException("Exact remote build should skip upload.")),
             prepareAppleDistribution: prepareAppleDistribution,
             getAppleReleaseState: getState,
+            getAppleBuildUpload: getAppleBuildUpload,
             generateAppleProject: generateAppleProject,
             delay: delay,
             appleArtifactService: new AppleReleaseArtifactService(getAvailableBytes ?? (_ => long.MaxValue)));

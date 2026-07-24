@@ -251,6 +251,43 @@ public sealed class AppleAppArchiveServiceTests
     }
 
     [Fact]
+    public async Task UploadArchiveAsync_captures_build_upload_id_from_distribution_log()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var archive = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcarchive"));
+            var distributionLogs = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcdistributionlogs"));
+            var buildUploadId = Guid.NewGuid().ToString();
+            File.WriteAllText(
+                Path.Combine(distributionLogs.FullName, "ContentDelivery.log"),
+                $"UPLOAD SUCCEEDED with no errors{Environment.NewLine}Delivery UUID: {buildUploadId}");
+            var runner = new CapturingProcessRunner(new ProcessRunResult(
+                0,
+                $"Created bundle at path \"{distributionLogs.FullName}\"",
+                string.Empty,
+                "xcodebuild",
+                TimeSpan.FromSeconds(1),
+                false));
+            var service = new AppleAppArchiveService(runner);
+
+            var result = await service.UploadArchiveAsync(new AppleAppArchiveUploadRequest
+            {
+                ArchivePath = archive.FullName,
+                ExportPath = Path.Combine(root.FullName, "export")
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(distributionLogs.FullName, result.DistributionLogPath);
+            Assert.Equal(buildUploadId, result.BuildUploadId);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task UploadArchiveAsync_omits_allow_provisioning_updates_when_disabled()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -396,12 +433,19 @@ public sealed class AppleAppArchiveServiceTests
 
     private sealed class CapturingProcessRunner : IProcessRunner
     {
+        private readonly ProcessRunResult _result;
+
+        public CapturingProcessRunner(ProcessRunResult? result = null)
+        {
+            _result = result ?? new ProcessRunResult(0, "ok", string.Empty, "xcodebuild", TimeSpan.FromMilliseconds(1), false);
+        }
+
         public List<ProcessRunRequest> Requests { get; } = new();
 
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
-            return Task.FromResult(new ProcessRunResult(0, "ok", string.Empty, request.FileName, TimeSpan.FromMilliseconds(1), false));
+            return Task.FromResult(_result);
         }
     }
 }

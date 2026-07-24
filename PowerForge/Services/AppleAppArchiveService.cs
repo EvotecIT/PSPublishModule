@@ -1,5 +1,6 @@
 using System.Security;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -142,13 +143,55 @@ public sealed class AppleAppArchiveService
                 request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout),
             cancellationToken).ConfigureAwait(false);
 
+        var diagnostics = ResolveUploadDiagnostics(result);
+
         return new AppleAppArchiveUploadResult
         {
             ArchivePath = archivePath,
             ExportPath = exportPath,
             ExportOptionsPlistPath = plistPath,
+            DistributionLogPath = diagnostics.DistributionLogPath,
+            BuildUploadId = diagnostics.BuildUploadId,
             ProcessResult = result
         };
+    }
+
+    private static AppleUploadDiagnostics ResolveUploadDiagnostics(ProcessRunResult result)
+    {
+        var output = string.Join(Environment.NewLine, result.StdOut, result.StdErr);
+        var match = Regex.Match(
+            output,
+            "Created bundle at path \\\"(?<path>[^\\\"]+\\.xcdistributionlogs)\\\"",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        if (!match.Success)
+            return new AppleUploadDiagnostics(null, null);
+
+        var logPath = Path.GetFullPath(match.Groups["path"].Value);
+        var contentDeliveryLog = Path.Combine(logPath, "ContentDelivery.log");
+        if (!File.Exists(contentDeliveryLog))
+            return new AppleUploadDiagnostics(logPath, null);
+
+        var deliveryMatches = Regex.Matches(
+            File.ReadAllText(contentDeliveryLog),
+            "Delivery UUID:\\s*(?<id>[0-9a-fA-F-]{36})",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        var buildUploadId = deliveryMatches.Count == 0
+            ? null
+            : deliveryMatches[deliveryMatches.Count - 1].Groups["id"].Value;
+        return new AppleUploadDiagnostics(logPath, buildUploadId);
+    }
+
+    private readonly struct AppleUploadDiagnostics
+    {
+        internal AppleUploadDiagnostics(string? distributionLogPath, string? buildUploadId)
+        {
+            DistributionLogPath = distributionLogPath;
+            BuildUploadId = buildUploadId;
+        }
+
+        internal string? DistributionLogPath { get; }
+
+        internal string? BuildUploadId { get; }
     }
 
     private static void AddAppStoreConnectAuthenticationArguments(

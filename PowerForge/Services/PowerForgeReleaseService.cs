@@ -63,6 +63,7 @@ internal sealed partial class PowerForgeReleaseService
     private readonly Func<AppStoreConnectReviewSubmissionRequest, AppStoreConnectReviewSubmissionResult> _submitAppleReview;
     private readonly Func<AppStoreConnectVersionReleaseRequest, AppStoreConnectVersionReleaseResult> _releaseAppleVersion;
     private readonly Func<AppStoreConnectReleaseStateRequest, AppStoreConnectReleaseStateResult> _getAppleReleaseState;
+    private readonly Func<AppStoreConnectApiCredential, string, AppStoreConnectBuildUploadInfo?> _getAppleBuildUpload;
     private readonly Func<PowerForgeAppleAppReleaseTargetPlan, bool> _generateAppleProject;
     private readonly Action<TimeSpan> _delay;
     private readonly AppleReleaseArtifactService _appleArtifactService;
@@ -138,6 +139,7 @@ internal sealed partial class PowerForgeReleaseService
         Func<AppStoreConnectReviewSubmissionRequest, AppStoreConnectReviewSubmissionResult>? submitAppleReview = null,
         Func<AppStoreConnectVersionReleaseRequest, AppStoreConnectVersionReleaseResult>? releaseAppleVersion = null,
         Func<AppStoreConnectReleaseStateRequest, AppStoreConnectReleaseStateResult>? getAppleReleaseState = null,
+        Func<AppStoreConnectApiCredential, string, AppStoreConnectBuildUploadInfo?>? getAppleBuildUpload = null,
         Func<PowerForgeAppleAppReleaseTargetPlan, bool>? generateAppleProject = null,
         Action<TimeSpan>? delay = null,
         AppleReleaseArtifactService? appleArtifactService = null)
@@ -159,6 +161,7 @@ internal sealed partial class PowerForgeReleaseService
         _submitAppleReview = submitAppleReview ?? SubmitAppleReview;
         _releaseAppleVersion = releaseAppleVersion ?? ReleaseAppleVersion;
         _getAppleReleaseState = getAppleReleaseState ?? GetAppleReleaseState;
+        _getAppleBuildUpload = getAppleBuildUpload ?? GetAppleBuildUpload;
         _generateAppleProject = generateAppleProject ?? (app => new AppleProjectGenerationService().Generate(app));
         _delay = delay ?? Thread.Sleep;
         _appleArtifactService = appleArtifactService ?? new AppleReleaseArtifactService();
@@ -1376,7 +1379,7 @@ internal sealed partial class PowerForgeReleaseService
 
                 if (IsUploadAction(plan.Action) &&
                     plan.Automation.WaitForProcessing)
-                    result.RemoteState = WaitForAppleBuild(plan, app);
+                    result.RemoteState = WaitForAppleBuild(plan, app, buildUploadId: upload.BuildUploadId);
             }
 
             var appInfoMetadataSpecs = plan.SyncAppInfo && pendingAppInfoAppIds.Remove(app.AppStoreConnectAppId!)
