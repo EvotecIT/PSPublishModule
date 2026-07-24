@@ -33,7 +33,7 @@ public sealed partial class AppStoreConnectClient
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (response.IsSuccessStatusCode ||
                 attempt >= MaximumReadAttempts ||
                 !IsTransientReadFailure(response.StatusCode))
@@ -49,17 +49,30 @@ public sealed partial class AppStoreConnectClient
     }
 
     private static bool IsTransientReadFailure(HttpStatusCode statusCode)
-        => statusCode is HttpStatusCode.TooManyRequests
-            or HttpStatusCode.InternalServerError
+        => (int)statusCode == 429
+            || statusCode is HttpStatusCode.InternalServerError
             or HttpStatusCode.BadGateway
             or HttpStatusCode.ServiceUnavailable
             or HttpStatusCode.GatewayTimeout;
 
-    private readonly record struct AppStoreConnectHttpResponse(
-        HttpStatusCode StatusCode,
-        string? ReasonPhrase,
-        string Content)
+    private readonly struct AppStoreConnectHttpResponse
     {
+        public AppStoreConnectHttpResponse(
+            HttpStatusCode statusCode,
+            string? reasonPhrase,
+            string content)
+        {
+            StatusCode = statusCode;
+            ReasonPhrase = reasonPhrase;
+            Content = content;
+        }
+
+        public HttpStatusCode StatusCode { get; }
+
+        public string? ReasonPhrase { get; }
+
+        public string Content { get; }
+
         public bool IsSuccessStatusCode => (int)StatusCode is >= 200 and <= 299;
     }
 }
