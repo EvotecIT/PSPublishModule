@@ -57,6 +57,45 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task GetVersionsAsync_HonorsRetryAfterForRateLimit()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(
+                (HttpStatusCode)429,
+                """{ "errors": [{ "code": "RATE_LIMIT_EXCEEDED" }] }""",
+                TimeSpan.FromSeconds(30)),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "version-1",
+                      "type": "appStoreVersions",
+                      "attributes": {
+                        "versionString": "1.4.0",
+                        "appStoreState": "PREPARE_FOR_SUBMISSION",
+                        "platform": "IOS"
+                      }
+                    }
+                  ]
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var delays = new List<TimeSpan>();
+        client.TransientReadDelayAsync = (delay, _) =>
+        {
+            delays.Add(delay);
+            return Task.CompletedTask;
+        };
+
+        var versions = await client.GetVersionsAsync("app-1", "1.4.0", ApplePlatform.iOS);
+
+        Assert.Equal("version-1", Assert.Single(versions).Id);
+        Assert.Equal(new[] { TimeSpan.FromSeconds(30) }, delays);
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_StopsAfterBoundedTransientRetries()
     {
         var handler = new SequenceHandler(

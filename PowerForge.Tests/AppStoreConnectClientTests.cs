@@ -2115,15 +2115,18 @@ public sealed partial class AppStoreConnectClientTests
 
     private sealed class SequenceResponse
     {
-        public SequenceResponse(HttpStatusCode statusCode, string content)
+        public SequenceResponse(HttpStatusCode statusCode, string content, TimeSpan? retryAfter = null)
         {
             StatusCode = statusCode;
             Content = content;
+            RetryAfter = retryAfter;
         }
 
         public HttpStatusCode StatusCode { get; }
 
         public string Content { get; }
+
+        public TimeSpan? RetryAfter { get; }
     }
 
     private sealed class SequenceHandler : HttpMessageHandler
@@ -2163,10 +2166,13 @@ public sealed partial class AppStoreConnectClientTests
             }
 
             var response = _responses.Dequeue();
-            return new HttpResponseMessage(response.StatusCode)
+            var message = new HttpResponseMessage(response.StatusCode)
             {
                 Content = new StringContent(response.Content)
             };
+            if (response.RetryAfter.HasValue)
+                message.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(response.RetryAfter.Value);
+            return message;
         }
     }
 }

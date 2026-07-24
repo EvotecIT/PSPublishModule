@@ -44,8 +44,25 @@ public sealed partial class AppStoreConnectClient
                     content);
             }
 
-            await TransientReadDelayAsync(TimeSpan.FromSeconds(attempt), cancellationToken).ConfigureAwait(false);
+            var delay = ResolveTransientReadDelay(response.Headers.RetryAfter, attempt);
+            await TransientReadDelayAsync(delay, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private static TimeSpan ResolveTransientReadDelay(RetryConditionHeaderValue? retryAfter, int attempt)
+    {
+        var fallback = TimeSpan.FromSeconds(attempt);
+        if (retryAfter is null)
+            return fallback;
+
+        var requested = retryAfter.Delta;
+        if (!requested.HasValue && retryAfter.Date.HasValue)
+            requested = retryAfter.Date.Value - DateTimeOffset.UtcNow;
+        if (!requested.HasValue || requested.Value <= TimeSpan.Zero)
+            return fallback;
+
+        var maximum = TimeSpan.FromMinutes(2);
+        return requested.Value <= maximum ? requested.Value : maximum;
     }
 
     private static bool IsTransientReadFailure(HttpStatusCode statusCode)
