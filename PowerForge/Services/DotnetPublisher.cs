@@ -218,30 +218,43 @@ public sealed class DotnetPublisher
         string tfm,
         string artifacts)
     {
-        var projectQueue = new Queue<string>();
-        var visitedProjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var projectQueue = new Queue<ProjectEvaluationRequest>();
+        var visitedEvaluations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var pathMaps = new List<string>();
         var seenPathMaps = new HashSet<string>(StringComparer.Ordinal);
-        projectQueue.Enqueue(Path.GetFullPath(projectPath));
+        projectQueue.Enqueue(new ProjectEvaluationRequest(Path.GetFullPath(projectPath), tfm));
 
         while (projectQueue.Count > 0)
         {
-            var currentProject = projectQueue.Dequeue();
-            if (!visitedProjects.Add(currentProject))
+            var request = projectQueue.Dequeue();
+            var evaluationKey = $"{request.ProjectPath}|{request.TargetFramework ?? string.Empty}";
+            if (!visitedEvaluations.Add(evaluationKey))
                 continue;
 
             var evaluation = ReadProjectBuildContext(
-                currentProject,
+                request.ProjectPath,
                 configuration,
-                tfm,
+                request.TargetFramework,
                 artifacts);
             var pathMap = evaluation.PathMap.Trim().TrimEnd(',');
             if (!string.IsNullOrWhiteSpace(pathMap) && seenPathMaps.Add(pathMap))
                 pathMaps.Add(pathMap);
 
+            if (request.TargetFramework == null)
+            {
+                foreach (var targetFramework in evaluation.TargetFrameworks)
+                {
+                    projectQueue.Enqueue(new ProjectEvaluationRequest(
+                        request.ProjectPath,
+                        targetFramework));
+                }
+            }
+
             foreach (var projectReference in evaluation.ProjectReferences)
             {
-                projectQueue.Enqueue(projectReference);
+                // Referenced projects choose their own target framework. Evaluate their
+                // project-declared framework(s) instead of forcing the entry project's TFM.
+                projectQueue.Enqueue(new ProjectEvaluationRequest(projectReference, null));
             }
         }
 
@@ -251,23 +264,26 @@ public sealed class DotnetPublisher
     private ProjectBuildContext ReadProjectBuildContext(
         string projectPath,
         string configuration,
-        string tfm,
+        string? tfm,
         string artifacts)
     {
-        var args = new[]
+        var args = new List<string>
         {
             "msbuild",
             projectPath,
             "-nologo",
             "-verbosity:quiet",
             "-getProperty:PathMap",
+            "-getProperty:TargetFrameworks",
             "-getItem:ProjectReference",
             $"-p:Configuration={configuration}",
-            $"-p:TargetFramework={tfm}",
             "-p:UseArtifactsOutput=true",
             $"-p:ArtifactsPath={artifacts}",
             "-p:ContinuousIntegrationBuild=true"
         };
+        if (!string.IsNullOrWhiteSpace(tfm))
+            args.Add($"-p:TargetFramework={tfm}");
+
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
@@ -307,6 +323,10 @@ public sealed class DotnetPublisher
                 .GetProperty("Properties")
                 .GetProperty("PathMap")
                 .GetString() ?? string.Empty;
+            var targetFrameworks = root
+                .GetProperty("Properties")
+                .GetProperty("TargetFrameworks")
+                .GetString() ?? string.Empty;
             var projectReferences = new List<string>();
             if (root.GetProperty("Items").TryGetProperty("ProjectReference", out var references))
             {
@@ -320,28 +340,57 @@ public sealed class DotnetPublisher
                 }
             }
 
-            return new ProjectBuildContext(pathMap, projectReferences);
+            var declaredTargetFrameworks = string.IsNullOrWhiteSpace(targetFrameworks)
+                ? Array.Empty<string>()
+                : targetFrameworks
+                    .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(static framework => framework.Trim())
+                    .Where(static framework => framework.Length > 0)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+            return new ProjectBuildContext(pathMap, projectReferences, declaredTargetFrameworks);
         }
 
         _logger.Error(
-            $"dotnet msbuild could not evaluate PathMap/project references for {projectPath} ({tfm}): " +
+            $"dotnet msbuild could not evaluate PathMap/project references for {projectPath} " +
+            $"({tfm ?? "project-declared frameworks"}): " +
             $"{stderr}\n{stdout}");
         throw new InvalidOperationException(
             $"dotnet msbuild could not evaluate PathMap/project references for {projectPath} " +
-            $"({tfm}, exit {process.ExitCode})");
+            $"({tfm ?? "project-declared frameworks"}, exit {process.ExitCode})");
+    }
+
+    private sealed class ProjectEvaluationRequest
+    {
+        internal ProjectEvaluationRequest(string projectPath, string? targetFramework)
+        {
+            ProjectPath = projectPath;
+            TargetFramework = targetFramework;
+        }
+
+        internal string ProjectPath { get; }
+
+        internal string? TargetFramework { get; }
     }
 
     private sealed class ProjectBuildContext
     {
-        internal ProjectBuildContext(string pathMap, IReadOnlyList<string> projectReferences)
+        internal ProjectBuildContext(
+            string pathMap,
+            IReadOnlyList<string> projectReferences,
+            IReadOnlyList<string> targetFrameworks)
         {
             PathMap = pathMap;
             ProjectReferences = projectReferences;
+            TargetFrameworks = targetFrameworks;
         }
 
         internal string PathMap { get; }
 
         internal IReadOnlyList<string> ProjectReferences { get; }
+
+        internal IReadOnlyList<string> TargetFrameworks { get; }
     }
 
     private void RunDotnet(string workingDirectory, IReadOnlyList<string> args, string tfm, string phase)

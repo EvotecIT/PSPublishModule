@@ -65,17 +65,14 @@ public sealed class DotnetPublisherTests
                 var escapedModuleDirectory =
                     System.Security.SecurityElement.Escape(moduleDirectory);
                 File.WriteAllText(
-                    Path.Combine(dependencyDirectory, "Directory.Build.props"),
-                    $"<Project><PropertyGroup Condition=\"'$(ContinuousIntegrationBuild)' == 'true' And '$(UseArtifactsOutput)' == 'true'\"><PathMap>{escapedDependencyDirectory}=/_/PowerForge/dependency</PathMap></PropertyGroup></Project>");
-                File.WriteAllText(
                     Path.Combine(moduleDirectory, "Directory.Build.props"),
                     $"<Project><PropertyGroup Condition=\"'$(ContinuousIntegrationBuild)' == 'true' And '$(UseArtifactsOutput)' == 'true'\"><PathMap>{escapedModuleDirectory}=/_/PowerForge/module</PathMap></PropertyGroup></Project>");
                 File.WriteAllText(
                     Path.Combine(dependencyDirectory, "Dependency.csproj"),
-                    "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Deterministic>true</Deterministic><DebugType>portable</DebugType></PropertyGroup></Project>");
+                    $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>netstandard2.0</TargetFramework><Deterministic>true</Deterministic><DebugType>portable</DebugType></PropertyGroup><PropertyGroup Condition=\"'$(ContinuousIntegrationBuild)' == 'true' And '$(UseArtifactsOutput)' == 'true' And '$(TargetFramework)' == 'netstandard2.0'\"><PathMap>{escapedDependencyDirectory}=/_/PowerForge/dependency</PathMap></PropertyGroup></Project>");
                 File.WriteAllText(
                     Path.Combine(dependencyDirectory, "Dependency.cs"),
-                    "namespace Dependency; public sealed class Value { public string Text => \"stable\"; }");
+                    "namespace Dependency { public sealed class Value { public string Text => \"stable\"; } }");
                 var moduleProject = Path.Combine(moduleDirectory, "Module.csproj");
                 File.WriteAllText(
                     moduleProject,
@@ -106,6 +103,9 @@ public sealed class DotnetPublisherTests
             Assert.Equal(
                 File.ReadAllBytes(Path.Combine(first, "Dependency.dll")),
                 File.ReadAllBytes(Path.Combine(second, "Dependency.dll")));
+            Assert.Equal(
+                File.ReadAllBytes(Path.Combine(first, "Dependency.pdb")),
+                File.ReadAllBytes(Path.Combine(second, "Dependency.pdb")));
             Assert.Equal(
                 File.ReadAllBytes(Path.Combine(first, "Module.dll")),
                 File.ReadAllBytes(Path.Combine(second, "Module.dll")));
