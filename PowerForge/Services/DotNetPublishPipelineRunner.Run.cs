@@ -32,6 +32,8 @@ public sealed partial class DotNetPublishPipelineRunner
         var benchmarkGates = new List<DotNetPublishBenchmarkGateResult>();
         var benchmarkExtracts = new Dictionary<string, DotNetPublishBenchmarkExtractionResult>(StringComparer.OrdinalIgnoreCase);
         var stepReports = new List<DotNetPublishRunReportStep>();
+        IReadOnlyDictionary<string, string> cleanTrackedGeneratedProvenanceState =
+            new Dictionary<string, string>();
         string? manifestJson = null;
         string? manifestText = null;
         string? checksumsPath = null;
@@ -40,6 +42,12 @@ public sealed partial class DotNetPublishPipelineRunner
 
         try
         {
+            cleanTrackedGeneratedProvenanceState = CaptureCleanTrackedGeneratedProvenanceState(
+                plan.ProjectRoot,
+                EnumerateTrackedGeneratedProvenancePaths(
+                    plan,
+                    Array.Empty<DotNetPublishMsiBuildResult>()));
+
             foreach (var step in plan.Steps ?? Array.Empty<DotNetPublishStep>())
             {
                 progress.StepStarting(step);
@@ -97,12 +105,19 @@ public sealed partial class DotNetPublishPipelineRunner
                             benchmarkGates.Add(RunBenchmarkGateStep(plan, benchmarkExtracts, step));
                             break;
                         case DotNetPublishStepKind.Manifest:
+                        {
                             (manifestJson, manifestText, checksumsPath) = WriteManifestsWithProvenance(
                                 plan,
                                 artefacts,
                                 storePackages,
-                                msiBuilds);
+                                msiBuilds,
+                                cleanTrackedGeneratedPaths: null,
+                                cleanTrackedGeneratedProvenanceState:
+                                    cleanTrackedGeneratedProvenanceState,
+                                msiReservationOwner:
+                                    msiReservationOwner);
                             break;
+                        }
                     }
 
                     progress.StepCompleted(step);
@@ -201,14 +216,21 @@ public sealed partial class DotNetPublishPipelineRunner
         }
         finally
         {
-            foreach (var version in plan.MsiVersions.Values)
+            try
             {
-                if (!ReleaseMsiVersionStateReservation(version, msiReservationOwner))
+                foreach (var version in plan.MsiVersions.Values)
                 {
-                    _logger.Warn(
-                        $"MSI version reservation for '{version.Version}' in '{version.StatePath}' " +
-                        "could not be released. A later overwrite rebuild may require retrying after the state file is available.");
+                    if (!ReleaseMsiVersionStateReservation(version, msiReservationOwner))
+                    {
+                        _logger.Warn(
+                            $"MSI version reservation for '{version.Version}' in '{version.StatePath}' " +
+                            "could not be released. A later overwrite rebuild may require retrying after the state file is available.");
+                    }
                 }
+            }
+            finally
+            {
+                ClearMsiVersionStateWrites(msiReservationOwner);
             }
         }
     }

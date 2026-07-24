@@ -288,6 +288,24 @@ public sealed class WebCliServerCaptureTests
     }
 
     [Fact]
+    public void BuildRemoteOperationLockCommand_CanWaitForAConcurrentHostOperation()
+    {
+        var command = WebCliCommandHandlers.BuildRemoteOperationLockCommand(
+            ["/var/lock/powerforge-site-example.lock"],
+            waitSecondsPerLock: 900);
+
+        Assert.Contains("flock -w 900 '/var/lock/powerforge-site-example.lock'", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("flock -n", command, StringComparison.Ordinal);
+        Assert.Equal(
+            TimeSpan.FromSeconds(1830),
+            WebCliCommandHandlers.GetRemoteOperationLockMarkerTimeout(lockCount: 2, waitSecondsPerLock: 900));
+        Assert.Throws<InvalidOperationException>(() =>
+            WebCliCommandHandlers.BuildRemoteOperationLockCommand(
+                ["/var/lock/powerforge-site-example.lock"],
+                waitSecondsPerLock: 3601));
+    }
+
+    [Fact]
     public void RemoteOperationLock_ReportsADeadSessionBeforeWorkCanContinue()
     {
         var startInfo = new ProcessStartInfo(OperatingSystem.IsWindows() ? "cmd.exe" : "sh")

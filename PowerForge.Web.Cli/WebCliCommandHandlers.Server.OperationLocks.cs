@@ -5,17 +5,23 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebCliCommandHandlers
 {
-    internal static string BuildRemoteOperationLockCommand(IEnumerable<string> paths)
+    internal static string BuildRemoteOperationLockCommand(IEnumerable<string> paths, int waitSecondsPerLock = 0)
     {
         var locks = GetRemoteOperationLocks(paths);
         if (locks.Length == 0)
             throw new InvalidOperationException("At least one operation lock is required.");
+        if (waitSecondsPerLock is < 0 or > 3600)
+            throw new InvalidOperationException("Operation lock wait per lock must be from 0 through 3600 seconds.");
 
         var builder = new StringBuilder("set -e; ");
         foreach (var path in locks)
             builder.Append(BuildOperationLockPostcondition(path)).Append("; ");
         foreach (var path in locks)
-            builder.Append("flock -n ").Append(ShellQuote(path)).Append(' ');
+        {
+            builder.Append(waitSecondsPerLock > 0 ? $"flock -w {waitSecondsPerLock} " : "flock -n ")
+                .Append(ShellQuote(path))
+                .Append(' ');
+        }
         builder.Append("sh -c ").Append(ShellQuote("printf 'POWERFORGE_OPERATION_LOCKED\\n'; cat >/dev/null"));
         return builder.ToString();
     }
@@ -23,13 +29,16 @@ internal static partial class WebCliCommandHandlers
     private static RemoteOperationLock? AcquireRemoteOperationLocks(
         string sshCommand,
         string target,
-        IEnumerable<string> paths)
+        IEnumerable<string> paths,
+        int waitSecondsPerLock = 0)
     {
         var locks = GetRemoteOperationLocks(paths);
         if (locks.Length == 0)
             return null;
 
-        var process = CreateProcess(sshCommand, BuildSshArguments(target, BuildRemoteOperationLockCommand(locks)));
+        var process = CreateProcess(
+            sshCommand,
+            BuildSshArguments(target, BuildRemoteOperationLockCommand(locks, waitSecondsPerLock)));
         process.StartInfo.RedirectStandardInput = true;
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;
@@ -40,7 +49,7 @@ internal static partial class WebCliCommandHandlers
         bool markerReady;
         try
         {
-            markerReady = markerTask.Wait(TimeSpan.FromSeconds(30));
+            markerReady = markerTask.Wait(GetRemoteOperationLockMarkerTimeout(locks.Length, waitSecondsPerLock));
         }
         catch (Exception exception)
         {
@@ -65,6 +74,17 @@ internal static partial class WebCliCommandHandlers
         }
 
         return new RemoteOperationLock(process);
+    }
+
+    internal static TimeSpan GetRemoteOperationLockMarkerTimeout(int lockCount, int waitSecondsPerLock)
+    {
+        if (lockCount < 1)
+            throw new InvalidOperationException("At least one operation lock is required.");
+        if (waitSecondsPerLock is < 0 or > 3600)
+            throw new InvalidOperationException("Operation lock wait per lock must be from 0 through 3600 seconds.");
+
+        var waitSeconds = checked((long)lockCount * waitSecondsPerLock + 30);
+        return TimeSpan.FromSeconds(Math.Max(30L, waitSeconds));
     }
 
     private static string StopFailedOperationLockProcess(Process process)

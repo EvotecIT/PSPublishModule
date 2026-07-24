@@ -50,6 +50,9 @@ public sealed class ModuleBootstrapperGeneratorDesktopTypeAcceleratorTests
                 bootstrapper.IndexOf(". $LibrariesScript", StringComparison.Ordinal));
             Assert.True(
                 bootstrapper.IndexOf(". $LibrariesScript", StringComparison.Ordinal) <
+                bootstrapper.IndexOf("$PowerForgeDesktopBinaryLoaded = $true", StringComparison.Ordinal));
+            Assert.True(
+                bootstrapper.IndexOf("$PowerForgeDesktopBinaryLoaded = $true", StringComparison.Ordinal) <
                 bootstrapper.IndexOf("& $RegisterPowerForgeDesktopAssemblyTypeAccelerators", StringComparison.Ordinal));
             Assert.Contains("    if ($PSEdition -ne 'Core') {\r\n        # Desktop loads module dependencies", bootstrapper);
         }

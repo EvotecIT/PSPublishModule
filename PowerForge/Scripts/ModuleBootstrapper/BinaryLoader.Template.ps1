@@ -99,4 +99,7 @@ if (-not $PowerForgeDesktopLibrariesLoaded -and (Test-Path -LiteralPath $Librari
 }
 if ($PSEdition -ne 'Core' -and $null -ne $PowerForgeDesktopAssemblyResolverState) {
     $PowerForgeDesktopAssemblyResolverState.BootstrapActive = $false
+    if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
+        & $UnregisterPowerForgeDesktopAssemblyResolver
+    }
 }
