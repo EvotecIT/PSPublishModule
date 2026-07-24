@@ -480,12 +480,23 @@ public sealed class ModuleBuilder
 
             var xmlFileName = Path.ChangeExtension(fileName, ".xml");
             var xmlSource = TryResolveXmlDocPath(publishDir, xmlFileName);
-            if (string.IsNullOrWhiteSpace(xmlSource) || !File.Exists(xmlSource)) continue;
+            if (!string.IsNullOrWhiteSpace(xmlSource) && File.Exists(xmlSource))
+            {
+                var xmlDest = Path.Combine(targetDir, xmlFileName);
+                Directory.CreateDirectory(Path.GetDirectoryName(xmlDest)!);
+                File.Copy(xmlSource, xmlDest, overwrite: true);
+                copied++;
+            }
 
-            var xmlDest = Path.Combine(targetDir, xmlFileName);
-            Directory.CreateDirectory(Path.GetDirectoryName(xmlDest)!);
-            File.Copy(xmlSource, xmlDest, overwrite: true);
-            copied++;
+            var helpFileName = fileName + "-Help.xml";
+            var helpSource = TryResolveXmlDocPath(publishDir, helpFileName);
+            if (!string.IsNullOrWhiteSpace(helpSource) && File.Exists(helpSource))
+            {
+                var helpDest = Path.Combine(targetDir, helpFileName);
+                Directory.CreateDirectory(Path.GetDirectoryName(helpDest)!);
+                File.Copy(helpSource, helpDest, overwrite: true);
+                copied++;
+            }
         }
 
         copied += CopyReferencedTopLevelAssemblies(publishDir, targetDir, options);
