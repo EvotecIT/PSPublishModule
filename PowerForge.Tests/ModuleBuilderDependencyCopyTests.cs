@@ -174,6 +174,67 @@ public sealed class ModuleBuilderDependencyCopyTests
     }
 
     [Fact]
+    public void CopyPublishOutputBinaries_CopiesExternalHelpForExportAssembly()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var publishDir = Path.Combine(root, "publish");
+        var targetDir = Path.Combine(root, "target");
+
+        Directory.CreateDirectory(publishDir);
+        Directory.CreateDirectory(targetDir);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(publishDir, "TestModule.dll"), "module");
+            File.WriteAllText(Path.Combine(publishDir, "TestModule.dll-Help.xml"), "external help");
+            File.WriteAllText(Path.Combine(publishDir, "TestModule.deps.json"), """
+                {
+                  "targets": {
+                    ".NETFramework,Version=v4.7.2": {
+                      "TestModule/1.0.0": {
+                        "runtime": {
+                          "TestModule.dll": {}
+                        }
+                      }
+                    }
+                  }
+                }
+                """);
+
+            var builder = ModuleBuilderTestDependencies.Create();
+            var copyMethod = typeof(ModuleBuilder).GetMethod(
+                "CopyPublishOutputBinaries",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(copyMethod);
+
+            copyMethod!.Invoke(builder, new object[]
+            {
+                publishDir,
+                targetDir,
+                "net472",
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TestModule.dll" },
+                null!
+            });
+
+            Assert.Equal(
+                "external help",
+                File.ReadAllText(Path.Combine(targetDir, "TestModule.dll-Help.xml")));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort cleanup
+            }
+        }
+    }
+
+    [Fact]
     public void CopyPublishOutputBinaries_DoesNotReAddExcludedTopLevelDepsFiles()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
