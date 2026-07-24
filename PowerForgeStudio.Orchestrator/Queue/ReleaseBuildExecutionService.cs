@@ -116,14 +116,16 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
 
     private async Task<ReleaseBuildAdapterResult> ExecuteModuleBuildAsync(PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository, CancellationToken cancellationToken)
     {
-        var scriptPath = repository.ModuleBuildScriptPath!;
+        var buildInputPath = repository.ModuleBuildScriptPath!;
+        var configBacked = string.Equals(Path.GetExtension(buildInputPath), ".json", StringComparison.OrdinalIgnoreCase);
         var modulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath();
         var execution = await _moduleBuildHostService.ExecuteBuildAsync(new ModuleBuildHostBuildRequest {
             RepositoryRoot = repository.RootPath,
-            ScriptPath = scriptPath,
+            ConfigPath = configBacked ? buildInputPath : null,
+            ScriptPath = configBacked ? null : buildInputPath,
             ModulePath = modulePath
         }, cancellationToken);
-        var artifactInfo = CollectModuleArtifacts(scriptPath);
+        var artifactInfo = CollectModuleArtifacts(repository.RootPath);
         var succeeded = execution.Succeeded;
 
         return new ReleaseBuildAdapterResult(
@@ -162,13 +164,11 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         return new ArtifactCollection(directories.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(), files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList());
     }
 
-    private static ArtifactCollection CollectModuleArtifacts(string moduleBuildScriptPath)
+    private static ArtifactCollection CollectModuleArtifacts(string repositoryRoot)
     {
         var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var moduleRoot = Directory.GetParent(Path.GetDirectoryName(moduleBuildScriptPath)!)?.FullName;
-
-        if (!string.IsNullOrWhiteSpace(moduleRoot))
+        foreach (var moduleRoot in new[] { repositoryRoot, Path.Combine(repositoryRoot, "Module") })
         {
             var unpacked = Path.Combine(moduleRoot, "Artefacts", "Unpacked");
             var packed = Path.Combine(moduleRoot, "Artefacts", "Packed");

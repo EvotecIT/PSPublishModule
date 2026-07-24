@@ -340,31 +340,6 @@ public sealed partial class ReleasePublishExecutionService
         return await ReadProjectPlanFileAsync(planPath, cancellationToken);
     }
 
-    private async Task<IReadOnlyList<PublishConfiguration>> ExportModulePublishConfigsAsync(string repositoryRoot, string scriptPath, CancellationToken cancellationToken)
-    {
-        var repositoryName = Path.GetFileName(repositoryRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        var exportPath = PowerForgeStudioHostPaths.GetRuntimeFilePath(repositoryName, "module-publish", "powerforge.publish.json");
-        var execution = await _moduleBuildHostService.ExportPipelineJsonAsync(new ModuleBuildHostExportRequest {
-            RepositoryRoot = repositoryRoot,
-            ScriptPath = scriptPath,
-            ModulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
-            OutputPath = exportPath
-        }, cancellationToken);
-        if (execution.ExitCode != 0 || !File.Exists(exportPath))
-        {
-            return [];
-        }
-
-        try
-        {
-            return new ModulePublishConfigurationReader().Read(exportPath);
-        }
-        catch
-        {
-            return [];
-        }
-    }
-
     private async Task<ModulePackageDetails?> ResolveModulePackageDetailsAsync(
         string repositoryRoot,
         string repositoryName,

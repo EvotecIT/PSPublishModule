@@ -11,7 +11,7 @@ using PowerForgeStudio.Orchestrator.Queue;
 
 namespace PowerForgeStudio.Tests;
 
-public sealed class PowerForgeStudioReleasePublishExecutionServiceTests
+public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
 {
     [Fact]
     public void BuildPendingTargets_PublishReadyItem_ReturnsGroupedTargetsFromSigningCheckpoint()

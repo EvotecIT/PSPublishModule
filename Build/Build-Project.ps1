@@ -3,6 +3,7 @@ param(
     [string] $ConfigPath,
     [ValidateSet('Release', 'Debug')]
     [string] $Configuration = 'Release',
+    [Alias('ModuleRunMode')]
     [ValidateSet('Manifest', 'Documentation', 'Build', 'Publish')]
     [string] $RunMode = 'Build',
     [switch] $Publish,
@@ -19,15 +20,33 @@ param(
     [ValidateSet('auto', 'net10.0', 'net8.0')]
     [string] $ModuleFramework = 'auto',
     [string] $ModuleVersion,
+    [Alias('PreReleaseTag')]
     [string] $ModulePreReleaseTag,
     [Alias('NoBuild')]
     [switch] $ModuleNoDotnetBuild,
+    [Alias('NoSign')]
     [switch] $ModuleNoSign,
+    [Alias('SignModule')]
     [switch] $ModuleSignModule,
+    [Alias('CertificateThumbprint')]
     [string] $ModuleCertificateThumbprint,
-    [bool] $ModuleSignIncludeBinaries,
-    [bool] $ModuleSignIncludeInternals,
-    [bool] $ModuleSignIncludeExe,
+    [Alias('SignIncludeBinaries')]
+    [switch] $ModuleSignIncludeBinaries,
+    [Alias('SignIncludeInternals')]
+    [switch] $ModuleSignIncludeInternals,
+    [Alias('SignIncludeExe')]
+    [switch] $ModuleSignIncludeExe,
+    [Alias('DiagnosticsBaselinePath')]
+    [string] $ModuleDiagnosticsBaselinePath,
+    [Alias('GenerateDiagnosticsBaseline')]
+    [switch] $ModuleGenerateDiagnosticsBaseline,
+    [Alias('UpdateDiagnosticsBaseline')]
+    [switch] $ModuleUpdateDiagnosticsBaseline,
+    [Alias('FailOnNewDiagnostics')]
+    [switch] $ModuleFailOnNewDiagnostics,
+    [Alias('FailOnDiagnosticsSeverity')]
+    [ValidateSet('Warning', 'Error')]
+    [string] $ModuleFailOnDiagnosticsSeverity,
     [Alias('Targets')]
     [string[]] $Target,
     [Alias('Runtime', 'Rid')]
@@ -71,7 +90,7 @@ $bootstrapFrameworks = if ($PSEdition -eq 'Desktop') {
     $desktopChildFramework = if ($ModuleFramework -eq 'auto') { 'net8.0' } else { $ModuleFramework }
     @('net472', $desktopChildFramework) | Select-Object -Unique
 } elseif ($ModuleFramework -eq 'net10.0') {
-    @('net10.0')
+    @('net8.0', 'net10.0')
 } else {
     @('net8.0')
 }
@@ -96,6 +115,18 @@ try {
     foreach ($entry in $PSBoundParameters.GetEnumerator()) {
         if ($entry.Key -notin @('Json', 'Publish', 'RunMode', 'WhatIf', 'Confirm')) {
             $invokeParams[$entry.Key] = $entry.Value
+        }
+    }
+    foreach ($switchName in @(
+            'ModuleSignIncludeBinaries',
+            'ModuleSignIncludeInternals',
+            'ModuleSignIncludeExe',
+            'ModuleGenerateDiagnosticsBaseline',
+            'ModuleUpdateDiagnosticsBaseline',
+            'ModuleFailOnNewDiagnostics'
+        )) {
+        if ($PSBoundParameters.ContainsKey($switchName)) {
+            $invokeParams[$switchName] = [bool] $PSBoundParameters[$switchName]
         }
     }
     $invokeParams.ConfigPath = $ConfigPath

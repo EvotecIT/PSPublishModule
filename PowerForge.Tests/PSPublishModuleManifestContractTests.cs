@@ -132,6 +132,7 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.Contains("$bootstrapFrameworks = if ($PSEdition -eq 'Desktop')", entryPoint, StringComparison.Ordinal);
         Assert.Contains("'net472'", entryPoint, StringComparison.Ordinal);
         Assert.Contains("'net8.0'", entryPoint, StringComparison.Ordinal);
+        Assert.Contains("@('net8.0', 'net10.0')", entryPoint, StringComparison.Ordinal);
         Assert.Contains("$desktopChildFramework = if ($ModuleFramework -eq 'auto')", entryPoint, StringComparison.Ordinal);
         Assert.Contains("dotnet build $moduleProject", entryPoint, StringComparison.Ordinal);
         Assert.Contains("Import-Module $moduleBinary", entryPoint, StringComparison.Ordinal);
@@ -142,6 +143,11 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.True(shouldProcessIndex >= 0 && shouldProcessIndex < bootstrapIndex);
         Assert.Contains("Success = $true", entryPoint, StringComparison.Ordinal);
         Assert.Contains("Skipped = $true", entryPoint, StringComparison.Ordinal);
+        Assert.Contains("[Alias('ModuleRunMode')]", entryPoint, StringComparison.Ordinal);
+        Assert.Contains("[Alias('CertificateThumbprint')]", entryPoint, StringComparison.Ordinal);
+        Assert.Contains("[Alias('SignIncludeBinaries')]", entryPoint, StringComparison.Ordinal);
+        Assert.Contains("[Alias('DiagnosticsBaselinePath')]", entryPoint, StringComparison.Ordinal);
+        Assert.Contains("[Alias('FailOnNewDiagnostics')]", entryPoint, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -18,6 +18,36 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
         Assert.Equal(ReleaseWorkspaceKind.Worktree, entry.WorkspaceKind);
     }
 
+    [Fact]
+    public void InspectRepository_UnifiedReleaseModuleConfig_IsDetectedWithoutLegacyScript()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryPath = scope.CreateRepository("JsonModuleRepo");
+        var buildPath = Path.Combine(repositoryPath, "Build");
+        var legacyScript = Path.Combine(buildPath, "Build-Module.ps1");
+        File.Delete(legacyScript);
+        File.WriteAllText(Path.Combine(buildPath, "Build-Project.ps1"), "# unified entry point");
+        var moduleConfig = Path.Combine(repositoryPath, "powerforge.json");
+        File.WriteAllText(moduleConfig, """{ "SchemaVersion": 1, "Segments": [] }""");
+        File.WriteAllText(
+            Path.Combine(buildPath, "release.json"),
+            """
+            {
+              "Module": {
+                "RepositoryRoot": "..",
+                "ConfigPath": "powerforge.json"
+              }
+            }
+            """);
+
+        var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
+
+        Assert.Equal(ReleaseRepositoryKind.Module, entry.RepositoryKind);
+        Assert.Equal(moduleConfig, entry.ModuleBuildScriptPath);
+        Assert.Null(entry.ProjectBuildScriptPath);
+        Assert.True(entry.IsReleaseManaged);
+    }
+
     private sealed class TemporaryDirectoryScope : IDisposable
     {
         public TemporaryDirectoryScope()

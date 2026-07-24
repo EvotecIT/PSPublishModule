@@ -886,10 +886,15 @@ internal sealed partial class PowerForgeReleaseService
                 ? options.ScriptPath!
                 : Path.Combine(repositoryRoot, string.IsNullOrWhiteSpace(options.ScriptPath) ? Path.Combine("Module", "Build", "Build-Module.ps1") : options.ScriptPath!));
         var effectiveConfiguration = configurationOverride ?? "Release";
-        var effectiveModuleFramework = request.ModuleFramework ?? options.Framework ?? "auto";
+        // JSON-backed module builds need an explicit modern host selection. Legacy
+        // script entry points historically left Framework unset so they could run
+        // under Windows PowerShell or older compatible PowerShell Core hosts.
+        var effectiveModuleFramework = request.ModuleFramework
+            ?? options.Framework
+            ?? (hasConfigPath ? "auto" : null);
         var moduleImportFramework = string.Equals(effectiveModuleFramework, "auto", StringComparison.OrdinalIgnoreCase)
             ? "net8.0"
-            : effectiveModuleFramework;
+            : effectiveModuleFramework ?? "net8.0";
         var configuredModulePath = ExpandModulePath(options.ModulePath, effectiveConfiguration, moduleImportFramework);
         var modulePath = string.IsNullOrWhiteSpace(options.ModulePath)
             ? "PSPublishModule"

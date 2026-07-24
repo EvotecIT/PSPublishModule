@@ -6,6 +6,41 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void ModuleReleasePlan_LegacyScriptWithoutFramework_PreservesHostFallback()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var buildScript = Path.Combine(root, "Build", "Build-Module.ps1");
+            Directory.CreateDirectory(Path.GetDirectoryName(buildScript)!);
+            File.WriteAllText(buildScript, "# legacy module build");
+
+            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = ".",
+                        ScriptPath = "Build/Build-Module.ps1"
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success);
+            Assert.NotNull(result.ModulePlan);
+            Assert.Null(result.ModulePlan!.Framework);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void ToolReleasePlan_AppliesOverridesAcrossSelectedTarget()
     {
         var root = CreateSandbox();

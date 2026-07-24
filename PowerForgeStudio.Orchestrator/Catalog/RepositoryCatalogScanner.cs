@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PowerForgeStudio.Domain.Catalog;
 
 namespace PowerForgeStudio.Orchestrator.Catalog;
@@ -51,18 +52,130 @@ public sealed class RepositoryCatalogScanner
     private static RepositoryCatalogEntry InspectDirectory(string directoryPath, bool includeImmediateChildBuildFolders)
     {
         var moduleBuildScript = FindBuildScript(directoryPath, "Build-Module.ps1", includeImmediateChildBuildFolders);
-        var projectBuildScript = FindBuildScript(directoryPath, "Build-Project.ps1", includeImmediateChildBuildFolders);
+        var releaseModuleBuildConfig = moduleBuildScript is null
+            ? FindReleaseModuleBuildConfig(directoryPath, includeImmediateChildBuildFolders)
+            : null;
+        var moduleBuildConfig = moduleBuildScript is null
+            ? releaseModuleBuildConfig ?? FindDirectModuleBuildConfig(directoryPath)
+            : null;
+        var moduleBuildInput = moduleBuildScript ?? moduleBuildConfig;
+        var projectBuildScript = releaseModuleBuildConfig is null
+            ? FindBuildScript(directoryPath, "Build-Project.ps1", includeImmediateChildBuildFolders)
+            : null;
         var hasWebsiteSignals = HasWebsiteSignals(directoryPath);
 
         return new RepositoryCatalogEntry(
             Name: Path.GetFileName(directoryPath),
             RootPath: directoryPath,
-            RepositoryKind: DetermineKind(moduleBuildScript, projectBuildScript, hasWebsiteSignals),
+            RepositoryKind: DetermineKind(moduleBuildInput, projectBuildScript, hasWebsiteSignals),
             WorkspaceKind: DetermineWorkspaceKind(directoryPath),
-            ModuleBuildScriptPath: moduleBuildScript,
+            ModuleBuildScriptPath: moduleBuildInput,
             ProjectBuildScriptPath: projectBuildScript,
             IsWorktree: IsWorktree(directoryPath),
             HasWebsiteSignals: hasWebsiteSignals);
+    }
+
+    private static string? FindReleaseModuleBuildConfig(string directoryPath, bool includeImmediateChildBuildFolders)
+    {
+        foreach (var releaseConfigPath in EnumerateBuildFiles(directoryPath, "release.json", includeImmediateChildBuildFolders))
+        {
+            var moduleConfigPath = ResolveModuleConfigFromRelease(releaseConfigPath);
+            if (moduleConfigPath is not null)
+            {
+                return moduleConfigPath;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? FindDirectModuleBuildConfig(string directoryPath)
+    {
+        var directConfig = Path.Combine(directoryPath, "powerforge.json");
+        return IsModulePipelineConfig(directConfig) ? directConfig : null;
+    }
+
+    private static IEnumerable<string> EnumerateBuildFiles(string directoryPath, string fileName, bool includeImmediateChildBuildFolders)
+    {
+        var directCandidate = Path.Combine(directoryPath, "Build", fileName);
+        if (File.Exists(directCandidate))
+        {
+            yield return directCandidate;
+        }
+
+        if (!includeImmediateChildBuildFolders)
+        {
+            yield break;
+        }
+
+        foreach (var childDirectory in Directory.EnumerateDirectories(directoryPath))
+        {
+            var nestedCandidate = Path.Combine(childDirectory, "Build", fileName);
+            if (File.Exists(nestedCandidate))
+            {
+                yield return nestedCandidate;
+            }
+        }
+    }
+
+    private static string? ResolveModuleConfigFromRelease(string releaseConfigPath)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(
+                File.ReadAllText(releaseConfigPath),
+                new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
+            if (!document.RootElement.TryGetProperty("Module", out var module) ||
+                module.ValueKind != JsonValueKind.Object ||
+                !module.TryGetProperty("ConfigPath", out var configPathElement))
+            {
+                return null;
+            }
+
+            var configuredPath = configPathElement.GetString();
+            if (string.IsNullOrWhiteSpace(configuredPath))
+            {
+                return null;
+            }
+
+            var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
+            var repositoryRoot = releaseDirectory;
+            if (module.TryGetProperty("RepositoryRoot", out var rootElement) &&
+                !string.IsNullOrWhiteSpace(rootElement.GetString()))
+            {
+                repositoryRoot = Path.GetFullPath(Path.Combine(releaseDirectory, rootElement.GetString()!));
+            }
+
+            var fullPath = Path.GetFullPath(Path.IsPathRooted(configuredPath)
+                ? configuredPath
+                : Path.Combine(repositoryRoot, configuredPath));
+            return IsModulePipelineConfig(fullPath) ? fullPath : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsModulePipelineConfig(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(
+                File.ReadAllText(path),
+                new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
+            return document.RootElement.TryGetProperty("Segments", out var segments) &&
+                   segments.ValueKind == JsonValueKind.Array;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static string? FindBuildScript(string directoryPath, string fileName, bool includeImmediateChildBuildFolders)

@@ -74,6 +74,48 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains(adapter.ArtifactFiles, path => path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task ExecuteAsync_UsesDiscoveredJsonModuleConfigWithoutLegacyScript()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("JsonModuleRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("JsonModuleRepo", "Build"));
+        File.WriteAllText(Path.Combine(buildDirectory, "Build-Project.ps1"), "# unified entry point");
+        var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+        File.WriteAllText(moduleConfig, """{ "SchemaVersion": 1, "Segments": [] }""");
+        File.WriteAllText(
+            Path.Combine(buildDirectory, "release.json"),
+            """
+            {
+              "Module": {
+                "RepositoryRoot": "..",
+                "ConfigPath": "powerforge.json"
+              }
+            }
+            """);
+
+        PowerShellRunRequest? captured = null;
+        var moduleRunner = new CapturingPowerShellRunner(request =>
+        {
+            captured = request;
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        });
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(moduleRunner));
+
+        var result = await service.ExecuteAsync(repositoryRoot);
+
+        Assert.True(result.Succeeded);
+        var adapter = Assert.Single(result.AdapterResults);
+        Assert.Equal(ReleaseBuildAdapterKind.ModuleBuild, adapter.AdapterKind);
+        Assert.NotNull(captured);
+        Assert.Contains($"ConfigPath = '{moduleConfig}'", captured!.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("$buildScriptPath =", captured.CommandText!, StringComparison.Ordinal);
+    }
+
     private sealed class TemporaryDirectoryScope : IDisposable
     {
         public TemporaryDirectoryScope()
@@ -101,5 +143,10 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
     {
         public PowerShellRunResult Run(PowerShellRunRequest request)
             => throw new InvalidOperationException("PowerShell should not be used for project builds when shared host service is available.");
+    }
+
+    private sealed class CapturingPowerShellRunner(Func<PowerShellRunRequest, PowerShellRunResult> execute) : IPowerShellRunner
+    {
+        public PowerShellRunResult Run(PowerShellRunRequest request) => execute(request);
     }
 }

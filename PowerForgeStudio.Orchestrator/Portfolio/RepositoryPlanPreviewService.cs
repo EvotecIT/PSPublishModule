@@ -86,10 +86,40 @@ public sealed class RepositoryPlanPreviewService
     private async Task<RepositoryPlanResult> RunModulePlanAsync(RepositoryPortfolioItem item, CancellationToken cancellationToken)
     {
         var modulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath();
+        var moduleBuildInput = item.Repository.ModuleBuildScriptPath!;
+        if (string.Equals(Path.GetExtension(moduleBuildInput), ".json", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                _ = new ModulePublishConfigurationReader().Read(moduleBuildInput);
+                return new RepositoryPlanResult(
+                    AdapterKind: RepositoryPlanAdapterKind.ModuleJsonExport,
+                    Status: RepositoryPlanStatus.Succeeded,
+                    Summary: "Module JSON config discovered.",
+                    PlanPath: moduleBuildInput,
+                    ExitCode: 0,
+                    DurationSeconds: 0,
+                    OutputTail: null,
+                    ErrorTail: null);
+            }
+            catch (Exception ex)
+            {
+                return new RepositoryPlanResult(
+                    AdapterKind: RepositoryPlanAdapterKind.ModuleJsonExport,
+                    Status: RepositoryPlanStatus.Failed,
+                    Summary: "Module JSON config validation failed.",
+                    PlanPath: null,
+                    ExitCode: 1,
+                    DurationSeconds: 0,
+                    OutputTail: null,
+                    ErrorTail: TrimTail(ex.Message));
+            }
+        }
+
         var outputPath = BuildPlanOutputPath(item.Name, RepositoryPlanAdapterKind.ModuleJsonExport, "powerforge.json");
         var execution = await _moduleBuildHostService.ExportPipelineJsonAsync(new ModuleBuildHostExportRequest {
             RepositoryRoot = item.Repository.RootPath,
-            ScriptPath = item.Repository.ModuleBuildScriptPath!,
+            ScriptPath = moduleBuildInput,
             ModulePath = modulePath,
             OutputPath = outputPath
         }, cancellationToken);
