@@ -5,6 +5,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class ModuleBuildHostBuildRequest
 {
+    internal IPowerForgeReleaseProgressReporterV2? Progress { get; set; }
+
     /// <summary>
     /// Repository root used as the command working directory.
     /// </summary>

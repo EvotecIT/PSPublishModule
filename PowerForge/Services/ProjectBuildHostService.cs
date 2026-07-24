@@ -142,7 +142,8 @@ public sealed class ProjectBuildHostService
                 preparation,
                 request.ExecuteBuild,
                 request.RemotePublishAttempted,
-                request.CoordinatedReleaseCheckpointActive);
+                request.CoordinatedReleaseCheckpointActive,
+                request.Progress);
 
         return new ProjectBuildHostExecutionResult {
             Success = workflow.Result.Success,

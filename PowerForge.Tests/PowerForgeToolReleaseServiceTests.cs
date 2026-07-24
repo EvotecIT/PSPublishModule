@@ -83,6 +83,7 @@ public sealed class PowerForgeToolReleaseServiceTests
                     return new PowerForgeToolReleaseService.ProcessExecutionResult(0, string.Empty, string.Empty);
                 });
             var outputPath = Path.Combine(root, "output");
+            var progress = new RecordingReleaseProgress();
             var result = service.Run(new PowerForgeToolReleasePlan
             {
                 ProjectRoot = root,
@@ -111,9 +112,18 @@ public sealed class PowerForgeToolReleaseServiceTests
                         }
                     }
                 }
-            });
+            }, progress);
 
             Assert.True(result.Success, result.ErrorMessage);
+            var progressItem = Assert.Single(progress.Planned);
+            Assert.Contains("Sample.Tool", progressItem.Title, StringComparison.Ordinal);
+            Assert.Equal(
+                new[]
+                {
+                    PowerForgeReleaseProgressItemState.Started,
+                    PowerForgeReleaseProgressItemState.Completed
+                },
+                progress.Updates);
             Assert.NotNull(captured);
             Assert.Contains("/p:RestoreLockedMode=false", captured!.Arguments, StringComparison.Ordinal);
             Assert.Contains(
@@ -125,6 +135,30 @@ public sealed class PowerForgeToolReleaseServiceTests
         {
             try { Directory.Delete(root, recursive: true); } catch { }
         }
+    }
+
+    private sealed class RecordingReleaseProgress : IPowerForgeReleaseProgressReporterV2
+    {
+        public List<PowerForgeReleaseProgressItem> Planned { get; } = new();
+
+        public List<PowerForgeReleaseProgressItemState> Updates { get; } = new();
+
+        public void PhaseStarted(PowerForgeReleaseProgressPhase phase, int totalItems, string? detail = null) { }
+
+        public void PhaseCompleted(PowerForgeReleaseProgressPhase phase, string? detail = null) { }
+
+        public void PhaseFailed(PowerForgeReleaseProgressPhase phase, string? detail = null) { }
+
+        public void ItemsPlanned(
+            PowerForgeReleaseProgressPhase phase,
+            IReadOnlyList<PowerForgeReleaseProgressItem> items)
+            => Planned.AddRange(items);
+
+        public void ItemUpdated(
+            PowerForgeReleaseProgressItem item,
+            PowerForgeReleaseProgressItemState state,
+            string? detail = null)
+            => Updates.Add(state);
     }
 
     private static string ReadProperty(string arguments, string prefix)

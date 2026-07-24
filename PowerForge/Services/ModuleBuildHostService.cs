@@ -41,7 +41,8 @@ public sealed class ModuleBuildHostService
             TimeSpan.FromMinutes(15),
             preferPwsh: !FrameworkCompatibility.IsWindows(),
             requiredRuntimeMajor: 0,
-            cancellationToken);
+            progress: null,
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>
@@ -63,7 +64,8 @@ public sealed class ModuleBuildHostService
             timeout,
             preferPwsh: hostRequirements.PreferPwsh,
             requiredRuntimeMajor: hostRequirements.RequiredRuntimeMajor,
-            cancellationToken);
+            progress: request.Progress,
+            cancellationToken: cancellationToken);
     }
 
     private async Task<ModuleBuildHostExecutionResult> RunCommandAsync(
@@ -72,33 +74,78 @@ public sealed class ModuleBuildHostService
         TimeSpan timeout,
         bool preferPwsh,
         int requiredRuntimeMajor,
+        IPowerForgeReleaseProgressReporterV2? progress,
         CancellationToken cancellationToken)
     {
         var startedAt = Stopwatch.StartNew();
         var executableOverride = Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE");
+        var environment = progress is null
+            ? null
+            : new Dictionary<string, string?>
+            {
+                [ModulePipelineProgressProtocol.EnvironmentVariable] = "1"
+            };
+        Action<string>? outputLineReceived = progress is null
+            ? null
+            : line => ForwardProgress(line, progress);
         var runRequest = requiredRuntimeMajor > 0
             ? PowerShellRunRequest.ForCompatibleCommand(
                 commandText: script,
                 timeout: timeout,
                 requiredRuntimeMajor: requiredRuntimeMajor,
                 workingDirectory: workingDirectory,
-                executableOverride: executableOverride)
+                environmentVariables: environment,
+                executableOverride: executableOverride,
+                captureOutput: true,
+                captureError: true,
+                outputLineReceived: outputLineReceived,
+                errorLineReceived: null)
             : PowerShellRunRequest.ForCommand(
                 commandText: script,
                 timeout: timeout,
                 preferPwsh: preferPwsh,
                 workingDirectory: workingDirectory,
-                executableOverride: executableOverride);
+                environmentVariables: environment,
+                executableOverride: executableOverride,
+                captureOutput: true,
+                captureError: true,
+                outputLineReceived: outputLineReceived,
+                errorLineReceived: null);
         var result = await Task.Run(() => _powerShellRunner.Run(runRequest), cancellationToken).ConfigureAwait(false);
         startedAt.Stop();
 
         return new ModuleBuildHostExecutionResult {
             ExitCode = result.ExitCode,
             Duration = startedAt.Elapsed,
-            StandardOutput = result.StdOut,
+            StandardOutput = progress is null ? result.StdOut : StripProgressLines(result.StdOut),
             StandardError = result.StdErr,
             Executable = result.Executable
         };
+    }
+
+    private static string StripProgressLines(string output)
+    {
+        if (string.IsNullOrEmpty(output))
+            return output;
+
+        var lines = output
+            .Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)
+            .Where(line => !ModulePipelineProgressProtocol.IsProtocolLine(line));
+        return string.Join(Environment.NewLine, lines).TrimEnd('\r', '\n');
+    }
+
+    private static void ForwardProgress(
+        string line,
+        IPowerForgeReleaseProgressReporterV2 progress)
+    {
+        if (!ModulePipelineProgressProtocol.TryParse(line, out var message) || message is null)
+            return;
+
+        if (message.Items is { Length: > 0 })
+            progress.ItemsPlanned(PowerForgeReleaseProgressPhase.Module, message.Items);
+
+        if (message.Item is not null && message.State.HasValue)
+            progress.ItemUpdated(message.Item, message.State.Value, message.Detail);
     }
 
     private static PowerShellHostRequirements ResolveHostRequirements(string? framework)

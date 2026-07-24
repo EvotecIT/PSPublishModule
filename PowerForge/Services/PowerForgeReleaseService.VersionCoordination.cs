@@ -117,6 +117,14 @@ internal sealed partial class PowerForgeReleaseService
             ReleaseVersionFloor = releaseVersionFloor,
             ReleaseVersionFloorProject = releaseVersionFloorProject
         };
+        if (request.Progress is IPowerForgeReleaseProgressReporterV2 detailedProgress)
+        {
+            packageRequest.Progress = new ProjectBuildReleaseProgressAdapter(
+                detailedProgress,
+                forcePlanOnly
+                    ? PowerForgeReleaseProgressPhase.Versioning
+                    : PowerForgeReleaseProgressPhase.Packages);
+        }
 
         return _executePackages(packageRequest, packages, configPath);
     }

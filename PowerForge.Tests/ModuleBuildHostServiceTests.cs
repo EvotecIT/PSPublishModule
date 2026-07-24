@@ -1,4 +1,6 @@
 using PowerForge;
+using System.Text;
+using System.Text.Json;
 
 namespace PowerForge.Tests;
 
@@ -271,6 +273,86 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Contains("$buildScriptArguments['Configuration'] = 'Release'", captured.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("$buildScriptArguments += @('-Configuration', 'Release')", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task ExecuteBuildAsync_ForwardsStructuredModuleProgressFromChildHost()
+    {
+        var progress = new RecordingReleaseProgress();
+        PowerShellRunRequest? captured = null;
+        var runner = new StubPowerShellRunner(request =>
+        {
+            captured = request;
+            var item = new PowerForgeReleaseProgressItem
+            {
+                Phase = PowerForgeReleaseProgressPhase.Module,
+                Key = "build:stage",
+                Title = "Stage to staging",
+                Kind = ModulePipelineStepKind.Build.ToString(),
+                Position = 1,
+                Total = 1
+            };
+            var planned = JsonSerializer.Serialize(new ModulePipelineProgressProtocolMessage
+            {
+                Items = new[] { item }
+            });
+            var completed = JsonSerializer.Serialize(new ModulePipelineProgressProtocolMessage
+            {
+                Item = item,
+                State = PowerForgeReleaseProgressItemState.Completed
+            });
+            request.OutputLineReceived!(
+                "##powerforge-module-progress-v1##" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(planned)));
+            request.OutputLineReceived!(
+                "##powerforge-module-progress-v1##" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(completed)));
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        });
+        var service = new ModuleBuildHostService(runner);
+
+        var result = await service.ExecuteBuildAsync(new ModuleBuildHostBuildRequest
+        {
+            RepositoryRoot = @"C:\repo",
+            ScriptPath = @"C:\repo\Build\Build-Module.ps1",
+            ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
+            Framework = "auto",
+            Progress = progress
+        });
+
+        Assert.True(result.Succeeded);
+        Assert.DoesNotContain("##powerforge-module-progress", result.StandardOutput, StringComparison.Ordinal);
+        Assert.NotNull(captured);
+        Assert.Equal("1", captured!.EnvironmentVariables![ModulePipelineProgressProtocol.EnvironmentVariable]);
+        Assert.NotNull(captured.OutputLineReceived);
+        var plannedItem = Assert.Single(progress.Planned);
+        Assert.Equal("build:stage", plannedItem.Key);
+        var update = Assert.Single(progress.Updates);
+        Assert.Equal(PowerForgeReleaseProgressItemState.Completed, update.State);
+    }
+
+    private sealed class RecordingReleaseProgress : IPowerForgeReleaseProgressReporterV2
+    {
+        public List<PowerForgeReleaseProgressItem> Planned { get; } = new();
+
+        public List<(PowerForgeReleaseProgressItem Item, PowerForgeReleaseProgressItemState State)> Updates { get; } = new();
+
+        public void PhaseStarted(PowerForgeReleaseProgressPhase phase, int totalItems, string? detail = null) { }
+
+        public void PhaseCompleted(PowerForgeReleaseProgressPhase phase, string? detail = null) { }
+
+        public void PhaseFailed(PowerForgeReleaseProgressPhase phase, string? detail = null) { }
+
+        public void ItemsPlanned(
+            PowerForgeReleaseProgressPhase phase,
+            IReadOnlyList<PowerForgeReleaseProgressItem> items)
+            => Planned.AddRange(items);
+
+        public void ItemUpdated(
+            PowerForgeReleaseProgressItem item,
+            PowerForgeReleaseProgressItemState state,
+            string? detail = null)
+            => Updates.Add((item, state));
     }
 
     private sealed class StubPowerShellRunner : IPowerShellRunner

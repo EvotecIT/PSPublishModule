@@ -225,13 +225,101 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = configPath,
                     ModuleOnly = true,
-                    PlanOnly = true
+                    PlanOnly = true,
+                    ModuleRunMode = publishUnifiedGitHub
+                        ? ConfigurationGateMode.Publish
+                        : ConfigurationGateMode.Build
                 });
 
             Assert.True(result.Success);
             Assert.NotNull(result.ModulePlan);
             Assert.True(result.ModulePlan!.PowerForgeReleaseStage);
             Assert.Equal(publishUnifiedGitHub, result.ModulePlan.UnifiedGitHubRelease);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ModuleReleaseStage_OmittedRunModeDefaultsToBuildAndSuppressesUnifiedGitHubPublishing()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var configPath = Path.Combine(root, "release.json");
+            var scriptPath = Path.Combine(root, "Build-Module.ps1");
+            File.WriteAllText(configPath, "{}");
+            File.WriteAllText(scriptPath, "param([switch] $PowerForgeReleaseStage)");
+
+            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = root,
+                        ScriptPath = scriptPath
+                    },
+                    GitHub = new PowerForgeReleaseGitHubOptions { Publish = true }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = configPath,
+                    ModuleOnly = true,
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success);
+            Assert.NotNull(result.ModulePlan);
+            Assert.Equal(ConfigurationGateMode.Build, result.ModulePlan!.RunMode);
+            Assert.False(result.ModulePlan.UnifiedGitHubRelease);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(ConfigurationGateMode.Manifest, false)]
+    [InlineData(ConfigurationGateMode.Documentation, false)]
+    [InlineData(ConfigurationGateMode.Build, false)]
+    [InlineData(ConfigurationGateMode.Publish, true)]
+    public void ModuleReleaseStage_UsesModernHostDefaultAndOnlyPublishesUnifiedGitHubAtPublishGate(
+        ConfigurationGateMode runMode,
+        bool expectedUnifiedGitHub)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var configPath = Path.Combine(root, "release.json");
+            var scriptPath = Path.Combine(root, "Build-Module.ps1");
+            File.WriteAllText(configPath, "{}");
+            File.WriteAllText(scriptPath, "param([switch] $PowerForgeReleaseStage)");
+
+            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = root,
+                        ScriptPath = scriptPath
+                    },
+                    GitHub = new PowerForgeReleaseGitHubOptions { Publish = true }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = configPath,
+                    ModuleOnly = true,
+                    PlanOnly = true,
+                    ModuleRunMode = runMode
+                });
+
+            Assert.True(result.Success);
+            Assert.NotNull(result.ModulePlan);
+            Assert.Equal("auto", result.ModulePlan!.Framework);
+            Assert.Equal(expectedUnifiedGitHub, result.ModulePlan.UnifiedGitHubRelease);
         }
         finally
         {
@@ -322,6 +410,84 @@ public sealed partial class PowerForgeReleaseServiceTests
                 publish.AssetFilePaths.OrderBy(static path => path));
             Assert.DoesNotContain(powerForgeExecutable, publish.AssetFilePaths);
             Assert.DoesNotContain(powerForgeWebExecutable, publish.AssetFilePaths);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void TargetedToolRelease_DoesNotApplyTheInactiveModuleBuildGateToUnifiedGitHubPublishing()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var zipPath = Path.Combine(root, "PowerForge-1.0.7-osx-arm64.zip");
+            File.WriteAllText(zipPath, "zip");
+            var publishCalls = new List<GitHubReleasePublishRequest>();
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => new PowerForgeToolReleasePlan(),
+                runTools: _ => new PowerForgeToolReleaseResult
+                {
+                    Success = true,
+                    Artefacts =
+                    [
+                        new PowerForgeToolReleaseArtifactResult
+                        {
+                            Target = "PowerForge",
+                            Version = "1.0.7",
+                            ZipPath = zipPath
+                        }
+                    ]
+                },
+                publishGitHubRelease: request =>
+                {
+                    publishCalls.Add(request);
+                    return new GitHubReleasePublishResult { Succeeded = true };
+                });
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = root,
+                        ScriptPath = "Missing-Build-Module.ps1"
+                    },
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        Targets =
+                        [
+                            new PowerForgeToolReleaseTarget
+                            {
+                                Name = "PowerForge",
+                                ProjectPath = "PowerForge.Cli.csproj"
+                            }
+                        ],
+                        GitHub = new PowerForgeToolReleaseGitHubOptions { Publish = false }
+                    },
+                    GitHub = new PowerForgeReleaseGitHubOptions
+                    {
+                        Publish = true,
+                        VersionSource = PowerForgeReleaseVersionSource.Assets,
+                        Owner = "EvotecIT",
+                        Repository = "PSPublishModule",
+                        Token = "token"
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    Targets = ["PowerForge"]
+                });
+
+            Assert.True(result.Success);
+            Assert.Null(result.ModulePlan);
+            Assert.Single(publishCalls);
+            Assert.NotNull(result.UnifiedGitHubRelease);
         }
         finally
         {

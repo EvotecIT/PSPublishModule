@@ -18,7 +18,10 @@ internal sealed class ModuleBuildWorkflowService
             throw new ArgumentNullException(nameof(logger));
 
         _planPipeline = planPipeline ?? (spec => new ModulePipelineRunner(logger).Plan(spec));
-        _runPipeline = runPipeline ?? ((spec, plan) => new ModulePipelineRunner(logger).Run(spec, plan));
+        _runPipeline = runPipeline ?? ((spec, plan) => new ModulePipelineRunner(logger).Run(
+            spec,
+            plan,
+            ModulePipelineProgressProtocol.CreateReporterFromEnvironment(plan)));
         _runInteractive = runInteractive;
         _writeSummary = writeSummary ?? (_ => { });
     }

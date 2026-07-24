@@ -49,10 +49,10 @@ internal sealed partial class PowerForgeReleaseService
     private readonly ILogger _logger;
     private readonly Func<ProjectBuildHostRequest, ProjectBuildConfiguration, string, ProjectBuildHostExecutionResult> _executePackages;
     private readonly Func<PowerForgeToolReleaseSpec, string, PowerForgeReleaseRequest, PowerForgeToolReleasePlan> _planTools;
-    private readonly Func<PowerForgeToolReleasePlan, PowerForgeToolReleaseResult> _runTools;
+    private readonly Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, PowerForgeToolReleaseResult> _runTools;
     private readonly Func<PowerForgeToolReleaseSpec, string, (DotNetPublishSpec Spec, string SourceConfigPath)> _loadDotNetToolsSpec;
     private readonly Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, ISet<PowerForgeReleaseToolOutputKind>, DotNetPublishPlan> _planDotNetTools;
-    private readonly Func<DotNetPublishPlan, DotNetPublishResult> _runDotNetTools;
+    private readonly Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, DotNetPublishResult> _runDotNetTools;
     private readonly Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> _publishGitHubRelease;
     private readonly Func<PowerForgeWingetSubmissionPlan, PowerForgeWingetSubmissionResult> _submitWinget;
     private readonly Func<AppleAppArchiveRequest, AppleAppArchiveResult> _archiveAppleApp;
@@ -95,7 +95,11 @@ internal sealed partial class PowerForgeReleaseService
             plan => new WingetSubmissionService(logger).Run(plan),
             request => new AppleAppArchiveService().CreateArchiveAsync(request).GetAwaiter().GetResult(),
             request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult(),
-            null)
+            null,
+            runToolsWithProgress: (plan, progress) =>
+                new PowerForgeToolReleaseService(logger).Run(plan, progress),
+            runDotNetToolsWithProgress: (plan, progress) =>
+                new DotNetPublishPipelineRunner(logger).Run(plan, progress))
     {
     }
 
@@ -142,15 +146,21 @@ internal sealed partial class PowerForgeReleaseService
         Func<AppStoreConnectApiCredential, string, AppStoreConnectBuildUploadInfo?>? getAppleBuildUpload = null,
         Func<PowerForgeAppleAppReleaseTargetPlan, bool>? generateAppleProject = null,
         Action<TimeSpan>? delay = null,
-        AppleReleaseArtifactService? appleArtifactService = null)
+        AppleReleaseArtifactService? appleArtifactService = null,
+        Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, PowerForgeToolReleaseResult>? runToolsWithProgress = null,
+        Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, DotNetPublishResult>? runDotNetToolsWithProgress = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
         _planTools = planTools ?? throw new ArgumentNullException(nameof(planTools));
-        _runTools = runTools ?? throw new ArgumentNullException(nameof(runTools));
+        if (runTools is null)
+            throw new ArgumentNullException(nameof(runTools));
+        _runTools = runToolsWithProgress ?? ((plan, _) => runTools(plan));
         _loadDotNetToolsSpec = loadDotNetToolsSpec ?? throw new ArgumentNullException(nameof(loadDotNetToolsSpec));
         _planDotNetTools = planDotNetTools ?? throw new ArgumentNullException(nameof(planDotNetTools));
-        _runDotNetTools = runDotNetTools ?? throw new ArgumentNullException(nameof(runDotNetTools));
+        if (runDotNetTools is null)
+            throw new ArgumentNullException(nameof(runDotNetTools));
+        _runDotNetTools = runDotNetToolsWithProgress ?? ((plan, _) => runDotNetTools(plan));
         _publishGitHubRelease = publishGitHubRelease ?? throw new ArgumentNullException(nameof(publishGitHubRelease));
         _submitWinget = submitWinget ?? (plan => new WingetSubmissionService(logger).Run(plan));
         _archiveAppleApp = archiveAppleApp ?? (request => new AppleAppArchiveService().CreateArchiveAsync(request).GetAwaiter().GetResult());
@@ -205,7 +215,6 @@ internal sealed partial class PowerForgeReleaseService
         var runWorkspaceValidation = !explicitAppleAction &&
                                      spec.WorkspaceValidation is not null &&
                                      !request.SkipWorkspaceValidation;
-        var publishUnifiedGitHub = !explicitAppleAction && ShouldPublishUnifiedGitHub(spec, request);
         DotNetPublishSpec? dotNetSpecForTools = null;
         string? dotNetSourcePathForTools = null;
 
@@ -258,6 +267,8 @@ internal sealed partial class PowerForgeReleaseService
         {
             runPackages = false;
         }
+        var publishUnifiedGitHub = !explicitAppleAction &&
+                                   ShouldPublishUnifiedGitHub(spec, request, runModule);
 
         ValidateVersionCoordinationConfiguration(spec, runModule);
 
@@ -473,7 +484,10 @@ internal sealed partial class PowerForgeReleaseService
 
                     if (!request.PlanOnly && !request.ValidateOnly)
                     {
-                        var dotNetTools = _runDotNetTools(dotNetPlan);
+                        var toolProgress = request.Progress is IPowerForgeReleaseProgressReporterV2 detailedProgress
+                            ? new DotNetPublishReleaseProgressAdapter(detailedProgress, dotNetPlan)
+                            : null;
+                        var dotNetTools = _runDotNetTools(dotNetPlan, toolProgress);
                         FilterDotNetToolResult(dotNetTools, selectedToolOutputs);
                         result.DotNetTools = dotNetTools;
                         if (!dotNetTools.Succeeded)
@@ -514,7 +528,9 @@ internal sealed partial class PowerForgeReleaseService
 
                     if (!request.PlanOnly && !request.ValidateOnly)
                     {
-                        var tools = _runTools(toolPlan);
+                        var tools = _runTools(
+                            toolPlan,
+                            request.Progress as IPowerForgeReleaseProgressReporterV2);
                         result.Tools = tools;
                         if (!tools.Success)
                         {
@@ -883,7 +899,7 @@ internal sealed partial class PowerForgeReleaseService
             ScriptPath = scriptPath,
             ModulePath = modulePath,
             Configuration = configurationOverride,
-            Framework = request.ModuleFramework ?? options.Framework,
+            Framework = request.ModuleFramework ?? options.Framework ?? "auto",
             RunMode = ResolveModuleRunMode(options, request, packagePublishingRequested),
             PowerForgeReleaseStage = true,
             UnifiedGitHubRelease = publishUnifiedGitHub,
@@ -908,6 +924,7 @@ internal sealed partial class PowerForgeReleaseService
             FailOnNewDiagnostics = request.ModuleFailOnNewDiagnostics,
             FailOnDiagnosticsSeverity = request.ModuleFailOnDiagnosticsSeverity
         };
+        buildRequest.Progress = request.Progress as IPowerForgeReleaseProgressReporterV2;
 
         var plan = new PowerForgeModuleReleasePlanSummary
         {
@@ -2230,13 +2247,26 @@ internal sealed partial class PowerForgeReleaseService
         }
     }
 
-    private static bool ShouldPublishUnifiedGitHub(PowerForgeReleaseSpec spec, PowerForgeReleaseRequest request)
+    internal static bool ShouldPublishUnifiedGitHub(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        bool moduleSelected)
     {
         if (request.ToolsOnly && request.PublishToolGitHub == true)
             return false;
 
         if (request.PackagesOnly && request.PublishProjectGitHub == true)
             return false;
+
+        if (moduleSelected && spec.Module is not null)
+        {
+            var packagePublishingRequested =
+                !request.ModuleOnly &&
+                ((request.PublishNuget ?? spec.Packages?.PublishNuget) == true ||
+                 (request.PublishProjectGitHub ?? spec.Packages?.PublishGitHub) == true);
+            if (ResolveModuleRunMode(spec.Module!, request, packagePublishingRequested) != ConfigurationGateMode.Publish)
+                return false;
+        }
 
         return spec.GitHub is not null && (request.PublishProjectGitHub ?? spec.GitHub.Publish);
     }

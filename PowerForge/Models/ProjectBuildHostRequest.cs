@@ -5,6 +5,7 @@ namespace PowerForge;
 /// </summary>
 public sealed class ProjectBuildHostRequest
 {
+    internal IProjectBuildProgressReporter? Progress { get; set; }
     internal Action? RemotePublishAttempted { get; set; }
     internal bool CoordinatedReleaseCheckpointActive { get; set; }
     internal string? ReleaseVersionFloor { get; set; }

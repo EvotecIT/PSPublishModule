@@ -219,13 +219,17 @@ internal sealed class PowerForgeToolReleaseService
     /// <summary>
     /// Executes the planned tool releases.
     /// </summary>
-    public PowerForgeToolReleaseResult Run(PowerForgeToolReleasePlan plan)
+    public PowerForgeToolReleaseResult Run(
+        PowerForgeToolReleasePlan plan,
+        IPowerForgeReleaseProgressReporterV2? progress = null)
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
 
         var artefacts = new List<PowerForgeToolReleaseArtifactResult>();
         var manifests = new List<string>();
+        var progressItems = CreateProgressItems(plan);
+        progress?.ItemsPlanned(PowerForgeReleaseProgressPhase.Tools, progressItems.Values.ToArray());
 
         try
         {
@@ -234,7 +238,22 @@ internal sealed class PowerForgeToolReleaseService
                 var targetArtefacts = new List<PowerForgeToolReleaseArtifactResult>();
                 foreach (var combination in target.Combinations ?? Array.Empty<PowerForgeToolReleaseCombinationPlan>())
                 {
-                    targetArtefacts.Add(PublishOne(plan, target, combination));
+                    var progressKey = BuildProgressKey(target, combination);
+                    progressItems.TryGetValue(progressKey, out var progressItem);
+                    if (progressItem is not null)
+                        progress?.ItemUpdated(progressItem, PowerForgeReleaseProgressItemState.Started);
+                    try
+                    {
+                        targetArtefacts.Add(PublishOne(plan, target, combination));
+                        if (progressItem is not null)
+                            progress?.ItemUpdated(progressItem, PowerForgeReleaseProgressItemState.Completed);
+                    }
+                    catch (Exception ex)
+                    {
+                        if (progressItem is not null)
+                            progress?.ItemUpdated(progressItem, PowerForgeReleaseProgressItemState.Failed, ex.Message);
+                        throw;
+                    }
                 }
 
                 artefacts.AddRange(targetArtefacts);
@@ -263,6 +282,31 @@ internal sealed class PowerForgeToolReleaseService
             };
         }
     }
+
+    private static IReadOnlyDictionary<string, PowerForgeReleaseProgressItem> CreateProgressItems(
+        PowerForgeToolReleasePlan plan)
+    {
+        var combinations = (plan.Targets ?? Array.Empty<PowerForgeToolReleaseTargetPlan>())
+            .SelectMany(target => (target.Combinations ?? Array.Empty<PowerForgeToolReleaseCombinationPlan>())
+                .Select(combination => (Target: target, Combination: combination)))
+            .ToArray();
+        return combinations
+            .Select((entry, index) => new PowerForgeReleaseProgressItem
+            {
+                Phase = PowerForgeReleaseProgressPhase.Tools,
+                Key = BuildProgressKey(entry.Target, entry.Combination),
+                Title = $"Publish {entry.Target.Name} ({entry.Combination.Framework}, {entry.Combination.Runtime}, {entry.Combination.Flavor})",
+                Kind = "ToolPublish",
+                Position = index + 1,
+                Total = combinations.Length
+            })
+            .ToDictionary(item => item.Key, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string BuildProgressKey(
+        PowerForgeToolReleaseTargetPlan target,
+        PowerForgeToolReleaseCombinationPlan combination)
+        => $"tool:{target.Name}:{combination.Framework}:{combination.Runtime}:{combination.Flavor}";
 
     private PowerForgeToolReleaseArtifactResult PublishOne(
         PowerForgeToolReleasePlan plan,

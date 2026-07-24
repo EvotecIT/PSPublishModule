@@ -31,7 +31,9 @@
         },
         "Framework": {
           "type": [ "string", "null" ],
-          "enum": [ "auto", "net10.0", "net8.0", null ]
+          "enum": [ "auto", "net10.0", "net8.0", null ],
+          "default": "auto",
+          "description": "PowerShell module target framework and child-host requirement. Omitted or auto selects a compatible PowerShell 7 host; set an explicit framework only when the module requires it."
         },
         "NoDotnetBuild": { "type": [ "boolean", "null" ] },
         "ModuleVersion": { "type": [ "string", "null" ] },

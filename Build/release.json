@@ -13,6 +13,7 @@
     "IncludesPackages": false,
     "SynchronizeVersionWithPackages": true,
     "VersionPrimaryProject": "PowerForge",
+    "Framework": "auto",
     "ModuleVersion": "3.0.X",
     "TimeoutSeconds": 7200
   },
