@@ -30,7 +30,7 @@ public sealed partial class AppStoreConnectClient : IDisposable
     {
         _credential = credential ?? throw new ArgumentNullException(nameof(credential));
         _tokenGenerator = tokenGenerator ?? new AppStoreConnectJwtTokenGenerator();
-        _httpClient = httpClient ?? new HttpClient { BaseAddress = DefaultBaseUri };
+        _httpClient = httpClient ?? CreateDefaultHttpClient();
         _disposeClient = httpClient is null;
         if (_httpClient.BaseAddress is null)
             _httpClient.BaseAddress = DefaultBaseUri;
@@ -650,19 +650,14 @@ public sealed partial class AppStoreConnectClient : IDisposable
 
     private async Task<JsonDocument?> GetJsonAsync(string relativeUrl, CancellationToken cancellationToken, bool returnNullOnNotFound = false)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, relativeUrl);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _tokenGenerator.CreateToken(_credential));
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        var response = await SendGetWithTransientRetryAsync(relativeUrl, cancellationToken).ConfigureAwait(false);
         if (returnNullOnNotFound && response.StatusCode == HttpStatusCode.NotFound)
             return null;
 
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"App Store Connect API request failed ({(int)response.StatusCode} {response.ReasonPhrase}): {content}");
+            throw new InvalidOperationException($"App Store Connect API request failed ({(int)response.StatusCode} {response.ReasonPhrase}): {response.Content}");
 
-        return JsonDocument.Parse(content);
+        return JsonDocument.Parse(response.Content);
     }
 
     private async Task<JsonDocument?> SendJsonAsync(HttpMethod method, string relativeUrl, object body, CancellationToken cancellationToken)
