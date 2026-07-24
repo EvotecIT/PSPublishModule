@@ -69,22 +69,35 @@ public sealed class PowerForgeReleaseConfigScaffoldService
                 "powerforge.dotnetpublish.json",
                 Path.Combine(".powerforge", "powerforge.dotnetpublish.json"));
 
-        var moduleScriptPath = ResolveOptionalConfigPath(
+        var moduleConfigPath = ResolveOptionalConfigPath(
             projectRoot,
             explicitPath: null,
-            label: "Module build script",
-            Path.Combine("Module", "Build", "Build-Module.ps1"),
-            Path.Combine("Build", "Build-Module.ps1"));
+            label: "Module pipeline config",
+            "powerforge.json",
+            Path.Combine("Build", "powerforge.json"),
+            Path.Combine(".powerforge", "powerforge.json"));
+        var moduleScriptPath = string.IsNullOrWhiteSpace(moduleConfigPath)
+            ? ResolveOptionalConfigPath(
+                projectRoot,
+                explicitPath: null,
+                label: "Module build script",
+                Path.Combine("Module", "Build", "Build-Module.ps1"),
+                Path.Combine("Build", "Build-Module.ps1"))
+            : null;
 
         if (string.IsNullOrWhiteSpace(packageConfigPath) &&
             string.IsNullOrWhiteSpace(dotNetPublishConfigPath) &&
+            string.IsNullOrWhiteSpace(moduleConfigPath) &&
             string.IsNullOrWhiteSpace(moduleScriptPath))
             throw new InvalidOperationException(
-                "Could not find package, module, or DotNet publish inputs to scaffold from. Provide -PackagesConfigPath and/or -DotNetPublishConfigPath, or create Module/Build/Build-Module.ps1, Build/project.build.json, or Build/powerforge.dotnetpublish.json first.");
+                "Could not find package, module, or DotNet publish inputs to scaffold from. Provide -PackagesConfigPath and/or -DotNetPublishConfigPath, or create powerforge.json, Module/Build/Build-Module.ps1, Build/project.build.json, or Build/powerforge.dotnetpublish.json first.");
 
         var packages = string.IsNullOrWhiteSpace(packageConfigPath)
             ? null
             : LoadProjectBuildConfig(packageConfigPath!);
+        var modulePipeline = string.IsNullOrWhiteSpace(moduleConfigPath)
+            ? null
+            : LoadModulePipelineConfig(moduleConfigPath!);
 
         var spec = new PowerForgeReleaseSpec
         {
@@ -92,7 +105,7 @@ public sealed class PowerForgeReleaseConfigScaffoldService
                 ? "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/powerforge.release.schema.json"
                 : null,
             SchemaVersion = 1,
-            Module = BuildModuleSection(projectRoot, outputPath, moduleScriptPath),
+            Module = BuildModuleSection(projectRoot, outputPath, moduleConfigPath, moduleScriptPath, modulePipeline),
             Packages = packages,
             Tools = BuildToolsSection(request, outputPath, packages, dotNetPublishConfigPath),
             Outputs = new PowerForgeReleaseOutputsOptions
@@ -115,6 +128,7 @@ public sealed class PowerForgeReleaseConfigScaffoldService
             IncludesPackages = packages is not null,
             IncludesTools = spec.Tools is not null,
             PackagesConfigPath = packageConfigPath,
+            ModuleConfigPath = moduleConfigPath,
             ModuleScriptPath = moduleScriptPath,
             DotNetPublishConfigPath = dotNetPublishConfigPath,
             ToolGitHubOwner = spec.Tools?.GitHub.Owner,
@@ -189,6 +203,20 @@ public sealed class PowerForgeReleaseConfigScaffoldService
         return config;
     }
 
+    private static ModulePipelineSpec LoadModulePipelineConfig(string path)
+    {
+        var json = File.ReadAllText(path);
+        var config = JsonSerializer.Deserialize<ModulePipelineSpec>(json, DeserializeOptions);
+        if (config?.Build is null)
+            throw new InvalidOperationException($"Unable to deserialize module pipeline config: {path}");
+        if (string.IsNullOrWhiteSpace(config.Build.Name))
+            throw new InvalidOperationException($"Module pipeline config requires Build.Name: {path}");
+        if (string.IsNullOrWhiteSpace(config.Build.SourcePath))
+            throw new InvalidOperationException($"Module pipeline config requires Build.SourcePath: {path}");
+
+        return config;
+    }
+
     private static PowerForgeToolReleaseSpec? BuildToolsSection(
         PowerForgeReleaseConfigScaffoldRequest request,
         string outputPath,
@@ -224,35 +252,75 @@ public sealed class PowerForgeReleaseConfigScaffoldService
         };
     }
 
-    private static PowerForgeModuleReleaseOptions? BuildModuleSection(string projectRoot, string outputPath, string? moduleScriptPath)
+    private static PowerForgeModuleReleaseOptions? BuildModuleSection(
+        string projectRoot,
+        string outputPath,
+        string? moduleConfigPath,
+        string? moduleScriptPath,
+        ModulePipelineSpec? modulePipeline)
     {
-        if (string.IsNullOrWhiteSpace(moduleScriptPath))
+        if (string.IsNullOrWhiteSpace(moduleConfigPath) && string.IsNullOrWhiteSpace(moduleScriptPath))
             return null;
 
         var outputDirectory = Path.GetDirectoryName(outputPath) ?? Directory.GetCurrentDirectory();
         var relativeRepositoryRoot = GetRelativePathCompat(outputDirectory, projectRoot)
             .Replace('\\', '/');
-        var relativeScriptPath = GetRelativePathCompat(projectRoot, moduleScriptPath!)
-            .Replace('\\', '/');
-        var moduleBuildDirectory = Path.GetDirectoryName(moduleScriptPath!) ?? projectRoot;
-        var moduleRoot = Directory.GetParent(moduleBuildDirectory)?.FullName ?? projectRoot;
-        var artifactRoot = Path.Combine(moduleRoot, "Artefacts");
-        var artifactPaths = new[]
-        {
-            Path.Combine(artifactRoot, "Packed"),
-            Path.Combine(artifactRoot, "PackedWithModules"),
-            Path.Combine(artifactRoot, "Unpacked")
-        }
-        .Select(path => GetRelativePathCompat(projectRoot, path).Replace('\\', '/'))
-        .ToArray();
+        var relativeConfigPath = string.IsNullOrWhiteSpace(moduleConfigPath)
+            ? null
+            : GetRelativePathCompat(projectRoot, moduleConfigPath!).Replace('\\', '/');
+        var relativeScriptPath = string.IsNullOrWhiteSpace(moduleScriptPath)
+            ? null
+            : GetRelativePathCompat(projectRoot, moduleScriptPath!).Replace('\\', '/');
+        var moduleRoot = modulePipeline is not null
+            ? ResolvePath(Path.GetDirectoryName(moduleConfigPath!) ?? projectRoot, modulePipeline.Build.SourcePath)
+            : Directory.GetParent(Path.GetDirectoryName(moduleScriptPath!) ?? projectRoot)?.FullName ?? projectRoot;
+        var artifactPaths = modulePipeline is not null
+            ? BuildModuleArtifactPaths(projectRoot, moduleRoot, modulePipeline)
+            : new[]
+            {
+                Path.Combine(moduleRoot, "Artefacts", "Packed"),
+                Path.Combine(moduleRoot, "Artefacts", "PackedWithModules"),
+                Path.Combine(moduleRoot, "Artefacts", "Unpacked")
+            }
+            .Select(path => GetRelativePathCompat(projectRoot, path).Replace('\\', '/'))
+            .ToArray();
+        var manifestPath = modulePipeline is null
+            ? null
+            : Path.Combine(moduleRoot, modulePipeline.Build.Name + ".psd1");
 
         return new PowerForgeModuleReleaseOptions
         {
             RepositoryRoot = string.IsNullOrWhiteSpace(relativeRepositoryRoot) ? "." : relativeRepositoryRoot,
+            ModuleName = NormalizeNullable(modulePipeline?.Build.Name),
+            ConfigPath = relativeConfigPath,
             ScriptPath = relativeScriptPath,
+            ManifestPath = manifestPath is not null && File.Exists(manifestPath)
+                ? GetRelativePathCompat(projectRoot, manifestPath).Replace('\\', '/')
+                : null,
+            ModuleVersion = NormalizeNullable(modulePipeline?.Build.Version),
             ArtifactPaths = artifactPaths
         };
     }
+
+    private static string[] BuildModuleArtifactPaths(
+        string projectRoot,
+        string moduleRoot,
+        ModulePipelineSpec modulePipeline)
+        => (modulePipeline.Segments ?? Array.Empty<IConfigurationSegment>())
+            .OfType<ConfigurationArtefactSegment>()
+            .Where(segment => segment.Configuration?.Enabled == true)
+            .Select(segment =>
+            {
+                var configuredPath = segment.Configuration?.Path;
+                return string.IsNullOrWhiteSpace(configuredPath)
+                    ? Path.Combine(moduleRoot, "Artefacts", segment.ArtefactType.ToString())
+                    : Path.IsPathRooted(configuredPath)
+                        ? configuredPath!
+                        : Path.Combine(moduleRoot, configuredPath!);
+            })
+            .Select(path => GetRelativePathCompat(projectRoot, Path.GetFullPath(path)).Replace('\\', '/'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     private static string? NormalizeNullable(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
@@ -269,6 +337,7 @@ public sealed class PowerForgeReleaseConfigScaffoldService
             PropertyNameCaseInsensitive = true
         };
         options.Converters.Add(new JsonStringEnumConverter());
+        options.Converters.Add(new ConfigurationSegmentJsonConverter());
         return options;
     }
 

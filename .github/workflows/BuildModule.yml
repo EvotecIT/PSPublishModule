@@ -117,7 +117,7 @@ jobs:
       - name: Build PSPublishModule
         shell: pwsh
         timeout-minutes: 15
-        run: .\Build\Build-Module.ps1
+        run: .\Build\Build-Project.ps1 -ModuleOnly
 
       - name: Run live Azure Artifacts validation
         shell: pwsh
@@ -231,7 +231,7 @@ jobs:
       - name: Build Module
         shell: pwsh
         timeout-minutes: 10
-        run: .\Build\Build-Module.ps1
+        run: .\Build\Build-Project.ps1 -ModuleOnly
 
       - name: Test with Windows PowerShell 5.1
         shell: pwsh
@@ -270,7 +270,7 @@ jobs:
       - name: Build Module
         shell: pwsh
         timeout-minutes: 10
-        run: .\Build\Build-Module.ps1
+        run: .\Build\Build-Project.ps1 -ModuleOnly
 
       - name: Test Linux website deployment state machine
         shell: bash
@@ -310,7 +310,7 @@ jobs:
       - name: Build Module
         shell: pwsh
         timeout-minutes: 10
-        run: .\Build\Build-Module.ps1
+        run: .\Build\Build-Project.ps1 -ModuleOnly
 
       - name: Test with Pester
         shell: pwsh

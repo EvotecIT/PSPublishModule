@@ -1,7 +1,7 @@
 namespace PowerForge;
 
 /// <summary>
-/// Host-facing request for executing a module build script through shared orchestration.
+/// Host-facing request for executing a module build through shared orchestration.
 /// </summary>
 public sealed class ModuleBuildHostBuildRequest
 {
@@ -13,9 +13,14 @@ public sealed class ModuleBuildHostBuildRequest
     public string RepositoryRoot { get; set; } = string.Empty;
 
     /// <summary>
-    /// Path to the repository's <c>Build-Module.ps1</c> script.
+    /// Path to a module pipeline JSON configuration. Mutually exclusive with <see cref="ScriptPath"/>.
     /// </summary>
-    public string ScriptPath { get; set; } = string.Empty;
+    public string? ConfigPath { get; set; }
+
+    /// <summary>
+    /// Path to the repository's legacy <c>Build-Module.ps1</c> script.
+    /// </summary>
+    public string? ScriptPath { get; set; }
 
     /// <summary>
     /// Path to the PSPublishModule manifest that should be imported.

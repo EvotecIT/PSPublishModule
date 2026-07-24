@@ -60,6 +60,20 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void UnifiedGitHubRelease_ExpandsJsonScaffoldModuleArtifactTokensAfterVersionResolution()
+    {
+        var paths = PowerForgeReleaseService.ExpandModuleArtifactPaths(
+            new[] { Path.Combine("CustomModule", "Output", "<TagModuleVersionWithPreRelease>") },
+            "Sample",
+            "1.2.3",
+            "preview1");
+
+        Assert.Equal(
+            Path.Combine("CustomModule", "Output", "v1.2.3-preview1"),
+            Assert.Single(paths));
+    }
+
+    [Fact]
     public void UnifiedGitHubRelease_ModuleVersionSourcePrefersBuiltArchiveManifest()
     {
         var root = CreateSandbox();

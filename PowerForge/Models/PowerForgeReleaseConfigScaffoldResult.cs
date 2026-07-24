@@ -26,6 +26,11 @@ public sealed class PowerForgeReleaseConfigScaffoldResult
     public string? PackagesConfigPath { get; set; }
 
     /// <summary>
+    /// Gets or sets the resolved source path for the module pipeline config, if any.
+    /// </summary>
+    public string? ModuleConfigPath { get; set; }
+
+    /// <summary>
     /// Gets or sets the resolved source path for the module build script, if any.
     /// </summary>
     public string? ModuleScriptPath { get; set; }

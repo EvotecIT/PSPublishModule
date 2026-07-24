@@ -11,6 +11,94 @@ namespace PowerForge.Tests;
 public sealed class ModuleBuildPreparationServiceTests
 {
     [Fact]
+    public void Prepare_from_json_applies_release_overrides_without_mutating_the_file()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-overrides-" + Guid.NewGuid().ToString("N")));
+        var configPath = Path.Combine(root.FullName, "powerforge.json");
+        File.WriteAllText(configPath, """
+        {
+          "SchemaVersion": 1,
+          "Build": {
+            "Name": "SampleModule",
+            "SourcePath": "Module",
+            "Version": "1.0.0",
+            "Configuration": "Release",
+            "Frameworks": [ "net8.0", "net472" ]
+          },
+          "Segments": [
+            {
+              "Type": "Manifest",
+              "Configuration": {
+                "ModuleVersion": "1.0.0",
+                "Prerelease": "preview1"
+              }
+            },
+            {
+              "Type": "Build",
+              "BuildModule": {
+                "Enable": true,
+                "SignMerged": false
+              }
+            },
+            {
+              "Type": "BuildLibraries",
+              "BuildLibraries": {
+                "Enable": true,
+                "Configuration": "Release",
+                "Framework": [ "net8.0", "net472" ]
+              }
+            }
+          ]
+        }
+        """);
+        var original = File.ReadAllText(configPath);
+
+        try
+        {
+            var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
+            {
+                ParameterSetName = "Config",
+                ConfigPath = configPath,
+                CurrentPath = root.FullName,
+                ResolvePath = path => path,
+                RunMode = ConfigurationGateMode.Publish,
+                ModuleVersion = "2.1.0",
+                PreReleaseTag = string.Empty,
+                BuildConfiguration = "Debug",
+                BuildFramework = "net10.0",
+                SignModule = true,
+                SignModuleWasBound = true,
+                CertificateThumbprint = "ABC123",
+                SignIncludeBinaries = true,
+                SignIncludeInternals = false
+            });
+
+            Assert.Equal("2.1.0", prepared.PipelineSpec.Build.Version);
+            Assert.Equal("Debug", prepared.PipelineSpec.Build.Configuration);
+            Assert.Equal(new[] { "net10.0" }, prepared.PipelineSpec.Build.Frameworks);
+            var manifest = Assert.Single(prepared.PipelineSpec.Segments.OfType<ConfigurationManifestSegment>());
+            Assert.Equal("2.1.0", manifest.Configuration.ModuleVersion);
+            Assert.Null(manifest.Configuration.Prerelease);
+            var build = Assert.Single(prepared.PipelineSpec.Segments.OfType<ConfigurationBuildSegment>());
+            Assert.True(build.BuildModule.SignMerged);
+            var libraries = Assert.Single(prepared.PipelineSpec.Segments.OfType<ConfigurationBuildLibrariesSegment>());
+            Assert.Equal("Debug", libraries.BuildLibraries.Configuration);
+            Assert.Equal(new[] { "net10.0" }, libraries.BuildLibraries.Framework);
+            var signing = Assert.Single(prepared.PipelineSpec.Segments.OfType<ConfigurationOptionsSegment>()).Options.Signing;
+            Assert.NotNull(signing);
+            Assert.Equal("ABC123", signing!.CertificateThumbprint);
+            Assert.True(signing.IncludeBinaries);
+            Assert.False(signing.IncludeInternals);
+            Assert.Equal(ConfigurationGateMode.Publish, Assert.Single(prepared.PipelineSpec.Segments.OfType<ConfigurationGateSegment>()).Configuration.Mode);
+            Assert.Equal(original, File.ReadAllText(configPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void InvokeModuleBuild_RunMode_AllowsLegacyConfigurationParameterSet()
     {
         var runMode = typeof(InvokeModuleBuildCommand).GetProperty(nameof(InvokeModuleBuildCommand.RunMode));

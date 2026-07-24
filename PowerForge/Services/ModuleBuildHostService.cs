@@ -4,7 +4,7 @@ using System.Text;
 namespace PowerForge;
 
 /// <summary>
-/// Shared host service for invoking repository <c>Build-Module.ps1</c> scripts.
+/// Shared host service for invoking repository module builds from JSON configuration or legacy scripts.
 /// </summary>
 public sealed class ModuleBuildHostService
 {
@@ -52,10 +52,16 @@ public sealed class ModuleBuildHostService
     {
         FrameworkCompatibility.NotNull(request, nameof(request));
         ValidateRequiredPath(request.RepositoryRoot, nameof(request.RepositoryRoot));
-        ValidateRequiredPath(request.ScriptPath, nameof(request.ScriptPath));
         ValidateRequiredPath(request.ModulePath, nameof(request.ModulePath));
 
-        var script = BuildBuildScript(request.RepositoryRoot, request.ScriptPath, request.ModulePath, request);
+        var hasConfigPath = !string.IsNullOrWhiteSpace(request.ConfigPath);
+        var hasScriptPath = !string.IsNullOrWhiteSpace(request.ScriptPath);
+        if (hasConfigPath == hasScriptPath)
+            throw new ArgumentException("Exactly one of ConfigPath or ScriptPath is required.", nameof(request));
+
+        var script = hasConfigPath
+            ? BuildConfigScript(request.RepositoryRoot, request.ConfigPath!, request.ModulePath, request)
+            : BuildBuildScript(request.RepositoryRoot, request.ScriptPath!, request.ModulePath, request);
         var timeout = request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(2) : request.Timeout;
         var hostRequirements = ResolveHostRequirements(request.Framework);
         return RunCommandAsync(
@@ -298,6 +304,68 @@ public sealed class ModuleBuildHostService
         });
     }
 
+    private static string BuildConfigScript(string repositoryRoot, string configPath, string modulePath, ModuleBuildHostBuildRequest request)
+    {
+        var invocation = BuildConfigInvocation(configPath, request);
+        return string.Join(Environment.NewLine, new[] {
+            "$ErrorActionPreference = 'Stop'",
+            $"Set-Location -LiteralPath {QuoteLiteral(repositoryRoot)}",
+            BuildModuleImportClause(modulePath),
+            invocation
+        });
+    }
+
+    private static string BuildConfigInvocation(string configPath, ModuleBuildHostBuildRequest request)
+    {
+        var arguments = new List<string>
+        {
+            "$moduleBuildCommand = Get-Command -Name Invoke-ModuleBuild -CommandType Cmdlet -Module PSPublishModule -ErrorAction Stop",
+            $"$moduleBuildArguments = @{{ ConfigPath = {QuoteLiteral(configPath)}; ExitCode = $true }}"
+        };
+
+        AddDirectStringArgument(arguments, "BuildConfiguration", request.Configuration);
+        AddDirectStringArgument(arguments, "BuildFramework", request.Framework);
+        if (request.RunMode.HasValue)
+            AddDirectStringArgument(arguments, "RunMode", request.RunMode.Value.ToString());
+        AddDirectStringArgument(arguments, "ModuleVersion", request.ModuleVersion);
+        if (request.PreReleaseTag is not null)
+            AddDirectStringArgument(arguments, "PreReleaseTag", request.PreReleaseTag);
+        if (request.NoSign)
+            arguments.Add("$moduleBuildArguments['NoSign'] = $true");
+        else if (request.SignModule)
+            arguments.Add("$moduleBuildArguments['SignModule'] = $true");
+
+        AddDirectStringArgument(arguments, "CertificateThumbprint", request.CertificateThumbprint);
+        AddDirectBooleanArgument(arguments, "SignIncludeBinaries", request.SignIncludeBinaries);
+        AddDirectBooleanArgument(arguments, "SignIncludeInternals", request.SignIncludeInternals);
+        AddDirectBooleanArgument(arguments, "SignIncludeExe", request.SignIncludeExe);
+        AddDirectStringArgument(arguments, "DiagnosticsBaselinePath", request.DiagnosticsBaselinePath);
+        AddDirectBooleanArgument(arguments, "GenerateDiagnosticsBaseline", request.GenerateDiagnosticsBaseline);
+        AddDirectBooleanArgument(arguments, "UpdateDiagnosticsBaseline", request.UpdateDiagnosticsBaseline);
+        AddDirectBooleanArgument(arguments, "FailOnNewDiagnostics", request.FailOnNewDiagnostics);
+        AddDirectStringArgument(arguments, "FailOnDiagnosticsSeverity", request.FailOnDiagnosticsSeverity);
+        arguments.Add("& $moduleBuildCommand @moduleBuildArguments");
+        arguments.Add("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }");
+
+        return string.Join(Environment.NewLine, arguments);
+    }
+
+    private static void AddDirectStringArgument(List<string> arguments, string parameterName, string? value)
+    {
+        if (value is null)
+            return;
+
+        arguments.Add($"$moduleBuildArguments['{parameterName}'] = {QuoteLiteral(value)}");
+    }
+
+    private static void AddDirectBooleanArgument(List<string> arguments, string parameterName, bool? value)
+    {
+        if (!value.HasValue)
+            return;
+
+        arguments.Add($"$moduleBuildArguments['{parameterName}'] = ${value.Value.ToString().ToLowerInvariant()}");
+    }
+
     private static string BuildScriptInvocation(string scriptPath, ModuleBuildHostBuildRequest request)
     {
         var arguments = new List<string>
@@ -393,7 +461,7 @@ public sealed class ModuleBuildHostService
 
     private static string BuildModuleImportClause(string modulePath)
         => File.Exists(modulePath)
-            ? $"try {{ Import-Module {QuoteLiteral(modulePath)} -Force -ErrorAction Stop }} catch {{ Import-Module PSPublishModule -Force -ErrorAction Stop }}"
+            ? $"Import-Module {QuoteLiteral(modulePath)} -Force -ErrorAction Stop"
             : "Import-Module PSPublishModule -Force -ErrorAction Stop";
 
     private static string ResolveModuleRoot(string repositoryRoot, string scriptPath)

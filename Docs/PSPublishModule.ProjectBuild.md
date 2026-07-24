@@ -79,7 +79,6 @@ Unified release entrypoint
 - Scaffolder: `New-PowerForgeReleaseConfig -ProjectRoot . -PassThru`
 - PowerShell cmdlet: `Invoke-PowerForgeRelease -ConfigPath .\Build\release.json`
 - Wrapper: `Build/Build-Project.ps1`
-- Transitional top-level wrapper: `Build/Build-Release.ps1`
 - Preview tool wrapper: `Build/Build-ToolsPreview.ps1`
 - CLI: `powerforge release --config .\Build\release.json`
 - Packages continue to use `project.build.json` / `Invoke-ProjectBuild`.
@@ -94,7 +93,7 @@ Unified release entrypoint
   - uses stable `-preview` tags per tool/version so reruns can reuse the same release and resume missing asset uploads
   - keeps the existing local `TokenFilePath` pattern from `Build/release.json`; replace that path if you run the preview flow from another machine or CI environment
 - Module release can now be declared directly in `release.json` through the top-level `Module` section.
-  In this repo that section shells out to `Module/Build/Build-Module.ps1` and stages the declared artefact folders.
+  In this repo that section points to the module pipeline in `powerforge.json` and stages the declared artefact folders.
 - Repositories that need one version across NuGet packages, a PowerShell module, and executable outputs can set
   `Module.SynchronizeVersionWithPackages: true` and identify `Module.VersionPrimaryProject`.
   Keep `Module.IncludesPackages: false` so the package lane has one owner. The package plan receives the module's
@@ -104,15 +103,13 @@ Unified release entrypoint
   must share the version.
 - Interactive PowerShell and CLI runs render the same phase plan, live elapsed time, and final release summary.
   Redirected, verbose, quiet, no-color, and JSON runs keep line-oriented or structured output for CI and agents.
-- `Build/Build-Release.ps1` still supports bridge mode for repos that have not adopted a native `Module` section yet,
-  but it automatically defers to `release.json` when `Module` is present.
-- When native `Module` mode is active, the same day-to-day overrides from `Build/Build-Release.ps1` can still flow into
-  the module script:
-  - `-NoDotnetBuild`
+- `Build/Build-Project.ps1` is the single PSPublishModule self-build entry point. It builds and imports the local
+  cmdlet assembly, then forwards the release request to the shared engine.
+- Common module overrides remain available on the entry point:
   - `-ModuleVersion <version>`
-  - `-PreReleaseTag <tag>`
-  - `-NoSign`
-  - `-SignModule`
+  - `-ModulePreReleaseTag <tag>`
+  - `-ModuleNoSign`
+  - `-ModuleSignModule`
 - Unified release can also declare a reusable workspace preflight via `WorkspaceValidation`
   backed by `workspace.validation.json` and `powerforge workspace validate`.
 - Common release-time overrides:
@@ -147,7 +144,7 @@ New-PowerForgeReleaseConfig -ProjectRoot . -PassThru
 ```
 
 - The generated `release.json` now includes:
-  - a native `Module` section pointing at `Module/Build/Build-Module.ps1`
+  - a native `Module` section pointing at either a module `ConfigPath` or a legacy `ScriptPath`
   - default module artefact roots for `Packed`, `PackedWithModules`, and `Unpacked`
   - the existing package/tool sections when matching source configs are present
 - The `Module` section can optionally carry module-specific defaults too:

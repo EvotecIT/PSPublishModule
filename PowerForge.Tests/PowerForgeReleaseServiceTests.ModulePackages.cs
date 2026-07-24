@@ -8,10 +8,10 @@ public sealed partial class PowerForgeReleaseServiceTests
         var root = CreateSandbox();
         try
         {
-            var buildScript = Path.Combine(root, "Module", "Build", "Build-Module.ps1");
+            var moduleConfig = Path.Combine(root, "powerforge.json");
             var manifestPath = Path.Combine(root, "Module", "PSPublishModule.psd1");
-            Directory.CreateDirectory(Path.GetDirectoryName(buildScript)!);
-            File.WriteAllText(buildScript, "# test build script");
+            Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
+            File.WriteAllText(moduleConfig, """{ "SchemaVersion": 1, "Build": { "Name": "PSPublishModule", "SourcePath": "Module", "Version": "3.0.X" }, "Segments": [] }""");
             File.WriteAllText(manifestPath, "@{ ModuleVersion = '3.0.75' }");
 
             ProjectBuildHostRequest? capturedRequest = null;
@@ -55,6 +55,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     Module = new PowerForgeModuleReleaseOptions
                     {
                         RepositoryRoot = ".",
+                        ConfigPath = "powerforge.json",
                         ManifestPath = "Module/PSPublishModule.psd1",
                         ModuleVersion = "3.0.X",
                         SynchronizeVersionWithPackages = true,
@@ -85,6 +86,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.False(capturedRequest.ExecuteBuild);
             Assert.False(capturedRequest.PublishNuget);
             Assert.Equal("3.1.0", result.ModulePlan!.ModuleVersion);
+            Assert.Equal(moduleConfig, result.ModulePlan.ConfigPath);
+            Assert.Null(result.ModulePlan.ScriptPath);
             Assert.Null(result.ModulePlan.PreReleaseTag);
             Assert.Equal("3.1.0", toolReleaseVersion);
             Assert.Equal(

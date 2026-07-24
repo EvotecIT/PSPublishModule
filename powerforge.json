@@ -5,9 +5,12 @@
     "Name": "PSPublishModule",
     "SourcePath": "Module",
     "CsprojPath": "PSPublishModule/PSPublishModule.csproj",
-    "Version": "auto",
+    "Version": "3.0.X",
     "Configuration": "Release",
-    "Frameworks": ["net8.0", "net472"],
+    "Frameworks": [
+      "net8.0",
+      "net472"
+    ],
     "ExcludeDirectories": [
       ".git",
       ".vs",
@@ -25,7 +28,10 @@
       "Tests",
       "Lib"
     ],
-    "ExcludeFiles": [".gitignore", "PSPublishModule.Tests.ps1"]
+    "ExcludeFiles": [
+      ".gitignore",
+      "PSPublishModule.Tests.ps1"
+    ]
   },
   "Install": {
     "Enabled": true,
@@ -34,8 +40,196 @@
   },
   "Segments": [
     {
+      "Type": "Manifest",
+      "Configuration": {
+        "ModuleVersion": "3.0.X",
+        "CompatiblePSEditions": [
+          "Desktop",
+          "Core"
+        ],
+        "Guid": "eb76426a-1992-40a5-82cd-6480f883ef4d",
+        "Author": "Przemyslaw Klys",
+        "CompanyName": "Evotec",
+        "Copyright": "(c) 2011 - 2026 Przemyslaw Klys @ Evotec. All rights reserved.",
+        "Description": "Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery",
+        "PowerShellVersion": "5.1",
+        "Tags": [
+          "Windows",
+          "MacOS",
+          "Linux",
+          "Build",
+          "Module"
+        ],
+        "IconUri": "https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png",
+        "ProjectUri": "https://github.com/EvotecIT/PSPublishModule",
+        "DotNetFrameworkVersion": "4.5.2"
+      }
+    },
+    {
+      "Kind": "ApprovedModule",
+      "Type": "ApprovedModule",
+      "Configuration": {
+        "ModuleName": "PSSharedGoods",
+        "VersionSource": "Auto"
+      }
+    },
+    {
+      "Kind": "ApprovedModule",
+      "Type": "ApprovedModule",
+      "Configuration": {
+        "ModuleName": "PSWriteColor",
+        "VersionSource": "Auto"
+      }
+    },
+    {
+      "Kind": "ApprovedModule",
+      "Type": "ApprovedModule",
+      "Configuration": {
+        "ModuleName": "Connectimo",
+        "VersionSource": "Auto"
+      }
+    },
+    {
+      "Kind": "ApprovedModule",
+      "Type": "ApprovedModule",
+      "Configuration": {
+        "ModuleName": "PSUnifi",
+        "VersionSource": "Auto"
+      }
+    },
+    {
+      "Kind": "ApprovedModule",
+      "Type": "ApprovedModule",
+      "Configuration": {
+        "ModuleName": "PSWebToolbox",
+        "VersionSource": "Auto"
+      }
+    },
+    {
+      "Kind": "ApprovedModule",
+      "Type": "ApprovedModule",
+      "Configuration": {
+        "ModuleName": "PSMyPassword",
+        "VersionSource": "Auto"
+      }
+    },
+    {
+      "Type": "ModuleSkip",
+      "Configuration": {
+        "IgnoreModuleName": [
+          "PKI",
+          "OpenAuthenticode"
+        ],
+        "IgnoreFunctionName": [
+          "Set-OpenAuthenticodeSignature",
+          "Get-OpenAuthenticodeSignature",
+          "Get-AuthenticodeSignature",
+          "Set-AuthenticodeSignature",
+          "New-FileCatalog"
+        ]
+      }
+    },
+    {
+      "Type": "Formatting",
+      "Options": {
+        "Merge": {
+          "FormatCodePSM1": {
+            "Enabled": true,
+            "Sort": "None",
+            "RemoveComments": true,
+            "RemoveEmptyLines": true,
+            "FormatterSettings": {
+              "IncludeRules": [
+                "PSPlaceOpenBrace",
+                "PSPlaceCloseBrace",
+                "PSUseConsistentIndentation",
+                "PSUseConsistentWhitespace",
+                "PSAlignAssignmentStatement",
+                "PSUseCorrectCasing"
+              ],
+              "Rules": {
+                "PSPlaceOpenBrace": {
+                  "OnSameLine": true,
+                  "NewLineAfter": true,
+                  "IgnoreOneLineBlock": false,
+                  "Enable": true
+                },
+                "PSPlaceCloseBrace": {
+                  "NewLineAfter": false,
+                  "IgnoreOneLineBlock": false,
+                  "NoEmptyLineBefore": true,
+                  "Enable": true
+                },
+                "PSUseConsistentIndentation": {
+                  "Kind": "space",
+                  "PipelineIndentation": "IncreaseIndentationAfterEveryPipeline",
+                  "IndentationSize": 4,
+                  "Enable": true
+                },
+                "PSUseConsistentWhitespace": {
+                  "CheckInnerBrace": true,
+                  "CheckOpenBrace": true,
+                  "CheckOpenParen": true,
+                  "CheckOperator": true,
+                  "CheckPipe": true,
+                  "CheckSeparator": true,
+                  "Enable": true
+                },
+                "PSAlignAssignmentStatement": {
+                  "CheckHashtable": true,
+                  "Enable": true
+                },
+                "PSUseCorrectCasing": {
+                  "Enable": true
+                }
+              }
+            }
+          },
+          "FormatCodePSD1": {
+            "Enabled": true,
+            "Sort": "None",
+            "RemoveComments": true,
+            "RemoveEmptyLines": true
+          }
+        }
+      }
+    },
+    {
+      "Type": "Formatting",
+      "Options": {
+        "Standard": {
+          "FormatCodePSM1": {
+            "Enabled": true,
+            "Sort": "None"
+          },
+          "FormatCodePSD1": {
+            "Enabled": true,
+            "Sort": "None"
+          }
+        }
+      }
+    },
+    {
+      "Type": "Formatting",
+      "Options": {
+        "Merge": {
+          "Style": {
+            "PSD1": "Minimal"
+          }
+        },
+        "Standard": {
+          "Style": {
+            "PSD1": "Minimal"
+          }
+        }
+      }
+    },
+    {
       "Type": "Documentation",
-      "Configuration": { "Path": "Docs", "PathReadme": "Docs/Readme.md" }
+      "Configuration": {
+        "Path": "Docs",
+        "PathReadme": "Docs/Readme.md"
+      }
     },
     {
       "Type": "BuildDocumentation",
@@ -50,7 +244,9 @@
       "Type": "Validation",
       "Settings": {
         "Enable": true,
-        "ScriptAnalyzer": { "Enable": true },
+        "ScriptAnalyzer": {
+          "Enable": true
+        },
         "FileIntegrity": {
           "CheckTrailingWhitespace": true,
           "CheckSyntax": true
@@ -88,7 +284,155 @@
         "ExportReport": true
       }
     },
-    { "Type": "Packed", "Configuration": { "Enabled": true, "Path": "Artefacts/Packed" } },
-    { "Type": "Unpacked", "Configuration": { "Enabled": true, "Path": "Artefacts/Unpacked" } }
+    {
+      "Type": "ImportModules",
+      "ImportModules": {
+        "Self": true,
+        "RequiredModules": false
+      }
+    },
+    {
+      "Type": "Build",
+      "BuildModule": {
+        "Enable": true,
+        "Merge": true,
+        "SignMerged": false,
+        "ClassesDotSource": true,
+        "LibraryDotSource": true,
+        "VersionedInstallStrategy": "AutoRevision",
+        "VersionedInstallKeep": 3,
+        "InstallMissingModules": true,
+        "KillLockersBeforeInstall": true,
+        "KillLockersForce": true,
+        "ResolveBinaryConflicts": {
+          "ProjectName": "PSPublishModule"
+        }
+      }
+    },
+    {
+      "Type": "Options",
+      "Options": {
+        "Signing": {
+          "CertificateThumbprint": "92e95fb58effa6a4a75e77a33cdd6bfe6dd30f1a"
+        }
+      }
+    },
+    {
+      "Type": "BuildLibraries",
+      "BuildLibraries": {
+        "Enable": true,
+        "Configuration": "Release",
+        "Framework": [
+          "net8.0",
+          "net472"
+        ],
+        "ProjectName": "PSPublishModule",
+        "HandleAssemblyWithSameName": true,
+        "NETProjectPath": "../PSPublishModule",
+        "UseAssemblyLoadContext": true,
+        "AssemblyTypeAccelerators": [
+          "PowerForge.ModuleTestFailureAnalysis",
+          "PowerForge.ModuleTestSuiteResult",
+          "PowerForge.ModuleRepositoryProfileScope",
+          "PowerForge.PrivateGalleryBootstrapMode",
+          "PowerForge.PrivateGalleryCredentialSource",
+          "PowerForge.PublishTool",
+          "PowerForge.RepositoryRegistrationTool"
+        ]
+      }
+    },
+    {
+      "Type": "PlaceHolderOption",
+      "PlaceHolderOption": {
+        "SkipBuiltinReplacements": true
+      }
+    },
+    {
+      "ArtefactType": "Unpacked",
+      "Type": "Unpacked",
+      "Configuration": {
+        "Enabled": true,
+        "Path": "Artefacts/Unpacked/<TagModuleVersionWithPreRelease>",
+        "RequiredModules": {
+          "Enabled": true,
+          "Path": "Artefacts/Unpacked/<TagModuleVersionWithPreRelease>/Modules"
+        },
+        "FilesOutput": [
+          {
+            "Source": "Examples/Example.ModuleLifecycleActions.ps1",
+            "Destination": "Examples/Example.ModuleLifecycleActions.ps1"
+          },
+          {
+            "Source": "Examples/Step01.CreateModuleProject.ps1",
+            "Destination": "Examples/Step01.CreateModuleProject.ps1"
+          },
+          {
+            "Source": "Examples/Step02.BuildModuleOver.ps1",
+            "Destination": "Examples/Step02.BuildModuleOver.ps1"
+          }
+        ],
+        "DestinationFilesRelative": true
+      }
+    },
+    {
+      "ArtefactType": "Packed",
+      "Type": "Packed",
+      "Configuration": {
+        "Enabled": true,
+        "IncludeTagName": true,
+        "Path": "Artefacts/PackedWithModules",
+        "RequiredModules": {
+          "Enabled": true
+        },
+        "FilesOutput": [
+          {
+            "Source": "Examples/Example.ModuleLifecycleActions.ps1",
+            "Destination": "Examples/Example.ModuleLifecycleActions.ps1"
+          },
+          {
+            "Source": "Examples/Step01.CreateModuleProject.ps1",
+            "Destination": "Examples/Step01.CreateModuleProject.ps1"
+          },
+          {
+            "Source": "Examples/Step02.BuildModuleOver.ps1",
+            "Destination": "Examples/Step02.BuildModuleOver.ps1"
+          }
+        ],
+        "DestinationFilesRelative": true,
+        "ArtefactName": "PSPublishModule.<TagModuleVersionWithPreRelease>-FullPackage.zip",
+        "ID": "ToGitHub"
+      }
+    },
+    {
+      "ArtefactType": "Packed",
+      "Type": "Packed",
+      "Configuration": {
+        "Enabled": true,
+        "IncludeTagName": true,
+        "Path": "Artefacts/Packed",
+        "ArtefactName": "PSPublishModule.<TagModuleVersionWithPreRelease>.zip",
+        "ID": "ToGitHub"
+      }
+    },
+    {
+      "Configuration": {
+        "Destination": "PowerShellGallery",
+        "ApiKeyFilePath": "C:/Support/Important/PowerShellGalleryAPI.txt",
+        "Enabled": true
+      },
+      "Type": "GalleryNuget"
+    },
+    {
+      "Configuration": {
+        "Destination": "GitHub",
+        "ApiKeyFilePath": "C:/Support/Important/GitHubAPI.txt",
+        "ID": "ToGitHub",
+        "Enabled": false,
+        "UserName": "EvotecIT",
+        "OverwriteTagName": "<TagModuleVersionWithPreRelease>",
+        "GenerateReleaseNotes": true
+      },
+      "Type": "GitHubNuget"
+    }
   ]
 }

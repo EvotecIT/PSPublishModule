@@ -588,7 +588,7 @@ Generated command reference lives in [Module/Docs/Readme.md](Module/Docs/Readme.
 | `PowerForge.Web/` | Static-site, API-docs, search, SEO, audit, and verification engine. |
 | `PowerForge.Web.Cli/` | `powerforge-web` command-line tool. |
 | `PowerForgeStudio.*` | Current PowerForge Studio experiments and hosts. |
-| `Module/` | Packaged PSPublishModule output, generated command docs, external help, tests, and module build script. |
+| `Module/` | Packaged PSPublishModule output, generated command docs, external help, and tests. |
 | `Docs/` | Product guides, quickstarts, configuration reference, and workflow documentation. |
 | `Schemas/` | JSON schemas for PowerForge configs. |
 | `Build/` | Repo release/build entrypoints and release configuration. |
@@ -604,19 +604,19 @@ dotnet test .\PSPublishModule.sln -c Release
 Run the module build:
 
 ```powershell
-.\Build\Build-Module.ps1
+.\Build\Build-Project.ps1 -ModuleOnly
 ```
 
 Publish the complete repository release:
 
 ```powershell
-.\Build\Build-Module.ps1 -RunMode Publish
+.\Build\Build-Project.ps1 -Publish
 ```
 
 The publish gate builds the PowerShell module and PowerForge packages, publishes the NuGet and PowerShell Gallery
 artifacts, creates the coordinated module GitHub release, and publishes the configured Windows, Linux, Intel macOS,
-and Apple-silicon macOS CLI archives. Running `Module\Build\Build-Module.ps1 -RunMode Publish` routes to the same
-entry point.
+and Apple-silicon macOS CLI archives. The publish shortcut enables module signing with the certificate declared in
+`powerforge.json`; use `-ModuleNoSign` only for an intentional unsigned release.
 
 Run the unified release plan:
 

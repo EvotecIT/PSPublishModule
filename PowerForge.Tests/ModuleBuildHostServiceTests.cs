@@ -7,6 +7,71 @@ namespace PowerForge.Tests;
 public sealed class ModuleBuildHostServiceTests
 {
     [Fact]
+    public async Task ExecuteBuildAsync_InvokesJsonConfigDirectly()
+    {
+        PowerShellRunRequest? captured = null;
+        var runner = new StubPowerShellRunner(request => {
+            captured = request;
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        });
+        var service = new ModuleBuildHostService(runner);
+
+        var result = await service.ExecuteBuildAsync(new ModuleBuildHostBuildRequest
+        {
+            RepositoryRoot = @"C:\repo",
+            ConfigPath = @"C:\repo\powerforge.json",
+            ModulePath = @"C:\repo\PSPublishModule\bin\Release\net8.0\PSPublishModule.dll",
+            Configuration = "Release",
+            Framework = "auto",
+            RunMode = ConfigurationGateMode.Build,
+            ModuleVersion = "3.1.0",
+            NoSign = true
+        });
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(captured);
+        Assert.Contains("Invoke-ModuleBuild", captured!.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("ConfigPath = 'C:\\repo\\powerforge.json'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$moduleBuildArguments['BuildConfiguration'] = 'Release'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$moduleBuildArguments['BuildFramework'] = 'auto'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$moduleBuildArguments['RunMode'] = 'Build'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$moduleBuildArguments['ModuleVersion'] = '3.1.0'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$moduleBuildArguments['NoSign'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("$buildScriptPath", captured.CommandText!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteBuildAsync_ImportsConfiguredLocalAssemblyWithoutInstalledModuleFallback()
+    {
+        var modulePath = Path.GetTempFileName();
+        try
+        {
+            PowerShellRunRequest? captured = null;
+            var runner = new StubPowerShellRunner(request => {
+                captured = request;
+                return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+            });
+
+            var result = await new ModuleBuildHostService(runner).ExecuteBuildAsync(new ModuleBuildHostBuildRequest
+            {
+                RepositoryRoot = Path.GetTempPath(),
+                ConfigPath = Path.Combine(Path.GetTempPath(), "powerforge.json"),
+                ModulePath = modulePath,
+                Framework = "auto"
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.NotNull(captured);
+            Assert.Contains($"Import-Module '{modulePath.Replace("'", "''")}' -Force -ErrorAction Stop", captured!.CommandText!, StringComparison.Ordinal);
+            Assert.DoesNotContain("catch { Import-Module PSPublishModule", captured.CommandText!, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(modulePath);
+        }
+    }
+
+    [Fact]
     public async Task ExportPipelineJsonAsync_UsesSharedModuleWrapperAndWorkingDirectory()
     {
         PowerShellRunRequest? captured = null;

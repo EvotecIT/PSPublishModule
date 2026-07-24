@@ -124,6 +124,7 @@ internal sealed class ModuleBuildPreparationService
 
         var spec = ReadPipelineSpecJson(configFullPath);
         ResolvePipelineSpecPaths(spec, configFullPath);
+        ApplyConfigOverrides(spec, request);
         spec.Segments = AddRunModeSegment(spec.Segments ?? Array.Empty<IConfigurationSegment>(), request.RunMode);
 
         if (spec.Build is null)
@@ -148,6 +149,82 @@ internal sealed class ModuleBuildPreparationService
             ConfigFilePath = configFullPath
         };
     }
+
+    private static void ApplyConfigOverrides(ModulePipelineSpec spec, ModuleBuildPreparationRequest request)
+    {
+        if (spec.Build is null)
+            return;
+
+        var segments = spec.Segments ?? Array.Empty<IConfigurationSegment>();
+        var manifest = segments.OfType<ConfigurationManifestSegment>().LastOrDefault();
+        var libraryBuilds = segments.OfType<ConfigurationBuildLibrariesSegment>().ToArray();
+        var moduleBuilds = segments.OfType<ConfigurationBuildSegment>().ToArray();
+        var options = segments.OfType<ConfigurationOptionsSegment>().LastOrDefault();
+
+        if (!string.IsNullOrWhiteSpace(request.ModuleVersion))
+        {
+            spec.Build.Version = request.ModuleVersion!;
+            if (manifest is not null)
+                manifest.Configuration.ModuleVersion = request.ModuleVersion!;
+        }
+
+        if (request.PreReleaseTag is not null && manifest is not null)
+            manifest.Configuration.Prerelease = NullIfWhiteSpace(request.PreReleaseTag);
+
+        if (!string.IsNullOrWhiteSpace(request.BuildConfiguration))
+        {
+            spec.Build.Configuration = request.BuildConfiguration!;
+            foreach (var libraryBuild in libraryBuilds)
+                libraryBuild.BuildLibraries.Configuration = request.BuildConfiguration;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.BuildFramework) &&
+            !string.Equals(request.BuildFramework, "auto", StringComparison.OrdinalIgnoreCase))
+        {
+            spec.Build.Frameworks = new[] { request.BuildFramework! };
+            foreach (var libraryBuild in libraryBuilds)
+                libraryBuild.BuildLibraries.Framework = new[] { request.BuildFramework! };
+        }
+
+        var signingOverride = request.NoSignWasBound && request.NoSign
+            ? false
+            : request.SignModuleWasBound
+                ? request.SignModule
+                : (bool?)null;
+        if (signingOverride.HasValue)
+        {
+            foreach (var moduleBuild in moduleBuilds)
+                moduleBuild.BuildModule.SignMerged = signingOverride.Value;
+        }
+
+        var hasSigningOptions = !string.IsNullOrWhiteSpace(request.CertificateThumbprint) ||
+                                request.SignIncludeBinaries.HasValue ||
+                                request.SignIncludeInternals.HasValue ||
+                                request.SignIncludeExe.HasValue;
+        if (!hasSigningOptions)
+            return;
+
+        options ??= new ConfigurationOptionsSegment();
+        if (!segments.Contains(options))
+        {
+            segments = segments.Concat(new IConfigurationSegment[] { options }).ToArray();
+            spec.Segments = segments;
+        }
+
+        options.Options.Signing ??= new SigningOptionsConfiguration();
+        var signing = options.Options.Signing;
+        if (!string.IsNullOrWhiteSpace(request.CertificateThumbprint))
+            signing.CertificateThumbprint = request.CertificateThumbprint;
+        if (request.SignIncludeBinaries.HasValue)
+            signing.IncludeBinaries = request.SignIncludeBinaries.Value;
+        if (request.SignIncludeInternals.HasValue)
+            signing.IncludeInternals = request.SignIncludeInternals.Value;
+        if (request.SignIncludeExe.HasValue)
+            signing.IncludeExe = request.SignIncludeExe.Value;
+    }
+
+    private static string? NullIfWhiteSpace(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value;
 
     private static IConfigurationSegment[] AddRunModeSegment(
         IReadOnlyList<IConfigurationSegment>? segments,

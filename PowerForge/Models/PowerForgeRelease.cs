@@ -830,6 +830,10 @@ internal sealed class PowerForgeModuleReleaseOptions
 {
     public string? RepositoryRoot { get; set; }
 
+    public string? ModuleName { get; set; }
+
+    public string? ConfigPath { get; set; }
+
     public string? ScriptPath { get; set; }
 
     public string? ModulePath { get; set; }
@@ -863,7 +867,9 @@ internal sealed class PowerForgeModuleReleasePlanSummary
 {
     public string RepositoryRoot { get; set; } = string.Empty;
 
-    public string ScriptPath { get; set; } = string.Empty;
+    public string? ConfigPath { get; set; }
+
+    public string? ScriptPath { get; set; }
 
     public string ModulePath { get; set; } = string.Empty;
 

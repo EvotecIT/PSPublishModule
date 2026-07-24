@@ -376,15 +376,23 @@ internal sealed partial class PowerForgeReleaseService
                 result.Module = moduleResult;
                 if (!moduleResult.Succeeded)
                 {
+                    var moduleSource = module.Request.ConfigPath ?? module.Request.ScriptPath ?? "module build";
                     request.Progress?.PhaseFailed(
                         PowerForgeReleaseProgressPhase.Module,
-                        BuildModuleFailureMessage(module.Request.ScriptPath, moduleResult));
+                        BuildModuleFailureMessage(moduleSource, moduleResult));
                     result.Success = false;
-                    result.ErrorMessage = BuildModuleFailureMessage(module.Request.ScriptPath, moduleResult);
+                    result.ErrorMessage = BuildModuleFailureMessage(moduleSource, moduleResult);
                     return result;
                 }
 
                 UpdateResolvedModuleVersion(result.ModulePlan, result.ModuleAssets);
+                result.ModuleAssets = ExpandModuleArtifactPaths(
+                    result.ModuleAssets,
+                    spec.Module!.ModuleName,
+                    result.ModulePlan?.ModuleVersion,
+                    result.ModulePlan?.PreReleaseTag);
+                if (result.ModulePlan is not null)
+                    result.ModulePlan.ArtifactPaths = result.ModuleAssets;
             }
             request.Progress?.PhaseCompleted(
                 PowerForgeReleaseProgressPhase.Module,
@@ -862,22 +870,44 @@ internal sealed partial class PowerForgeReleaseService
         var repositoryRoot = Path.GetFullPath(Path.IsPathRooted(options.RepositoryRoot)
             ? options.RepositoryRoot!
             : Path.Combine(configDirectory, string.IsNullOrWhiteSpace(options.RepositoryRoot) ? "." : options.RepositoryRoot!));
-        var scriptPath = Path.GetFullPath(Path.IsPathRooted(options.ScriptPath)
-            ? options.ScriptPath!
-            : Path.Combine(repositoryRoot, string.IsNullOrWhiteSpace(options.ScriptPath) ? Path.Combine("Module", "Build", "Build-Module.ps1") : options.ScriptPath!));
+        var hasConfigPath = !string.IsNullOrWhiteSpace(options.ConfigPath);
+        var hasScriptPath = !string.IsNullOrWhiteSpace(options.ScriptPath);
+        if (hasConfigPath && hasScriptPath)
+            throw new InvalidOperationException("Module.ConfigPath and Module.ScriptPath are mutually exclusive.");
+
+        var configPath = hasConfigPath
+            ? Path.GetFullPath(Path.IsPathRooted(options.ConfigPath)
+                ? options.ConfigPath!
+                : Path.Combine(repositoryRoot, options.ConfigPath!))
+            : null;
+        var scriptPath = hasConfigPath
+            ? null
+            : Path.GetFullPath(Path.IsPathRooted(options.ScriptPath)
+                ? options.ScriptPath!
+                : Path.Combine(repositoryRoot, string.IsNullOrWhiteSpace(options.ScriptPath) ? Path.Combine("Module", "Build", "Build-Module.ps1") : options.ScriptPath!));
+        var effectiveConfiguration = configurationOverride ?? "Release";
+        var effectiveModuleFramework = request.ModuleFramework ?? options.Framework ?? "auto";
+        var moduleImportFramework = string.Equals(effectiveModuleFramework, "auto", StringComparison.OrdinalIgnoreCase)
+            ? "net8.0"
+            : effectiveModuleFramework;
+        var configuredModulePath = ExpandModulePath(options.ModulePath, effectiveConfiguration, moduleImportFramework);
         var modulePath = string.IsNullOrWhiteSpace(options.ModulePath)
             ? "PSPublishModule"
-            : Path.IsPathRooted(options.ModulePath)
-                ? options.ModulePath!
-                : Path.Combine(repositoryRoot, options.ModulePath!);
+            : Path.IsPathRooted(configuredModulePath)
+                ? configuredModulePath
+                : Path.Combine(repositoryRoot, configuredModulePath);
         var manifestPath = string.IsNullOrWhiteSpace(options.ManifestPath)
             ? null
             : Path.GetFullPath(Path.IsPathRooted(options.ManifestPath)
                 ? options.ManifestPath!
                 : Path.Combine(repositoryRoot, options.ManifestPath!));
 
-        if (!File.Exists(scriptPath))
+        if (configPath is not null && !File.Exists(configPath))
+            throw new FileNotFoundException($"Module build config was not found: {configPath}", configPath);
+        if (scriptPath is not null && !File.Exists(scriptPath))
             throw new FileNotFoundException($"Module build script was not found: {scriptPath}", scriptPath);
+        if (!string.IsNullOrWhiteSpace(options.ModulePath) && !File.Exists(modulePath))
+            throw new FileNotFoundException($"Configured module assembly was not found: {modulePath}", modulePath);
         if (!string.IsNullOrWhiteSpace(manifestPath) && !File.Exists(manifestPath))
             throw new FileNotFoundException($"Module manifest was not found: {manifestPath}", manifestPath);
 
@@ -896,10 +926,11 @@ internal sealed partial class PowerForgeReleaseService
         var buildRequest = new ModuleBuildHostBuildRequest
         {
             RepositoryRoot = repositoryRoot,
+            ConfigPath = configPath,
             ScriptPath = scriptPath,
             ModulePath = modulePath,
             Configuration = configurationOverride,
-            Framework = request.ModuleFramework ?? options.Framework ?? "auto",
+            Framework = effectiveModuleFramework,
             RunMode = ResolveModuleRunMode(options, request, packagePublishingRequested),
             PowerForgeReleaseStage = true,
             UnifiedGitHubRelease = publishUnifiedGitHub,
@@ -909,7 +940,7 @@ internal sealed partial class PowerForgeReleaseService
                 : PackageVersionUtility.GetNumericVersion(request.ResolvedReleaseVersion!),
             PreReleaseTag = string.IsNullOrWhiteSpace(request.ResolvedReleaseVersion)
                 ? request.ModulePreReleaseTag ?? options.PreReleaseTag
-                : NullIfEmpty(PackageVersionUtility.GetPrereleaseVersion(request.ResolvedReleaseVersion!)),
+                : PackageVersionUtility.GetPrereleaseVersion(request.ResolvedReleaseVersion!) ?? string.Empty,
             NoSign = request.ModuleNoSign ?? options.NoSign ?? false,
             SignModule = request.ModuleSignModule ?? options.SignModule ?? false,
             IncludeProjectPackages = includeProjectPackages,
@@ -929,6 +960,7 @@ internal sealed partial class PowerForgeReleaseService
         var plan = new PowerForgeModuleReleasePlanSummary
         {
             RepositoryRoot = repositoryRoot,
+            ConfigPath = configPath,
             ScriptPath = scriptPath,
             ModulePath = modulePath,
             ManifestPath = manifestPath,
@@ -940,7 +972,7 @@ internal sealed partial class PowerForgeReleaseService
             TimeoutSeconds = timeoutSeconds,
             NoDotnetBuild = buildRequest.NoDotnetBuild,
             ModuleVersion = buildRequest.ModuleVersion,
-            PreReleaseTag = buildRequest.PreReleaseTag,
+            PreReleaseTag = NullIfEmpty(buildRequest.PreReleaseTag ?? string.Empty),
             NoSign = buildRequest.NoSign,
             SignModule = buildRequest.SignModule,
             PowerForgeReleaseStage = buildRequest.PowerForgeReleaseStage,
@@ -949,6 +981,43 @@ internal sealed partial class PowerForgeReleaseService
         };
 
         return (buildRequest, plan, artifactPaths);
+    }
+
+    private static string ExpandModulePath(string? path, string configuration, string framework)
+        => string.IsNullOrWhiteSpace(path)
+            ? string.Empty
+            : ReplaceModulePathToken(
+                ReplaceModulePathToken(path!, "{Configuration}", configuration),
+                "{Framework}",
+                framework);
+
+    private static string ReplaceModulePathToken(string path, string token, string value)
+        => System.Text.RegularExpressions.Regex.Replace(
+            path,
+            System.Text.RegularExpressions.Regex.Escape(token),
+            _ => value,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    internal static string[] ExpandModuleArtifactPaths(
+        IEnumerable<string>? artifactPaths,
+        string? moduleName,
+        string? moduleVersion,
+        string? preReleaseTag)
+    {
+        if (string.IsNullOrWhiteSpace(moduleName) ||
+            string.IsNullOrWhiteSpace(NormalizeReleaseVersion(moduleVersion)))
+        {
+            return (artifactPaths ?? Array.Empty<string>()).ToArray();
+        }
+
+        return (artifactPaths ?? Array.Empty<string>())
+            .Select(path => ModulePathTokenFormatter.ReplacePathTokens(
+                path,
+                moduleName!,
+                moduleVersion!,
+                preReleaseTag))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static ConfigurationGateMode ResolveModuleRunMode(

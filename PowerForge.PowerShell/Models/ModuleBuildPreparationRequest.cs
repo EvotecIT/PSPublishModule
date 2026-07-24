@@ -11,6 +11,18 @@ internal sealed class ModuleBuildPreparationRequest
     public string? ConfigPath { get; set; }
     public string? ModuleName { get; set; }
     public ConfigurationGateMode? RunMode { get; set; }
+    public string? ModuleVersion { get; set; }
+    public string? PreReleaseTag { get; set; }
+    public string? BuildConfiguration { get; set; }
+    public string? BuildFramework { get; set; }
+    public bool NoSign { get; set; }
+    public bool NoSignWasBound { get; set; }
+    public bool SignModule { get; set; }
+    public bool SignModuleWasBound { get; set; }
+    public string? CertificateThumbprint { get; set; }
+    public bool? SignIncludeBinaries { get; set; }
+    public bool? SignIncludeInternals { get; set; }
+    public bool? SignIncludeExe { get; set; }
     public string? InputPath { get; set; }
     public string? StagingPath { get; set; }
     public string? CsprojPath { get; set; }

@@ -128,6 +128,48 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     [Alias("ConfigurationGateMode")]
     public ConfigurationGateMode? RunMode { get; set; }
 
+    /// <summary>Overrides the module version declared by a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public string? ModuleVersion { get; set; }
+
+    /// <summary>Overrides the prerelease tag declared by a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public string? PreReleaseTag { get; set; }
+
+    /// <summary>Overrides the .NET build configuration declared by a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    [ValidateSet("Release", "Debug")]
+    public string? BuildConfiguration { get; set; }
+
+    /// <summary>Overrides the .NET framework declared by a JSON configuration. Auto preserves the configured framework matrix.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    [ValidateSet("auto", "net10.0", "net8.0", "net472")]
+    public string? BuildFramework { get; set; }
+
+    /// <summary>Disables module signing declared by a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter NoSign { get; set; }
+
+    /// <summary>Enables module signing declared by a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter SignModule { get; set; }
+
+    /// <summary>Overrides the signing certificate thumbprint declared by a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public string? CertificateThumbprint { get; set; }
+
+    /// <summary>Overrides whether binary files are signed for a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public bool? SignIncludeBinaries { get; set; }
+
+    /// <summary>Overrides whether internal files are signed for a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public bool? SignIncludeInternals { get; set; }
+
+    /// <summary>Overrides whether executable files are signed for a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public bool? SignIncludeExe { get; set; }
+
     /// <summary>
     /// Folder name containing functions to export. Default: <c>Public</c>.
     /// </summary>
@@ -414,6 +456,18 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             ConfigPath = ConfigPath,
             ModuleName = ModuleName,
             RunMode = RunMode,
+            ModuleVersion = ModuleVersion,
+            PreReleaseTag = PreReleaseTag,
+            BuildConfiguration = BuildConfiguration,
+            BuildFramework = BuildFramework,
+            NoSign = NoSign.IsPresent,
+            NoSignWasBound = boundParameters?.ContainsKey(nameof(NoSign)) == true,
+            SignModule = SignModule.IsPresent,
+            SignModuleWasBound = boundParameters?.ContainsKey(nameof(SignModule)) == true,
+            CertificateThumbprint = CertificateThumbprint,
+            SignIncludeBinaries = SignIncludeBinaries,
+            SignIncludeInternals = SignIncludeInternals,
+            SignIncludeExe = SignIncludeExe,
             InputPath = Path,
             StagingPath = StagingPath,
             CsprojPath = CsprojPath,
