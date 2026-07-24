@@ -45,13 +45,28 @@ public sealed class AppStoreConnectReleasePreparationService
         AppStoreConnectVersionInfo? version = null;
         if (requiresVersion)
         {
-            var versions = await _client.GetVersionsAsync(
-                appId,
-                versionString,
-                request.Platform,
-                limit: 10,
-                cancellationToken).ConfigureAwait(false);
-            version = versions.FirstOrDefault();
+            var configuredVersionId = ResolveConfiguredVersionId(request);
+            if (!request.CreateVersion && configuredVersionId is not null)
+            {
+                version = new AppStoreConnectVersionInfo
+                {
+                    Id = configuredVersionId,
+                    VersionString = versionString,
+                    Platform = request.Platform.ToString()
+                };
+                messages.Add($"Using configured App Store version '{versionString}' for platform '{request.Platform}'.");
+            }
+            else
+            {
+                var versions = await _client.GetVersionsAsync(
+                    appId,
+                    versionString,
+                    request.Platform,
+                    limit: 10,
+                    cancellationToken).ConfigureAwait(false);
+                version = versions.FirstOrDefault();
+            }
+
             if (version is null)
             {
                 if (!request.CreateVersion)
@@ -169,6 +184,24 @@ public sealed class AppStoreConnectReleasePreparationService
             Readiness = readiness,
             Messages = messages.ToArray()
         };
+    }
+
+    private static string? ResolveConfiguredVersionId(AppStoreConnectReleasePreparationRequest request)
+    {
+        var configuredIds = new[]
+            {
+                request.ScreenshotSpec?.VersionId,
+                request.MetadataSpec?.VersionId
+            }
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (configuredIds.Length > 1)
+            throw new InvalidOperationException("Configured screenshot and metadata mappings target different App Store version ids.");
+
+        return configuredIds.SingleOrDefault();
     }
 
     private static void ValidateBuildIsSelectable(AppStoreConnectBuildInfo build, string buildNumber)
