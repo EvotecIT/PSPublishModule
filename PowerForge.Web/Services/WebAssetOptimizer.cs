@@ -16,6 +16,7 @@ public static partial class WebAssetOptimizer
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private static readonly HttpClient RewriteDownloadClient = CreateRewriteDownloadClient();
     private static readonly Regex HtmlAttrRegex = new("(?<attr>href|src)=\"(?<url>[^\"]+)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex HtmlSrcSetAttrRegex = new("(?<attr>\\b(?:srcset|imagesrcset))\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex CssUrlRegex = new("url\\((?<quote>['\"]?)(?<url>[^'\")]+)\\k<quote>\\)", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex StylesheetLinkRegex = new("<link\\s+rel=\"stylesheet\"\\s+href=\"([^\"]+)\"\\s*/?>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ImgTagRegex = new("<img\\b(?<attrs>[^>]*?)>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
@@ -796,12 +797,80 @@ public static partial class WebAssetOptimizer
 
     private static string RewriteReferences(string html, Dictionary<string, string> map)
     {
-        return HtmlAttrRegex.Replace(html, match =>
+        var rewrittenHtml = HtmlAttrRegex.Replace(html, match =>
         {
             var url = match.Groups["url"].Value;
             var rewritten = RewriteUrlWithMap(url, map);
             return rewritten == url ? match.Value : $"{match.Groups["attr"].Value}=\"{rewritten}\"";
         });
+
+        return HtmlSrcSetAttrRegex.Replace(rewrittenHtml, match =>
+        {
+            var value = match.Groups["value"].Value;
+            var rewritten = RewriteSrcSetWithMap(value, map);
+            if (string.Equals(rewritten, value, StringComparison.Ordinal))
+                return match.Value;
+
+            var quote = match.Groups["quote"].Value;
+            return $"{match.Groups["attr"].Value}={quote}{rewritten}{quote}";
+        });
+    }
+
+    private static string RewriteSrcSetWithMap(string srcSet, Dictionary<string, string> map)
+    {
+        StringBuilder? rewritten = null;
+        var copyFrom = 0;
+        var index = 0;
+        while (index < srcSet.Length)
+        {
+            while (index < srcSet.Length && (char.IsWhiteSpace(srcSet[index]) || srcSet[index] == ','))
+                index++;
+            if (index >= srcSet.Length)
+                break;
+
+            var urlStart = index;
+            while (index < srcSet.Length && !char.IsWhiteSpace(srcSet[index]))
+                index++;
+
+            var urlEnd = index;
+            while (urlEnd > urlStart && srcSet[urlEnd - 1] == ',')
+                urlEnd--;
+            var candidateEndedWithComma = urlEnd < index;
+
+            if (urlEnd > urlStart)
+            {
+                var url = srcSet[urlStart..urlEnd];
+                var mapped = RewriteUrlWithMap(url, map);
+                if (!string.Equals(mapped, url, StringComparison.Ordinal))
+                {
+                    rewritten ??= new StringBuilder(srcSet.Length + 32);
+                    rewritten.Append(srcSet, copyFrom, urlStart - copyFrom);
+                    rewritten.Append(mapped);
+                    copyFrom = urlEnd;
+                }
+            }
+
+            if (candidateEndedWithComma)
+                continue;
+
+            var parentheses = 0;
+            while (index < srcSet.Length)
+            {
+                var current = srcSet[index++];
+                if (current == '(')
+                    parentheses++;
+                else if (current == ')' && parentheses > 0)
+                    parentheses--;
+                else if (current == ',' && parentheses == 0)
+                    break;
+            }
+        }
+
+        if (rewritten is null)
+            return srcSet;
+
+        rewritten.Append(srcSet, copyFrom, srcSet.Length - copyFrom);
+        return rewritten.ToString();
     }
 
     private static string RewriteCssUrls(string css, Dictionary<string, string> map)
