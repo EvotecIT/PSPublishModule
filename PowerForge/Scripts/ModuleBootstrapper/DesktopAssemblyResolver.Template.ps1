@@ -7,6 +7,7 @@ if ($PSEdition -ne 'Core' -and $LibFolder) {
     }
     $PowerForgeDesktopAssemblyResolverState = [pscustomobject]@{
         BootstrapActive = $true
+        Registered      = $false
     }
 
     $PowerForgeDesktopAssemblyResolver = [System.ResolveEventHandler] {
@@ -64,15 +65,21 @@ if ($PSEdition -ne 'Core' -and $LibFolder) {
     }.GetNewClosure()
 
     [AppDomain]::CurrentDomain.add_AssemblyResolve($PowerForgeDesktopAssemblyResolver)
+    $PowerForgeDesktopAssemblyResolverState.Registered = $true
     $PowerForgeResolverForRemoval = $PowerForgeDesktopAssemblyResolver
     $UnregisterPowerForgeDesktopAssemblyResolver = {
-        [AppDomain]::CurrentDomain.remove_AssemblyResolve($PowerForgeResolverForRemoval)
+        if ($PowerForgeDesktopAssemblyResolverState.Registered) {
+            [AppDomain]::CurrentDomain.remove_AssemblyResolve($PowerForgeResolverForRemoval)
+            $PowerForgeDesktopAssemblyResolverState.Registered = $false
+        }
     }.GetNewClosure()
 
     $PowerForgePreviousOnRemove = $ExecutionContext.SessionState.Module.OnRemove
     $ExecutionContext.SessionState.Module.OnRemove = {
         try {
-            & $UnregisterPowerForgeDesktopAssemblyResolver
+            if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
+                & $UnregisterPowerForgeDesktopAssemblyResolver
+            }
         } finally {
             if ($null -ne $PowerForgePreviousOnRemove) {
                 & $PowerForgePreviousOnRemove @args

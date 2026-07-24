@@ -35,6 +35,9 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("$PowerForgeDesktopAssemblyResolverState = [pscustomobject]@{", bootstrapper);
             Assert.Contains("if (-not $PowerForgeDesktopAssemblyResolverState.BootstrapActive)", bootstrapper);
             Assert.Contains("$PowerForgeDesktopAssemblyResolverState.BootstrapActive = $false", bootstrapper);
+            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Registered = $true", bootstrapper);
+            Assert.Contains("if ($PowerForgeDesktopAssemblyResolverState.Registered)", bootstrapper);
+            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Registered = $false", bootstrapper);
             Assert.Contains("StartsWith($PowerForgeDesktopAssemblyRootPrefix, [StringComparison]::OrdinalIgnoreCase)", bootstrapper);
             Assert.Contains("$PowerForgeRequestedAssemblyName -ne [IO.Path]::GetFileName($PowerForgeRequestedAssemblyName)", bootstrapper);
             Assert.Contains("$PowerForgeRequestedAssemblyName.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0", bootstrapper);
@@ -42,6 +45,10 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("$PowerForgeAssemblyCandidate.StartsWith($PowerForgeDesktopAssemblyRootPrefix, [StringComparison]::OrdinalIgnoreCase)", bootstrapper);
             Assert.Contains("[AppDomain]::CurrentDomain.remove_AssemblyResolve($PowerForgeResolverForRemoval)", bootstrapper);
             Assert.Contains("$ExecutionContext.SessionState.Module.OnRemove", bootstrapper);
+            Assert.True(
+                bootstrapper.LastIndexOf("& $UnregisterPowerForgeDesktopAssemblyResolver", StringComparison.Ordinal) >
+                bootstrapper.LastIndexOf("$PowerForgeDesktopAssemblyResolverState.BootstrapActive = $false", StringComparison.Ordinal),
+                "The Desktop resolver must be removed after the bounded bootstrap window.");
             Assert.DoesNotContain("ProcessArchitecture", bootstrapper);
         }
         finally
