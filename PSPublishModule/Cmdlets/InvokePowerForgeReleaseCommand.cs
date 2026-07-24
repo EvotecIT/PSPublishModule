@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PowerForge;
+using PowerForge.ConsoleShared;
 
 namespace PSPublishModule;
 
@@ -472,6 +474,10 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     [Parameter]
     public SwitchParameter ExitCode { get; set; }
 
+    /// <summary>Disables the interactive Spectre renderer while preserving structured pipeline output.</summary>
+    [Parameter]
+    public SwitchParameter NoInteractive { get; set; }
+
     /// <summary>
     /// Executes the unified release workflow.
     /// </summary>
@@ -479,7 +485,6 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     {
         var boundParameters = MyInvocation?.BoundParameters;
         var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
-        var logger = new CmdletLogger(this, isVerbose);
         var exitCodeMode = ExitCode.IsPresent;
 
         try
@@ -518,12 +523,42 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             }
 
             var request = BuildRequest(configFullPath, requestDefaults, boundParameters);
-
-            var result = new PowerForgeReleaseService(
+            ConsoleEncoding.EnsureUtf8();
+            var interactive = !NoInteractive.IsPresent && SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+            BufferedLogger? interactiveBuffer = null;
+            ILogger logger = interactive
+                ? interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }
+                : new CmdletLogger(this, isVerbose);
+            var service = new PowerForgeReleaseService(
                 logger,
                 DotNetAssemblySigningCallbackFactory.Create(logger),
-                DotNetAssemblySigningCallbackFactory.CreatePreflight(logger))
-                .Execute(spec, request);
+                DotNetAssemblySigningCallbackFactory.CreatePreflight(logger));
+            var watch = Stopwatch.StartNew();
+            PowerForgeReleaseResult result;
+            if (interactive)
+            {
+                result = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
+                    spec,
+                    request,
+                    progress =>
+                    {
+                        request.Progress = progress;
+                        return service.Execute(spec, request);
+                    });
+                watch.Stop();
+                SpectrePowerForgeReleaseConsoleUi.WriteSummary(result, watch.Elapsed);
+                if (!result.Success && interactiveBuffer?.Entries.Count > 0)
+                {
+                    new BufferedLogSupportService().WriteTail(
+                        interactiveBuffer.Entries,
+                        new SpectreConsoleLogger { IsVerbose = isVerbose });
+                }
+            }
+            else
+            {
+                result = service.Execute(spec, request);
+                watch.Stop();
+            }
             WriteObject(AppleSummary.IsPresent && result.AppleReceipt is not null
                 ? result.AppleReceipt
                 : result);

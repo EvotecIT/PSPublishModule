@@ -34,6 +34,9 @@ internal sealed class PowerForgeReleaseSpec
 /// </summary>
 internal sealed class PowerForgeReleaseRequest
 {
+    internal string? ResolvedReleaseVersion { get; set; }
+    internal IPowerForgeReleaseProgressReporter? Progress { get; set; }
+
     public string ConfigPath { get; set; } = string.Empty;
 
     public bool PlanOnly { get; set; }
@@ -834,6 +837,10 @@ internal sealed class PowerForgeModuleReleaseOptions
     public string? ManifestPath { get; set; }
 
     public bool IncludesPackages { get; set; }
+
+    public bool SynchronizeVersionWithPackages { get; set; }
+
+    public string? VersionPrimaryProject { get; set; }
 
     public string? Framework { get; set; }
 

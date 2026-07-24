@@ -24,43 +24,100 @@ param(
     [string] $FailOnDiagnosticsSeverity
 )
 
-$script = Join-Path $PSScriptRoot '..\Module\Build\Build-ModuleSelf.ps1'
-if (-not (Test-Path -LiteralPath $script)) {
-    throw "Build script not found: $script"
-}
-
-if ($PSBoundParameters.ContainsKey('JsonPath')) {
-    Write-Verbose "JsonPath is ignored in self-build mode."
-}
-
-$invoke = @{
-    RunMode        = $RunMode
-    Framework      = $Framework
-    Configuration  = $Configuration
-}
-if ($NoBuild) { $invoke.NoBuild = $true }
-if ($Json) { $invoke.Json = $true }
-foreach ($parameterName in @(
-        'NoSign',
-        'SignModule',
-        'ModuleVersion',
-        'PreReleaseTag',
-        'CertificateThumbprint',
-        'SignIncludeBinaries',
-        'SignIncludeInternals',
-        'SignIncludeExe',
-        'DiagnosticsBaselinePath',
-        'GenerateDiagnosticsBaseline',
-        'UpdateDiagnosticsBaseline',
-        'FailOnNewDiagnostics',
-        'FailOnDiagnosticsSeverity'
-    )) {
-    if ($PSBoundParameters.ContainsKey($parameterName)) {
-        $invoke[$parameterName] = $PSBoundParameters[$parameterName]
+$moduleBuildScript = Join-Path $PSScriptRoot '..\Module\Build\Build-Module.ps1'
+$releaseBuildScript = Join-Path $PSScriptRoot 'Build-Project.ps1'
+foreach ($requiredScript in @($moduleBuildScript, $releaseBuildScript)) {
+    if (-not (Test-Path -LiteralPath $requiredScript)) {
+        throw "Build script not found: $requiredScript"
     }
 }
 
-& $script @invoke
+if ($RunMode -eq 'Publish') {
+    $invoke = @{
+        Configuration = $Configuration
+        ModuleRunMode = 'Publish'
+        PublishNuget = $true
+    }
+    if ($NoBuild) { $invoke.ModuleNoDotnetBuild = $true }
+    if ($Json) { $invoke.Json = $true }
+    if ($PSBoundParameters.ContainsKey('ModuleVersion')) { $invoke.ModuleVersion = $ModuleVersion }
+    if ($PSBoundParameters.ContainsKey('PreReleaseTag')) { $invoke.ModulePreReleaseTag = $PreReleaseTag }
+    foreach ($parameterName in @(
+            'NoSign',
+            'SignModule',
+            'CertificateThumbprint',
+            'SignIncludeBinaries',
+            'SignIncludeInternals',
+            'SignIncludeExe',
+            'DiagnosticsBaselinePath',
+            'GenerateDiagnosticsBaseline',
+            'UpdateDiagnosticsBaseline',
+            'FailOnNewDiagnostics',
+            'FailOnDiagnosticsSeverity'
+        )) {
+        if (-not $PSBoundParameters.ContainsKey($parameterName)) { continue }
+        switch ($parameterName) {
+            'NoSign' { $invoke.ModuleNoSign = $NoSign.IsPresent }
+            'SignModule' { $invoke.ModuleSignModule = $SignModule.IsPresent }
+            default { $invoke[$parameterName] = $PSBoundParameters[$parameterName] }
+        }
+    }
+    if ($Framework -ne 'auto') { $invoke.ModuleFramework = $Framework }
+    & $releaseBuildScript @invoke
+} else {
+    $invoke = @{
+        RunMode = $RunMode
+        Framework = $Framework
+        Configuration = $Configuration
+    }
+    if ($NoBuild) { $invoke.NoDotnetBuild = $true }
+    foreach ($parameterName in @(
+            'NoSign',
+            'SignModule',
+            'ModuleVersion',
+            'PreReleaseTag',
+            'CertificateThumbprint',
+            'SignIncludeBinaries',
+            'SignIncludeInternals',
+            'SignIncludeExe',
+            'DiagnosticsBaselinePath',
+            'GenerateDiagnosticsBaseline',
+            'UpdateDiagnosticsBaseline',
+            'FailOnNewDiagnostics',
+            'FailOnDiagnosticsSeverity'
+        )) {
+        if ($PSBoundParameters.ContainsKey($parameterName)) {
+            $invoke[$parameterName] = $PSBoundParameters[$parameterName]
+        }
+    }
+
+    if ($Json) {
+        if ($PSBoundParameters.ContainsKey('JsonPath')) {
+            Write-Verbose 'JsonPath is ignored when -Json requests an executed build result.'
+        }
+        $invoke.NoInteractive = $true
+        $invoke.NoExitCode = $true
+        $invoke.Quiet = $true
+        $invoke.PassThru = $true
+        $invoke.ErrorAction = 'Stop'
+        try {
+            $result = & $moduleBuildScript @invoke 3>$null 4>$null 6>$null
+            if ($null -eq $result) {
+                throw 'The module build completed without returning a structured result.'
+            }
+            $result | ConvertTo-Json -Depth 20
+        } catch {
+            [ordered]@{
+                Success = $false
+                ErrorMessage = $_.Exception.Message
+            } | ConvertTo-Json -Depth 5
+            exit 1
+        }
+    } else {
+        & $moduleBuildScript @invoke
+    }
+}
+
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }

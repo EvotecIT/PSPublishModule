@@ -17,6 +17,8 @@
     [switch] $SignIncludeInternals,
     [switch] $SignIncludeExe,
     [switch] $NoInteractive,
+    [switch] $Quiet,
+    [switch] $PassThru,
     [switch] $NoExitCode,
     [Alias('ConfigurationGateMode')]
     [ValidateSet('Manifest', 'Documentation', 'Build', 'Publish')]
@@ -161,6 +163,11 @@ if ($JsonOnly) {
     $buildParams.JsonPath = $JsonPath
 }
 if ($NoInteractive.IsPresent) { $buildParams.NoInteractive = $true }
+if ($Quiet.IsPresent) { $buildParams.Quiet = $true }
+if ($PassThru.IsPresent) {
+    $buildParams.PassThru = $true
+    $buildParams.ErrorAction = 'Stop'
+}
 if ($PSBoundParameters.ContainsKey('DiagnosticsBaselinePath')) { $buildParams.DiagnosticsBaselinePath = $DiagnosticsBaselinePath }
 if ($PSBoundParameters.ContainsKey('GenerateDiagnosticsBaseline')) { $buildParams.GenerateDiagnosticsBaseline = $GenerateDiagnosticsBaseline.IsPresent }
 if ($PSBoundParameters.ContainsKey('UpdateDiagnosticsBaseline')) { $buildParams.UpdateDiagnosticsBaseline = $UpdateDiagnosticsBaseline.IsPresent }
@@ -269,8 +276,8 @@ Invoke-ModuleBuild @buildParams -Settings {
 
     if ($RunMode -in @('Build', 'Publish')) {
         if ($IncludeProjectPackages) {
-            New-ConfigurationProjectBuild -Name 'PowerForge' -ConfigPath '../Build/release.json' -BuildBeforeModule -PublishNuget
-            New-ConfigurationRelease -StageRoot 'Module/Artefacts/UploadReady' -VersionSource Module -BuildOrder 'Packages', 'Module' -PublishOrder 'NuGet', 'PowerShellGallery', 'GitHub'
+            New-ConfigurationProjectBuild -Name 'PowerForge' -ConfigPath '../Build/release.json' -BuildBeforeModule -UseAsReleaseVersionSource -PublishNuget
+            New-ConfigurationRelease -StageRoot 'Module/Artefacts/UploadReady' -VersionSource ProjectBuild -PrimaryProject 'PowerForge' -SynchronizeModuleVersion -BuildOrder 'Packages', 'Module' -PublishOrder 'NuGet', 'PowerShellGallery', 'GitHub'
         } else {
             New-ConfigurationRelease -StageRoot 'Module/Artefacts/UploadReady' -VersionSource Module -BuildOrder 'Module' -PublishOrder 'PowerShellGallery', 'GitHub'
         }

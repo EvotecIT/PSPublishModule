@@ -25,6 +25,13 @@ public sealed partial class DotNetRepositoryReleaseService
         DotNetRepositoryReleaseSpec spec,
         Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies,
         Action<DotNetReleaseBuildAssemblySigningPreflightRequest>? validateAssemblySigning)
+        => Execute(spec, signAssemblies, validateAssemblySigning, progress: null);
+
+    internal DotNetRepositoryReleaseResult Execute(
+        DotNetRepositoryReleaseSpec spec,
+        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies,
+        Action<DotNetReleaseBuildAssemblySigningPreflightRequest>? validateAssemblySigning,
+        IProjectBuildProgressReporter? progress)
     {
         var result = new DotNetRepositoryReleaseResult();
 
@@ -247,8 +254,11 @@ public sealed partial class DotNetRepositoryReleaseService
 
             PrepareReleaseVersionFloor(packable, expectedGlobal, expectedMap, spec);
             var alignedVersions = ResolveAlignedPackageVersions(packable, expectedGlobal, expectedMap, spec);
+            progress?.PhaseStarted(ProjectBuildProgressPhase.Versioning, packable.Length, "Resolving project versions");
+            var versionProgress = 0;
             foreach (var project in packable)
             {
+                progress?.PhaseUpdated(ProjectBuildProgressPhase.Versioning, versionProgress, packable.Length, project.ProjectName);
                 var expectedVersion = ResolveExpectedVersion(
                     project.ProjectName,
                     expectedGlobal,
@@ -286,6 +296,8 @@ public sealed partial class DotNetRepositoryReleaseService
                     project.ErrorMessage = $"Version resolution failed: {ex.Message}";
                     _logger.Warn($"{project.ProjectName}: {project.ErrorMessage}");
                     result.Success = false;
+                    versionProgress++;
+                    progress?.PhaseUpdated(ProjectBuildProgressPhase.Versioning, versionProgress, packable.Length, project.ProjectName);
                     continue;
                 }
 
@@ -296,6 +308,8 @@ public sealed partial class DotNetRepositoryReleaseService
                         : resolutionWarning;
                     _logger.Warn($"{project.ProjectName}: {project.ErrorMessage}");
                     result.Success = false;
+                    versionProgress++;
+                    progress?.PhaseUpdated(ProjectBuildProgressPhase.Versioning, versionProgress, packable.Length, project.ProjectName);
                     continue;
                 }
 
@@ -321,7 +335,12 @@ public sealed partial class DotNetRepositoryReleaseService
                 }
 
                 project.NewVersion = resolvedVersion;
-                if (spec.WhatIf || !shouldUpdateProjectVersion) continue;
+                if (spec.WhatIf || !shouldUpdateProjectVersion)
+                {
+                    versionProgress++;
+                    progress?.PhaseUpdated(ProjectBuildProgressPhase.Versioning, versionProgress, packable.Length, project.ProjectName);
+                    continue;
+                }
 
                 var content = File.ReadAllText(project.CsprojPath);
                 var updated = CsprojVersionEditor.UpdateVersionText(content, resolvedVersion, out _);
@@ -339,10 +358,19 @@ public sealed partial class DotNetRepositoryReleaseService
                     if (!string.IsNullOrWhiteSpace(project.OldVersion))
                         _logger.Info($"{project.ProjectName}: version unchanged ({project.OldVersion}).");
                 }
+
+                versionProgress++;
+                progress?.PhaseUpdated(ProjectBuildProgressPhase.Versioning, versionProgress, packable.Length, project.ProjectName);
             }
+
+            if (packable.Any(project => !string.IsNullOrWhiteSpace(project.ErrorMessage)))
+                progress?.PhaseFailed(ProjectBuildProgressPhase.Versioning, "One or more project versions could not be resolved");
+            else
+                progress?.PhaseCompleted(ProjectBuildProgressPhase.Versioning, $"{packable.Length} project version(s) resolved");
 
             if (spec.Pack)
             {
+                progress?.PhaseStarted(ProjectBuildProgressPhase.PackageBuild, packable.Length, "Building and packing projects");
                 DotNetPackResult? batchPackResult = null;
                 HashSet<DotNetRepositoryProjectResult>? batchCandidateSet = null;
                 var batchPackRequested = spec.PackStrategy == DotNetRepositoryPackStrategy.MSBuild && !spec.WhatIf;
@@ -394,8 +422,11 @@ public sealed partial class DotNetRepositoryReleaseService
                     }
                 }
 
+                var packageProgress = 0;
                 foreach (var project in packable)
                 {
+                    progress?.PhaseUpdated(ProjectBuildProgressPhase.PackageBuild, packageProgress, packable.Length, project.ProjectName);
+                    packageProgress++;
                     if (!string.IsNullOrWhiteSpace(project.ErrorMessage))
                     {
                         result.Success = false;
@@ -512,6 +543,12 @@ public sealed partial class DotNetRepositoryReleaseService
                     }
                 }
 
+                progress?.PhaseUpdated(ProjectBuildProgressPhase.PackageBuild, packable.Length, packable.Length, "Package workflow complete");
+                if (packable.Any(project => !string.IsNullOrWhiteSpace(project.ErrorMessage)))
+                    progress?.PhaseFailed(ProjectBuildProgressPhase.PackageBuild, "One or more project package workflows failed");
+                else
+                    progress?.PhaseCompleted(ProjectBuildProgressPhase.PackageBuild, $"{packable.Sum(project => project.Packages.Count)} package(s) produced");
+
                 if (!spec.WhatIf && signNuGetPackages && signingSha256 is not null)
                 {
                     var packagesToSign = packable
@@ -523,6 +560,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
                     if (packagesToSign.Length > 0)
                     {
+                        progress?.PhaseStarted(ProjectBuildProgressPhase.PackageSigning, packagesToSign.Length, "Signing NuGet packages");
                         _logger.Info($"Signing {packagesToSign.Length} NuGet package(s)...");
                         var signingWatch = Stopwatch.StartNew();
                         if (!_signPackages(packagesToSign, spec, signingSha256, out var signError))
@@ -532,6 +570,7 @@ public sealed partial class DotNetRepositoryReleaseService
                             _logger.Warn(signError);
                             result.Success = false;
                             MarkPackageSigningFailure(packable, packagesToSign, signError);
+                            progress?.PhaseFailed(ProjectBuildProgressPhase.PackageSigning, signError);
                             if (spec.PublishFailFast)
                                 return result;
                         }
@@ -539,6 +578,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         {
                             signingWatch.Stop();
                             _logger.Success($"Signed {packagesToSign.Length} NuGet package(s) in {FormatDuration(signingWatch.Elapsed)}.");
+                            progress?.PhaseCompleted(ProjectBuildProgressPhase.PackageSigning, $"{packagesToSign.Length} package(s) signed");
                         }
                     }
                 }
@@ -568,7 +608,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
                 var orderedProjects = SortProjectsForPublish(packable);
                 var publishSymbolsSeparately = spec.IncludeSymbols && IsLocalPublishSource(source);
-                var packages = GetPackagesForPublish(orderedProjects, publishSymbolsSeparately);
+                var packages = GetPackagesForPublish(orderedProjects, publishSymbolsSeparately).ToArray();
 
                 var packageLookup = orderedProjects
                     .SelectMany(p => (publishSymbolsSeparately
@@ -579,8 +619,11 @@ public sealed partial class DotNetRepositoryReleaseService
                     .ToDictionary(g => g.Key, g => g.First().Project, StringComparer.OrdinalIgnoreCase);
 
                 var publishWatch = Stopwatch.StartNew();
+                progress?.PhaseStarted(ProjectBuildProgressPhase.NuGetPublish, packages.Length, "Publishing package artifacts");
+                var publishProgress = 0;
                 foreach (var pkg in packages)
                 {
+                    progress?.PhaseUpdated(ProjectBuildProgressPhase.NuGetPublish, publishProgress, packages.Length, Path.GetFileName(pkg));
                     packageLookup.TryGetValue(pkg, out var project);
                     var publishedArtifacts = GetPublishedArtifacts(
                         project,
@@ -666,15 +709,22 @@ public sealed partial class DotNetRepositoryReleaseService
                             return result;
                         }
                     }
+                    publishProgress++;
                 }
                 publishWatch.Stop();
                 var publishSummary = spec.WhatIf
                     ? $"NuGet publish plan prepared in {FormatDuration(publishWatch.Elapsed)} ({result.PublishedPackages.Count} package artifact(s) would be published)."
                     : $"NuGet publish phase completed in {FormatDuration(publishWatch.Elapsed)} ({result.PublishedPackages.Count} published, {result.SkippedDuplicatePackages.Count} skipped duplicate, {result.FailedPackages.Count} failed).";
                 if (result.FailedPackages.Count == 0)
+                {
                     _logger.Success(publishSummary);
+                    progress?.PhaseCompleted(ProjectBuildProgressPhase.NuGetPublish, publishSummary);
+                }
                 else
+                {
                     _logger.Warn(publishSummary);
+                    progress?.PhaseFailed(ProjectBuildProgressPhase.NuGetPublish, publishSummary);
+                }
             }
 
             if (result.ResolvedVersionsByProject.Count > 0)

@@ -10,14 +10,17 @@
       "Module/Artefacts/PackedWithModules",
       "Module/Artefacts/Unpacked"
     ],
-    "IncludesPackages": true,
+    "IncludesPackages": false,
+    "SynchronizeVersionWithPackages": true,
+    "VersionPrimaryProject": "PowerForge",
+    "ModuleVersion": "3.0.X",
     "TimeoutSeconds": 7200
   },
   "Packages": {
     "RootPath": "..",
     "VersionTracks": {
       "PowerForge": {
-        "ExpectedVersion": "1.0.X",
+        "ExpectedVersion": "3.0.X",
         "AnchorProject": "PowerForge",
         "Projects": [
           "PowerForge.PowerShell",
@@ -28,6 +31,7 @@
         ]
       }
     },
+    "AlignPackageVersions": true,
     "ExpectedVersionMapAsInclude": true,
     "ExpectedVersionMapUseWildcards": false,
     "Configuration": "Release",

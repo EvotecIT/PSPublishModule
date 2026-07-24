@@ -1,5 +1,7 @@
 using PowerForge;
 using PowerForge.Cli;
+using PowerForge.ConsoleShared;
+using System.Diagnostics;
 using System.Text.Json;
 
 internal static partial class Program
@@ -73,18 +75,33 @@ internal static partial class Program
 
         try
         {
-            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
             var loaded = LoadPowerForgeReleaseSpecWithPath(configPath);
             var spec = loaded.Value;
             var fullConfigPath = loaded.FullPath;
 
             var request = BuildReleaseRequestFromArgs(argv, fullConfigPath, planOnly, validateOnly, packagesOnly, moduleOnly, toolsOnly);
+            var interactive = !request.AppleSummaryOnly && PipelineConsoleUi.ShouldUseInteractiveView(outputJson, cli);
+            BufferedLogger? interactiveBuffer = null;
+            var (cmdLogger, logBuffer) = interactive
+                ? (interactiveBuffer = new BufferedLogger { IsVerbose = cli.Verbose }, interactiveBuffer)
+                : CreateCommandLogger(outputJson, cli, logger);
 
             var service = new PowerForgeReleaseService(
                 cmdLogger,
                 DotNetAssemblySigningCallbackFactory.Create(cmdLogger),
                 DotNetAssemblySigningCallbackFactory.CreatePreflight(cmdLogger));
-            var result = RunWithStatus(outputJson, cli, "Running unified release workflow", () => service.Execute(spec, request));
+            var watch = Stopwatch.StartNew();
+            var result = interactive
+                ? SpectrePowerForgeReleaseConsoleUi.RunInteractive(
+                    spec,
+                    request,
+                    progress =>
+                    {
+                        request.Progress = progress;
+                        return service.Execute(spec, request);
+                    })
+                : RunWithStatus(outputJson, cli, "Running unified release workflow", () => service.Execute(spec, request));
+            watch.Stop();
             var exitCode = result.Success ? 0 : 1;
 
             if (outputJson)
@@ -105,6 +122,14 @@ internal static partial class Program
                     Result = compactResult,
                     Logs = request.AppleSummaryOnly ? null : LogsToJsonElement(logBuffer)
                 });
+                return exitCode;
+            }
+
+            if (interactive)
+            {
+                SpectrePowerForgeReleaseConsoleUi.WriteSummary(result, watch.Elapsed);
+                if (!result.Success && interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0 && !cli.Quiet)
+                    WriteLogTail(interactiveBuffer, logger);
                 return exitCode;
             }
 

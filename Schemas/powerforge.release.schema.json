@@ -21,6 +21,14 @@
           "type": "boolean",
           "description": "When true, the module pipeline owns the configured Packages lane and the outer release skips running that lane a second time."
         },
+        "SynchronizeVersionWithPackages": {
+          "type": "boolean",
+          "description": "When true, the package lane runs first with the next module version as a floor. The resolved package version is then applied to the module and tool lanes. Cannot be combined with IncludesPackages."
+        },
+        "VersionPrimaryProject": {
+          "type": [ "string", "null" ],
+          "description": "Package project whose resolved version becomes the shared module and tool release version when SynchronizeVersionWithPackages is enabled."
+        },
         "Framework": {
           "type": [ "string", "null" ],
           "enum": [ "auto", "net10.0", "net8.0", null ]
