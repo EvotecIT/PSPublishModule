@@ -548,6 +548,15 @@ public sealed partial class ModulePipelineRunner
             }
         }
 
+        if (spec.Build.PreReleaseTag is not null)
+        {
+            preRelease = string.IsNullOrWhiteSpace(spec.Build.PreReleaseTag)
+                ? null
+                : spec.Build.PreReleaseTag.Trim();
+            if (manifestConfiguration is not null)
+                manifestConfiguration.Prerelease = preRelease;
+        }
+
         ApplyGateModeToPlanInputs(
             gateMode,
             ref refreshPsd1Only);

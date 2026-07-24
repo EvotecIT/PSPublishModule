@@ -106,6 +106,52 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
     }
 
     [Fact]
+    public void BuildToStaging_SkipDotNetBuild_AcceptsExtensionlessInferredExportAssembly()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "SampleModule";
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+            WriteMinimalBinaryModule(projectRoot.FullName, moduleName);
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0",
+                    SkipDotNetBuild = true,
+                    ExcludeDirectories = ["Lib"],
+                    ExportAssemblies = Array.Empty<string>()
+                },
+                Segments =
+                [
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            Enable = true,
+                            ProjectName = moduleName
+                        }
+                    }
+                ],
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            Assert.Equal([moduleName], plan.BuildSpec.ExportAssemblies);
+            var result = ModuleBuildPipelineFactory.Create(new NullLogger()).BuildToStaging(plan.BuildSpec);
+
+            Assert.True(File.Exists(Path.Combine(result.StagingPath, "Lib", "Core", moduleName + ".dll")));
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Plan_NormalizesLegacyNetProjectPath_WithWindowsSeparators()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -933,7 +979,8 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
                 SkipDotNetBuild = true,
                 ExcludeDirectories = ["Lib"],
                 Frameworks = ["net8.0"],
-                ExportAssemblies = [moduleName + ".dll"],
+                ExportAssemblies = [moduleName],
+                CsprojRequiredReasons = ["BuildLibraries.ProjectName"],
                 DisableBinaryCmdletScan = true
             });
 

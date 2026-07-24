@@ -43,6 +43,29 @@ if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
     $ConfigPath = Join-Path $PSScriptRoot 'release.json'
 }
 
+$operation = if ($Plan) {
+    'Plan unified PowerForge release'
+} elseif ($Validate) {
+    'Validate unified PowerForge release'
+} elseif ($Publish -or $PublishNuget -or $PublishProjectGitHub -or $PublishToolGitHub) {
+    'Publish unified PowerForge release'
+} else {
+    'Build unified PowerForge release'
+}
+$shouldRun = $false
+if (-not ($Json -and $WhatIfPreference)) {
+    $shouldRun = $PSCmdlet.ShouldProcess($ConfigPath, $operation)
+}
+if (-not $shouldRun) {
+    $skipped = [ordered]@{
+        Success = $true
+        Skipped = $true
+        Reason  = 'ShouldProcess declined the operation.'
+    }
+    if ($Json) { $skipped | ConvertTo-Json -Depth 5 } else { [pscustomobject] $skipped }
+    return
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $bootstrapFrameworks = if ($PSEdition -eq 'Desktop') {
     $desktopChildFramework = if ($ModuleFramework -eq 'auto') { 'net8.0' } else { $ModuleFramework }
@@ -71,7 +94,7 @@ try {
 
     $invokeParams = @{}
     foreach ($entry in $PSBoundParameters.GetEnumerator()) {
-        if ($entry.Key -notin @('Json', 'Publish', 'RunMode')) {
+        if ($entry.Key -notin @('Json', 'Publish', 'RunMode', 'WhatIf', 'Confirm')) {
             $invokeParams[$entry.Key] = $entry.Value
         }
     }

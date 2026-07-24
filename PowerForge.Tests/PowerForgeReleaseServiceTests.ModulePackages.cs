@@ -19,7 +19,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                     RepositoryRoot = ".",
                     ConfigPath = "powerforge.json",
                     ModulePath = missingModulePath,
-                    ModuleVersion = "3.0.X"
+                    ModuleVersion = "3.0.X",
+                    ArtifactPaths = [Path.Combine("Artifacts", "<TagModuleVersionWithPreRelease>")]
                 }
             };
             var service = new PowerForgeReleaseService(new NullLogger());
@@ -34,6 +35,9 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.True(plan.Success, plan.ErrorMessage);
             Assert.Equal(missingModulePath, plan.ModulePlan!.ModulePath);
+            Assert.Equal(
+                Path.Combine(root, "Artifacts", "<TagModuleVersionWithPreRelease>"),
+                Assert.Single(plan.ModulePlan.ArtifactPaths));
 
             var validation = service.Execute(
                 spec,

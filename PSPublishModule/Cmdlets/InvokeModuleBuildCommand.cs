@@ -158,6 +158,13 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetConfig)]
     public SwitchParameter SignModule { get; set; }
 
+    /// <summary>
+    /// Controls whether project/package segments declared by a JSON configuration are included.
+    /// Unified release orchestration disables them when the outer package lane owns publication.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public bool IncludeProjectPackages { get; set; } = true;
+
     /// <summary>Overrides the signing certificate thumbprint declared by a JSON configuration.</summary>
     [Parameter(ParameterSetName = ParameterSetConfig)]
     public string? CertificateThumbprint { get; set; }
@@ -470,6 +477,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             NoSignWasBound = boundParameters?.ContainsKey(nameof(NoSign)) == true,
             SignModule = SignModule.IsPresent,
             SignModuleWasBound = boundParameters?.ContainsKey(nameof(SignModule)) == true,
+            IncludeProjectPackages = IncludeProjectPackages,
             CertificateThumbprint = CertificateThumbprint,
             SignIncludeBinaries = SignIncludeBinaries,
             SignIncludeInternals = SignIncludeInternals,

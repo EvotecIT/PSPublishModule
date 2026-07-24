@@ -168,8 +168,12 @@ internal sealed class ModuleBuildPreparationService
                 manifest.Configuration.ModuleVersion = request.ModuleVersion!;
         }
 
-        if (request.PreReleaseTag is not null && manifest is not null)
-            manifest.Configuration.Prerelease = NullIfWhiteSpace(request.PreReleaseTag);
+        if (request.PreReleaseTag is not null)
+        {
+            spec.Build.PreReleaseTag = request.PreReleaseTag;
+            if (manifest is not null)
+                manifest.Configuration.Prerelease = NullIfWhiteSpace(request.PreReleaseTag);
+        }
 
         if (!string.IsNullOrWhiteSpace(request.BuildConfiguration))
         {
@@ -196,8 +200,30 @@ internal sealed class ModuleBuildPreparationService
                 : (bool?)null;
         if (signingOverride.HasValue)
         {
-            foreach (var moduleBuild in moduleBuilds)
-                moduleBuild.BuildModule.SignMerged = signingOverride.Value;
+            if (moduleBuilds.Length == 0)
+            {
+                var moduleBuild = new ConfigurationBuildSegment
+                {
+                    BuildModule = new BuildModuleConfiguration { SignMerged = signingOverride.Value }
+                };
+                segments = segments.Concat(new IConfigurationSegment[] { moduleBuild }).ToArray();
+                spec.Segments = segments;
+            }
+            else
+            {
+                foreach (var moduleBuild in moduleBuilds)
+                    moduleBuild.BuildModule.SignMerged = signingOverride.Value;
+            }
+        }
+
+        if (!request.IncludeProjectPackages)
+        {
+            segments = segments
+                .Where(static segment =>
+                    segment is not ConfigurationProjectBuildSegment &&
+                    segment is not ConfigurationPackageBuildSegment)
+                .ToArray();
+            spec.Segments = segments;
         }
 
         var hasSigningOptions = !string.IsNullOrWhiteSpace(request.CertificateThumbprint) ||

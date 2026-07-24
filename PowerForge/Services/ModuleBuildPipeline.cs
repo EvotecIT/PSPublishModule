@@ -133,6 +133,7 @@ public sealed class ModuleBuildPipeline
             .Where(static assembly => !string.IsNullOrWhiteSpace(assembly))
             .Select(Path.GetFileName)
             .OfType<string>()
+            .Select(static name => name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? name : name + ".dll")
             .Where(name => !availableNames.Contains(name))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();

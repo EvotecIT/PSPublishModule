@@ -137,6 +137,11 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.Contains("Import-Module $moduleBinary", entryPoint, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgeRelease @invokeParams", entryPoint, StringComparison.Ordinal);
         Assert.Contains("if ($null -eq $result)", entryPoint, StringComparison.Ordinal);
+        var shouldProcessIndex = entryPoint.IndexOf("$PSCmdlet.ShouldProcess", StringComparison.Ordinal);
+        var bootstrapIndex = entryPoint.IndexOf("dotnet build $moduleProject", StringComparison.Ordinal);
+        Assert.True(shouldProcessIndex >= 0 && shouldProcessIndex < bootstrapIndex);
+        Assert.Contains("Success = $true", entryPoint, StringComparison.Ordinal);
+        Assert.Contains("Skipped = $true", entryPoint, StringComparison.Ordinal);
     }
 
     [Fact]

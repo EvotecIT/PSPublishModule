@@ -916,9 +916,7 @@ internal sealed partial class PowerForgeReleaseService
 
         var artifactPaths = (options.ArtifactPaths ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Select(path => Path.GetFullPath(Path.IsPathRooted(path)
-                ? path
-                : Path.Combine(repositoryRoot, path)))
+            .Select(path => PathTokenProtection.GetFullPath(repositoryRoot, path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var timeoutSeconds = request.ModuleTimeoutSeconds ?? options.TimeoutSeconds;

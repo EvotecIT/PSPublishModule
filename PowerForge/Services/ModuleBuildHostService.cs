@@ -336,6 +336,8 @@ public sealed class ModuleBuildHostService
             arguments.Add("$moduleBuildArguments['NoSign'] = $true");
         else if (request.SignModule)
             arguments.Add("$moduleBuildArguments['SignModule'] = $true");
+        if (!request.IncludeProjectPackages)
+            arguments.Add("$moduleBuildArguments['IncludeProjectPackages'] = $false");
 
         AddDirectStringArgument(arguments, "CertificateThumbprint", request.CertificateThumbprint);
         AddDirectBooleanArgument(arguments, "SignIncludeBinaries", request.SignIncludeBinaries);

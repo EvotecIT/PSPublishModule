@@ -102,6 +102,109 @@ public sealed class ModuleBuildPreparationServiceTests
     }
 
     [Fact]
+    public void Prepare_from_json_materializes_missing_signing_and_prerelease_overrides()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-minimal-overrides-" + Guid.NewGuid().ToString("N")));
+        var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+        var configPath = Path.Combine(root.FullName, "powerforge.json");
+        File.WriteAllText(Path.Combine(moduleRoot.FullName, "SampleModule.psd1"), """
+        @{
+            RootModule = 'SampleModule.psm1'
+            ModuleVersion = '1.0.0'
+            PrivateData = @{ PSData = @{ Prerelease = 'old-preview' } }
+        }
+        """);
+        File.WriteAllText(Path.Combine(moduleRoot.FullName, "SampleModule.psm1"), string.Empty);
+        File.WriteAllText(configPath, """
+        {
+          "SchemaVersion": 1,
+          "Build": {
+            "Name": "SampleModule",
+            "SourcePath": "Module",
+            "Version": "1.0.0"
+          },
+          "Segments": []
+        }
+        """);
+
+        try
+        {
+            var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
+            {
+                ParameterSetName = "Config",
+                ConfigPath = configPath,
+                CurrentPath = root.FullName,
+                ResolvePath = path => path,
+                PreReleaseTag = "preview2",
+                SignModule = true,
+                SignModuleWasBound = true
+            });
+
+            Assert.Equal("preview2", prepared.PipelineSpec.Build.PreReleaseTag);
+            Assert.True(Assert.Single(prepared.PipelineSpec.Segments.OfType<ConfigurationBuildSegment>()).BuildModule.SignMerged);
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(prepared.PipelineSpec);
+            Assert.Equal("preview2", plan.PreRelease);
+            Assert.True(plan.SignModule);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_from_json_removes_child_package_segments_when_parent_owns_packages()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-package-owner-" + Guid.NewGuid().ToString("N")));
+        var configPath = Path.Combine(root.FullName, "powerforge.json");
+        File.WriteAllText(configPath, """
+        {
+          "SchemaVersion": 1,
+          "Build": {
+            "Name": "SampleModule",
+            "SourcePath": ".",
+            "Version": "1.0.0"
+          },
+          "Segments": [
+            {
+              "Type": "ProjectBuild",
+              "Configuration": {
+                "ConfigPath": "Build/project.build.json",
+                "Enabled": true
+              }
+            },
+            {
+              "Type": "PackageBuild",
+              "Configuration": {
+                "RootPath": ".",
+                "Enabled": true
+              }
+            }
+          ]
+        }
+        """);
+
+        try
+        {
+            var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
+            {
+                ParameterSetName = "Config",
+                ConfigPath = configPath,
+                CurrentPath = root.FullName,
+                ResolvePath = path => path,
+                IncludeProjectPackages = false
+            });
+
+            Assert.Empty(prepared.PipelineSpec.Segments.OfType<ConfigurationProjectBuildSegment>());
+            Assert.Empty(prepared.PipelineSpec.Segments.OfType<ConfigurationPackageBuildSegment>());
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void InvokeModuleBuild_RunMode_AllowsLegacyConfigurationParameterSet()
     {
         var runMode = typeof(InvokeModuleBuildCommand).GetProperty(nameof(InvokeModuleBuildCommand.RunMode));

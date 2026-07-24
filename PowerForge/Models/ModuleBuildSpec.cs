@@ -29,6 +29,12 @@ public sealed class ModuleBuildSpec
     /// <summary>Base module version used for manifest patching and install resolution.</summary>
     public string Version { get; set; } = "1.0.0";
 
+    /// <summary>
+    /// Optional prerelease override for this invocation. A non-null empty value explicitly clears
+    /// a prerelease label inherited from the source manifest or a manifest segment.
+    /// </summary>
+    public string? PreReleaseTag { get; set; }
+
     /// <summary>Build configuration used for publishing (e.g., Release or Debug).</summary>
     public string Configuration { get; set; } = "Release";
 

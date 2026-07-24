@@ -21,6 +21,7 @@ internal sealed class ModuleBuildPreparationRequest
     public bool NoSignWasBound { get; set; }
     public bool SignModule { get; set; }
     public bool SignModuleWasBound { get; set; }
+    public bool IncludeProjectPackages { get; set; } = true;
     public string? CertificateThumbprint { get; set; }
     public bool? SignIncludeBinaries { get; set; }
     public bool? SignIncludeInternals { get; set; }
