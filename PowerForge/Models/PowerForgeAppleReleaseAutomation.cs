@@ -125,6 +125,8 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public string? BuildProcessingState { get; set; }
 
+    public string? BuildUploadId { get; set; }
+
     public string? DistributionVersionId { get; set; }
 
     public string? DistributionState { get; set; }

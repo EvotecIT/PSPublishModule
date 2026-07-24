@@ -143,6 +143,12 @@ public sealed class AppleAppArchiveUploadResult
     /// <summary>Generated export options plist path.</summary>
     public string ExportOptionsPlistPath { get; set; } = string.Empty;
 
+    /// <summary>Xcode distribution log bundle associated with this upload, when reported.</summary>
+    public string? DistributionLogPath { get; set; }
+
+    /// <summary>Build-upload id accepted by App Store Connect, when reported by Xcode delivery.</summary>
+    public string? BuildUploadId { get; set; }
+
     /// <summary>xcodebuild process result.</summary>
     public ProcessRunResult ProcessResult { get; set; } = new(0, string.Empty, string.Empty, "xcodebuild", TimeSpan.Zero, false);
 

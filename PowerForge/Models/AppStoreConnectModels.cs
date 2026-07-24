@@ -73,6 +73,48 @@ public sealed class AppStoreConnectBuildInfo
 }
 
 /// <summary>
+/// App Store Connect state for a package accepted by the upload transport before it becomes a build.
+/// </summary>
+public sealed class AppStoreConnectBuildUploadInfo
+{
+    /// <summary>Build upload id returned by Xcode delivery.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>Marketing version declared by the uploaded bundle.</summary>
+    public string? MarketingVersion { get; set; }
+
+    /// <summary>Build number declared by the uploaded bundle.</summary>
+    public string? BuildNumber { get; set; }
+
+    /// <summary>Platform value returned by App Store Connect.</summary>
+    public string? Platform { get; set; }
+
+    /// <summary>Upload processing state such as AWAITING_PROCESSING or FAILED.</summary>
+    public string? State { get; set; }
+
+    /// <summary>Terminal validation errors reported for the uploaded package.</summary>
+    public AppStoreConnectBuildUploadIssue[] Errors { get; set; } = Array.Empty<AppStoreConnectBuildUploadIssue>();
+
+    /// <summary>Non-terminal validation warnings reported for the uploaded package.</summary>
+    public AppStoreConnectBuildUploadIssue[] Warnings { get; set; } = Array.Empty<AppStoreConnectBuildUploadIssue>();
+
+    /// <summary>Upload date when available.</summary>
+    public DateTimeOffset? UploadedDate { get; set; }
+}
+
+/// <summary>
+/// Validation issue attached to an App Store Connect build upload.
+/// </summary>
+public sealed class AppStoreConnectBuildUploadIssue
+{
+    /// <summary>Apple validation code.</summary>
+    public string? Code { get; set; }
+
+    /// <summary>Human-readable validation description.</summary>
+    public string? Description { get; set; }
+}
+
+/// <summary>
 /// App Store Connect subscription group summary.
 /// </summary>
 public sealed class AppStoreConnectSubscriptionGroupInfo
