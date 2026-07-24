@@ -906,7 +906,10 @@ internal sealed partial class PowerForgeReleaseService
             throw new FileNotFoundException($"Module build config was not found: {configPath}", configPath);
         if (scriptPath is not null && !File.Exists(scriptPath))
             throw new FileNotFoundException($"Module build script was not found: {scriptPath}", scriptPath);
-        if (!string.IsNullOrWhiteSpace(options.ModulePath) && !File.Exists(modulePath))
+        if (!request.PlanOnly &&
+            !request.ValidateOnly &&
+            !string.IsNullOrWhiteSpace(options.ModulePath) &&
+            !File.Exists(modulePath))
             throw new FileNotFoundException($"Configured module assembly was not found: {modulePath}", modulePath);
         if (!string.IsNullOrWhiteSpace(manifestPath) && !File.Exists(manifestPath))
             throw new FileNotFoundException($"Module manifest was not found: {manifestPath}", manifestPath);

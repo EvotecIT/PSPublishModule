@@ -615,9 +615,11 @@ public sealed partial class ModulePipelineRunner
         }
 
         // Resolve .csproj path: explicit build setting wins, otherwise derive from BuildLibraries NETProjectPath/ProjectName.
-        var csproj = !string.IsNullOrWhiteSpace(spec.Build.CsprojPath)
-            ? spec.Build.CsprojPath
-            : ModulePipelinePlanningHelpers.TryResolveCsprojPath(projectRoot, moduleName, netProjectPath, netProjectName);
+        var csproj = spec.Build.SkipDotNetBuild
+            ? null
+            : !string.IsNullOrWhiteSpace(spec.Build.CsprojPath)
+                ? spec.Build.CsprojPath
+                : ModulePipelinePlanningHelpers.TryResolveCsprojPath(projectRoot, moduleName, netProjectPath, netProjectName);
 
         var dotnetConfig = !string.IsNullOrWhiteSpace(dotnetConfigFromSegments)
             ? dotnetConfigFromSegments!
@@ -669,7 +671,7 @@ public sealed partial class ModulePipelineRunner
             syncNETProjectVersion = false;
         }
 
-        var csprojRequiredReasons = refreshPsd1Only
+        var csprojRequiredReasons = refreshPsd1Only || spec.Build.SkipDotNetBuild
             ? Array.Empty<string>()
             : BuildMissingCsprojReasonList(
                 spec,
@@ -691,7 +693,8 @@ public sealed partial class ModulePipelineRunner
             Name = moduleName,
             SourcePath = projectRoot,
             StagingPath = spec.Build.StagingPath,
-            CsprojPath = refreshPsd1Only ? string.Empty : csproj,
+            CsprojPath = refreshPsd1Only || spec.Build.SkipDotNetBuild ? string.Empty : csproj,
+            SkipDotNetBuild = spec.Build.SkipDotNetBuild,
             Version = resolved,
             Configuration = dotnetConfig,
             Frameworks = frameworks,
@@ -958,7 +961,7 @@ public sealed partial class ModulePipelineRunner
             manifest: manifestConfiguration,
             buildSpec: buildSpec,
             resolvedCsprojPath: csproj,
-            syncNETProjectVersion: syncNETProjectVersion,
+            syncNETProjectVersion: !spec.Build.SkipDotNetBuild && syncNETProjectVersion,
             compatiblePSEditions: compatible,
             requiredModules: requiredModules,
             externalModuleDependencies: externalModules

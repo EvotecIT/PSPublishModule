@@ -421,18 +421,6 @@
         "Enabled": true
       },
       "Type": "GalleryNuget"
-    },
-    {
-      "Configuration": {
-        "Destination": "GitHub",
-        "ApiKeyFilePath": "C:/Support/Important/GitHubAPI.txt",
-        "ID": "ToGitHub",
-        "Enabled": false,
-        "UserName": "EvotecIT",
-        "OverwriteTagName": "<TagModuleVersionWithPreRelease>",
-        "GenerateReleaseNotes": true
-      },
-      "Type": "GitHubNuget"
     }
   ]
 }

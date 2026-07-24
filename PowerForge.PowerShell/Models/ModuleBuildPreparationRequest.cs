@@ -15,6 +15,8 @@ internal sealed class ModuleBuildPreparationRequest
     public string? PreReleaseTag { get; set; }
     public string? BuildConfiguration { get; set; }
     public string? BuildFramework { get; set; }
+    public bool NoDotnetBuild { get; set; }
+    public bool NoDotnetBuildWasBound { get; set; }
     public bool NoSign { get; set; }
     public bool NoSignWasBound { get; set; }
     public bool SignModule { get; set; }

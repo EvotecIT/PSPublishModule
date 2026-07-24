@@ -66,6 +66,8 @@ public sealed class ModuleBuildPreparationServiceTests
                 PreReleaseTag = string.Empty,
                 BuildConfiguration = "Debug",
                 BuildFramework = "net10.0",
+                NoDotnetBuild = true,
+                NoDotnetBuildWasBound = true,
                 SignModule = true,
                 SignModuleWasBound = true,
                 CertificateThumbprint = "ABC123",
@@ -76,6 +78,7 @@ public sealed class ModuleBuildPreparationServiceTests
             Assert.Equal("2.1.0", prepared.PipelineSpec.Build.Version);
             Assert.Equal("Debug", prepared.PipelineSpec.Build.Configuration);
             Assert.Equal(new[] { "net10.0" }, prepared.PipelineSpec.Build.Frameworks);
+            Assert.True(prepared.PipelineSpec.Build.SkipDotNetBuild);
             var manifest = Assert.Single(prepared.PipelineSpec.Segments.OfType<ConfigurationManifestSegment>());
             Assert.Equal("2.1.0", manifest.Configuration.ModuleVersion);
             Assert.Null(manifest.Configuration.Prerelease);

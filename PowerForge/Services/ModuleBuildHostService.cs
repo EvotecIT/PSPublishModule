@@ -330,6 +330,8 @@ public sealed class ModuleBuildHostService
         AddDirectStringArgument(arguments, "ModuleVersion", request.ModuleVersion);
         if (request.PreReleaseTag is not null)
             AddDirectStringArgument(arguments, "PreReleaseTag", request.PreReleaseTag);
+        if (request.NoDotnetBuild)
+            arguments.Add("$moduleBuildArguments['NoDotnetBuild'] = $true");
         if (request.NoSign)
             arguments.Add("$moduleBuildArguments['NoSign'] = $true");
         else if (request.SignModule)

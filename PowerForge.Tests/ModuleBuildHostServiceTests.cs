@@ -25,6 +25,7 @@ public sealed class ModuleBuildHostServiceTests
             Framework = "auto",
             RunMode = ConfigurationGateMode.Build,
             ModuleVersion = "3.1.0",
+            NoDotnetBuild = true,
             NoSign = true
         });
 
@@ -36,6 +37,7 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Contains("$moduleBuildArguments['BuildFramework'] = 'auto'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['RunMode'] = 'Build'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['ModuleVersion'] = '3.1.0'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$moduleBuildArguments['NoDotnetBuild'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['NoSign'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("$buildScriptPath", captured.CommandText!, StringComparison.Ordinal);
     }

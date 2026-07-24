@@ -146,6 +146,10 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     [ValidateSet("auto", "net10.0", "net8.0", "net472")]
     public string? BuildFramework { get; set; }
 
+    /// <summary>Skips the configured .NET project build and reuses the existing module binary payload.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter NoDotnetBuild { get; set; }
+
     /// <summary>Disables module signing declared by a JSON configuration.</summary>
     [Parameter(ParameterSetName = ParameterSetConfig)]
     public SwitchParameter NoSign { get; set; }
@@ -460,6 +464,8 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             PreReleaseTag = PreReleaseTag,
             BuildConfiguration = BuildConfiguration,
             BuildFramework = BuildFramework,
+            NoDotnetBuild = NoDotnetBuild.IsPresent,
+            NoDotnetBuildWasBound = boundParameters?.ContainsKey(nameof(NoDotnetBuild)) == true,
             NoSign = NoSign.IsPresent,
             NoSignWasBound = boundParameters?.ContainsKey(nameof(NoSign)) == true,
             SignModule = SignModule.IsPresent,

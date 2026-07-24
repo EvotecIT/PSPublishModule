@@ -20,6 +20,8 @@ param(
     [string] $ModuleFramework = 'auto',
     [string] $ModuleVersion,
     [string] $ModulePreReleaseTag,
+    [Alias('NoBuild')]
+    [switch] $ModuleNoDotnetBuild,
     [switch] $ModuleNoSign,
     [switch] $ModuleSignModule,
     [string] $ModuleCertificateThumbprint,

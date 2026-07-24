@@ -11,6 +11,7 @@
     "SourcePath": { "type": "string", "minLength": 1 },
     "StagingPath": { "type": ["string", "null"] },
     "CsprojPath": { "type": ["string", "null"] },
+    "SkipDotNetBuild": { "type": "boolean" },
 
     "Version": { "type": "string" },
     "Configuration": { "type": "string" },

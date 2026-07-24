@@ -3,6 +3,64 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void Execute_ModulePlan_AllowsConfiguredAssemblyThatWillBeBuiltLater()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var moduleConfig = Path.Combine(root, "powerforge.json");
+            var missingModulePath = Path.Combine(root, "PSPublishModule", "bin", "Release", "net8.0", "PSPublishModule.dll");
+            File.WriteAllText(moduleConfig, """{ "SchemaVersion": 1, "Build": { "Name": "PSPublishModule", "SourcePath": ".", "Version": "3.0.X" }, "Segments": [] }""");
+
+            var spec = new PowerForgeReleaseSpec
+            {
+                Module = new PowerForgeModuleReleaseOptions
+                {
+                    RepositoryRoot = ".",
+                    ConfigPath = "powerforge.json",
+                    ModulePath = missingModulePath,
+                    ModuleVersion = "3.0.X"
+                }
+            };
+            var service = new PowerForgeReleaseService(new NullLogger());
+
+            var plan = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.True(plan.Success, plan.ErrorMessage);
+            Assert.Equal(missingModulePath, plan.ModulePlan!.ModulePath);
+
+            var validation = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ValidateOnly = true
+                });
+
+            Assert.True(validation.Success, validation.ErrorMessage);
+            Assert.Equal(missingModulePath, validation.ModulePlan!.ModulePath);
+
+            var exception = Assert.Throws<FileNotFoundException>(() => service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json")
+                }));
+            Assert.Equal(missingModulePath, exception.FileName);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_CoordinatedVersions_RunPackagesFirstAndApplyHighestVersionToModule()
     {
         var root = CreateSandbox();

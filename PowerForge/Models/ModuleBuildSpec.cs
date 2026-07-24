@@ -21,6 +21,11 @@ public sealed class ModuleBuildSpec
     /// </summary>
     public string? CsprojPath { get; set; }
 
+    /// <summary>
+    /// When true, skips the configured .NET project build for this run and reuses the existing module binary payload.
+    /// </summary>
+    public bool SkipDotNetBuild { get; set; }
+
     /// <summary>Base module version used for manifest patching and install resolution.</summary>
     public string Version { get; set; } = "1.0.0";
 

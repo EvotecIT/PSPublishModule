@@ -91,6 +91,8 @@ public sealed class ModuleBuildPipeline
         var excluded = new HashSet<string>((spec.ExcludeDirectories ?? Array.Empty<string>())
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .Select(s => s.Trim()), StringComparer.OrdinalIgnoreCase);
+        if (spec.SkipDotNetBuild)
+            excluded.Remove("Lib");
 
         var excludedFiles = new HashSet<string>((spec.ExcludeFiles ?? Array.Empty<string>())
             .Where(s => !string.IsNullOrWhiteSpace(s))

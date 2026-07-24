@@ -176,6 +176,7 @@ public sealed class PSPublishModuleManifestContractTests
 
         Assert.Contains("$invokeParams.PublishNuget = $true", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("$invokeParams.ModuleSignModule = $true", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("[switch] $ModuleNoDotnetBuild", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("$invokeParams.ModuleRunMode = if ($Publish) { 'Publish' } else { $RunMode }", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("\"IncludesPackages\": false", releaseConfig, StringComparison.Ordinal);
         using var releaseDocument = JsonDocument.Parse(releaseConfig);
@@ -201,6 +202,7 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.Contains(segments, segment => segment.GetProperty("Type").GetString() == "BuildLibraries");
         Assert.Contains(segments, segment => segment.GetProperty("Type").GetString() == "GalleryNuget");
         Assert.Contains(segments, segment => segment.GetProperty("Type").GetString() == "Packed");
+        Assert.DoesNotContain(segments, segment => segment.GetProperty("Type").GetString() == "GitHubNuget");
     }
 
     [Fact]

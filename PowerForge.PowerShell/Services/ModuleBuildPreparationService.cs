@@ -186,6 +186,9 @@ internal sealed class ModuleBuildPreparationService
                 libraryBuild.BuildLibraries.Framework = new[] { request.BuildFramework! };
         }
 
+        if (request.NoDotnetBuildWasBound)
+            spec.Build.SkipDotNetBuild = request.NoDotnetBuild;
+
         var signingOverride = request.NoSignWasBound && request.NoSign
             ? false
             : request.SignModuleWasBound
