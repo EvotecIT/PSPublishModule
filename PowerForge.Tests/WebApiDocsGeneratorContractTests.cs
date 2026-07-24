@@ -198,6 +198,82 @@ public class WebApiDocsGeneratorContractTests
     }
 
     [Fact]
+    public void GenerateDocsHtml_AllowsNavigationTokensInOnlyOneCustomFragment()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-nav-split-fragments-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var siteJsonPath = Path.Combine(root, "site.json");
+        File.WriteAllText(siteJsonPath,
+            """
+            {
+              "Name": "TestSite",
+              "Navigation": {
+                "Menus": [
+                  { "Name": "main", "Items": [ { "Title": "Docs", "Url": "/docs/" } ] }
+                ]
+              }
+            }
+            """);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var headerPath = Path.Combine(root, "api-header.html");
+        var footerPath = Path.Combine(root, "api-footer.html");
+        File.WriteAllText(headerPath, "<header>{{NAV_LINKS}}{{NAV_ACTIONS}}</header>");
+        File.WriteAllText(footerPath, "<footer>Footer</footer>");
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            NavJsonPath = siteJsonPath,
+            HeaderHtmlPath = headerPath,
+            FooterHtmlPath = footerPath
+        };
+        options.TemplateTokens["NAV_LINKS"] = "<a href=\"/provided/\">Provided</a>";
+        options.TemplateTokens["NAV_ACTIONS"] = string.Empty;
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("nav injection may be empty", StringComparison.OrdinalIgnoreCase));
+
+            var html = File.ReadAllText(Path.Combine(outputPath, "index.html"));
+            Assert.Contains("href=\"/docs/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<footer>Footer</footer>", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
     public void GenerateDocsHtml_WarnsWhenNavTokensPresentButNavJsonPathNotSet()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-nav-required-" + Guid.NewGuid().ToString("N"));
