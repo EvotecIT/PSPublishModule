@@ -61,7 +61,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 repositoryRoot,
                 DateTimeOffset.UtcNow - startedAt,
                 results,
-                JsonSerializer.Serialize(unified),
+                SerializeUnifiedCheckpoint(unified),
                 UnifiedReleaseConfigFingerprint.Compute(configPath));
         }
 
@@ -140,9 +140,11 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         if (unified.ModulePlan is not null)
         {
             var buildInput = unified.ModulePlan.ConfigPath ?? repository.ModuleBuildScriptPath;
-            var artifacts = !string.IsNullOrWhiteSpace(buildInput)
+            var artifacts = (unified.ModuleAssets?.Length ?? 0) > 0
+                ? CollectExplicitArtifacts(unified.ModuleAssets ?? [])
+                : !string.IsNullOrWhiteSpace(buildInput)
                 ? CollectModuleArtifacts(repository.RootPath, buildInput!)
-                : CollectExplicitArtifacts(unified.ModuleAssets);
+                : CollectExplicitArtifacts(unified.ModuleAssets ?? []);
             var moduleSucceeded = unified.Module?.Succeeded == true;
             results.Add(new ReleaseBuildAdapterResult(
                 ReleaseBuildAdapterKind.ModuleBuild,
@@ -184,6 +186,21 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 ErrorTail: TrimTail(unified.ErrorMessage)));
         }
 
+        if (results.Count == 0 &&
+            (unified.WorkspaceValidation is not null || unified.WorkspaceValidationPlan is not null))
+        {
+            var workspaceSucceeded = unified.WorkspaceValidation?.Succeeded ?? unified.Success;
+            results.Add(new ReleaseBuildAdapterResult(
+                ReleaseBuildAdapterKind.ProjectBuild,
+                workspaceSucceeded,
+                workspaceSucceeded ? "Unified workspace validation completed." : "Unified workspace validation failed.",
+                workspaceSucceeded ? 0 : 1,
+                Math.Round(duration.TotalSeconds, 2),
+                [],
+                [],
+                ErrorTail: TrimTail(unified.ErrorMessage)));
+        }
+
         if (results.Count == 0)
         {
             results.Add(new ReleaseBuildAdapterResult(
@@ -198,6 +215,18 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         }
 
         return results;
+    }
+
+    private static string SerializeUnifiedCheckpoint(PowerForgeReleaseResult unified)
+    {
+        var checkpoint = JsonSerializer.Deserialize<PowerForgeReleaseResult>(JsonSerializer.Serialize(unified))
+                         ?? throw new InvalidOperationException("Unified release state could not be cloned for checkpoint persistence.");
+        if (checkpoint.DotNetToolPlan is not null)
+        {
+            DotNetPublishPlanRedactor.RedactInPlace(checkpoint.DotNetToolPlan);
+        }
+
+        return JsonSerializer.Serialize(checkpoint);
     }
 
     private async Task<ReleaseBuildAdapterResult> ExecuteProjectBuildAsync(PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository, CancellationToken cancellationToken)

@@ -276,6 +276,59 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_UnifiedModuleUsesCheckpointedResolvedArtifacts()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ResolvedModuleRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("ResolvedModuleRepo", "Build"));
+        var moduleRoot = scope.CreateDirectory(Path.Combine("ResolvedModuleRepo", "src", "ResolvedModuleRepo"));
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+        var resolvedArtifact = scope.CreateDirectory(Path.Combine("ResolvedModuleRepo", "src", "ResolvedModuleRepo", "out", "package-v2.0.0"));
+        var staleArtifact = scope.CreateDirectory(Path.Combine("ResolvedModuleRepo", "src", "ResolvedModuleRepo", "out", "package-v1.0.0"));
+        File.WriteAllText(releaseConfig, """{ "Module": { "ConfigPath": "../powerforge.json" } }""");
+        File.WriteAllText(
+            moduleConfig,
+            """
+            {
+              "Build": { "Name": "ResolvedModuleRepo", "SourcePath": "src/ResolvedModuleRepo" },
+              "Segments": [
+                { "Type": "Packed", "Configuration": { "Enabled": true, "Path": "out/package-v<TagModuleVersionWithPreRelease>" } }
+              ]
+            }
+            """);
+        File.WriteAllText(Path.Combine(resolvedArtifact, "ResolvedModuleRepo.zip"), "current");
+        File.WriteAllText(Path.Combine(staleArtifact, "ResolvedModuleRepo.zip"), "stale");
+        Directory.SetLastWriteTimeUtc(staleArtifact, DateTime.UtcNow.AddMinutes(5));
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()),
+            (_, _) => new PowerForgeReleaseResult {
+                Success = true,
+                ModulePlan = new PowerForgeModuleReleasePlanSummary {
+                    ConfigPath = moduleConfig
+                },
+                Module = new ModuleBuildHostExecutionResult {
+                    ExitCode = 0,
+                    Executable = "pwsh"
+                },
+                ModuleAssets = [resolvedArtifact]
+            });
+
+        var result = await service.ExecuteAsync(repositoryRoot);
+
+        Assert.True(result.Succeeded);
+        var adapter = Assert.Single(result.AdapterResults);
+        Assert.Equal(ReleaseBuildAdapterKind.ModuleBuild, adapter.AdapterKind);
+        Assert.Contains(resolvedArtifact, adapter.ArtifactDirectories);
+        Assert.DoesNotContain(staleArtifact, adapter.ArtifactDirectories);
+        Assert.Contains(Path.Combine(resolvedArtifact, "ResolvedModuleRepo.zip"), adapter.ArtifactFiles);
+        Assert.DoesNotContain(Path.Combine(staleArtifact, "ResolvedModuleRepo.zip"), adapter.ArtifactFiles);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_AppleOnlyRelease_CheckpointsPlanWithoutExecutingActions()
     {
         using var scope = new TemporaryDirectoryScope();
@@ -381,6 +434,90 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal(1, unifiedCalls);
         Assert.Equal(ReleaseBuildAdapterKind.ProjectBuild, Assert.Single(result.AdapterResults).AdapterKind);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WorkspaceOnlyResultCreatesSuccessfulCheckpointAdapter()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("WorkspaceOnlyRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("WorkspaceOnlyRepo", "Build"));
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "WorkspaceValidation": {
+                "ConfigPath": "workspace.validation.json"
+              }
+            }
+            """);
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()),
+            (_, _) => new PowerForgeReleaseResult {
+                Success = true,
+                WorkspaceValidation = new WorkspaceValidationResult {
+                    Succeeded = true
+                }
+            });
+
+        var result = await service.ExecuteAsync(repositoryRoot);
+
+        Assert.True(result.Succeeded);
+        var adapter = Assert.Single(result.AdapterResults);
+        Assert.True(adapter.Succeeded);
+        Assert.Equal(ReleaseBuildAdapterKind.ProjectBuild, adapter.AdapterKind);
+        Assert.Equal("Unified workspace validation completed.", adapter.Summary);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnifiedCheckpointRedactsToolPlanSecretsWithoutMutatingExecutionResult()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("SecretToolRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("SecretToolRepo", "Build"));
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(releaseConfig, """{ "Tools": { "Targets": [] } }""");
+        var unified = new PowerForgeReleaseResult {
+            Success = true,
+            DotNetToolPlan = new DotNetPublishPlan {
+                EnvironmentVariables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase) {
+                    ["PACKAGE_TOKEN"] = "plain-token"
+                },
+                Steps = [
+                    new DotNetPublishStep {
+                        HookEnvironment = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
+                            ["HOOK_TOKEN"] = "plain-hook-token"
+                        }
+                    }
+                ]
+            },
+            DotNetTools = new DotNetPublishResult {
+                Succeeded = true
+            }
+        };
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()),
+            (_, _) => unified);
+
+        var result = await service.ExecuteAsync(repositoryRoot);
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(result.UnifiedReleaseStateJson);
+        Assert.DoesNotContain("plain-token", result.UnifiedReleaseStateJson!, StringComparison.Ordinal);
+        Assert.DoesNotContain("plain-hook-token", result.UnifiedReleaseStateJson!, StringComparison.Ordinal);
+        var checkpoint = System.Text.Json.JsonSerializer.Deserialize<PowerForgeReleaseResult>(result.UnifiedReleaseStateJson!);
+        Assert.NotNull(checkpoint?.DotNetToolPlan);
+        Assert.Equal("<redacted>", checkpoint!.DotNetToolPlan!.EnvironmentVariables["PACKAGE_TOKEN"]);
+        Assert.Equal("<redacted>", checkpoint.DotNetToolPlan.Steps[0].HookEnvironment["HOOK_TOKEN"]);
+        Assert.Equal("plain-token", unified.DotNetToolPlan.EnvironmentVariables["PACKAGE_TOKEN"]);
+        Assert.Equal("plain-hook-token", unified.DotNetToolPlan.Steps[0].HookEnvironment["HOOK_TOKEN"]);
     }
 
     private sealed class TemporaryDirectoryScope : IDisposable
