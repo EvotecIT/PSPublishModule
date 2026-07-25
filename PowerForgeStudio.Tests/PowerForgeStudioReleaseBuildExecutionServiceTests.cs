@@ -5,7 +5,7 @@ using PowerForgeStudio.Orchestrator.Queue;
 
 namespace PowerForgeStudio.Tests;
 
-public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
+public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 {
     [Fact]
     public async Task ExecuteAsync_UsesSharedProjectBuildHostServiceForProjectBuilds()

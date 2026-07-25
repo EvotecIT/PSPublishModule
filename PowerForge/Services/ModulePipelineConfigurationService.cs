@@ -55,7 +55,8 @@ public sealed class ModulePipelineConfigurationService
             ProjectRoot = projectRoot,
             Spec = spec,
             EffectiveVersion = ResolveEffectiveVersion(spec),
-            ArtifactPaths = ResolveArtifactPaths(spec, projectRoot)
+            ArtifactPaths = ResolveArtifactPaths(spec, projectRoot),
+            PackageArtifactPaths = ResolvePackageArtifactPaths(spec, projectRoot, configDirectory)
         };
     }
 
@@ -150,6 +151,78 @@ public sealed class ModulePipelineConfigurationService
         };
     }
 
+    private static string[] ResolvePackageArtifactPaths(
+        ModulePipelineSpec spec,
+        string projectRoot,
+        string configDirectory)
+    {
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var segment in spec.Segments ?? Array.Empty<IConfigurationSegment>())
+        {
+            switch (segment)
+            {
+                case ConfigurationProjectBuildSegment project when project.Configuration.Enabled:
+                {
+                    if (string.IsNullOrWhiteSpace(project.Configuration.ConfigPath))
+                        throw new InvalidOperationException("Enabled ProjectBuild segments require ConfigPath.");
+
+                    var configPath = PathValueResolver.Resolve(projectRoot, project.Configuration.ConfigPath);
+                    if (!File.Exists(configPath))
+                    {
+                        var configRelativePath = PathValueResolver.Resolve(
+                            configDirectory,
+                            project.Configuration.ConfigPath);
+                        if (File.Exists(configRelativePath))
+                            configPath = configRelativePath;
+                    }
+                    var configuration = new ProjectBuildSupportService(new NullLogger()).LoadConfig(configPath);
+                    ProjectBuildConfigurationAdapter.ApplyReference(configuration, project.Configuration);
+                    AddPackageArtifactPaths(
+                        paths,
+                        configuration,
+                        Path.GetDirectoryName(configPath) ?? projectRoot,
+                        inlinePathBase: null);
+                    break;
+                }
+                case ConfigurationPackageBuildSegment package when package.Configuration.Enabled:
+                {
+                    var configuration = ProjectBuildConfigurationAdapter.FromPackageBuild(package.Configuration);
+                    AddPackageArtifactPaths(paths, configuration, projectRoot, projectRoot);
+                    break;
+                }
+            }
+        }
+
+        return paths.ToArray();
+    }
+
+    private static void AddPackageArtifactPaths(
+        ISet<string> paths,
+        ProjectBuildConfiguration configuration,
+        string configDirectory,
+        string? inlinePathBase)
+    {
+        var rootPath = ProjectBuildSupportService.ResolveOptionalPath(
+                           configuration.RootPath,
+                           inlinePathBase ?? configDirectory)
+                       ?? (inlinePathBase ?? configDirectory);
+        var outputBase = inlinePathBase ?? rootPath;
+        var stagingPath = ProjectBuildSupportService.ResolveOptionalPath(configuration.StagingPath, outputBase);
+        var outputPath = ProjectBuildSupportService.ResolveOptionalPath(configuration.OutputPath, outputBase)
+                         ?? (!string.IsNullOrWhiteSpace(stagingPath)
+                             ? Path.Combine(stagingPath!, "packages")
+                             : null);
+        var releaseZipPath = ProjectBuildSupportService.ResolveOptionalPath(configuration.ReleaseZipOutputPath, outputBase)
+                             ?? (!string.IsNullOrWhiteSpace(stagingPath)
+                                 ? Path.Combine(stagingPath!, "releases")
+                                 : null);
+        foreach (var path in new[] { stagingPath, outputPath, releaseZipPath })
+        {
+            if (!string.IsNullOrWhiteSpace(path))
+                paths.Add(path!);
+        }
+    }
+
     private static string? NullIfWhiteSpace(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
 
@@ -186,4 +259,7 @@ public sealed class ModulePipelineConfigurationContext
 
     /// <summary>Resolved candidate artefact output directories.</summary>
     public string[] ArtifactPaths { get; set; } = Array.Empty<string>();
+
+    /// <summary>Resolved candidate output directories for enabled package-build lanes.</summary>
+    public string[] PackageArtifactPaths { get; set; } = Array.Empty<string>();
 }

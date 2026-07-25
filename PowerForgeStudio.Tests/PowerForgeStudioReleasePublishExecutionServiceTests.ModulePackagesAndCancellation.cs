@@ -12,6 +12,84 @@ namespace PowerForgeStudio.Tests;
 public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
 {
     [Fact]
+    public async Task ExecuteAsync_loads_outer_package_publish_settings_from_unified_contract()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForgeStudio.Tests",
+            Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+            var releaseConfig = Path.Combine(buildDirectory, "release.json");
+            File.WriteAllText(
+                releaseConfig,
+                """
+                {
+                  "Packages": {
+                    "RootPath": "..",
+                    "PublishNuget": true,
+                    "PublishGitHub": false,
+                    "PublishApiKey": "nested-key",
+                    "PublishSource": "https://nested.example.test/v3/index.json"
+                  }
+                }
+                """);
+            var signedPackage = Path.Combine(repositoryRoot, "Sample.Library.1.0.0.nupkg");
+            File.WriteAllText(signedPackage, "signed-package");
+            var queueItem = CreateUnifiedPublishQueueItem(
+                repositoryRoot,
+                "Sample",
+                releaseConfig,
+                new PowerForgeReleaseResult { Success = true, ConfigPath = releaseConfig },
+                [
+                    new ReleaseSigningReceipt(
+                        repositoryRoot,
+                        "Sample",
+                        ReleaseBuildAdapterKind.ProjectBuild.ToString(),
+                        signedPackage,
+                        "File",
+                        ReleaseSigningReceiptStatus.Signed,
+                        "Signed.",
+                        DateTimeOffset.UtcNow)
+                ]);
+            DotNetNuGetPushRequest? capturedPush = null;
+            var service = new ReleasePublishExecutionService(
+                new RepositoryCatalogScanner(),
+                new ModuleBuildHostService(),
+                new ProjectBuildHostService(),
+                new ProjectBuildCommandHostService(),
+                new ProjectBuildPublishHostService(),
+                (request, _) =>
+                {
+                    capturedPush = request;
+                    return Task.FromResult(new DotNetNuGetPushResult(
+                        0,
+                        "published",
+                        string.Empty,
+                        "dotnet",
+                        TimeSpan.Zero,
+                        timedOut: false,
+                        errorMessage: null));
+                },
+                publishUnifiedRelease: (_, _) => new PowerForgeReleaseResult { Success = true });
+
+            using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+            var result = await service.ExecuteAsync(queueItem);
+
+            Assert.True(result.Succeeded);
+            Assert.NotNull(capturedPush);
+            Assert.Equal(signedPackage, capturedPush!.PackagePath);
+            Assert.Equal("nested-key", capturedPush.ApiKey);
+            Assert.Equal("https://nested.example.test/v3/index.json", capturedPush.Source);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task ExecuteAsync_publishes_signed_module_owned_package_without_rebuilding()
     {
         var repositoryRoot = Directory.CreateDirectory(Path.Combine(

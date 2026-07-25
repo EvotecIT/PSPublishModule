@@ -408,6 +408,7 @@ public sealed class PowerShellRunner : IPowerShellRunner, ICancellablePowerShell
                 request.OutputLineReceived,
                 request.ErrorLineReceived),
             cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
 
         return new PowerShellRunResult(processResult.ExitCode, processResult.StdOut, processResult.StdErr, exe);
     }

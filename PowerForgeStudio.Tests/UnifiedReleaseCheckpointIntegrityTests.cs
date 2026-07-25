@@ -12,7 +12,7 @@ namespace PowerForgeStudio.Tests;
 public sealed class UnifiedReleaseCheckpointIntegrityTests
 {
     [Fact]
-    public void Fingerprint_changes_when_package_owning_module_config_changes()
+    public void Fingerprint_changes_when_module_config_changes_without_package_ownership()
     {
         using var scope = new TestDirectoryScope();
         var repositoryRoot = scope.CreateDirectory("FingerprintRepo");
@@ -27,7 +27,7 @@ public sealed class UnifiedReleaseCheckpointIntegrityTests
               "Module": {
                 "RepositoryRoot": "..",
                 "ConfigPath": "powerforge.json",
-                "IncludesPackages": true
+                "IncludesPackages": false
               }
             }
             """);

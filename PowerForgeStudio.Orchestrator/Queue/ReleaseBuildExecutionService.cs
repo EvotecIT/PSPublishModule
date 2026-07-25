@@ -149,6 +149,13 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 : !string.IsNullOrWhiteSpace(buildInput)
                 ? CollectModuleArtifacts(repository.RootPath, buildInput!)
                 : CollectExplicitArtifacts(unified.ModuleAssets ?? []);
+            if (unified.ModulePlan.IncludesPackages &&
+                !string.IsNullOrWhiteSpace(unified.ModulePlan.ConfigPath))
+            {
+                artifacts = MergeArtifactCollections(
+                    artifacts,
+                    CollectModulePackageArtifacts(unified.ModulePlan.ConfigPath!));
+            }
             var moduleSucceeded = unified.Module?.Succeeded == true;
             results.Add(new ReleaseBuildAdapterResult(
                 ReleaseBuildAdapterKind.ModuleBuild,
@@ -360,6 +367,35 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         CollectArtifactFiles(directories, files);
         return new ArtifactCollection(directories.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(), files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList());
     }
+
+    private static ArtifactCollection CollectModulePackageArtifacts(string configPath)
+    {
+        var context = new ModulePipelineConfigurationService().Load(configPath);
+        var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in context.PackageArtifactPaths)
+            AddModuleArtifactDirectory(path, directories);
+
+        CollectArtifactFiles(directories, files);
+        return new ArtifactCollection(
+            directories.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(),
+            files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
+    private static ArtifactCollection MergeArtifactCollections(
+        ArtifactCollection first,
+        ArtifactCollection second)
+        => new(
+            first.Directories
+                .Concat(second.Directories)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            first.Files
+                .Concat(second.Files)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList());
 
     private static ArtifactCollection CollectExplicitArtifacts(IEnumerable<string> paths)
     {

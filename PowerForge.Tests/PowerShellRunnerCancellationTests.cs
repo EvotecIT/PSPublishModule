@@ -1,3 +1,5 @@
+using PowerForge;
+
 namespace PowerForge.Tests;
 
 public sealed class PowerShellRunnerCancellationTests
@@ -27,6 +29,35 @@ public sealed class PowerShellRunnerCancellationTests
         {
             File.Delete(executable);
         }
+    }
+
+    [Fact]
+    public async Task RunAsync_rethrows_caller_cancellation_when_process_runner_returns_a_result()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var runner = (ICancellablePowerShellRunner)new PowerShellRunner(new CancellationSwallowingProcessRunner());
+        var request = PowerShellRunRequest.ForCommand(
+            commandText: "$null",
+            timeout: TimeSpan.FromMinutes(1),
+            executableOverride: Environment.ProcessPath);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => runner.RunAsync(request, cancellation.Token));
+    }
+
+    private sealed class CancellationSwallowingProcessRunner : IProcessRunner
+    {
+        public Task<ProcessRunResult> RunAsync(
+            ProcessRunRequest request,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(new ProcessRunResult(
+                -1,
+                string.Empty,
+                "cancelled",
+                request.FileName,
+                TimeSpan.Zero,
+                timedOut: false));
     }
 
     private sealed class BlockingProcessRunner : IProcessRunner

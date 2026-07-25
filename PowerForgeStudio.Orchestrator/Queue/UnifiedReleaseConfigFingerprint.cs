@@ -17,8 +17,7 @@ internal static class UnifiedReleaseConfigFingerprint
         AppendFile(hash, "release", fullPath);
 
         var spec = PowerForgeReleaseService.LoadConfiguration(fullPath);
-        if (spec.Module?.IncludesPackages == true &&
-            !string.IsNullOrWhiteSpace(spec.Module.ConfigPath))
+        if (!string.IsNullOrWhiteSpace(spec.Module?.ConfigPath))
         {
             var releaseDirectory = Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory();
             var repositoryRoot = string.IsNullOrWhiteSpace(spec.Module.RepositoryRoot)
@@ -36,7 +35,7 @@ internal static class UnifiedReleaseConfigFingerprint
                     moduleConfigPath);
             }
 
-            AppendFile(hash, "module-packages", moduleConfigPath);
+            AppendFile(hash, "module", moduleConfigPath);
         }
 
         AppendApplePublicationInputs(hash, fullPath, spec.AppleApps);

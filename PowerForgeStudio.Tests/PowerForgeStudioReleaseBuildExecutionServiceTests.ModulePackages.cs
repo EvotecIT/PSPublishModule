@@ -1,0 +1,70 @@
+using PowerForge;
+using PowerForgeStudio.Orchestrator.Catalog;
+using PowerForgeStudio.Orchestrator.Queue;
+
+namespace PowerForgeStudio.Tests;
+
+public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
+{
+    [Fact]
+    public async Task ExecuteAsync_captures_module_owned_package_outputs_in_the_build_checkpoint()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ModulePackagesRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("ModulePackagesRepo", "Build"));
+        var packageDirectory = scope.CreateDirectory(Path.Combine("ModulePackagesRepo", "PackageArtifacts"));
+        var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        var packagePath = Path.Combine(packageDirectory, "Sample.Library.1.0.0.nupkg");
+        var zipPath = Path.Combine(packageDirectory, "Sample.Library.1.0.0.zip");
+        File.WriteAllText(packagePath, "package");
+        File.WriteAllText(zipPath, "zip");
+        File.WriteAllText(
+            moduleConfig,
+            """
+            {
+              "Build": { "Name": "Sample", "SourcePath": "." },
+              "Segments": [
+                {
+                  "Type": "PackageBuild",
+                  "Configuration": {
+                    "Name": "Sample packages",
+                    "StagingPath": "PackageArtifacts",
+                    "Build": true,
+                    "PublishNuget": true
+                  }
+                }
+              ]
+            }
+            """);
+        File.WriteAllText(
+            releaseConfig,
+            """{ "Module": { "RepositoryRoot": "..", "ConfigPath": "powerforge.json", "IncludesPackages": true } }""");
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()),
+            (_, _) => new PowerForgeReleaseResult {
+                Success = true,
+                ConfigPath = releaseConfig,
+                ModulePlan = new PowerForgeModuleReleasePlanSummary {
+                    ConfigPath = moduleConfig,
+                    IncludesPackages = true
+                },
+                Module = new ModuleBuildHostExecutionResult {
+                    ExitCode = 0,
+                    Executable = "pwsh"
+                }
+            });
+
+        var result = await service.ExecuteAsync(repositoryRoot);
+
+        Assert.True(result.Succeeded);
+        var adapter = Assert.Single(result.AdapterResults);
+        Assert.Equal(ReleaseBuildAdapterKind.ModuleBuild, adapter.AdapterKind);
+        Assert.Contains(packageDirectory, adapter.ArtifactDirectories);
+        Assert.Contains(packagePath, adapter.ArtifactFiles);
+        Assert.Contains(zipPath, adapter.ArtifactFiles);
+    }
+}
