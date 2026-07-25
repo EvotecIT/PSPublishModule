@@ -35,6 +35,11 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(moduleCalls[1].NoDotnetBuildWasSpecified);
             Assert.True(moduleCalls[1].SkipInstall);
             Assert.False(moduleCalls[1].IncludeProjectPackages);
+            Assert.True(moduleCalls[0].RequireReusableOutput);
+            Assert.True(moduleCalls[1].RequireReusableOutput);
+            Assert.False(string.IsNullOrWhiteSpace(moduleCalls[0].StagingPath));
+            Assert.Equal(moduleCalls[0].StagingPath, moduleCalls[1].StagingPath);
+            Assert.False(Directory.Exists(moduleCalls[0].StagingPath));
             Assert.NotNull(result.Module);
             Assert.NotNull(result.ModulePublication);
         }
@@ -214,7 +219,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                     request.NoDotnetBuildWasSpecified,
                     request.SkipInstall,
                     request.IncludeProjectPackages,
-                    request.StagingPath));
+                    request.StagingPath,
+                    request.RequireReusableOutput));
                 return new ModuleBuildHostExecutionResult { ExitCode = 0 };
             });
 
@@ -225,5 +231,6 @@ public sealed partial class PowerForgeReleaseServiceTests
         bool NoDotnetBuildWasSpecified,
         bool SkipInstall,
         bool IncludeProjectPackages,
-        string? StagingPath);
+        string? StagingPath,
+        bool RequireReusableOutput);
 }

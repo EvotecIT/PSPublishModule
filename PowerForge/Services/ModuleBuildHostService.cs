@@ -400,6 +400,11 @@ public sealed class ModuleBuildHostService
             "$buildScriptArguments = @{}"
         };
 
+        if (request.RequireReusableOutput)
+        {
+            arguments.Add("if (-not $buildScriptCommand.Parameters.ContainsKey('NoDotnetBuild') -or -not $buildScriptCommand.Parameters.ContainsKey('StagingPath')) { throw 'Deferred module publication requires the legacy build script to expose NoDotnetBuild and StagingPath parameters.' }");
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Configuration))
         {
             arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('Configuration')) {{ $buildScriptArguments['Configuration'] = {QuoteLiteral(request.Configuration!)} }}");

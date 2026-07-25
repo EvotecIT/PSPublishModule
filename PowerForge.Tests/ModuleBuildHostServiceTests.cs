@@ -473,6 +473,42 @@ public sealed class ModuleBuildHostServiceTests
     }
 
     [Fact]
+    public async Task ExecuteBuildAsync_DeferredLegacyPublishRequiresReusableOutputParameters()
+    {
+        PowerShellRunRequest? captured = null;
+        var runner = new StubPowerShellRunner(request =>
+        {
+            captured = request;
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        });
+        var service = new ModuleBuildHostService(runner);
+
+        var result = await service.ExecuteBuildAsync(new ModuleBuildHostBuildRequest
+        {
+            RepositoryRoot = @"C:\repo",
+            ScriptPath = @"C:\repo\Build\Build-Module.ps1",
+            ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
+            StagingPath = @"C:\repo\.powerforge\staging",
+            RequireReusableOutput = true
+        });
+
+        Assert.NotNull(captured);
+        Assert.Contains(
+            "$buildScriptCommand.Parameters.ContainsKey('NoDotnetBuild')",
+            captured!.CommandText!,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$buildScriptCommand.Parameters.ContainsKey('StagingPath')",
+            captured.CommandText!,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Deferred module publication requires the legacy build script",
+            captured.CommandText!,
+            StringComparison.Ordinal);
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
     public async Task ExecuteBuildAsync_ForwardsStructuredModuleProgressFromChildHost()
     {
         var progress = new RecordingReleaseProgress();

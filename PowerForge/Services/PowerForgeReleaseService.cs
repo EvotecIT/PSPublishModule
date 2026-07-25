@@ -407,12 +407,12 @@ internal sealed partial class PowerForgeReleaseService
             {
                 if (!request.PlanOnly &&
                     !request.ValidateOnly &&
-                    module.Request.ConfigPath is not null &&
                     string.IsNullOrWhiteSpace(module.Request.StagingPath))
                 {
                     module.Request.StagingPath = deferredModuleStaging.GetOrCreatePath();
                     module.Plan.StagingPath = module.Request.StagingPath;
                 }
+                module.Request.RequireReusableOutput = module.Request.ScriptPath is not null;
                 deferredModulePublishRequest = module.Request;
             }
 

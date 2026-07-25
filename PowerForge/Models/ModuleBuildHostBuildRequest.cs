@@ -80,6 +80,12 @@ public sealed class ModuleBuildHostBuildRequest
     public string? StagingPath { get; set; }
 
     /// <summary>
+    /// Requires a legacy script to expose the staging and no-build parameters needed
+    /// to publish the exact output produced by an earlier deferred build.
+    /// </summary>
+    internal bool RequireReusableOutput { get; set; }
+
+    /// <summary>
     /// Disables module signing when true.
     /// </summary>
     public bool NoSign { get; set; }
