@@ -152,7 +152,12 @@ public sealed class RepositoryCatalogScanner
                 : Path.Combine(repositoryRoot, configuredPath));
             return IsModulePipelineConfig(fullPath) ? fullPath : null;
         }
-        catch (JsonException)
+        catch (Exception ex) when (
+            ex is JsonException or
+            InvalidOperationException or
+            IOException or
+            ArgumentException or
+            NotSupportedException)
         {
             return null;
         }

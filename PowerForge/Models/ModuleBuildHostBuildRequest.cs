@@ -60,6 +60,11 @@ public sealed class ModuleBuildHostBuildRequest
     public bool NoDotnetBuild { get; set; }
 
     /// <summary>
+    /// Indicates that <see cref="NoDotnetBuild"/> was explicitly selected, including an explicit false value.
+    /// </summary>
+    public bool NoDotnetBuildWasSpecified { get; set; }
+
+    /// <summary>
     /// Optional module version override.
     /// </summary>
     public string? ModuleVersion { get; set; }

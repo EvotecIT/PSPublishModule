@@ -930,6 +930,7 @@ internal sealed partial class PowerForgeReleaseService
         if (timeoutSeconds <= 0)
             throw new InvalidOperationException("Module TimeoutSeconds must be greater than zero.");
         var includeProjectPackages = options.IncludesPackages && !request.ModuleOnly;
+        var noDotnetBuildOverride = request.ModuleNoDotnetBuild ?? options.NoDotnetBuild;
 
         var buildRequest = new ModuleBuildHostBuildRequest
         {
@@ -942,7 +943,8 @@ internal sealed partial class PowerForgeReleaseService
             RunMode = ResolveModuleRunMode(options, request, packagePublishingRequested),
             PowerForgeReleaseStage = true,
             UnifiedGitHubRelease = publishUnifiedGitHub,
-            NoDotnetBuild = request.ModuleNoDotnetBuild ?? options.NoDotnetBuild ?? false,
+            NoDotnetBuild = noDotnetBuildOverride ?? false,
+            NoDotnetBuildWasSpecified = noDotnetBuildOverride.HasValue,
             ModuleVersion = string.IsNullOrWhiteSpace(request.ResolvedReleaseVersion)
                 ? request.ModuleVersion ?? options.ModuleVersion
                 : PackageVersionUtility.GetNumericVersion(request.ResolvedReleaseVersion!),

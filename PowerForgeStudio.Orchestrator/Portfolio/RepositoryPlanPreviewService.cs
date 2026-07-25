@@ -91,7 +91,7 @@ public sealed class RepositoryPlanPreviewService
         {
             try
             {
-                _ = new ModulePublishConfigurationReader().Read(moduleBuildInput);
+                _ = new ModulePipelineConfigurationService().Load(moduleBuildInput);
                 return new RepositoryPlanResult(
                     AdapterKind: RepositoryPlanAdapterKind.ModuleJsonExport,
                     Status: RepositoryPlanStatus.Succeeded,

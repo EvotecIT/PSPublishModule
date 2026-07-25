@@ -8,6 +8,37 @@ namespace PowerForgeStudio.Tests;
 public sealed class PowerForgeStudioRepositoryPlanPreviewServiceTests
 {
     [Fact]
+    public async Task PopulatePlanPreviewAsync_InvalidJsonBuildContract_FailsPreview()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("InvalidModuleRepo");
+        var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+        File.WriteAllText(moduleConfig, """{ "Build": { "Name": "MissingSource" } }""");
+        var service = new RepositoryPlanPreviewService(
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()));
+        var item = new RepositoryPortfolioItem(
+            new RepositoryCatalogEntry(
+                Name: "InvalidModuleRepo",
+                RootPath: repositoryRoot,
+                RepositoryKind: ReleaseRepositoryKind.Module,
+                WorkspaceKind: ReleaseWorkspaceKind.PrimaryRepository,
+                ModuleBuildScriptPath: moduleConfig,
+                ProjectBuildScriptPath: null,
+                IsWorktree: false,
+                HasWebsiteSignals: false),
+            new RepositoryGitSnapshot(true, "main", "origin/main", 0, 0, 0, 0),
+            new RepositoryReadiness(RepositoryReadinessKind.Ready, "Ready"));
+
+        var result = await service.PopulatePlanPreviewAsync([item], new PlanPreviewOptions { MaxRepositories = 1 });
+
+        var preview = Assert.Single(Assert.Single(result).PlanResults!);
+        Assert.Equal(RepositoryPlanStatus.Failed, preview.Status);
+        Assert.Contains("Build.SourcePath", preview.ErrorTail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ResolveProjectConfigPath_UsesSiblingConfigForNestedBuildScript()
     {
         using var scope = new TemporaryDirectoryScope();

@@ -62,6 +62,24 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
         Assert.Null(entry.ModuleBuildScriptPath);
     }
 
+    [Fact]
+    public void Scan_InvalidReleaseModuleMetadata_DoesNotAbortOtherRepositories()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var invalidRepository = scope.CreateRepository("InvalidReleaseRepo");
+        File.Delete(Path.Combine(invalidRepository, "Build", "Build-Module.ps1"));
+        File.WriteAllText(
+            Path.Combine(invalidRepository, "Build", "release.json"),
+            """{ "Module": { "RepositoryRoot": 42, "ConfigPath": { "file": "powerforge.json" } } }""");
+        var validRepository = scope.CreateRepository("ValidModuleRepo");
+
+        var entries = new RepositoryCatalogScanner().Scan(scope.RootPath);
+
+        Assert.Equal(2, entries.Count);
+        Assert.Null(entries.Single(entry => entry.Name == "InvalidReleaseRepo").ModuleBuildScriptPath);
+        Assert.NotNull(entries.Single(entry => entry.Name == "ValidModuleRepo").ModuleBuildScriptPath);
+    }
+
     private sealed class TemporaryDirectoryScope : IDisposable
     {
         public TemporaryDirectoryScope()
