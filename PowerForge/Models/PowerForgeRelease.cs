@@ -36,6 +36,7 @@ internal sealed class PowerForgeReleaseRequest
 {
     internal string? ResolvedReleaseVersion { get; set; }
     internal IPowerForgeReleaseProgressReporter? Progress { get; set; }
+    internal CancellationToken CancellationToken { get; set; }
 
     public string ConfigPath { get; set; } = string.Empty;
 
@@ -81,6 +82,8 @@ internal sealed class PowerForgeReleaseRequest
     public bool? ModuleSkipInstall { get; set; }
 
     public bool? ModuleSignModule { get; set; }
+
+    internal bool? ModuleIncludePublishing { get; set; }
 
     public int? ModuleTimeoutSeconds { get; set; }
 

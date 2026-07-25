@@ -111,4 +111,53 @@ public sealed class PowerForgeReleaseConfigScaffoldServiceTests
             try { root.Delete(recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void Generate_module_json_with_owned_package_lane_marks_module_as_package_owner()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "pf-release-scaffold-packages-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root.FullName, "powerforge.json"),
+                """
+                {
+                  "Build": { "Name": "Sample", "SourcePath": "Module" },
+                  "Segments": [
+                    {
+                      "Type": "PackageBuild",
+                      "Configuration": {
+                        "Name": "Sample.Library",
+                        "RootPath": ".",
+                        "Build": true,
+                        "PublishNuget": true
+                      }
+                    }
+                  ]
+                }
+                """);
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+
+            var result = new PowerForgeReleaseConfigScaffoldService().Generate(new PowerForgeReleaseConfigScaffoldRequest
+            {
+                ProjectRoot = root.FullName,
+                WorkingDirectory = root.FullName,
+                SkipPackages = true,
+                SkipTools = true
+            });
+
+            using var release = JsonDocument.Parse(File.ReadAllText(result.ConfigPath));
+            Assert.True(release.RootElement
+                .GetProperty("Module")
+                .GetProperty("IncludesPackages")
+                .GetBoolean());
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
 }

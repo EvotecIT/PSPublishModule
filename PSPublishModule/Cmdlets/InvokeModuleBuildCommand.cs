@@ -166,6 +166,13 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     public bool IncludeProjectPackages { get; set; } = true;
 
     /// <summary>
+    /// Controls whether module repository and GitHub publish segments declared by a JSON configuration are included.
+    /// Parent release hosts disable them when publishing signed checkpointed module artifacts directly.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public bool IncludeModulePublishing { get; set; } = true;
+
+    /// <summary>
     /// Indicates that a parent unified release owns GitHub publication and suppresses
     /// GitHub publish segments declared by the JSON module configuration.
     /// </summary>
@@ -486,6 +493,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             SignModule = SignModule.IsPresent,
             SignModuleWasBound = boundParameters?.ContainsKey(nameof(SignModule)) == true,
             IncludeProjectPackages = IncludeProjectPackages,
+            IncludeModulePublishing = IncludeModulePublishing,
             UnifiedGitHubRelease = PowerForgeUnifiedGitHubRelease.IsPresent,
             CertificateThumbprint = CertificateThumbprint,
             SignIncludeBinaries = SignIncludeBinaries,

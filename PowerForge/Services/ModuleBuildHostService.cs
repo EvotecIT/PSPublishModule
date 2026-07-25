@@ -117,7 +117,9 @@ public sealed class ModuleBuildHostService
                 captureError: true,
                 outputLineReceived: outputLineReceived,
                 errorLineReceived: null);
-        var result = await Task.Run(() => _powerShellRunner.Run(runRequest), cancellationToken).ConfigureAwait(false);
+        var result = _powerShellRunner is ICancellablePowerShellRunner cancellableRunner
+            ? await cancellableRunner.RunAsync(runRequest, cancellationToken).ConfigureAwait(false)
+            : await Task.Run(() => _powerShellRunner.Run(runRequest), cancellationToken).ConfigureAwait(false);
         startedAt.Stop();
 
         return new ModuleBuildHostExecutionResult {
@@ -351,6 +353,8 @@ public sealed class ModuleBuildHostService
                         : null);
         if (!request.IncludeProjectPackages)
             arguments.Add("$moduleBuildArguments['IncludeProjectPackages'] = $false");
+        if (!request.IncludeModulePublishing)
+            arguments.Add("$moduleBuildArguments['IncludeModulePublishing'] = $false");
         if (request.SkipInstall)
             arguments.Add("$moduleBuildArguments['SkipInstall'] = $true");
         if (request.UnifiedGitHubRelease)
@@ -445,6 +449,7 @@ public sealed class ModuleBuildHostService
         }
 
         arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('IncludeProjectPackages')) {{ $buildScriptArguments['IncludeProjectPackages'] = ${request.IncludeProjectPackages.ToString().ToLowerInvariant()} }}");
+        arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('IncludeModulePublishing')) {{ $buildScriptArguments['IncludeModulePublishing'] = ${request.IncludeModulePublishing.ToString().ToLowerInvariant()} }}");
 
         AddOptionalStringArgument(arguments, "CertificateThumbprint", request.CertificateThumbprint);
         AddOptionalSwitchArgument(arguments, "SignIncludeBinaries", request.SignIncludeBinaries);

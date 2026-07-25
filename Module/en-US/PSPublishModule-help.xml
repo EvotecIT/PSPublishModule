@@ -21224,6 +21224,19 @@ When provided, conflict findings can participate in diagnostics baselines and po
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IncludeModulePublishing</maml:name>
+          <maml:description>
+            <maml:para>Controls whether module repository and GitHub publish segments declared by a JSON configuration are included.&#xD;
+Parent release hosts disable them when publishing signed checkpointed module artifacts directly.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>IncludeProjectPackages</maml:name>
           <maml:description>
             <maml:para>Controls whether project/package segments declared by a JSON configuration are included.&#xD;
@@ -21943,6 +21956,19 @@ When provided, conflict findings can participate in diagnostics baselines and po
         <command:parameterValue required="false" variableLength="false">ScriptBlock</command:parameterValue>
         <dev:type>
           <maml:name>ScriptBlock</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IncludeModulePublishing</maml:name>
+        <maml:description>
+          <maml:para>Controls whether module repository and GitHub publish segments declared by a JSON configuration are included.&#xD;
+Parent release hosts disable them when publishing signed checkpointed module artifacts directly.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

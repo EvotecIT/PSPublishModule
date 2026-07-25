@@ -105,7 +105,13 @@ public sealed class PowerForgeReleaseConfigScaffoldService
                 ? "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/powerforge.release.schema.json"
                 : null,
             SchemaVersion = 1,
-            Module = BuildModuleSection(projectRoot, outputPath, moduleConfigPath, moduleScriptPath, modulePipeline),
+            Module = BuildModuleSection(
+                projectRoot,
+                outputPath,
+                moduleConfigPath,
+                moduleScriptPath,
+                modulePipeline,
+                outerPackagesConfigured: packages is not null),
             Packages = packages,
             Tools = BuildToolsSection(request, outputPath, packages, dotNetPublishConfigPath),
             Outputs = new PowerForgeReleaseOutputsOptions
@@ -248,7 +254,8 @@ public sealed class PowerForgeReleaseConfigScaffoldService
         string outputPath,
         string? moduleConfigPath,
         string? moduleScriptPath,
-        ModulePipelineSpec? modulePipeline)
+        ModulePipelineSpec? modulePipeline,
+        bool outerPackagesConfigured)
     {
         if (string.IsNullOrWhiteSpace(moduleConfigPath) && string.IsNullOrWhiteSpace(moduleScriptPath))
             return null;
@@ -289,6 +296,10 @@ public sealed class PowerForgeReleaseConfigScaffoldService
                 ? GetRelativePathCompat(projectRoot, manifestPath).Replace('\\', '/')
                 : null,
             ModuleVersion = NormalizeNullable(ModulePipelineConfigurationService.ResolveEffectiveVersion(modulePipeline)),
+            IncludesPackages = !outerPackagesConfigured &&
+                (modulePipeline?.Segments ?? Array.Empty<IConfigurationSegment>())
+                    .Any(static segment =>
+                        segment is ConfigurationProjectBuildSegment or ConfigurationPackageBuildSegment),
             ArtifactPaths = artifactPaths
         };
     }

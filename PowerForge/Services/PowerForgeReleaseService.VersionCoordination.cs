@@ -126,7 +126,10 @@ internal sealed partial class PowerForgeReleaseService
                     : PowerForgeReleaseProgressPhase.Packages);
         }
 
-        return _executePackages(packageRequest, packages, configPath);
+        request.CancellationToken.ThrowIfCancellationRequested();
+        var result = _executePackages(packageRequest, packages, configPath);
+        request.CancellationToken.ThrowIfCancellationRequested();
+        return result;
     }
 
     private static string ResolveCoordinatedPackageVersion(

@@ -53,9 +53,13 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
         {
             var configPath = repository.UnifiedReleaseConfigPath!;
-            var unified = _executeUnifiedReleaseBuild(
+            var unifiedRequest = CreateUnifiedReleaseBuildRequest(
                 configPath,
-                CreateUnifiedReleaseBuildRequest(configPath, PowerForgeStudioHostPaths.ResolvePSPublishModulePath()));
+                PowerForgeStudioHostPaths.ResolvePSPublishModulePath());
+            unifiedRequest.CancellationToken = cancellationToken;
+            var unified = await Task.Run(
+                () => _executeUnifiedReleaseBuild(configPath, unifiedRequest),
+                cancellationToken).ConfigureAwait(false);
             results.AddRange(CreateUnifiedAdapterResults(repository, unified, DateTimeOffset.UtcNow - startedAt));
             return ReleaseQueueExecutionResultFactory.CreateBuildResult(
                 repositoryRoot,

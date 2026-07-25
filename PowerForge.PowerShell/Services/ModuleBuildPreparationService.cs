@@ -231,6 +231,14 @@ internal sealed class ModuleBuildPreparationService
             spec.Segments = segments;
         }
 
+        if (!request.IncludeModulePublishing)
+        {
+            segments = segments
+                .Where(static segment => segment is not ConfigurationPublishSegment)
+                .ToArray();
+            spec.Segments = segments;
+        }
+
         if (request.UnifiedGitHubRelease)
         {
             segments = segments

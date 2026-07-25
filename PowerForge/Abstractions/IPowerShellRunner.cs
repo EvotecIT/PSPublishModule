@@ -349,10 +349,17 @@ public interface IPowerShellRunner
     /// </summary>
     PowerShellRunResult Run(PowerShellRunRequest request);
 }
+
+internal interface ICancellablePowerShellRunner
+{
+    Task<PowerShellRunResult> RunAsync(
+        PowerShellRunRequest request,
+        CancellationToken cancellationToken);
+}
 /// <summary>
 /// Default implementation that locates <c>pwsh</c> or <c>powershell.exe</c> on PATH and executes a script with <c>-File</c>.
 /// </summary>
-public sealed class PowerShellRunner : IPowerShellRunner
+public sealed class PowerShellRunner : IPowerShellRunner, ICancellablePowerShellRunner
 {
     private readonly IProcessRunner _processRunner;
 
@@ -367,6 +374,16 @@ public sealed class PowerShellRunner : IPowerShellRunner
 
     /// <inheritdoc />
     public PowerShellRunResult Run(PowerShellRunRequest request)
+        => RunAsync(request, CancellationToken.None).GetAwaiter().GetResult();
+
+    async Task<PowerShellRunResult> ICancellablePowerShellRunner.RunAsync(
+        PowerShellRunRequest request,
+        CancellationToken cancellationToken)
+        => await RunAsync(request, cancellationToken).ConfigureAwait(false);
+
+    private async Task<PowerShellRunResult> RunAsync(
+        PowerShellRunRequest request,
+        CancellationToken cancellationToken)
     {
         string? resolutionError = null;
         var exe = request.RequiredRuntimeMajor > 0
@@ -379,7 +396,7 @@ public sealed class PowerShellRunner : IPowerShellRunner
         }
 
         var arguments = BuildArguments(request);
-        var processResult = _processRunner.RunAsync(
+        var processResult = await _processRunner.RunAsync(
             new ProcessRunRequest(
                 exe,
                 request.WorkingDirectory ?? Environment.CurrentDirectory,
@@ -389,7 +406,8 @@ public sealed class PowerShellRunner : IPowerShellRunner
                 request.CaptureOutput,
                 request.CaptureError,
                 request.OutputLineReceived,
-                request.ErrorLineReceived)).GetAwaiter().GetResult();
+                request.ErrorLineReceived),
+            cancellationToken).ConfigureAwait(false);
 
         return new PowerShellRunResult(processResult.ExitCode, processResult.StdOut, processResult.StdErr, exe);
     }

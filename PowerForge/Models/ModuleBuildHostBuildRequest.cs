@@ -95,6 +95,12 @@ public sealed class ModuleBuildHostBuildRequest
     public bool IncludeProjectPackages { get; set; } = true;
 
     /// <summary>
+    /// Includes module repository and GitHub publish segments declared by the module configuration.
+    /// Parent release hosts disable these when they publish signed checkpointed module artifacts directly.
+    /// </summary>
+    public bool IncludeModulePublishing { get; set; } = true;
+
+    /// <summary>
     /// Skips installing the module after a JSON-backed build.
     /// </summary>
     public bool SkipInstall { get; set; }

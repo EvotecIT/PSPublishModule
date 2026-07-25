@@ -187,6 +187,8 @@ internal sealed partial class PowerForgeReleaseService
         if (request is null)
             throw new ArgumentNullException(nameof(request));
 
+        request.CancellationToken.ThrowIfCancellationRequested();
+
         if (string.IsNullOrWhiteSpace(request.ConfigPath))
             throw new ArgumentException("ConfigPath is required.", nameof(request));
 
@@ -380,7 +382,10 @@ internal sealed partial class PowerForgeReleaseService
 
             if (!request.PlanOnly && !request.ValidateOnly)
             {
-                var moduleResult = new ModuleBuildHostService().ExecuteBuildAsync(module.Request).GetAwaiter().GetResult();
+                var moduleResult = new ModuleBuildHostService()
+                    .ExecuteBuildAsync(module.Request, request.CancellationToken)
+                    .GetAwaiter()
+                    .GetResult();
                 result.Module = moduleResult;
                 if (!moduleResult.Succeeded)
                 {
@@ -500,10 +505,12 @@ internal sealed partial class PowerForgeReleaseService
 
                     if (!request.PlanOnly && !request.ValidateOnly)
                     {
+                        request.CancellationToken.ThrowIfCancellationRequested();
                         var toolProgress = request.Progress is IPowerForgeReleaseProgressReporterV2 detailedProgress
                             ? new DotNetPublishReleaseProgressAdapter(detailedProgress, dotNetPlan)
                             : null;
                         var dotNetTools = _runDotNetTools(dotNetPlan, toolProgress);
+                        request.CancellationToken.ThrowIfCancellationRequested();
                         FilterDotNetToolResult(dotNetTools, selectedToolOutputs);
                         result.DotNetTools = dotNetTools;
                         if (!dotNetTools.Succeeded)
@@ -544,9 +551,11 @@ internal sealed partial class PowerForgeReleaseService
 
                     if (!request.PlanOnly && !request.ValidateOnly)
                     {
+                        request.CancellationToken.ThrowIfCancellationRequested();
                         var tools = _runTools(
                             toolPlan,
                             request.Progress as IPowerForgeReleaseProgressReporterV2);
+                        request.CancellationToken.ThrowIfCancellationRequested();
                         result.Tools = tools;
                         if (!tools.Success)
                         {
@@ -724,6 +733,8 @@ internal sealed partial class PowerForgeReleaseService
         if (string.IsNullOrWhiteSpace(request.ConfigPath))
             throw new ArgumentException("ConfigPath is required.", nameof(request));
 
+        request.CancellationToken.ThrowIfCancellationRequested();
+
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
         var sharedReleaseVersion = request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, builtResult);
@@ -739,6 +750,7 @@ internal sealed partial class PowerForgeReleaseService
                 ModuleNoSign = true,
                 ModuleSkipInstall = true,
                 ModuleSignModule = false,
+                ModuleIncludePublishing = false,
                 ResolvedReleaseVersion = sharedReleaseVersion
             };
             var modulePublish = PrepareModuleRelease(
@@ -749,7 +761,7 @@ internal sealed partial class PowerForgeReleaseService
                 packagePublishingRequested: true,
                 publishUnifiedGitHub: spec.GitHub?.Publish == true);
             var modulePublishResult = new ModuleBuildHostService()
-                .ExecuteBuildAsync(modulePublish.Request)
+                .ExecuteBuildAsync(modulePublish.Request, request.CancellationToken)
                 .GetAwaiter()
                 .GetResult();
             builtResult.Module = modulePublishResult;
@@ -1120,6 +1132,7 @@ internal sealed partial class PowerForgeReleaseService
             SignModule = signModuleOverride ?? false,
             SignModuleWasSpecified = signModuleOverride.HasValue,
             IncludeProjectPackages = includeProjectPackages,
+            IncludeModulePublishing = request.ModuleIncludePublishing ?? true,
             Timeout = TimeSpan.FromSeconds(timeoutSeconds),
             CertificateThumbprint = request.ModuleCertificateThumbprint,
             SignIncludeBinaries = request.ModuleSignIncludeBinaries,
@@ -2707,16 +2720,33 @@ internal sealed partial class PowerForgeReleaseService
         if (resolved.Error is not null)
             return resolved.Error;
 
-        var assets = result.ReleaseAssets
-            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+        var expectedAssets = result.ReleaseAssets
             .Concat(new[]
             {
                 result.ReleaseManifestPath,
                 result.ReleaseChecksumsPath
-            }.Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
+            })
+            .Where(path => !string.IsNullOrWhiteSpace(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(path => path!)
             .ToArray();
+        var missingAssets = expectedAssets
+            .Where(static path => !File.Exists(path))
+            .ToArray();
+        if (missingAssets.Length > 0)
+        {
+            return new PowerForgeUnifiedGitHubReleaseResult
+            {
+                Owner = resolved.Owner ?? string.Empty,
+                Repository = resolved.Repository ?? string.Empty,
+                Version = version!,
+                Success = false,
+                ErrorMessage = "Checkpointed unified GitHub release assets are missing: " +
+                               string.Join(", ", missingAssets)
+            };
+        }
+
+        var assets = expectedAssets;
         if (assets.Length == 0)
         {
             return new PowerForgeUnifiedGitHubReleaseResult

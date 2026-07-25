@@ -22,6 +22,7 @@ internal sealed class ModuleBuildPreparationRequest
     public bool SignModule { get; set; }
     public bool SignModuleWasBound { get; set; }
     public bool IncludeProjectPackages { get; set; } = true;
+    public bool IncludeModulePublishing { get; set; } = true;
     public bool UnifiedGitHubRelease { get; set; }
     public string? CertificateThumbprint { get; set; }
     public bool? SignIncludeBinaries { get; set; }

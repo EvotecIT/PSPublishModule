@@ -33,9 +33,22 @@ public sealed partial class ReleasePublishExecutionService
             var targets = new List<ReleasePublishTarget>();
             var assets = unified.ReleaseAssets
                 .Concat(unified.ReleaseAssetEntries.Select(static entry => entry.StagedPath ?? entry.Path))
-                .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                .Concat(new[] { unified.ReleaseManifestPath, unified.ReleaseChecksumsPath })
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(static path => path!)
                 .ToArray();
+            var missingAssets = assets
+                .Where(static path => !File.Exists(path))
+                .ToArray();
+            if ((spec.GitHub?.Publish == true || spec.Tools?.GitHub.Publish == true) &&
+                missingAssets.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    "Checkpointed unified GitHub release assets are missing: " +
+                    string.Join(", ", missingAssets));
+            }
+
             if ((spec.GitHub?.Publish == true || spec.Tools?.GitHub.Publish == true) &&
                 assets.FirstOrDefault() is { } sourcePath)
             {
@@ -232,21 +245,6 @@ public sealed partial class ReleasePublishExecutionService
         try
         {
             return PowerForgeReleaseService.LoadConfiguration(configPath!).GitHub?.Publish == true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static bool UnifiedReleaseOwnsModulePackages(string? configPath)
-    {
-        if (string.IsNullOrWhiteSpace(configPath))
-            return false;
-
-        try
-        {
-            return PowerForgeReleaseService.LoadConfiguration(configPath!).Module?.IncludesPackages == true;
         }
         catch
         {

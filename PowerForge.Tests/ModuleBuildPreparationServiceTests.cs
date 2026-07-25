@@ -51,6 +51,7 @@ public sealed partial class ModuleBuildPreparationServiceTests
           ]
         }
         """);
+        Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
         var original = File.ReadAllText(configPath);
 
         try
