@@ -101,6 +101,33 @@ public sealed class AsyncPSCmdletTests
     }
 
     [Fact]
+    public void AsyncPSCmdlet_translates_cancellation_to_a_pipeline_stop()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncCancellation",
+            typeof(TestAsyncCancellationCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncCancellation");
+        TestAsyncCancellationCommand.Reset();
+
+        var invocation = powerShell.BeginInvoke();
+        Assert.True(
+            TestAsyncCancellationCommand.Started.Wait(TimeSpan.FromSeconds(5)),
+            "The asynchronous cmdlet did not start in time.");
+
+        powerShell.Stop();
+
+        var exception = Assert.Throws<PipelineStoppedException>(() => powerShell.EndInvoke(invocation));
+        Assert.IsNotType<OperationCanceledException>(exception);
+    }
+
+    [Fact]
     public void AsyncPSCmdlet_marshals_terminating_errors_to_the_pipeline_thread()
     {
         var sessionState = InitialSessionState.CreateDefault();
@@ -238,6 +265,26 @@ public sealed class TestAsyncTaskSchedulerCommand : AsyncPSCmdlet
         Assert.Same(_scheduler, TaskScheduler.Current);
         await Task.Yield();
         WriteObject(_scheduler.QueuedTaskCount);
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncCancellation")]
+public sealed class TestAsyncCancellationCommand : AsyncPSCmdlet
+{
+    private static ManualResetEventSlim _started = new();
+
+    public static ManualResetEventSlim Started => _started;
+
+    public static void Reset()
+    {
+        _started.Dispose();
+        _started = new ManualResetEventSlim();
+    }
+
+    protected override async Task ProcessRecordAsync()
+    {
+        _started.Set();
+        await Task.Delay(Timeout.InfiniteTimeSpan, CancelToken);
     }
 }
 
