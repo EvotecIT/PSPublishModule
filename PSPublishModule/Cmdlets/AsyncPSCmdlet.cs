@@ -247,7 +247,7 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
     }
 
     /// <inheritdoc />
-    public void Dispose()
+    public virtual void Dispose()
         => _cancelSource.Dispose();
 
     private bool IsPipelineThread
