@@ -49,6 +49,8 @@ public sealed partial class ModuleBuildPreparationServiceTests
             var release = Assert.Single(
                 prepared.PipelineSpec.Segments.OfType<ConfigurationReleaseSegment>());
             Assert.False(release.Configuration.SynchronizeModuleVersion);
+            Assert.Equal(ReleaseVersionSource.Module, release.Configuration.VersionSource);
+            Assert.Null(release.Configuration.PrimaryProject);
             _ = new ModulePipelineRunner(new NullLogger()).Plan(prepared.PipelineSpec);
         }
         finally

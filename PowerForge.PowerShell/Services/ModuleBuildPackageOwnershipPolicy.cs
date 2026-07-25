@@ -13,12 +13,13 @@ internal static class ModuleBuildPackageOwnershipPolicy
     {
         foreach (var release in segments.OfType<ConfigurationReleaseSegment>())
         {
-            if (release.Configuration.SynchronizeModuleVersion &&
-                release.Configuration.VersionSource is
-                    ReleaseVersionSource.ProjectBuild or
-                    ReleaseVersionSource.PackageBuild)
+            if (release.Configuration.VersionSource is
+                ReleaseVersionSource.ProjectBuild or
+                ReleaseVersionSource.PackageBuild)
             {
                 release.Configuration.SynchronizeModuleVersion = false;
+                release.Configuration.VersionSource = ReleaseVersionSource.Module;
+                release.Configuration.PrimaryProject = null;
             }
         }
     }
