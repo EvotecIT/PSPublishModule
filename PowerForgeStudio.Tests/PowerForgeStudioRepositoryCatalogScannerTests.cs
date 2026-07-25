@@ -28,6 +28,7 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
         File.Delete(legacyScript);
         File.WriteAllText(Path.Combine(buildPath, "Build-Project.ps1"), "# unified entry point");
         var moduleConfig = Path.Combine(repositoryPath, "powerforge.json");
+        Directory.CreateDirectory(Path.Combine(repositoryPath, "src", "JsonModuleRepo"));
         File.WriteAllText(moduleConfig, """{ "SchemaVersion": 1, "Build": { "Name": "JsonModuleRepo", "SourcePath": "src/JsonModuleRepo" } }""");
         File.WriteAllText(
             Path.Combine(buildPath, "release.json"),
@@ -46,6 +47,46 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
         Assert.Equal(moduleConfig, entry.ModuleBuildScriptPath);
         Assert.Null(entry.ProjectBuildScriptPath);
         Assert.True(entry.IsReleaseManaged);
+    }
+
+    [Fact]
+    public void InspectRepository_UnifiedReleaseWithPackages_PreservesBothBuildContracts()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryPath = scope.CreateRepository("UnifiedRepo");
+        var buildPath = Path.Combine(repositoryPath, "Build");
+        File.Delete(Path.Combine(buildPath, "Build-Module.ps1"));
+        var moduleRoot = Directory.CreateDirectory(Path.Combine(repositoryPath, "src", "UnifiedRepo")).FullName;
+        var moduleConfig = Path.Combine(repositoryPath, "powerforge.json");
+        File.WriteAllText(
+            moduleConfig,
+            $$"""{ "SchemaVersion": 1, "Build": { "Name": "UnifiedRepo", "SourcePath": "{{moduleRoot.Replace("\\", "\\\\")}}" } }""");
+        var releaseConfig = Path.Combine(buildPath, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "Module": {
+                "RepositoryRoot": "..",
+                "ConfigPath": "powerforge.json"
+              },
+              "Packages": {
+                "RootPath": "..",
+                "Build": true
+              }
+            }
+            """);
+
+        var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
+
+        Assert.Equal(ReleaseRepositoryKind.Mixed, entry.RepositoryKind);
+        Assert.Equal(moduleConfig, entry.ModuleBuildScriptPath);
+        Assert.Equal(releaseConfig, entry.ProjectBuildScriptPath);
+        Assert.Equal(
+            releaseConfig,
+            PowerForgeStudio.Orchestrator.Portfolio.RepositoryPlanPreviewService.ResolveProjectConfigPath(
+                entry.ProjectBuildScriptPath!,
+                repositoryPath));
     }
 
     [Fact]
@@ -77,6 +118,31 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
 
         Assert.Equal(2, entries.Count);
         Assert.Null(entries.Single(entry => entry.Name == "InvalidReleaseRepo").ModuleBuildScriptPath);
+        Assert.NotNull(entries.Single(entry => entry.Name == "ValidModuleRepo").ModuleBuildScriptPath);
+    }
+
+    [Fact]
+    public void Scan_NullArtifactConfiguration_DoesNotAbortOtherRepositories()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var invalidRepository = scope.CreateRepository("InvalidArtifactRepo");
+        File.Delete(Path.Combine(invalidRepository, "Build", "Build-Module.ps1"));
+        File.WriteAllText(
+            Path.Combine(invalidRepository, "powerforge.json"),
+            """
+            {
+              "Build": { "Name": "InvalidArtifactRepo", "SourcePath": "." },
+              "Segments": [
+                { "Type": "Packed", "Configuration": null }
+              ]
+            }
+            """);
+        var validRepository = scope.CreateRepository("ValidModuleRepo");
+
+        var entries = new RepositoryCatalogScanner().Scan(scope.RootPath);
+
+        Assert.Equal(2, entries.Count);
+        Assert.Null(entries.Single(entry => entry.Name == "InvalidArtifactRepo").ModuleBuildScriptPath);
         Assert.NotNull(entries.Single(entry => entry.Name == "ValidModuleRepo").ModuleBuildScriptPath);
     }
 

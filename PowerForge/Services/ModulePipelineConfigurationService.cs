@@ -43,6 +43,9 @@ public sealed class ModulePipelineConfigurationService
 
         var configDirectory = Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory();
         var projectRoot = PathTokenProtection.GetFullPath(configDirectory, spec.Build.SourcePath);
+        if (!Directory.Exists(projectRoot))
+            throw new DirectoryNotFoundException($"Module pipeline Build.SourcePath was not found: {projectRoot}");
+
         spec.Build.SourcePath = projectRoot;
         ResolveProjectPaths(spec, projectRoot);
 
@@ -100,6 +103,9 @@ public sealed class ModulePipelineConfigurationService
         foreach (var publish in (spec.Segments ?? Array.Empty<IConfigurationSegment>())
                      .OfType<ConfigurationPublishSegment>())
         {
+            if (publish.Configuration is null)
+                throw new InvalidOperationException($"Module pipeline segment '{publish.Type}' requires a Configuration object.");
+
             if (!string.IsNullOrWhiteSpace(publish.Configuration.ApiKeyFilePath))
             {
                 publish.Configuration.ApiKeyFilePath = PathTokenProtection.GetFullPath(
@@ -111,6 +117,9 @@ public sealed class ModulePipelineConfigurationService
         foreach (var artefact in (spec.Segments ?? Array.Empty<IConfigurationSegment>())
                      .OfType<ConfigurationArtefactSegment>())
         {
+            if (artefact.Configuration is null)
+                throw new InvalidOperationException($"Module pipeline segment '{artefact.Type}' requires a Configuration object.");
+
             if (!string.IsNullOrWhiteSpace(artefact.Configuration.Path))
             {
                 artefact.Configuration.Path = PathTokenProtection.GetFullPath(

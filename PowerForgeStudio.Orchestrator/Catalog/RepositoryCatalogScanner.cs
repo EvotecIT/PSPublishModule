@@ -53,16 +53,19 @@ public sealed class RepositoryCatalogScanner
     private static RepositoryCatalogEntry InspectDirectory(string directoryPath, bool includeImmediateChildBuildFolders)
     {
         var moduleBuildScript = FindBuildScript(directoryPath, "Build-Module.ps1", includeImmediateChildBuildFolders);
+        var releaseContract = FindReleaseBuildContract(directoryPath, includeImmediateChildBuildFolders);
         var releaseModuleBuildConfig = moduleBuildScript is null
-            ? FindReleaseModuleBuildConfig(directoryPath, includeImmediateChildBuildFolders)
+            ? releaseContract?.ModuleConfigPath
             : null;
         var moduleBuildConfig = moduleBuildScript is null
             ? releaseModuleBuildConfig ?? FindDirectModuleBuildConfig(directoryPath)
             : null;
         var moduleBuildInput = moduleBuildScript ?? moduleBuildConfig;
-        var projectBuildScript = releaseModuleBuildConfig is null
-            ? FindBuildScript(directoryPath, "Build-Project.ps1", includeImmediateChildBuildFolders)
-            : null;
+        var projectBuildScript = releaseContract?.IncludesPackages == true
+            ? releaseContract.ConfigPath
+            : releaseModuleBuildConfig is null
+                ? FindBuildScript(directoryPath, "Build-Project.ps1", includeImmediateChildBuildFolders)
+                : null;
         var hasWebsiteSignals = HasWebsiteSignals(directoryPath);
 
         return new RepositoryCatalogEntry(
@@ -76,14 +79,14 @@ public sealed class RepositoryCatalogScanner
             HasWebsiteSignals: hasWebsiteSignals);
     }
 
-    private static string? FindReleaseModuleBuildConfig(string directoryPath, bool includeImmediateChildBuildFolders)
+    private static ReleaseBuildContract? FindReleaseBuildContract(string directoryPath, bool includeImmediateChildBuildFolders)
     {
         foreach (var releaseConfigPath in EnumerateBuildFiles(directoryPath, "release.json", includeImmediateChildBuildFolders))
         {
-            var moduleConfigPath = ResolveModuleConfigFromRelease(releaseConfigPath);
-            if (moduleConfigPath is not null)
+            var contract = ResolveReleaseBuildContract(releaseConfigPath);
+            if (contract is not null)
             {
-                return moduleConfigPath;
+                return contract;
             }
         }
 
@@ -119,38 +122,44 @@ public sealed class RepositoryCatalogScanner
         }
     }
 
-    private static string? ResolveModuleConfigFromRelease(string releaseConfigPath)
+    private static ReleaseBuildContract? ResolveReleaseBuildContract(string releaseConfigPath)
     {
         try
         {
             using var document = JsonDocument.Parse(
                 File.ReadAllText(releaseConfigPath),
                 new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
-            if (!document.RootElement.TryGetProperty("Module", out var module) ||
-                module.ValueKind != JsonValueKind.Object ||
-                !module.TryGetProperty("ConfigPath", out var configPathElement))
+            var includesPackages = document.RootElement.TryGetProperty("Packages", out var packages) &&
+                                   packages.ValueKind == JsonValueKind.Object;
+            string? moduleConfigPath = null;
+            if (document.RootElement.TryGetProperty("Module", out var module) &&
+                module.ValueKind == JsonValueKind.Object &&
+                module.TryGetProperty("ConfigPath", out var configPathElement))
             {
-                return null;
+                var configuredPath = configPathElement.GetString();
+                if (!string.IsNullOrWhiteSpace(configuredPath))
+                {
+                    var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
+                    var repositoryRoot = releaseDirectory;
+                    if (module.TryGetProperty("RepositoryRoot", out var rootElement) &&
+                        !string.IsNullOrWhiteSpace(rootElement.GetString()))
+                    {
+                        repositoryRoot = Path.GetFullPath(Path.Combine(releaseDirectory, rootElement.GetString()!));
+                    }
+
+                    var fullPath = Path.GetFullPath(Path.IsPathRooted(configuredPath)
+                        ? configuredPath
+                        : Path.Combine(repositoryRoot, configuredPath));
+                    if (IsModulePipelineConfig(fullPath))
+                    {
+                        moduleConfigPath = fullPath;
+                    }
+                }
             }
 
-            var configuredPath = configPathElement.GetString();
-            if (string.IsNullOrWhiteSpace(configuredPath))
-            {
-                return null;
-            }
-
-            var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
-            var repositoryRoot = releaseDirectory;
-            if (module.TryGetProperty("RepositoryRoot", out var rootElement) &&
-                !string.IsNullOrWhiteSpace(rootElement.GetString()))
-            {
-                repositoryRoot = Path.GetFullPath(Path.Combine(releaseDirectory, rootElement.GetString()!));
-            }
-
-            var fullPath = Path.GetFullPath(Path.IsPathRooted(configuredPath)
-                ? configuredPath
-                : Path.Combine(repositoryRoot, configuredPath));
-            return IsModulePipelineConfig(fullPath) ? fullPath : null;
+            return moduleConfigPath is not null || includesPackages
+                ? new ReleaseBuildContract(releaseConfigPath, moduleConfigPath, includesPackages)
+                : null;
         }
         catch (Exception ex) when (
             ex is JsonException or
@@ -167,6 +176,11 @@ public sealed class RepositoryCatalogScanner
     {
         return new ModulePipelineConfigurationService().TryLoad(path, out _);
     }
+
+    private sealed record ReleaseBuildContract(
+        string ConfigPath,
+        string? ModuleConfigPath,
+        bool IncludesPackages);
 
     private static string? FindBuildScript(string directoryPath, string fileName, bool includeImmediateChildBuildFolders)
     {

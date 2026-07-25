@@ -209,6 +209,12 @@ public sealed class RepositoryPlanPreviewService
         ArgumentException.ThrowIfNullOrWhiteSpace(projectBuildScriptPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
 
+        if (string.Equals(Path.GetExtension(projectBuildScriptPath), ".json", StringComparison.OrdinalIgnoreCase) &&
+            File.Exists(projectBuildScriptPath))
+        {
+            return projectBuildScriptPath;
+        }
+
         var buildDirectory = Path.GetDirectoryName(projectBuildScriptPath);
         if (!string.IsNullOrWhiteSpace(buildDirectory))
         {

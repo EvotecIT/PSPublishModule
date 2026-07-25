@@ -87,6 +87,44 @@ public sealed class ProjectBuildPublishHostServiceTests
     }
 
     [Fact]
+    public void LoadConfiguration_UsesPackagesSectionFromUnifiedReleaseConfig()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var buildDirectory = Directory.CreateDirectory(Path.Combine(root, "Build")).FullName;
+        var configPath = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            configPath,
+            """
+            {
+              "Module": {
+                "RepositoryRoot": "..",
+                "ConfigPath": "powerforge.json"
+              },
+              "Packages": {
+                "PublishNuget": true,
+                "PublishApiKey": "test-key",
+                "PublishSource": "https://packages.example/v3/index.json",
+                "PublishGitHub": false
+              }
+            }
+            """);
+
+        try
+        {
+            var configuration = new ProjectBuildPublishHostService().LoadConfiguration(configPath);
+
+            Assert.True(configuration.PublishNuget);
+            Assert.False(configuration.PublishGitHub);
+            Assert.Equal("test-key", configuration.PublishApiKey);
+            Assert.Equal("https://packages.example/v3/index.json", configuration.PublishSource);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void PublishGitHub_MapsHostConfigurationIntoSharedRequest()
     {
         ProjectBuildGitHubPublishRequest? captured = null;

@@ -9,6 +9,7 @@ public sealed class ModulePipelineConfigurationServiceTests
         try
         {
             var configPath = Path.Combine(root.FullName, "powerforge.json");
+            Directory.CreateDirectory(Path.Combine(root.FullName, "src", "Sample"));
             File.WriteAllText(
                 configPath,
                 """
@@ -40,6 +41,44 @@ public sealed class ModulePipelineConfigurationServiceTests
                 Assert.Single(context.ArtifactPaths));
             var publish = Assert.Single(context.Spec.Segments.OfType<ConfigurationPublishSegment>());
             Assert.Equal(Path.Combine(projectRoot, "secrets", "gallery.key"), publish.Configuration.ApiKeyFilePath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Load_RejectsMissingSourceDirectoryAndNullArtifactConfiguration()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-module-config-validation-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var missingSourcePath = Path.Combine(root.FullName, "missing-source.json");
+            File.WriteAllText(
+                missingSourcePath,
+                """{ "Build": { "Name": "Sample", "SourcePath": "missing" } }""");
+
+            var sourceException = Assert.Throws<DirectoryNotFoundException>(
+                () => new ModulePipelineConfigurationService().Load(missingSourcePath));
+            Assert.Contains("Build.SourcePath", sourceException.Message, StringComparison.Ordinal);
+
+            var nullArtifactPath = Path.Combine(root.FullName, "null-artifact.json");
+            File.WriteAllText(
+                nullArtifactPath,
+                """
+                {
+                  "Build": { "Name": "Sample", "SourcePath": "." },
+                  "Segments": [
+                    { "Type": "Packed", "Configuration": null }
+                  ]
+                }
+                """);
+
+            var artifactException = Assert.Throws<InvalidOperationException>(
+                () => new ModulePipelineConfigurationService().Load(nullArtifactPath));
+            Assert.Contains("requires a Configuration object", artifactException.Message, StringComparison.Ordinal);
+            Assert.False(new ModulePipelineConfigurationService().TryLoad(nullArtifactPath, out _));
         }
         finally
         {
