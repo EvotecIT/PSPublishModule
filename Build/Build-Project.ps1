@@ -102,6 +102,10 @@ $moduleProject = Join-Path $repoRoot 'PSPublishModule\PSPublishModule.csproj'
 $moduleBinary = Join-Path $repoRoot "PSPublishModule\bin\$Configuration\$importFramework\PSPublishModule.dll"
 
 try {
+    if ($Publish -and $PackagesOnly) {
+        throw 'The full -Publish switch cannot be combined with -PackagesOnly. Use -PackagesOnly -PublishNuget for a package-only publication.'
+    }
+
     foreach ($framework in $bootstrapFrameworks) {
         $buildOutput = & dotnet build $moduleProject -c $Configuration -f $framework --nologo --verbosity quiet 2>&1
         if ($LASTEXITCODE -ne 0) {

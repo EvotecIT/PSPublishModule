@@ -192,6 +192,8 @@ public sealed class PSPublishModuleManifestContractTests
 
         Assert.Contains("$invokeParams.PublishNuget = $true", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("$invokeParams.ModuleSignModule = $true", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("if ($Publish -and $PackagesOnly)", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("Use -PackagesOnly -PublishNuget", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("[switch] $ModuleNoDotnetBuild", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("$invokeParams.ModuleRunMode = if ($Publish) { 'Publish' } else { $RunMode }", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("$Publish -or $RunMode -eq 'Publish' -or $PublishNuget", projectWrapperScript, StringComparison.Ordinal);

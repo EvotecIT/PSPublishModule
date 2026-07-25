@@ -352,8 +352,10 @@ public sealed class PowerForgeReleaseConfigScaffoldService
         string moduleRoot,
         ModulePipelineSpec modulePipeline)
     {
-        var configuredPaths = (modulePipeline.Segments ?? Array.Empty<IConfigurationSegment>())
+        var artifactSegments = (modulePipeline.Segments ?? Array.Empty<IConfigurationSegment>())
             .OfType<ConfigurationArtefactSegment>()
+            .ToArray();
+        var configuredPaths = artifactSegments
             .Where(segment => segment.Configuration?.Enabled == true)
             .Select(segment =>
             {
@@ -367,7 +369,7 @@ public sealed class PowerForgeReleaseConfigScaffoldService
             .Select(path => GetRelativePathCompat(projectRoot, path).Replace('\\', '/'))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        if (configuredPaths.Length > 0)
+        if (artifactSegments.Length > 0)
             return configuredPaths;
 
         return new[]
