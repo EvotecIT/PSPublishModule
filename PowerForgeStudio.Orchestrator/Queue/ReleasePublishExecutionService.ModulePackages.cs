@@ -22,6 +22,10 @@ public sealed partial class ReleasePublishExecutionService
                 signingResult,
                 cancellationToken).ConfigureAwait(false);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             return [
@@ -228,33 +232,82 @@ public sealed partial class ReleasePublishExecutionService
 
         foreach (var project in plan.Projects)
         {
-            var expectedPackageNames = project.Packages
-                .Select(Path.GetFileName)
-                .Where(static name => !string.IsNullOrWhiteSpace(name))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var projectPackages = packages
-                .Where(path =>
-                    expectedPackageNames.Contains(Path.GetFileName(path)) ||
-                    MatchesProjectPackage(path, project))
-                .ToArray();
+            var projectPackages = ResolveSignedArtifacts(
+                project.Packages,
+                packages,
+                path => MatchesProjectPackage(path, project));
             project.Packages.Clear();
             project.Packages.AddRange(projectPackages);
 
-            var expectedSymbolNames = project.SymbolPackages
-                .Select(Path.GetFileName)
-                .Where(static name => !string.IsNullOrWhiteSpace(name))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var projectSymbols = ResolveSignedArtifacts(
+                project.SymbolPackages,
+                symbolPackages,
+                path => MatchesProjectPackage(path, project));
             project.SymbolPackages.Clear();
-            project.SymbolPackages.AddRange(symbolPackages.Where(path =>
-                expectedSymbolNames.Contains(Path.GetFileName(path)) ||
-                MatchesProjectPackage(path, project)));
+            project.SymbolPackages.AddRange(projectSymbols);
 
-            var expectedZipName = Path.GetFileName(project.ReleaseZipPath);
-            project.ReleaseZipPath = !string.IsNullOrWhiteSpace(expectedZipName)
-                ? archives.FirstOrDefault(path =>
-                    string.Equals(Path.GetFileName(path), expectedZipName, StringComparison.OrdinalIgnoreCase))
-                : archives.FirstOrDefault(path => MatchesProjectArchive(path, project));
+            project.ReleaseZipPath = ResolveSignedArtifacts(
+                    string.IsNullOrWhiteSpace(project.ReleaseZipPath) ? [] : [project.ReleaseZipPath],
+                    archives,
+                    path => MatchesProjectArchive(path, project))
+                .SingleOrDefault();
         }
+    }
+
+    private static string[] ResolveSignedArtifacts(
+        IEnumerable<string> checkpointedPaths,
+        IReadOnlyList<string> signedPaths,
+        Func<string, bool> identityFallback)
+    {
+        var expectedPaths = checkpointedPaths
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var resolved = new List<string>();
+        foreach (var checkpointedPath in expectedPaths)
+        {
+            var expectedPath = Path.GetFullPath(checkpointedPath);
+            var exact = signedPaths.FirstOrDefault(path =>
+                string.Equals(Path.GetFullPath(path), expectedPath, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(exact))
+            {
+                resolved.Add(exact);
+                continue;
+            }
+
+            var expectedFileName = Path.GetFileName(checkpointedPath);
+            var filenameMatches = signedPaths
+                .Where(path => string.Equals(
+                    Path.GetFileName(path),
+                    expectedFileName,
+                    StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (filenameMatches.Length == 1)
+            {
+                resolved.Add(filenameMatches[0]);
+                continue;
+            }
+
+            var fallback = signedPaths
+                .Where(identityFallback)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (fallback.Length == 1)
+                resolved.Add(fallback[0]);
+        }
+
+        if (expectedPaths.Length == 0)
+        {
+            var fallback = signedPaths
+                .Where(identityFallback)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (fallback.Length == 1)
+                resolved.Add(fallback[0]);
+        }
+
+        return resolved.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private static bool MatchesProjectPackage(string path, DotNetRepositoryProjectResult project)

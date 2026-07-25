@@ -5829,7 +5829,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_Winget_UsesPublishedToolGitHubReleaseWhenUrlTemplateIsMissing()
+    public void Execute_Winget_UsesPlannedToolGitHubReleaseWhenPublicationIsDeferred()
     {
         var root = CreateSandbox();
         var trayX64 = Path.Combine(root, "tray-x64.zip");
@@ -5900,13 +5900,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                         }
                     }
                 },
-                publishGitHubRelease: _ => new GitHubReleasePublishResult
-                {
-                    Succeeded = true,
-                    ReleaseCreationSucceeded = true,
-                    HtmlUrl = "https://github.com/EvotecIT/IntelligenceX/releases/tag/IntelligenceX.Tray+v1.0.0",
-                    UploadUrl = "https://uploads.github.com/repos/EvotecIT/IntelligenceX/releases/1/assets{?name,label}"
-                });
+                publishGitHubRelease: _ =>
+                    throw new InvalidOperationException("GitHub publication must remain deferred."));
 
             var stageRoot = Path.Combine(root, "upload-ready");
             var result = service.Execute(
@@ -5966,10 +5961,13 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "release.json"),
-                    ToolsOnly = true
+                    ToolsOnly = true,
+                    PublishToolGitHub = false
                 });
 
             Assert.True(result.Success);
+            Assert.Empty(result.ToolGitHubReleases);
+            Assert.Single(result.ToolGitHubReleasePlans);
             var manifestPath = Assert.Single(result.WingetManifestPaths);
             var yaml = File.ReadAllText(manifestPath);
             Assert.Contains("https://github.com/EvotecIT/IntelligenceX/releases/download/IntelligenceX.Tray%2Bv1.0.0/IntelligenceX.Tray-1.0.0-win-x64-portable.zip", yaml, StringComparison.Ordinal);

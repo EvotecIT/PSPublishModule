@@ -135,7 +135,8 @@ public sealed class RepositoryPublisher
                         path: fullPath,
                         repository: repositoryParameter,
                         apiKey: request.ApiKey,
-                        credential: credential));
+                        credential: credential),
+                    cancellationToken: request.CancellationToken);
             }
             else
             {
@@ -153,7 +154,8 @@ public sealed class RepositoryPublisher
                         destinationPath: request.DestinationPath,
                         skipDependenciesCheck: request.SkipDependenciesCheck,
                         skipModuleManifestValidate: request.SkipModuleManifestValidate,
-                        credential: credential));
+                        credential: credential),
+                    cancellationToken: request.CancellationToken);
             }
         }
         finally

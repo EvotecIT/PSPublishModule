@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
 
 namespace PowerForge;
 
@@ -69,7 +70,8 @@ public sealed partial class ModulePublisher
             artefactResults,
             includeScriptFolders,
             remotePublishAttempted: null,
-            remoteSideEffectObserved: null);
+            remoteSideEffectObserved: null,
+            CancellationToken.None);
 
     internal ModulePublishResult Publish(
         PublishConfiguration publish,
@@ -78,7 +80,8 @@ public sealed partial class ModulePublisher
         IReadOnlyList<ArtefactBuildResult> artefactResults,
         bool includeScriptFolders,
         Action? remotePublishAttempted,
-        Action? remoteSideEffectObserved)
+        Action? remoteSideEffectObserved,
+        CancellationToken cancellationToken = default)
     {
         if (publish is null) throw new ArgumentNullException(nameof(publish));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
@@ -110,7 +113,8 @@ public sealed partial class ModulePublisher
                 buildResult,
                 includeScriptFolders,
                 remotePublishAttempted,
-                remoteSideEffectObserved),
+                remoteSideEffectObserved,
+                cancellationToken),
             PublishDestination.GitHub => PublishToGitHub(
                 publish,
                 plan,
@@ -318,7 +322,8 @@ public sealed partial class ModulePublisher
         ModuleBuildResult buildResult,
         bool includeScriptFolders,
         Action? remotePublishAttempted,
-        Action? remoteSideEffectObserved)
+        Action? remoteSideEffectObserved,
+        CancellationToken cancellationToken)
     {
         var (repositoryName, repoConfig) = ResolveRepository(publish);
         repoConfig = NormalizeRepositoryPaths(repoConfig, plan.ProjectRoot);
@@ -357,20 +362,21 @@ public sealed partial class ModulePublisher
                     repoConfig,
                     includeScriptFolders,
                     remotePublishAttempted,
-                    remoteSideEffectObserved);
+                    remoteSideEffectObserved,
+                    cancellationToken);
             }
 
             try
             {
-                return PublishToRepositoryWithTool(PublishTool.PSResourceGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved);
+                return PublishToRepositoryWithTool(PublishTool.PSResourceGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved, cancellationToken);
             }
             catch (PowerShellToolNotAvailableException)
             {
-                return PublishToRepositoryWithTool(PublishTool.PowerShellGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved);
+                return PublishToRepositoryWithTool(PublishTool.PowerShellGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved, cancellationToken);
             }
         }
 
-        return PublishToRepositoryWithTool(tool, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved);
+        return PublishToRepositoryWithTool(tool, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved, cancellationToken);
     }
 
     private ModulePublishResult PublishToRepositoryWithTool(
@@ -382,7 +388,8 @@ public sealed partial class ModulePublisher
         PublishRepositoryConfiguration? repoConfig,
         bool includeScriptFolders,
         Action? remotePublishAttempted,
-        Action? remoteSideEffectObserved)
+        Action? remoteSideEffectObserved,
+        CancellationToken cancellationToken)
     {
         if (publish.PublishRequiredModules && tool == PublishTool.PowerShellGet)
         {
@@ -406,6 +413,7 @@ public sealed partial class ModulePublisher
 
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             temporaryPublishPath = PrepareModulePackageForRepositoryPublish(
                 stagingPath: buildResult.StagingPath,
                 moduleName: plan.ModuleName,
@@ -493,7 +501,8 @@ public sealed partial class ModulePublisher
                     DestinationPath = null,
                     SkipDependenciesCheck = tool != PublishTool.PowerShellGet,
                     SkipModuleManifestValidate = false,
-                    RemotePublishAttempted = remotePublishAttempted
+                    RemotePublishAttempted = remotePublishAttempted,
+                    CancellationToken = cancellationToken
                 });
 
             _logger.Info($"Published {plan.ModuleName} {versionText} to repository '{repositoryName}' using {tool}.");

@@ -279,7 +279,8 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         }
 
         var releaseMetadata = CollectExplicitArtifacts(
-            [unified.ReleaseManifestPath ?? string.Empty, unified.ReleaseChecksumsPath ?? string.Empty]);
+            new[] { unified.ReleaseManifestPath ?? string.Empty, unified.ReleaseChecksumsPath ?? string.Empty }
+                .Concat(unified.WingetManifestPaths ?? []));
         if (releaseMetadata.Directories.Count > 0 || releaseMetadata.Files.Count > 0)
         {
             if (results.Count == 0)
@@ -381,7 +382,8 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 UpdateVersions = false,
                 Build = true,
                 PublishNuget = false,
-                PublishGitHub = false
+                PublishGitHub = false,
+                CancellationToken = cancellationToken
             });
             var artifactInfo = CollectProjectArtifacts(execution);
 

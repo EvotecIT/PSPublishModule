@@ -1,3 +1,5 @@
+using System.Threading;
+
 namespace PowerForge;
 
 /// <content>
@@ -6,6 +8,11 @@ namespace PowerForge;
 public sealed partial class ModulePublisher
 {
     internal ModulePublishResult PublishCheckpointed(ModuleCheckpointPublishRequest request)
+        => PublishCheckpointed(request, CancellationToken.None);
+
+    internal ModulePublishResult PublishCheckpointed(
+        ModuleCheckpointPublishRequest request,
+        CancellationToken cancellationToken)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
         if (request.Publish is null) throw new ArgumentNullException(nameof(request.Publish));
@@ -45,7 +52,10 @@ public sealed partial class ModulePublisher
             plan,
             buildResult,
             [],
-            includeScriptFolders: true);
+            includeScriptFolders: true,
+            remotePublishAttempted: null,
+            remoteSideEffectObserved: null,
+            cancellationToken);
     }
 
     internal static ModulePipelinePlan CreateCheckpointedPublishPlan(

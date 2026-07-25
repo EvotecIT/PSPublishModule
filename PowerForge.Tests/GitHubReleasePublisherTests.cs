@@ -78,6 +78,24 @@ public sealed class GitHubReleasePublisherTests
     }
 
     [Fact]
+    public void PublishRelease_honors_cancellation_before_contacting_github()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var request = new GitHubReleasePublishRequest
+        {
+            Owner = "EvotecIT",
+            Repository = "PSPublishModule",
+            Token = "token",
+            TagName = "v1.2.3"
+        };
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            new GitHubReleasePublisher(new NullLogger())
+                .PublishRelease(request, cancellation.Token));
+    }
+
+    [Fact]
     public void TryReserveExistingAssetNameForReplacement_AllowsOnlyAssetsFromOriginalSnapshot()
     {
         var replaceableAssetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

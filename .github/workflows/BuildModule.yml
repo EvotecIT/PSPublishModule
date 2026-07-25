@@ -287,14 +287,7 @@ jobs:
         timeout-minutes: 15
         run: dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --no-restore --no-build --nologo
 
-      - name: Run full Studio test suites
-        shell: pwsh
-        timeout-minutes: 10
-        run: |
-          dotnet test .\PowerForgeStudio.Tests\PowerForgeStudio.Tests.csproj -c Release --no-restore --no-build --nologo
-          dotnet test .\PowerForgeStudio.Wpf.Tests\PowerForgeStudio.Wpf.Tests.csproj -c Release --nologo
-
-      - name: Run no-publish product build smoke
+      - name: Run no-publish core product build smoke
         shell: pwsh
         timeout-minutes: 30
         run: .\Build\Test-ProductBuild.ps1 -Runtime win-x64

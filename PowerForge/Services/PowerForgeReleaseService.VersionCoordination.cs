@@ -115,7 +115,8 @@ internal sealed partial class PowerForgeReleaseService
             PublishNuget = suppressPublishing ? false : request.PublishNuget,
             PublishGitHub = suppressPublishing || publishUnifiedGitHub ? false : request.PublishProjectGitHub,
             ReleaseVersionFloor = releaseVersionFloor,
-            ReleaseVersionFloorProject = releaseVersionFloorProject
+            ReleaseVersionFloorProject = releaseVersionFloorProject,
+            CancellationToken = request.CancellationToken
         };
         if (request.Progress is IPowerForgeReleaseProgressReporterV2 detailedProgress)
         {

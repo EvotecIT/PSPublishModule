@@ -6,6 +6,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -31,12 +32,16 @@ public sealed partial class DotNetRepositoryReleaseService
         DotNetRepositoryReleaseSpec spec,
         Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies,
         Action<DotNetReleaseBuildAssemblySigningPreflightRequest>? validateAssemblySigning,
-        IProjectBuildProgressReporter? progress)
+        IProjectBuildProgressReporter? progress,
+        CancellationToken cancellationToken = default)
     {
         var result = new DotNetRepositoryReleaseResult();
+        var previousCancellationToken = ActiveCancellationToken.Value;
+        ActiveCancellationToken.Value = cancellationToken;
 
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (spec is null) throw new ArgumentNullException(nameof(spec));
             if (string.IsNullOrWhiteSpace(spec.RootPath))
             {
@@ -743,11 +748,19 @@ public sealed partial class DotNetRepositoryReleaseService
 
             return result;
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             result.Success = false;
             result.ErrorMessage = ex.Message;
             return result;
+        }
+        finally
+        {
+            ActiveCancellationToken.Value = previousCancellationToken;
         }
     }
 

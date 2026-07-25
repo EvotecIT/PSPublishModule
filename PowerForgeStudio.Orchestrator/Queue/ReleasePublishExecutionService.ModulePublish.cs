@@ -62,13 +62,22 @@ public sealed partial class ReleasePublishExecutionService
             .Where(path => path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) && File.Exists(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var packageAssets = receipts
+            .Select(receipt => receipt.ArtifactPath)
+            .Where(path =>
+                (path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase) ||
+                 path.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase)) &&
+                File.Exists(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         return new ModulePackageDetails(
             ModuleName: manifestInfo.ModuleName,
             Version: manifestInfo.Version,
             PreRelease: manifestInfo.PreRelease,
             PackagePath: packagePath!,
-            ZipAssets: zipAssets);
+            ZipAssets: zipAssets,
+            PackageAssets: packageAssets);
     }
 
     private static bool ModuleManifestMatchesPlan(
@@ -155,6 +164,10 @@ public sealed partial class ReleasePublishExecutionService
             ValidateModuleExportedConfigurationCheckpoint(
                 signingResult,
                 publishSet);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -246,6 +259,10 @@ public sealed partial class ReleasePublishExecutionService
                 $"Module published to {publishResult.RepositoryName ?? destination} using {publishResult.Tool}.",
                 packageDetails.PackagePath);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             return ReleaseQueueReceiptFactory.FailedPublishReceipt(
@@ -301,6 +318,10 @@ public sealed partial class ReleasePublishExecutionService
                 execution.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
                 execution.Succeeded ? $"GitHub release {tag} published." : execution.ErrorMessage!,
                 zipAssets.FirstOrDefault());
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -374,6 +395,14 @@ public sealed partial class ReleasePublishExecutionService
         {
             throw new InvalidOperationException(
                 $"The checkpoint contains no signed ZIP for module publish artefact ID '{publishConfig.ID ?? "(default)"}'.");
+        }
+
+        if ((context.Spec.Segments ?? []).OfType<ConfigurationReleaseSegment>().Any())
+        {
+            return assets
+                .Concat(packageDetails.PackageAssets)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
 
         return assets;

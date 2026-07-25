@@ -272,6 +272,8 @@ internal sealed class PowerForgeReleaseResult
 
     public PowerForgeToolGitHubReleaseResult[] ToolGitHubReleases { get; set; } = Array.Empty<PowerForgeToolGitHubReleaseResult>();
 
+    public PowerForgeToolGitHubReleaseResult[] ToolGitHubReleasePlans { get; set; } = Array.Empty<PowerForgeToolGitHubReleaseResult>();
+
     public string[] ReleaseAssets { get; set; } = Array.Empty<string>();
 
     public PowerForgeReleaseAssetEntry[] ReleaseAssetEntries { get; set; } = Array.Empty<PowerForgeReleaseAssetEntry>();

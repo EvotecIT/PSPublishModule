@@ -145,6 +145,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             ProjectBuildHostRequest? capturedRequest = null;
             string? toolReleaseVersion = null;
             var progress = new RecordingReleaseProgress();
+            using var cancellation = new CancellationTokenSource();
             var service = new PowerForgeReleaseService(
                 new NullLogger(),
                 executePackages: (packageRequest, _, configPath) =>
@@ -203,7 +204,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     PlanOnly = true,
-                    Progress = progress
+                    Progress = progress,
+                    CancellationToken = cancellation.Token
                 });
 
             Assert.True(result.Success, result.ErrorMessage);
@@ -213,6 +215,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(capturedRequest.PlanOnly);
             Assert.False(capturedRequest.ExecuteBuild);
             Assert.False(capturedRequest.PublishNuget);
+            Assert.Equal(cancellation.Token, capturedRequest.CancellationToken);
             Assert.Equal("3.1.0", result.ModulePlan!.ModuleVersion);
             Assert.Equal(moduleConfig, result.ModulePlan.ConfigPath);
             Assert.Null(result.ModulePlan.ScriptPath);

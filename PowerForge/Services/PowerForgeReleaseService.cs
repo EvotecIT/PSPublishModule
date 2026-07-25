@@ -760,6 +760,7 @@ internal sealed partial class PowerForgeReleaseService
         if (!request.PlanOnly && !request.ValidateOnly && !explicitAppleAction)
         {
             PopulateReleaseOutputs(spec, request, configDirectory, result, sharedReleaseVersion);
+            result.ToolGitHubReleasePlans = BuildToolGitHubReleasePlans(spec, result);
             GenerateWingetOutputs(spec, request, configDirectory, result);
             IncludeWingetOutputsInReleaseAssets(result);
             if (publishUnifiedGitHub)
@@ -2665,7 +2666,12 @@ internal sealed partial class PowerForgeReleaseService
                 throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' is missing ShortDescription.");
 
             var installerEntries = package.Installers
-                .Select(installer => ResolveWingetInstallerEntry(installer, winget, package, result.ReleaseAssetEntries, result.ToolGitHubReleases))
+                .Select(installer => ResolveWingetInstallerEntry(
+                    installer,
+                    winget,
+                    package,
+                    result.ReleaseAssetEntries,
+                    result.ToolGitHubReleases.Concat(result.ToolGitHubReleasePlans).ToArray()))
                 .ToArray();
             if (installerEntries.Length == 0)
                 throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' did not resolve any installers.");

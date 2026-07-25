@@ -175,7 +175,8 @@ public sealed class ProjectBuildHostService
                 request.ExecuteBuild,
                 request.RemotePublishAttempted,
                 request.CoordinatedReleaseCheckpointActive,
-                request.Progress);
+                request.Progress,
+                request.CancellationToken);
 
         return new ProjectBuildHostExecutionResult {
             Success = workflow.Result.Success,

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 
 namespace PowerForge;
 
@@ -230,7 +231,10 @@ public sealed class PowerShellGetClient
     /// <summary>
     /// Publishes a PowerShell module using PowerShellGet.
     /// </summary>
-    public void Publish(PowerShellGetPublishOptions options, TimeSpan? timeout = null)
+    public void Publish(
+        PowerShellGetPublishOptions options,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
         if (string.IsNullOrWhiteSpace(options.Path)) throw new ArgumentException("Path is required.", nameof(options));
@@ -245,7 +249,7 @@ public sealed class PowerShellGetClient
             options.Credential?.Secret ?? string.Empty
         };
 
-        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10));
+        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10), cancellationToken);
         if (result.ExitCode != 0)
         {
             var message = TryExtractError(result.StdOut) ?? result.StdErr;
@@ -371,7 +375,11 @@ public sealed class PowerShellGetClient
         }
     }
 
-    private PowerShellRunResult RunScript(string scriptText, IReadOnlyList<string> args, TimeSpan timeout)
+    private PowerShellRunResult RunScript(
+        string scriptText,
+        IReadOnlyList<string> args,
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "PowerForge", "powershellget");
         Directory.CreateDirectory(tempDir);
@@ -379,12 +387,25 @@ public sealed class PowerShellGetClient
         File.WriteAllText(scriptPath, scriptText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         try
         {
-            return _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh: true));
+            var request = new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh: true);
+            return _runner is ICancellablePowerShellRunner cancellableRunner
+                ? cancellableRunner.RunAsync(request, cancellationToken).GetAwaiter().GetResult()
+                : RunWithoutCancellation(request, cancellationToken);
         }
         finally
         {
             try { File.Delete(scriptPath); } catch { /* ignore */ }
         }
+    }
+
+    private PowerShellRunResult RunWithoutCancellation(
+        PowerShellRunRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = _runner.Run(request);
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
     }
 
     private static IEnumerable<string> SplitLines(string? text)

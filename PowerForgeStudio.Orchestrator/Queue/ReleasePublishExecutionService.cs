@@ -30,7 +30,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
             new ProjectBuildCommandHostService(),
             new ProjectBuildPublishHostService(),
             (request, cancellationToken) => new DotNetNuGetClient().PushPackageAsync(request, cancellationToken),
-            (request, _) => Task.FromResult(new GitHubReleasePublisher(new NullLogger()).PublishRelease(request)))
+            (request, cancellationToken) => Task.FromResult(new GitHubReleasePublisher(new NullLogger()).PublishRelease(request, cancellationToken)))
     {
     }
 
@@ -52,9 +52,9 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
         _projectBuildCommandHostService = projectBuildCommandHostService;
         _projectBuildPublishHostService = projectBuildPublishHostService;
         _pushNuGetPackageAsync = pushNuGetPackageAsync;
-        _publishGitHubReleaseAsync = publishGitHubReleaseAsync ?? ((request, _) => Task.FromResult(new GitHubReleasePublisher(new NullLogger()).PublishRelease(request)));
+        _publishGitHubReleaseAsync = publishGitHubReleaseAsync ?? ((request, cancellationToken) => Task.FromResult(new GitHubReleasePublisher(new NullLogger()).PublishRelease(request, cancellationToken)));
         _publishCheckpointedModuleAsync = publishCheckpointedModuleAsync ??
-            ((request, _) => Task.FromResult(new ModulePublisher(new NullLogger()).PublishCheckpointed(request)));
+            ((request, cancellationToken) => Task.FromResult(new ModulePublisher(new NullLogger()).PublishCheckpointed(request, cancellationToken)));
         _publishUnifiedRelease = publishUnifiedReleaseWithCancellation
             ?? (publishUnifiedRelease is not null
                 ? (configPath, stateJson, _) => publishUnifiedRelease(configPath, stateJson)
@@ -294,6 +294,10 @@ public sealed partial class ReleasePublishExecutionService
                 result.HtmlUrl,
                 result.Succeeded ? null : "GitHub publish failed.");
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             return new GitHubReleaseExecutionResult(false, null, FirstLine(ex.Message) ?? "GitHub publish failed.");
@@ -344,7 +348,13 @@ public sealed partial class ReleasePublishExecutionService
             ? null
             : value.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
 
-    private sealed record ModulePackageDetails(string ModuleName, string Version, string? PreRelease, string PackagePath, IReadOnlyList<string> ZipAssets);
+    private sealed record ModulePackageDetails(
+        string ModuleName,
+        string Version,
+        string? PreRelease,
+        string PackagePath,
+        IReadOnlyList<string> ZipAssets,
+        IReadOnlyList<string> PackageAssets);
     private sealed record ModuleManifestInfo(string ModuleName, string Version, string? PreRelease);
 
     private sealed record GitHubReleaseExecutionResult(bool Succeeded, string? ReleaseUrl, string? ErrorMessage);
@@ -367,7 +377,8 @@ public sealed partial class ReleasePublishExecutionService
                 UpdateVersions = false,
                 Build = false,
                 PublishNuget = false,
-                PublishGitHub = false
+                PublishGitHub = false,
+                CancellationToken = cancellationToken
             });
 
             if (!execution.Success || !File.Exists(planPath))

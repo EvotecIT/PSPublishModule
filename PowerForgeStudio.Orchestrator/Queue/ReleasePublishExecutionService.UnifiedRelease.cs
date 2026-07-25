@@ -76,6 +76,12 @@ public sealed partial class ReleasePublishExecutionService
                     "Checkpointed unified GitHub release assets are missing: " +
                     string.Join(", ", missingAssets));
             }
+            if ((spec.GitHub?.Publish == true || spec.Tools?.GitHub.Publish == true) &&
+                assets.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    "Unified GitHub publishing is enabled, but the signed build checkpoint contains no release assets.");
+            }
 
             if ((spec.GitHub?.Publish == true || spec.Tools?.GitHub.Publish == true) &&
                 assets.FirstOrDefault() is { } sourcePath)
@@ -281,6 +287,7 @@ public sealed partial class ReleasePublishExecutionService
         var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
         var builtResult = JsonSerializer.Deserialize<PowerForgeReleaseResult>(stateJson)
             ?? throw new InvalidOperationException("Unified release build state could not be deserialized.");
+        PrepareApplePublishFromCheckpoint(spec, builtResult);
         return new PowerForgeReleaseService(new NullLogger()).PublishBuiltReleaseOutputs(
             spec,
             new PowerForgeReleaseRequest {
@@ -291,6 +298,14 @@ public sealed partial class ReleasePublishExecutionService
                 CancellationToken = cancellationToken
             },
             builtResult);
+    }
+
+    internal static void PrepareApplePublishFromCheckpoint(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseResult builtResult)
+    {
+        if (spec.AppleApps is not null && builtResult.AppleAppPlan is not null)
+            spec.AppleApps.Archive = false;
     }
 
     private static bool UnifiedReleaseOwnsGitHub(string? configPath)

@@ -109,7 +109,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
             var result = await service.ExecuteAsync(queueItem);
 
-            Assert.True(result.Succeeded);
+            Assert.True(
+                result.Succeeded,
+                $"{result.Summary} | {string.Join(" | ", result.Receipts.Select(receipt => receipt.Summary))}");
             var capturedPush = Assert.Single(capturedPushes);
             Assert.Equal(signedPackage, capturedPush.PackagePath);
             Assert.Equal("nested-key", capturedPush.ApiKey);
@@ -216,7 +218,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
             var result = await service.ExecuteAsync(queueItem);
 
-            Assert.True(result.Succeeded);
+            Assert.True(
+                result.Succeeded,
+                $"{result.Summary} | {string.Join(" | ", result.Receipts.Select(receipt => receipt.Summary))}");
             Assert.NotNull(capturedPush);
             Assert.Equal(signedPackage, capturedPush!.PackagePath);
             var receipt = Assert.Single(result.Receipts);
@@ -331,7 +335,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
             var result = await service.ExecuteAsync(queueItem);
 
-            Assert.True(result.Succeeded);
+            Assert.True(
+                result.Succeeded,
+                $"{result.Summary} | {string.Join(" | ", result.Receipts.Select(receipt => receipt.Summary))}");
             Assert.NotNull(capturedPublish);
             Assert.Contains(
                 capturedPublish!.Release.Projects,

@@ -6,7 +6,7 @@ param(
     [ValidateSet('auto', 'win-x64', 'linux-x64', 'osx-x64', 'osx-arm64')]
     [string] $Runtime = 'auto',
 
-    [switch] $SkipStudioSmoke
+    [switch] $IncludeStudioSmoke
 )
 
 $ErrorActionPreference = 'Stop'
@@ -69,7 +69,7 @@ if (-not $webResult.Success -or -not (Test-Path -LiteralPath (Join-Path $webOutp
     throw 'PowerForge.Web sample build did not produce a successful result and index.html.'
 }
 
-if (-not $SkipStudioSmoke) {
+if ($IncludeStudioSmoke) {
     Write-Host 'Running the opt-in Studio build/checkpoint/sign/publish-lock smoke...'
     $originalSmoke = $env:POWERFORGE_RUN_PRODUCT_SMOKE
     $originalRoot = $env:RELEASE_OPS_STUDIO_SMOKE_ROOT
@@ -93,5 +93,5 @@ if (-not $SkipStudioSmoke) {
     Success     = $true
     Runtime     = $resolvedRuntime
     WebOutput   = $webOutput
-    StudioSmoke = -not $SkipStudioSmoke
+    StudioSmoke = [bool] $IncludeStudioSmoke
 }

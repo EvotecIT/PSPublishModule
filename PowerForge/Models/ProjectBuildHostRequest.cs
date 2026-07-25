@@ -12,6 +12,11 @@ public sealed class ProjectBuildHostRequest
     internal string? ReleaseVersionFloorProject { get; set; }
 
     /// <summary>
+    /// Cancels active project build and package child processes.
+    /// </summary>
+    public CancellationToken CancellationToken { get; set; }
+
+    /// <summary>
     /// Path to the <c>project.build.json</c> configuration file.
     /// </summary>
     public string ConfigPath { get; set; } = string.Empty;
