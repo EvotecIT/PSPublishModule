@@ -15,9 +15,17 @@ internal sealed class ModulePackageReleaseCheckpointService
     internal PowerForgeModulePackageReleaseCheckpoint[] Capture(
         string releaseConfigPath,
         PowerForgeReleaseSpec spec)
+        => Capture(ResolveLanes(releaseConfigPath, spec));
+
+    internal PowerForgeModulePackageReleaseCheckpoint[] Capture(
+        ModulePipelineConfigurationContext context)
+        => Capture(ResolveLanes(context));
+
+    private PowerForgeModulePackageReleaseCheckpoint[] Capture(
+        IReadOnlyList<ModulePackageReleaseLane> resolvedLanes)
     {
         var checkpoints = new List<PowerForgeModulePackageReleaseCheckpoint>();
-        foreach (var lane in ResolveLanes(releaseConfigPath, spec)
+        foreach (var lane in resolvedLanes
                      .Where(static lane => lane.PublishNuget || lane.PublishGitHub))
         {
             var request = new ProjectBuildHostRequest
@@ -91,6 +99,15 @@ internal sealed class ModulePackageReleaseCheckpointService
             : PathTokenProtection.GetFullPath(releaseDirectory, spec.Module.RepositoryRoot!);
         var moduleConfigPath = PathTokenProtection.GetFullPath(repositoryRoot, spec.Module.ConfigPath!);
         var context = new ModulePipelineConfigurationService().Load(moduleConfigPath);
+        return ResolveLanes(context);
+    }
+
+    internal static IReadOnlyList<ModulePackageReleaseLane> ResolveLanes(
+        ModulePipelineConfigurationContext context)
+    {
+        if (context is null) throw new ArgumentNullException(nameof(context));
+
+        var moduleConfigPath = context.ConfigPath;
         var lanes = new List<ModulePackageReleaseLane>();
         var segments = context.Spec.Segments ?? [];
         for (var index = 0; index < segments.Length; index++)

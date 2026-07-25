@@ -114,6 +114,61 @@ public sealed partial class ModulePublisherManagedModuleTests
     }
 
     [Fact]
+    public void PublishCheckpointed_RejectsVersionNotGreaterThanRepository()
+    {
+        using var root = new TemporaryDirectory();
+        using var feed = new TemporaryDirectory();
+        var stagingRoot = Path.Combine(root.Path, "staging");
+        Directory.CreateDirectory(stagingRoot);
+        var manifestPath = Path.Combine(stagingRoot, "PSPublishModule.psd1");
+        File.WriteAllText(
+            manifestPath,
+            "@{ ModuleVersion = '3.0.20'; RootModule = 'PSPublishModule.psm1'; Author = 'Evotec'; Description = 'Checkpoint publish test.' }");
+        File.WriteAllText(Path.Combine(stagingRoot, "PSPublishModule.psm1"), string.Empty);
+
+        var publisher = new ModulePublisher(
+            new NullLogger(),
+            new StubPowerShellRunner(_ => throw new InvalidOperationException("PowerShell runner should not be used by managed publish.")));
+        var publish = new PublishConfiguration
+        {
+            Destination = PublishDestination.PowerShellGallery,
+            Enabled = true,
+            Tool = PublishTool.ManagedModule,
+            RepositoryName = "Local",
+            Repository = new PublishRepositoryConfiguration
+            {
+                Name = "Local",
+                Uri = feed.Path
+            }
+        };
+
+        var first = publisher.PublishCheckpointed(new ModuleCheckpointPublishRequest
+        {
+            Publish = publish,
+            ProjectRoot = root.Path,
+            ModuleName = "PSPublishModule",
+            ModuleVersion = "3.0.20",
+            ModulePath = stagingRoot
+        });
+        Assert.True(first.Succeeded);
+
+        File.WriteAllText(
+            manifestPath,
+            "@{ ModuleVersion = '3.0.19'; RootModule = 'PSPublishModule.psm1'; Author = 'Evotec'; Description = 'Checkpoint publish test.' }");
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            publisher.PublishCheckpointed(new ModuleCheckpointPublishRequest
+            {
+                Publish = publish,
+                ProjectRoot = root.Path,
+                ModuleName = "PSPublishModule",
+                ModuleVersion = "3.0.19",
+                ModulePath = stagingRoot
+            }));
+
+        Assert.Contains("not greater than repository version", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Publish_ManagedModule_ResolvesRelativeRepositoryAgainstProjectRoot()
     {
         using var root = new TemporaryDirectory();
@@ -262,7 +317,7 @@ public sealed partial class ModulePublisherManagedModuleTests
     }
 
     [Fact]
-    public void Publish_ManagedModule_MirrorsRequiredModulesThroughManagedEngine()
+    public void PublishCheckpointed_ManagedModule_MirrorsRequiredModulesThroughManagedEngine()
     {
         var stagingRoot = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));
         using var sourceFeed = new TemporaryDirectory();
@@ -315,12 +370,14 @@ public sealed partial class ModulePublisherManagedModuleTests
                     Uri = targetFeed.Path
                 }
             };
-            var buildResult = new ModuleBuildResult(
-                stagingPath: stagingRoot,
-                manifestPath: manifestPath,
-                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
-
-            var result = publisher.Publish(publish, CreatePlan(), buildResult, Array.Empty<ArtefactBuildResult>());
+            var result = publisher.PublishCheckpointed(new ModuleCheckpointPublishRequest
+            {
+                Publish = publish,
+                ProjectRoot = stagingRoot,
+                ModuleName = "PSPublishModule",
+                ModuleVersion = "3.0.13",
+                ModulePath = stagingRoot
+            });
 
             Assert.True(result.Succeeded);
             Assert.True(File.Exists(Path.Combine(targetFeed.Path, "dependencysupport.1.0.0.nupkg")));

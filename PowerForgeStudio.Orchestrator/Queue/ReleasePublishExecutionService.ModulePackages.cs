@@ -13,9 +13,27 @@ public sealed partial class ReleasePublishExecutionService
         CancellationToken cancellationToken)
     {
         ValidateModulePublishCheckpoint(repository, signingResult);
-        var lanes = ModulePackageReleaseCheckpointService.ResolveLanes(
-            repository.UnifiedReleaseConfigPath!,
-            spec);
+        IReadOnlyList<ModulePackageReleaseLane> lanes;
+        try
+        {
+            lanes = await ResolveModuleOwnedPackageLanesAsync(
+                repository,
+                spec,
+                signingResult,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            return [
+                FailedReceipt(
+                    repository.RootPath,
+                    repository.Name,
+                    "UnifiedRelease",
+                    "ModulePackages",
+                    null,
+                    FirstLine(ex.Message) ?? "Module-owned package configuration could not be restored.")
+            ];
+        }
         var unified = ReadUnifiedReleaseCheckpoint(signingResult);
         if (unified is null)
         {
@@ -141,6 +159,36 @@ public sealed partial class ReleasePublishExecutionService
         return receipts;
     }
 
+    private async Task<IReadOnlyList<ModulePackageReleaseLane>> ResolveModuleOwnedPackageLanesAsync(
+        PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
+        PowerForgeReleaseSpec spec,
+        ReleaseSigningExecutionResult signingResult,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(spec.Module?.ConfigPath))
+        {
+            return ModulePackageReleaseCheckpointService.ResolveLanes(
+                repository.UnifiedReleaseConfigPath!,
+                spec);
+        }
+
+        if (string.IsNullOrWhiteSpace(spec.Module?.ScriptPath) ||
+            string.IsNullOrWhiteSpace(repository.ModuleBuildScriptPath))
+        {
+            return [];
+        }
+
+        var publishSet = await ExportModulePublishConfigsAsync(
+            repository.RootPath,
+            repository.ModuleBuildScriptPath!,
+            cancellationToken).ConfigureAwait(false);
+        ValidateModuleExportedConfigurationCheckpoint(signingResult, publishSet);
+        return publishSet.Context is null
+            ? throw new InvalidOperationException(
+                "Script-backed module package configuration could not be loaded from the checkpointed export.")
+            : ModulePackageReleaseCheckpointService.ResolveLanes(publishSet.Context);
+    }
+
     private static void ApplySignedCheckpointArtifacts(
         DotNetRepositoryReleaseResult plan,
         ReleaseSigningExecutionResult signingResult)
@@ -236,4 +284,8 @@ public sealed partial class ReleasePublishExecutionService
         PowerForgeReleaseSpec spec)
         => ModulePackageReleaseCheckpointService.ResolveLanes(releaseConfigPath, spec)
             .Any(static lane => lane.PublishNuget || lane.PublishGitHub);
+
+    private PowerForgeModulePackageReleaseCheckpoint[] GetCheckpointedModulePackagePlans(
+        ReleaseSigningExecutionResult signingResult)
+        => ReadUnifiedReleaseCheckpoint(signingResult)?.ModulePackagePlans ?? [];
 }

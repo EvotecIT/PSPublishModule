@@ -332,6 +332,7 @@ public sealed class ModuleBuildHostService
         AddDirectStringArgument(arguments, "ModuleVersion", request.ModuleVersion);
         if (request.PreReleaseTag is not null)
             AddDirectStringArgument(arguments, "PreReleaseTag", request.PreReleaseTag);
+        AddDirectStringArgument(arguments, "StagingPath", request.StagingPath);
         AddDirectBooleanArgument(
             arguments,
             "NoDotnetBuild",
@@ -438,6 +439,11 @@ public sealed class ModuleBuildHostService
         if (!string.IsNullOrWhiteSpace(request.PreReleaseTag))
         {
             arguments.Add($"$buildScriptArguments['PreReleaseTag'] = {QuoteLiteral(request.PreReleaseTag!)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.StagingPath))
+        {
+            arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('StagingPath')) {{ $buildScriptArguments['StagingPath'] = {QuoteLiteral(request.StagingPath!)} }}");
         }
 
         if (request.NoSign)

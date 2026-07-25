@@ -168,16 +168,10 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     TimeSpan.Zero,
                     timedOut: false,
                     errorMessage: null)),
-                publishRepositoryAsync: (request, _) =>
+                publishCheckpointedModuleAsync: (request, _) =>
                 {
                     modulePublishCalls++;
-                    return Task.FromResult(new RepositoryPublishResult(
-                        request.Path,
-                        request.IsNupkg,
-                        request.RepositoryName ?? "PSGallery",
-                        request.Tool,
-                        repositoryCreated: false,
-                        repositoryUnregistered: false));
+                    return Task.FromResult(CreateSuccessfulCheckpointedModulePublish(request));
                 });
 
             using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");

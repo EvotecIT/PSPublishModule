@@ -25,6 +25,7 @@ public sealed class ModuleBuildHostServiceTests
             Framework = "auto",
             RunMode = ConfigurationGateMode.Build,
             ModuleVersion = "3.1.0",
+            StagingPath = @"C:\repo\.powerforge\staging",
             NoDotnetBuild = true,
             NoSign = true,
             IncludeProjectPackages = false,
@@ -41,6 +42,7 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Contains("$moduleBuildArguments['BuildFramework'] = 'auto'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['RunMode'] = 'Build'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['ModuleVersion'] = '3.1.0'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$moduleBuildArguments['StagingPath'] = 'C:\\repo\\.powerforge\\staging'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['NoDotnetBuild'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['NoSign'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['IncludeProjectPackages'] = $false", captured.CommandText!, StringComparison.Ordinal);
@@ -440,7 +442,8 @@ public sealed class ModuleBuildHostServiceTests
             RepositoryRoot = @"C:\repo",
             ScriptPath = @"C:\repo\Build\Build-Module.ps1",
             ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
-            Configuration = "Release"
+            Configuration = "Release",
+            StagingPath = @"C:\repo\.powerforge\staging"
         });
 
         Assert.NotNull(captured);
@@ -448,6 +451,8 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Contains("$buildScriptCommand = Get-Command -Name $buildScriptPath -CommandType ExternalScript", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('Configuration')", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptArguments['Configuration'] = 'Release'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('StagingPath')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['StagingPath'] = 'C:\\repo\\.powerforge\\staging'", captured.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("$buildScriptArguments += @('-Configuration', 'Release')", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(result.Succeeded);
     }

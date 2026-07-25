@@ -300,6 +300,10 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         var repositoryRoot = scope.CreateDirectory("UnifiedModuleRepo");
         var buildDirectory = scope.CreateDirectory(Path.Combine("UnifiedModuleRepo", "Build"));
         scope.CreateDirectory(Path.Combine("UnifiedModuleRepo", "src", "UnifiedModuleRepo"));
+        var packedDirectory = scope.CreateDirectory(
+            Path.Combine("UnifiedModuleRepo", "Artifacts", "Packed"));
+        var packedArchive = Path.Combine(packedDirectory, "UnifiedModuleRepo.zip");
+        File.WriteAllText(packedArchive, "packed");
         var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
         File.WriteAllText(
             moduleConfig,
@@ -335,6 +339,14 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                 Assert.True(request.ModuleNoSign);
                 Assert.False(request.PublishNuget);
                 Assert.False(string.IsNullOrWhiteSpace(request.ModuleHostPath));
+                Assert.False(string.IsNullOrWhiteSpace(request.ModuleStagingPath));
+                Directory.CreateDirectory(request.ModuleStagingPath!);
+                var stagedManifest = Path.Combine(
+                    request.ModuleStagingPath!,
+                    "UnifiedModuleRepo.psd1");
+                File.WriteAllText(
+                    stagedManifest,
+                    "@{ RootModule = 'UnifiedModuleRepo.psm1'; ModuleVersion = '4.2.0' }");
 
                 var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
                 Assert.True(spec.Module!.IncludesPackages);
@@ -347,12 +359,14 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                     ConfigPath = configPath,
                     ModulePlan = new PowerForgeModuleReleasePlanSummary {
                         ConfigPath = moduleConfig,
-                        IncludesPackages = true
+                        IncludesPackages = true,
+                        StagingPath = request.ModuleStagingPath
                     },
                     Module = new ModuleBuildHostExecutionResult {
                         ExitCode = 0,
                         Executable = "pwsh"
-                    }
+                    },
+                    ModuleAssets = [packedDirectory]
                 };
             });
 
@@ -361,7 +375,12 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal(1, unifiedCalls);
         Assert.False(string.IsNullOrWhiteSpace(result.UnifiedReleaseConfigSha256));
-        Assert.Equal(ReleaseBuildAdapterKind.ModuleBuild, Assert.Single(result.AdapterResults).AdapterKind);
+        var adapter = Assert.Single(result.AdapterResults);
+        Assert.Equal(ReleaseBuildAdapterKind.ModuleBuild, adapter.AdapterKind);
+        Assert.Contains(packedDirectory, adapter.ArtifactDirectories);
+        Assert.Contains(packedArchive, adapter.ArtifactFiles);
+        Assert.Contains(adapter.ArtifactFiles, path =>
+            path.EndsWith("UnifiedModuleRepo.psd1", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -474,6 +493,95 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         var adapter = Assert.Single(result.AdapterResults);
         Assert.Equal(ReleaseBuildAdapterKind.AppleBuild, adapter.AdapterKind);
         Assert.Equal([archivePath], adapter.ArtifactDirectories);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_MixedRelease_CheckpointsAppleArchiveWithoutSuppressingOtherBuilds()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("MixedAppleRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("MixedAppleRepo", "Build"));
+        var archivePath = scope.CreateDirectory(
+            Path.Combine("MixedAppleRepo", "Artifacts", "Sample.xcarchive"));
+        File.WriteAllText(Path.Combine(archivePath, "Info.plist"), "approved archive");
+        var toolDirectory = scope.CreateDirectory(Path.Combine("MixedAppleRepo", "Artifacts", "Tool"));
+        var toolZip = Path.Combine(toolDirectory, "MixedAppleRepo.zip");
+        File.WriteAllText(toolZip, "tool");
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "Tools": { "ProjectRoot": "..", "Targets": [] },
+              "AppleApps": {
+                "Archive": false,
+                "Upload": true,
+                "Apps": [
+                  {
+                    "Name": "Sample iOS",
+                    "Enabled": true,
+                    "BundleId": "com.evotecit.sample",
+                    "ArchivePath": "../Artifacts/Sample.xcarchive"
+                  }
+                ]
+              }
+            }
+            """);
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()),
+            (configPath, request) =>
+            {
+                Assert.Equal(releaseConfig, configPath);
+                Assert.False(request.PlanOnly);
+                Assert.False(request.SkipAppleApps);
+                Assert.True(request.CheckpointAppleApps);
+                return new PowerForgeReleaseResult
+                {
+                    Success = true,
+                    ConfigPath = configPath,
+                    ToolPlan = new PowerForgeToolReleasePlan(),
+                    Tools = new PowerForgeToolReleaseResult
+                    {
+                        Success = true,
+                        Artefacts =
+                        [
+                            new PowerForgeToolReleaseArtifactResult
+                            {
+                                Target = "MixedAppleRepo",
+                                OutputPath = toolDirectory,
+                                ZipPath = toolZip
+                            }
+                        ]
+                    },
+                    AppleAppPlan = new PowerForgeAppleReleasePlan
+                    {
+                        Archive = false,
+                        Upload = true,
+                        Apps =
+                        [
+                            new PowerForgeAppleAppReleaseTargetPlan
+                            {
+                                Name = "Sample iOS",
+                                Upload = true,
+                                ArchivePath = archivePath
+                            }
+                        ]
+                    }
+                };
+            });
+
+        var result = await service.ExecuteAsync(repositoryRoot);
+
+        Assert.True(result.Succeeded);
+        Assert.Contains(result.AdapterResults, adapter =>
+            adapter.AdapterKind == ReleaseBuildAdapterKind.ToolBuild &&
+            adapter.ArtifactFiles.Contains(toolZip));
+        Assert.Contains(result.AdapterResults, adapter =>
+            adapter.AdapterKind == ReleaseBuildAdapterKind.AppleBuild &&
+            adapter.ArtifactDirectories.Contains(archivePath));
     }
 
     [Fact]

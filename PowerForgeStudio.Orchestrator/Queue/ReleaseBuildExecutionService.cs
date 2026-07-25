@@ -62,18 +62,22 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         {
             var configPath = repository.UnifiedReleaseConfigPath!;
             var configFingerprint = UnifiedReleaseConfigFingerprint.Compute(configPath);
+            var moduleStagingPath = ResolveModuleCheckpointStagingPath(repository.Name);
             var unifiedRequest = CreateUnifiedReleaseBuildRequest(
                 configPath,
-                PowerForgeStudioHostPaths.ResolvePSPublishModulePath());
+                PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
+                moduleStagingPath);
             unifiedRequest.CancellationToken = cancellationToken;
             var unified = await Task.Run(
                 () => _executeUnifiedReleaseBuild(configPath, unifiedRequest),
                 cancellationToken).ConfigureAwait(false);
-            var moduleExportedConfigFingerprint =
+            var moduleExportCheckpoint =
                 await CaptureScriptModuleExportedConfigFingerprintAsync(
                     repository,
                     unified,
                     cancellationToken).ConfigureAwait(false);
+            if (moduleExportCheckpoint.PackagePlans.Length > 0)
+                unified.ModulePackagePlans = moduleExportCheckpoint.PackagePlans;
             var completedFingerprint = UnifiedReleaseConfigFingerprint.Compute(configPath);
             if (!string.Equals(configFingerprint, completedFingerprint, StringComparison.OrdinalIgnoreCase))
             {
@@ -88,7 +92,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 results,
                 SerializeUnifiedCheckpoint(unified),
                 configFingerprint,
-                moduleExportedConfigSha256: moduleExportedConfigFingerprint);
+                moduleExportedConfigSha256: moduleExportCheckpoint.Fingerprint);
         }
 
         if (!string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath))
@@ -118,7 +122,10 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             moduleBuildConfigSha256: directModuleConfigFingerprint);
     }
 
-    internal static PowerForgeReleaseRequest CreateUnifiedReleaseBuildRequest(string configPath, string moduleHostPath)
+    internal static PowerForgeReleaseRequest CreateUnifiedReleaseBuildRequest(
+        string configPath,
+        string moduleHostPath,
+        string moduleStagingPath)
     {
         var request = new PowerForgeReleaseRequest {
             ConfigPath = configPath,
@@ -127,6 +134,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             PublishProjectGitHub = false,
             PublishToolGitHub = false,
             ModuleRunMode = ConfigurationGateMode.Build,
+            ModuleStagingPath = moduleStagingPath,
             ModuleNoSign = true,
             ModuleSkipInstall = true,
             EnableSigning = false,
@@ -135,14 +143,15 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         };
 
         var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
-        if (spec.AppleApps is not null &&
-            spec.Module is null &&
-            spec.Packages is null &&
-            spec.Tools is null &&
-            spec.WorkspaceValidation is null)
+        if (spec.AppleApps is not null)
         {
             request.SkipAppleApps = false;
-            request.PlanOnly = true;
+            request.CheckpointAppleApps = true;
+            request.PlanOnly =
+                spec.Module is null &&
+                spec.Packages is null &&
+                spec.Tools is null &&
+                spec.WorkspaceValidation is null;
         }
 
         return request;
@@ -177,10 +186,18 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         if (unified.ModulePlan is not null)
         {
             var buildInput = unified.ModulePlan.ConfigPath ?? repository.ModuleBuildScriptPath;
-            var artifacts = (unified.ModuleAssets?.Length ?? 0) > 0
-                ? CollectExplicitArtifacts(unified.ModuleAssets ?? [])
+            var explicitModuleAssets = (unified.ModuleAssets ?? [])
+                .Concat(string.IsNullOrWhiteSpace(unified.ModulePlan.StagingPath)
+                    ? []
+                    : [unified.ModulePlan.StagingPath!])
+                .ToArray();
+            var artifacts = explicitModuleAssets.Length > 0
+                ? CollectExplicitArtifacts(explicitModuleAssets)
                 : !string.IsNullOrWhiteSpace(buildInput)
-                ? CollectModuleArtifacts(repository.RootPath, buildInput!)
+                ? CollectModuleArtifacts(
+                    repository.RootPath,
+                    buildInput!,
+                    unified.ModulePlan.StagingPath)
                 : CollectExplicitArtifacts(unified.ModuleAssets ?? []);
             if (unified.ModulePlan.IncludesPackages &&
                 !string.IsNullOrWhiteSpace(unified.ModulePlan.ConfigPath))
@@ -332,6 +349,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         var buildInputPath = repository.ModuleBuildScriptPath!;
         var configBacked = string.Equals(Path.GetExtension(buildInputPath), ".json", StringComparison.OrdinalIgnoreCase);
         var modulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath();
+        var stagingPath = ResolveModuleCheckpointStagingPath(repository.Name);
         var execution = await _moduleBuildHostService.ExecuteBuildAsync(new ModuleBuildHostBuildRequest {
             RepositoryRoot = repository.RootPath,
             ConfigPath = configBacked ? buildInputPath : null,
@@ -339,11 +357,12 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             ModulePath = modulePath,
             Framework = configBacked ? "auto" : null,
             RunMode = configBacked ? ConfigurationGateMode.Build : null,
+            StagingPath = stagingPath,
             IncludeProjectPackages = string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath),
             SkipInstall = configBacked,
             NoSign = configBacked
         }, cancellationToken);
-        var artifactInfo = CollectModuleArtifacts(repository.RootPath, buildInputPath);
+        var artifactInfo = CollectModuleArtifacts(repository.RootPath, buildInputPath, stagingPath);
         var succeeded = execution.Succeeded;
 
         return new ReleaseBuildAdapterResult(
@@ -382,7 +401,10 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         return new ArtifactCollection(directories.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(), files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList());
     }
 
-    private static ArtifactCollection CollectModuleArtifacts(string repositoryRoot, string buildInputPath)
+    private static ArtifactCollection CollectModuleArtifacts(
+        string repositoryRoot,
+        string buildInputPath,
+        string? stagingPath = null)
     {
         var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -400,9 +422,23 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         {
             AddModuleArtifactDirectory(candidateDirectory, directories);
         }
+        if (!string.IsNullOrWhiteSpace(stagingPath))
+            AddModuleArtifactDirectory(stagingPath!, directories);
 
         CollectArtifactFiles(directories, files);
         return new ArtifactCollection(directories.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(), files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
+    private static string ResolveModuleCheckpointStagingPath(string repositoryName)
+    {
+        var root = Path.GetDirectoryName(
+            PowerForgeStudioHostPaths.GetRuntimeFilePath(
+                repositoryName,
+                "module-staging",
+                "checkpoint.marker"));
+        if (string.IsNullOrWhiteSpace(root))
+            throw new InvalidOperationException("PowerForge Studio module staging path could not be resolved.");
+        return Path.Combine(root, Guid.NewGuid().ToString("N"));
     }
 
     private static ArtifactCollection CollectModulePackageArtifacts(string configPath)
@@ -542,14 +578,14 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         }
     }
 
-    private async Task<string?> CaptureScriptModuleExportedConfigFingerprintAsync(
+    private async Task<ScriptModuleExportCheckpoint> CaptureScriptModuleExportedConfigFingerprintAsync(
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
         PowerForgeReleaseResult unified,
         CancellationToken cancellationToken)
     {
         var scriptPath = unified.ModulePlan?.ScriptPath;
         if (string.IsNullOrWhiteSpace(scriptPath))
-            return null;
+            return new ScriptModuleExportCheckpoint(null, []);
 
         var outputPath = PowerForgeStudioHostPaths.GetRuntimeFilePath(
             repository.Name,
@@ -571,13 +607,23 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                     $"Module publish configuration checkpoint export failed for '{scriptPath}' (exit {execution.ExitCode}).");
             }
 
-            return UnifiedReleaseConfigFingerprint.ComputeModuleConfig(outputPath);
+            var context = new ModulePipelineConfigurationService().Load(outputPath);
+            var packagePlans = unified.ModulePlan?.IncludesProjectPackages == true
+                ? new ModulePackageReleaseCheckpointService().Capture(context)
+                : [];
+            return new ScriptModuleExportCheckpoint(
+                UnifiedReleaseConfigFingerprint.ComputeModuleConfig(outputPath),
+                packagePlans);
         }
         finally
         {
             try { File.Delete(outputPath); } catch { }
         }
     }
+
+    private sealed record ScriptModuleExportCheckpoint(
+        string? Fingerprint,
+        PowerForgeModulePackageReleaseCheckpoint[] PackagePlans);
 
     private static string? TrimTail(string? text)
     {

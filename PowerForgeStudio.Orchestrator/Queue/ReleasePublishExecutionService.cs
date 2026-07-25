@@ -19,7 +19,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
     private readonly ReleaseQueueTargetProjectionService _targetProjectionService = new();
     private readonly Func<DotNetNuGetPushRequest, CancellationToken, Task<DotNetNuGetPushResult>> _pushNuGetPackageAsync;
     private readonly Func<GitHubReleasePublishRequest, CancellationToken, Task<GitHubReleasePublishResult>> _publishGitHubReleaseAsync;
-    private readonly Func<RepositoryPublishRequest, CancellationToken, Task<RepositoryPublishResult>> _publishRepositoryAsync;
+    private readonly Func<ModuleCheckpointPublishRequest, CancellationToken, Task<ModulePublishResult>> _publishCheckpointedModuleAsync;
     private readonly Func<string, string, CancellationToken, PowerForgeReleaseResult> _publishUnifiedRelease;
 
     public ReleasePublishExecutionService()
@@ -30,8 +30,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
             new ProjectBuildCommandHostService(),
             new ProjectBuildPublishHostService(),
             (request, cancellationToken) => new DotNetNuGetClient().PushPackageAsync(request, cancellationToken),
-            (request, _) => Task.FromResult(new GitHubReleasePublisher(new NullLogger()).PublishRelease(request)),
-            (request, _) => Task.FromResult(new RepositoryPublisher(new NullLogger()).Publish(request)))
+            (request, _) => Task.FromResult(new GitHubReleasePublisher(new NullLogger()).PublishRelease(request)))
     {
     }
 
@@ -43,7 +42,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
         ProjectBuildPublishHostService projectBuildPublishHostService,
         Func<DotNetNuGetPushRequest, CancellationToken, Task<DotNetNuGetPushResult>> pushNuGetPackageAsync,
         Func<GitHubReleasePublishRequest, CancellationToken, Task<GitHubReleasePublishResult>>? publishGitHubReleaseAsync = null,
-        Func<RepositoryPublishRequest, CancellationToken, Task<RepositoryPublishResult>>? publishRepositoryAsync = null,
+        Func<ModuleCheckpointPublishRequest, CancellationToken, Task<ModulePublishResult>>? publishCheckpointedModuleAsync = null,
         Func<string, string, PowerForgeReleaseResult>? publishUnifiedRelease = null,
         Func<string, string, CancellationToken, PowerForgeReleaseResult>? publishUnifiedReleaseWithCancellation = null)
     {
@@ -54,7 +53,8 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
         _projectBuildPublishHostService = projectBuildPublishHostService;
         _pushNuGetPackageAsync = pushNuGetPackageAsync;
         _publishGitHubReleaseAsync = publishGitHubReleaseAsync ?? ((request, _) => Task.FromResult(new GitHubReleasePublisher(new NullLogger()).PublishRelease(request)));
-        _publishRepositoryAsync = publishRepositoryAsync ?? ((request, _) => Task.FromResult(new RepositoryPublisher(new NullLogger()).Publish(request)));
+        _publishCheckpointedModuleAsync = publishCheckpointedModuleAsync ??
+            ((request, _) => Task.FromResult(new ModulePublisher(new NullLogger()).PublishCheckpointed(request)));
         _publishUnifiedRelease = publishUnifiedReleaseWithCancellation
             ?? (publishUnifiedRelease is not null
                 ? (configPath, stateJson, _) => publishUnifiedRelease(configPath, stateJson)
@@ -180,7 +180,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
         if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
         {
             var unifiedSpec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
-            if (HasConfiguredModulePackagePublication(repository.UnifiedReleaseConfigPath!, unifiedSpec))
+            if (GetCheckpointedModulePackagePlans(signingResult).Length > 0)
             {
                 var modulePackageReceipts = await ExecuteModuleOwnedPackagePublishAsync(
                     repository,

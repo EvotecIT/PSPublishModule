@@ -462,7 +462,9 @@ internal sealed partial class PowerForgeReleaseService
                 request.SkipBuild,
                 selectedAppleTargets,
                 allowUnresolvedResolvedVersion: true,
-                validateReusableArchives: !request.PlanOnly && !request.ValidateOnly);
+                validateReusableArchives:
+                    (!request.PlanOnly && !request.ValidateOnly) ||
+                    request.CheckpointAppleApps);
         }
 
         if (runPackages && result.Packages is null)
@@ -508,9 +510,11 @@ internal sealed partial class PowerForgeReleaseService
                 appleReleaseVersion,
                 request.SkipBuild,
                 selectedAppleTargets,
-                validateReusableArchives: !request.PlanOnly && !request.ValidateOnly);
+                validateReusableArchives:
+                    (!request.PlanOnly && !request.ValidateOnly) ||
+                    request.CheckpointAppleApps);
             result.AppleAppPlan = applePlan;
-            if (request.PlanOnly || request.ValidateOnly)
+            if (request.PlanOnly || request.ValidateOnly || request.CheckpointAppleApps)
                 ScrubApplePlanCredentials(result.AppleAppPlan);
         }
 
@@ -658,7 +662,7 @@ internal sealed partial class PowerForgeReleaseService
         }
         if (applePlan is not null)
         {
-            if (!request.PlanOnly && !request.ValidateOnly)
+            if (!request.PlanOnly && !request.ValidateOnly && !request.CheckpointAppleApps)
             {
                 var cleanup = new PowerForgeAppleReleaseCleanupReceipt();
                 PowerForgeAppleAppReleaseResult[] appleResults;
@@ -1170,6 +1174,7 @@ internal sealed partial class PowerForgeReleaseService
             PreReleaseTag = string.IsNullOrWhiteSpace(request.ResolvedReleaseVersion)
                 ? request.ModulePreReleaseTag ?? options.PreReleaseTag
                 : PackageVersionUtility.GetPrereleaseVersion(request.ResolvedReleaseVersion!) ?? string.Empty,
+            StagingPath = request.ModuleStagingPath,
             NoSign = request.ModuleNoSign ?? options.NoSign ?? false,
             SkipInstall = request.ModuleSkipInstall ?? false,
             SignModule = signModuleOverride ?? false,
@@ -1206,6 +1211,7 @@ internal sealed partial class PowerForgeReleaseService
             NoDotnetBuild = buildRequest.NoDotnetBuild,
             ModuleVersion = buildRequest.ModuleVersion,
             PreReleaseTag = NullIfEmpty(buildRequest.PreReleaseTag ?? string.Empty),
+            StagingPath = buildRequest.StagingPath,
             NoSign = buildRequest.NoSign,
             SkipInstall = buildRequest.SkipInstall,
             SignModule = buildRequest.SignModule,

@@ -75,6 +75,11 @@ public sealed class ModuleBuildHostBuildRequest
     public string? PreReleaseTag { get; set; }
 
     /// <summary>
+    /// Optional persistent staging directory override used by staged release hosts.
+    /// </summary>
+    public string? StagingPath { get; set; }
+
+    /// <summary>
     /// Disables module signing when true.
     /// </summary>
     public bool NoSign { get; set; }

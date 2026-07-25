@@ -206,24 +206,18 @@ public sealed partial class ReleasePublishExecutionService
 
         try
         {
-            var apiKey = ModulePublisher.ResolvePublishApiKey(publishConfig, repository.RootPath);
-            if (string.IsNullOrWhiteSpace(apiKey) && !HasRepositoryAuthentication(publishConfig.Repository))
-            {
-                return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "Module publish", destination, "Module publish is enabled but no API key or repository credential was resolved.");
-            }
-
-            var publishResult = await _publishRepositoryAsync(
-                new RepositoryPublishRequest {
-                    Path = packageDetails.PackagePath,
-                    IsNupkg = false,
-                    RepositoryName = destination,
-                    Tool = publishConfig.Tool,
-                    ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
-                    Repository = publishConfig.Repository,
-                    SkipDependenciesCheck = true,
-                    SkipModuleManifestValidate = false
+            cancellationToken.ThrowIfCancellationRequested();
+            var publishResult = await _publishCheckpointedModuleAsync(
+                new ModuleCheckpointPublishRequest {
+                    Publish = publishConfig,
+                    ProjectRoot = repository.RootPath,
+                    ModuleName = packageDetails.ModuleName,
+                    ModuleVersion = packageDetails.Version,
+                    PreRelease = packageDetails.PreRelease,
+                    ModulePath = packageDetails.PackagePath
                 },
                 cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             return ReleaseQueueReceiptFactory.CreatePublishReceipt(
                 repository.RootPath,
@@ -231,9 +225,9 @@ public sealed partial class ReleasePublishExecutionService
                 ReleaseBuildAdapterKind.ModuleBuild.ToString(),
                 packageDetails.ModuleName,
                 "PowerShellRepository",
-                publishResult.RepositoryName,
+                publishResult.RepositoryName ?? destination,
                 ReleasePublishReceiptStatus.Published,
-                $"Module published to {publishResult.RepositoryName} using {publishResult.Tool}.",
+                $"Module published to {publishResult.RepositoryName ?? destination} using {publishResult.Tool}.",
                 packageDetails.PackagePath);
         }
         catch (Exception ex)
@@ -369,15 +363,4 @@ public sealed partial class ReleasePublishExecutionService
         return assets;
     }
 
-    private static bool HasRepositoryAuthentication(PublishRepositoryConfiguration? repository)
-    {
-        if (repository?.Credential is { } credential &&
-            !string.IsNullOrWhiteSpace(credential.UserName) &&
-            !string.IsNullOrWhiteSpace(credential.Secret))
-        {
-            return true;
-        }
-
-        return repository?.CredentialProvider is { Kind: not RepositoryCredentialProviderKind.None };
-    }
 }

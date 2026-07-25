@@ -54,18 +54,12 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     CreateSigningReceipt(repositoryRoot, oldDirectory, "Directory"),
                     CreateSigningReceipt(repositoryRoot, currentDirectory, "Directory")
                 ]);
-            RepositoryPublishRequest? captured = null;
+            ModuleCheckpointPublishRequest? captured = null;
             var service = CreateReviewPublishService(
-                publishRepositoryAsync: (request, _) =>
+                publishCheckpointedModuleAsync: (request, _) =>
                 {
                     captured = request;
-                    return Task.FromResult(new RepositoryPublishResult(
-                        request.Path,
-                        request.IsNupkg,
-                        request.RepositoryName ?? "PSGallery",
-                        request.Tool,
-                        repositoryCreated: false,
-                        repositoryUnregistered: false));
+                    return Task.FromResult(CreateSuccessfulCheckpointedModulePublish(request));
                 });
 
             using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
@@ -75,7 +69,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 result.Succeeded,
                 $"{result.Summary} | {string.Join(" | ", result.Receipts.Select(receipt => $"{receipt.TargetName}:{receipt.Status}:{receipt.Summary}"))}");
             Assert.NotNull(captured);
-            Assert.Equal(currentDirectory, captured!.Path);
+            Assert.Equal(currentDirectory, captured!.ModulePath);
         }
         finally
         {
@@ -416,7 +410,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         ProjectBuildPublishHostService? projectBuildPublishHostService = null,
         Func<DotNetNuGetPushRequest, CancellationToken, Task<DotNetNuGetPushResult>>? pushNuGetPackageAsync = null,
         Func<GitHubReleasePublishRequest, CancellationToken, Task<GitHubReleasePublishResult>>? publishGitHubReleaseAsync = null,
-        Func<RepositoryPublishRequest, CancellationToken, Task<RepositoryPublishResult>>? publishRepositoryAsync = null)
+        Func<ModuleCheckpointPublishRequest, CancellationToken, Task<ModulePublishResult>>? publishCheckpointedModuleAsync = null)
         => new(
             new RepositoryCatalogScanner(),
             new ModuleBuildHostService(),
@@ -432,8 +426,25 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 timedOut: false,
                 errorMessage: null))),
             publishGitHubReleaseAsync,
-            publishRepositoryAsync,
+            publishCheckpointedModuleAsync,
             publishUnifiedRelease: (_, _) => new PowerForgeReleaseResult { Success = true });
+
+    private static ModulePublishResult CreateSuccessfulCheckpointedModulePublish(
+        ModuleCheckpointPublishRequest request)
+        => new(
+            destination: PublishDestination.PowerShellGallery,
+            repositoryName: request.Publish.RepositoryName ?? "PSGallery",
+            userName: null,
+            tagName: null,
+            versionText: ModulePathTokenFormatter.FormatVersionWithPreRelease(
+                request.ModuleVersion,
+                request.PreRelease),
+            isPreRelease: !string.IsNullOrWhiteSpace(request.PreRelease),
+            assetPaths: [],
+            releaseUrl: null,
+            succeeded: true,
+            errorMessage: null,
+            tool: request.Publish.Tool);
 
     private static void TryDeleteReviewRepository(string repositoryRoot)
     {

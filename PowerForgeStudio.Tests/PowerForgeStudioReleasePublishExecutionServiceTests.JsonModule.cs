@@ -119,7 +119,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             CheckpointStateJson: JsonSerializer.Serialize(signingResult),
             UpdatedAtUtc: DateTimeOffset.UtcNow);
 
-        RepositoryPublishRequest? captured = null;
+        ModuleCheckpointPublishRequest? captured = null;
         var service = new ReleasePublishExecutionService(
             new RepositoryCatalogScanner(),
             new ModuleBuildHostService(new ThrowingPowerShellRunner()),
@@ -127,16 +127,10 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
             new ProjectBuildPublishHostService(),
             (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, "published", string.Empty, "dotnet", TimeSpan.Zero, timedOut: false, errorMessage: null)),
-            publishRepositoryAsync: (request, _) =>
+            publishCheckpointedModuleAsync: (request, _) =>
             {
                 captured = request;
-                return Task.FromResult(new RepositoryPublishResult(
-                    path: request.Path,
-                    isNupkg: request.IsNupkg,
-                    repositoryName: request.RepositoryName ?? "PSGallery",
-                    tool: request.Tool,
-                    repositoryCreated: false,
-                    repositoryUnregistered: false));
+                return Task.FromResult(CreateSuccessfulCheckpointedModulePublish(request));
             });
 
         try
@@ -147,9 +141,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
 
             Assert.True(result.Succeeded);
             Assert.NotNull(captured);
-            Assert.Equal(packageDirectory, captured!.Path);
-            Assert.Equal("gallery-key", captured.ApiKey);
-            Assert.Equal("PSGallery", captured.RepositoryName);
+            Assert.Equal(packageDirectory, captured!.ModulePath);
+            Assert.Equal("gallery-key", ModulePublisher.ResolvePublishApiKey(captured.Publish, captured.ProjectRoot));
+            Assert.Equal("PSGallery", captured.Publish.RepositoryName);
             Assert.Equal(ReleasePublishReceiptStatus.Published, Assert.Single(result.Receipts).Status);
         }
         finally

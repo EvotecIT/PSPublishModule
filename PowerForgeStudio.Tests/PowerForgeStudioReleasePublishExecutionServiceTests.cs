@@ -500,7 +500,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             CheckpointStateJson: JsonSerializer.Serialize(signingResult),
             UpdatedAtUtc: DateTimeOffset.UtcNow);
 
-        RepositoryPublishRequest? captured = null;
+        ModuleCheckpointPublishRequest? captured = null;
         var moduleRunner = new StubPowerShellRunner((request) => {
                 if (request.InvocationMode != PowerShellInvocationMode.Command || string.IsNullOrWhiteSpace(request.CommandText))
                     return new PowerShellRunResult(1, string.Empty, "Unexpected invocation.", "pwsh");
@@ -542,15 +542,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             new ProjectBuildCommandHostService(),
             new ProjectBuildPublishHostService(),
             (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, "published", string.Empty, "dotnet", TimeSpan.Zero, timedOut: false, errorMessage: null)),
-            publishRepositoryAsync: (request, _) => {
+            publishCheckpointedModuleAsync: (request, _) => {
                 captured = request;
-                return Task.FromResult(new RepositoryPublishResult(
-                    path: request.Path,
-                    isNupkg: request.IsNupkg,
-                    repositoryName: request.RepositoryName ?? "PSGallery",
-                    tool: request.Tool,
-                    repositoryCreated: false,
-                    repositoryUnregistered: false));
+                return Task.FromResult(CreateSuccessfulCheckpointedModulePublish(request));
             });
 
         try
@@ -564,13 +558,10 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             Assert.True(
                 captured is not null,
                 string.Join(" | ", result.Receipts.Select(receipt => $"{receipt.TargetKind}:{receipt.Status}:{receipt.Summary}")));
-            Assert.Equal(packageDirectory, captured!.Path);
-            Assert.False(captured.IsNupkg);
-            Assert.Equal("PSGallery", captured.RepositoryName);
-            Assert.Equal(PublishTool.PSResourceGet, captured.Tool);
-            Assert.Equal("gallery-key", captured.ApiKey);
-            Assert.True(captured.SkipDependenciesCheck);
-            Assert.False(captured.SkipModuleManifestValidate);
+            Assert.Equal(packageDirectory, captured!.ModulePath);
+            Assert.Equal("PSGallery", captured.Publish.RepositoryName);
+            Assert.Equal(PublishTool.PSResourceGet, captured.Publish.Tool);
+            Assert.Equal("gallery-key", ModulePublisher.ResolvePublishApiKey(captured.Publish, captured.ProjectRoot));
             var receipt = Assert.Single(result.Receipts);
             Assert.Equal(ReleasePublishReceiptStatus.Published, receipt.Status);
             Assert.Contains("PSGallery", receipt.Summary, StringComparison.OrdinalIgnoreCase);
@@ -639,7 +630,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             CheckpointStateJson: JsonSerializer.Serialize(signingResult),
             UpdatedAtUtc: DateTimeOffset.UtcNow);
 
-        RepositoryPublishRequest? captured = null;
+        ModuleCheckpointPublishRequest? captured = null;
         var moduleRunner = new StubPowerShellRunner((request) => {
                 if (request.InvocationMode != PowerShellInvocationMode.Command || string.IsNullOrWhiteSpace(request.CommandText))
                     return new PowerShellRunResult(1, string.Empty, "Unexpected invocation.", "pwsh");
@@ -691,15 +682,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             new ProjectBuildCommandHostService(),
             new ProjectBuildPublishHostService(),
             (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, "published", string.Empty, "dotnet", TimeSpan.Zero, timedOut: false, errorMessage: null)),
-            publishRepositoryAsync: (request, _) => {
+            publishCheckpointedModuleAsync: (request, _) => {
                 captured = request;
-                return Task.FromResult(new RepositoryPublishResult(
-                    path: request.Path,
-                    isNupkg: request.IsNupkg,
-                    repositoryName: request.RepositoryName ?? "JFrogPS",
-                    tool: request.Tool,
-                    repositoryCreated: false,
-                    repositoryUnregistered: false));
+                return Task.FromResult(CreateSuccessfulCheckpointedModulePublish(request));
             });
 
         try
@@ -711,12 +696,12 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
 
             Assert.True(result.Succeeded);
             Assert.NotNull(captured);
-            Assert.Equal(packageDirectory, captured!.Path);
-            Assert.Equal("JFrogPS", captured.RepositoryName);
-            Assert.Null(captured.ApiKey);
-            Assert.NotNull(captured.Repository?.CredentialProvider);
-            Assert.Equal(RepositoryCredentialProviderKind.JFrogOidc, captured.Repository!.CredentialProvider!.Kind);
-            Assert.Equal("azure-oidc", captured.Repository.CredentialProvider.JFrogOidcProvider);
+            Assert.Equal(packageDirectory, captured!.ModulePath);
+            Assert.Equal("JFrogPS", captured.Publish.RepositoryName);
+            Assert.True(string.IsNullOrWhiteSpace(captured.Publish.ApiKey));
+            Assert.NotNull(captured.Publish.Repository?.CredentialProvider);
+            Assert.Equal(RepositoryCredentialProviderKind.JFrogOidc, captured.Publish.Repository!.CredentialProvider!.Kind);
+            Assert.Equal("azure-oidc", captured.Publish.Repository.CredentialProvider.JFrogOidcProvider);
             var receipt = Assert.Single(result.Receipts);
             Assert.Equal(ReleasePublishReceiptStatus.Published, receipt.Status);
         }

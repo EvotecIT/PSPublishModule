@@ -91,15 +91,18 @@ public sealed partial class ReleasePublishExecutionService
                     Destination: "Windows Package Manager"));
             }
 
-            if (HasConfiguredModulePackagePublication(configPath!, spec))
+            if (unified.ModulePackagePlans.Length > 0)
             {
-                foreach (var lane in ModulePackageReleaseCheckpointService
-                             .ResolveLanes(configPath!, spec)
-                             .Where(static lane => lane.PublishNuget || lane.PublishGitHub))
+                if (!string.IsNullOrWhiteSpace(spec.Module?.ConfigPath))
                 {
-                    _ = ModulePackageReleaseCheckpointService.Restore(
-                        lane,
-                        unified.ModulePackagePlans);
+                    foreach (var lane in ModulePackageReleaseCheckpointService
+                                 .ResolveLanes(configPath!, spec)
+                                 .Where(static lane => lane.PublishNuget || lane.PublishGitHub))
+                    {
+                        _ = ModulePackageReleaseCheckpointService.Restore(
+                            lane,
+                            unified.ModulePackagePlans);
+                    }
                 }
 
                 targets.Add(new ReleasePublishTarget(

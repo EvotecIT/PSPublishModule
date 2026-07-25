@@ -14,10 +14,21 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         var buildDirectory = scope.CreateDirectory(Path.Combine("ScriptModuleRepo", "Build"));
         var scriptPath = Path.Combine(repositoryRoot, "Build-Module.ps1");
         File.WriteAllText(scriptPath, "# module recipe");
+        File.WriteAllText(
+            Path.Combine(repositoryRoot, "Sample.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <Version>1.0.0</Version>
+                <IsPackable>true</IsPackable>
+              </PropertyGroup>
+            </Project>
+            """);
         var releaseConfig = Path.Combine(buildDirectory, "release.json");
         File.WriteAllText(
             releaseConfig,
-            """{ "Module": { "RepositoryRoot": "..", "ScriptPath": "Build-Module.ps1" } }""");
+            """{ "Module": { "RepositoryRoot": "..", "ScriptPath": "Build-Module.ps1", "IncludesPackages": true } }""");
         string? expectedFingerprint = null;
         var moduleHost = new ModuleBuildHostService(new CapturingPowerShellRunner(request =>
         {
@@ -28,13 +39,12 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             start += marker.Length;
             var end = request.CommandText!.IndexOf('\'', start);
             var outputPath = request.CommandText[start..end];
-            File.WriteAllText(
-                outputPath,
+            var exportedJson =
                 """
                 {
                   "Build": {
                     "Name": "Sample",
-                    "SourcePath": "."
+                    "SourcePath": "__SOURCE_PATH__"
                   },
                   "Segments": [
                     {
@@ -53,10 +63,25 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                         "Enabled": true,
                         "RepositoryName": "PSGallery"
                       }
+                    },
+                    {
+                      "Type": "PackageBuild",
+                      "Configuration": {
+                        "Name": "Script packages",
+                        "StagingPath": "PackageArtifacts",
+                        "Build": true,
+                        "PublishNuget": true
+                      }
                     }
                   ]
                 }
-                """);
+                """;
+            File.WriteAllText(
+                outputPath,
+                exportedJson.Replace(
+                    "\"__SOURCE_PATH__\"",
+                    System.Text.Json.JsonSerializer.Serialize(repositoryRoot),
+                    StringComparison.Ordinal));
             expectedFingerprint =
                 UnifiedReleaseConfigFingerprint.ComputeModuleConfig(outputPath);
             return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh");
@@ -71,7 +96,9 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                 ConfigPath = releaseConfig,
                 ModulePlan = new PowerForgeModuleReleasePlanSummary {
                     ModuleName = "Sample",
-                    ScriptPath = scriptPath
+                    ScriptPath = scriptPath,
+                    IncludesPackages = true,
+                    IncludesProjectPackages = true
                 },
                 Module = new ModuleBuildHostExecutionResult { ExitCode = 0 }
             });
@@ -80,6 +107,12 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 
         Assert.True(result.Succeeded);
         Assert.Equal(expectedFingerprint, result.ModuleExportedConfigSha256);
+        var checkpoint = System.Text.Json.JsonSerializer.Deserialize<PowerForgeReleaseResult>(
+            result.UnifiedReleaseStateJson!);
+        var packagePlan = Assert.Single(checkpoint!.ModulePackagePlans);
+        Assert.Equal("PackageBuild:2", packagePlan.Key);
+        Assert.Equal("Script packages", packagePlan.Name);
+        Assert.NotNull(packagePlan.Release);
     }
 
     [Fact]

@@ -57,6 +57,8 @@ internal sealed class PowerForgeReleaseRequest
     /// </summary>
     public bool SkipAppleApps { get; set; }
 
+    internal bool CheckpointAppleApps { get; set; }
+
     public bool? PublishNuget { get; set; }
 
     public bool? PublishProjectGitHub { get; set; }
@@ -76,6 +78,8 @@ internal sealed class PowerForgeReleaseRequest
     public string? ModuleVersion { get; set; }
 
     public string? ModulePreReleaseTag { get; set; }
+
+    internal string? ModuleStagingPath { get; set; }
 
     public bool? ModuleNoSign { get; set; }
 
@@ -913,6 +917,8 @@ internal sealed class PowerForgeModuleReleasePlanSummary
     public string? ModuleVersion { get; set; }
 
     public string? PreReleaseTag { get; set; }
+
+    public string? StagingPath { get; set; }
 
     public bool NoSign { get; set; }
 
