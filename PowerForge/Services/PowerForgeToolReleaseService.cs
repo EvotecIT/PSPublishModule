@@ -233,12 +233,14 @@ internal sealed class PowerForgeToolReleaseService
 
         try
         {
-            foreach (var target in plan.Targets ?? Array.Empty<PowerForgeToolReleaseTargetPlan>())
+            var targets = plan.Targets ?? Array.Empty<PowerForgeToolReleaseTargetPlan>();
+            for (var targetIndex = 0; targetIndex < targets.Length; targetIndex++)
             {
+                var target = targets[targetIndex];
                 var targetArtefacts = new List<PowerForgeToolReleaseArtifactResult>();
                 foreach (var combination in target.Combinations ?? Array.Empty<PowerForgeToolReleaseCombinationPlan>())
                 {
-                    var progressKey = BuildProgressKey(target, combination);
+                    var progressKey = BuildProgressKey(target, combination, targetIndex);
                     progressItems.TryGetValue(progressKey, out var progressItem);
                     if (progressItem is not null)
                         progress?.ItemUpdated(progressItem, PowerForgeReleaseProgressItemState.Started);
@@ -287,14 +289,14 @@ internal sealed class PowerForgeToolReleaseService
         PowerForgeToolReleasePlan plan)
     {
         var combinations = (plan.Targets ?? Array.Empty<PowerForgeToolReleaseTargetPlan>())
-            .SelectMany(target => (target.Combinations ?? Array.Empty<PowerForgeToolReleaseCombinationPlan>())
-                .Select(combination => (Target: target, Combination: combination)))
+            .SelectMany((target, targetIndex) => (target.Combinations ?? Array.Empty<PowerForgeToolReleaseCombinationPlan>())
+                .Select(combination => (Target: target, Combination: combination, TargetIndex: targetIndex)))
             .ToArray();
         return combinations
             .Select((entry, index) => new PowerForgeReleaseProgressItem
             {
                 Phase = PowerForgeReleaseProgressPhase.Tools,
-                Key = BuildProgressKey(entry.Target, entry.Combination),
+                Key = BuildProgressKey(entry.Target, entry.Combination, entry.TargetIndex),
                 Title = $"Publish {entry.Target.Name} ({entry.Combination.Framework}, {entry.Combination.Runtime}, {entry.Combination.Flavor})",
                 Kind = "ToolPublish",
                 Position = index + 1,
@@ -305,8 +307,9 @@ internal sealed class PowerForgeToolReleaseService
 
     private static string BuildProgressKey(
         PowerForgeToolReleaseTargetPlan target,
-        PowerForgeToolReleaseCombinationPlan combination)
-        => $"tool:{target.Name}:{combination.Framework}:{combination.Runtime}:{combination.Flavor}";
+        PowerForgeToolReleaseCombinationPlan combination,
+        int targetIndex)
+        => $"tool:{targetIndex}:{target.Name}:{combination.Framework}:{combination.Runtime}:{combination.Flavor}";
 
     private PowerForgeToolReleaseArtifactResult PublishOne(
         PowerForgeToolReleasePlan plan,

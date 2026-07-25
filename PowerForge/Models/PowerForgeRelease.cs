@@ -865,6 +865,8 @@ internal sealed class PowerForgeModuleReleaseOptions
 
 internal sealed class PowerForgeModuleReleasePlanSummary
 {
+    public string? ModuleName { get; set; }
+
     public string RepositoryRoot { get; set; } = string.Empty;
 
     public string? ConfigPath { get; set; }

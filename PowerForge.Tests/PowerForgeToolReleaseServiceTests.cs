@@ -137,6 +137,71 @@ public sealed class PowerForgeToolReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void Run_AllowsDuplicateTargetNamesWithoutProgressKeyCollisions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.ToolReleaseTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var projectPath = Path.Combine(root, "Sample.Tool.csproj");
+            File.WriteAllText(projectPath, "<Project />");
+            var service = new PowerForgeToolReleaseService(
+                new NullLogger(),
+                startInfo =>
+                {
+                    var publishDirectory = ReadProperty(startInfo.Arguments, "/p:PublishDir=");
+                    Directory.CreateDirectory(publishDirectory);
+                    File.WriteAllText(Path.Combine(publishDirectory, "Sample.Tool"), "tool");
+                    return new PowerForgeToolReleaseService.ProcessExecutionResult(0, string.Empty, string.Empty);
+                });
+            var progress = new RecordingReleaseProgress();
+            var targets = Enumerable.Range(0, 2)
+                .Select(index =>
+                {
+                    var outputPath = Path.Combine(root, $"output-{index}");
+                    return new PowerForgeToolReleaseTargetPlan
+                    {
+                        Name = "Sample.Tool",
+                        ProjectPath = projectPath,
+                        OutputName = "Sample.Tool",
+                        Version = "1.2.3",
+                        ArtifactRootPath = outputPath,
+                        KeepDocs = true,
+                        KeepSymbols = true,
+                        MsBuildProperties = new Dictionary<string, string>(),
+                        Combinations =
+                        [
+                            new PowerForgeToolReleaseCombinationPlan
+                            {
+                                Runtime = "osx-arm64",
+                                Framework = "net10.0",
+                                Flavor = PowerForgeToolReleaseFlavor.SingleContained,
+                                OutputPath = outputPath
+                            }
+                        ]
+                    };
+                })
+                .ToArray();
+
+            var result = service.Run(new PowerForgeToolReleasePlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                Targets = targets
+            }, progress);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(2, progress.Planned.Count);
+            Assert.Equal(2, progress.Planned.Select(item => item.Key).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+            Assert.Equal(4, progress.Updates.Count);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
     private sealed class RecordingReleaseProgress : IPowerForgeReleaseProgressReporterV2
     {
         public List<PowerForgeReleaseProgressItem> Planned { get; } = new();

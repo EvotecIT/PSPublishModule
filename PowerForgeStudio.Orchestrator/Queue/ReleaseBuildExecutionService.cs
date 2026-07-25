@@ -205,9 +205,38 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         }
 
         var searchRoot = path[..tokenIndex].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (Directory.Exists(searchRoot))
+        if (!Directory.Exists(searchRoot))
         {
-            directories.Add(searchRoot);
+            return;
+        }
+
+        var tokenEnd = path.IndexOfAny(['>', '}'], tokenIndex + 1);
+        if (tokenEnd < 0)
+        {
+            return;
+        }
+
+        var relativeSuffix = path[(tokenEnd + 1)..]
+            .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var currentArtifact = Directory.EnumerateDirectories(searchRoot)
+            .Select(directory => string.IsNullOrWhiteSpace(relativeSuffix)
+                ? directory
+                : Path.Combine(directory, relativeSuffix))
+            .Where(Directory.Exists)
+            .Select(directory => new
+            {
+                Path = directory,
+                LastWriteUtc = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
+                    .Select(File.GetLastWriteTimeUtc)
+                    .DefaultIfEmpty(Directory.GetLastWriteTimeUtc(directory))
+                    .Max()
+            })
+            .OrderByDescending(candidate => candidate.LastWriteUtc)
+            .ThenByDescending(candidate => candidate.Path, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (currentArtifact is not null)
+        {
+            directories.Add(currentArtifact.Path);
         }
     }
 

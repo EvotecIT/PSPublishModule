@@ -85,6 +85,9 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
         var moduleRoot = scope.CreateDirectory(Path.Combine("JsonModuleRepo", "src", "JsonModuleRepo"));
         var configuredArtifactRoot = Path.Combine(moduleRoot, "out");
         var configuredArtifact = Path.Combine(configuredArtifactRoot, "v1.0.0");
+        var staleArtifact = Directory.CreateDirectory(Path.Combine(configuredArtifactRoot, "v0.9.0")).FullName;
+        File.WriteAllText(Path.Combine(staleArtifact, "JsonModuleRepo.zip"), "stale");
+        File.SetLastWriteTimeUtc(Path.Combine(staleArtifact, "JsonModuleRepo.zip"), DateTime.UtcNow.AddDays(-1));
         File.WriteAllText(
             moduleConfig,
             """
@@ -132,8 +135,9 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains("$moduleBuildArguments['RunMode'] = 'Build'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['SkipInstall'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['NoSign'] = $true", captured.CommandText!, StringComparison.Ordinal);
-        Assert.Contains(configuredArtifactRoot, adapter.ArtifactDirectories);
+        Assert.Contains(configuredArtifact, adapter.ArtifactDirectories);
         Assert.Contains(Path.Combine(configuredArtifact, "JsonModuleRepo.zip"), adapter.ArtifactFiles);
+        Assert.DoesNotContain(Path.Combine(staleArtifact, "JsonModuleRepo.zip"), adapter.ArtifactFiles);
     }
 
     private sealed class TemporaryDirectoryScope : IDisposable

@@ -388,7 +388,7 @@ internal sealed partial class PowerForgeReleaseService
                 UpdateResolvedModuleVersion(result.ModulePlan, result.ModuleAssets);
                 result.ModuleAssets = ExpandModuleArtifactPaths(
                     result.ModuleAssets,
-                    spec.Module!.ModuleName,
+                    result.ModulePlan?.ModuleName,
                     result.ModulePlan?.ModuleVersion,
                     result.ModulePlan?.PreReleaseTag);
                 if (result.ModulePlan is not null)
@@ -909,8 +909,9 @@ internal sealed partial class PowerForgeReleaseService
 
         if (configPath is not null && !File.Exists(configPath))
             throw new FileNotFoundException($"Module build config was not found: {configPath}", configPath);
-        if (configPath is not null)
-            _ = new ModulePipelineConfigurationService().Load(configPath);
+        var moduleConfig = configPath is null
+            ? null
+            : new ModulePipelineConfigurationService().Load(configPath);
         if (scriptPath is not null && !File.Exists(scriptPath))
             throw new FileNotFoundException($"Module build script was not found: {scriptPath}", scriptPath);
         if (!request.PlanOnly &&
@@ -931,6 +932,9 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException("Module TimeoutSeconds must be greater than zero.");
         var includeProjectPackages = options.IncludesPackages && !request.ModuleOnly;
         var noDotnetBuildOverride = request.ModuleNoDotnetBuild ?? options.NoDotnetBuild;
+        var moduleName = string.IsNullOrWhiteSpace(options.ModuleName)
+            ? moduleConfig?.Spec.Build.Name
+            : options.ModuleName;
 
         var buildRequest = new ModuleBuildHostBuildRequest
         {
@@ -969,6 +973,7 @@ internal sealed partial class PowerForgeReleaseService
 
         var plan = new PowerForgeModuleReleasePlanSummary
         {
+            ModuleName = moduleName,
             RepositoryRoot = repositoryRoot,
             ConfigPath = configPath,
             ScriptPath = scriptPath,

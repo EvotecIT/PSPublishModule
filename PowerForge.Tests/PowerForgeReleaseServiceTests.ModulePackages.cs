@@ -3,6 +3,40 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void Execute_ModulePlan_InfersModuleNameFromJsonBuildContract()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "powerforge.json"),
+                """{ "Build": { "Name": "InferredModule", "SourcePath": ".", "Version": "1.2.3" } }""");
+            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = ".",
+                        ConfigPath = "powerforge.json",
+                        ArtifactPaths = [Path.Combine("Artifacts", "<ModuleName>", "<ModuleVersion>")]
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("InferredModule", result.ModulePlan!.ModuleName);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_ModuleValidate_RejectsInvalidJsonBuildContract()
     {
         var root = CreateSandbox();
