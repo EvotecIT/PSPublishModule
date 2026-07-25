@@ -274,13 +274,13 @@ jobs:
             ${{ runner.os }}-product-nuget-
             ${{ runner.os }}-nuget-
 
-      - name: Restore complete product graph
+      - name: Restore core product graph
         shell: pwsh
-        run: dotnet restore .\PSPublishModule.sln --force-evaluate
+        run: dotnet restore .\PSPublishModule.Core.slnf --force-evaluate
 
-      - name: Build complete product graph
+      - name: Build core product graph
         shell: pwsh
-        run: dotnet build .\PSPublishModule.sln -c Release --no-restore --nologo
+        run: dotnet build .\PSPublishModule.Core.slnf -c Release --no-restore --nologo
 
       - name: Run full PowerForge test suite
         shell: pwsh

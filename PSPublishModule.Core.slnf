@@ -1,0 +1,16 @@
+{
+  "solution": {
+    "path": "PSPublishModule.sln",
+    "projects": [
+      "PowerForge.Cli\\PowerForge.Cli.csproj",
+      "PowerForge.Net472SmokeTests\\PowerForge.Net472SmokeTests.csproj",
+      "PowerForge.PowerShell\\PowerForge.PowerShell.csproj",
+      "PowerForge.Tests\\PowerForge.Tests.csproj",
+      "PowerForge.Web.Cli\\PowerForge.Web.Cli.csproj",
+      "PowerForge.Web.Sample.App\\PowerForge.Web.Sample.App.csproj",
+      "PowerForge.Web\\PowerForge.Web.csproj",
+      "PowerForge\\PowerForge.csproj",
+      "PSPublishModule\\PSPublishModule.csproj"
+    ]
+  }
+}
