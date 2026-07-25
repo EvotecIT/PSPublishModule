@@ -93,6 +93,15 @@ public sealed partial class ReleasePublishExecutionService
 
             if (HasConfiguredModulePackagePublication(configPath!, spec))
             {
+                foreach (var lane in ModulePackageReleaseCheckpointService
+                             .ResolveLanes(configPath!, spec)
+                             .Where(static lane => lane.PublishNuget || lane.PublishGitHub))
+                {
+                    _ = ModulePackageReleaseCheckpointService.Restore(
+                        lane,
+                        unified.ModulePackagePlans);
+                }
+
                 targets.Add(new ReleasePublishTarget(
                     RootPath: item.RootPath,
                     RepositoryName: item.RepositoryName,

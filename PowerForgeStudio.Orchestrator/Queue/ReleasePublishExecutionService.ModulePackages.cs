@@ -12,7 +12,23 @@ public sealed partial class ReleasePublishExecutionService
         ReleaseSigningExecutionResult signingResult,
         CancellationToken cancellationToken)
     {
-        var lanes = ResolveModulePackagePublishLanes(repository.UnifiedReleaseConfigPath!, spec);
+        var lanes = ModulePackageReleaseCheckpointService.ResolveLanes(
+            repository.UnifiedReleaseConfigPath!,
+            spec);
+        var unified = ReadUnifiedReleaseCheckpoint(signingResult);
+        if (unified is null)
+        {
+            return [
+                FailedReceipt(
+                    repository.RootPath,
+                    repository.Name,
+                    "UnifiedRelease",
+                    "ModulePackages",
+                    null,
+                    "Module-owned package publication requires the signed unified build checkpoint.")
+            ];
+        }
+
         var receipts = new List<ReleasePublishReceipt>();
         foreach (var lane in lanes.Where(static lane => lane.PublishNuget || lane.PublishGitHub))
         {
@@ -21,7 +37,9 @@ public sealed partial class ReleasePublishExecutionService
                 ? _projectBuildPublishHostService.LoadConfiguration(lane.Reference, lane.ConfigPath)
                 : _projectBuildPublishHostService.LoadConfiguration(lane.Inline!, lane.ConfigPath);
 
-            var plan = CreateModulePackagePublishPlan(lane);
+            var plan = ModulePackageReleaseCheckpointService
+                .Restore(lane, unified.ModulePackagePlans)
+                .Release;
             ApplySignedCheckpointArtifacts(plan, signingResult);
 
             if (publishConfig.PublishNuget)
@@ -121,27 +139,6 @@ public sealed partial class ReleasePublishExecutionService
         return receipts;
     }
 
-    private DotNetRepositoryReleaseResult CreateModulePackagePublishPlan(ModulePackagePublishLane lane)
-    {
-        var request = new ProjectBuildHostRequest {
-            ConfigPath = lane.ConfigPath,
-            ExecuteBuild = false,
-            PlanOnly = true,
-            UpdateVersions = false,
-            Build = false,
-            PublishNuget = false,
-            PublishGitHub = false
-        };
-        var execution = lane.Reference is not null
-            ? _projectBuildHostService.Execute(request, lane.Reference, lane.ConfigPath)
-            : _projectBuildHostService.Execute(request, lane.Inline!, lane.ConfigPath);
-        if (!execution.Success || execution.Result.Release is null)
-            throw new InvalidOperationException(
-                $"{lane.Name}: package publish plan could not be restored. {execution.ErrorMessage}");
-
-        return execution.Result.Release;
-    }
-
     private static void ApplySignedCheckpointArtifacts(
         DotNetRepositoryReleaseResult plan,
         ReleaseSigningExecutionResult signingResult)
@@ -190,10 +187,10 @@ public sealed partial class ReleasePublishExecutionService
                 MatchesProjectPackage(path, project)));
 
             var expectedZipName = Path.GetFileName(project.ReleaseZipPath);
-            project.ReleaseZipPath = archives.FirstOrDefault(path =>
-                (!string.IsNullOrWhiteSpace(expectedZipName) &&
-                 string.Equals(Path.GetFileName(path), expectedZipName, StringComparison.OrdinalIgnoreCase)) ||
-                Path.GetFileName(path).Contains(project.ProjectName, StringComparison.OrdinalIgnoreCase));
+            project.ReleaseZipPath = !string.IsNullOrWhiteSpace(expectedZipName)
+                ? archives.FirstOrDefault(path =>
+                    string.Equals(Path.GetFileName(path), expectedZipName, StringComparison.OrdinalIgnoreCase))
+                : archives.FirstOrDefault(path => MatchesProjectArchive(path, project));
         }
     }
 
@@ -210,70 +207,31 @@ public sealed partial class ReleasePublishExecutionService
         return string.Equals(Path.GetFileName(path), expectedName, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool HasConfiguredModulePackagePublication(
-        string releaseConfigPath,
-        PowerForgeReleaseSpec spec)
-        => ResolveModulePackagePublishLanes(releaseConfigPath, spec)
-            .Any(static lane => lane.PublishNuget || lane.PublishGitHub);
-
-    private static IReadOnlyList<ModulePackagePublishLane> ResolveModulePackagePublishLanes(
-        string releaseConfigPath,
-        PowerForgeReleaseSpec spec)
+    private static bool MatchesProjectArchive(string path, DotNetRepositoryProjectResult project)
     {
-        if (spec.Module?.IncludesPackages != true)
-            return [];
-        if (string.IsNullOrWhiteSpace(spec.Module.ConfigPath))
+        var fileName = Path.GetFileNameWithoutExtension(path);
+        var identities = new[] { project.PackageId, project.ProjectName }
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        foreach (var identity in identities)
         {
-            throw new InvalidOperationException(
-                "Module-owned package publication requires Module.ConfigPath so the declared JSON package lanes can be resumed.");
-        }
+            if (string.Equals(fileName, identity, StringComparison.OrdinalIgnoreCase))
+                return true;
 
-        var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
-        var repositoryRoot = string.IsNullOrWhiteSpace(spec.Module.RepositoryRoot)
-            ? releaseDirectory
-            : PathTokenProtection.GetFullPath(releaseDirectory, spec.Module.RepositoryRoot!);
-        var moduleConfigPath = PathTokenProtection.GetFullPath(repositoryRoot, spec.Module.ConfigPath!);
-        var context = new ModulePipelineConfigurationService().Load(moduleConfigPath);
-        var lanes = new List<ModulePackagePublishLane>();
-        foreach (var segment in context.Spec.Segments ?? [])
-        {
-            switch (segment)
+            if (fileName.StartsWith(identity + ".", StringComparison.OrdinalIgnoreCase) ||
+                fileName.StartsWith(identity + "-", StringComparison.OrdinalIgnoreCase))
             {
-                case ConfigurationProjectBuildSegment project when project.Configuration.Enabled:
-                {
-                    var configPath = ModulePipelineConfigurationService.ResolveProjectBuildConfigurationPath(
-                        context,
-                        project.Configuration);
-                    var publish = new ProjectBuildSupportService(new NullLogger()).LoadConfig(configPath);
-                    lanes.Add(new ModulePackagePublishLane(
-                        project.Configuration.Name ?? Path.GetFileNameWithoutExtension(configPath),
-                        configPath,
-                        project.Configuration,
-                        null,
-                        project.Configuration.PublishNuget ?? (publish.PublishNuget == true),
-                        project.Configuration.PublishGitHub ?? (publish.PublishGitHub == true)));
-                    break;
-                }
-                case ConfigurationPackageBuildSegment package when package.Configuration.Enabled:
-                    lanes.Add(new ModulePackagePublishLane(
-                        package.Configuration.Name ?? "Inline package build",
-                        moduleConfigPath,
-                        null,
-                        package.Configuration,
-                        package.Configuration.PublishNuget == true,
-                        package.Configuration.PublishGitHub == true));
-                    break;
+                return string.IsNullOrWhiteSpace(project.NewVersion) ||
+                       fileName.Contains(project.NewVersion!, StringComparison.OrdinalIgnoreCase);
             }
         }
 
-        return lanes;
+        return false;
     }
 
-    private sealed record ModulePackagePublishLane(
-        string Name,
-        string ConfigPath,
-        ProjectBuildConfigurationReference? Reference,
-        PackageBuildConfiguration? Inline,
-        bool PublishNuget,
-        bool PublishGitHub);
+    private static bool HasConfiguredModulePackagePublication(
+        string releaseConfigPath,
+        PowerForgeReleaseSpec spec)
+        => ModulePackageReleaseCheckpointService.ResolveLanes(releaseConfigPath, spec)
+            .Any(static lane => lane.PublishNuget || lane.PublishGitHub);
 }

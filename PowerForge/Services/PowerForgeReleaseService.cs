@@ -410,6 +410,13 @@ internal sealed partial class PowerForgeReleaseService
                     result.ModulePlan?.PreReleaseTag);
                 if (result.ModulePlan is not null)
                     result.ModulePlan.ArtifactPaths = result.ModuleAssets;
+
+                if (result.ModulePlan?.IncludesProjectPackages == true &&
+                    module.Request.ConfigPath is not null)
+                {
+                    result.ModulePackagePlans = new ModulePackageReleaseCheckpointService()
+                        .Capture(configPath, spec);
+                }
             }
             request.Progress?.PhaseCompleted(
                 PowerForgeReleaseProgressPhase.Module,
@@ -3020,13 +3027,8 @@ internal sealed partial class PowerForgeReleaseService
         if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
             return sharedReleaseVersion;
 
-        if (!string.IsNullOrWhiteSpace(target.ProjectPath)
-            && File.Exists(target.ProjectPath)
-            && CsprojVersionEditor.TryGetVersion(target.ProjectPath, out var version)
-            && !string.IsNullOrWhiteSpace(version))
-        {
-            return version;
-        }
+        if (!string.IsNullOrWhiteSpace(target.Version))
+            return target.Version;
 
         var msiVersion = (result.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
             .Where(entry => string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase))
@@ -4077,14 +4079,9 @@ internal sealed partial class PowerForgeReleaseService
         if (target is null)
             return null;
 
-        var version = !string.IsNullOrWhiteSpace(target.ProjectPath)
-            && File.Exists(target.ProjectPath)
-            && CsprojVersionEditor.TryGetVersion(target.ProjectPath, out var resolvedVersion)
-            && !string.IsNullOrWhiteSpace(resolvedVersion)
-            ? resolvedVersion
-            : null;
-
-        return version;
+        return string.IsNullOrWhiteSpace(target.Version)
+            ? null
+            : target.Version;
     }
 
     private static object? BuildPackageManifestSection(ProjectBuildHostExecutionResult? packages)

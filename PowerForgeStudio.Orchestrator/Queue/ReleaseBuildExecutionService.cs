@@ -499,7 +499,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         {
             foreach (var extension in new[] { "*.nupkg", "*.snupkg", "*.zip", "*.psd1", "*.psm1", "*.dll" })
             {
-                foreach (var file in Directory.EnumerateFiles(directory, extension, SearchOption.AllDirectories).Take(50))
+                foreach (var file in Directory.EnumerateFiles(directory, extension, SearchOption.AllDirectories))
                 {
                     files.Add(file);
                 }

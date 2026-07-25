@@ -14,6 +14,15 @@ public sealed class DotNetPublishPipelineRunnerMatrixProjectTests
         try
         {
             var projectPath = CreateProject(root, "src/app.csproj");
+            File.WriteAllText(
+                projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <Version>1.0.0</Version>
+                  </PropertyGroup>
+                </Project>
+                """);
             var spec = new DotNetPublishSpec
             {
                 DotNet = new DotNetPublishDotNetOptions
@@ -46,6 +55,7 @@ public sealed class DotNetPublishPipelineRunnerMatrixProjectTests
             var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
             Assert.Single(plan.Targets);
             Assert.Equal(Path.GetFullPath(projectPath), plan.Targets[0].ProjectPath);
+            Assert.Equal("1.0.0", plan.Targets[0].Version);
         }
         finally
         {
@@ -186,4 +196,3 @@ public sealed class DotNetPublishPipelineRunnerMatrixProjectTests
         }
     }
 }
-

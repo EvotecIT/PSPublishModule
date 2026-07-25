@@ -122,6 +122,31 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
         Assert.Equal(releaseConfig, entry.PrimaryBuildScriptPath);
     }
 
+    [Theory]
+    [InlineData("powerforge.release.json")]
+    [InlineData(".powerforge/release.json")]
+    [InlineData("Build/release.json")]
+    [InlineData("release.json")]
+    public void InspectRepository_ProbesEverySupportedUnifiedReleaseLocation(string relativePath)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryPath = scope.CreateRepository("UnifiedLocationRepo");
+        File.Delete(Path.Combine(repositoryPath, "Build", "Build-Module.ps1"));
+        var releaseConfig = Path.Combine(
+            repositoryPath,
+            relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(releaseConfig)!);
+        File.WriteAllText(
+            releaseConfig,
+            """{ "Tools": { "ProjectRoot": ".", "Targets": [] } }""");
+
+        var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
+
+        Assert.True(entry.IsReleaseManaged);
+        Assert.Equal(releaseConfig, entry.UnifiedReleaseConfigPath);
+        Assert.Equal(releaseConfig, entry.PrimaryBuildScriptPath);
+    }
+
     [Fact]
     public void InspectRepository_WorkspaceValidation_RetainsUnifiedReleaseContract()
     {

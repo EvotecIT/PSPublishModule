@@ -83,7 +83,7 @@ public sealed class RepositoryCatalogScanner
 
     private static ReleaseBuildContract? FindReleaseBuildContract(string directoryPath, bool includeImmediateChildBuildFolders)
     {
-        foreach (var releaseConfigPath in EnumerateBuildFiles(directoryPath, "release.json", includeImmediateChildBuildFolders))
+        foreach (var releaseConfigPath in EnumerateReleaseConfigFiles(directoryPath, includeImmediateChildBuildFolders))
         {
             var contract = ResolveReleaseBuildContract(releaseConfigPath);
             if (contract is not null)
@@ -112,12 +112,14 @@ public sealed class RepositoryCatalogScanner
         return null;
     }
 
-    private static IEnumerable<string> EnumerateBuildFiles(string directoryPath, string fileName, bool includeImmediateChildBuildFolders)
+    private static IEnumerable<string> EnumerateReleaseConfigFiles(
+        string directoryPath,
+        bool includeImmediateChildBuildFolders)
     {
-        var directCandidate = Path.Combine(directoryPath, "Build", fileName);
-        if (File.Exists(directCandidate))
+        foreach (var candidate in EnumerateReleaseConfigCandidates(directoryPath))
         {
-            yield return directCandidate;
+            if (File.Exists(candidate))
+                yield return candidate;
         }
 
         if (!includeImmediateChildBuildFolders)
@@ -127,12 +129,20 @@ public sealed class RepositoryCatalogScanner
 
         foreach (var childDirectory in Directory.EnumerateDirectories(directoryPath))
         {
-            var nestedCandidate = Path.Combine(childDirectory, "Build", fileName);
-            if (File.Exists(nestedCandidate))
+            foreach (var nestedCandidate in EnumerateReleaseConfigCandidates(childDirectory))
             {
-                yield return nestedCandidate;
+                if (File.Exists(nestedCandidate))
+                    yield return nestedCandidate;
             }
         }
+    }
+
+    private static IEnumerable<string> EnumerateReleaseConfigCandidates(string directoryPath)
+    {
+        yield return Path.Combine(directoryPath, "powerforge.release.json");
+        yield return Path.Combine(directoryPath, ".powerforge", "release.json");
+        yield return Path.Combine(directoryPath, "Build", "release.json");
+        yield return Path.Combine(directoryPath, "release.json");
     }
 
     private static ReleaseBuildContract? ResolveReleaseBuildContract(string releaseConfigPath)

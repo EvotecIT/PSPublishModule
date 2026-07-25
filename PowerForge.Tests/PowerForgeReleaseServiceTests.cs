@@ -4876,6 +4876,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         new DotNetPublishTargetPlan
                         {
                             Name = "PowerForgeWeb",
+                            Version = "1.2.3",
                             ProjectPath = projectPath,
                             Publish = new DotNetPublishPublishOptions
                             {
@@ -5331,6 +5332,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         new DotNetPublishTargetPlan
                         {
                             Name = "IntelligenceX.Chat.App",
+                            Version = "1.0.0",
                             ProjectPath = chatProject,
                             Publish = new DotNetPublishPublishOptions
                             {
@@ -5458,6 +5460,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         new DotNetPublishTargetPlan
                         {
                             Name = "IntelligenceX.Tray",
+                            Version = "1.0.0",
                             ProjectPath = trayProject,
                             Publish = new DotNetPublishPublishOptions
                             {
@@ -5716,6 +5719,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         new DotNetPublishTargetPlan
                         {
                             Name = "IntelligenceX.Tray",
+                            Version = "1.0.0",
                             ProjectPath = trayProject,
                             Publish = new DotNetPublishPublishOptions
                             {
@@ -5857,6 +5861,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         new DotNetPublishTargetPlan
                         {
                             Name = "IntelligenceX.Tray",
+                            Version = "1.0.0",
                             ProjectPath = trayProject,
                             Publish = new DotNetPublishPublishOptions
                             {

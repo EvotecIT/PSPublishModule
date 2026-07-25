@@ -205,6 +205,54 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_UnifiedModuleCheckpointCapturesEverySignablePackageArtifact()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("LargeModuleRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("LargeModuleRepo", "Build"));
+        var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+        File.WriteAllText(
+            moduleConfig,
+            """{ "Build": { "Name": "LargeModuleRepo", "SourcePath": "." } }""");
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """{ "Module": { "RepositoryRoot": "..", "ConfigPath": "powerforge.json" } }""");
+        var artifactDirectory = scope.CreateDirectory(Path.Combine("LargeModuleRepo", "Artifacts", "Packages"));
+        var packages = Enumerable.Range(1, 55)
+            .Select(index => Path.Combine(artifactDirectory, $"LargeModuleRepo.Dependency{index}.1.0.0.nupkg"))
+            .ToArray();
+        foreach (var package in packages)
+            File.WriteAllText(package, "package");
+
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()),
+            (_, _) => new PowerForgeReleaseResult
+            {
+                Success = true,
+                ModulePlan = new PowerForgeModuleReleasePlanSummary
+                {
+                    ModuleName = "LargeModuleRepo",
+                    ConfigPath = moduleConfig,
+                    ArtifactPaths = [artifactDirectory]
+                },
+                Module = new ModuleBuildHostExecutionResult { ExitCode = 0 },
+                ModuleAssets = [artifactDirectory]
+            });
+
+        var result = await service.ExecuteAsync(repositoryRoot);
+
+        Assert.True(result.Succeeded);
+        var adapter = Assert.Single(result.AdapterResults);
+        Assert.Equal(55, adapter.ArtifactFiles.Count(path =>
+            path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase)));
+        Assert.All(packages, package => Assert.Contains(package, adapter.ArtifactFiles));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ModuleReleaseContract_UsesUnifiedEngineAndPreservesOverrides()
     {
         using var scope = new TemporaryDirectoryScope();

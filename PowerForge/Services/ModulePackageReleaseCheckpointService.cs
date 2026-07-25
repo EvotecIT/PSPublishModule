@@ -1,0 +1,162 @@
+namespace PowerForge;
+
+/// <summary>
+/// Resolves module-owned package lanes and captures their immutable release plans.
+/// </summary>
+internal sealed class ModulePackageReleaseCheckpointService
+{
+    private readonly ProjectBuildHostService _projectBuildHostService;
+
+    internal ModulePackageReleaseCheckpointService(ProjectBuildHostService? projectBuildHostService = null)
+    {
+        _projectBuildHostService = projectBuildHostService ?? new ProjectBuildHostService();
+    }
+
+    internal PowerForgeModulePackageReleaseCheckpoint[] Capture(
+        string releaseConfigPath,
+        PowerForgeReleaseSpec spec)
+    {
+        var checkpoints = new List<PowerForgeModulePackageReleaseCheckpoint>();
+        foreach (var lane in ResolveLanes(releaseConfigPath, spec)
+                     .Where(static lane => lane.PublishNuget || lane.PublishGitHub))
+        {
+            var request = new ProjectBuildHostRequest
+            {
+                ConfigPath = lane.ConfigPath,
+                ExecuteBuild = false,
+                PlanOnly = true,
+                UpdateVersions = false,
+                Build = false,
+                PublishNuget = false,
+                PublishGitHub = false
+            };
+            var execution = lane.Reference is not null
+                ? _projectBuildHostService.Execute(request, lane.Reference, lane.ConfigPath)
+                : _projectBuildHostService.Execute(request, lane.Inline!, lane.ConfigPath);
+            if (!execution.Success || execution.Result.Release is null)
+            {
+                throw new InvalidOperationException(
+                    $"{lane.Name}: package release plan could not be checkpointed. {execution.ErrorMessage}");
+            }
+
+            checkpoints.Add(new PowerForgeModulePackageReleaseCheckpoint
+            {
+                Name = lane.Name,
+                ConfigPath = Path.GetFullPath(lane.ConfigPath),
+                Release = execution.Result.Release
+            });
+        }
+
+        return checkpoints.ToArray();
+    }
+
+    internal static PowerForgeModulePackageReleaseCheckpoint Restore(
+        ModulePackageReleaseLane lane,
+        IEnumerable<PowerForgeModulePackageReleaseCheckpoint>? checkpoints)
+    {
+        var normalizedConfigPath = Path.GetFullPath(lane.ConfigPath);
+        var matches = (checkpoints ?? [])
+            .Where(checkpoint =>
+                string.Equals(checkpoint.Name, lane.Name, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(
+                    Path.GetFullPath(checkpoint.ConfigPath),
+                    normalizedConfigPath,
+                    StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return matches.Length switch
+        {
+            1 => matches[0],
+            0 => throw new InvalidOperationException(
+                $"{lane.Name}: the signed build checkpoint does not contain its package release plan."),
+            _ => throw new InvalidOperationException(
+                $"{lane.Name}: the signed build checkpoint contains duplicate package release plans.")
+        };
+    }
+
+    internal static IReadOnlyList<ModulePackageReleaseLane> ResolveLanes(
+        string releaseConfigPath,
+        PowerForgeReleaseSpec spec)
+    {
+        if (spec.Module?.IncludesPackages != true)
+            return [];
+        if (string.IsNullOrWhiteSpace(spec.Module.ConfigPath))
+        {
+            throw new InvalidOperationException(
+                "Module-owned package publication requires Module.ConfigPath so the declared JSON package lanes can be resumed.");
+        }
+
+        var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
+        var repositoryRoot = string.IsNullOrWhiteSpace(spec.Module.RepositoryRoot)
+            ? releaseDirectory
+            : PathTokenProtection.GetFullPath(releaseDirectory, spec.Module.RepositoryRoot!);
+        var moduleConfigPath = PathTokenProtection.GetFullPath(repositoryRoot, spec.Module.ConfigPath!);
+        var context = new ModulePipelineConfigurationService().Load(moduleConfigPath);
+        var lanes = new List<ModulePackageReleaseLane>();
+        foreach (var segment in context.Spec.Segments ?? [])
+        {
+            switch (segment)
+            {
+                case ConfigurationProjectBuildSegment project when project.Configuration.Enabled:
+                {
+                    var configPath = ModulePipelineConfigurationService.ResolveProjectBuildConfigurationPath(
+                        context,
+                        project.Configuration);
+                    var publish = new ProjectBuildSupportService(new NullLogger()).LoadConfig(configPath);
+                    lanes.Add(new ModulePackageReleaseLane(
+                        project.Configuration.Name ?? Path.GetFileNameWithoutExtension(configPath),
+                        configPath,
+                        project.Configuration,
+                        null,
+                        project.Configuration.PublishNuget ?? (publish.PublishNuget == true),
+                        project.Configuration.PublishGitHub ?? (publish.PublishGitHub == true)));
+                    break;
+                }
+                case ConfigurationPackageBuildSegment package when package.Configuration.Enabled:
+                    lanes.Add(new ModulePackageReleaseLane(
+                        package.Configuration.Name ?? "Inline package build",
+                        moduleConfigPath,
+                        null,
+                        package.Configuration,
+                        package.Configuration.PublishNuget == true,
+                        package.Configuration.PublishGitHub == true));
+                    break;
+            }
+        }
+
+        return lanes;
+    }
+}
+
+/// <summary>
+/// Resolved module-owned package lane used by checkpoint capture and staged publication.
+/// </summary>
+internal sealed class ModulePackageReleaseLane
+{
+    internal ModulePackageReleaseLane(
+        string name,
+        string configPath,
+        ProjectBuildConfigurationReference? reference,
+        PackageBuildConfiguration? inline,
+        bool publishNuget,
+        bool publishGitHub)
+    {
+        Name = name;
+        ConfigPath = configPath;
+        Reference = reference;
+        Inline = inline;
+        PublishNuget = publishNuget;
+        PublishGitHub = publishGitHub;
+    }
+
+    internal string Name { get; }
+
+    internal string ConfigPath { get; }
+
+    internal ProjectBuildConfigurationReference? Reference { get; }
+
+    internal PackageBuildConfiguration? Inline { get; }
+
+    internal bool PublishNuget { get; }
+
+    internal bool PublishGitHub { get; }
+}

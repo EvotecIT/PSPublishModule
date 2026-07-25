@@ -159,6 +159,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                         "Signed.",
                         DateTimeOffset.UtcNow)
                 ]);
+            File.Delete(projectPath);
             DotNetNuGetPushRequest? capturedPush = null;
             var service = new ReleasePublishExecutionService(
                 new RepositoryCatalogScanner(),
@@ -441,6 +442,17 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             var releaseConfig = Path.Combine(buildDirectory, "release.json");
             var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
             File.WriteAllText(
+                Path.Combine(moduleDirectory, "Sample.csproj"),
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <Version>1.0.0</Version>
+                    <IsPackable>true</IsPackable>
+                  </PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(
                 Path.Combine(moduleDirectory, "project.build.json"),
                 """{ "RootPath": ".", "PublishNuget": true, "PublishApiKey": "test-key" }""");
             File.WriteAllText(
@@ -549,8 +561,19 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         string repositoryName,
         string releaseConfig,
         PowerForgeReleaseResult unified,
-        IReadOnlyList<ReleaseSigningReceipt> receipts)
+        IReadOnlyList<ReleaseSigningReceipt> receipts,
+        bool captureModulePackagePlans = true)
     {
+        if (captureModulePackagePlans && unified.ModulePackagePlans.Length == 0)
+        {
+            var spec = PowerForgeReleaseService.LoadConfiguration(releaseConfig);
+            if (spec.Module?.IncludesPackages == true)
+            {
+                unified.ModulePackagePlans = new ModulePackageReleaseCheckpointService()
+                    .Capture(releaseConfig, spec);
+            }
+        }
+
         var buildResult = new ReleaseBuildExecutionResult(
             repositoryRoot,
             true,

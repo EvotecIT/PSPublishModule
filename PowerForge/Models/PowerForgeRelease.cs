@@ -241,6 +241,9 @@ internal sealed class PowerForgeReleaseResult
 
     public string[] ModuleAssets { get; set; } = Array.Empty<string>();
 
+    public PowerForgeModulePackageReleaseCheckpoint[] ModulePackagePlans { get; set; } =
+        Array.Empty<PowerForgeModulePackageReleaseCheckpoint>();
+
     public ProjectBuildHostExecutionResult? Packages { get; set; }
 
     public PowerForgeToolReleasePlan? ToolPlan { get; set; }

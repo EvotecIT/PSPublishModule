@@ -306,7 +306,16 @@ public sealed class UnifiedReleaseCheckpointIntegrityTests
             new PowerForgeReleaseResult
             {
                 Success = true,
-                ConfigPath = releaseConfig
+                ConfigPath = releaseConfig,
+                ModulePackagePlans =
+                [
+                    new PowerForgeModulePackageReleaseCheckpoint
+                    {
+                        Name = "Sample packages",
+                        ConfigPath = packageConfig,
+                        Release = new DotNetRepositoryReleaseResult()
+                    }
+                ]
             });
 
         var target = Assert.Single(new ReleasePublishExecutionService().BuildPendingTargets([queueItem]));
