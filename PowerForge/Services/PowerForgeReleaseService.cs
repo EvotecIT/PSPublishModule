@@ -203,6 +203,7 @@ internal sealed partial class PowerForgeReleaseService
         if (request is null)
             throw new ArgumentNullException(nameof(request));
 
+        using var deferredModuleStaging = new DeferredModuleStagingDirectory(_logger);
         request.CancellationToken.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(request.ConfigPath))
@@ -403,7 +404,17 @@ internal sealed partial class PowerForgeReleaseService
                 willRunTools,
                 willRunAppleApps);
             if (deferModulePublishing)
+            {
+                if (!request.PlanOnly &&
+                    !request.ValidateOnly &&
+                    module.Request.ConfigPath is not null &&
+                    string.IsNullOrWhiteSpace(module.Request.StagingPath))
+                {
+                    module.Request.StagingPath = deferredModuleStaging.GetOrCreatePath();
+                    module.Plan.StagingPath = module.Request.StagingPath;
+                }
                 deferredModulePublishRequest = module.Request;
+            }
 
             if (!request.PlanOnly && !request.ValidateOnly)
             {
@@ -2835,6 +2846,25 @@ internal sealed partial class PowerForgeReleaseService
                 Success = false,
                 ErrorMessage = "Checkpointed unified GitHub release assets are missing: " +
                                string.Join(", ", missingAssets)
+            };
+        }
+
+        var duplicateAssetNames = expectedAssets
+            .GroupBy(static path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+            .Where(static group => group.Count() > 1)
+            .ToArray();
+        if (duplicateAssetNames.Length > 0)
+        {
+            var collisions = duplicateAssetNames
+                .Select(group => $"{group.Key}: {string.Join(", ", group)}");
+            return new PowerForgeUnifiedGitHubReleaseResult
+            {
+                Owner = resolved.Owner ?? string.Empty,
+                Repository = resolved.Repository ?? string.Empty,
+                Version = version!,
+                Success = false,
+                ErrorMessage = "Unified GitHub release assets must have unique file names: " +
+                               string.Join("; ", collisions)
             };
         }
 

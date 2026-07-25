@@ -539,6 +539,72 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void PublishBuiltReleaseOutputs_RejectsDuplicateGitHubAssetFileNames()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var firstDirectory = Path.Combine(root, "first");
+            var secondDirectory = Path.Combine(root, "second");
+            Directory.CreateDirectory(firstDirectory);
+            Directory.CreateDirectory(secondDirectory);
+            var firstAsset = Path.Combine(firstDirectory, "Sample-1.0.7.zip");
+            var secondAsset = Path.Combine(secondDirectory, "Sample-1.0.7.zip");
+            File.WriteAllText(firstAsset, "first");
+            File.WriteAllText(secondAsset, "second");
+            var publishCalls = new List<GitHubReleasePublishRequest>();
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages must not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools must not plan."),
+                runTools: _ => throw new InvalidOperationException("Tools must not run."),
+                publishGitHubRelease: request =>
+                {
+                    publishCalls.Add(request);
+                    return new GitHubReleasePublishResult { Succeeded = true };
+                });
+            var built = new PowerForgeReleaseResult
+            {
+                Success = true,
+                ReleaseAssets = [firstAsset, secondAsset],
+                ReleaseAssetEntries =
+                [
+                    new PowerForgeReleaseAssetEntry { Path = firstAsset, Version = "1.0.7" },
+                    new PowerForgeReleaseAssetEntry { Path = secondAsset, Version = "1.0.7" }
+                ]
+            };
+
+            var result = service.PublishBuiltReleaseOutputs(
+                new PowerForgeReleaseSpec
+                {
+                    GitHub = new PowerForgeReleaseGitHubOptions
+                    {
+                        Publish = true,
+                        VersionSource = PowerForgeReleaseVersionSource.Assets,
+                        Owner = "EvotecIT",
+                        Repository = "Sample",
+                        Token = "token"
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json")
+                },
+                built);
+
+            Assert.False(result.Success);
+            Assert.Contains("unique file names", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(firstAsset, result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(secondAsset, result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(publishCalls);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void PublishBuiltReleaseOutputs_SubmitsPreviouslyGeneratedWingetManifests()
     {
         var root = CreateSandbox();

@@ -60,4 +60,45 @@ internal sealed partial class PowerForgeReleaseService
             request.IncludeProjectPackages = originalIncludeProjectPackages;
         }
     }
+
+    private sealed class DeferredModuleStagingDirectory : IDisposable
+    {
+        private readonly ILogger _logger;
+        private string? _path;
+
+        public DeferredModuleStagingDirectory(ILogger logger)
+        {
+            _logger = logger;
+        }
+
+        public string GetOrCreatePath()
+        {
+            if (_path is not null)
+                return _path;
+
+            _path = Path.Combine(
+                Path.GetTempPath(),
+                "PowerForge",
+                "unified-release",
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(_path);
+            return _path;
+        }
+
+        public void Dispose()
+        {
+            if (string.IsNullOrWhiteSpace(_path) || !Directory.Exists(_path))
+                return;
+
+            try
+            {
+                Directory.Delete(_path!, recursive: true);
+            }
+            catch (Exception exception)
+            {
+                _logger.Verbose(
+                    $"Unable to remove deferred module staging directory '{_path}': {exception.Message}");
+            }
+        }
+    }
 }

@@ -83,6 +83,78 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void Execute_deferred_json_module_publish_reuses_and_cleans_staging_directory()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var moduleConfigPath = Path.Combine(root, "powerforge.json");
+            var releasePath = Path.Combine(root, "release.json");
+            File.WriteAllText(
+                moduleConfigPath,
+                """{ "Build": { "Name": "SampleModule", "SourcePath": ".", "Version": "1.0.0" }, "Segments": [] }""");
+            File.WriteAllText(releasePath, "{}");
+            var moduleCalls = new List<ModuleExecutionSnapshot>();
+            var service = CreateReleaseService(
+                root,
+                moduleCalls,
+                new PowerForgeToolReleaseResult { Success = true },
+                request =>
+                {
+                    Assert.False(string.IsNullOrWhiteSpace(request.StagingPath));
+                    var payloadPath = Path.Combine(request.StagingPath!, "Lib", "SampleModule.dll");
+                    if (request.RunMode == ConfigurationGateMode.Build)
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(payloadPath)!);
+                        File.WriteAllText(payloadPath, "built payload");
+                    }
+                    else
+                    {
+                        Assert.True(File.Exists(payloadPath), payloadPath);
+                    }
+                });
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = root,
+                        ConfigPath = moduleConfigPath
+                    },
+                    Tools = new PowerForgeToolReleaseSpec
+                    {
+                        ProjectRoot = root,
+                        Targets =
+                        [
+                            new PowerForgeToolReleaseTarget
+                            {
+                                Name = "SampleTool",
+                                ProjectPath = "SampleTool.csproj",
+                                OutputName = "SampleTool"
+                            }
+                        ]
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ModuleRunMode = ConfigurationGateMode.Publish
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(2, moduleCalls.Count);
+            Assert.Equal(moduleCalls[0].StagingPath, moduleCalls[1].StagingPath);
+            Assert.Equal(moduleCalls[0].StagingPath, result.ModulePlan!.StagingPath);
+            Assert.False(Directory.Exists(moduleCalls[0].StagingPath));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static PowerForgeReleaseSpec CreateReleaseSpec(
         string root,
         string scriptPath)
@@ -107,7 +179,8 @@ public sealed partial class PowerForgeReleaseServiceTests
     private static PowerForgeReleaseService CreateReleaseService(
         string root,
         ICollection<ModuleExecutionSnapshot> moduleCalls,
-        PowerForgeToolReleaseResult toolResult)
+        PowerForgeToolReleaseResult toolResult,
+        Action<ModuleBuildHostBuildRequest>? onModuleExecution = null)
         => new(
             new NullLogger(),
             executePackages: (_, _, _) =>
@@ -133,13 +206,15 @@ public sealed partial class PowerForgeReleaseServiceTests
             executeModuleBuild: (request, cancellationToken) =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                onModuleExecution?.Invoke(request);
                 moduleCalls.Add(new ModuleExecutionSnapshot(
                     request.RunMode,
                     request.IncludeModulePublishing,
                     request.NoDotnetBuild,
                     request.NoDotnetBuildWasSpecified,
                     request.SkipInstall,
-                    request.IncludeProjectPackages));
+                    request.IncludeProjectPackages,
+                    request.StagingPath));
                 return new ModuleBuildHostExecutionResult { ExitCode = 0 };
             });
 
@@ -149,5 +224,6 @@ public sealed partial class PowerForgeReleaseServiceTests
         bool NoDotnetBuild,
         bool NoDotnetBuildWasSpecified,
         bool SkipInstall,
-        bool IncludeProjectPackages);
+        bool IncludeProjectPackages,
+        string? StagingPath);
 }
