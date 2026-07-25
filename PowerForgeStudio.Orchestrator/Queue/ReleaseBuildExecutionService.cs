@@ -53,6 +53,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
         {
             var configPath = repository.UnifiedReleaseConfigPath!;
+            var configFingerprint = UnifiedReleaseConfigFingerprint.Compute(configPath);
             var unifiedRequest = CreateUnifiedReleaseBuildRequest(
                 configPath,
                 PowerForgeStudioHostPaths.ResolvePSPublishModulePath());
@@ -60,13 +61,20 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             var unified = await Task.Run(
                 () => _executeUnifiedReleaseBuild(configPath, unifiedRequest),
                 cancellationToken).ConfigureAwait(false);
+            var completedFingerprint = UnifiedReleaseConfigFingerprint.Compute(configPath);
+            if (!string.Equals(configFingerprint, completedFingerprint, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Unified release configuration changed while the build was running. Rebuild from the updated contract before signing.");
+            }
+
             results.AddRange(CreateUnifiedAdapterResults(repository, unified, DateTimeOffset.UtcNow - startedAt));
             return ReleaseQueueExecutionResultFactory.CreateBuildResult(
                 repositoryRoot,
                 DateTimeOffset.UtcNow - startedAt,
                 results,
                 SerializeUnifiedCheckpoint(unified),
-                UnifiedReleaseConfigFingerprint.Compute(configPath));
+                configFingerprint);
         }
 
         if (!string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath))

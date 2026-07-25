@@ -278,6 +278,50 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void RefreshBuiltArchivesAfterSigning_RebuildsPackageReleaseZipFromSignedOutput()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var signedOutput = Path.Combine(root, "signed-output");
+            Directory.CreateDirectory(signedOutput);
+            File.WriteAllText(Path.Combine(signedOutput, "Sample.Library.dll"), "signed");
+
+            var unsignedOutput = Path.Combine(root, "unsigned-output");
+            Directory.CreateDirectory(unsignedOutput);
+            File.WriteAllText(Path.Combine(unsignedOutput, "Sample.Library.dll"), "unsigned");
+            var archivePath = Path.Combine(root, "Sample.Library.1.0.0.zip");
+            ZipFile.CreateFromDirectory(unsignedOutput, archivePath);
+            var stagedPath = Path.Combine(root, "staged", Path.GetFileName(archivePath));
+            Directory.CreateDirectory(Path.GetDirectoryName(stagedPath)!);
+            File.Copy(archivePath, stagedPath);
+            var result = new PowerForgeReleaseResult {
+                ReleaseAssetEntries = [
+                    new PowerForgeReleaseAssetEntry {
+                        Path = archivePath,
+                        StagedPath = stagedPath,
+                        Category = PowerForgeReleaseAssetCategory.Package
+                    }
+                ],
+                ReleaseAssets = [stagedPath]
+            };
+
+            var refreshed = PowerForgeReleaseService.RefreshBuiltArchivesAfterSigning(
+                result,
+                [signedOutput]);
+
+            Assert.Contains(archivePath, refreshed);
+            Assert.Contains(stagedPath, refreshed);
+            Assert.Equal("signed", ReadArchiveText(archivePath, "Sample.Library.dll"));
+            Assert.Equal("signed", ReadArchiveText(stagedPath, "Sample.Library.dll"));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void RefreshBuiltArchivesAfterSigning_RefreshesStagedSignedPackage()
     {
         var root = CreateSandbox();

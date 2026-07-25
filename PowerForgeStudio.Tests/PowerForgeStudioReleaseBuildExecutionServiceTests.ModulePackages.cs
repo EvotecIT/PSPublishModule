@@ -7,6 +7,31 @@ namespace PowerForgeStudio.Tests;
 public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 {
     [Fact]
+    public async Task ExecuteAsync_rejects_release_contract_drift_during_the_build()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("DriftDuringBuildRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("DriftDuringBuildRepo", "Build"));
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(releaseConfig, """{ "GitHub": { "Publish": false, "Repository": "Original" } }""");
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()),
+            (_, _) =>
+            {
+                File.WriteAllText(releaseConfig, """{ "GitHub": { "Publish": false, "Repository": "Changed" } }""");
+                return new PowerForgeReleaseResult { Success = true, ConfigPath = releaseConfig };
+            });
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.ExecuteAsync(repositoryRoot));
+
+        Assert.Contains("changed while the build was running", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_captures_module_owned_package_outputs_in_the_build_checkpoint()
     {
         using var scope = new TemporaryDirectoryScope();

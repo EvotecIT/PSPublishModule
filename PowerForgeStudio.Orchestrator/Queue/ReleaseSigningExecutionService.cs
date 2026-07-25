@@ -80,6 +80,7 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
         }
 
         RefreshUnifiedArchives(queueItem, receipts);
+        CaptureIntegrityDigests(receipts);
 
         var failed = receipts.Count(receipt => receipt.Status == ReleaseSigningReceiptStatus.Failed);
         var signed = receipts.Count(receipt => receipt.Status == ReleaseSigningReceiptStatus.Signed);
@@ -95,6 +96,28 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
             Summary: summary,
             SourceCheckpointStateJson: queueItem.CheckpointStateJson,
             Receipts: receipts);
+    }
+
+    private static void CaptureIntegrityDigests(List<ReleaseSigningReceipt> receipts)
+    {
+        for (var index = 0; index < receipts.Count; index++)
+        {
+            if (receipts[index].Status is not (ReleaseSigningReceiptStatus.Signed or ReleaseSigningReceiptStatus.Skipped))
+                continue;
+
+            try
+            {
+                receipts[index] = ReleaseSigningArtifactIntegrity.Capture(receipts[index]);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                receipts[index] = receipts[index] with {
+                    Status = ReleaseSigningReceiptStatus.Failed,
+                    Summary = FirstLine(ex.Message) ?? "Signed artifact integrity digest could not be captured.",
+                    SignedAtUtc = DateTimeOffset.UtcNow
+                };
+            }
+        }
     }
 
     private void RefreshUnifiedArchives(ReleaseQueueItem queueItem, List<ReleaseSigningReceipt> receipts)

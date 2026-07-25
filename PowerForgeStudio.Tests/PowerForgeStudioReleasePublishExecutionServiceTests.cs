@@ -16,62 +16,70 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
     [Fact]
     public void BuildPendingTargets_PublishReadyItem_ReturnsGroupedTargetsFromSigningCheckpoint()
     {
-        var repositoryRoot = @"C:\Support\GitHub\PSPublishModule";
-        var signingResult = new ReleaseSigningExecutionResult(
-            RootPath: repositoryRoot,
-            Succeeded: true,
-            Summary: "Signing completed.",
-            SourceCheckpointStateJson: "{}",
-            Receipts: [
-                new ReleaseSigningReceipt(
-                    RootPath: repositoryRoot,
-                    RepositoryName: "PSPublishModule",
-                    AdapterKind: ReleaseBuildAdapterKind.ProjectBuild.ToString(),
-                    ArtifactPath: Path.Combine(repositoryRoot, "Artefacts", "ProjectBuild", "Package.1.0.0.nupkg"),
-                    ArtifactKind: "File",
-                    Status: ReleaseSigningReceiptStatus.Signed,
-                    Summary: "Signed.",
-                    SignedAtUtc: DateTimeOffset.UtcNow),
-                new ReleaseSigningReceipt(
-                    RootPath: repositoryRoot,
-                    RepositoryName: "PSPublishModule",
-                    AdapterKind: ReleaseBuildAdapterKind.ProjectBuild.ToString(),
-                    ArtifactPath: Path.Combine(repositoryRoot, "Artefacts", "ProjectBuild", "Package.1.0.0.zip"),
-                    ArtifactKind: "File",
-                    Status: ReleaseSigningReceiptStatus.Signed,
-                    Summary: "Signed.",
-                    SignedAtUtc: DateTimeOffset.UtcNow),
-                new ReleaseSigningReceipt(
-                    RootPath: repositoryRoot,
-                    RepositoryName: "PSPublishModule",
-                    AdapterKind: ReleaseBuildAdapterKind.ModuleBuild.ToString(),
-                    ArtifactPath: Path.Combine(repositoryRoot, "Artefacts", "Packed", "PSPublishModule"),
-                    ArtifactKind: "Directory",
-                    Status: ReleaseSigningReceiptStatus.Signed,
-                    Summary: "Signed.",
-                    SignedAtUtc: DateTimeOffset.UtcNow)
-            ]);
+        var repositoryRoot = Directory.CreateDirectory(
+            Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var signingResult = new ReleaseSigningExecutionResult(
+                RootPath: repositoryRoot,
+                Succeeded: true,
+                Summary: "Signing completed.",
+                SourceCheckpointStateJson: "{}",
+                Receipts: [
+                    new ReleaseSigningReceipt(
+                        RootPath: repositoryRoot,
+                        RepositoryName: "PSPublishModule",
+                        AdapterKind: ReleaseBuildAdapterKind.ProjectBuild.ToString(),
+                        ArtifactPath: Path.Combine(repositoryRoot, "Artefacts", "ProjectBuild", "Package.1.0.0.nupkg"),
+                        ArtifactKind: "File",
+                        Status: ReleaseSigningReceiptStatus.Signed,
+                        Summary: "Signed.",
+                        SignedAtUtc: DateTimeOffset.UtcNow),
+                    new ReleaseSigningReceipt(
+                        RootPath: repositoryRoot,
+                        RepositoryName: "PSPublishModule",
+                        AdapterKind: ReleaseBuildAdapterKind.ProjectBuild.ToString(),
+                        ArtifactPath: Path.Combine(repositoryRoot, "Artefacts", "ProjectBuild", "Package.1.0.0.zip"),
+                        ArtifactKind: "File",
+                        Status: ReleaseSigningReceiptStatus.Signed,
+                        Summary: "Signed.",
+                        SignedAtUtc: DateTimeOffset.UtcNow),
+                    new ReleaseSigningReceipt(
+                        RootPath: repositoryRoot,
+                        RepositoryName: "PSPublishModule",
+                        AdapterKind: ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                        ArtifactPath: Path.Combine(repositoryRoot, "Artefacts", "Packed", "PSPublishModule"),
+                        ArtifactKind: "Directory",
+                        Status: ReleaseSigningReceiptStatus.Signed,
+                        Summary: "Signed.",
+                        SignedAtUtc: DateTimeOffset.UtcNow)
+                ]);
 
-        var queueItem = new ReleaseQueueItem(
-            RootPath: repositoryRoot,
-            RepositoryName: "PSPublishModule",
-            RepositoryKind: ReleaseRepositoryKind.Mixed,
-            WorkspaceKind: ReleaseWorkspaceKind.PrimaryRepository,
-            QueueOrder: 1,
-            Stage: ReleaseQueueStage.Publish,
-            Status: ReleaseQueueItemStatus.ReadyToRun,
-            Summary: "Ready for publish.",
-            CheckpointKey: "publish.ready",
-            CheckpointStateJson: JsonSerializer.Serialize(signingResult),
-            UpdatedAtUtc: DateTimeOffset.UtcNow);
+            var queueItem = new ReleaseQueueItem(
+                RootPath: repositoryRoot,
+                RepositoryName: "PSPublishModule",
+                RepositoryKind: ReleaseRepositoryKind.Mixed,
+                WorkspaceKind: ReleaseWorkspaceKind.PrimaryRepository,
+                QueueOrder: 1,
+                Stage: ReleaseQueueStage.Publish,
+                Status: ReleaseQueueItemStatus.ReadyToRun,
+                Summary: "Ready for publish.",
+                CheckpointKey: "publish.ready",
+                CheckpointStateJson: JsonSerializer.Serialize(signingResult),
+                UpdatedAtUtc: DateTimeOffset.UtcNow);
 
-        var service = new ReleasePublishExecutionService();
-        var targets = service.BuildPendingTargets([queueItem]);
+            var service = new ReleasePublishExecutionService();
+            var targets = service.BuildPendingTargets([queueItem]);
 
-        Assert.Equal(3, targets.Count);
-        Assert.Contains(targets, target => target.TargetKind == "NuGet");
-        Assert.Contains(targets, target => target.TargetKind == "GitHub");
-        Assert.Contains(targets, target => target.TargetKind == "PowerShellRepository");
+            Assert.Equal(3, targets.Count);
+            Assert.Contains(targets, target => target.TargetKind == "NuGet");
+            Assert.Contains(targets, target => target.TargetKind == "GitHub");
+            Assert.Contains(targets, target => target.TargetKind == "PowerShellRepository");
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
     }
 
     [Fact]

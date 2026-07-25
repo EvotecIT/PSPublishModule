@@ -35,6 +35,17 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         var zipPath = Path.Combine(repositoryRoot, "Artifacts", "UnifiedRepo.zip");
         Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
         File.WriteAllText(zipPath, "zip");
+        var unified = new PowerForgeReleaseResult {
+            Success = true,
+            ConfigPath = releaseConfig,
+            ReleaseAssets = [zipPath],
+            ReleaseAssetEntries = [
+                new PowerForgeReleaseAssetEntry {
+                    Path = zipPath,
+                    Category = PowerForgeReleaseAssetCategory.Tool
+                }
+            ]
+        };
         var buildResult = new ReleaseBuildExecutionResult(
             repositoryRoot,
             true,
@@ -50,7 +61,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     [],
                     [zipPath])
             ],
-            UnifiedReleaseStateJson: "{}",
+            UnifiedReleaseStateJson: JsonSerializer.Serialize(unified),
             UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig));
         var signingResult = new ReleaseSigningExecutionResult(
             repositoryRoot,
@@ -58,7 +69,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             "Signing completed.",
             JsonSerializer.Serialize(buildResult),
             [
-                new ReleaseSigningReceipt(
+                ReleaseSigningArtifactIntegrity.Capture(new ReleaseSigningReceipt(
                     repositoryRoot,
                     "UnifiedRepo",
                     ReleaseBuildAdapterKind.ToolBuild.ToString(),
@@ -66,7 +77,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     "File",
                     ReleaseSigningReceiptStatus.Signed,
                     "Signed.",
-                    DateTimeOffset.UtcNow)
+                    DateTimeOffset.UtcNow))
             ]);
         var queueItem = new ReleaseQueueItem(
             repositoryRoot,
@@ -113,7 +124,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
 
             Assert.True(result.Succeeded);
             Assert.Equal(releaseConfig, capturedConfig);
-            Assert.Equal("{}", capturedState);
+            Assert.Equal(JsonSerializer.Serialize(unified), capturedState);
             var receipt = Assert.Single(result.Receipts);
             Assert.Equal(ReleasePublishReceiptStatus.Published, receipt.Status);
             Assert.Equal("Unified GitHub release", receipt.TargetName);
@@ -183,7 +194,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             "Signing completed.",
             JsonSerializer.Serialize(buildResult),
             [
-                new ReleaseSigningReceipt(
+                ReleaseSigningArtifactIntegrity.Capture(new ReleaseSigningReceipt(
                     repositoryRoot,
                     "UnifiedRepo",
                     ReleaseBuildAdapterKind.ToolBuild.ToString(),
@@ -191,7 +202,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     "File",
                     ReleaseSigningReceiptStatus.Signed,
                     "Signed.",
-                    DateTimeOffset.UtcNow)
+                    DateTimeOffset.UtcNow))
             ]);
         var queueItem = new ReleaseQueueItem(
             repositoryRoot,

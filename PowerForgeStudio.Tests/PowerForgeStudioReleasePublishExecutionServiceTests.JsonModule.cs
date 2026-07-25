@@ -160,7 +160,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             "Signing completed.",
             JsonSerializer.Serialize(buildResult),
             [
-                new ReleaseSigningReceipt(
+                ReleaseSigningArtifactIntegrity.Capture(new ReleaseSigningReceipt(
                     repositoryRoot,
                     "BrokenModule",
                     ReleaseBuildAdapterKind.ModuleBuild.ToString(),
@@ -168,7 +168,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     "Directory",
                     ReleaseSigningReceiptStatus.Signed,
                     "Signed.",
-                    DateTimeOffset.UtcNow)
+                    DateTimeOffset.UtcNow))
             ]);
         var queueItem = new ReleaseQueueItem(
             repositoryRoot,

@@ -5,7 +5,7 @@ namespace PowerForge;
 internal sealed partial class PowerForgeReleaseService
 {
     /// <summary>
-    /// Rebuilds tool and module archives from output directories that were signed after the unified build,
+    /// Rebuilds tool, module, and package archives from output directories that were signed after the unified build,
     /// refreshes staged copies, and rewrites release summary files whose hashes changed.
     /// </summary>
     internal static IReadOnlyList<string> RefreshBuiltArchivesAfterSigning(
@@ -81,6 +81,7 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         refreshed.AddRange(RefreshModuleArchives(result, signedDirectories));
+        refreshed.AddRange(RefreshPackageArchives(result, signedDirectories));
         foreach (var signedFile in signedFilePaths)
         {
             refreshed.AddRange(RefreshStagedCopies(result, signedFile));
@@ -132,6 +133,67 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         return refreshed;
+    }
+
+    private static IReadOnlyList<string> RefreshPackageArchives(
+        PowerForgeReleaseResult result,
+        ISet<string> signedDirectories)
+    {
+        var archivePaths = result.ReleaseAssetEntries
+            .Where(static entry =>
+                entry.Category == PowerForgeReleaseAssetCategory.Package &&
+                entry.Path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+                File.Exists(entry.Path))
+            .Select(static entry => Path.GetFullPath(entry.Path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var refreshed = new List<string>();
+        foreach (var archivePath in archivePaths)
+        {
+            var sourceDirectory = ResolvePackageArchiveSource(archivePath, signedDirectories);
+            if (sourceDirectory is null)
+            {
+                throw new InvalidOperationException(
+                    $"Signed package output matching archive '{archivePath}' was not found. The unsigned archive cannot be published.");
+            }
+
+            RecreateArchiveFromExistingEntries(sourceDirectory, archivePath);
+            refreshed.Add(archivePath);
+            refreshed.AddRange(RefreshStagedCopies(result, archivePath));
+        }
+
+        return refreshed;
+    }
+
+    private static string? ResolvePackageArchiveSource(
+        string archivePath,
+        IEnumerable<string> signedDirectories)
+    {
+        string[] archiveEntries;
+        using (var archive = ZipFile.OpenRead(archivePath))
+        {
+            archiveEntries = archive.Entries
+                .Where(static entry => !string.IsNullOrWhiteSpace(entry.Name))
+                .Select(static entry => entry.FullName.Replace('/', Path.DirectorySeparatorChar))
+                .ToArray();
+        }
+
+        if (archiveEntries.Length == 0)
+            return null;
+
+        foreach (var signedDirectory in signedDirectories.Where(Directory.Exists))
+        {
+            var candidates = new[] { signedDirectory }
+                .Concat(Directory.EnumerateDirectories(signedDirectory, "*", SearchOption.AllDirectories));
+            foreach (var candidate in candidates)
+            {
+                if (archiveEntries.All(entry => File.Exists(Path.Combine(candidate, entry))))
+                    return candidate;
+            }
+        }
+
+        return null;
     }
 
     private static void RecreateArchiveFromExistingEntries(string sourceDirectory, string archivePath)

@@ -17,6 +17,7 @@ public sealed class UnifiedReleaseCheckpointIntegrityTests
         using var scope = new TestDirectoryScope();
         var repositoryRoot = scope.CreateDirectory("FingerprintRepo");
         var buildRoot = scope.CreateDirectory(Path.Combine("FingerprintRepo", "Build"));
+        scope.CreateDirectory(Path.Combine("FingerprintRepo", "Module"));
         var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
         var releaseConfig = Path.Combine(buildRoot, "release.json");
         File.WriteAllText(moduleConfig, """{ "Build": { "Name": "Sample", "SourcePath": "Module" }, "Segments": [] }""");
@@ -34,6 +35,45 @@ public sealed class UnifiedReleaseCheckpointIntegrityTests
 
         var fingerprint = UnifiedReleaseConfigFingerprint.Compute(releaseConfig);
         File.WriteAllText(moduleConfig, """{ "Build": { "Name": "Sample", "SourcePath": "Module" }, "Segments": [{ "Type": "PackageBuild", "Configuration": { "Name": "Changed" } }] }""");
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => UnifiedReleaseConfigFingerprint.Validate(releaseConfig, fingerprint));
+        Assert.Contains("changed after the build checkpoint", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Fingerprint_changes_when_referenced_package_config_changes()
+    {
+        using var scope = new TestDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ReferencedFingerprintRepo");
+        var buildRoot = scope.CreateDirectory(Path.Combine("ReferencedFingerprintRepo", "Build"));
+        scope.CreateDirectory(Path.Combine("ReferencedFingerprintRepo", "Module"));
+        var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+        var packageConfig = Path.Combine(repositoryRoot, "project.build.json");
+        var releaseConfig = Path.Combine(buildRoot, "release.json");
+        File.WriteAllText(packageConfig, """{ "RootPath": ".", "PublishNuget": true, "PublishSource": "https://original.example.test/v3/index.json" }""");
+        File.WriteAllText(
+            moduleConfig,
+            """
+            {
+              "Build": { "Name": "Sample", "SourcePath": "Module" },
+              "Segments": [
+                {
+                  "Type": "ProjectBuild",
+                  "Configuration": {
+                    "Enabled": true,
+                    "ConfigPath": "../project.build.json"
+                  }
+                }
+              ]
+            }
+            """);
+        File.WriteAllText(
+            releaseConfig,
+            """{ "Module": { "RepositoryRoot": "..", "ConfigPath": "powerforge.json", "IncludesPackages": true } }""");
+
+        var fingerprint = UnifiedReleaseConfigFingerprint.Compute(releaseConfig);
+        File.WriteAllText(packageConfig, """{ "RootPath": ".", "PublishNuget": true, "PublishSource": "https://changed.example.test/v3/index.json" }""");
 
         var exception = Assert.Throws<InvalidOperationException>(
             () => UnifiedReleaseConfigFingerprint.Validate(releaseConfig, fingerprint));

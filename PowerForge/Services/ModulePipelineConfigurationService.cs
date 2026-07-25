@@ -49,15 +49,18 @@ public sealed class ModulePipelineConfigurationService
         spec.Build.SourcePath = projectRoot;
         ResolveProjectPaths(spec, projectRoot);
 
-        return new ModulePipelineConfigurationContext
+        var context = new ModulePipelineConfigurationContext
         {
             ConfigPath = fullPath,
+            ConfigDirectory = configDirectory,
             ProjectRoot = projectRoot,
             Spec = spec,
             EffectiveVersion = ResolveEffectiveVersion(spec),
-            ArtifactPaths = ResolveArtifactPaths(spec, projectRoot),
-            PackageArtifactPaths = ResolvePackageArtifactPaths(spec, projectRoot, configDirectory)
+            ArtifactPaths = ResolveArtifactPaths(spec, projectRoot)
         };
+        context.PackageConfigurationPaths = ResolvePackageConfigurationPaths(context);
+        context.PackageArtifactPaths = ResolvePackageArtifactPaths(context);
+        return context;
     }
 
     /// <summary>
@@ -151,43 +154,63 @@ public sealed class ModulePipelineConfigurationService
         };
     }
 
+    /// <summary>
+    /// Resolves a referenced project-build configuration using the same project-root-first,
+    /// module-config-directory fallback semantics as module pipeline execution.
+    /// </summary>
+    public static string ResolveProjectBuildConfigurationPath(
+        ModulePipelineConfigurationContext context,
+        ProjectBuildConfigurationReference reference)
+    {
+        if (context is null)
+            throw new ArgumentNullException(nameof(context));
+        if (reference is null)
+            throw new ArgumentNullException(nameof(reference));
+        if (string.IsNullOrWhiteSpace(reference.ConfigPath))
+            throw new InvalidOperationException("Enabled ProjectBuild segments require ConfigPath.");
+
+        var projectRelativePath = PathValueResolver.Resolve(context.ProjectRoot, reference.ConfigPath);
+        if (File.Exists(projectRelativePath))
+            return projectRelativePath;
+
+        var configRelativePath = PathValueResolver.Resolve(context.ConfigDirectory, reference.ConfigPath);
+        return File.Exists(configRelativePath)
+            ? configRelativePath
+            : projectRelativePath;
+    }
+
+    private static string[] ResolvePackageConfigurationPaths(ModulePipelineConfigurationContext context)
+        => (context.Spec.Segments ?? Array.Empty<IConfigurationSegment>())
+            .OfType<ConfigurationProjectBuildSegment>()
+            .Where(static segment => segment.Configuration.Enabled)
+            .Select(segment => ResolveProjectBuildConfigurationPath(context, segment.Configuration))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
     private static string[] ResolvePackageArtifactPaths(
-        ModulePipelineSpec spec,
-        string projectRoot,
-        string configDirectory)
+        ModulePipelineConfigurationContext context)
     {
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var segment in spec.Segments ?? Array.Empty<IConfigurationSegment>())
+        foreach (var segment in context.Spec.Segments ?? Array.Empty<IConfigurationSegment>())
         {
             switch (segment)
             {
                 case ConfigurationProjectBuildSegment project when project.Configuration.Enabled:
                 {
-                    if (string.IsNullOrWhiteSpace(project.Configuration.ConfigPath))
-                        throw new InvalidOperationException("Enabled ProjectBuild segments require ConfigPath.");
-
-                    var configPath = PathValueResolver.Resolve(projectRoot, project.Configuration.ConfigPath);
-                    if (!File.Exists(configPath))
-                    {
-                        var configRelativePath = PathValueResolver.Resolve(
-                            configDirectory,
-                            project.Configuration.ConfigPath);
-                        if (File.Exists(configRelativePath))
-                            configPath = configRelativePath;
-                    }
+                    var configPath = ResolveProjectBuildConfigurationPath(context, project.Configuration);
                     var configuration = new ProjectBuildSupportService(new NullLogger()).LoadConfig(configPath);
                     ProjectBuildConfigurationAdapter.ApplyReference(configuration, project.Configuration);
                     AddPackageArtifactPaths(
                         paths,
                         configuration,
-                        Path.GetDirectoryName(configPath) ?? projectRoot,
+                        Path.GetDirectoryName(configPath) ?? context.ProjectRoot,
                         inlinePathBase: null);
                     break;
                 }
                 case ConfigurationPackageBuildSegment package when package.Configuration.Enabled:
                 {
                     var configuration = ProjectBuildConfigurationAdapter.FromPackageBuild(package.Configuration);
-                    AddPackageArtifactPaths(paths, configuration, projectRoot, projectRoot);
+                    AddPackageArtifactPaths(paths, configuration, context.ProjectRoot, context.ProjectRoot);
                     break;
                 }
             }
@@ -248,6 +271,9 @@ public sealed class ModulePipelineConfigurationContext
     /// <summary>Absolute configuration path.</summary>
     public string ConfigPath { get; set; } = string.Empty;
 
+    /// <summary>Absolute directory containing the module pipeline configuration.</summary>
+    public string ConfigDirectory { get; set; } = string.Empty;
+
     /// <summary>Absolute module project root resolved from Build.SourcePath.</summary>
     public string ProjectRoot { get; set; } = string.Empty;
 
@@ -262,4 +288,7 @@ public sealed class ModulePipelineConfigurationContext
 
     /// <summary>Resolved candidate output directories for enabled package-build lanes.</summary>
     public string[] PackageArtifactPaths { get; set; } = Array.Empty<string>();
+
+    /// <summary>Resolved referenced project-build configuration files used by enabled package lanes.</summary>
+    public string[] PackageConfigurationPaths { get; set; } = Array.Empty<string>();
 }

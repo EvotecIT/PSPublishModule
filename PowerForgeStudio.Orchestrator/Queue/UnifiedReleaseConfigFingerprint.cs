@@ -36,6 +36,14 @@ internal static class UnifiedReleaseConfigFingerprint
             }
 
             AppendFile(hash, "module", moduleConfigPath);
+            var moduleContext = new ModulePipelineConfigurationService().Load(moduleConfigPath);
+            for (var index = 0; index < moduleContext.PackageConfigurationPaths.Length; index++)
+            {
+                AppendFile(
+                    hash,
+                    $"module-package:{index}",
+                    moduleContext.PackageConfigurationPaths[index]);
+            }
         }
 
         AppendApplePublicationInputs(hash, fullPath, spec.AppleApps);

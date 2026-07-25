@@ -1,3 +1,4 @@
+using PowerForge;
 using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Signing;
@@ -13,6 +14,9 @@ public sealed partial class ReleasePublishExecutionService
         var targets = new List<ReleasePublishTarget>();
         var repository = _catalogScanner.InspectRepository(item.RootPath);
         var receipts = signingResult.Receipts ?? [];
+        var unifiedSpec = !string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath)
+            ? TryLoadUnifiedReleaseSpec(repository.UnifiedReleaseConfigPath!)
+            : null;
         var grouped = receipts.GroupBy(receipt => receipt.AdapterKind, StringComparer.OrdinalIgnoreCase);
         foreach (var group in grouped)
         {
@@ -34,7 +38,11 @@ public sealed partial class ReleasePublishExecutionService
                     Destination: "Configured NuGet feed"));
             }
 
-            if (paths.Any(path => path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
+            if (paths.Any(path => path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) &&
+                AllowsAdapterGitHubTarget(
+                    repository.UnifiedReleaseConfigPath,
+                    unifiedSpec,
+                    adapterKind))
             {
                 targets.Add(new ReleasePublishTarget(
                     RootPath: item.RootPath,
@@ -70,6 +78,69 @@ public sealed partial class ReleasePublishExecutionService
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath) &&
+            targets.Any(static target =>
+                !string.Equals(target.TargetKind, "ConfigurationError", StringComparison.OrdinalIgnoreCase)))
+        {
+            var integrityFailure = ReleaseSigningArtifactIntegrity.Validate(receipts);
+            if (!string.IsNullOrWhiteSpace(integrityFailure))
+            {
+                return [
+                    new ReleasePublishTarget(
+                        RootPath: item.RootPath,
+                        RepositoryName: item.RepositoryName,
+                        AdapterKind: "UnifiedRelease",
+                        TargetName: "Signed artifact integrity",
+                        TargetKind: "ConfigurationError",
+                        SourcePath: item.RootPath,
+                        Destination: integrityFailure)
+                ];
+            }
+        }
+
         return targets;
+    }
+
+    private static PowerForgeReleaseSpec? TryLoadUnifiedReleaseSpec(string configPath)
+    {
+        try
+        {
+            return PowerForgeReleaseService.LoadConfiguration(configPath);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool AllowsAdapterGitHubTarget(
+        string? releaseConfigPath,
+        PowerForgeReleaseSpec? spec,
+        string adapterKind)
+    {
+        if (string.IsNullOrWhiteSpace(releaseConfigPath))
+            return true;
+        if (spec is null || spec.GitHub?.Publish == true)
+            return false;
+
+        if (string.Equals(adapterKind, ReleaseBuildAdapterKind.ProjectBuild.ToString(), StringComparison.OrdinalIgnoreCase))
+            return spec.Packages?.PublishGitHub == true;
+        if (!string.Equals(adapterKind, ReleaseBuildAdapterKind.ModuleBuild.ToString(), StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(spec.Module?.ConfigPath))
+        {
+            return false;
+        }
+
+        var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
+        var repositoryRoot = string.IsNullOrWhiteSpace(spec.Module.RepositoryRoot)
+            ? releaseDirectory
+            : PathTokenProtection.GetFullPath(releaseDirectory, spec.Module.RepositoryRoot!);
+        var moduleConfigPath = PathTokenProtection.GetFullPath(repositoryRoot, spec.Module.ConfigPath!);
+        var context = new ModulePipelineConfigurationService().Load(moduleConfigPath);
+        return (context.Spec.Segments ?? [])
+            .OfType<ConfigurationPublishSegment>()
+            .Any(static segment =>
+                segment.Configuration.Enabled &&
+                segment.Configuration.Destination == PublishDestination.GitHub);
     }
 }

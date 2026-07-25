@@ -175,7 +175,9 @@ public sealed class PowerForgeStudioStateDatabaseTests
                     ArtifactKind: "ModuleManifest",
                     Status: ReleaseSigningReceiptStatus.Signed,
                     Summary: "Signed manifest.",
-                    SignedAtUtc: DateTimeOffset.UtcNow)
+                    SignedAtUtc: DateTimeOffset.UtcNow) {
+                    ContentSha256 = "ABC123"
+                }
             ]);
 
         var receipts = await stateDatabase.LoadSigningReceiptsAsync("session-1");
@@ -184,6 +186,7 @@ public sealed class PowerForgeStudioStateDatabaseTests
         Assert.Equal(@"C:\Temp\DbaClientX\DbaClientX.psd1", receipt.ArtifactPath);
         Assert.Equal("ModuleManifest", receipt.ArtifactKind);
         Assert.Equal(ReleaseSigningReceiptStatus.Signed, receipt.Status);
+        Assert.Equal("ABC123", receipt.ContentSha256);
     }
 
     [Fact]

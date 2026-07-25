@@ -316,6 +316,170 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_publishes_only_the_planned_module_owned_package_version()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForgeStudio.Tests",
+            Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+            var releaseConfig = Path.Combine(buildDirectory, "release.json");
+            var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+            File.WriteAllText(
+                Path.Combine(repositoryRoot, "Sample.Library.csproj"),
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <Version>1.0.0</Version>
+                    <PackageId>Sample.Library</PackageId>
+                    <IsPackable>true</IsPackable>
+                  </PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(
+                moduleConfig,
+                """
+                {
+                  "Build": { "Name": "Sample", "SourcePath": "." },
+                  "Segments": [
+                    {
+                      "Type": "PackageBuild",
+                      "Configuration": {
+                        "Name": "Sample packages",
+                        "RootPath": ".",
+                        "ExpectedVersion": "1.0.0",
+                        "IncludeProjects": [ "Sample.Library" ],
+                        "UpdateVersions": false,
+                        "Build": true,
+                        "PublishNuget": true,
+                        "PublishApiKey": "test-key",
+                        "PublishSource": "https://example.test/v3/index.json"
+                      }
+                    }
+                  ]
+                }
+                """);
+            File.WriteAllText(
+                releaseConfig,
+                """{ "Module": { "RepositoryRoot": "..", "ConfigPath": "powerforge.json", "IncludesPackages": true } }""");
+            var currentPackage = Path.Combine(repositoryRoot, "Sample.Library.1.0.0.nupkg");
+            var stalePackage = Path.Combine(repositoryRoot, "Sample.Library.0.9.0.nupkg");
+            File.WriteAllText(currentPackage, "current");
+            File.WriteAllText(stalePackage, "stale");
+            var queueItem = CreateUnifiedPublishQueueItem(
+                repositoryRoot,
+                "Sample",
+                releaseConfig,
+                new PowerForgeReleaseResult { Success = true, ConfigPath = releaseConfig },
+                [
+                    new ReleaseSigningReceipt(
+                        repositoryRoot,
+                        "Sample",
+                        ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                        currentPackage,
+                        "File",
+                        ReleaseSigningReceiptStatus.Signed,
+                        "Signed.",
+                        DateTimeOffset.UtcNow),
+                    new ReleaseSigningReceipt(
+                        repositoryRoot,
+                        "Sample",
+                        ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                        stalePackage,
+                        "File",
+                        ReleaseSigningReceiptStatus.Signed,
+                        "Signed.",
+                        DateTimeOffset.UtcNow)
+                ]);
+            var pushed = new List<string>();
+            var service = new ReleasePublishExecutionService(
+                new RepositoryCatalogScanner(),
+                new ModuleBuildHostService(),
+                new ProjectBuildHostService(),
+                new ProjectBuildCommandHostService(),
+                new ProjectBuildPublishHostService(),
+                (request, _) =>
+                {
+                    pushed.Add(request.PackagePath);
+                    return Task.FromResult(new DotNetNuGetPushResult(
+                        0,
+                        "published",
+                        string.Empty,
+                        "dotnet",
+                        TimeSpan.Zero,
+                        timedOut: false,
+                        errorMessage: null));
+                },
+                publishUnifiedRelease: (_, _) => new PowerForgeReleaseResult { Success = true });
+
+            using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+            var result = await service.ExecuteAsync(queueItem);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal([currentPackage], pushed);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void BuildPendingTargets_resolves_referenced_package_config_from_module_project_root()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForgeStudio.Tests",
+            Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+            var moduleDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Module")).FullName;
+            var releaseConfig = Path.Combine(buildDirectory, "release.json");
+            var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+            File.WriteAllText(
+                Path.Combine(moduleDirectory, "project.build.json"),
+                """{ "RootPath": ".", "PublishNuget": true, "PublishApiKey": "test-key" }""");
+            File.WriteAllText(
+                moduleConfig,
+                """
+                {
+                  "Build": { "Name": "Sample", "SourcePath": "Module" },
+                  "Segments": [
+                    {
+                      "Type": "ProjectBuild",
+                      "Configuration": {
+                        "Enabled": true,
+                        "ConfigPath": "project.build.json"
+                      }
+                    }
+                  ]
+                }
+                """);
+            File.WriteAllText(
+                releaseConfig,
+                """{ "Module": { "RepositoryRoot": "..", "ConfigPath": "powerforge.json", "IncludesPackages": true } }""");
+            var queueItem = CreateUnifiedPublishQueueItem(
+                repositoryRoot,
+                "Sample",
+                releaseConfig,
+                new PowerForgeReleaseResult { Success = true, ConfigPath = releaseConfig },
+                []);
+
+            var target = Assert.Single(new ReleasePublishExecutionService().BuildPendingTargets([queueItem]));
+
+            Assert.Equal("ModulePackages", target.TargetKind);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task ExecuteAsync_forwards_cancellation_to_staged_unified_publication()
     {
         var repositoryRoot = Directory.CreateDirectory(Path.Combine(
@@ -400,7 +564,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             true,
             "Signing completed.",
             JsonSerializer.Serialize(buildResult),
-            receipts);
+            receipts.Select(ReleaseSigningArtifactIntegrity.Capture).ToArray());
         return new ReleaseQueueItem(
             repositoryRoot,
             repositoryName,

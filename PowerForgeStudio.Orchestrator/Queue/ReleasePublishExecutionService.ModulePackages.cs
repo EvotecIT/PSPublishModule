@@ -191,7 +191,14 @@ public sealed partial class ReleasePublishExecutionService
     private static bool MatchesProjectPackage(string path, DotNetRepositoryProjectResult project)
     {
         var packageId = string.IsNullOrWhiteSpace(project.PackageId) ? project.ProjectName : project.PackageId;
-        return Path.GetFileName(path).StartsWith(packageId + ".", StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(packageId) || string.IsNullOrWhiteSpace(project.NewVersion))
+            return false;
+
+        var extension = path.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase)
+            ? ".snupkg"
+            : ".nupkg";
+        var expectedName = $"{packageId}.{project.NewVersion}{extension}";
+        return string.Equals(Path.GetFileName(path), expectedName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool HasConfiguredModulePackagePublication(
@@ -218,7 +225,6 @@ public sealed partial class ReleasePublishExecutionService
             : PathTokenProtection.GetFullPath(releaseDirectory, spec.Module.RepositoryRoot!);
         var moduleConfigPath = PathTokenProtection.GetFullPath(repositoryRoot, spec.Module.ConfigPath!);
         var context = new ModulePipelineConfigurationService().Load(moduleConfigPath);
-        var workspaceRoot = Path.GetDirectoryName(moduleConfigPath) ?? repositoryRoot;
         var lanes = new List<ModulePackagePublishLane>();
         foreach (var segment in context.Spec.Segments ?? [])
         {
@@ -226,7 +232,9 @@ public sealed partial class ReleasePublishExecutionService
             {
                 case ConfigurationProjectBuildSegment project when project.Configuration.Enabled:
                 {
-                    var configPath = PathTokenProtection.GetFullPath(workspaceRoot, project.Configuration.ConfigPath);
+                    var configPath = ModulePipelineConfigurationService.ResolveProjectBuildConfigurationPath(
+                        context,
+                        project.Configuration);
                     var publish = new ProjectBuildSupportService(new NullLogger()).LoadConfig(configPath);
                     lanes.Add(new ModulePackagePublishLane(
                         project.Configuration.Name ?? Path.GetFileNameWithoutExtension(configPath),

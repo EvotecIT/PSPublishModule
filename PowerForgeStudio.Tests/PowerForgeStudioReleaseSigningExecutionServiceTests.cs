@@ -79,6 +79,7 @@ public sealed class PowerForgeStudioReleaseSigningExecutionServiceTests
             var receipt = Assert.Single(result.Receipts);
             Assert.Equal(ReleaseSigningReceiptStatus.Signed, receipt.Status);
             Assert.Contains("dotnet nuget sign", receipt.Summary, StringComparison.OrdinalIgnoreCase);
+            Assert.False(string.IsNullOrWhiteSpace(receipt.ContentSha256));
         }
         finally
         {
@@ -157,6 +158,7 @@ public sealed class PowerForgeStudioReleaseSigningExecutionServiceTests
             var receipt = Assert.Single(result.Receipts);
             Assert.Equal(ReleaseSigningReceiptStatus.Signed, receipt.Status);
             Assert.Contains("Authenticode signing completed", receipt.Summary, StringComparison.OrdinalIgnoreCase);
+            Assert.False(string.IsNullOrWhiteSpace(receipt.ContentSha256));
         }
         finally
         {
@@ -323,6 +325,8 @@ public sealed class PowerForgeStudioReleaseSigningExecutionServiceTests
             Assert.True(result.Succeeded);
             Assert.Equal(ReleaseSigningReceiptStatus.Signed, result.Receipts.Single(receipt => receipt.ArtifactPath == zipPath).Status);
             Assert.Equal(ReleaseSigningReceiptStatus.Signed, result.Receipts.Single(receipt => receipt.ArtifactPath == stagedZipPath).Status);
+            Assert.False(string.IsNullOrWhiteSpace(result.Receipts.Single(receipt => receipt.ArtifactPath == zipPath).ContentSha256));
+            Assert.False(string.IsNullOrWhiteSpace(result.Receipts.Single(receipt => receipt.ArtifactPath == stagedZipPath).ContentSha256));
             Assert.Contains("rebuilt", result.Receipts.Single(receipt => receipt.ArtifactPath == zipPath).Summary, StringComparison.OrdinalIgnoreCase);
             Assert.Equal("signed", ReadArchiveText(zipPath, "UnifiedTool.exe"));
             Assert.Equal("signed", ReadArchiveText(stagedZipPath, "UnifiedTool.exe"));

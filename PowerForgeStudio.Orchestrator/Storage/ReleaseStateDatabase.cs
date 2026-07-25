@@ -16,7 +16,7 @@ namespace PowerForgeStudio.Orchestrator.Storage;
 
 public sealed class ReleaseStateDatabase
 {
-    private const string CurrentSchemaVersion = "16";
+    private const string CurrentSchemaVersion = "17";
     private readonly SQLite _sqlite = new() {
         BusyTimeoutMs = 10_000
     };
@@ -33,6 +33,7 @@ public sealed class ReleaseStateDatabase
             artifact_kind,
             status,
             summary,
+            content_sha256,
             signed_at_utc)
         VALUES (
             @SessionId,
@@ -43,6 +44,7 @@ public sealed class ReleaseStateDatabase
             @ArtifactKind,
             @Status,
             @Summary,
+            @ContentSha256,
             @SignedAtUtc);
         """,
         QuerySql:
@@ -54,6 +56,7 @@ public sealed class ReleaseStateDatabase
                artifact_kind,
                status,
                summary,
+               content_sha256,
                signed_at_utc
         FROM release_signing_receipt
         WHERE session_id = @SessionId
@@ -68,6 +71,7 @@ public sealed class ReleaseStateDatabase
             ["@ArtifactKind"] = receipt.ArtifactKind,
             ["@Status"] = receipt.Status.ToString(),
             ["@Summary"] = receipt.Summary,
+            ["@ContentSha256"] = receipt.ContentSha256,
             ["@SignedAtUtc"] = receipt.SignedAtUtc.ToString("O")
         },
         Map: static reader => new ReleaseSigningReceipt(
@@ -78,7 +82,9 @@ public sealed class ReleaseStateDatabase
             ArtifactKind: reader.GetString(4),
             Status: Enum.Parse<ReleaseSigningReceiptStatus>(reader.GetString(5), ignoreCase: true),
             Summary: reader.GetString(6),
-            SignedAtUtc: DateTimeOffset.Parse(reader.GetString(7))));
+            SignedAtUtc: DateTimeOffset.Parse(reader.GetString(8))) {
+            ContentSha256 = reader.IsDBNull(7) ? null : reader.GetString(7)
+        });
     private static readonly ReceiptTableDefinition<ReleasePublishReceipt> PublishReceiptTable = new(
         TableName: "release_publish_receipt",
         InsertSql:
@@ -231,6 +237,9 @@ public sealed class ReleaseStateDatabase
             },
             ["release_publish_receipt"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
                 ["source_path"] = "TEXT NULL"
+            },
+            ["release_signing_receipt"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
+                ["content_sha256"] = "TEXT NULL"
             }
         };
 
@@ -416,6 +425,7 @@ public sealed class ReleaseStateDatabase
                 artifact_kind TEXT NOT NULL,
                 status TEXT NOT NULL,
                 summary TEXT NOT NULL,
+                content_sha256 TEXT NULL,
                 signed_at_utc TEXT NOT NULL,
                 PRIMARY KEY (session_id, artifact_path)
             );
@@ -534,6 +544,12 @@ public sealed class ReleaseStateDatabase
         await EnsureColumnExistsAsync(
             tableName: "release_publish_receipt",
             columnName: "source_path",
+            columnDefinition: "TEXT NULL",
+            cancellationToken).ConfigureAwait(false);
+
+        await EnsureColumnExistsAsync(
+            tableName: "release_signing_receipt",
+            columnName: "content_sha256",
             columnDefinition: "TEXT NULL",
             cancellationToken).ConfigureAwait(false);
 
