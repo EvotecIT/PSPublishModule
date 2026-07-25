@@ -27,6 +27,7 @@ internal static class PowerForgeReleaseRequestMapper
         request.ModuleRunMode = options.ModuleRunMode ?? request.ModuleRunMode;
         request.ModuleNoDotnetBuild = ChooseBool(request.ModuleNoDotnetBuild, options.ModuleNoDotnetBuild);
         request.ModuleNoSign = ChooseBool(request.ModuleNoSign, options.ModuleNoSign);
+        request.ModuleSkipInstall = ChooseBool(request.ModuleSkipInstall, options.ModuleSkipInstall);
         request.ModuleSignModule = ChooseBool(request.ModuleSignModule, options.ModuleSignModule);
         request.ModuleTimeoutSeconds = options.ModuleTimeoutSeconds ?? request.ModuleTimeoutSeconds;
         request.ModuleCertificateThumbprint = ChooseString(request.ModuleCertificateThumbprint, options.ModuleCertificateThumbprint);
@@ -141,6 +142,7 @@ internal static class PowerForgeReleaseRequestMapper
             ModuleVersion = source.ModuleVersion,
             ModulePreReleaseTag = source.ModulePreReleaseTag,
             ModuleNoSign = source.ModuleNoSign,
+            ModuleSkipInstall = source.ModuleSkipInstall,
             ModuleSignModule = source.ModuleSignModule,
             ModuleTimeoutSeconds = source.ModuleTimeoutSeconds,
             ModuleCertificateThumbprint = source.ModuleCertificateThumbprint,

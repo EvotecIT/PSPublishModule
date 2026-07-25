@@ -142,6 +142,12 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     public SwitchParameter ModuleNoSign { get; set; }
 
     /// <summary>
+    /// Skips installation after the native module-release lane completes.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter ModuleSkipInstall { get; set; }
+
+    /// <summary>
     /// Enables signing for the native module-release lane.
     /// </summary>
     [Parameter]
@@ -754,6 +760,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             ModuleRunMode = ModuleRunMode,
             ModuleNoDotnetBuild = ResolveRequestedFlag(boundParameters, nameof(ModuleNoDotnetBuild)),
             ModuleNoSign = ResolveRequestedFlag(boundParameters, nameof(ModuleNoSign)),
+            ModuleSkipInstall = ResolveRequestedFlag(boundParameters, nameof(ModuleSkipInstall)),
             ModuleSignModule = ResolveRequestedFlag(boundParameters, nameof(ModuleSignModule)),
             ModuleTimeoutSeconds = ModuleTimeoutSeconds,
             ModuleCertificateThumbprint = NormalizeNullable(ModuleCertificateThumbprint),

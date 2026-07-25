@@ -138,6 +138,71 @@ public sealed class PowerForgeToolReleaseServiceTests
     }
 
     [Fact]
+    public void Run_DisablesSingleFileCompressionForFrameworkDependentTools()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.ToolReleaseTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var projectPath = Path.Combine(root, "Sample.Tool.csproj");
+            File.WriteAllText(projectPath, "<Project />");
+            ProcessStartInfo? captured = null;
+            var service = new PowerForgeToolReleaseService(
+                new NullLogger(),
+                startInfo =>
+                {
+                    captured = startInfo;
+                    var publishDirectory = ReadProperty(startInfo.Arguments, "/p:PublishDir=");
+                    Directory.CreateDirectory(publishDirectory);
+                    File.WriteAllText(Path.Combine(publishDirectory, "Sample.Tool.exe"), "tool");
+                    return new PowerForgeToolReleaseService.ProcessExecutionResult(0, string.Empty, string.Empty);
+                });
+            var outputPath = Path.Combine(root, "output");
+
+            var result = service.Run(new PowerForgeToolReleasePlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                Targets =
+                [
+                    new PowerForgeToolReleaseTargetPlan
+                    {
+                        Name = "Sample.Tool",
+                        ProjectPath = projectPath,
+                        OutputName = "Sample.Tool",
+                        Version = "1.2.3",
+                        ArtifactRootPath = outputPath,
+                        KeepDocs = true,
+                        KeepSymbols = true,
+                        MsBuildProperties = new Dictionary<string, string>(),
+                        Combinations =
+                        [
+                            new PowerForgeToolReleaseCombinationPlan
+                            {
+                                Runtime = "win-x64",
+                                Framework = "net10.0",
+                                Flavor = PowerForgeToolReleaseFlavor.SingleFx,
+                                OutputPath = outputPath
+                            }
+                        ]
+                    }
+                ]
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.NotNull(captured);
+            Assert.Contains("--self-contained:false", captured!.Arguments, StringComparison.Ordinal);
+            Assert.Contains("/p:PublishSingleFile=true", captured.Arguments, StringComparison.Ordinal);
+            Assert.Contains("/p:EnableCompressionInSingleFile=false", captured.Arguments, StringComparison.Ordinal);
+            Assert.Contains("/p:IncludeNativeLibrariesForSelfExtract=false", captured.Arguments, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_AllowsDuplicateTargetNamesWithoutProgressKeyCollisions()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.ToolReleaseTests", Guid.NewGuid().ToString("N"));

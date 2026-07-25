@@ -45,7 +45,7 @@ public sealed class ShortcodeRenderContext
         {
             Name = name,
             Attrs = attrs,
-            Data = ShortcodeProcessor.ResolveList(Data, attrs)
+            Data = ShortcodeProcessor.ResolveData(Data, attrs)
         };
 
         var page = new ContentItem

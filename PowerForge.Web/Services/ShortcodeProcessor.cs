@@ -60,14 +60,25 @@ internal static class ShortcodeProcessor
 
     internal static IEnumerable<object?>? ResolveList(IReadOnlyDictionary<string, object?> data, Dictionary<string, string> attrs)
     {
+        var resolved = ResolveData(data, attrs);
+        if (resolved is IEnumerable<object?> sequence)
+            return sequence;
+        if (resolved is IReadOnlyDictionary<string, object?> map &&
+            map.TryGetValue("items", out var items))
+        {
+            return items as IEnumerable<object?>;
+        }
+
+        return null;
+    }
+
+    internal static object? ResolveData(IReadOnlyDictionary<string, object?> data, Dictionary<string, string> attrs)
+    {
         var key = attrs.TryGetValue("data", out var value) ? value : null;
         if (string.IsNullOrWhiteSpace(key) && attrs.TryGetValue("from", out var from))
             key = from;
-        if (string.IsNullOrWhiteSpace(key))
-            return null;
 
-        var resolved = ResolveDataPath(data, key);
-        return resolved as IEnumerable<object?>;
+        return string.IsNullOrWhiteSpace(key) ? null : ResolveDataPath(data, key);
     }
 
     private static object? ResolveDataPath(IReadOnlyDictionary<string, object?> data, string path)

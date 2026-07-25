@@ -26,6 +26,7 @@ param(
     [switch] $ModuleNoDotnetBuild,
     [Alias('NoSign')]
     [switch] $ModuleNoSign,
+    [switch] $ModuleSkipInstall,
     [Alias('SignModule')]
     [switch] $ModuleSignModule,
     [Alias('CertificateThumbprint')]
@@ -47,6 +48,8 @@ param(
     [Alias('FailOnDiagnosticsSeverity')]
     [ValidateSet('Warning', 'Error')]
     [string] $ModuleFailOnDiagnosticsSeverity,
+    [Alias('Sign')]
+    [bool] $EnableSigning,
     [Alias('Targets')]
     [string[]] $Target,
     [Alias('Runtime', 'Rid')]
@@ -128,6 +131,10 @@ try {
         if ($PSBoundParameters.ContainsKey($switchName)) {
             $invokeParams[$switchName] = [bool] $PSBoundParameters[$switchName]
         }
+    }
+    if ($PSBoundParameters.ContainsKey('EnableSigning')) {
+        $invokeParams.Remove('EnableSigning')
+        $invokeParams.Sign = $EnableSigning
     }
     $invokeParams.ConfigPath = $ConfigPath
     $invokeParams.Configuration = $Configuration

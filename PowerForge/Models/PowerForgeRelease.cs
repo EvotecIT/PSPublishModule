@@ -370,11 +370,11 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public PowerForgeAppleReleaseAutomationOptions Automation { get; set; } = new();
 
-    internal string? AppStoreConnectApiKeyPath { get; set; }
+    public string? AppStoreConnectApiKeyPath { get; set; }
 
-    internal string? AppStoreConnectApiKeyId { get; set; }
+    public string? AppStoreConnectApiKeyId { get; set; }
 
-    internal string? AppStoreConnectApiIssuerId { get; set; }
+    public string? AppStoreConnectApiIssuerId { get; set; }
 
     public string? ScreenshotConfigPath { get; set; }
 

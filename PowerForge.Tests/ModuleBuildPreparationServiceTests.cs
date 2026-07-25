@@ -127,7 +127,6 @@ public sealed partial class ModuleBuildPreparationServiceTests
           "Segments": []
         }
         """);
-
         try
         {
             var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
@@ -184,6 +183,18 @@ public sealed partial class ModuleBuildPreparationServiceTests
           ]
         }
         """);
+        var projectConfigPath = Path.Combine(root.FullName, "Build", "project.build.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(projectConfigPath)!);
+        File.WriteAllText(
+            projectConfigPath,
+            """
+            {
+              "RootPath": ".",
+              "Build": false,
+              "PublishNuget": false,
+              "PublishGitHub": false
+            }
+            """);
 
         try
         {

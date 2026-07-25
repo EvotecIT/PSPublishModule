@@ -347,7 +347,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData(ConfigurationGateMode.Documentation, false)]
     [InlineData(ConfigurationGateMode.Build, false)]
     [InlineData(ConfigurationGateMode.Publish, true)]
-    public void ModuleReleaseStage_UsesModernHostDefaultAndOnlyPublishesUnifiedGitHubAtPublishGate(
+    public void ModuleReleaseStage_PreservesLegacyHostFallbackAndOnlyPublishesUnifiedGitHubAtPublishGate(
         ConfigurationGateMode runMode,
         bool expectedUnifiedGitHub)
     {
@@ -379,7 +379,7 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.True(result.Success);
             Assert.NotNull(result.ModulePlan);
-            Assert.Equal("auto", result.ModulePlan!.Framework);
+            Assert.Null(result.ModulePlan!.Framework);
             Assert.Equal(expectedUnifiedGitHub, result.ModulePlan.UnifiedGitHubRelease);
         }
         finally

@@ -36,6 +36,8 @@ internal sealed class PowerForgeReleaseInvocationOptions
 
     public bool? ModuleNoSign { get; set; }
 
+    public bool? ModuleSkipInstall { get; set; }
+
     public bool? ModuleSignModule { get; set; }
 
     public int? ModuleTimeoutSeconds { get; set; }

@@ -577,7 +577,7 @@ internal sealed partial class PowerForgeToolReleaseService
         => flavor switch
         {
             PowerForgeToolReleaseFlavor.SingleContained => (true, true, true, true),
-            PowerForgeToolReleaseFlavor.SingleFx => (false, true, true, false),
+            PowerForgeToolReleaseFlavor.SingleFx => (false, true, false, false),
             PowerForgeToolReleaseFlavor.Portable => (true, false, false, false),
             PowerForgeToolReleaseFlavor.Fx => (false, false, false, false),
             _ => throw new ArgumentOutOfRangeException(nameof(flavor), flavor, "Unsupported tool release flavor.")

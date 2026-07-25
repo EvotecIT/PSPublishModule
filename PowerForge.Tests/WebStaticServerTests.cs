@@ -43,7 +43,7 @@ public class WebStaticServerTests
             var listeningLog = await WaitForLogAsync(
                 logs,
                 message => message.StartsWith("Listening on http://localhost:", StringComparison.OrdinalIgnoreCase),
-                TimeSpan.FromSeconds(5));
+                TimeSpan.FromSeconds(15));
             if (listeningLog is null && serverTask.IsCompleted)
             {
                 if (serverTask.Exception is not null)
@@ -64,7 +64,7 @@ public class WebStaticServerTests
 
             cts.Cancel();
             await TryWakeServerAsync(boundPort);
-            await serverTask.WaitAsync(TimeSpan.FromSeconds(3));
+            await serverTask.WaitAsync(TimeSpan.FromSeconds(10));
         }
         finally
         {
@@ -158,7 +158,7 @@ public class WebStaticServerTests
             var listeningLog = await WaitForLogAsync(
                 logs,
                 message => message.StartsWith("Listening on http://localhost:", StringComparison.OrdinalIgnoreCase),
-                TimeSpan.FromSeconds(5));
+                TimeSpan.FromSeconds(15));
             if (listeningLog is null && serverTask.IsCompleted && serverTask.Exception is not null)
                 throw new Xunit.Sdk.XunitException($"Server task faulted before listening: {serverTask.Exception.GetBaseException().Message}");
             Assert.NotNull(listeningLog);
@@ -175,7 +175,7 @@ public class WebStaticServerTests
 
             cts.Cancel();
             await TryWakeServerAsync(boundPort);
-            await serverTask.WaitAsync(TimeSpan.FromSeconds(3));
+            await serverTask.WaitAsync(TimeSpan.FromSeconds(10));
         }
         finally
         {

@@ -146,6 +146,9 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.Contains("[Alias('ModuleRunMode')]", entryPoint, StringComparison.Ordinal);
         Assert.Contains("[Alias('CertificateThumbprint')]", entryPoint, StringComparison.Ordinal);
         Assert.Contains("[Alias('SignIncludeBinaries')]", entryPoint, StringComparison.Ordinal);
+        Assert.Contains("[switch] $ModuleSkipInstall", entryPoint, StringComparison.Ordinal);
+        Assert.Contains("[bool] $EnableSigning", entryPoint, StringComparison.Ordinal);
+        Assert.Contains("$invokeParams.Sign = $EnableSigning", entryPoint, StringComparison.Ordinal);
         Assert.Contains("[Alias('DiagnosticsBaselinePath')]", entryPoint, StringComparison.Ordinal);
         Assert.Contains("[Alias('FailOnNewDiagnostics')]", entryPoint, StringComparison.Ordinal);
     }
