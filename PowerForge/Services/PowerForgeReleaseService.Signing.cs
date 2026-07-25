@@ -10,7 +10,8 @@ internal sealed partial class PowerForgeReleaseService
     /// </summary>
     internal static IReadOnlyList<string> RefreshBuiltArchivesAfterSigning(
         PowerForgeReleaseResult result,
-        IReadOnlyCollection<string> signedOutputDirectories)
+        IReadOnlyCollection<string> signedOutputDirectories,
+        IReadOnlyCollection<string>? signedFiles = null)
     {
         if (result is null)
             throw new ArgumentNullException(nameof(result));
@@ -21,7 +22,11 @@ internal sealed partial class PowerForgeReleaseService
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(Path.GetFullPath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (signedDirectories.Count == 0)
+        var signedFilePaths = (signedFiles ?? [])
+            .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Select(Path.GetFullPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (signedDirectories.Count == 0 && signedFilePaths.Count == 0)
             return [];
 
         var archives = (result.Tools?.Artefacts ?? [])
@@ -76,6 +81,10 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         refreshed.AddRange(RefreshModuleArchives(result, signedDirectories));
+        foreach (var signedFile in signedFilePaths)
+        {
+            refreshed.AddRange(RefreshStagedCopies(result, signedFile));
+        }
 
         if (refreshed.Count > 0)
             RewriteReleaseSummaryFiles(result);
@@ -112,7 +121,10 @@ internal sealed partial class PowerForgeReleaseService
         {
             var sourceDirectory = ResolveModuleArchiveSource(archivePath, signedDirectories);
             if (sourceDirectory is null)
-                continue;
+            {
+                throw new InvalidOperationException(
+                    $"Signed module output matching archive '{archivePath}' was not found. The unsigned archive cannot be published.");
+            }
 
             RecreateArchiveFromExistingEntries(sourceDirectory, archivePath);
             refreshed.Add(archivePath);

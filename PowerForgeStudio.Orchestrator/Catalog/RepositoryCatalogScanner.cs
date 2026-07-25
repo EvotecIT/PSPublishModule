@@ -176,13 +176,15 @@ public sealed class RepositoryCatalogScanner
                                          workspaceValidation.ValueKind == JsonValueKind.Object;
             var hasWinget = document.RootElement.TryGetProperty("Winget", out var winget) &&
                             winget.ValueKind == JsonValueKind.Object;
-            return moduleConfigPath is not null || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget
+            var hasAppleApps = document.RootElement.TryGetProperty("AppleApps", out var appleApps) &&
+                               appleApps.ValueKind == JsonValueKind.Object;
+            return moduleConfigPath is not null || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps
                 ? new ReleaseBuildContract(
                     releaseConfigPath,
                     moduleConfigPath,
                     includesPackages,
                     moduleIncludesPackages,
-                    RequiresUnifiedExecution: hasTools || hasGitHub || hasWorkspaceValidation || hasWinget)
+                    RequiresUnifiedExecution: hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps)
                 : null;
         }
         catch (Exception ex) when (

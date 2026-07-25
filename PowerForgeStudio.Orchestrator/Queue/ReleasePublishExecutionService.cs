@@ -20,7 +20,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
     private readonly Func<DotNetNuGetPushRequest, CancellationToken, Task<DotNetNuGetPushResult>> _pushNuGetPackageAsync;
     private readonly Func<GitHubReleasePublishRequest, CancellationToken, Task<GitHubReleasePublishResult>> _publishGitHubReleaseAsync;
     private readonly Func<RepositoryPublishRequest, CancellationToken, Task<RepositoryPublishResult>> _publishRepositoryAsync;
-    private readonly Func<string, string, PowerForgeReleaseResult> _publishUnifiedGitHub;
+    private readonly Func<string, string, PowerForgeReleaseResult> _publishUnifiedRelease;
 
     public ReleasePublishExecutionService()
         : this(
@@ -44,7 +44,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
         Func<DotNetNuGetPushRequest, CancellationToken, Task<DotNetNuGetPushResult>> pushNuGetPackageAsync,
         Func<GitHubReleasePublishRequest, CancellationToken, Task<GitHubReleasePublishResult>>? publishGitHubReleaseAsync = null,
         Func<RepositoryPublishRequest, CancellationToken, Task<RepositoryPublishResult>>? publishRepositoryAsync = null,
-        Func<string, string, PowerForgeReleaseResult>? publishUnifiedGitHub = null)
+        Func<string, string, PowerForgeReleaseResult>? publishUnifiedRelease = null)
     {
         _catalogScanner = catalogScanner;
         _moduleBuildHostService = moduleBuildHostService;
@@ -54,7 +54,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
         _pushNuGetPackageAsync = pushNuGetPackageAsync;
         _publishGitHubReleaseAsync = publishGitHubReleaseAsync ?? ((request, _) => Task.FromResult(new GitHubReleasePublisher(new NullLogger()).PublishRelease(request)));
         _publishRepositoryAsync = publishRepositoryAsync ?? ((request, _) => Task.FromResult(new RepositoryPublisher(new NullLogger()).Publish(request)));
-        _publishUnifiedGitHub = publishUnifiedGitHub ?? PublishUnifiedGitHub;
+        _publishUnifiedRelease = publishUnifiedRelease ?? PublishUnifiedRelease;
     }
 
     public IReadOnlyList<ReleasePublishTarget> BuildPendingTargets(IEnumerable<ReleaseQueueItem> queueItems)
@@ -155,7 +155,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
 
         if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
         {
-            receipts.AddRange(ExecuteUnifiedGitHubPublish(repository, signingResult));
+            receipts.AddRange(ExecuteUnifiedPublish(repository, signingResult));
         }
 
         if (receipts.Count == 0)

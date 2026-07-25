@@ -197,13 +197,16 @@ internal sealed partial class PowerForgeReleaseService
         var selectedToolOutputs = ResolveSelectedToolOutputs(request);
         var selectedTargets = NormalizeStrings(request.Targets);
         var runModule = !explicitAppleAction &&
+                        !request.AppleOnly &&
                         spec.Module is not null &&
                         (!request.PackagesOnly && !request.ToolsOnly || request.ModuleOnly);
         var runPackages = !explicitAppleAction &&
+                          !request.AppleOnly &&
                           spec.Packages is not null &&
                           !request.ModuleOnly &&
                           !request.ToolsOnly;
         var runTools = !explicitAppleAction &&
+                       !request.AppleOnly &&
                        spec.Tools is not null &&
                        !request.ModuleOnly &&
                        !request.PackagesOnly;
@@ -217,6 +220,7 @@ internal sealed partial class PowerForgeReleaseService
             : Array.Empty<string>();
         var toolTargetMatches = Array.Empty<string>();
         var runWorkspaceValidation = !explicitAppleAction &&
+                                     !request.AppleOnly &&
                                      spec.WorkspaceValidation is not null &&
                                      !request.SkipWorkspaceValidation;
         DotNetPublishSpec? dotNetSpecForTools = null;
@@ -706,7 +710,7 @@ internal sealed partial class PowerForgeReleaseService
         return spec ?? throw new InvalidOperationException($"Unable to deserialize unified release config: {fullPath}");
     }
 
-    internal PowerForgeReleaseResult PublishBuiltGitHubReleases(
+    internal PowerForgeReleaseResult PublishBuiltReleaseOutputs(
         PowerForgeReleaseSpec spec,
         PowerForgeReleaseRequest request,
         PowerForgeReleaseResult builtResult)
@@ -723,6 +727,37 @@ internal sealed partial class PowerForgeReleaseService
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
         var sharedReleaseVersion = request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, builtResult);
+
+        if (spec.AppleApps is not null)
+        {
+            var appleResult = Execute(
+                spec,
+                new PowerForgeReleaseRequest {
+                    ConfigPath = configPath,
+                    AppleOnly = true,
+                    AppleAction = request.AppleAction,
+                    AppleActionConfirmed = request.AppleActionConfirmed,
+                    AppleResume = request.AppleResume,
+                    AppleWaitForProcessing = request.AppleWaitForProcessing,
+                    AppleProcessingTimeoutSeconds = request.AppleProcessingTimeoutSeconds,
+                    ApplePollIntervalSeconds = request.ApplePollIntervalSeconds,
+                    Configuration = request.Configuration,
+                    ModuleRunMode = ConfigurationGateMode.Publish,
+                    PublishProjectGitHub = false,
+                    PublishToolGitHub = false,
+                    SubmitWinget = false,
+                    ResolvedReleaseVersion = sharedReleaseVersion
+                });
+            builtResult.AppleAppPlan = appleResult.AppleAppPlan;
+            builtResult.AppleApps = appleResult.AppleApps;
+            builtResult.AppleReceipt = appleResult.AppleReceipt;
+            if (!appleResult.Success)
+            {
+                builtResult.Success = false;
+                builtResult.ErrorMessage = appleResult.ErrorMessage ?? "Apple application release failed.";
+                return builtResult;
+            }
+        }
 
         if (spec.Tools is not null && (request.PublishToolGitHub ?? spec.Tools.GitHub.Publish))
         {

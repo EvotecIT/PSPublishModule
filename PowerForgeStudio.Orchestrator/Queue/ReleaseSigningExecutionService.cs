@@ -109,7 +109,13 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
                 string.Equals(receipt.ArtifactKind, "Directory", StringComparison.OrdinalIgnoreCase))
             .Select(static receipt => receipt.ArtifactPath)
             .ToArray();
-        if (signedDirectories.Length == 0)
+        var signedFiles = receipts
+            .Where(static receipt =>
+                receipt.Status == ReleaseSigningReceiptStatus.Signed &&
+                string.Equals(receipt.ArtifactKind, "File", StringComparison.OrdinalIgnoreCase))
+            .Select(static receipt => receipt.ArtifactPath)
+            .ToArray();
+        if (signedDirectories.Length == 0 && signedFiles.Length == 0)
             return;
 
         try
@@ -118,7 +124,10 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
             if (unified is null)
                 throw new InvalidOperationException("Unified release build state could not be deserialized after signing.");
 
-            var refreshedArchives = PowerForgeReleaseService.RefreshBuiltArchivesAfterSigning(unified, signedDirectories);
+            var refreshedArchives = PowerForgeReleaseService.RefreshBuiltArchivesAfterSigning(
+                unified,
+                signedDirectories,
+                signedFiles);
             foreach (var archivePath in refreshedArchives)
             {
                 var receiptIndex = receipts.FindIndex(receipt =>
@@ -128,7 +137,9 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
 
                 receipts[receiptIndex] = receipts[receiptIndex] with {
                     Status = ReleaseSigningReceiptStatus.Signed,
-                    Summary = "Archive rebuilt from its signed output directory.",
+                    Summary = archivePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                        ? "Archive rebuilt from its signed output directory."
+                        : "Staged artifact refreshed from its signed source.",
                     SignedAtUtc = DateTimeOffset.UtcNow
                 };
             }
@@ -138,7 +149,10 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
             var summary = FirstLine(ex.Message) ?? "Signed archives could not be rebuilt.";
             var archiveIndexes = receipts
                 .Select((receipt, index) => new { receipt, index })
-                .Where(static item => item.receipt.ArtifactPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                .Where(static item =>
+                    item.receipt.ArtifactPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                    item.receipt.ArtifactPath.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase) ||
+                    item.receipt.ArtifactPath.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase))
                 .Select(static item => item.index)
                 .ToArray();
             foreach (var index in archiveIndexes)

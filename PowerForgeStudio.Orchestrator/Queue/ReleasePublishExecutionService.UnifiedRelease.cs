@@ -63,6 +63,18 @@ public sealed partial class ReleasePublishExecutionService
                     Destination: "Windows Package Manager"));
             }
 
+            if (spec.AppleApps is not null)
+            {
+                targets.Add(new ReleasePublishTarget(
+                    RootPath: item.RootPath,
+                    RepositoryName: item.RepositoryName,
+                    AdapterKind: "UnifiedRelease",
+                    TargetName: $"{spec.AppleApps.Apps.Count(static app => app.Enabled)} Apple application(s)",
+                    TargetKind: "Apple",
+                    SourcePath: configPath,
+                    Destination: "Configured Apple release destinations"));
+            }
+
             return targets;
         }
         catch (Exception ex)
@@ -80,7 +92,7 @@ public sealed partial class ReleasePublishExecutionService
         }
     }
 
-    private IReadOnlyList<ReleasePublishReceipt> ExecuteUnifiedGitHubPublish(
+    private IReadOnlyList<ReleasePublishReceipt> ExecuteUnifiedPublish(
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
         ReleaseSigningExecutionResult signingResult)
     {
@@ -94,7 +106,7 @@ public sealed partial class ReleasePublishExecutionService
 
         try
         {
-            var result = _publishUnifiedGitHub(repository.UnifiedReleaseConfigPath!, buildResult.UnifiedReleaseStateJson!);
+            var result = _publishUnifiedRelease(repository.UnifiedReleaseConfigPath!, buildResult.UnifiedReleaseStateJson!);
             var receipts = result.ToolGitHubReleases
                 .Select(release => ReleaseQueueReceiptFactory.CreatePublishReceipt(
                     repository.RootPath,
@@ -136,6 +148,20 @@ public sealed partial class ReleasePublishExecutionService
                     result.WingetManifestPaths.FirstOrDefault()));
             }
 
+            foreach (var apple in result.AppleApps)
+            {
+                receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                    repository.RootPath,
+                    repository.Name,
+                    "UnifiedRelease",
+                    apple.Plan.Name,
+                    "Apple",
+                    apple.Plan.BundleId ?? apple.Plan.Destination,
+                    apple.Success ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
+                    apple.Success ? "Configured Apple release actions completed." : apple.ErrorMessage ?? "Apple application release failed.",
+                    apple.Archive?.ArchivePath ?? apple.Plan.ArchivePath));
+            }
+
             if (!result.Success && receipts.All(receipt => receipt.Status != ReleasePublishReceiptStatus.Failed))
                 receipts.Add(FailedReceipt(repository.RootPath, repository.Name, "UnifiedRelease", "GitHub release", null, result.ErrorMessage ?? "Unified GitHub publishing failed."));
 
@@ -149,16 +175,17 @@ public sealed partial class ReleasePublishExecutionService
         }
     }
 
-    private static PowerForgeReleaseResult PublishUnifiedGitHub(string configPath, string stateJson)
+    private static PowerForgeReleaseResult PublishUnifiedRelease(string configPath, string stateJson)
     {
         var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
         var builtResult = JsonSerializer.Deserialize<PowerForgeReleaseResult>(stateJson)
             ?? throw new InvalidOperationException("Unified release build state could not be deserialized.");
-        return new PowerForgeReleaseService(new NullLogger()).PublishBuiltGitHubReleases(
+        return new PowerForgeReleaseService(new NullLogger()).PublishBuiltReleaseOutputs(
             spec,
             new PowerForgeReleaseRequest {
                 ConfigPath = configPath,
-                ModuleRunMode = ConfigurationGateMode.Publish
+                ModuleRunMode = ConfigurationGateMode.Publish,
+                AppleActionConfirmed = true
             },
             builtResult);
     }

@@ -151,6 +151,76 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void RefreshBuiltArchivesAfterSigning_UnmatchedModuleZipFails()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var archiveSource = Path.Combine(root, "archive-source", "PSPublishModule");
+            Directory.CreateDirectory(archiveSource);
+            File.WriteAllText(Path.Combine(archiveSource, "PSPublishModule.psd1"), "@{ ModuleVersion = '1.0.0' }");
+            File.WriteAllText(Path.Combine(archiveSource, "PSPublishModule.dll"), "unsigned");
+            var archivePath = Path.Combine(root, "PSPublishModule.v1.0.0.zip");
+            ZipFile.CreateFromDirectory(Path.GetDirectoryName(archiveSource)!, archivePath);
+            var unrelatedSignedRoot = Path.Combine(root, "signed");
+            Directory.CreateDirectory(unrelatedSignedRoot);
+            var result = new PowerForgeReleaseResult {
+                ReleaseAssetEntries = [
+                    new PowerForgeReleaseAssetEntry {
+                        Path = archivePath,
+                        Category = PowerForgeReleaseAssetCategory.Module
+                    }
+                ]
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => PowerForgeReleaseService.RefreshBuiltArchivesAfterSigning(result, [unrelatedSignedRoot]));
+
+            Assert.Contains("unsigned archive cannot be published", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void RefreshBuiltArchivesAfterSigning_RefreshesStagedSignedPackage()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var packagePath = Path.Combine(root, "Package.1.0.0.nupkg");
+            var stagedPath = Path.Combine(root, "staged", Path.GetFileName(packagePath));
+            Directory.CreateDirectory(Path.GetDirectoryName(stagedPath)!);
+            File.WriteAllText(packagePath, "signed-package");
+            File.WriteAllText(stagedPath, "unsigned-package");
+            var result = new PowerForgeReleaseResult {
+                ReleaseAssetEntries = [
+                    new PowerForgeReleaseAssetEntry {
+                        Path = packagePath,
+                        StagedPath = stagedPath,
+                        Category = PowerForgeReleaseAssetCategory.Package
+                    }
+                ],
+                ReleaseAssets = [stagedPath]
+            };
+
+            var refreshed = PowerForgeReleaseService.RefreshBuiltArchivesAfterSigning(
+                result,
+                [],
+                [packagePath]);
+
+            Assert.Contains(stagedPath, refreshed);
+            Assert.Equal("signed-package", File.ReadAllText(stagedPath));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static string ReadArchiveText(string archivePath, string entryName)
     {
         using var archive = ZipFile.OpenRead(archivePath);

@@ -479,7 +479,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void PublishBuiltGitHubReleases_UsesCapturedArtifactsWithoutRebuilding()
+    public void PublishBuiltReleaseOutputs_UsesCapturedArtifactsWithoutRebuilding()
     {
         var root = CreateSandbox();
         try
@@ -521,7 +521,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 ]
             };
 
-            var result = service.PublishBuiltGitHubReleases(
+            var result = service.PublishBuiltReleaseOutputs(
                 spec,
                 new PowerForgeReleaseRequest {
                     ConfigPath = Path.Combine(root, "release.json")
@@ -539,7 +539,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void PublishBuiltGitHubReleases_SubmitsPreviouslyGeneratedWingetManifests()
+    public void PublishBuiltReleaseOutputs_SubmitsPreviouslyGeneratedWingetManifests()
     {
         var root = CreateSandbox();
         try
@@ -583,7 +583,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 ]
             };
 
-            var result = service.PublishBuiltGitHubReleases(
+            var result = service.PublishBuiltReleaseOutputs(
                 spec,
                 new PowerForgeReleaseRequest {
                     ConfigPath = Path.Combine(root, "release.json")

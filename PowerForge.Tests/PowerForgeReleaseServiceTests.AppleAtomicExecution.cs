@@ -3,6 +3,42 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void PublishBuiltReleaseOutputs_ExecutesConfiguredAppleLane()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var archiveCalls = 0;
+            var service = CreateAppleAutomationService(
+                _ => throw new InvalidOperationException("Configured archive should not query App Store Connect."),
+                archiveAppleApp: request =>
+                {
+                    archiveCalls++;
+                    return CreateSuccessfulArchive(request);
+                });
+
+            var result = service.PublishBuiltReleaseOutputs(
+                CreateAppleAutomationSpec(root, keyPath),
+                new PowerForgeReleaseRequest {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleActionConfirmed = true
+                },
+                new PowerForgeReleaseResult { Success = true });
+
+            Assert.True(result.Success);
+            Assert.Equal(1, archiveCalls);
+            Assert.True(Assert.Single(result.AppleApps).Success);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleUploadExisting_PreflightsEveryArchiveBeforeFirstUpload()
     {
         var root = CreateSandbox();

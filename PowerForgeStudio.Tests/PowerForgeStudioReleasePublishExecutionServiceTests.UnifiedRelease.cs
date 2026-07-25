@@ -88,7 +88,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             new ProjectBuildCommandHostService(),
             new ProjectBuildPublishHostService(),
             (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, string.Empty, string.Empty, "dotnet", TimeSpan.Zero, false, null)),
-            publishUnifiedGitHub: (configPath, stateJson) =>
+            publishUnifiedRelease: (configPath, stateJson) =>
             {
                 capturedConfig = configPath;
                 capturedState = stateJson;
@@ -211,7 +211,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             new ProjectBuildCommandHostService(),
             new ProjectBuildPublishHostService(),
             (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, string.Empty, string.Empty, "dotnet", TimeSpan.Zero, false, null)),
-            publishUnifiedGitHub: (_, stateJson) =>
+            publishUnifiedRelease: (_, stateJson) =>
             {
                 capturedState = stateJson;
                 return new PowerForgeReleaseResult {
@@ -303,7 +303,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             new ProjectBuildCommandHostService(),
             new ProjectBuildPublishHostService(),
             (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, string.Empty, string.Empty, "dotnet", TimeSpan.Zero, false, null)),
-            publishUnifiedGitHub: (_, _) => new PowerForgeReleaseResult {
+            publishUnifiedRelease: (_, _) => new PowerForgeReleaseResult {
                 Success = true,
                 WingetManifestPaths = [manifestPath],
                 WingetSubmission = new PowerForgeWingetSubmissionResult {
@@ -385,6 +385,95 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             var receipt = Assert.Single(result.Receipts);
             Assert.Equal(ReleasePublishReceiptStatus.Failed, receipt.Status);
             Assert.Equal("Configuration", receipt.TargetKind);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnifiedRelease_ProjectsAndPublishesAppleActions()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "AppleApps": {
+                "Apps": [
+                  {
+                    "Name": "Sample iOS",
+                    "Enabled": true,
+                    "BundleId": "com.evotecit.sample"
+                  }
+                ]
+              }
+            }
+            """);
+        var unified = new PowerForgeReleaseResult {
+            Success = true,
+            ConfigPath = releaseConfig
+        };
+        var buildResult = new ReleaseBuildExecutionResult(
+            repositoryRoot,
+            true,
+            "Build completed.",
+            1,
+            [],
+            JsonSerializer.Serialize(unified));
+        var signingResult = new ReleaseSigningExecutionResult(
+            repositoryRoot,
+            true,
+            "Signing completed.",
+            JsonSerializer.Serialize(buildResult),
+            []);
+        var queueItem = new ReleaseQueueItem(
+            repositoryRoot,
+            "AppleRepo",
+            ReleaseRepositoryKind.Library,
+            ReleaseWorkspaceKind.PrimaryRepository,
+            1,
+            ReleaseQueueStage.Publish,
+            ReleaseQueueItemStatus.ReadyToRun,
+            "Ready.",
+            "publish.ready",
+            JsonSerializer.Serialize(signingResult),
+            DateTimeOffset.UtcNow);
+        var service = new ReleasePublishExecutionService(
+            new RepositoryCatalogScanner(),
+            new ModuleBuildHostService(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(),
+            new ProjectBuildPublishHostService(),
+            (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, string.Empty, string.Empty, "dotnet", TimeSpan.Zero, false, null)),
+            publishUnifiedRelease: (_, _) => new PowerForgeReleaseResult {
+                Success = true,
+                AppleApps = [
+                    new PowerForgeAppleAppReleaseResult {
+                        Success = true,
+                        Plan = new PowerForgeAppleAppReleaseTargetPlan {
+                            Name = "Sample iOS",
+                            BundleId = "com.evotecit.sample"
+                        }
+                    }
+                ]
+            });
+
+        try
+        {
+            var target = Assert.Single(service.BuildPendingTargets([queueItem]));
+            Assert.Equal("Apple", target.TargetKind);
+
+            using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+            var result = await service.ExecuteAsync(queueItem);
+
+            Assert.True(result.Succeeded);
+            var receipt = Assert.Single(result.Receipts);
+            Assert.Equal("Apple", receipt.TargetKind);
+            Assert.Equal(ReleasePublishReceiptStatus.Published, receipt.Status);
         }
         finally
         {

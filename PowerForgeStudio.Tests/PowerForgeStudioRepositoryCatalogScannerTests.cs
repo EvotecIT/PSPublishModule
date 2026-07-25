@@ -209,6 +209,32 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
     }
 
     [Fact]
+    public void InspectRepository_AppleApps_RetainsUnifiedReleaseContract()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryPath = scope.CreateRepository("AppleRepo");
+        var buildPath = Path.Combine(repositoryPath, "Build");
+        File.Delete(Path.Combine(buildPath, "Build-Module.ps1"));
+        var releaseConfig = Path.Combine(buildPath, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "AppleApps": {
+                "Apps": [
+                  { "Name": "Sample", "Enabled": true }
+                ]
+              }
+            }
+            """);
+
+        var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
+
+        Assert.True(entry.IsReleaseManaged);
+        Assert.Equal(releaseConfig, entry.UnifiedReleaseConfigPath);
+    }
+
+    [Fact]
     public void InspectRepository_ModuleOwnedPackages_SuppressesOuterPackageContract()
     {
         using var scope = new TemporaryDirectoryScope();

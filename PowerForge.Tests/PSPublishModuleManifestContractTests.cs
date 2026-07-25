@@ -189,7 +189,11 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.Contains("$invokeParams.PublishNuget = $true", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("$invokeParams.ModuleSignModule = $true", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("[switch] $ModuleNoDotnetBuild", projectWrapperScript, StringComparison.Ordinal);
-        Assert.Contains("$invokeParams.ModuleRunMode = if ($Publish -or $PublishNuget -or $PublishProjectGitHub) { 'Publish' } else { $RunMode }", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("$invokeParams.ModuleRunMode = if ($Publish) { 'Publish' } else { $RunMode }", projectWrapperScript, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "$invokeParams.ModuleRunMode = if ($Publish -or $PublishNuget -or $PublishProjectGitHub)",
+            projectWrapperScript,
+            StringComparison.Ordinal);
         Assert.Contains("\"IncludesPackages\": false", releaseConfig, StringComparison.Ordinal);
         using var releaseDocument = JsonDocument.Parse(releaseConfig);
         var releaseRoot = releaseDocument.RootElement;
