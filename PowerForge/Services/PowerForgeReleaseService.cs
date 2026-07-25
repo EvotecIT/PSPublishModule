@@ -4535,6 +4535,11 @@ internal sealed partial class PowerForgeReleaseService
             packages.CertificateStore = request.PackageSignStore!.Trim();
         if (!string.IsNullOrWhiteSpace(request.PackageSignTimestampUrl))
             packages.TimeStampServer = request.PackageSignTimestampUrl!.Trim();
+        if (request.EnableSigning == false)
+        {
+            packages.SignAssemblies = false;
+            packages.SignPackages = false;
+        }
     }
 
     private static void ApplyToolRequestOverrides(PowerForgeToolReleaseSpec tools, PowerForgeReleaseRequest request, string? configurationOverride)

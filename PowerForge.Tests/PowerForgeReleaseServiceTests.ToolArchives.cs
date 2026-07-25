@@ -195,6 +195,55 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void RefreshBuiltArchivesAfterSigning_MatchesSignedModuleByPrereleaseLabel()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var signedRoot = Path.Combine(root, "signed");
+            var betaModuleRoot = Path.Combine(signedRoot, "beta", "PSPublishModule");
+            Directory.CreateDirectory(betaModuleRoot);
+            File.WriteAllText(
+                Path.Combine(betaModuleRoot, "PSPublishModule.psd1"),
+                "@{ ModuleVersion = '1.0.0'; PrivateData = @{ PSData = @{ Prerelease = 'beta' } } }");
+            File.WriteAllText(Path.Combine(betaModuleRoot, "PSPublishModule.dll"), "signed-beta");
+
+            var rcModuleRoot = Path.Combine(signedRoot, "rc", "PSPublishModule");
+            Directory.CreateDirectory(rcModuleRoot);
+            File.WriteAllText(
+                Path.Combine(rcModuleRoot, "PSPublishModule.psd1"),
+                "@{ ModuleVersion = '1.0.0'; PrivateData = @{ PSData = @{ Prerelease = 'rc' } } }");
+            File.WriteAllText(Path.Combine(rcModuleRoot, "PSPublishModule.dll"), "signed-rc");
+
+            var unsignedRoot = Path.Combine(root, "unsigned");
+            var unsignedModuleRoot = Path.Combine(unsignedRoot, "PSPublishModule");
+            Directory.CreateDirectory(unsignedModuleRoot);
+            File.WriteAllText(
+                Path.Combine(unsignedModuleRoot, "PSPublishModule.psd1"),
+                "@{ ModuleVersion = '1.0.0'; PrivateData = @{ PSData = @{ Prerelease = 'rc' } } }");
+            File.WriteAllText(Path.Combine(unsignedModuleRoot, "PSPublishModule.dll"), "unsigned");
+            var archivePath = Path.Combine(root, "PSPublishModule.v1.0.0-rc.zip");
+            ZipFile.CreateFromDirectory(unsignedRoot, archivePath);
+            var result = new PowerForgeReleaseResult {
+                ReleaseAssetEntries = [
+                    new PowerForgeReleaseAssetEntry {
+                        Path = archivePath,
+                        Category = PowerForgeReleaseAssetCategory.Module
+                    }
+                ]
+            };
+
+            PowerForgeReleaseService.RefreshBuiltArchivesAfterSigning(result, [signedRoot]);
+
+            Assert.Equal("signed-rc", ReadArchiveText(archivePath, "PSPublishModule/PSPublishModule.dll"));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void RefreshBuiltArchivesAfterSigning_UnmatchedModuleZipFails()
     {
         var root = CreateSandbox();

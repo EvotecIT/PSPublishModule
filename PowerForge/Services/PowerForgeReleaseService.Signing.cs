@@ -205,12 +205,14 @@ internal sealed partial class PowerForgeReleaseService
         {
             foreach (var manifestPath in Directory.EnumerateFiles(signedDirectory, "*.psd1", SearchOption.AllDirectories))
             {
+                var candidateIdentity = ReadModuleManifestVersionIdentity(File.ReadAllText(manifestPath));
+                if (candidateIdentity is null)
+                    continue;
+
                 foreach (var manifestEntry in manifestEntries)
                 {
                     if (!archiveManifestVersions.TryGetValue(manifestEntry, out var archiveVersion) ||
-                        !ModuleManifestValueReader.TryGetTopLevelString(manifestPath, "ModuleVersion", out var candidateVersion) ||
-                        string.IsNullOrWhiteSpace(candidateVersion) ||
-                        !ModuleVersionsMatch(archiveVersion, candidateVersion!))
+                        !ModuleVersionsMatch(archiveVersion, candidateIdentity))
                     {
                         continue;
                     }
@@ -231,11 +233,11 @@ internal sealed partial class PowerForgeReleaseService
         return null;
     }
 
-    private static IReadOnlyDictionary<string, string> ReadArchiveManifestVersions(
+    private static IReadOnlyDictionary<string, ModuleManifestVersionIdentity> ReadArchiveManifestVersions(
         string archivePath,
         IReadOnlyCollection<string> manifestEntries)
     {
-        var versions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var versions = new Dictionary<string, ModuleManifestVersionIdentity>(StringComparer.OrdinalIgnoreCase);
         using var archive = ZipFile.OpenRead(archivePath);
         foreach (var manifestEntry in manifestEntries)
         {
@@ -245,28 +247,92 @@ internal sealed partial class PowerForgeReleaseService
 
             using var reader = new StreamReader(entry.Open());
             var manifestText = reader.ReadToEnd();
-            if (ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(
-                    manifestText,
-                    "ModuleVersion",
-                    out var version) &&
-                !string.IsNullOrWhiteSpace(version))
-            {
-                versions[manifestEntry] = version!;
-            }
+            var identity = ReadModuleManifestVersionIdentity(manifestText);
+            if (identity is not null)
+                versions[manifestEntry] = identity;
         }
 
         return versions;
     }
 
-    private static bool ModuleVersionsMatch(string archiveVersion, string candidateVersion)
+    private static ModuleManifestVersionIdentity? ReadModuleManifestVersionIdentity(string manifestText)
     {
-        if (Version.TryParse(archiveVersion, out var parsedArchive) &&
-            Version.TryParse(candidateVersion, out var parsedCandidate))
+        if (!ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(
+                manifestText,
+                "ModuleVersion",
+                out var version) ||
+            string.IsNullOrWhiteSpace(version))
         {
-            return parsedArchive.Equals(parsedCandidate);
+            return null;
         }
 
-        return string.Equals(archiveVersion, candidateVersion, StringComparison.OrdinalIgnoreCase);
+        string? preRelease = null;
+        try
+        {
+            if (ModuleManifestTextParser.TryGetPsDataStringValue(
+                    manifestText,
+                    "Prerelease",
+                    out var psDataPrerelease) &&
+                !string.IsNullOrWhiteSpace(psDataPrerelease))
+            {
+                preRelease = psDataPrerelease;
+            }
+        }
+        catch
+        {
+            // Best effort: invalid optional PSData must not hide the numeric version.
+        }
+
+        if (preRelease is null &&
+            ModuleManifestTextParser.TryGetQuotedStringValue(
+                manifestText,
+                "Prerelease",
+                out var manifestPrerelease) &&
+            !string.IsNullOrWhiteSpace(manifestPrerelease))
+        {
+            preRelease = manifestPrerelease;
+        }
+
+        return new ModuleManifestVersionIdentity(
+            version!,
+            NormalizeModulePreRelease(preRelease));
+    }
+
+    private static bool ModuleVersionsMatch(
+        ModuleManifestVersionIdentity archiveVersion,
+        ModuleManifestVersionIdentity candidateVersion)
+    {
+        var numericVersionsMatch = Version.TryParse(archiveVersion.Version, out var parsedArchive) &&
+                                   Version.TryParse(candidateVersion.Version, out var parsedCandidate)
+            ? parsedArchive.Equals(parsedCandidate)
+            : string.Equals(
+                archiveVersion.Version,
+                candidateVersion.Version,
+                StringComparison.OrdinalIgnoreCase);
+
+        return numericVersionsMatch &&
+               string.Equals(
+                   archiveVersion.PreRelease,
+                   candidateVersion.PreRelease,
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeModulePreRelease(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value!.Trim().TrimStart('-');
+
+    private sealed class ModuleManifestVersionIdentity
+    {
+        internal ModuleManifestVersionIdentity(string version, string preRelease)
+        {
+            Version = version;
+            PreRelease = preRelease;
+        }
+
+        internal string Version { get; }
+
+        internal string PreRelease { get; }
     }
 
     private static string? ResolveArchiveRootFromManifest(string manifestPath, string manifestEntry)

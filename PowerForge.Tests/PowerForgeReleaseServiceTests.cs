@@ -3898,6 +3898,50 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_DisabledSigningSuppressesPackageAssemblyAndNuGetSigning()
+    {
+        ProjectBuildConfiguration? capturedPackages = null;
+
+        var service = new PowerForgeReleaseService(
+            new NullLogger(),
+            executePackages: (_, config, _) =>
+            {
+                capturedPackages = config;
+                return new ProjectBuildHostExecutionResult {
+                    Success = true,
+                    ConfigPath = "release.json",
+                    PlanOutputPath = "plan.json",
+                    Result = new ProjectBuildResult()
+                };
+            },
+            planTools: (_, _, _) => throw new InvalidOperationException("Tools should not run."),
+            runTools: _ => throw new InvalidOperationException("Tools should not run."),
+            publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+        var result = service.Execute(
+            new PowerForgeReleaseSpec {
+                Packages = new ProjectBuildConfiguration {
+                    RootPath = ".",
+                    Configuration = "Release",
+                    CertificateThumbprint = "ABC123",
+                    SignAssemblies = true,
+                    SignPackages = true
+                }
+            },
+            new PowerForgeReleaseRequest {
+                ConfigPath = Path.Combine(Path.GetTempPath(), "release.json"),
+                PackagesOnly = true,
+                PlanOnly = true,
+                EnableSigning = false
+            });
+
+        Assert.True(result.Success);
+        Assert.NotNull(capturedPackages);
+        Assert.False(capturedPackages!.SignAssemblies);
+        Assert.False(capturedPackages.SignPackages);
+    }
+
+    [Fact]
     public void Execute_KeepSymbolsAndSigningOverrides_ApplyToDotNetTargetsAndInstallers()
     {
         var root = CreateSandbox();
