@@ -248,7 +248,10 @@ public sealed class AsyncPSCmdletTests
         var result = powerShell.Invoke();
 
         Assert.False(powerShell.HadErrors, string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
-        Assert.True((bool)Assert.Single(result).BaseObject);
+        Assert.Collection(
+            result,
+            item => Assert.Equal("early-output", item.BaseObject),
+            item => Assert.True((bool)item.BaseObject));
     }
 
     [Fact]
@@ -483,6 +486,7 @@ public sealed class TestAsyncEarlyShouldProcessCommand : AsyncPSCmdlet
 
     protected override void ProcessRecord()
     {
+        WriteObject("early-output");
         _approved = ShouldProcess("target");
         base.ProcessRecord();
     }
