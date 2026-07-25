@@ -74,6 +74,8 @@ internal sealed class PowerForgeReleaseRequest
 
     public bool? ModuleNoSign { get; set; }
 
+    public bool? ModuleSkipInstall { get; set; }
+
     public bool? ModuleSignModule { get; set; }
 
     public int? ModuleTimeoutSeconds { get; set; }
@@ -901,6 +903,8 @@ internal sealed class PowerForgeModuleReleasePlanSummary
     public string? PreReleaseTag { get; set; }
 
     public bool NoSign { get; set; }
+
+    public bool SkipInstall { get; set; }
 
     public bool SignModule { get; set; }
 

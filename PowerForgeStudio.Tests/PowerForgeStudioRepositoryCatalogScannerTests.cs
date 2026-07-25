@@ -151,6 +151,64 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
     }
 
     [Fact]
+    public void InspectRepository_UnifiedContract_PrefersDeclaredJsonModuleOverLegacyScript()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryPath = scope.CreateRepository("UnifiedModuleRepo");
+        var buildPath = Path.Combine(repositoryPath, "Build");
+        var moduleConfig = Path.Combine(repositoryPath, "powerforge.json");
+        Directory.CreateDirectory(Path.Combine(repositoryPath, "src", "UnifiedModuleRepo"));
+        File.WriteAllText(moduleConfig, """{ "Build": { "Name": "UnifiedModuleRepo", "SourcePath": "src/UnifiedModuleRepo" } }""");
+        var releaseConfig = Path.Combine(buildPath, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "Module": {
+                "RepositoryRoot": "..",
+                "ConfigPath": "powerforge.json"
+              },
+              "Tools": {
+                "ProjectRoot": "..",
+                "Targets": []
+              }
+            }
+            """);
+
+        var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
+
+        Assert.Equal(releaseConfig, entry.UnifiedReleaseConfigPath);
+        Assert.Equal(moduleConfig, entry.ModuleBuildScriptPath);
+    }
+
+    [Fact]
+    public void InspectRepository_Winget_RetainsUnifiedReleaseContract()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryPath = scope.CreateRepository("WingetRepo");
+        var buildPath = Path.Combine(repositoryPath, "Build");
+        File.Delete(Path.Combine(buildPath, "Build-Module.ps1"));
+        var releaseConfig = Path.Combine(buildPath, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "Winget": {
+                "Enabled": true,
+                "Submit": true,
+                "Packages": []
+              }
+            }
+            """);
+
+        var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
+
+        Assert.True(entry.IsReleaseManaged);
+        Assert.Equal(releaseConfig, entry.UnifiedReleaseConfigPath);
+        Assert.Equal(releaseConfig, entry.PrimaryBuildScriptPath);
+    }
+
+    [Fact]
     public void InspectRepository_ModuleOwnedPackages_SuppressesOuterPackageContract()
     {
         using var scope = new TemporaryDirectoryScope();

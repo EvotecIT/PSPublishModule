@@ -259,10 +259,14 @@ public sealed partial class ReleasePublishExecutionService
             }
         }
 
-        if (!targets.Any(static target => string.Equals(target.TargetKind, "GitHub", StringComparison.OrdinalIgnoreCase)) &&
-            TryBuildUnifiedGitHubTarget(item, signingResult) is { } unifiedTarget)
+        foreach (var unifiedTarget in BuildUnifiedPublishTargets(item, signingResult))
         {
-            targets.Add(unifiedTarget);
+            if (!targets.Any(target =>
+                    string.Equals(target.TargetKind, unifiedTarget.TargetKind, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(target.SourcePath, unifiedTarget.SourcePath, StringComparison.OrdinalIgnoreCase)))
+            {
+                targets.Add(unifiedTarget);
+            }
         }
 
         return targets;

@@ -191,6 +191,8 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
                 Assert.False(request.PublishNuget);
                 Assert.False(request.PublishProjectGitHub);
                 Assert.False(request.PublishToolGitHub);
+                Assert.True(request.ModuleSkipInstall);
+                Assert.False(request.SubmitWinget);
                 return new PowerForgeReleaseResult {
                     Success = true,
                     ToolPlan = new PowerForgeToolReleasePlan(),

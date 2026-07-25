@@ -86,8 +86,10 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             PublishToolGitHub = false,
             ModuleRunMode = ConfigurationGateMode.Build,
             ModuleNoSign = true,
+            ModuleSkipInstall = true,
             EnableSigning = false,
-            SkipAppleApps = true
+            SkipAppleApps = true,
+            SubmitWinget = false
         };
 
     private static PowerForgeReleaseResult ExecuteUnifiedReleaseBuild(string configPath, PowerForgeReleaseRequest request)

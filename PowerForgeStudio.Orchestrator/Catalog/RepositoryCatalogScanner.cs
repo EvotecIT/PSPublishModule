@@ -54,13 +54,15 @@ public sealed class RepositoryCatalogScanner
     {
         var moduleBuildScript = FindBuildScript(directoryPath, "Build-Module.ps1", includeImmediateChildBuildFolders);
         var releaseContract = FindReleaseBuildContract(directoryPath, includeImmediateChildBuildFolders);
-        var releaseModuleBuildConfig = moduleBuildScript is null
-            ? releaseContract?.ModuleConfigPath
-            : null;
-        var moduleBuildConfig = moduleBuildScript is null
-            ? releaseModuleBuildConfig ?? FindDirectModuleBuildConfig(directoryPath)
-            : null;
-        var moduleBuildInput = moduleBuildScript ?? moduleBuildConfig;
+        var releaseModuleBuildConfig = releaseContract?.RequiresUnifiedExecution == true
+            ? releaseContract.ModuleConfigPath
+            : moduleBuildScript is null
+                ? releaseContract?.ModuleConfigPath
+                : null;
+        var moduleBuildConfig = releaseModuleBuildConfig ?? (moduleBuildScript is null
+            ? FindDirectModuleBuildConfig(directoryPath)
+            : null);
+        var moduleBuildInput = moduleBuildConfig ?? moduleBuildScript;
         var projectBuildScript = releaseContract?.IncludesPackages == true &&
                                  !releaseContract.ModuleIncludesPackages
             ? releaseContract.ConfigPath
@@ -172,13 +174,15 @@ public sealed class RepositoryCatalogScanner
                             gitHub.ValueKind == JsonValueKind.Object;
             var hasWorkspaceValidation = document.RootElement.TryGetProperty("WorkspaceValidation", out var workspaceValidation) &&
                                          workspaceValidation.ValueKind == JsonValueKind.Object;
-            return moduleConfigPath is not null || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation
+            var hasWinget = document.RootElement.TryGetProperty("Winget", out var winget) &&
+                            winget.ValueKind == JsonValueKind.Object;
+            return moduleConfigPath is not null || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget
                 ? new ReleaseBuildContract(
                     releaseConfigPath,
                     moduleConfigPath,
                     includesPackages,
                     moduleIncludesPackages,
-                    RequiresUnifiedExecution: hasTools || hasGitHub || hasWorkspaceValidation)
+                    RequiresUnifiedExecution: hasTools || hasGitHub || hasWorkspaceValidation || hasWinget)
                 : null;
         }
         catch (Exception ex) when (

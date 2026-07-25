@@ -281,6 +281,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     ConfigPath = configPath,
                     ModuleOnly = true,
                     PlanOnly = true,
+                    ModuleSkipInstall = true,
                     ModuleRunMode = publishUnifiedGitHub
                         ? ConfigurationGateMode.Publish
                         : ConfigurationGateMode.Build
@@ -289,6 +290,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(result.Success);
             Assert.NotNull(result.ModulePlan);
             Assert.True(result.ModulePlan!.PowerForgeReleaseStage);
+            Assert.True(result.ModulePlan.SkipInstall);
             Assert.Equal(publishUnifiedGitHub, result.ModulePlan.UnifiedGitHubRelease);
         }
         finally
@@ -525,6 +527,69 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(result.Success);
             Assert.NotNull(result.UnifiedGitHubRelease);
             Assert.Equal(zipPath, Assert.Single(Assert.Single(publishCalls).AssetFilePaths));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void PublishBuiltGitHubReleases_SubmitsPreviouslyGeneratedWingetManifests()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            PowerForgeWingetSubmissionPlan? capturedPlan = null;
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages must not run during staged publishing."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools must not plan during staged publishing."),
+                runTools: _ => throw new InvalidOperationException("Tools must not run during staged publishing."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("DotNet tools must not load during staged publishing."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools must not plan during staged publishing."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools must not run during staged publishing."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub must not run during this WinGet-only publish."),
+                submitWinget: plan =>
+                {
+                    capturedPlan = plan;
+                    return new PowerForgeWingetSubmissionResult { Succeeded = true };
+                });
+            var spec = new PowerForgeReleaseSpec {
+                Winget = new PowerForgeReleaseWingetOptions {
+                    Enabled = true,
+                    Submit = true,
+                    Submission = new PowerForgeReleaseWingetSubmissionOptions {
+                        Token = "secret"
+                    }
+                }
+            };
+            var manifestPath = Path.Combine(root, "manifests", "EvotecIT.Tool.yaml");
+            Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
+            File.WriteAllText(manifestPath, "PackageIdentifier: EvotecIT.Tool");
+            var built = new PowerForgeReleaseResult {
+                Success = true,
+                WingetManifestPaths = [manifestPath],
+                WingetManifests = [
+                    new PowerForgeWingetManifestArtifact {
+                        PackageIdentifier = "EvotecIT.Tool",
+                        PackageVersion = "1.0.0",
+                        ManifestPath = manifestPath
+                    }
+                ]
+            };
+
+            var result = service.PublishBuiltGitHubReleases(
+                spec,
+                new PowerForgeReleaseRequest {
+                    ConfigPath = Path.Combine(root, "release.json")
+                },
+                built);
+
+            Assert.True(result.Success);
+            Assert.NotNull(capturedPlan);
+            Assert.True(capturedPlan!.Enabled);
+            Assert.True(result.WingetSubmission?.Succeeded);
         }
         finally
         {

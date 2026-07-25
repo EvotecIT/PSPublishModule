@@ -245,4 +245,89 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public async Task ExecuteAsync_UnifiedRelease_ProjectsAndPublishesWingetSubmission()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "Winget": {
+                "Enabled": true,
+                "Submit": true,
+                "Packages": []
+              }
+            }
+            """);
+        var manifestPath = Path.Combine(repositoryRoot, "Artifacts", "Winget", "EvotecIT.Tool.yaml");
+        Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
+        File.WriteAllText(manifestPath, "PackageIdentifier: EvotecIT.Tool");
+        var unified = new PowerForgeReleaseResult {
+            Success = true,
+            ConfigPath = releaseConfig,
+            WingetManifestPaths = [manifestPath]
+        };
+        var buildResult = new ReleaseBuildExecutionResult(
+            repositoryRoot,
+            true,
+            "Build completed.",
+            1,
+            [],
+            JsonSerializer.Serialize(unified));
+        var signingResult = new ReleaseSigningExecutionResult(
+            repositoryRoot,
+            true,
+            "Signing completed.",
+            JsonSerializer.Serialize(buildResult),
+            []);
+        var queueItem = new ReleaseQueueItem(
+            repositoryRoot,
+            "WingetRepo",
+            ReleaseRepositoryKind.Library,
+            ReleaseWorkspaceKind.PrimaryRepository,
+            1,
+            ReleaseQueueStage.Publish,
+            ReleaseQueueItemStatus.ReadyToRun,
+            "Ready.",
+            "publish.ready",
+            JsonSerializer.Serialize(signingResult),
+            DateTimeOffset.UtcNow);
+        var service = new ReleasePublishExecutionService(
+            new RepositoryCatalogScanner(),
+            new ModuleBuildHostService(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(),
+            new ProjectBuildPublishHostService(),
+            (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, string.Empty, string.Empty, "dotnet", TimeSpan.Zero, false, null)),
+            publishUnifiedGitHub: (_, _) => new PowerForgeReleaseResult {
+                Success = true,
+                WingetManifestPaths = [manifestPath],
+                WingetSubmission = new PowerForgeWingetSubmissionResult {
+                    Succeeded = true
+                }
+            });
+
+        try
+        {
+            var target = Assert.Single(service.BuildPendingTargets([queueItem]));
+            Assert.Equal("Winget", target.TargetKind);
+            Assert.Equal(manifestPath, target.SourcePath);
+
+            using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+            var result = await service.ExecuteAsync(queueItem);
+
+            Assert.True(result.Succeeded);
+            var receipt = Assert.Single(result.Receipts);
+            Assert.Equal("Winget", receipt.TargetKind);
+            Assert.Equal(ReleasePublishReceiptStatus.Published, receipt.Status);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
 }

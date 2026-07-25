@@ -765,6 +765,11 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
 
+        SubmitWingetOutputs(spec, request, configDirectory, builtResult);
+        if (!builtResult.Success)
+            return builtResult;
+
+        RewriteReleaseSummaryFiles(builtResult);
         builtResult.Success = true;
         builtResult.ErrorMessage = null;
         return builtResult;
@@ -1040,6 +1045,7 @@ internal sealed partial class PowerForgeReleaseService
                 ? request.ModulePreReleaseTag ?? options.PreReleaseTag
                 : PackageVersionUtility.GetPrereleaseVersion(request.ResolvedReleaseVersion!) ?? string.Empty,
             NoSign = request.ModuleNoSign ?? options.NoSign ?? false,
+            SkipInstall = request.ModuleSkipInstall ?? false,
             SignModule = signModuleOverride ?? false,
             SignModuleWasSpecified = signModuleOverride.HasValue,
             IncludeProjectPackages = includeProjectPackages,
@@ -1074,6 +1080,7 @@ internal sealed partial class PowerForgeReleaseService
             ModuleVersion = buildRequest.ModuleVersion,
             PreReleaseTag = NullIfEmpty(buildRequest.PreReleaseTag ?? string.Empty),
             NoSign = buildRequest.NoSign,
+            SkipInstall = buildRequest.SkipInstall,
             SignModule = buildRequest.SignModule,
             PowerForgeReleaseStage = buildRequest.PowerForgeReleaseStage,
             UnifiedGitHubRelease = buildRequest.UnifiedGitHubRelease,

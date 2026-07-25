@@ -60,6 +60,50 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void RefreshBuiltToolArchivesAfterSigning_RestoresUnixExecutablePermissions()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var outputRoot = Path.Combine(root, "output");
+            Directory.CreateDirectory(outputRoot);
+            var executablePath = Path.Combine(outputRoot, "PowerForge");
+            var aliasPath = Path.Combine(outputRoot, "pf");
+            File.WriteAllText(executablePath, "signed-main");
+            File.WriteAllText(aliasPath, "signed-alias");
+            var archivePath = Path.Combine(root, "PowerForge-linux-x64.zip");
+            ZipFile.CreateFromDirectory(outputRoot, archivePath);
+            RewriteCentralDirectoryAsDos(archivePath);
+
+            var result = new PowerForgeReleaseResult {
+                Tools = new PowerForgeToolReleaseResult {
+                    Success = true,
+                    Artefacts = [
+                        new PowerForgeToolReleaseArtifactResult {
+                            Runtime = "linux-x64",
+                            OutputPath = outputRoot,
+                            ExecutablePath = executablePath,
+                            CommandAliasPath = aliasPath,
+                            ZipPath = archivePath
+                        }
+                    ]
+                }
+            };
+
+            PowerForgeReleaseService.RefreshBuiltToolArchivesAfterSigning(result, [outputRoot]);
+
+            using var archive = ZipFile.OpenRead(archivePath);
+            Assert.Equal(unchecked((int)0x81ED0000u), archive.GetEntry("PowerForge")!.ExternalAttributes);
+            Assert.Equal(unchecked((int)0x81ED0000u), archive.GetEntry("pf")!.ExternalAttributes);
+            Assert.All(ReadCentralDirectoryCreatorSystems(archivePath), creatorSystem => Assert.Equal((byte)3, creatorSystem));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static void RewriteCentralDirectoryAsDos(string archivePath)
     {
         var bytes = File.ReadAllBytes(archivePath);

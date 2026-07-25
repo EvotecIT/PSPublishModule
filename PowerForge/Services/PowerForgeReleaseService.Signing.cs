@@ -25,15 +25,31 @@ internal sealed partial class PowerForgeReleaseService
             return [];
 
         var archives = (result.Tools?.Artefacts ?? [])
-            .Select(static artifact => (OutputDirectory: artifact.OutputPath, artifact.ZipPath))
+            .Select(static artifact => (
+                OutputDirectory: artifact.OutputPath,
+                artifact.ZipPath,
+                Runtime: artifact.Runtime,
+                ExecutablePath: (string?)artifact.ExecutablePath,
+                AliasPath: artifact.CommandAliasPath,
+                IsLegacy: true))
             .Concat((result.DotNetTools?.Artefacts ?? [])
-                .Select(static artifact => (OutputDirectory: artifact.OutputDir, artifact.ZipPath)))
+                .Select(static artifact => (
+                    OutputDirectory: artifact.OutputDir,
+                    artifact.ZipPath,
+                    Runtime: string.Empty,
+                    ExecutablePath: (string?)null,
+                    AliasPath: (string?)null,
+                    IsLegacy: false)))
             .Where(static artifact =>
                 !string.IsNullOrWhiteSpace(artifact.OutputDirectory) &&
                 !string.IsNullOrWhiteSpace(artifact.ZipPath))
             .Select(static artifact => (
                 OutputDirectory: Path.GetFullPath(artifact.OutputDirectory),
-                ZipPath: Path.GetFullPath(artifact.ZipPath!)))
+                ZipPath: Path.GetFullPath(artifact.ZipPath!),
+                artifact.Runtime,
+                artifact.ExecutablePath,
+                artifact.AliasPath,
+                artifact.IsLegacy))
             .Where(artifact => signedDirectories.Contains(artifact.OutputDirectory))
             .GroupBy(static artifact => artifact.ZipPath, StringComparer.OrdinalIgnoreCase)
             .Select(static group => group.First())
@@ -46,6 +62,15 @@ internal sealed partial class PowerForgeReleaseService
                 throw new DirectoryNotFoundException($"Signed tool output directory was not found: {archive.OutputDirectory}");
 
             RecreateArchive(archive.OutputDirectory, archive.ZipPath);
+            if (archive.IsLegacy)
+            {
+                PowerForgeToolReleaseService.ApplyArchiveExecutablePermissions(
+                    archive.Runtime,
+                    archive.OutputDirectory,
+                    archive.ZipPath,
+                    archive.ExecutablePath,
+                    archive.AliasPath);
+            }
             refreshed.Add(archive.ZipPath);
             refreshed.AddRange(RefreshStagedCopies(result, archive.ZipPath));
         }
