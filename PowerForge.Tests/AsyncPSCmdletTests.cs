@@ -101,6 +101,30 @@ public sealed class AsyncPSCmdletTests
     }
 
     [Fact]
+    public void AsyncPSCmdlet_preserves_fifo_order_for_pipeline_thread_and_worker_writes()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncWriteOrdering",
+            typeof(TestAsyncWriteOrderingCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncWriteOrdering");
+
+        var result = powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors, string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
+        Assert.Collection(
+            result,
+            item => Assert.Equal("first", item.BaseObject),
+            item => Assert.Equal("second", item.BaseObject));
+    }
+
+    [Fact]
     public void AsyncPSCmdlet_translates_cancellation_to_a_pipeline_stop()
     {
         var sessionState = InitialSessionState.CreateDefault();
@@ -442,16 +466,32 @@ public sealed class TestAsyncSynchronizationContextCommand : AsyncPSCmdlet
 public sealed class TestAsyncTaskSchedulerCommand : AsyncPSCmdlet
 {
     private readonly ForwardingTaskScheduler _scheduler = new();
+    private int _pipelineThreadId;
 
     protected override void ProcessRecord()
-        => _scheduler.Run(base.ProcessRecord);
+    {
+        _pipelineThreadId = Environment.CurrentManagedThreadId;
+        _scheduler.Run(base.ProcessRecord);
+    }
 
     protected override async Task ProcessRecordAsync()
     {
-        Assert.Same(TaskScheduler.Default, TaskScheduler.Current);
+        Assert.Equal(_pipelineThreadId, Environment.CurrentManagedThreadId);
+        Assert.NotSame(_scheduler, TaskScheduler.Current);
         await Task.Factory.StartNew(static () => { });
         await Task.Yield();
         WriteObject(_scheduler.QueuedTaskCount);
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncWriteOrdering")]
+public sealed class TestAsyncWriteOrderingCommand : AsyncPSCmdlet
+{
+    protected override Task ProcessRecordAsync()
+    {
+        Task.Run(() => WriteObject("first")).GetAwaiter().GetResult();
+        WriteObject("second");
+        return Task.CompletedTask;
     }
 }
 
