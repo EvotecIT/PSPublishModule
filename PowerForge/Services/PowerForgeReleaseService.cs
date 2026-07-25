@@ -687,6 +687,85 @@ internal sealed partial class PowerForgeReleaseService
         return result;
     }
 
+    internal static PowerForgeReleaseSpec LoadConfiguration(string configPath)
+    {
+        if (string.IsNullOrWhiteSpace(configPath))
+            throw new ArgumentException("ConfigPath is required.", nameof(configPath));
+
+        var fullPath = Path.GetFullPath(configPath.Trim().Trim('"'));
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException($"Unified release config was not found: {fullPath}", fullPath);
+
+        var spec = JsonSerializer.Deserialize<PowerForgeReleaseSpec>(
+            File.ReadAllText(fullPath),
+            CreateJsonOptions());
+        return spec ?? throw new InvalidOperationException($"Unable to deserialize unified release config: {fullPath}");
+    }
+
+    internal PowerForgeReleaseResult PublishBuiltGitHubReleases(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        PowerForgeReleaseResult builtResult)
+    {
+        if (spec is null)
+            throw new ArgumentNullException(nameof(spec));
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (builtResult is null)
+            throw new ArgumentNullException(nameof(builtResult));
+        if (string.IsNullOrWhiteSpace(request.ConfigPath))
+            throw new ArgumentException("ConfigPath is required.", nameof(request));
+
+        var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
+        var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
+        var sharedReleaseVersion = request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, builtResult);
+
+        if (spec.Tools is not null && (request.PublishToolGitHub ?? spec.Tools.GitHub.Publish))
+        {
+            if (builtResult.DotNetToolPlan is not null && builtResult.DotNetTools is not null)
+            {
+                builtResult.ToolGitHubReleases = PublishDotNetToolGitHubReleases(
+                    spec,
+                    configDirectory,
+                    builtResult.DotNetToolPlan,
+                    builtResult.DotNetTools,
+                    sharedReleaseVersion);
+            }
+            else if (builtResult.Tools is not null)
+            {
+                builtResult.ToolGitHubReleases = PublishLegacyToolGitHubReleases(
+                    spec,
+                    configDirectory,
+                    builtResult.Tools);
+            }
+
+            var toolFailure = builtResult.ToolGitHubReleases.FirstOrDefault(static release => !release.Success);
+            if (toolFailure is not null)
+            {
+                builtResult.Success = false;
+                builtResult.ErrorMessage = toolFailure.ErrorMessage ?? "Tool GitHub release publishing failed.";
+                return builtResult;
+            }
+        }
+
+        var moduleSelected = spec.Module is not null && !request.PackagesOnly && !request.ToolsOnly;
+        if (ShouldPublishUnifiedGitHub(spec, request, moduleSelected))
+        {
+            var unified = PublishUnifiedGitHubRelease(spec, configDirectory, builtResult, sharedReleaseVersion);
+            builtResult.UnifiedGitHubRelease = unified;
+            if (!unified.Success)
+            {
+                builtResult.Success = false;
+                builtResult.ErrorMessage = unified.ErrorMessage ?? "Unified GitHub release publishing failed.";
+                return builtResult;
+            }
+        }
+
+        builtResult.Success = true;
+        builtResult.ErrorMessage = null;
+        return builtResult;
+    }
+
     private static TResult WithRequestTargets<TResult>(PowerForgeReleaseRequest request, string[] targets, Func<TResult> action)
     {
         var originalTargets = request.Targets;

@@ -153,6 +153,67 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.DoesNotContain(Path.Combine(staleArtifact, "JsonModuleRepo.zip"), adapter.ArtifactFiles);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_UnifiedRelease_UsesSharedEngineAndCapturesToolArtifacts()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("UnifiedToolRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("UnifiedToolRepo", "Build"));
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "Tools": {
+                "ProjectRoot": "..",
+                "Targets": []
+              },
+              "GitHub": {
+                "Publish": true,
+                "Owner": "EvotecIT",
+                "Repository": "UnifiedToolRepo"
+              }
+            }
+            """);
+        var toolDirectory = scope.CreateDirectory(Path.Combine("UnifiedToolRepo", "Artifacts", "Tool"));
+        var zipPath = Path.Combine(toolDirectory, "UnifiedToolRepo-win-x64.zip");
+        File.WriteAllText(zipPath, "zip");
+        string? capturedConfig = null;
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()),
+            configPath =>
+            {
+                capturedConfig = configPath;
+                return new PowerForgeReleaseResult {
+                    Success = true,
+                    ToolPlan = new PowerForgeToolReleasePlan(),
+                    Tools = new PowerForgeToolReleaseResult {
+                        Success = true,
+                        Artefacts = [
+                            new PowerForgeToolReleaseArtifactResult {
+                                Target = "UnifiedToolRepo",
+                                OutputPath = toolDirectory,
+                                ZipPath = zipPath
+                            }
+                        ]
+                    }
+                };
+            });
+
+        var result = await service.ExecuteAsync(repositoryRoot);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(releaseConfig, capturedConfig);
+        Assert.NotNull(result.UnifiedReleaseStateJson);
+        var adapter = Assert.Single(result.AdapterResults);
+        Assert.Equal(ReleaseBuildAdapterKind.ToolBuild, adapter.AdapterKind);
+        Assert.Contains(toolDirectory, adapter.ArtifactDirectories);
+        Assert.Contains(zipPath, adapter.ArtifactFiles);
+    }
+
     private sealed class TemporaryDirectoryScope : IDisposable
     {
         public TemporaryDirectoryScope()

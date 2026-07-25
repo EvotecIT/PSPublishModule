@@ -5,4 +5,5 @@ public sealed record ReleaseBuildExecutionResult(
     bool Succeeded,
     string Summary,
     double DurationSeconds,
-    IReadOnlyList<ReleaseBuildAdapterResult> AdapterResults);
+    IReadOnlyList<ReleaseBuildAdapterResult> AdapterResults,
+    string? UnifiedReleaseStateJson = null);

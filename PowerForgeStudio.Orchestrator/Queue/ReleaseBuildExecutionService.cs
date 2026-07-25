@@ -12,6 +12,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
     private readonly ProjectBuildHostService _projectBuildHostService;
     private readonly ProjectBuildCommandHostService _projectBuildCommandHostService;
     private readonly ModuleBuildHostService _moduleBuildHostService;
+    private readonly Func<string, PowerForgeReleaseResult> _executeUnifiedReleaseBuild;
 
     public ReleaseBuildExecutionService()
         : this(new RepositoryCatalogScanner(), new ProjectBuildHostService(), new ProjectBuildCommandHostService(), new ModuleBuildHostService())
@@ -22,12 +23,14 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         RepositoryCatalogScanner catalogScanner,
         ProjectBuildHostService projectBuildHostService,
         ProjectBuildCommandHostService projectBuildCommandHostService,
-        ModuleBuildHostService moduleBuildHostService)
+        ModuleBuildHostService moduleBuildHostService,
+        Func<string, PowerForgeReleaseResult>? executeUnifiedReleaseBuild = null)
     {
         _catalogScanner = catalogScanner;
         _projectBuildHostService = projectBuildHostService;
         _projectBuildCommandHostService = projectBuildCommandHostService;
         _moduleBuildHostService = moduleBuildHostService;
+        _executeUnifiedReleaseBuild = executeUnifiedReleaseBuild ?? ExecuteUnifiedReleaseBuild;
     }
 
     public async Task<ReleaseBuildExecutionResult> ExecuteAsync(string repositoryRoot, CancellationToken cancellationToken = default)
@@ -47,6 +50,16 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
 
         var results = new List<ReleaseBuildAdapterResult>();
         var startedAt = DateTimeOffset.UtcNow;
+        if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
+        {
+            var unified = _executeUnifiedReleaseBuild(repository.UnifiedReleaseConfigPath!);
+            results.AddRange(CreateUnifiedAdapterResults(repository, unified, DateTimeOffset.UtcNow - startedAt));
+            return ReleaseQueueExecutionResultFactory.CreateBuildResult(
+                repositoryRoot,
+                DateTimeOffset.UtcNow - startedAt,
+                results,
+                JsonSerializer.Serialize(unified));
+        }
 
         if (!string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath))
         {
@@ -62,6 +75,91 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             repositoryRoot,
             DateTimeOffset.UtcNow - startedAt,
             results);
+    }
+
+    private static PowerForgeReleaseResult ExecuteUnifiedReleaseBuild(string configPath)
+    {
+        var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
+        var request = new PowerForgeReleaseRequest {
+            ConfigPath = configPath,
+            PublishNuget = false,
+            PublishProjectGitHub = false,
+            PublishToolGitHub = false,
+            ModuleRunMode = ConfigurationGateMode.Build,
+            ModuleNoSign = true,
+            EnableSigning = false
+        };
+        return new PowerForgeReleaseService(new NullLogger()).Execute(spec, request);
+    }
+
+    private static IReadOnlyList<ReleaseBuildAdapterResult> CreateUnifiedAdapterResults(
+        PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
+        PowerForgeReleaseResult unified,
+        TimeSpan duration)
+    {
+        var results = new List<ReleaseBuildAdapterResult>();
+        if (unified.Packages is not null)
+        {
+            var artifacts = CollectProjectArtifacts(unified.Packages);
+            results.Add(new ReleaseBuildAdapterResult(
+                ReleaseBuildAdapterKind.ProjectBuild,
+                unified.Packages.Success,
+                unified.Packages.Success ? "Unified package lane completed with publishing disabled." : "Unified package lane failed.",
+                unified.Packages.Success ? 0 : 1,
+                Math.Round(duration.TotalSeconds, 2),
+                artifacts.Directories,
+                artifacts.Files,
+                ErrorTail: TrimTail(unified.Packages.ErrorMessage ?? unified.Packages.Result.Release?.ErrorMessage)));
+        }
+
+        if (unified.ModulePlan is not null)
+        {
+            var buildInput = unified.ModulePlan.ConfigPath ?? repository.ModuleBuildScriptPath;
+            var artifacts = !string.IsNullOrWhiteSpace(buildInput)
+                ? CollectModuleArtifacts(repository.RootPath, buildInput!)
+                : CollectExplicitArtifacts(unified.ModuleAssets);
+            var moduleSucceeded = unified.Module?.Succeeded == true;
+            results.Add(new ReleaseBuildAdapterResult(
+                ReleaseBuildAdapterKind.ModuleBuild,
+                moduleSucceeded,
+                moduleSucceeded ? "Unified module lane completed with publishing, signing, and install disabled." : "Unified module lane failed.",
+                moduleSucceeded ? 0 : unified.Module?.ExitCode ?? 1,
+                Math.Round(duration.TotalSeconds, 2),
+                artifacts.Directories,
+                artifacts.Files,
+                OutputTail: TrimTail(unified.Module?.StandardOutput),
+                ErrorTail: TrimTail(unified.Module?.StandardError ?? unified.ErrorMessage)));
+        }
+
+        if (unified.ToolPlan is not null || unified.DotNetToolPlan is not null || unified.Tools is not null || unified.DotNetTools is not null)
+        {
+            var artifacts = CollectToolArtifacts(unified);
+            var toolSucceeded = unified.Tools?.Success ?? unified.DotNetTools?.Succeeded ?? unified.Success;
+            results.Add(new ReleaseBuildAdapterResult(
+                ReleaseBuildAdapterKind.ToolBuild,
+                toolSucceeded,
+                toolSucceeded ? "Unified executable/tool lane completed with publishing disabled." : "Unified executable/tool lane failed.",
+                toolSucceeded ? 0 : 1,
+                Math.Round(duration.TotalSeconds, 2),
+                artifacts.Directories,
+                artifacts.Files,
+                ErrorTail: TrimTail(unified.Tools?.ErrorMessage ?? unified.DotNetTools?.ErrorMessage ?? unified.ErrorMessage)));
+        }
+
+        if (results.Count == 0)
+        {
+            results.Add(new ReleaseBuildAdapterResult(
+                ReleaseBuildAdapterKind.ProjectBuild,
+                false,
+                "Unified release did not produce any build lane.",
+                1,
+                Math.Round(duration.TotalSeconds, 2),
+                [],
+                [],
+                ErrorTail: TrimTail(unified.ErrorMessage)));
+        }
+
+        return results;
     }
 
     private async Task<ReleaseBuildAdapterResult> ExecuteProjectBuildAsync(PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository, CancellationToken cancellationToken)
@@ -190,6 +288,44 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
 
         CollectArtifactFiles(directories, files);
         return new ArtifactCollection(directories.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(), files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
+    private static ArtifactCollection CollectExplicitArtifacts(IEnumerable<string> paths)
+    {
+        var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in paths ?? [])
+        {
+            if (Directory.Exists(path))
+                directories.Add(path);
+            else if (File.Exists(path))
+                files.Add(path);
+        }
+        CollectArtifactFiles(directories, files);
+        return new ArtifactCollection(directories.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(), files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
+    private static ArtifactCollection CollectToolArtifacts(PowerForgeReleaseResult unified)
+    {
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in unified.ReleaseAssetEntries.Where(entry =>
+                     entry.Category is not PowerForgeReleaseAssetCategory.Module and not PowerForgeReleaseAssetCategory.Package))
+        {
+            paths.Add(entry.StagedPath ?? entry.Path);
+        }
+        foreach (var artifact in unified.Tools?.Artefacts ?? [])
+        {
+            paths.Add(artifact.OutputPath);
+            if (!string.IsNullOrWhiteSpace(artifact.ZipPath))
+                paths.Add(artifact.ZipPath!);
+        }
+        foreach (var artifact in unified.DotNetTools?.Artefacts ?? [])
+        {
+            paths.Add(artifact.OutputDir);
+            if (!string.IsNullOrWhiteSpace(artifact.ZipPath))
+                paths.Add(artifact.ZipPath!);
+        }
+        return CollectExplicitArtifacts(paths);
     }
 
     private static void AddModuleArtifactDirectory(string path, ISet<string> directories)

@@ -20,6 +20,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
     private readonly Func<DotNetNuGetPushRequest, CancellationToken, Task<DotNetNuGetPushResult>> _pushNuGetPackageAsync;
     private readonly Func<GitHubReleasePublishRequest, CancellationToken, Task<GitHubReleasePublishResult>> _publishGitHubReleaseAsync;
     private readonly Func<RepositoryPublishRequest, CancellationToken, Task<RepositoryPublishResult>> _publishRepositoryAsync;
+    private readonly Func<string, string, PowerForgeReleaseResult> _publishUnifiedGitHub;
 
     public ReleasePublishExecutionService()
         : this(
@@ -42,7 +43,8 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
         ProjectBuildPublishHostService projectBuildPublishHostService,
         Func<DotNetNuGetPushRequest, CancellationToken, Task<DotNetNuGetPushResult>> pushNuGetPackageAsync,
         Func<GitHubReleasePublishRequest, CancellationToken, Task<GitHubReleasePublishResult>>? publishGitHubReleaseAsync = null,
-        Func<RepositoryPublishRequest, CancellationToken, Task<RepositoryPublishResult>>? publishRepositoryAsync = null)
+        Func<RepositoryPublishRequest, CancellationToken, Task<RepositoryPublishResult>>? publishRepositoryAsync = null,
+        Func<string, string, PowerForgeReleaseResult>? publishUnifiedGitHub = null)
     {
         _catalogScanner = catalogScanner;
         _moduleBuildHostService = moduleBuildHostService;
@@ -52,6 +54,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
         _pushNuGetPackageAsync = pushNuGetPackageAsync;
         _publishGitHubReleaseAsync = publishGitHubReleaseAsync ?? ((request, _) => Task.FromResult(new GitHubReleasePublisher(new NullLogger()).PublishRelease(request)));
         _publishRepositoryAsync = publishRepositoryAsync ?? ((request, _) => Task.FromResult(new RepositoryPublisher(new NullLogger()).Publish(request)));
+        _publishUnifiedGitHub = publishUnifiedGitHub ?? PublishUnifiedGitHub;
     }
 
     public IReadOnlyList<ReleasePublishTarget> BuildPendingTargets(IEnumerable<ReleaseQueueItem> queueItems)
@@ -118,15 +121,21 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
 
         var repository = _catalogScanner.InspectRepository(queueItem.RootPath);
         var receipts = new List<ReleasePublishReceipt>();
+        var unifiedOwnsGitHub = UnifiedReleaseOwnsGitHub(repository.UnifiedReleaseConfigPath);
 
         if (!string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath))
         {
-            receipts.AddRange(await ExecuteProjectPublishAsync(repository, signingResult, cancellationToken));
+            receipts.AddRange(await ExecuteProjectPublishAsync(repository, signingResult, cancellationToken, unifiedOwnsGitHub));
         }
 
         if (!string.IsNullOrWhiteSpace(repository.ModuleBuildScriptPath))
         {
-            receipts.AddRange(await ExecuteModulePublishAsync(repository, signingResult, cancellationToken));
+            receipts.AddRange(await ExecuteModulePublishAsync(repository, signingResult, cancellationToken, unifiedOwnsGitHub));
+        }
+
+        if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
+        {
+            receipts.AddRange(ExecuteUnifiedGitHubPublish(repository, signingResult));
         }
 
         if (receipts.Count == 0)
@@ -136,6 +145,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
 
         return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
     }
+
 }
 
 public sealed partial class ReleasePublishExecutionService
@@ -474,9 +484,20 @@ public sealed partial class ReleasePublishExecutionService
     private async Task<IReadOnlyList<ReleasePublishReceipt>> ExecuteModulePublishAsync(
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
         ReleaseSigningExecutionResult signingResult,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool suppressGitHub)
     {
-        var publishConfigs = await ExportModulePublishConfigsAsync(repository.RootPath, repository.ModuleBuildScriptPath!, cancellationToken);
+        IReadOnlyList<PublishConfiguration> publishConfigs;
+        try
+        {
+            publishConfigs = await ExportModulePublishConfigsAsync(repository.RootPath, repository.ModuleBuildScriptPath!, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return [
+                FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "Module publish configuration", null, FirstLine(ex.Message) ?? "Module publish configuration could not be loaded.")
+            ];
+        }
         if (publishConfigs.Count == 0)
         {
             return [];
@@ -488,6 +509,8 @@ public sealed partial class ReleasePublishExecutionService
         {
             if (publishConfig.Destination == PublishDestination.GitHub)
             {
+                if (suppressGitHub)
+                    continue;
                 receipts.Add(await ExecuteModuleGitHubPublishAsync(repository, publishConfig, packageDetails, cancellationToken));
                 continue;
             }
@@ -620,7 +643,8 @@ public sealed partial class ReleasePublishExecutionService
     private async Task<IReadOnlyList<ReleasePublishReceipt>> ExecuteProjectPublishAsync(
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
         ReleaseSigningExecutionResult signingResult,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool suppressGitHub)
     {
         var scriptPath = repository.ProjectBuildScriptPath!;
         var configPath = RepositoryPlanPreviewService.ResolveProjectConfigPath(scriptPath, repository.RootPath);
@@ -674,7 +698,7 @@ public sealed partial class ReleasePublishExecutionService
             }
         }
 
-        if (config.PublishGitHub)
+        if (config.PublishGitHub && !suppressGitHub)
         {
             receipts.AddRange(await ExecuteProjectGitHubPublishAsync(repository, config, signingResult, cancellationToken));
         }

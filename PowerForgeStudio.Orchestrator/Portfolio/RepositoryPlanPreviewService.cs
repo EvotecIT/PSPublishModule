@@ -10,6 +10,7 @@ public sealed class RepositoryPlanPreviewService
     private readonly ProjectBuildHostService _projectBuildHostService;
     private readonly ProjectBuildCommandHostService _projectBuildCommandHostService;
     private readonly ModuleBuildHostService _moduleBuildHostService;
+    private readonly Func<string, PowerForgeReleaseResult> _planUnifiedRelease;
 
     public RepositoryPlanPreviewService()
         : this(new ProjectBuildHostService(), new ProjectBuildCommandHostService(), new ModuleBuildHostService())
@@ -19,11 +20,13 @@ public sealed class RepositoryPlanPreviewService
     internal RepositoryPlanPreviewService(
         ProjectBuildHostService projectBuildHostService,
         ProjectBuildCommandHostService projectBuildCommandHostService,
-        ModuleBuildHostService moduleBuildHostService)
+        ModuleBuildHostService moduleBuildHostService,
+        Func<string, PowerForgeReleaseResult>? planUnifiedRelease = null)
     {
         _projectBuildHostService = projectBuildHostService;
         _projectBuildCommandHostService = projectBuildCommandHostService;
         _moduleBuildHostService = moduleBuildHostService;
+        _planUnifiedRelease = planUnifiedRelease ?? PlanUnifiedRelease;
     }
 
     public async Task<IReadOnlyList<RepositoryPortfolioItem>> PopulatePlanPreviewAsync(
@@ -56,15 +59,21 @@ public sealed class RepositoryPlanPreviewService
             }
 
             var results = new List<RepositoryPlanResult>();
-            if (!string.IsNullOrWhiteSpace(item.Repository.ModuleBuildScriptPath))
+            if (!string.IsNullOrWhiteSpace(item.Repository.UnifiedReleaseConfigPath))
+            {
+                results.Add(RunUnifiedReleasePlan(item));
+            }
+            else if (!string.IsNullOrWhiteSpace(item.Repository.ModuleBuildScriptPath))
             {
                 results.Add(await RunModulePlanAsync(item, cancellationToken));
-            }
 
-            if (!string.IsNullOrWhiteSpace(item.Repository.ProjectBuildScriptPath))
-            {
-                results.Add(await RunProjectPlanAsync(item, cancellationToken));
+                if (!string.IsNullOrWhiteSpace(item.Repository.ProjectBuildScriptPath))
+                {
+                    results.Add(await RunProjectPlanAsync(item, cancellationToken));
+                }
             }
+            else if (!string.IsNullOrWhiteSpace(item.Repository.ProjectBuildScriptPath))
+                results.Add(await RunProjectPlanAsync(item, cancellationToken));
 
             updated.Add(item with {
                 PlanResults = results
@@ -72,6 +81,50 @@ public sealed class RepositoryPlanPreviewService
         }
 
         return updated;
+    }
+
+    private RepositoryPlanResult RunUnifiedReleasePlan(RepositoryPortfolioItem item)
+    {
+        var startedAt = DateTimeOffset.UtcNow;
+        try
+        {
+            var result = _planUnifiedRelease(item.Repository.UnifiedReleaseConfigPath!);
+            return new RepositoryPlanResult(
+                RepositoryPlanAdapterKind.UnifiedRelease,
+                result.Success ? RepositoryPlanStatus.Succeeded : RepositoryPlanStatus.Failed,
+                result.Success ? "Unified release plan generated." : "Unified release plan failed.",
+                result.Success ? item.Repository.UnifiedReleaseConfigPath : null,
+                result.Success ? 0 : 1,
+                Math.Round((DateTimeOffset.UtcNow - startedAt).TotalSeconds, 2),
+                null,
+                TrimTail(result.ErrorMessage ?? string.Empty));
+        }
+        catch (Exception ex)
+        {
+            return new RepositoryPlanResult(
+                RepositoryPlanAdapterKind.UnifiedRelease,
+                RepositoryPlanStatus.Failed,
+                "Unified release plan failed.",
+                null,
+                1,
+                Math.Round((DateTimeOffset.UtcNow - startedAt).TotalSeconds, 2),
+                null,
+                TrimTail(ex.Message));
+        }
+    }
+
+    private static PowerForgeReleaseResult PlanUnifiedRelease(string configPath)
+    {
+        var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
+        return new PowerForgeReleaseService(new NullLogger()).Execute(
+            spec,
+            new PowerForgeReleaseRequest {
+                ConfigPath = configPath,
+                PlanOnly = true,
+                PublishNuget = false,
+                PublishProjectGitHub = false,
+                PublishToolGitHub = false
+            });
     }
 
     private static int GetPreviewPriority(Domain.Catalog.ReleaseRepositoryKind repositoryKind)

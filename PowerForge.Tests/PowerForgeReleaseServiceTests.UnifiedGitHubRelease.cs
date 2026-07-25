@@ -473,6 +473,66 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void PublishBuiltGitHubReleases_UsesCapturedArtifactsWithoutRebuilding()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var zipPath = Path.Combine(root, "PowerForge-1.0.7-win-x64.zip");
+            File.WriteAllText(zipPath, "zip");
+            var publishCalls = new List<GitHubReleasePublishRequest>();
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages must not rebuild during staged publishing."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools must not replan during staged publishing."),
+                runTools: _ => throw new InvalidOperationException("Tools must not rebuild during staged publishing."),
+                publishGitHubRelease: request =>
+                {
+                    publishCalls.Add(request);
+                    return new GitHubReleasePublishResult {
+                        Succeeded = true,
+                        HtmlUrl = "https://github.com/EvotecIT/PSPublishModule/releases/tag/v1.0.7"
+                    };
+                });
+            var spec = new PowerForgeReleaseSpec {
+                GitHub = new PowerForgeReleaseGitHubOptions {
+                    Publish = true,
+                    VersionSource = PowerForgeReleaseVersionSource.Assets,
+                    Owner = "EvotecIT",
+                    Repository = "PSPublishModule",
+                    Token = "token"
+                }
+            };
+            var built = new PowerForgeReleaseResult {
+                Success = true,
+                ReleaseAssets = [zipPath],
+                ReleaseAssetEntries = [
+                    new PowerForgeReleaseAssetEntry {
+                        Path = zipPath,
+                        Version = "1.0.7",
+                        Category = PowerForgeReleaseAssetCategory.Portable
+                    }
+                ]
+            };
+
+            var result = service.PublishBuiltGitHubReleases(
+                spec,
+                new PowerForgeReleaseRequest {
+                    ConfigPath = Path.Combine(root, "release.json")
+                },
+                built);
+
+            Assert.True(result.Success);
+            Assert.NotNull(result.UnifiedGitHubRelease);
+            Assert.Equal(zipPath, Assert.Single(Assert.Single(publishCalls).AssetFilePaths));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void TargetedToolRelease_DoesNotApplyTheInactiveModuleBuildGateToUnifiedGitHubPublishing()
     {
         var root = CreateSandbox();

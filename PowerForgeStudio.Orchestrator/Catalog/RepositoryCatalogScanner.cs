@@ -77,7 +77,10 @@ public sealed class RepositoryCatalogScanner
             ModuleBuildScriptPath: moduleBuildInput,
             ProjectBuildScriptPath: projectBuildScript,
             IsWorktree: IsWorktree(directoryPath),
-            HasWebsiteSignals: hasWebsiteSignals);
+            HasWebsiteSignals: hasWebsiteSignals,
+            UnifiedReleaseConfigPath: releaseContract?.RequiresUnifiedExecution == true
+                ? releaseContract.ConfigPath
+                : null);
     }
 
     private static ReleaseBuildContract? FindReleaseBuildContract(string directoryPath, bool includeImmediateChildBuildFolders)
@@ -155,16 +158,25 @@ public sealed class RepositoryCatalogScanner
                         var fullPath = Path.GetFullPath(Path.IsPathRooted(configuredPath)
                             ? configuredPath
                             : Path.Combine(repositoryRoot, configuredPath));
-                        if (IsModulePipelineConfig(fullPath))
-                        {
-                            moduleConfigPath = fullPath;
-                        }
+                        // Keep the declared release contract even if the module JSON later becomes
+                        // missing or invalid. Plan/build/publish surfaces must report that failure
+                        // instead of silently downgrading the repository to an unmanaged shape.
+                        moduleConfigPath = fullPath;
                     }
                 }
             }
 
-            return moduleConfigPath is not null || includesPackages
-                ? new ReleaseBuildContract(releaseConfigPath, moduleConfigPath, includesPackages, moduleIncludesPackages)
+            var hasTools = document.RootElement.TryGetProperty("Tools", out var tools) &&
+                           tools.ValueKind == JsonValueKind.Object;
+            var hasGitHub = document.RootElement.TryGetProperty("GitHub", out var gitHub) &&
+                            gitHub.ValueKind == JsonValueKind.Object;
+            return moduleConfigPath is not null || includesPackages || hasTools || hasGitHub
+                ? new ReleaseBuildContract(
+                    releaseConfigPath,
+                    moduleConfigPath,
+                    includesPackages,
+                    moduleIncludesPackages,
+                    RequiresUnifiedExecution: hasTools || hasGitHub)
                 : null;
         }
         catch (Exception ex) when (
@@ -187,7 +199,8 @@ public sealed class RepositoryCatalogScanner
         string ConfigPath,
         string? ModuleConfigPath,
         bool IncludesPackages,
-        bool ModuleIncludesPackages);
+        bool ModuleIncludesPackages,
+        bool RequiresUnifiedExecution);
 
     private static string? FindBuildScript(string directoryPath, string fileName, bool includeImmediateChildBuildFolders)
     {

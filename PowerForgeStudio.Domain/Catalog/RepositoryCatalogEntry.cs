@@ -8,10 +8,11 @@ public sealed record RepositoryCatalogEntry(
     string? ModuleBuildScriptPath,
     string? ProjectBuildScriptPath,
     bool IsWorktree,
-    bool HasWebsiteSignals)
+    bool HasWebsiteSignals,
+    string? UnifiedReleaseConfigPath = null)
 {
-    public bool IsReleaseManaged => ModuleBuildScriptPath is not null || ProjectBuildScriptPath is not null;
+    public bool IsReleaseManaged => UnifiedReleaseConfigPath is not null || ModuleBuildScriptPath is not null || ProjectBuildScriptPath is not null;
 
-    public string? PrimaryBuildScriptPath => ModuleBuildScriptPath ?? ProjectBuildScriptPath;
+    public string? PrimaryBuildScriptPath => UnifiedReleaseConfigPath ?? ModuleBuildScriptPath ?? ProjectBuildScriptPath;
 }
 

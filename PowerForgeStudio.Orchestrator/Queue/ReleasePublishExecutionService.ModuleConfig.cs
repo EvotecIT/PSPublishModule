@@ -12,15 +12,8 @@ public sealed partial class ReleasePublishExecutionService
     {
         if (string.Equals(Path.GetExtension(buildInputPath), ".json", StringComparison.OrdinalIgnoreCase))
         {
-            try
-            {
-                var context = new ModulePipelineConfigurationService().Load(buildInputPath);
-                return new ModulePublishConfigurationReader().Read(context.Spec);
-            }
-            catch
-            {
-                return [];
-            }
+            var context = new ModulePipelineConfigurationService().Load(buildInputPath);
+            return new ModulePublishConfigurationReader().Read(context.Spec);
         }
 
         var repositoryName = Path.GetFileName(repositoryRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
@@ -33,16 +26,10 @@ public sealed partial class ReleasePublishExecutionService
         }, cancellationToken);
         if (execution.ExitCode != 0 || !File.Exists(exportPath))
         {
-            return [];
+            throw new InvalidOperationException(
+                $"Module publish configuration export failed for '{buildInputPath}' (exit {execution.ExitCode}).");
         }
 
-        try
-        {
-            return new ModulePublishConfigurationReader().Read(exportPath);
-        }
-        catch
-        {
-            return [];
-        }
+        return new ModulePublishConfigurationReader().Read(exportPath);
     }
 }

@@ -3,5 +3,6 @@ namespace PowerForgeStudio.Orchestrator.Queue;
 public enum ReleaseBuildAdapterKind
 {
     ProjectBuild = 0,
-    ModuleBuild = 1
+    ModuleBuild = 1,
+    ToolBuild = 2
 }

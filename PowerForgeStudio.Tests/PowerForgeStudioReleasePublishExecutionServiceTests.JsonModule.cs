@@ -140,4 +140,62 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public async Task ExecuteAsync_JsonModuleConfigReloadFailure_ReturnsFailedReceipt()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+        var moduleRoot = Directory.CreateDirectory(Path.Combine(repositoryRoot, "src", "BrokenModule")).FullName;
+        var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+        File.WriteAllText(moduleConfig, """{ "Build": { "Name": "BrokenModule", "SourcePath": "src/BrokenModule" } }""");
+        File.WriteAllText(
+            Path.Combine(buildDirectory, "release.json"),
+            """{ "Module": { "RepositoryRoot": "..", "ConfigPath": "powerforge.json" } }""");
+        var packageDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Artifacts", "Packed", "BrokenModule")).FullName;
+        var signingResult = new ReleaseSigningExecutionResult(
+            repositoryRoot,
+            true,
+            "Signing completed.",
+            null,
+            [
+                new ReleaseSigningReceipt(
+                    repositoryRoot,
+                    "BrokenModule",
+                    ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                    packageDirectory,
+                    "Directory",
+                    ReleaseSigningReceiptStatus.Signed,
+                    "Signed.",
+                    DateTimeOffset.UtcNow)
+            ]);
+        var queueItem = new ReleaseQueueItem(
+            repositoryRoot,
+            "BrokenModule",
+            ReleaseRepositoryKind.Module,
+            ReleaseWorkspaceKind.PrimaryRepository,
+            1,
+            ReleaseQueueStage.Publish,
+            ReleaseQueueItemStatus.ReadyToRun,
+            "Ready.",
+            "publish.ready",
+            JsonSerializer.Serialize(signingResult),
+            DateTimeOffset.UtcNow);
+        File.Delete(moduleConfig);
+
+        try
+        {
+            using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+            var result = await new ReleasePublishExecutionService().ExecuteAsync(queueItem);
+
+            Assert.False(result.Succeeded);
+            var receipt = Assert.Single(result.Receipts);
+            Assert.Equal(ReleasePublishReceiptStatus.Failed, receipt.Status);
+            Assert.Contains("powerforge.json", receipt.Summary, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
 }

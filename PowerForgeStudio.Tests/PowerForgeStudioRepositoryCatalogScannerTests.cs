@@ -87,6 +87,38 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
             PowerForgeStudio.Orchestrator.Portfolio.RepositoryPlanPreviewService.ResolveProjectConfigPath(
                 entry.ProjectBuildScriptPath!,
                 repositoryPath));
+        Assert.Null(entry.UnifiedReleaseConfigPath);
+    }
+
+    [Fact]
+    public void InspectRepository_ToolsAndTopLevelGitHub_RetainsUnifiedReleaseContract()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryPath = scope.CreateRepository("UnifiedToolRepo");
+        var buildPath = Path.Combine(repositoryPath, "Build");
+        File.Delete(Path.Combine(buildPath, "Build-Module.ps1"));
+        var releaseConfig = Path.Combine(buildPath, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "Tools": {
+                "ProjectRoot": "..",
+                "Targets": []
+              },
+              "GitHub": {
+                "Publish": true,
+                "Owner": "EvotecIT",
+                "Repository": "UnifiedToolRepo"
+              }
+            }
+            """);
+
+        var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
+
+        Assert.True(entry.IsReleaseManaged);
+        Assert.Equal(releaseConfig, entry.UnifiedReleaseConfigPath);
+        Assert.Equal(releaseConfig, entry.PrimaryBuildScriptPath);
     }
 
     [Fact]
