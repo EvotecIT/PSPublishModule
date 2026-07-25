@@ -240,7 +240,7 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
     }
 
     /// <summary>Throws when PowerShell has requested cancellation.</summary>
-    internal void ThrowIfStopped()
+    protected internal void ThrowIfStopped()
     {
         if (_cancelSource.IsCancellationRequested)
             throw new PipelineStoppedException();
