@@ -29,6 +29,24 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
               },
               "Segments": [
                 {
+                  "Type": "Information",
+                  "Configuration": {
+                    "IncludeRoot": [ "README.md" ],
+                    "IncludePS1": [ "Commands" ],
+                    "IncludeAll": [ "Assets" ],
+                    "ExcludeFromPackage": [ "Private" ]
+                  }
+                },
+                {
+                  "Type": "Options",
+                  "Options": {
+                    "Delivery": {
+                      "Enable": true,
+                      "InternalsPath": "Payload"
+                    }
+                  }
+                },
+                {
                   "Type": "GalleryNuget",
                   "Configuration": {
                     "Destination": "PowerShellGallery",
@@ -142,6 +160,13 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             Assert.True(result.Succeeded);
             Assert.NotNull(captured);
             Assert.Equal(packageDirectory, captured!.ModulePath);
+            Assert.Equal(moduleRoot, captured.ProjectRoot);
+            var information = Assert.IsType<InformationConfiguration>(captured.Information);
+            Assert.Equal(["README.md"], Assert.IsType<string[]>(information.IncludeRoot));
+            Assert.Equal(["Commands"], Assert.IsType<string[]>(information.IncludePS1));
+            Assert.Equal(["Assets"], Assert.IsType<string[]>(information.IncludeAll));
+            Assert.Equal(["Private"], Assert.IsType<string[]>(information.ExcludeFromPackage));
+            Assert.Equal("Payload", captured.Delivery!.InternalsPath);
             Assert.Equal("gallery-key", ModulePublisher.ResolvePublishApiKey(captured.Publish, captured.ProjectRoot));
             Assert.Equal("PSGallery", captured.Publish.RepositoryName);
             Assert.Equal(ReleasePublishReceiptStatus.Published, Assert.Single(result.Receipts).Status);

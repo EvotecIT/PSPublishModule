@@ -7,6 +7,21 @@ namespace PowerForge.Tests;
 public sealed class ModuleBuildHostServiceTests
 {
     [Fact]
+    public void InvokeModuleBuild_StagingPath_IsAvailableToJsonConfigParameterSet()
+    {
+        var property = typeof(PSPublishModule.InvokeModuleBuildCommand)
+            .GetProperty(nameof(PSPublishModule.InvokeModuleBuildCommand.StagingPath));
+        Assert.NotNull(property);
+        var parameterSets = property!
+            .GetCustomAttributes(typeof(System.Management.Automation.ParameterAttribute), inherit: false)
+            .Cast<System.Management.Automation.ParameterAttribute>()
+            .Select(attribute => attribute.ParameterSetName)
+            .ToArray();
+
+        Assert.Contains("Config", parameterSets);
+    }
+
+    [Fact]
     public async Task ExecuteBuildAsync_InvokesJsonConfigDirectly()
     {
         PowerShellRunRequest? captured = null;

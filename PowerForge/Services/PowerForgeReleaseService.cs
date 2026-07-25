@@ -662,13 +662,19 @@ internal sealed partial class PowerForgeReleaseService
         }
         if (applePlan is not null)
         {
-            if (!request.PlanOnly && !request.ValidateOnly && !request.CheckpointAppleApps)
+            if (!request.PlanOnly &&
+                !request.ValidateOnly &&
+                (!request.CheckpointAppleApps || applePlan.Archive))
             {
                 var cleanup = new PowerForgeAppleReleaseCleanupReceipt();
                 PowerForgeAppleAppReleaseResult[] appleResults;
                 try
                 {
-                    if (applePlan.Action == PowerForgeAppleReleaseAction.Cleanup)
+                    if (request.CheckpointAppleApps)
+                    {
+                        appleResults = RunAppleArchiveCheckpoint(applePlan, out cleanup);
+                    }
+                    else if (applePlan.Action == PowerForgeAppleReleaseAction.Cleanup)
                     {
                         cleanup = _appleArtifactService.RemoveStaleArtifacts(applePlan);
                         appleResults = applePlan.Apps
@@ -699,8 +705,9 @@ internal sealed partial class PowerForgeReleaseService
                         .ToArray();
                 }
                 result.AppleApps = appleResults;
-                if (applePlan.Action != PowerForgeAppleReleaseAction.Configured ||
-                    appleResults.Any(static app => !app.Success))
+                if (!request.CheckpointAppleApps &&
+                    (applePlan.Action != PowerForgeAppleReleaseAction.Configured ||
+                     appleResults.Any(static app => !app.Success)))
                     result.AppleReceipt = CompleteAppleReleaseReceipt(applePlan, appleResults, cleanup);
 
                 var failure = appleResults.FirstOrDefault(entry => !entry.Success);
@@ -1949,6 +1956,36 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         return plan.Apps.Select(app => resultsByApp[app]).ToArray();
+    }
+
+    private PowerForgeAppleAppReleaseResult[] RunAppleArchiveCheckpoint(
+        PowerForgeAppleReleasePlan plan,
+        out PowerForgeAppleReleaseCleanupReceipt cleanup)
+    {
+        var checkpointPlan = new PowerForgeAppleReleasePlan
+        {
+            ProjectRoot = plan.ProjectRoot,
+            Configuration = plan.Configuration,
+            Action = PowerForgeAppleReleaseAction.Archive,
+            Automation = new PowerForgeAppleReleaseAutomationOptions(),
+            ReceiptPath = plan.ReceiptPath,
+            Archive = true,
+            Upload = false,
+            XcodeBuildExecutable = plan.XcodeBuildExecutable,
+            AllowProvisioningUpdates = plan.AllowProvisioningUpdates,
+            ManageAppVersionAndBuildNumber = plan.ManageAppVersionAndBuildNumber,
+            UploadSymbols = plan.UploadSymbols,
+            GenerateAppStoreInformation = plan.GenerateAppStoreInformation,
+            SigningStyle = plan.SigningStyle,
+            AppStoreConnectApiKeyPath = plan.AppStoreConnectApiKeyPath,
+            AppStoreConnectApiKeyId = plan.AppStoreConnectApiKeyId,
+            AppStoreConnectApiIssuerId = plan.AppStoreConnectApiIssuerId,
+            Apps = plan.Apps
+        };
+        var results = RunAppleRelease(checkpointPlan, out cleanup);
+        if (results.All(static app => app.Success))
+            plan.Archive = false;
+        return results;
     }
 
     private static PowerForgeAppleAppReleaseResult[] CompleteAppleExecutionFailure(

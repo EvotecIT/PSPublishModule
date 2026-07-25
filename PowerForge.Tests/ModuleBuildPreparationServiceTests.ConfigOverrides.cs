@@ -33,6 +33,7 @@ public sealed partial class ModuleBuildPreparationServiceTests
                 }
                 """);
             var baselinePath = Path.Combine(root.FullName, ".powerforge", "override.json");
+            var stagingPath = Path.Combine(root.FullName, ".powerforge", "approved-staging");
 
             var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
             {
@@ -42,6 +43,7 @@ public sealed partial class ModuleBuildPreparationServiceTests
                 ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
                 UnifiedGitHubRelease = true,
                 SkipInstall = true,
+                StagingPath = Path.Combine(".powerforge", "approved-staging"),
                 DiagnosticsBaselinePath = baselinePath,
                 DiagnosticsBaselinePathWasBound = true,
                 GenerateDiagnosticsBaseline = false,
@@ -55,6 +57,7 @@ public sealed partial class ModuleBuildPreparationServiceTests
             });
 
             Assert.Equal(baselinePath, prepared.PipelineSpec.Diagnostics.BaselinePath);
+            Assert.Equal(stagingPath, prepared.PipelineSpec.Build.StagingPath);
             Assert.False(prepared.PipelineSpec.Install.Enabled);
             Assert.False(prepared.PipelineSpec.Diagnostics.GenerateBaseline);
             Assert.True(prepared.PipelineSpec.Diagnostics.UpdateBaseline);

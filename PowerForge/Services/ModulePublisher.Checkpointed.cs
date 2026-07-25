@@ -48,7 +48,7 @@ public sealed partial class ModulePublisher
             includeScriptFolders: true);
     }
 
-    private static ModulePipelinePlan CreateCheckpointedPublishPlan(
+    internal static ModulePipelinePlan CreateCheckpointedPublishPlan(
         ModuleCheckpointPublishRequest request)
         => new(
             moduleName: request.ModuleName,
@@ -71,9 +71,9 @@ public sealed partial class ModulePublisher
             requiredModules: [],
             externalModuleDependencies: [],
             requiredModulesForPackaging: [],
-            information: null,
+            information: request.Information,
             documentation: null,
-            delivery: null,
+            delivery: request.Delivery,
             documentationBuild: null,
             compatibilitySettings: null,
             fileConsistencySettings: null,
@@ -138,4 +138,8 @@ internal sealed class ModuleCheckpointPublishRequest
     internal string? PreRelease { get; set; }
 
     internal string ModulePath { get; set; } = string.Empty;
+
+    internal InformationConfiguration? Information { get; set; }
+
+    internal DeliveryOptionsConfiguration? Delivery { get; set; }
 }

@@ -186,7 +186,12 @@ public sealed partial class ReleasePublishExecutionService
                 continue;
             }
 
-            receipts.Add(await ExecuteModuleRepositoryPublishAsync(repository, publishConfig, packageDetails, cancellationToken));
+            receipts.Add(await ExecuteModuleRepositoryPublishAsync(
+                repository,
+                publishConfig,
+                publishSet.Context,
+                packageDetails,
+                cancellationToken));
         }
 
         return receipts;
@@ -195,6 +200,7 @@ public sealed partial class ReleasePublishExecutionService
     private async Task<ReleasePublishReceipt> ExecuteModuleRepositoryPublishAsync(
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
         PublishConfiguration publishConfig,
+        ModulePipelineConfigurationContext? moduleContext,
         ModulePackageDetails? packageDetails,
         CancellationToken cancellationToken)
     {
@@ -207,14 +213,24 @@ public sealed partial class ReleasePublishExecutionService
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var information = (moduleContext?.Spec.Segments ?? [])
+                .OfType<ConfigurationInformationSegment>()
+                .Select(segment => segment.Configuration)
+                .LastOrDefault(configuration => configuration is not null);
+            var delivery = (moduleContext?.Spec.Segments ?? [])
+                .OfType<ConfigurationOptionsSegment>()
+                .Select(segment => segment.Options?.Delivery)
+                .LastOrDefault(configuration => configuration is { Enable: true });
             var publishResult = await _publishCheckpointedModuleAsync(
                 new ModuleCheckpointPublishRequest {
                     Publish = publishConfig,
-                    ProjectRoot = repository.RootPath,
+                    ProjectRoot = moduleContext?.ProjectRoot ?? repository.RootPath,
                     ModuleName = packageDetails.ModuleName,
                     ModuleVersion = packageDetails.Version,
                     PreRelease = packageDetails.PreRelease,
-                    ModulePath = packageDetails.PackagePath
+                    ModulePath = packageDetails.PackagePath,
+                    Information = information,
+                    Delivery = delivery
                 },
                 cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();

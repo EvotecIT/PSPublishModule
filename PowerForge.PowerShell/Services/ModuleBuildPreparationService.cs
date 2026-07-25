@@ -164,6 +164,9 @@ internal sealed class ModuleBuildPreparationService
         spec.Diagnostics ??= new ModulePipelineDiagnosticsOptions();
         spec.Install ??= new ModulePipelineInstallOptions();
 
+        if (!string.IsNullOrWhiteSpace(request.StagingPath))
+            spec.Build.StagingPath = request.ResolvePath!(request.StagingPath!);
+
         if (request.SkipInstall)
             spec.Install.Enabled = false;
 

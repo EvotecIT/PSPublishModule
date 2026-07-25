@@ -330,6 +330,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
 
     /// <summary>Staging directory for the PowerForge pipeline. When omitted, a temporary folder is generated.</summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
     public string? StagingPath { get; set; }
 
     /// <summary>Optional path to a .NET project (.csproj) to publish into the module.</summary>
