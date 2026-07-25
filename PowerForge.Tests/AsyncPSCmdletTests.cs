@@ -150,6 +150,27 @@ public sealed class AsyncPSCmdletTests
         Assert.False(TestAsyncTerminatingErrorCommand.ReachedAfterTermination);
     }
 
+    [Fact]
+    public void AsyncPSCmdlet_preserves_terminating_errors_before_the_initial_base_hook()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncEarlyTerminatingError",
+            typeof(TestAsyncEarlyTerminatingErrorCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncEarlyTerminatingError");
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => powerShell.Invoke());
+
+        Assert.StartsWith("EarlyTerminatingError,", exception.ErrorRecord.FullyQualifiedErrorId, StringComparison.Ordinal);
+        Assert.Equal("early terminating failure", exception.InnerException?.Message);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -215,6 +236,31 @@ public sealed class AsyncPSCmdletTests
         TestAsyncLateWriteCommand.WriteAfterCompletion();
 
         Assert.Null(TestAsyncLateWriteCommand.LateWriteException);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_rejects_late_worker_interactions_after_the_pipeline_closes()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncLateInteraction",
+            typeof(TestAsyncLateInteractionCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncLateInteraction");
+        TestAsyncLateInteractionCommand.Reset();
+
+        powerShell.Invoke();
+        TestAsyncLateInteractionCommand.InteractAfterCompletion();
+
+        Assert.True(
+            TestAsyncLateInteractionCommand.LateInteractionException is
+                InvalidOperationException or PipelineStoppedException,
+            $"Unexpected late-interaction result: {TestAsyncLateInteractionCommand.LateInteractionException}");
     }
 
     [Fact]
@@ -372,7 +418,8 @@ public sealed class TestAsyncTaskSchedulerCommand : AsyncPSCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        Assert.Same(_scheduler, TaskScheduler.Current);
+        Assert.Same(TaskScheduler.Default, TaskScheduler.Current);
+        await Task.Factory.StartNew(static () => { });
         await Task.Yield();
         WriteObject(_scheduler.QueuedTaskCount);
     }
@@ -421,6 +468,17 @@ public sealed class TestAsyncTerminatingErrorCommand : AsyncPSCmdlet
     }
 }
 
+[Cmdlet(VerbsDiagnostic.Test, "AsyncEarlyTerminatingError")]
+public sealed class TestAsyncEarlyTerminatingErrorCommand : AsyncPSCmdlet
+{
+    protected override void BeginProcessing()
+        => ThrowTerminatingError(new ErrorRecord(
+            new InvalidOperationException("early terminating failure"),
+            "EarlyTerminatingError",
+            ErrorCategory.InvalidOperation,
+            targetObject: null));
+}
+
 [Cmdlet(VerbsDiagnostic.Test, "AsyncShouldContinue")]
 public sealed class TestAsyncShouldContinueCommand : AsyncPSCmdlet
 {
@@ -465,6 +523,39 @@ public sealed class TestAsyncLateWriteCommand : AsyncPSCmdlet
             LateWriteException = exception;
         }
     }
+
+    protected override Task ProcessRecordAsync()
+    {
+        _instance = this;
+        return Task.CompletedTask;
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncLateInteraction", SupportsShouldProcess = true)]
+public sealed class TestAsyncLateInteractionCommand : AsyncPSCmdlet
+{
+    private static TestAsyncLateInteractionCommand? _instance;
+
+    public static Exception? LateInteractionException { get; private set; }
+
+    public static void Reset()
+    {
+        _instance = null;
+        LateInteractionException = null;
+    }
+
+    public static void InteractAfterCompletion()
+        => Task.Run(() =>
+        {
+            try
+            {
+                _instance!.ShouldProcess("late-target");
+            }
+            catch (Exception exception)
+            {
+                LateInteractionException = exception;
+            }
+        }).GetAwaiter().GetResult();
 
     protected override Task ProcessRecordAsync()
     {
