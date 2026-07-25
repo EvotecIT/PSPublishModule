@@ -50,6 +50,14 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
 
         var results = new List<ReleaseBuildAdapterResult>();
         var startedAt = DateTimeOffset.UtcNow;
+        var directModuleConfigPath =
+            string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath) &&
+            string.Equals(Path.GetExtension(repository.ModuleBuildScriptPath), ".json", StringComparison.OrdinalIgnoreCase)
+                ? repository.ModuleBuildScriptPath
+                : null;
+        var directModuleConfigFingerprint = !string.IsNullOrWhiteSpace(directModuleConfigPath)
+            ? UnifiedReleaseConfigFingerprint.ComputeModuleConfig(directModuleConfigPath!)
+            : null;
         if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
         {
             var configPath = repository.UnifiedReleaseConfigPath!;
@@ -87,10 +95,21 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             results.Add(await ExecuteModuleBuildAsync(repository, cancellationToken));
         }
 
+        if (!string.IsNullOrWhiteSpace(directModuleConfigPath))
+        {
+            var completedFingerprint = UnifiedReleaseConfigFingerprint.ComputeModuleConfig(directModuleConfigPath!);
+            if (!string.Equals(directModuleConfigFingerprint, completedFingerprint, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Module build configuration changed while the build was running. Rebuild from the updated contract before signing.");
+            }
+        }
+
         return ReleaseQueueExecutionResultFactory.CreateBuildResult(
             repositoryRoot,
             DateTimeOffset.UtcNow - startedAt,
-            results);
+            results,
+            moduleBuildConfigSha256: directModuleConfigFingerprint);
     }
 
     internal static PowerForgeReleaseRequest CreateUnifiedReleaseBuildRequest(string configPath, string moduleHostPath)

@@ -16,8 +16,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
     {
         var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
         var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+        var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
         File.WriteAllText(
-            Path.Combine(repositoryRoot, "powerforge.json"),
+            moduleConfig,
             """
             {
               "SchemaVersion": 1,
@@ -53,11 +54,18 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 ModuleVersion = '1.2.3'
             }
             """);
+        var buildResult = new ReleaseBuildExecutionResult(
+            repositoryRoot,
+            true,
+            "Build completed.",
+            1,
+            [],
+            ModuleBuildConfigSha256: UnifiedReleaseConfigFingerprint.ComputeModuleConfig(moduleConfig));
         var signingResult = new ReleaseSigningExecutionResult(
             RootPath: repositoryRoot,
             Succeeded: true,
             Summary: "Signing completed.",
-            SourceCheckpointStateJson: null,
+            SourceCheckpointStateJson: JsonSerializer.Serialize(buildResult),
             Receipts: [
                 new ReleaseSigningReceipt(
                     RootPath: repositoryRoot,

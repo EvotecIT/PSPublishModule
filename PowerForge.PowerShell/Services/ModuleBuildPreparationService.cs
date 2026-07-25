@@ -159,7 +159,8 @@ internal sealed class ModuleBuildPreparationService
         var manifest = segments.OfType<ConfigurationManifestSegment>().LastOrDefault();
         var libraryBuilds = segments.OfType<ConfigurationBuildLibrariesSegment>().ToArray();
         var moduleBuilds = segments.OfType<ConfigurationBuildSegment>().ToArray();
-        var options = segments.OfType<ConfigurationOptionsSegment>().LastOrDefault();
+        var optionSegments = segments.OfType<ConfigurationOptionsSegment>().ToArray();
+        var options = optionSegments.LastOrDefault();
         spec.Diagnostics ??= new ModulePipelineDiagnosticsOptions();
         spec.Install ??= new ModulePipelineInstallOptions();
 
@@ -198,7 +199,17 @@ internal sealed class ModuleBuildPreparationService
         if (request.NoDotnetBuildWasBound)
             spec.Build.SkipDotNetBuild = request.NoDotnetBuild;
 
-        var signingOverride = request.NoSignWasBound && request.NoSign
+        var hardNoSign = request.NoSignWasBound && request.NoSign;
+        if (hardNoSign)
+        {
+            foreach (var optionSegment in optionSegments)
+            {
+                if (optionSegment.Options.Delivery is not null)
+                    optionSegment.Options.Delivery.Sign = false;
+            }
+        }
+
+        var signingOverride = hardNoSign
             ? false
             : request.SignModuleWasBound
                 ? request.SignModule

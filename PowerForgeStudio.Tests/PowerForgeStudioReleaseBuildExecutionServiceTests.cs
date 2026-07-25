@@ -119,6 +119,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         var result = await service.ExecuteAsync(repositoryRoot);
 
         Assert.True(result.Succeeded);
+        Assert.False(string.IsNullOrWhiteSpace(result.ModuleBuildConfigSha256));
         var adapter = Assert.Single(result.AdapterResults);
         Assert.Equal(ReleaseBuildAdapterKind.ModuleBuild, adapter.AdapterKind);
         Assert.NotNull(captured);

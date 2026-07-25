@@ -49,7 +49,7 @@ internal sealed partial class PowerForgeReleaseService
     private readonly ILogger _logger;
     private readonly Func<ProjectBuildHostRequest, ProjectBuildConfiguration, string, ProjectBuildHostExecutionResult> _executePackages;
     private readonly Func<PowerForgeToolReleaseSpec, string, PowerForgeReleaseRequest, PowerForgeToolReleasePlan> _planTools;
-    private readonly Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, PowerForgeToolReleaseResult> _runTools;
+    private readonly Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, CancellationToken, PowerForgeToolReleaseResult> _runTools;
     private readonly Func<PowerForgeToolReleaseSpec, string, (DotNetPublishSpec Spec, string SourceConfigPath)> _loadDotNetToolsSpec;
     private readonly Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, ISet<PowerForgeReleaseToolOutputKind>, DotNetPublishPlan> _planDotNetTools;
     private readonly Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult> _runDotNetTools;
@@ -98,6 +98,8 @@ internal sealed partial class PowerForgeReleaseService
             null,
             runToolsWithProgress: (plan, progress) =>
                 new PowerForgeToolReleaseService(logger).Run(plan, progress),
+            runToolsWithProgressAndCancellation: (plan, progress, cancellationToken) =>
+                new PowerForgeToolReleaseService(logger).Run(plan, progress, cancellationToken),
             runDotNetToolsWithProgressAndCancellation: (plan, progress, cancellationToken) =>
                 new DotNetPublishPipelineRunner(logger).Run(plan, progress, cancellationToken))
     {
@@ -149,14 +151,18 @@ internal sealed partial class PowerForgeReleaseService
         AppleReleaseArtifactService? appleArtifactService = null,
         Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, PowerForgeToolReleaseResult>? runToolsWithProgress = null,
         Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, DotNetPublishResult>? runDotNetToolsWithProgress = null,
-        Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult>? runDotNetToolsWithProgressAndCancellation = null)
+        Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult>? runDotNetToolsWithProgressAndCancellation = null,
+        Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, CancellationToken, PowerForgeToolReleaseResult>? runToolsWithProgressAndCancellation = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
         _planTools = planTools ?? throw new ArgumentNullException(nameof(planTools));
         if (runTools is null)
             throw new ArgumentNullException(nameof(runTools));
-        _runTools = runToolsWithProgress ?? ((plan, _) => runTools(plan));
+        _runTools = runToolsWithProgressAndCancellation
+            ?? (runToolsWithProgress is not null
+                ? (plan, progress, _) => runToolsWithProgress(plan, progress)
+                : (plan, _, _) => runTools(plan));
         _loadDotNetToolsSpec = loadDotNetToolsSpec ?? throw new ArgumentNullException(nameof(loadDotNetToolsSpec));
         _planDotNetTools = planDotNetTools ?? throw new ArgumentNullException(nameof(planDotNetTools));
         if (runDotNetTools is null)
@@ -565,7 +571,8 @@ internal sealed partial class PowerForgeReleaseService
                         request.CancellationToken.ThrowIfCancellationRequested();
                         var tools = _runTools(
                             toolPlan,
-                            request.Progress as IPowerForgeReleaseProgressReporterV2);
+                            request.Progress as IPowerForgeReleaseProgressReporterV2,
+                            request.CancellationToken);
                         request.CancellationToken.ThrowIfCancellationRequested();
                         result.Tools = tools;
                         if (!tools.Success)

@@ -23,16 +23,7 @@ internal static class UnifiedReleaseConfigFingerprint
             var moduleInput = UnifiedReleaseModuleInputResolver.Resolve(fullPath, spec.Module);
             if (!string.IsNullOrWhiteSpace(moduleInput.ConfigPath))
             {
-                AppendFile(hash, "module", moduleInput.ConfigPath!);
-                var moduleContext = new ModulePipelineConfigurationService().Load(moduleInput.ConfigPath!);
-                for (var index = 0; index < moduleContext.PackageConfigurationPaths.Length; index++)
-                {
-                    AppendFile(
-                        hash,
-                        $"module-package:{index}",
-                        moduleContext.PackageConfigurationPaths[index]);
-                }
-
+                AppendModuleConfigInputs(hash, moduleInput.ConfigPath!);
             }
             else
             {
@@ -41,6 +32,15 @@ internal static class UnifiedReleaseConfigFingerprint
         }
 
         AppendApplePublicationInputs(hash, fullPath, spec.AppleApps);
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
+    internal static string ComputeModuleConfig(string configPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(configPath);
+        var fullPath = Path.GetFullPath(configPath);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        AppendModuleConfigInputs(hash, fullPath);
         return Convert.ToHexString(hash.GetHashAndReset());
     }
 
@@ -57,6 +57,35 @@ internal static class UnifiedReleaseConfigFingerprint
         {
             throw new InvalidOperationException(
                 "Unified release config changed after the build checkpoint. Rebuild and approve the updated contract before publishing.");
+        }
+    }
+
+    internal static void ValidateModuleConfig(string configPath, string? expectedSha256)
+    {
+        if (string.IsNullOrWhiteSpace(expectedSha256))
+        {
+            throw new InvalidOperationException(
+                "Module build config fingerprint is missing from the build checkpoint. Rebuild before publishing.");
+        }
+
+        var actualSha256 = ComputeModuleConfig(configPath);
+        if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Module build config changed after the build checkpoint. Rebuild and approve the updated contract before publishing.");
+        }
+    }
+
+    private static void AppendModuleConfigInputs(IncrementalHash hash, string configPath)
+    {
+        AppendFile(hash, "module", configPath);
+        var moduleContext = new ModulePipelineConfigurationService().Load(configPath);
+        for (var index = 0; index < moduleContext.PackageConfigurationPaths.Length; index++)
+        {
+            AppendFile(
+                hash,
+                $"module-package:{index}",
+                moduleContext.PackageConfigurationPaths[index]);
         }
     }
 

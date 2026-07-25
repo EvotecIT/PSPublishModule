@@ -202,6 +202,27 @@ public sealed class PowerForgeToolReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void RunProcess_cancellation_terminates_the_child_process()
+    {
+        var startInfo = OperatingSystem.IsWindows()
+            ? new ProcessStartInfo("cmd.exe", "/d /s /c \"ping -n 31 127.0.0.1 > nul\"")
+            : new ProcessStartInfo("/bin/sh", "-c \"sleep 30\"");
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+        startInfo.UseShellExecute = false;
+        startInfo.CreateNoWindow = true;
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+        var stopwatch = Stopwatch.StartNew();
+
+        Assert.ThrowsAny<OperationCanceledException>(
+            () => PowerForgeToolReleaseService.RunProcess(startInfo, cancellation.Token));
+
+        Assert.True(
+            stopwatch.Elapsed < TimeSpan.FromSeconds(5),
+            $"Cancellation took {stopwatch.Elapsed}.");
+    }
+
     private sealed class RecordingReleaseProgress : IPowerForgeReleaseProgressReporterV2
     {
         public List<PowerForgeReleaseProgressItem> Planned { get; } = new();

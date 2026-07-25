@@ -8,10 +8,10 @@ namespace PowerForge;
 /// <summary>
 /// Builds downloadable runtime-specific tool executables from a typed configuration.
 /// </summary>
-internal sealed class PowerForgeToolReleaseService
+internal sealed partial class PowerForgeToolReleaseService
 {
     private readonly ILogger _logger;
-    private readonly Func<ProcessStartInfo, ProcessExecutionResult> _runProcess;
+    private readonly Func<ProcessStartInfo, CancellationToken, ProcessExecutionResult> _runProcess;
 
     /// <summary>
     /// Creates a new tool release service.
@@ -24,6 +24,13 @@ internal sealed class PowerForgeToolReleaseService
     internal PowerForgeToolReleaseService(
         ILogger logger,
         Func<ProcessStartInfo, ProcessExecutionResult> runProcess)
+        : this(logger, (startInfo, _) => runProcess(startInfo))
+    {
+    }
+
+    internal PowerForgeToolReleaseService(
+        ILogger logger,
+        Func<ProcessStartInfo, CancellationToken, ProcessExecutionResult> runProcess)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _runProcess = runProcess ?? throw new ArgumentNullException(nameof(runProcess));
@@ -221,7 +228,8 @@ internal sealed class PowerForgeToolReleaseService
     /// </summary>
     public PowerForgeToolReleaseResult Run(
         PowerForgeToolReleasePlan plan,
-        IPowerForgeReleaseProgressReporterV2? progress = null)
+        IPowerForgeReleaseProgressReporterV2? progress = null,
+        CancellationToken cancellationToken = default)
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
@@ -236,17 +244,19 @@ internal sealed class PowerForgeToolReleaseService
             var targets = plan.Targets ?? Array.Empty<PowerForgeToolReleaseTargetPlan>();
             for (var targetIndex = 0; targetIndex < targets.Length; targetIndex++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var target = targets[targetIndex];
                 var targetArtefacts = new List<PowerForgeToolReleaseArtifactResult>();
                 foreach (var combination in target.Combinations ?? Array.Empty<PowerForgeToolReleaseCombinationPlan>())
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var progressKey = BuildProgressKey(target, combination, targetIndex);
                     progressItems.TryGetValue(progressKey, out var progressItem);
                     if (progressItem is not null)
                         progress?.ItemUpdated(progressItem, PowerForgeReleaseProgressItemState.Started);
                     try
                     {
-                        targetArtefacts.Add(PublishOne(plan, target, combination));
+                        targetArtefacts.Add(PublishOne(plan, target, combination, cancellationToken));
                         if (progressItem is not null)
                             progress?.ItemUpdated(progressItem, PowerForgeReleaseProgressItemState.Completed);
                     }
@@ -268,6 +278,10 @@ internal sealed class PowerForgeToolReleaseService
                 Artefacts = artefacts.ToArray(),
                 ManifestPaths = manifests.ToArray()
             };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -314,7 +328,8 @@ internal sealed class PowerForgeToolReleaseService
     private PowerForgeToolReleaseArtifactResult PublishOne(
         PowerForgeToolReleasePlan plan,
         PowerForgeToolReleaseTargetPlan target,
-        PowerForgeToolReleaseCombinationPlan combination)
+        PowerForgeToolReleaseCombinationPlan combination,
+        CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(target.ArtifactRootPath);
 
@@ -333,7 +348,7 @@ internal sealed class PowerForgeToolReleaseService
                 ClearDirectory(combination.OutputPath);
 
             Directory.CreateDirectory(publishDir);
-            ExecutePublish(plan, target, combination, publishDir);
+            ExecutePublish(plan, target, combination, publishDir, cancellationToken);
             ApplyCleanup(publishDir, target);
             var executablePath = RenameMainExecutable(target, publishDir, combination.Runtime);
 
@@ -430,7 +445,8 @@ internal sealed class PowerForgeToolReleaseService
         PowerForgeToolReleasePlan plan,
         PowerForgeToolReleaseTargetPlan target,
         PowerForgeToolReleaseCombinationPlan combination,
-        string publishDir)
+        string publishDir,
+        CancellationToken cancellationToken)
     {
         var projectName = Path.GetFileNameWithoutExtension(target.ProjectPath) ?? target.Name;
         _logger.Info($"Publishing {target.Name} {target.Version} ({combination.Framework}, {combination.Runtime}, {combination.Flavor})");
@@ -483,7 +499,8 @@ internal sealed class PowerForgeToolReleaseService
 
         psi.Arguments = string.Join(" ", args);
 
-        var processResult = _runProcess(psi);
+        var processResult = _runProcess(psi, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         if (processResult.ExitCode != 0)
         {
             throw new InvalidOperationException(
@@ -709,32 +726,6 @@ internal sealed class PowerForgeToolReleaseService
         return (files.Length, total);
     }
 
-    private static ProcessExecutionResult RunProcess(ProcessStartInfo startInfo)
-    {
-        using var process = Process.Start(startInfo);
-        if (process is null)
-            return new ProcessExecutionResult(1, string.Empty, "Failed to start process.");
-
-        var stdOutTask = process.StandardOutput.ReadToEndAsync();
-        var stdErrTask = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
-        return new ProcessExecutionResult(
-            process.ExitCode,
-            stdOutTask.GetAwaiter().GetResult(),
-            stdErrTask.GetAwaiter().GetResult());
-    }
-
-    private static string TrimForMessage(string? stdErr, string? stdOut)
-    {
-        var combined = string.Join(
-            Environment.NewLine,
-            new[] { stdErr?.Trim(), stdOut?.Trim() }.Where(text => !string.IsNullOrWhiteSpace(text)));
-        if (combined.Length <= 3000)
-            return combined;
-
-        return combined.Substring(0, 3000) + "...";
-    }
-
     private static string Quote(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -745,19 +736,4 @@ internal sealed class PowerForgeToolReleaseService
             : value;
     }
 
-    internal struct ProcessExecutionResult
-    {
-        public ProcessExecutionResult(int exitCode, string stdOut, string stdErr)
-        {
-            ExitCode = exitCode;
-            StdOut = stdOut ?? string.Empty;
-            StdErr = stdErr ?? string.Empty;
-        }
-
-        public int ExitCode { get; }
-
-        public string StdOut { get; }
-
-        public string StdErr { get; }
-    }
 }

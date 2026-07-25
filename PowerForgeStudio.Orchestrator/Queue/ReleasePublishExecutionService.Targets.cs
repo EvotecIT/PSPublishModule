@@ -2,6 +2,7 @@ using PowerForge;
 using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Signing;
+using PowerForgeStudio.Domain.Catalog;
 using PowerForgeStudio.Orchestrator.Catalog;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
@@ -15,6 +16,21 @@ public sealed partial class ReleasePublishExecutionService
         var targets = new List<ReleasePublishTarget>();
         var repository = _catalogScanner.InspectRepository(item.RootPath);
         var receipts = signingResult.Receipts ?? [];
+        var directModuleConfigFailure = ValidateDirectModuleConfigCheckpoint(repository, signingResult);
+        if (!string.IsNullOrWhiteSpace(directModuleConfigFailure))
+        {
+            return [
+                new ReleasePublishTarget(
+                    RootPath: item.RootPath,
+                    RepositoryName: item.RepositoryName,
+                    AdapterKind: ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                    TargetName: "Module build contract",
+                    TargetKind: "ConfigurationError",
+                    SourcePath: repository.ModuleBuildScriptPath,
+                    Destination: directModuleConfigFailure)
+            ];
+        }
+
         var unifiedSpec = !string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath)
             ? TryLoadUnifiedReleaseSpec(repository.UnifiedReleaseConfigPath!)
             : null;
@@ -103,6 +119,31 @@ public sealed partial class ReleasePublishExecutionService
         }
 
         return targets;
+    }
+
+    private string? ValidateDirectModuleConfigCheckpoint(
+        RepositoryCatalogEntry repository,
+        ReleaseSigningExecutionResult signingResult)
+    {
+        if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath) ||
+            !string.Equals(Path.GetExtension(repository.ModuleBuildScriptPath), ".json", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        try
+        {
+            var buildResult = _checkpointSerializer.TryDeserialize<ReleaseBuildExecutionResult>(
+                signingResult.SourceCheckpointStateJson);
+            UnifiedReleaseConfigFingerprint.ValidateModuleConfig(
+                repository.ModuleBuildScriptPath!,
+                buildResult?.ModuleBuildConfigSha256);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return FirstLine(ex.Message) ?? "Module build config checkpoint validation failed.";
+        }
     }
 
     private static PowerForgeReleaseSpec? TryLoadUnifiedReleaseSpec(string configPath)

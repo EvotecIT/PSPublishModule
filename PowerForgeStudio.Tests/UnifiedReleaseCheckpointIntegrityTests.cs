@@ -80,6 +80,66 @@ public sealed class UnifiedReleaseCheckpointIntegrityTests
         Assert.Contains("changed after the build checkpoint", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void BuildPendingTargets_rejects_direct_module_config_drift()
+    {
+        using var scope = new TestDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("DirectModuleDriftRepo");
+        scope.CreateDirectory(Path.Combine("DirectModuleDriftRepo", "Module"));
+        var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+        File.WriteAllText(
+            moduleConfig,
+            """
+            {
+              "Build": { "Name": "DirectModuleDriftRepo", "SourcePath": "Module" },
+              "Segments": [
+                {
+                  "Type": "GalleryNuget",
+                  "Configuration": { "Destination": "PowerShellGallery", "Enabled": true }
+                }
+              ]
+            }
+            """);
+        var build = new ReleaseBuildExecutionResult(
+            repositoryRoot,
+            true,
+            "Build completed.",
+            1,
+            [],
+            ModuleBuildConfigSha256: UnifiedReleaseConfigFingerprint.ComputeModuleConfig(moduleConfig));
+        var signing = new ReleaseSigningExecutionResult(
+            repositoryRoot,
+            true,
+            "Signing completed.",
+            JsonSerializer.Serialize(build),
+            []);
+        File.WriteAllText(
+            moduleConfig,
+            """
+            {
+              "Build": { "Name": "DirectModuleDriftRepo", "SourcePath": "Module" },
+              "Segments": []
+            }
+            """);
+        var queueItem = new ReleaseQueueItem(
+            repositoryRoot,
+            "DirectModuleDriftRepo",
+            ReleaseRepositoryKind.Module,
+            ReleaseWorkspaceKind.PrimaryRepository,
+            1,
+            ReleaseQueueStage.Publish,
+            ReleaseQueueItemStatus.ReadyToRun,
+            "Ready.",
+            "publish.ready",
+            JsonSerializer.Serialize(signing),
+            DateTimeOffset.UtcNow);
+
+        var target = Assert.Single(new ReleasePublishExecutionService().BuildPendingTargets([queueItem]));
+
+        Assert.Equal("ConfigurationError", target.TargetKind);
+        Assert.Contains("changed after the build checkpoint", target.Destination, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData(null, "Module/Build/Build-Module.ps1")]
     [InlineData("Scripts/Build-CustomModule.ps1", "Scripts/Build-CustomModule.ps1")]

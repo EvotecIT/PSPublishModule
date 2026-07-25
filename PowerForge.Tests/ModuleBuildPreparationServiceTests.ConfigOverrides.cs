@@ -68,4 +68,55 @@ public sealed partial class ModuleBuildPreparationServiceTests
             try { root.Delete(recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void Prepare_from_config_explicit_no_sign_disables_delivery_signing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-config-nosign-" + Guid.NewGuid().ToString("N")));
+        var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+        var configPath = Path.Combine(root.FullName, "powerforge.json");
+        File.WriteAllText(Path.Combine(moduleRoot.FullName, "Sample.psd1"), "@{ RootModule = 'Sample.psm1'; ModuleVersion = '1.0.0' }");
+        File.WriteAllText(Path.Combine(moduleRoot.FullName, "Sample.psm1"), string.Empty);
+        File.WriteAllText(
+            configPath,
+            """
+            {
+              "Build": { "Name": "Sample", "SourcePath": "Module", "Version": "1.0.0" },
+              "Segments": [
+                {
+                  "Type": "Build",
+                  "BuildModule": { "SignMerged": true }
+                },
+                {
+                  "Type": "Options",
+                  "Options": {
+                    "Delivery": { "Enable": true, "Sign": true }
+                  }
+                }
+              ]
+            }
+            """);
+
+        try
+        {
+            var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
+            {
+                ParameterSetName = "Config",
+                ConfigPath = configPath,
+                CurrentPath = root.FullName,
+                ResolvePath = path => path,
+                NoSign = true,
+                NoSignWasBound = true
+            });
+
+            var delivery = Assert.Single(prepared.PipelineSpec.Segments.OfType<ConfigurationOptionsSegment>()).Options.Delivery;
+            Assert.NotNull(delivery);
+            Assert.False(delivery!.Sign);
+            Assert.False(new ModulePipelineRunner(new NullLogger()).Plan(prepared.PipelineSpec).SignModule);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
 }
