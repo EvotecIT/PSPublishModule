@@ -450,6 +450,27 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
         Assert.Equal(releaseConfig, entry.PrimaryBuildScriptPath);
     }
 
+    [Fact]
+    public void InspectRepository_ExplicitModuleScriptPath_UsesDeclaredScript()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryPath = scope.CreateRepository("ScriptReleaseRepo");
+        File.Delete(Path.Combine(repositoryPath, "Build", "Build-Module.ps1"));
+        var scriptsDirectory = Directory.CreateDirectory(Path.Combine(repositoryPath, "Scripts")).FullName;
+        var scriptPath = Path.Combine(scriptsDirectory, "Build-CustomModule.ps1");
+        File.WriteAllText(scriptPath, "# script-backed module contract");
+        var releaseConfig = Path.Combine(repositoryPath, "Build", "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """{ "Module": { "RepositoryRoot": "..", "ScriptPath": "Scripts/Build-CustomModule.ps1" } }""");
+
+        var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
+
+        Assert.Equal(scriptPath, entry.ModuleBuildScriptPath);
+        Assert.Equal(releaseConfig, entry.UnifiedReleaseConfigPath);
+        Assert.Equal(releaseConfig, entry.PrimaryBuildScriptPath);
+    }
+
     private sealed class TemporaryDirectoryScope : IDisposable
     {
         public TemporaryDirectoryScope()

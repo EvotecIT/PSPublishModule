@@ -80,6 +80,33 @@ public sealed class UnifiedReleaseCheckpointIntegrityTests
         Assert.Contains("changed after the build checkpoint", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(null, "Module/Build/Build-Module.ps1")]
+    [InlineData("Scripts/Build-CustomModule.ps1", "Scripts/Build-CustomModule.ps1")]
+    public void Fingerprint_changes_when_script_backed_module_contract_changes(
+        string? configuredScriptPath,
+        string relativeScriptPath)
+    {
+        using var scope = new TestDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ScriptFingerprintRepo");
+        var buildRoot = scope.CreateDirectory(Path.Combine("ScriptFingerprintRepo", "Build"));
+        var scriptPath = Path.Combine(repositoryRoot, relativeScriptPath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(scriptPath)!);
+        File.WriteAllText(scriptPath, "# original module publish contract");
+        var releaseConfig = Path.Combine(buildRoot, "release.json");
+        var moduleJson = configuredScriptPath is null
+            ? """{ "RepositoryRoot": ".." }"""
+            : $$"""{ "RepositoryRoot": "..", "ScriptPath": "{{configuredScriptPath}}" }""";
+        File.WriteAllText(releaseConfig, $$"""{ "Module": {{moduleJson}} }""");
+
+        var fingerprint = UnifiedReleaseConfigFingerprint.Compute(releaseConfig);
+        File.WriteAllText(scriptPath, "# changed module publish contract");
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => UnifiedReleaseConfigFingerprint.Validate(releaseConfig, fingerprint));
+        Assert.Contains("changed after the build checkpoint", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Fingerprint_changes_when_apple_metadata_input_changes()
     {
@@ -310,6 +337,46 @@ public sealed class UnifiedReleaseCheckpointIntegrityTests
             ]);
 
         Assert.Empty(new ReleasePublishExecutionService().BuildPendingTargets([queueItem]));
+    }
+
+    [Fact]
+    public void BuildPendingTargets_preserves_script_backed_module_publish_target()
+    {
+        using var scope = new TestDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ScriptModuleRepo");
+        var moduleOutput = scope.CreateDirectory(Path.Combine("ScriptModuleRepo", "Artifacts", "Module"));
+        var scriptsRoot = scope.CreateDirectory(Path.Combine("ScriptModuleRepo", "Scripts"));
+        var buildRoot = scope.CreateDirectory(Path.Combine("ScriptModuleRepo", "Build"));
+        File.WriteAllText(Path.Combine(moduleOutput, "ScriptModuleRepo.psd1"), "@{ ModuleVersion = '1.0.0' }");
+        var scriptPath = Path.Combine(scriptsRoot, "Build-CustomModule.ps1");
+        File.WriteAllText(scriptPath, "# script-backed module contract");
+        var releaseConfig = Path.Combine(buildRoot, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """{ "Module": { "RepositoryRoot": "..", "ScriptPath": "Scripts/Build-CustomModule.ps1" } }""");
+        var queueItem = CreatePublishQueueItem(
+            repositoryRoot,
+            "ScriptModuleRepo",
+            releaseConfig,
+            new PowerForgeReleaseResult {
+                Success = true,
+                ConfigPath = releaseConfig
+            },
+            [
+                ReleaseSigningArtifactIntegrity.Capture(new ReleaseSigningReceipt(
+                    repositoryRoot,
+                    "ScriptModuleRepo",
+                    ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                    moduleOutput,
+                    "Directory",
+                    ReleaseSigningReceiptStatus.Signed,
+                    "Signed.",
+                    DateTimeOffset.UtcNow))
+            ]);
+
+        var target = Assert.Single(new ReleasePublishExecutionService().BuildPendingTargets([queueItem]));
+
+        Assert.Equal("PowerShellRepository", target.TargetKind);
     }
 
     [Fact]

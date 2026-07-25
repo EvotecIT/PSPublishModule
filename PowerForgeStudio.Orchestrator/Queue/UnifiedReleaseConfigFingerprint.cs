@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using PowerForge;
+using PowerForgeStudio.Orchestrator.Catalog;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
@@ -17,32 +18,25 @@ internal static class UnifiedReleaseConfigFingerprint
         AppendFile(hash, "release", fullPath);
 
         var spec = PowerForgeReleaseService.LoadConfiguration(fullPath);
-        if (!string.IsNullOrWhiteSpace(spec.Module?.ConfigPath))
+        if (spec.Module is not null)
         {
-            var releaseDirectory = Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory();
-            var repositoryRoot = string.IsNullOrWhiteSpace(spec.Module.RepositoryRoot)
-                ? releaseDirectory
-                : Path.IsPathRooted(spec.Module.RepositoryRoot)
-                    ? Path.GetFullPath(spec.Module.RepositoryRoot)
-                    : Path.GetFullPath(Path.Combine(releaseDirectory, spec.Module.RepositoryRoot));
-            var moduleConfigPath = Path.IsPathRooted(spec.Module.ConfigPath)
-                ? Path.GetFullPath(spec.Module.ConfigPath)
-                : Path.GetFullPath(Path.Combine(repositoryRoot, spec.Module.ConfigPath));
-            if (!File.Exists(moduleConfigPath))
+            var moduleInput = UnifiedReleaseModuleInputResolver.Resolve(fullPath, spec.Module);
+            if (!string.IsNullOrWhiteSpace(moduleInput.ConfigPath))
             {
-                throw new FileNotFoundException(
-                    $"Module configuration referenced by the unified release was not found: {moduleConfigPath}",
-                    moduleConfigPath);
-            }
+                AppendFile(hash, "module", moduleInput.ConfigPath!);
+                var moduleContext = new ModulePipelineConfigurationService().Load(moduleInput.ConfigPath!);
+                for (var index = 0; index < moduleContext.PackageConfigurationPaths.Length; index++)
+                {
+                    AppendFile(
+                        hash,
+                        $"module-package:{index}",
+                        moduleContext.PackageConfigurationPaths[index]);
+                }
 
-            AppendFile(hash, "module", moduleConfigPath);
-            var moduleContext = new ModulePipelineConfigurationService().Load(moduleConfigPath);
-            for (var index = 0; index < moduleContext.PackageConfigurationPaths.Length; index++)
+            }
+            else
             {
-                AppendFile(
-                    hash,
-                    $"module-package:{index}",
-                    moduleContext.PackageConfigurationPaths[index]);
+                AppendFile(hash, "module-script", moduleInput.ScriptPath!);
             }
         }
 

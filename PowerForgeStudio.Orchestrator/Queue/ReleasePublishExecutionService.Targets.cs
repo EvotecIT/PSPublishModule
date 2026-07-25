@@ -2,6 +2,7 @@ using PowerForge;
 using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Signing;
+using PowerForgeStudio.Orchestrator.Catalog;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
@@ -177,15 +178,13 @@ public sealed partial class ReleasePublishExecutionService
         PowerForgeReleaseSpec spec,
         PublishDestination destination)
     {
-        if (string.IsNullOrWhiteSpace(spec.Module?.ConfigPath))
+        if (spec.Module is null)
             return false;
+        if (string.IsNullOrWhiteSpace(spec.Module.ConfigPath))
+            return true;
 
-        var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
-        var repositoryRoot = string.IsNullOrWhiteSpace(spec.Module.RepositoryRoot)
-            ? releaseDirectory
-            : PathTokenProtection.GetFullPath(releaseDirectory, spec.Module.RepositoryRoot!);
-        var moduleConfigPath = PathTokenProtection.GetFullPath(repositoryRoot, spec.Module.ConfigPath!);
-        var context = new ModulePipelineConfigurationService().Load(moduleConfigPath);
+        var moduleInput = UnifiedReleaseModuleInputResolver.Resolve(releaseConfigPath, spec.Module);
+        var context = new ModulePipelineConfigurationService().Load(moduleInput.ConfigPath!);
         return (context.Spec.Segments ?? [])
             .OfType<ConfigurationPublishSegment>()
             .Any(segment =>

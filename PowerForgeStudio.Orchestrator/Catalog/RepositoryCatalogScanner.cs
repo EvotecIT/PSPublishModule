@@ -54,15 +54,15 @@ public sealed class RepositoryCatalogScanner
     {
         var moduleBuildScript = FindBuildScript(directoryPath, "Build-Module.ps1", includeImmediateChildBuildFolders);
         var releaseContract = FindReleaseBuildContract(directoryPath, includeImmediateChildBuildFolders);
-        var releaseModuleBuildConfig = releaseContract?.ModuleConfigPath;
-        var moduleBuildConfig = releaseModuleBuildConfig ?? (moduleBuildScript is null
+        var releaseModuleBuildInput = releaseContract?.ModuleBuildInputPath;
+        var discoveredModuleBuildInput = releaseModuleBuildInput ?? (moduleBuildScript is null
             ? FindDirectModuleBuildConfig(directoryPath)
             : null);
-        var moduleBuildInput = moduleBuildConfig ?? moduleBuildScript;
+        var moduleBuildInput = discoveredModuleBuildInput ?? moduleBuildScript;
         var projectBuildScript = releaseContract?.IncludesPackages == true &&
                                  !releaseContract.ModuleIncludesPackages
             ? releaseContract.ConfigPath
-            : releaseModuleBuildConfig is null
+            : releaseModuleBuildInput is null
                 ? FindBuildScript(directoryPath, "Build-Project.ps1", includeImmediateChildBuildFolders)
                 : null;
         var hasWebsiteSignals = HasWebsiteSignals(directoryPath);
@@ -154,7 +154,7 @@ public sealed class RepositoryCatalogScanner
                 new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
             var includesPackages = TryGetPropertyIgnoreCase(document.RootElement, "Packages", out var packages) &&
                                    packages.ValueKind == JsonValueKind.Object;
-            string? moduleConfigPath = null;
+            string? moduleBuildInputPath = null;
             var moduleIncludesPackages = false;
             var hasModule = TryGetPropertyIgnoreCase(document.RootElement, "Module", out var module) &&
                             module.ValueKind == JsonValueKind.Object;
@@ -162,28 +162,18 @@ public sealed class RepositoryCatalogScanner
             {
                 moduleIncludesPackages = TryGetPropertyIgnoreCase(module, "IncludesPackages", out var includesPackagesElement) &&
                                          includesPackagesElement.ValueKind == JsonValueKind.True;
+                var moduleOptions = new PowerForgeModuleReleaseOptions();
+                if (TryGetPropertyIgnoreCase(module, "RepositoryRoot", out var rootElement))
+                    moduleOptions.RepositoryRoot = rootElement.GetString();
                 if (TryGetPropertyIgnoreCase(module, "ConfigPath", out var configPathElement))
-                {
-                    var configuredPath = configPathElement.GetString();
-                    if (!string.IsNullOrWhiteSpace(configuredPath))
-                    {
-                        var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
-                        var repositoryRoot = releaseDirectory;
-                        if (TryGetPropertyIgnoreCase(module, "RepositoryRoot", out var rootElement) &&
-                            !string.IsNullOrWhiteSpace(rootElement.GetString()))
-                        {
-                            repositoryRoot = Path.GetFullPath(Path.Combine(releaseDirectory, rootElement.GetString()!));
-                        }
-
-                        var fullPath = Path.GetFullPath(Path.IsPathRooted(configuredPath)
-                            ? configuredPath
-                            : Path.Combine(repositoryRoot, configuredPath));
-                        // Keep the declared release contract even if the module JSON later becomes
-                        // missing or invalid. Plan/build/publish surfaces must report that failure
-                        // instead of silently downgrading the repository to an unmanaged shape.
-                        moduleConfigPath = fullPath;
-                    }
-                }
+                    moduleOptions.ConfigPath = configPathElement.GetString();
+                if (TryGetPropertyIgnoreCase(module, "ScriptPath", out var scriptPathElement))
+                    moduleOptions.ScriptPath = scriptPathElement.GetString();
+                var moduleInput = UnifiedReleaseModuleInputResolver.Resolve(releaseConfigPath, moduleOptions);
+                // Keep the declared release contract even if its module input later
+                // becomes missing or invalid. Plan/build/publish must report that
+                // failure instead of silently downgrading to an unmanaged shape.
+                moduleBuildInputPath = moduleInput.ConfigPath ?? moduleInput.ScriptPath;
             }
 
             var hasTools = TryGetPropertyIgnoreCase(document.RootElement, "Tools", out var tools) &&
@@ -199,7 +189,7 @@ public sealed class RepositoryCatalogScanner
             return hasModule || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps
                 ? new ReleaseBuildContract(
                     releaseConfigPath,
-                    moduleConfigPath,
+                    moduleBuildInputPath,
                     includesPackages,
                     moduleIncludesPackages,
                     RequiresUnifiedExecution: hasModule || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps)
@@ -217,7 +207,7 @@ public sealed class RepositoryCatalogScanner
             // silently falling back to incomplete module/project adapters.
             return new ReleaseBuildContract(
                 releaseConfigPath,
-                ModuleConfigPath: null,
+                ModuleBuildInputPath: null,
                 IncludesPackages: false,
                 ModuleIncludesPackages: false,
                 RequiresUnifiedExecution: true);
@@ -252,7 +242,7 @@ public sealed class RepositoryCatalogScanner
 
     private sealed record ReleaseBuildContract(
         string ConfigPath,
-        string? ModuleConfigPath,
+        string? ModuleBuildInputPath,
         bool IncludesPackages,
         bool ModuleIncludesPackages,
         bool RequiresUnifiedExecution);
