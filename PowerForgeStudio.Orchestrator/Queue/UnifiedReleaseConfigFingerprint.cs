@@ -45,16 +45,6 @@ internal static class UnifiedReleaseConfigFingerprint
         return Convert.ToHexString(hash.GetHashAndReset());
     }
 
-    internal static string ComputeModulePublishConfigurations(
-        IEnumerable<PublishConfiguration> configurations)
-    {
-        ArgumentNullException.ThrowIfNull(configurations);
-        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        var payload = JsonSerializer.SerializeToUtf8Bytes(configurations.ToArray());
-        hash.AppendData(payload);
-        return Convert.ToHexString(hash.GetHashAndReset());
-    }
-
     internal static void Validate(string configPath, string? expectedSha256)
     {
         if (string.IsNullOrWhiteSpace(expectedSha256))

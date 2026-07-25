@@ -41,29 +41,34 @@ public sealed partial class ReleasePublishExecutionService
             buildResult.ModuleBuildConfigSha256);
     }
 
-    private void ValidateModulePublishConfigurationCheckpoint(
+    private void ValidateModuleExportedConfigurationCheckpoint(
         ReleaseSigningExecutionResult signingResult,
-        IReadOnlyList<PublishConfiguration> configurations)
+        ModulePublishConfigurationSet publishSet)
     {
         var buildResult = _checkpointSerializer.TryDeserialize<ReleaseBuildExecutionResult>(
             signingResult.SourceCheckpointStateJson);
         var unified = ReadUnifiedReleaseCheckpoint(signingResult);
         if (string.IsNullOrWhiteSpace(unified?.ModulePlan?.ScriptPath))
             return;
-        if (string.IsNullOrWhiteSpace(buildResult?.ModulePublishConfigSha256))
+        if (string.IsNullOrWhiteSpace(buildResult?.ModuleExportedConfigSha256))
         {
             throw new InvalidOperationException(
-                "Script-backed module publish configuration fingerprint is missing from the build checkpoint. Rebuild before publishing.");
+                "Script-backed exported module configuration fingerprint is missing from the build checkpoint. Rebuild before publishing.");
         }
+        if (string.IsNullOrWhiteSpace(publishSet.ExportedConfigPath) ||
+            !File.Exists(publishSet.ExportedConfigPath))
+            throw new InvalidOperationException(
+                "Script-backed exported module configuration is unavailable for checkpoint validation.");
 
-        var actual = UnifiedReleaseConfigFingerprint.ComputeModulePublishConfigurations(configurations);
+        var actual = UnifiedReleaseConfigFingerprint.ComputeModuleConfig(
+            publishSet.ExportedConfigPath);
         if (!string.Equals(
                 actual,
-                buildResult.ModulePublishConfigSha256,
+                buildResult.ModuleExportedConfigSha256,
                 StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                "Script-backed module publish configuration changed after the build checkpoint. Rebuild and approve the updated contract before publishing.");
+                "Script-backed exported module configuration changed after the build checkpoint. Rebuild and approve the updated contract before publishing.");
         }
     }
 
@@ -77,7 +82,8 @@ public sealed partial class ReleasePublishExecutionService
             var context = new ModulePipelineConfigurationService().Load(buildInputPath);
             return new ModulePublishConfigurationSet(
                 new ModulePublishConfigurationReader().Read(context.Spec),
-                context);
+                context,
+                buildInputPath);
         }
 
         var repositoryName = Path.GetFileName(repositoryRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
@@ -98,10 +104,14 @@ public sealed partial class ReleasePublishExecutionService
         var exportedPipelineContext = new ModulePipelineConfigurationService().TryLoad(exportPath, out var exportedContext)
             ? exportedContext
             : null;
-        return new ModulePublishConfigurationSet(configurations, exportedPipelineContext);
+        return new ModulePublishConfigurationSet(
+            configurations,
+            exportedPipelineContext,
+            exportPath);
     }
 
     private sealed record ModulePublishConfigurationSet(
         IReadOnlyList<PublishConfiguration> Configurations,
-        ModulePipelineConfigurationContext? Context);
+        ModulePipelineConfigurationContext? Context,
+        string? ExportedConfigPath);
 }

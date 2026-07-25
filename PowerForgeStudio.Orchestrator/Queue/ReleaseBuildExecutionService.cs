@@ -69,8 +69,8 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             var unified = await Task.Run(
                 () => _executeUnifiedReleaseBuild(configPath, unifiedRequest),
                 cancellationToken).ConfigureAwait(false);
-            var modulePublishConfigFingerprint =
-                await CaptureScriptModulePublishConfigFingerprintAsync(
+            var moduleExportedConfigFingerprint =
+                await CaptureScriptModuleExportedConfigFingerprintAsync(
                     repository,
                     unified,
                     cancellationToken).ConfigureAwait(false);
@@ -88,7 +88,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 results,
                 SerializeUnifiedCheckpoint(unified),
                 configFingerprint,
-                modulePublishConfigSha256: modulePublishConfigFingerprint);
+                moduleExportedConfigSha256: moduleExportedConfigFingerprint);
         }
 
         if (!string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath))
@@ -542,7 +542,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         }
     }
 
-    private async Task<string?> CaptureScriptModulePublishConfigFingerprintAsync(
+    private async Task<string?> CaptureScriptModuleExportedConfigFingerprintAsync(
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
         PowerForgeReleaseResult unified,
         CancellationToken cancellationToken)
@@ -553,7 +553,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
 
         var outputPath = PowerForgeStudioHostPaths.GetRuntimeFilePath(
             repository.Name,
-            "module-publish-checkpoint",
+            "module-publish",
             "powerforge.publish.json");
         try
         {
@@ -571,8 +571,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                     $"Module publish configuration checkpoint export failed for '{scriptPath}' (exit {execution.ExitCode}).");
             }
 
-            var configurations = new ModulePublishConfigurationReader().Read(outputPath);
-            return UnifiedReleaseConfigFingerprint.ComputeModulePublishConfigurations(configurations);
+            return UnifiedReleaseConfigFingerprint.ComputeModuleConfig(outputPath);
         }
         finally
         {

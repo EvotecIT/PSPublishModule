@@ -13,7 +13,7 @@ namespace PowerForgeStudio.Tests;
 public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
 {
     [Fact]
-    public async Task ExecuteAsync_rejects_changed_script_exported_publish_configuration()
+    public async Task ExecuteAsync_rejects_changed_script_exported_artifact_mapping()
     {
         var repositoryRoot = Directory.CreateDirectory(Path.Combine(
             Path.GetTempPath(),
@@ -35,14 +35,36 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 Path.Combine(packageDirectory, "Sample.psd1"),
                 "@{ RootModule = 'Sample.psm1'; ModuleVersion = '1.0.0' }");
 
-            var approvedConfigurations = new[]
-            {
-                new PublishConfiguration {
-                    Destination = PublishDestination.PowerShellGallery,
-                    Enabled = true,
-                    RepositoryName = "PSGallery"
+            var approvedExportPath = Path.Combine(repositoryRoot, "approved.powerforge.json");
+            File.WriteAllText(
+                approvedExportPath,
+                """
+                {
+                  "Build": {
+                    "Name": "Sample",
+                    "SourcePath": "."
+                  },
+                  "Segments": [
+                    {
+                      "Type": "Packed",
+                      "ArtefactType": "Packed",
+                      "Configuration": {
+                        "Enabled": true,
+                        "Path": "Artifacts/Packed/Approved",
+                        "ID": "ToGitHub"
+                      }
+                    },
+                    {
+                      "Type": "GalleryNuget",
+                      "Configuration": {
+                        "Destination": "PowerShellGallery",
+                        "Enabled": true,
+                        "RepositoryName": "PSGallery"
+                      }
+                    }
+                  ]
                 }
-            };
+                """);
             var unified = new PowerForgeReleaseResult {
                 Success = true,
                 ConfigPath = releaseConfig,
@@ -60,9 +82,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 [],
                 UnifiedReleaseStateJson: JsonSerializer.Serialize(unified),
                 UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig),
-                ModulePublishConfigSha256:
-                    UnifiedReleaseConfigFingerprint.ComputeModulePublishConfigurations(
-                        approvedConfigurations));
+                ModuleExportedConfigSha256:
+                    UnifiedReleaseConfigFingerprint.ComputeModuleConfig(
+                        approvedExportPath));
             var signingResult = new ReleaseSigningExecutionResult(
                 repositoryRoot,
                 true,
@@ -105,13 +127,26 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     match.Groups[1].Value,
                     """
                     {
+                      "Build": {
+                        "Name": "Sample",
+                        "SourcePath": "."
+                      },
                       "Segments": [
+                        {
+                          "Type": "Packed",
+                          "ArtefactType": "Packed",
+                          "Configuration": {
+                            "Enabled": true,
+                            "Path": "Artifacts/Packed/Changed",
+                            "ID": "ToGitHub"
+                          }
+                        },
                         {
                           "Type": "GalleryNuget",
                           "Configuration": {
                             "Destination": "PowerShellGallery",
                             "Enabled": true,
-                            "RepositoryName": "ChangedRepository"
+                            "RepositoryName": "PSGallery"
                           }
                         }
                       ]
@@ -152,7 +187,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             Assert.Equal(0, modulePublishCalls);
             var failure = Assert.Single(result.Receipts);
             Assert.Contains(
-                "publish configuration changed after the build checkpoint",
+                "exported module configuration changed after the build checkpoint",
                 failure.Summary,
                 StringComparison.OrdinalIgnoreCase);
         }

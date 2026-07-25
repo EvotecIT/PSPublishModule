@@ -7,7 +7,7 @@ namespace PowerForgeStudio.Tests;
 public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 {
     [Fact]
-    public async Task ExecuteAsync_checkpoints_script_exported_module_publish_configuration()
+    public async Task ExecuteAsync_checkpoints_complete_script_exported_module_configuration()
     {
         using var scope = new TemporaryDirectoryScope();
         var repositoryRoot = scope.CreateDirectory("ScriptModuleRepo");
@@ -18,14 +18,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         File.WriteAllText(
             releaseConfig,
             """{ "Module": { "RepositoryRoot": "..", "ScriptPath": "Build-Module.ps1" } }""");
-        var expectedConfigurations = new[]
-        {
-            new PublishConfiguration {
-                Destination = PublishDestination.PowerShellGallery,
-                Enabled = true,
-                RepositoryName = "PSGallery"
-            }
-        };
+        string? expectedFingerprint = null;
         var moduleHost = new ModuleBuildHostService(new CapturingPowerShellRunner(request =>
         {
             var marker = "$targetJson = '";
@@ -39,7 +32,20 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                 outputPath,
                 """
                 {
+                  "Build": {
+                    "Name": "Sample",
+                    "SourcePath": "."
+                  },
                   "Segments": [
+                    {
+                      "Type": "Packed",
+                      "ArtefactType": "Packed",
+                      "Configuration": {
+                        "Enabled": true,
+                        "Path": "Artifacts/Packed",
+                        "ID": "ToGitHub"
+                      }
+                    },
                     {
                       "Type": "GalleryNuget",
                       "Configuration": {
@@ -51,6 +57,8 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                   ]
                 }
                 """);
+            expectedFingerprint =
+                UnifiedReleaseConfigFingerprint.ComputeModuleConfig(outputPath);
             return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh");
         }));
         var service = new ReleaseBuildExecutionService(
@@ -71,10 +79,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         var result = await service.ExecuteAsync(repositoryRoot);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(
-            UnifiedReleaseConfigFingerprint.ComputeModulePublishConfigurations(
-                expectedConfigurations),
-            result.ModulePublishConfigSha256);
+        Assert.Equal(expectedFingerprint, result.ModuleExportedConfigSha256);
     }
 
     [Fact]

@@ -7052,7 +7052,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 psi.ArgumentList.Add("/c");
             psi.ArgumentList.Add(tempScript);
 
-            var result = method!.Invoke(null, new object?[] { psi });
+            var result = method!.Invoke(null, new object?[] { psi, CancellationToken.None });
             Assert.NotNull(result);
 
             var exitCode = (int)result.GetType().GetProperty("ExitCode")!.GetValue(result)!;

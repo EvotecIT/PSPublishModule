@@ -152,7 +152,8 @@ internal sealed partial class PowerForgeReleaseService
         Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, PowerForgeToolReleaseResult>? runToolsWithProgress = null,
         Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, DotNetPublishResult>? runDotNetToolsWithProgress = null,
         Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult>? runDotNetToolsWithProgressAndCancellation = null,
-        Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, CancellationToken, PowerForgeToolReleaseResult>? runToolsWithProgressAndCancellation = null)
+        Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, CancellationToken, PowerForgeToolReleaseResult>? runToolsWithProgressAndCancellation = null,
+        Func<ModuleBuildHostBuildRequest, CancellationToken, ModuleBuildHostExecutionResult>? executeModuleBuild = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
@@ -185,6 +186,11 @@ internal sealed partial class PowerForgeReleaseService
         _generateAppleProject = generateAppleProject ?? (app => new AppleProjectGenerationService().Generate(app));
         _delay = delay ?? Thread.Sleep;
         _appleArtifactService = appleArtifactService ?? new AppleReleaseArtifactService();
+        _executeModuleBuild = executeModuleBuild
+            ?? ((moduleRequest, cancellationToken) => new ModuleBuildHostService()
+                .ExecuteBuildAsync(moduleRequest, cancellationToken)
+                .GetAwaiter()
+                .GetResult());
     }
 
     /// <summary>
@@ -338,6 +344,7 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         var coordinateModuleAndPackageVersions = ShouldCoordinateModuleAndPackageVersions(spec, runModule, runPackages);
+        ModuleBuildHostBuildRequest? deferredModulePublishRequest = null;
         if (coordinateModuleAndPackageVersions)
         {
             var versionFloor = ResolveCoordinatedModuleVersionFloor(spec.Module!, configPath, request);
@@ -389,13 +396,24 @@ internal sealed partial class PowerForgeReleaseService
                 publishUnifiedGitHub);
             result.ModulePlan = module.Plan;
             result.ModuleAssets = module.ArtifactPaths;
+            var deferModulePublishing = ShouldDeferModulePublishing(
+                module.Request,
+                request,
+                runPackages,
+                willRunTools,
+                willRunAppleApps);
+            if (deferModulePublishing)
+                deferredModulePublishRequest = module.Request;
 
             if (!request.PlanOnly && !request.ValidateOnly)
             {
-                var moduleResult = new ModuleBuildHostService()
-                    .ExecuteBuildAsync(module.Request, request.CancellationToken)
-                    .GetAwaiter()
-                    .GetResult();
+                var moduleResult = deferModulePublishing
+                    ? ExecuteModuleRequest(
+                        module.Request,
+                        ConfigurationGateMode.Build,
+                        includeModulePublishing: false,
+                        cancellationToken: request.CancellationToken)
+                    : _executeModuleBuild(module.Request, request.CancellationToken);
                 result.Module = moduleResult;
                 if (!moduleResult.Succeeded)
                 {
@@ -689,6 +707,43 @@ internal sealed partial class PowerForgeReleaseService
                     return result;
                 }
             }
+        }
+
+        if (deferredModulePublishRequest is not null &&
+            !request.PlanOnly &&
+            !request.ValidateOnly)
+        {
+            request.Progress?.PhaseStarted(
+                PowerForgeReleaseProgressPhase.Module,
+                1,
+                "Publishing the checkpointed PowerShell module after prerequisite lanes");
+            var modulePublication = ExecuteModuleRequest(
+                deferredModulePublishRequest,
+                ConfigurationGateMode.Publish,
+                includeModulePublishing: true,
+                noDotnetBuild: true,
+                skipInstall: true,
+                includeProjectPackages: false,
+                cancellationToken: request.CancellationToken);
+            result.ModulePublication = modulePublication;
+            if (!modulePublication.Succeeded)
+            {
+                var moduleSource = deferredModulePublishRequest.ConfigPath
+                    ?? deferredModulePublishRequest.ScriptPath
+                    ?? "module publish";
+                request.Progress?.PhaseFailed(
+                    PowerForgeReleaseProgressPhase.Module,
+                    BuildModuleFailureMessage(moduleSource, modulePublication));
+                result.Success = false;
+                result.ErrorMessage = BuildModuleFailureMessage(
+                    moduleSource,
+                    modulePublication);
+                return result;
+            }
+
+            request.Progress?.PhaseCompleted(
+                PowerForgeReleaseProgressPhase.Module,
+                "Module publication complete");
         }
 
         if (!request.PlanOnly && !request.ValidateOnly && !explicitAppleAction)
