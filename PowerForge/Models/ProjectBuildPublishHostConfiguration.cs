@@ -58,4 +58,7 @@ public sealed class ProjectBuildPublishHostConfiguration
 
     /// <summary>Whether publishing failures should stop on first error.</summary>
     public bool PublishFailFast { get; set; } = true;
+
+    /// <summary>Whether an already-published NuGet package should be treated as a successful skip.</summary>
+    public bool SkipDuplicate { get; set; } = true;
 }

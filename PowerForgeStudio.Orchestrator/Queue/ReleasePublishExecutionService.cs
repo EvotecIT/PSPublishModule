@@ -189,14 +189,19 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
 
 public sealed partial class ReleasePublishExecutionService
 {
-    private async Task<(bool Succeeded, string? ErrorMessage)> PublishNugetPackageAsync(string packagePath, string apiKey, string source, CancellationToken cancellationToken)
+    private async Task<(bool Succeeded, string? ErrorMessage)> PublishNugetPackageAsync(
+        string packagePath,
+        string apiKey,
+        string source,
+        bool skipDuplicate,
+        CancellationToken cancellationToken)
     {
         var result = await _pushNuGetPackageAsync(
             new DotNetNuGetPushRequest(
                 packagePath: packagePath,
                 apiKey: apiKey,
                 source: source,
-                skipDuplicate: true,
+                skipDuplicate: skipDuplicate,
                 workingDirectory: Path.GetDirectoryName(packagePath)),
             cancellationToken).ConfigureAwait(false);
 
@@ -339,74 +344,19 @@ public sealed partial class ReleasePublishExecutionService
         return await ReadProjectPlanFileAsync(planPath, cancellationToken);
     }
 
-    private async Task<ModulePackageDetails?> ResolveModulePackageDetailsAsync(
-        string repositoryRoot,
-        string repositoryName,
-        ReleaseSigningExecutionResult signingResult,
-        CancellationToken cancellationToken)
+    private PowerForgeReleaseResult? ReadUnifiedReleaseCheckpoint(ReleaseSigningExecutionResult signingResult)
     {
-        var receipts = signingResult.Receipts
-            .Where(receipt => string.Equals(receipt.AdapterKind, ReleaseBuildAdapterKind.ModuleBuild.ToString(), StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-
-        var candidateManifest = receipts
-            .Where(receipt => receipt.ArtifactPath.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase) && File.Exists(receipt.ArtifactPath))
-            .Select(receipt => receipt.ArtifactPath)
-            .FirstOrDefault();
-
-        if (string.IsNullOrWhiteSpace(candidateManifest))
-        {
-            foreach (var directory in receipts.Where(receipt => string.Equals(receipt.ArtifactKind, "Directory", StringComparison.OrdinalIgnoreCase)))
-            {
-                if (!Directory.Exists(directory.ArtifactPath))
-                {
-                    continue;
-                }
-
-                candidateManifest = Directory.EnumerateFiles(directory.ArtifactPath, "*.psd1", SearchOption.AllDirectories)
-                    .FirstOrDefault(path => !path.Contains($"{Path.DirectorySeparatorChar}en-US{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase));
-                if (!string.IsNullOrWhiteSpace(candidateManifest))
-                {
-                    break;
-                }
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(candidateManifest))
-        {
-            return null;
-        }
-
-        var packagePath = Path.GetDirectoryName(candidateManifest);
-        var manifestInfo = await ReadModuleManifestAsync(repositoryRoot, candidateManifest, cancellationToken)
-                          ?? new ModuleManifestInfo(repositoryName, "0.0.0", null);
-        var zipAssets = receipts
-            .Select(receipt => receipt.ArtifactPath)
-            .Where(path => path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) && File.Exists(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        return new ModulePackageDetails(
-            ModuleName: manifestInfo.ModuleName,
-            Version: manifestInfo.Version,
-            PreRelease: manifestInfo.PreRelease,
-            PackagePath: packagePath!,
-            ZipAssets: zipAssets);
+        var buildResult = _checkpointSerializer.TryDeserialize<ReleaseBuildExecutionResult>(
+            signingResult.SourceCheckpointStateJson);
+        return string.IsNullOrWhiteSpace(buildResult?.UnifiedReleaseStateJson)
+            ? null
+            : _checkpointSerializer.TryDeserialize<PowerForgeReleaseResult>(
+                buildResult.UnifiedReleaseStateJson);
     }
 
-    private async Task<ModuleManifestInfo?> ReadModuleManifestAsync(string repositoryRoot, string manifestPath, CancellationToken cancellationToken)
-    {
-        await Task.CompletedTask.ConfigureAwait(false);
-        try
-        {
-            var metadata = new ModuleManifestMetadataReader().Read(manifestPath);
-            return new ModuleManifestInfo(metadata.ModuleName, metadata.ModuleVersion, metadata.PreRelease);
-        }
-        catch
-        {
-            return null;
-        }
-    }
+    private DotNetRepositoryReleaseResult? ReadCheckpointedProjectPlan(
+        ReleaseSigningExecutionResult signingResult)
+        => ReadUnifiedReleaseCheckpoint(signingResult)?.Packages?.Result.Release;
 
     private static IReadOnlyList<string> ResolveProjectGitHubAssets(DotNetRepositoryReleaseResult plan, ReleaseSigningExecutionResult signingResult, string? projectName = null)
     {
@@ -470,165 +420,6 @@ public sealed partial class ReleasePublishExecutionService
 
 public sealed partial class ReleasePublishExecutionService
 {
-    private async Task<IReadOnlyList<ReleasePublishReceipt>> ExecuteModulePublishAsync(
-        PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
-        ReleaseSigningExecutionResult signingResult,
-        CancellationToken cancellationToken,
-        bool suppressGitHub)
-    {
-        IReadOnlyList<PublishConfiguration> publishConfigs;
-        try
-        {
-            publishConfigs = await ExportModulePublishConfigsAsync(repository.RootPath, repository.ModuleBuildScriptPath!, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            return [
-                FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "Module publish configuration", null, FirstLine(ex.Message) ?? "Module publish configuration could not be loaded.")
-            ];
-        }
-        if (publishConfigs.Count == 0)
-        {
-            return [];
-        }
-
-        var packageDetails = await ResolveModulePackageDetailsAsync(repository.RootPath, repository.Name, signingResult, cancellationToken);
-        var receipts = new List<ReleasePublishReceipt>();
-        foreach (var publishConfig in publishConfigs.Where(config => config.Enabled))
-        {
-            if (publishConfig.Destination == PublishDestination.GitHub)
-            {
-                if (suppressGitHub)
-                    continue;
-                receipts.Add(await ExecuteModuleGitHubPublishAsync(repository, publishConfig, packageDetails, cancellationToken));
-                continue;
-            }
-
-            receipts.Add(await ExecuteModuleRepositoryPublishAsync(repository, publishConfig, packageDetails, cancellationToken));
-        }
-
-        return receipts;
-    }
-
-    private async Task<ReleasePublishReceipt> ExecuteModuleRepositoryPublishAsync(
-        PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
-        PublishConfiguration publishConfig,
-        ModulePackageDetails? packageDetails,
-        CancellationToken cancellationToken)
-    {
-        var destination = ResolveModuleRepositoryName(publishConfig);
-        if (packageDetails is null || string.IsNullOrWhiteSpace(packageDetails.PackagePath))
-        {
-            return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "Module publish", destination, "No publishable module package path was captured from the build artefacts.");
-        }
-
-        try
-        {
-            var apiKey = ModulePublisher.ResolvePublishApiKey(publishConfig, repository.RootPath);
-            if (string.IsNullOrWhiteSpace(apiKey) && !HasRepositoryAuthentication(publishConfig.Repository))
-            {
-                return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "Module publish", destination, "Module publish is enabled but no API key or repository credential was resolved.");
-            }
-
-            var publishResult = await _publishRepositoryAsync(
-                new RepositoryPublishRequest {
-                    Path = packageDetails.PackagePath,
-                    IsNupkg = false,
-                    RepositoryName = destination,
-                    Tool = publishConfig.Tool,
-                    ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
-                    Repository = publishConfig.Repository,
-                    SkipDependenciesCheck = true,
-                    SkipModuleManifestValidate = false
-                },
-                cancellationToken).ConfigureAwait(false);
-
-            return ReleaseQueueReceiptFactory.CreatePublishReceipt(
-                repository.RootPath,
-                repository.Name,
-                ReleaseBuildAdapterKind.ModuleBuild.ToString(),
-                packageDetails.ModuleName,
-                "PowerShellRepository",
-                publishResult.RepositoryName,
-                ReleasePublishReceiptStatus.Published,
-                $"Module published to {publishResult.RepositoryName} using {publishResult.Tool}.",
-                packageDetails.PackagePath);
-        }
-        catch (Exception ex)
-        {
-            return ReleaseQueueReceiptFactory.FailedPublishReceipt(
-                repository.RootPath,
-                repository.Name,
-                ReleaseBuildAdapterKind.ModuleBuild.ToString(),
-                packageDetails.ModuleName,
-                destination,
-                FirstLine(ex.Message) ?? "Module publish failed.",
-                "PowerShellRepository",
-                packageDetails.PackagePath);
-        }
-    }
-
-    private async Task<ReleasePublishReceipt> ExecuteModuleGitHubPublishAsync(
-        PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
-        PublishConfiguration publishConfig,
-        ModulePackageDetails? packageDetails,
-        CancellationToken cancellationToken)
-    {
-        if (packageDetails is null || packageDetails.ZipAssets.Count == 0)
-        {
-            return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "GitHub release", null, "No packed module assets were found for GitHub publishing.");
-        }
-
-        if (string.IsNullOrWhiteSpace(publishConfig.UserName))
-        {
-            return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "GitHub release", null, "GitHub publishing requires UserName.");
-        }
-
-        try
-        {
-            var apiKey = ModulePublisher.ResolvePublishApiKey(publishConfig, repository.RootPath);
-            if (string.IsNullOrWhiteSpace(apiKey))
-            {
-                return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "GitHub release", null, "GitHub publishing is enabled but no token was resolved.");
-            }
-
-            var repoName = string.IsNullOrWhiteSpace(publishConfig.RepositoryName) ? repository.Name : publishConfig.RepositoryName!.Trim();
-            var tag = new ModulePublishTagBuilder().BuildTag(publishConfig, packageDetails.ModuleName, packageDetails.Version, packageDetails.PreRelease);
-            var isPreRelease = !string.IsNullOrWhiteSpace(packageDetails.PreRelease) && !publishConfig.DoNotMarkAsPreRelease;
-
-            var execution = await PublishGitHubReleaseAsync(repository.RootPath, publishConfig.UserName!, repoName, apiKey, tag, tag, packageDetails.ZipAssets, publishConfig.GenerateReleaseNotes, isPreRelease, cancellationToken);
-            return ReleaseQueueReceiptFactory.CreatePublishReceipt(
-                repository.RootPath,
-                repository.Name,
-                ReleaseBuildAdapterKind.ModuleBuild.ToString(),
-                "GitHub release",
-                "GitHub",
-                execution.ReleaseUrl ?? $"{publishConfig.UserName}/{repoName}",
-                execution.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
-                execution.Succeeded ? $"GitHub release {tag} published." : execution.ErrorMessage!,
-                packageDetails.ZipAssets.FirstOrDefault());
-        }
-        catch (Exception ex)
-        {
-            return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "GitHub release", null, FirstLine(ex.Message) ?? "GitHub publish secret could not be resolved.");
-        }
-    }
-
-    private static bool HasRepositoryAuthentication(PublishRepositoryConfiguration? repository)
-    {
-        if (repository?.Credential is { } credential &&
-            !string.IsNullOrWhiteSpace(credential.UserName) &&
-            !string.IsNullOrWhiteSpace(credential.Secret))
-        {
-            return true;
-        }
-
-        return repository?.CredentialProvider is { Kind: not RepositoryCredentialProviderKind.None };
-    }
-}
-
-public sealed partial class ReleasePublishExecutionService
-{
     private async Task<IReadOnlyList<ReleasePublishReceipt>> ExecuteProjectPublishAsync(
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
         ReleaseSigningExecutionResult signingResult,
@@ -671,7 +462,12 @@ public sealed partial class ReleasePublishExecutionService
                 {
                     foreach (var package in packages)
                     {
-                        var result = await PublishNugetPackageAsync(package, config.PublishApiKey!, config.PublishSource, cancellationToken);
+                        var result = await PublishNugetPackageAsync(
+                            package,
+                            config.PublishApiKey!,
+                            config.PublishSource,
+                            config.SkipDuplicate,
+                            cancellationToken);
                         receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
                             repository.RootPath,
                             repository.Name,
@@ -682,9 +478,17 @@ public sealed partial class ReleasePublishExecutionService
                             result.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
                             result.Succeeded ? "Package pushed with dotnet nuget push." : result.ErrorMessage!,
                             package));
+                        if (!result.Succeeded && config.PublishFailFast)
+                            break;
                     }
                 }
             }
+        }
+
+        if (config.PublishFailFast &&
+            receipts.Any(static receipt => receipt.Status == ReleasePublishReceiptStatus.Failed))
+        {
+            return receipts;
         }
 
         if (config.PublishGitHub && !suppressGitHub)
@@ -715,11 +519,21 @@ public sealed partial class ReleasePublishExecutionService
             ];
         }
 
-        var plan = await GenerateProjectPlanAsync(repository, cancellationToken);
+        var plan = ReadCheckpointedProjectPlan(signingResult);
+        if (plan is null && string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
+            plan = await GenerateProjectPlanAsync(repository, cancellationToken);
         if (plan is null)
         {
             return [
-                FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ProjectBuild.ToString(), "GitHub release", $"{config.GitHubUsername}/{config.GitHubRepositoryName}", "Project release plan could not be generated for GitHub publishing.")
+                FailedReceipt(
+                    repository.RootPath,
+                    repository.Name,
+                    ReleaseBuildAdapterKind.ProjectBuild.ToString(),
+                    "GitHub release",
+                    $"{config.GitHubUsername}/{config.GitHubRepositoryName}",
+                    string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath)
+                        ? "Project release plan could not be generated for GitHub publishing."
+                        : "The checkpointed unified package release plan is missing; rebuild before publishing.")
             ];
         }
 

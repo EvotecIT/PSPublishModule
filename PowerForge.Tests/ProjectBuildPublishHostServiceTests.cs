@@ -24,6 +24,7 @@ public sealed class ProjectBuildPublishHostServiceTests
               "GitHubUsername": "EvotecIT",
               "GitHubRepositoryName": "PSPublishModule",
               "GitHubReleaseMode": "PerProject",
+              "SkipDuplicate": false,
               "PublishFailFast": false,
             }
             """);
@@ -43,6 +44,7 @@ public sealed class ProjectBuildPublishHostServiceTests
             Assert.Equal("EvotecIT", configuration.GitHubUsername);
             Assert.Equal("PSPublishModule", configuration.GitHubRepositoryName);
             Assert.Equal("PerProject", configuration.GitHubReleaseMode);
+            Assert.False(configuration.SkipDuplicate);
             Assert.False(configuration.PublishFailFast);
         }
         finally

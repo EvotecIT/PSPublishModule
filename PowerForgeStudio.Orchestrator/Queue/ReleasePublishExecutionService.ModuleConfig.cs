@@ -5,7 +5,7 @@ namespace PowerForgeStudio.Orchestrator.Queue;
 
 public sealed partial class ReleasePublishExecutionService
 {
-    private async Task<IReadOnlyList<PublishConfiguration>> ExportModulePublishConfigsAsync(
+    private async Task<ModulePublishConfigurationSet> ExportModulePublishConfigsAsync(
         string repositoryRoot,
         string buildInputPath,
         CancellationToken cancellationToken)
@@ -13,7 +13,9 @@ public sealed partial class ReleasePublishExecutionService
         if (string.Equals(Path.GetExtension(buildInputPath), ".json", StringComparison.OrdinalIgnoreCase))
         {
             var context = new ModulePipelineConfigurationService().Load(buildInputPath);
-            return new ModulePublishConfigurationReader().Read(context.Spec);
+            return new ModulePublishConfigurationSet(
+                new ModulePublishConfigurationReader().Read(context.Spec),
+                context);
         }
 
         var repositoryName = Path.GetFileName(repositoryRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
@@ -30,6 +32,14 @@ public sealed partial class ReleasePublishExecutionService
                 $"Module publish configuration export failed for '{buildInputPath}' (exit {execution.ExitCode}).");
         }
 
-        return new ModulePublishConfigurationReader().Read(exportPath);
+        var configurations = new ModulePublishConfigurationReader().Read(exportPath);
+        var exportedPipelineContext = new ModulePipelineConfigurationService().TryLoad(exportPath, out var exportedContext)
+            ? exportedContext
+            : null;
+        return new ModulePublishConfigurationSet(configurations, exportedPipelineContext);
     }
+
+    private sealed record ModulePublishConfigurationSet(
+        IReadOnlyList<PublishConfiguration> Configurations,
+        ModulePipelineConfigurationContext? Context);
 }

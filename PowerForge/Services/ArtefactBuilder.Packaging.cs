@@ -85,7 +85,7 @@ public sealed partial class ArtefactBuilder
     private static string ResolveOutputRoot(string? configuredPath, string projectRoot, string moduleName, string moduleVersion, string? preRelease, ArtefactType type)
         => ArtefactLayoutPathResolver.ResolveOutputRoot(configuredPath, projectRoot, moduleName, moduleVersion, preRelease, type);
 
-    private static string ResolveArtefactFileName(ArtefactConfiguration cfg, string moduleName, string moduleVersion, string? preRelease)
+    internal static string ResolveArtefactFileName(ArtefactConfiguration cfg, string moduleName, string moduleVersion, string? preRelease)
     {
         if (!string.IsNullOrWhiteSpace(cfg.ArtefactName))
             return ModulePathTokenFormatter.ReplacePathTokens(cfg.ArtefactName!.Trim(), moduleName, moduleVersion, preRelease);

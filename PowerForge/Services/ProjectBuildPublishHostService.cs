@@ -117,7 +117,8 @@ public sealed class ProjectBuildPublishHostService
             GitHubReleaseMode = releaseMode,
             GitHubPrimaryProject = TrimOrNull(config.GitHubPrimaryProject),
             GitHubTagConflictPolicy = TrimOrNull(config.GitHubTagConflictPolicy),
-            PublishFailFast = config.PublishFailFast ?? true
+            PublishFailFast = config.PublishFailFast ?? true,
+            SkipDuplicate = config.SkipDuplicate ?? true
         };
     }
 

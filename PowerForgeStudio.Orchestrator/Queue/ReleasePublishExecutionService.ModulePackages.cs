@@ -59,6 +59,7 @@ public sealed partial class ReleasePublishExecutionService
                             package,
                             publishConfig.PublishApiKey!,
                             publishConfig.PublishSource,
+                            publishConfig.SkipDuplicate,
                             cancellationToken);
                         receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
                             repository.RootPath,
@@ -70,8 +71,16 @@ public sealed partial class ReleasePublishExecutionService
                             publish.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
                             publish.Succeeded ? "Signed checkpointed package published without rebuilding." : publish.ErrorMessage!,
                             package));
+                        if (!publish.Succeeded && publishConfig.PublishFailFast)
+                            break;
                     }
                 }
+            }
+
+            if (publishConfig.PublishFailFast &&
+                receipts.Any(static receipt => receipt.Status == ReleasePublishReceiptStatus.Failed))
+            {
+                return receipts;
             }
 
             if (publishConfig.PublishGitHub)
