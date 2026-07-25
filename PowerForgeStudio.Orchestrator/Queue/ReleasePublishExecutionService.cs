@@ -85,6 +85,26 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
         }
 
         var pendingTargets = BuildPendingTargets([queueItem]);
+        var projectionFailure = pendingTargets.FirstOrDefault(static target =>
+            string.Equals(target.TargetKind, "ConfigurationError", StringComparison.OrdinalIgnoreCase));
+        if (projectionFailure is not null)
+        {
+            return new ReleasePublishExecutionResult(
+                RootPath: queueItem.RootPath,
+                Succeeded: false,
+                Summary: "Unified release publish targets could not be projected.",
+                SourceCheckpointStateJson: queueItem.CheckpointStateJson,
+                Receipts: [
+                    FailedReceipt(
+                        queueItem.RootPath,
+                        queueItem.RepositoryName,
+                        projectionFailure.AdapterKind,
+                        "Configuration",
+                        projectionFailure.SourcePath,
+                        projectionFailure.Destination)
+                ]);
+        }
+
         if (pendingTargets.Count == 0)
         {
             return new ReleasePublishExecutionResult(

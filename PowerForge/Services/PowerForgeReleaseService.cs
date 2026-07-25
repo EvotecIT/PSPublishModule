@@ -983,8 +983,9 @@ internal sealed partial class PowerForgeReleaseService
         var moduleImportFramework = string.Equals(effectiveModuleFramework, "auto", StringComparison.OrdinalIgnoreCase)
             ? "net8.0"
             : effectiveModuleFramework ?? "net8.0";
-        var configuredModulePath = ExpandModulePath(options.ModulePath, effectiveConfiguration, moduleImportFramework);
-        var modulePath = string.IsNullOrWhiteSpace(options.ModulePath)
+        var requestedModulePath = request.ModuleHostPath ?? options.ModulePath;
+        var configuredModulePath = ExpandModulePath(requestedModulePath, effectiveConfiguration, moduleImportFramework);
+        var modulePath = string.IsNullOrWhiteSpace(requestedModulePath)
             ? "PSPublishModule"
             : Path.IsPathRooted(configuredModulePath)
                 ? configuredModulePath
@@ -1004,7 +1005,7 @@ internal sealed partial class PowerForgeReleaseService
             throw new FileNotFoundException($"Module build script was not found: {scriptPath}", scriptPath);
         if (!request.PlanOnly &&
             !request.ValidateOnly &&
-            !string.IsNullOrWhiteSpace(options.ModulePath) &&
+            !string.IsNullOrWhiteSpace(requestedModulePath) &&
             !File.Exists(modulePath))
             throw new FileNotFoundException($"Configured module assembly was not found: {modulePath}", modulePath);
         if (!string.IsNullOrWhiteSpace(manifestPath) && !File.Exists(manifestPath))
@@ -2428,6 +2429,12 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeReleaseRequest request,
         bool moduleSelected)
     {
+        if (request.ModuleRunMode.HasValue &&
+            request.ModuleRunMode.Value != ConfigurationGateMode.Publish)
+        {
+            return false;
+        }
+
         if (request.ToolsOnly && request.PublishToolGitHub == true)
             return false;
 

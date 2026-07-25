@@ -79,7 +79,7 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
             receipts.Add(await SignArtifactAsync(queueItem.RootPath, artifact, settings, cancellationToken));
         }
 
-        RefreshUnifiedToolArchives(queueItem, receipts);
+        RefreshUnifiedArchives(queueItem, receipts);
 
         var failed = receipts.Count(receipt => receipt.Status == ReleaseSigningReceiptStatus.Failed);
         var signed = receipts.Count(receipt => receipt.Status == ReleaseSigningReceiptStatus.Signed);
@@ -97,7 +97,7 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
             Receipts: receipts);
     }
 
-    private void RefreshUnifiedToolArchives(ReleaseQueueItem queueItem, List<ReleaseSigningReceipt> receipts)
+    private void RefreshUnifiedArchives(ReleaseQueueItem queueItem, List<ReleaseSigningReceipt> receipts)
     {
         var buildResult = _checkpointReader.TryReadBuildResult(queueItem);
         if (string.IsNullOrWhiteSpace(buildResult?.UnifiedReleaseStateJson))
@@ -118,7 +118,7 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
             if (unified is null)
                 throw new InvalidOperationException("Unified release build state could not be deserialized after signing.");
 
-            var refreshedArchives = PowerForgeReleaseService.RefreshBuiltToolArchivesAfterSigning(unified, signedDirectories);
+            var refreshedArchives = PowerForgeReleaseService.RefreshBuiltArchivesAfterSigning(unified, signedDirectories);
             foreach (var archivePath in refreshedArchives)
             {
                 var receiptIndex = receipts.FindIndex(receipt =>
@@ -128,14 +128,14 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
 
                 receipts[receiptIndex] = receipts[receiptIndex] with {
                     Status = ReleaseSigningReceiptStatus.Signed,
-                    Summary = "Archive rebuilt from the signed tool output directory.",
+                    Summary = "Archive rebuilt from its signed output directory.",
                     SignedAtUtc = DateTimeOffset.UtcNow
                 };
             }
         }
         catch (Exception ex)
         {
-            var summary = FirstLine(ex.Message) ?? "Signed tool archives could not be rebuilt.";
+            var summary = FirstLine(ex.Message) ?? "Signed archives could not be rebuilt.";
             var archiveIndexes = receipts
                 .Select((receipt, index) => new { receipt, index })
                 .Where(static item => item.receipt.ArtifactPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))

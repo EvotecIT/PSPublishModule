@@ -67,4 +67,48 @@ public sealed class PowerForgeReleaseConfigScaffoldServiceTests
             try { root.Delete(recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void Generate_module_json_without_artifact_segments_uses_pipeline_defaults()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "pf-release-scaffold-defaults-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root.FullName, "powerforge.json"),
+                """
+                {
+                  "Build": { "Name": "Sample", "SourcePath": "Module" },
+                  "Segments": []
+                }
+                """);
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+
+            var result = new PowerForgeReleaseConfigScaffoldService().Generate(new PowerForgeReleaseConfigScaffoldRequest
+            {
+                ProjectRoot = root.FullName,
+                WorkingDirectory = root.FullName,
+                SkipPackages = true,
+                SkipTools = true
+            });
+
+            using var release = JsonDocument.Parse(File.ReadAllText(result.ConfigPath));
+            var paths = release.RootElement
+                .GetProperty("Module")
+                .GetProperty("ArtifactPaths")
+                .EnumerateArray()
+                .Select(static element => element.GetString()!)
+                .ToArray();
+            Assert.Equal(
+                ["Module/Artefacts/Packed", "Module/Artefacts/PackedWithModules", "Module/Artefacts/Unpacked"],
+                paths);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
 }

@@ -53,7 +53,9 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
         {
             var configPath = repository.UnifiedReleaseConfigPath!;
-            var unified = _executeUnifiedReleaseBuild(configPath, CreateUnifiedReleaseBuildRequest(configPath));
+            var unified = _executeUnifiedReleaseBuild(
+                configPath,
+                CreateUnifiedReleaseBuildRequest(configPath, PowerForgeStudioHostPaths.ResolvePSPublishModulePath()));
             results.AddRange(CreateUnifiedAdapterResults(repository, unified, DateTimeOffset.UtcNow - startedAt));
             return ReleaseQueueExecutionResultFactory.CreateBuildResult(
                 repositoryRoot,
@@ -78,9 +80,10 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             results);
     }
 
-    internal static PowerForgeReleaseRequest CreateUnifiedReleaseBuildRequest(string configPath)
+    internal static PowerForgeReleaseRequest CreateUnifiedReleaseBuildRequest(string configPath, string moduleHostPath)
         => new() {
             ConfigPath = configPath,
+            ModuleHostPath = moduleHostPath,
             PublishNuget = false,
             PublishProjectGitHub = false,
             PublishToolGitHub = false,

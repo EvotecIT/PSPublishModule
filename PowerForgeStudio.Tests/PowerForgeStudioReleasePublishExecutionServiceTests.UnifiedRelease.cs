@@ -330,4 +330,65 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public async Task ExecuteAsync_UnifiedRelease_MalformedContractReturnsProjectionFailure()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(releaseConfig, """{ "GitHub": { "Publish": true } }""");
+        var assetPath = Path.Combine(repositoryRoot, "Artifacts", "Tool");
+        Directory.CreateDirectory(Path.GetDirectoryName(assetPath)!);
+        File.WriteAllText(assetPath, "signed");
+        var unified = new PowerForgeReleaseResult {
+            Success = true,
+            ConfigPath = releaseConfig,
+            ReleaseAssets = [assetPath]
+        };
+        var buildResult = new ReleaseBuildExecutionResult(
+            repositoryRoot,
+            true,
+            "Build completed.",
+            1,
+            [],
+            JsonSerializer.Serialize(unified));
+        var signingResult = new ReleaseSigningExecutionResult(
+            repositoryRoot,
+            true,
+            "Signing completed.",
+            JsonSerializer.Serialize(buildResult),
+            []);
+        var queueItem = new ReleaseQueueItem(
+            repositoryRoot,
+            "BrokenUnifiedRepo",
+            ReleaseRepositoryKind.Library,
+            ReleaseWorkspaceKind.PrimaryRepository,
+            1,
+            ReleaseQueueStage.Publish,
+            ReleaseQueueItemStatus.ReadyToRun,
+            "Ready.",
+            "publish.ready",
+            JsonSerializer.Serialize(signingResult),
+            DateTimeOffset.UtcNow);
+        File.WriteAllText(releaseConfig, "{ malformed");
+        var service = new ReleasePublishExecutionService();
+
+        try
+        {
+            var target = Assert.Single(service.BuildPendingTargets([queueItem]));
+            Assert.Equal("ConfigurationError", target.TargetKind);
+
+            var result = await service.ExecuteAsync(queueItem);
+
+            Assert.False(result.Succeeded);
+            var receipt = Assert.Single(result.Receipts);
+            Assert.Equal(ReleasePublishReceiptStatus.Failed, receipt.Status);
+            Assert.Equal("Configuration", receipt.TargetKind);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
 }

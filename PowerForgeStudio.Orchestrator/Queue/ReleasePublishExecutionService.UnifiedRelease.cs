@@ -65,9 +65,18 @@ public sealed partial class ReleasePublishExecutionService
 
             return targets;
         }
-        catch
+        catch (Exception ex)
         {
-            return [];
+            return [
+                new ReleasePublishTarget(
+                    RootPath: item.RootPath,
+                    RepositoryName: item.RepositoryName,
+                    AdapterKind: "UnifiedRelease",
+                    TargetName: "Unified release configuration",
+                    TargetKind: "ConfigurationError",
+                    SourcePath: item.RootPath,
+                    Destination: FirstLine(ex.Message) ?? "Unified release configuration could not be loaded.")
+            ];
         }
     }
 

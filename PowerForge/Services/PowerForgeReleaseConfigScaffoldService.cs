@@ -297,7 +297,8 @@ public sealed class PowerForgeReleaseConfigScaffoldService
         string projectRoot,
         string moduleRoot,
         ModulePipelineSpec modulePipeline)
-        => (modulePipeline.Segments ?? Array.Empty<IConfigurationSegment>())
+    {
+        var configuredPaths = (modulePipeline.Segments ?? Array.Empty<IConfigurationSegment>())
             .OfType<ConfigurationArtefactSegment>()
             .Where(segment => segment.Configuration?.Enabled == true)
             .Select(segment =>
@@ -312,6 +313,18 @@ public sealed class PowerForgeReleaseConfigScaffoldService
             .Select(path => GetRelativePathCompat(projectRoot, path).Replace('\\', '/'))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        if (configuredPaths.Length > 0)
+            return configuredPaths;
+
+        return new[]
+        {
+            Path.Combine(moduleRoot, "Artefacts", "Packed"),
+            Path.Combine(moduleRoot, "Artefacts", "PackedWithModules"),
+            Path.Combine(moduleRoot, "Artefacts", "Unpacked")
+        }
+        .Select(path => GetRelativePathCompat(projectRoot, path).Replace('\\', '/'))
+        .ToArray();
+    }
 
     private static string? NormalizeNullable(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();

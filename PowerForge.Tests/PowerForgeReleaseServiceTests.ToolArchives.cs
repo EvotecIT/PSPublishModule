@@ -61,7 +61,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void RefreshBuiltToolArchivesAfterSigning_RestoresUnixExecutablePermissions()
+    public void RefreshBuiltArchivesAfterSigning_RestoresUnixExecutablePermissions()
     {
         var root = CreateSandbox();
         try
@@ -91,7 +91,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 }
             };
 
-            PowerForgeReleaseService.RefreshBuiltToolArchivesAfterSigning(result, [outputRoot]);
+            PowerForgeReleaseService.RefreshBuiltArchivesAfterSigning(result, [outputRoot]);
 
             using var archive = ZipFile.OpenRead(archivePath);
             Assert.Equal(unchecked((int)0x81ED0000u), archive.GetEntry("PowerForge")!.ExternalAttributes);
@@ -102,6 +102,60 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             TryDelete(root);
         }
+    }
+
+    [Fact]
+    public void RefreshBuiltArchivesAfterSigning_RebuildsModuleZipFromSignedDirectory()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var signedRoot = Path.Combine(root, "unpacked");
+            var moduleRoot = Path.Combine(signedRoot, "PSPublishModule");
+            Directory.CreateDirectory(moduleRoot);
+            File.WriteAllText(Path.Combine(moduleRoot, "PSPublishModule.psd1"), "@{ ModuleVersion = '1.0.0' }");
+            File.WriteAllText(Path.Combine(moduleRoot, "PSPublishModule.dll"), "signed");
+            File.WriteAllText(Path.Combine(moduleRoot, "FullPackageOnly.dll"), "extra");
+
+            var unsignedRoot = Path.Combine(root, "unsigned");
+            var unsignedModuleRoot = Path.Combine(unsignedRoot, "PSPublishModule");
+            Directory.CreateDirectory(unsignedModuleRoot);
+            File.WriteAllText(Path.Combine(unsignedModuleRoot, "PSPublishModule.psd1"), "@{ ModuleVersion = '1.0.0' }");
+            File.WriteAllText(Path.Combine(unsignedModuleRoot, "PSPublishModule.dll"), "unsigned");
+            var archivePath = Path.Combine(root, "PSPublishModule.v1.0.0.zip");
+            ZipFile.CreateFromDirectory(unsignedRoot, archivePath);
+            var stagedPath = Path.Combine(root, "staged", Path.GetFileName(archivePath));
+            Directory.CreateDirectory(Path.GetDirectoryName(stagedPath)!);
+            File.Copy(archivePath, stagedPath);
+            var result = new PowerForgeReleaseResult {
+                ReleaseAssetEntries = [
+                    new PowerForgeReleaseAssetEntry {
+                        Path = archivePath,
+                        StagedPath = stagedPath,
+                        Category = PowerForgeReleaseAssetCategory.Module
+                    }
+                ],
+                ReleaseAssets = [stagedPath]
+            };
+
+            PowerForgeReleaseService.RefreshBuiltArchivesAfterSigning(result, [signedRoot]);
+
+            Assert.Equal("signed", ReadArchiveText(archivePath, "PSPublishModule/PSPublishModule.dll"));
+            Assert.Equal("signed", ReadArchiveText(stagedPath, "PSPublishModule/PSPublishModule.dll"));
+            using var archive = ZipFile.OpenRead(archivePath);
+            Assert.Null(archive.GetEntry("PSPublishModule/FullPackageOnly.dll"));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    private static string ReadArchiveText(string archivePath, string entryName)
+    {
+        using var archive = ZipFile.OpenRead(archivePath);
+        using var reader = new StreamReader(archive.GetEntry(entryName)!.Open());
+        return reader.ReadToEnd();
     }
 
     private static void RewriteCentralDirectoryAsDos(string archivePath)

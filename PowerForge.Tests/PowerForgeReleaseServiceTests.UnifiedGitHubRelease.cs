@@ -259,9 +259,11 @@ public sealed partial class PowerForgeReleaseServiceTests
             var configPath = Path.Combine(root, "release.json");
             var scriptPath = Path.Combine(root, "Build-Module.ps1");
             var manifestPath = Path.Combine(root, "Company.Tools.psd1");
+            var moduleHostPath = Path.Combine(root, "PSPublishModule.psd1");
             File.WriteAllText(configPath, "{}");
             File.WriteAllText(scriptPath, "param([switch] $PowerForgeReleaseStage)");
             File.WriteAllText(manifestPath, "@{ ModuleVersion = '1.0.0' }");
+            File.WriteAllText(moduleHostPath, "@{ ModuleVersion = '1.0.0' }");
 
             var result = new PowerForgeReleaseService(new NullLogger()).Execute(
                 new PowerForgeReleaseSpec
@@ -281,6 +283,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     ConfigPath = configPath,
                     ModuleOnly = true,
                     PlanOnly = true,
+                    ModuleHostPath = moduleHostPath,
                     ModuleSkipInstall = true,
                     ModuleRunMode = publishUnifiedGitHub
                         ? ConfigurationGateMode.Publish
@@ -290,6 +293,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(result.Success);
             Assert.NotNull(result.ModulePlan);
             Assert.True(result.ModulePlan!.PowerForgeReleaseStage);
+            Assert.Equal(moduleHostPath, result.ModulePlan.ModulePath);
             Assert.True(result.ModulePlan.SkipInstall);
             Assert.Equal(publishUnifiedGitHub, result.ModulePlan.UnifiedGitHubRelease);
         }
@@ -595,6 +599,23 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             TryDelete(root);
         }
+    }
+
+    [Fact]
+    public void ShouldPublishUnifiedGitHub_ToolsOnlyBuildMode_DoesNotPublish()
+    {
+        var spec = new PowerForgeReleaseSpec {
+            GitHub = new PowerForgeReleaseGitHubOptions {
+                Publish = true,
+                VersionSource = PowerForgeReleaseVersionSource.Module
+            }
+        };
+        var request = new PowerForgeReleaseRequest {
+            ToolsOnly = true,
+            ModuleRunMode = ConfigurationGateMode.Build
+        };
+
+        Assert.False(PowerForgeReleaseService.ShouldPublishUnifiedGitHub(spec, request, moduleSelected: false));
     }
 
     [Fact]

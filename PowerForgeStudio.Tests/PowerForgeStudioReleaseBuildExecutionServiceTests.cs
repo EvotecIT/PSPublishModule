@@ -191,6 +191,7 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
                 Assert.False(request.PublishNuget);
                 Assert.False(request.PublishProjectGitHub);
                 Assert.False(request.PublishToolGitHub);
+                Assert.False(string.IsNullOrWhiteSpace(request.ModuleHostPath));
                 Assert.True(request.ModuleSkipInstall);
                 Assert.False(request.SubmitWinget);
                 return new PowerForgeReleaseResult {

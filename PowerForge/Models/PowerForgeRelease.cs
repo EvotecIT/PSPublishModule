@@ -64,6 +64,8 @@ internal sealed class PowerForgeReleaseRequest
 
     public string? ModuleFramework { get; set; }
 
+    public string? ModuleHostPath { get; set; }
+
     public ConfigurationGateMode? ModuleRunMode { get; set; }
 
     public bool? ModuleNoDotnetBuild { get; set; }
