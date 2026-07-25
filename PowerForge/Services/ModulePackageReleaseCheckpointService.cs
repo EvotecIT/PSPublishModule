@@ -41,6 +41,7 @@ internal sealed class ModulePackageReleaseCheckpointService
 
             checkpoints.Add(new PowerForgeModulePackageReleaseCheckpoint
             {
+                Key = lane.Key,
                 Name = lane.Name,
                 ConfigPath = Path.GetFullPath(lane.ConfigPath),
                 Release = execution.Result.Release
@@ -57,11 +58,13 @@ internal sealed class ModulePackageReleaseCheckpointService
         var normalizedConfigPath = Path.GetFullPath(lane.ConfigPath);
         var matches = (checkpoints ?? [])
             .Where(checkpoint =>
-                string.Equals(checkpoint.Name, lane.Name, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(
-                    Path.GetFullPath(checkpoint.ConfigPath),
-                    normalizedConfigPath,
-                    StringComparison.OrdinalIgnoreCase))
+                !string.IsNullOrWhiteSpace(checkpoint.Key)
+                    ? string.Equals(checkpoint.Key, lane.Key, StringComparison.OrdinalIgnoreCase)
+                    : string.Equals(checkpoint.Name, lane.Name, StringComparison.OrdinalIgnoreCase) &&
+                      string.Equals(
+                          Path.GetFullPath(checkpoint.ConfigPath),
+                          normalizedConfigPath,
+                          StringComparison.OrdinalIgnoreCase))
             .ToArray();
         return matches.Length switch
         {
@@ -92,8 +95,10 @@ internal sealed class ModulePackageReleaseCheckpointService
         var moduleConfigPath = PathTokenProtection.GetFullPath(repositoryRoot, spec.Module.ConfigPath!);
         var context = new ModulePipelineConfigurationService().Load(moduleConfigPath);
         var lanes = new List<ModulePackageReleaseLane>();
-        foreach (var segment in context.Spec.Segments ?? [])
+        var segments = context.Spec.Segments ?? [];
+        for (var index = 0; index < segments.Length; index++)
         {
+            var segment = segments[index];
             switch (segment)
             {
                 case ConfigurationProjectBuildSegment project when project.Configuration.Enabled:
@@ -103,6 +108,7 @@ internal sealed class ModulePackageReleaseCheckpointService
                         project.Configuration);
                     var publish = new ProjectBuildSupportService(new NullLogger()).LoadConfig(configPath);
                     lanes.Add(new ModulePackageReleaseLane(
+                        $"ProjectBuild:{index}",
                         project.Configuration.Name ?? Path.GetFileNameWithoutExtension(configPath),
                         configPath,
                         project.Configuration,
@@ -113,6 +119,7 @@ internal sealed class ModulePackageReleaseCheckpointService
                 }
                 case ConfigurationPackageBuildSegment package when package.Configuration.Enabled:
                     lanes.Add(new ModulePackageReleaseLane(
+                        $"PackageBuild:{index}",
                         package.Configuration.Name ?? "Inline package build",
                         moduleConfigPath,
                         null,
@@ -133,6 +140,7 @@ internal sealed class ModulePackageReleaseCheckpointService
 internal sealed class ModulePackageReleaseLane
 {
     internal ModulePackageReleaseLane(
+        string key,
         string name,
         string configPath,
         ProjectBuildConfigurationReference? reference,
@@ -140,6 +148,7 @@ internal sealed class ModulePackageReleaseLane
         bool publishNuget,
         bool publishGitHub)
     {
+        Key = key;
         Name = name;
         ConfigPath = configPath;
         Reference = reference;
@@ -147,6 +156,8 @@ internal sealed class ModulePackageReleaseLane
         PublishNuget = publishNuget;
         PublishGitHub = publishGitHub;
     }
+
+    internal string Key { get; }
 
     internal string Name { get; }
 

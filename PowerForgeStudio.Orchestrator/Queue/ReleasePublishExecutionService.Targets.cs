@@ -55,7 +55,10 @@ public sealed partial class ReleasePublishExecutionService
             }
 
             if (string.Equals(adapterKind, ReleaseBuildAdapterKind.ModuleBuild.ToString(), StringComparison.OrdinalIgnoreCase) &&
-                group.Any(receipt => string.Equals(receipt.ArtifactKind, "Directory", StringComparison.OrdinalIgnoreCase)))
+                group.Any(receipt => string.Equals(receipt.ArtifactKind, "Directory", StringComparison.OrdinalIgnoreCase)) &&
+                AllowsModuleRepositoryTarget(
+                    repository.UnifiedReleaseConfigPath,
+                    unifiedSpec))
             {
                 targets.Add(new ReleasePublishTarget(
                     RootPath: item.RootPath,
@@ -125,11 +128,57 @@ public sealed partial class ReleasePublishExecutionService
 
         if (string.Equals(adapterKind, ReleaseBuildAdapterKind.ProjectBuild.ToString(), StringComparison.OrdinalIgnoreCase))
             return spec.Packages?.PublishGitHub == true;
-        if (!string.Equals(adapterKind, ReleaseBuildAdapterKind.ModuleBuild.ToString(), StringComparison.OrdinalIgnoreCase) ||
-            string.IsNullOrWhiteSpace(spec.Module?.ConfigPath))
+        if (!string.Equals(adapterKind, ReleaseBuildAdapterKind.ModuleBuild.ToString(), StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
+
+        return AllowsModulePublishDestination(
+            releaseConfigPath!,
+            spec,
+            PublishDestination.GitHub);
+    }
+
+    private static bool AllowsModuleRepositoryTarget(
+        string? releaseConfigPath,
+        PowerForgeReleaseSpec? spec)
+    {
+        if (string.IsNullOrWhiteSpace(releaseConfigPath))
+            return true;
+        if (spec is null)
+            return false;
+
+        return AllowsModulePublishDestination(
+            releaseConfigPath!,
+            spec,
+            PublishDestination.PowerShellGallery);
+    }
+
+    private static bool AllowsModulePublishDestination(
+        string releaseConfigPath,
+        PowerForgeReleaseSpec spec,
+        PublishDestination destination)
+    {
+        try
+        {
+            return HasEnabledModulePublishDestination(releaseConfigPath, spec, destination);
+        }
+        catch
+        {
+            // Preserve the existing fail-closed publish path: a stale or malformed
+            // module recipe must produce an explicit failed receipt, not disappear
+            // from target projection as though publication were disabled.
+            return true;
+        }
+    }
+
+    private static bool HasEnabledModulePublishDestination(
+        string releaseConfigPath,
+        PowerForgeReleaseSpec spec,
+        PublishDestination destination)
+    {
+        if (string.IsNullOrWhiteSpace(spec.Module?.ConfigPath))
+            return false;
 
         var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
         var repositoryRoot = string.IsNullOrWhiteSpace(spec.Module.RepositoryRoot)
@@ -139,8 +188,8 @@ public sealed partial class ReleasePublishExecutionService
         var context = new ModulePipelineConfigurationService().Load(moduleConfigPath);
         return (context.Spec.Segments ?? [])
             .OfType<ConfigurationPublishSegment>()
-            .Any(static segment =>
+            .Any(segment =>
                 segment.Configuration.Enabled &&
-                segment.Configuration.Destination == PublishDestination.GitHub);
+                segment.Configuration.Destination == destination);
     }
 }

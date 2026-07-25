@@ -6,6 +6,11 @@ namespace PowerForge;
 internal sealed class PowerForgeModulePackageReleaseCheckpoint
 {
     /// <summary>
+    /// Stable segment key that uniquely identifies the package lane within the module recipe.
+    /// </summary>
+    public string Key { get; set; } = string.Empty;
+
+    /// <summary>
     /// Stable lane name from the module configuration.
     /// </summary>
     public string Name { get; set; } = string.Empty;

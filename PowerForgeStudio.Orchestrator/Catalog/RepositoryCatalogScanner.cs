@@ -152,24 +152,24 @@ public sealed class RepositoryCatalogScanner
             using var document = JsonDocument.Parse(
                 File.ReadAllText(releaseConfigPath),
                 new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
-            var includesPackages = document.RootElement.TryGetProperty("Packages", out var packages) &&
+            var includesPackages = TryGetPropertyIgnoreCase(document.RootElement, "Packages", out var packages) &&
                                    packages.ValueKind == JsonValueKind.Object;
             string? moduleConfigPath = null;
             var moduleIncludesPackages = false;
-            var hasModule = document.RootElement.TryGetProperty("Module", out var module) &&
+            var hasModule = TryGetPropertyIgnoreCase(document.RootElement, "Module", out var module) &&
                             module.ValueKind == JsonValueKind.Object;
             if (hasModule)
             {
-                moduleIncludesPackages = module.TryGetProperty("IncludesPackages", out var includesPackagesElement) &&
+                moduleIncludesPackages = TryGetPropertyIgnoreCase(module, "IncludesPackages", out var includesPackagesElement) &&
                                          includesPackagesElement.ValueKind == JsonValueKind.True;
-                if (module.TryGetProperty("ConfigPath", out var configPathElement))
+                if (TryGetPropertyIgnoreCase(module, "ConfigPath", out var configPathElement))
                 {
                     var configuredPath = configPathElement.GetString();
                     if (!string.IsNullOrWhiteSpace(configuredPath))
                     {
                         var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
                         var repositoryRoot = releaseDirectory;
-                        if (module.TryGetProperty("RepositoryRoot", out var rootElement) &&
+                        if (TryGetPropertyIgnoreCase(module, "RepositoryRoot", out var rootElement) &&
                             !string.IsNullOrWhiteSpace(rootElement.GetString()))
                         {
                             repositoryRoot = Path.GetFullPath(Path.Combine(releaseDirectory, rootElement.GetString()!));
@@ -186,15 +186,15 @@ public sealed class RepositoryCatalogScanner
                 }
             }
 
-            var hasTools = document.RootElement.TryGetProperty("Tools", out var tools) &&
+            var hasTools = TryGetPropertyIgnoreCase(document.RootElement, "Tools", out var tools) &&
                            tools.ValueKind == JsonValueKind.Object;
-            var hasGitHub = document.RootElement.TryGetProperty("GitHub", out var gitHub) &&
+            var hasGitHub = TryGetPropertyIgnoreCase(document.RootElement, "GitHub", out var gitHub) &&
                             gitHub.ValueKind == JsonValueKind.Object;
-            var hasWorkspaceValidation = document.RootElement.TryGetProperty("WorkspaceValidation", out var workspaceValidation) &&
+            var hasWorkspaceValidation = TryGetPropertyIgnoreCase(document.RootElement, "WorkspaceValidation", out var workspaceValidation) &&
                                          workspaceValidation.ValueKind == JsonValueKind.Object;
-            var hasWinget = document.RootElement.TryGetProperty("Winget", out var winget) &&
+            var hasWinget = TryGetPropertyIgnoreCase(document.RootElement, "Winget", out var winget) &&
                             winget.ValueKind == JsonValueKind.Object;
-            var hasAppleApps = document.RootElement.TryGetProperty("AppleApps", out var appleApps) &&
+            var hasAppleApps = TryGetPropertyIgnoreCase(document.RootElement, "AppleApps", out var appleApps) &&
                                appleApps.ValueKind == JsonValueKind.Object;
             return hasModule || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps
                 ? new ReleaseBuildContract(
@@ -202,7 +202,7 @@ public sealed class RepositoryCatalogScanner
                     moduleConfigPath,
                     includesPackages,
                     moduleIncludesPackages,
-                    RequiresUnifiedExecution: hasModule || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps)
+                    RequiresUnifiedExecution: hasModule || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps)
                 : null;
         }
         catch (Exception ex) when (
@@ -222,6 +222,27 @@ public sealed class RepositoryCatalogScanner
                 ModuleIncludesPackages: false,
                 RequiresUnifiedExecution: true);
         }
+    }
+
+    private static bool TryGetPropertyIgnoreCase(
+        JsonElement element,
+        string propertyName,
+        out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+        }
+
+        value = default;
+        return false;
     }
 
     private static bool IsModulePipelineConfig(string path)

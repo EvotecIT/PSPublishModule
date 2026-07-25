@@ -398,6 +398,58 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
         Assert.NotNull(entries.Single(entry => entry.Name == "ValidModuleRepo").ModuleBuildScriptPath);
     }
 
+    [Fact]
+    public void InspectRepository_MixedCaseSections_UseReleaseEngineSemantics()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryPath = scope.CreateRepository("MixedCaseReleaseRepo");
+        File.Delete(Path.Combine(repositoryPath, "Build", "Build-Module.ps1"));
+        var moduleConfig = Path.Combine(repositoryPath, "powerforge.json");
+        File.WriteAllText(
+            moduleConfig,
+            """{ "Build": { "Name": "MixedCaseReleaseRepo", "SourcePath": "." } }""");
+        var releaseConfig = Path.Combine(repositoryPath, "Build", "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "mOdUlE": {
+                "rEpOsItOrYrOoT": "..",
+                "cOnFiGpAtH": "powerforge.json"
+              },
+              "tOoLs": {
+                "ProjectRoot": "..",
+                "Targets": []
+              }
+            }
+            """);
+
+        var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
+
+        Assert.Equal(moduleConfig, entry.ModuleBuildScriptPath);
+        Assert.Equal(releaseConfig, entry.UnifiedReleaseConfigPath);
+        Assert.Equal(releaseConfig, entry.PrimaryBuildScriptPath);
+    }
+
+    [Fact]
+    public void InspectRepository_PackageOnlyRelease_UsesUnifiedCheckpointContract()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryPath = scope.CreateRepository("PackageOnlyReleaseRepo");
+        File.Delete(Path.Combine(repositoryPath, "Build", "Build-Module.ps1"));
+        var releaseConfig = Path.Combine(repositoryPath, "Build", "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """{ "Packages": { "RootPath": "..", "Build": true } }""");
+
+        var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
+
+        Assert.Equal(ReleaseRepositoryKind.Library, entry.RepositoryKind);
+        Assert.Equal(releaseConfig, entry.ProjectBuildScriptPath);
+        Assert.Equal(releaseConfig, entry.UnifiedReleaseConfigPath);
+        Assert.Equal(releaseConfig, entry.PrimaryBuildScriptPath);
+    }
+
     private sealed class TemporaryDirectoryScope : IDisposable
     {
         public TemporaryDirectoryScope()

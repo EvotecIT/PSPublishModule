@@ -267,6 +267,52 @@ public sealed class UnifiedReleaseCheckpointIntegrityTests
     }
 
     [Fact]
+    public void BuildPendingTargets_omits_module_repository_for_build_only_module_contract()
+    {
+        using var scope = new TestDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("BuildOnlyModuleRepo");
+        var moduleOutput = scope.CreateDirectory(Path.Combine("BuildOnlyModuleRepo", "Artifacts", "Module"));
+        var buildRoot = scope.CreateDirectory(Path.Combine("BuildOnlyModuleRepo", "Build"));
+        var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+        var releaseConfig = Path.Combine(buildRoot, "release.json");
+        File.WriteAllText(
+            moduleConfig,
+            """
+            {
+              "Build": { "Name": "Sample", "SourcePath": "." },
+              "Segments": [
+                { "Type": "Build", "Configuration": { "Enabled": true } }
+              ]
+            }
+            """);
+        File.WriteAllText(
+            releaseConfig,
+            """{ "Module": { "RepositoryRoot": "..", "ConfigPath": "powerforge.json" } }""");
+        var unified = new PowerForgeReleaseResult {
+            Success = true,
+            ConfigPath = releaseConfig
+        };
+        var queueItem = CreatePublishQueueItem(
+            repositoryRoot,
+            "BuildOnlyModuleRepo",
+            releaseConfig,
+            unified,
+            [
+                new ReleaseSigningReceipt(
+                    repositoryRoot,
+                    "BuildOnlyModuleRepo",
+                    ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                    moduleOutput,
+                    "Directory",
+                    ReleaseSigningReceiptStatus.Signed,
+                    "Signed.",
+                    DateTimeOffset.UtcNow)
+            ]);
+
+        Assert.Empty(new ReleasePublishExecutionService().BuildPendingTargets([queueItem]));
+    }
+
+    [Fact]
     public void BuildPendingTargets_honors_referenced_package_publish_override()
     {
         using var scope = new TestDirectoryScope();
@@ -327,7 +373,8 @@ public sealed class UnifiedReleaseCheckpointIntegrityTests
         string repositoryRoot,
         string repositoryName,
         string releaseConfig,
-        PowerForgeReleaseResult unified)
+        PowerForgeReleaseResult unified,
+        IReadOnlyList<ReleaseSigningReceipt>? receipts = null)
     {
         var build = new ReleaseBuildExecutionResult(
             repositoryRoot,
@@ -342,7 +389,7 @@ public sealed class UnifiedReleaseCheckpointIntegrityTests
             true,
             "Signing completed.",
             JsonSerializer.Serialize(build),
-            []);
+            receipts ?? []);
         return new ReleaseQueueItem(
             repositoryRoot,
             repositoryName,

@@ -7,6 +7,46 @@ namespace PowerForgeStudio.Tests;
 public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 {
     [Fact]
+    public async Task ExecuteAsync_package_only_release_uses_unified_checkpoint_path()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("PackageOnlyRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("PackageOnlyRepo", "Build"));
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """{ "Packages": { "RootPath": "..", "Build": true } }""");
+        var unifiedCalls = 0;
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()),
+            (configPath, _) =>
+            {
+                unifiedCalls++;
+                Assert.Equal(releaseConfig, configPath);
+                return new PowerForgeReleaseResult {
+                    Success = true,
+                    ConfigPath = configPath,
+                    Packages = new ProjectBuildHostExecutionResult {
+                        Success = true,
+                        ConfigPath = configPath,
+                        RootPath = repositoryRoot
+                    }
+                };
+            });
+
+        var result = await service.ExecuteAsync(repositoryRoot);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, unifiedCalls);
+        Assert.False(string.IsNullOrWhiteSpace(result.UnifiedReleaseStateJson));
+        Assert.False(string.IsNullOrWhiteSpace(result.UnifiedReleaseConfigSha256));
+        Assert.Equal(ReleaseBuildAdapterKind.ProjectBuild, Assert.Single(result.AdapterResults).AdapterKind);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_rejects_release_contract_drift_during_the_build()
     {
         using var scope = new TemporaryDirectoryScope();
