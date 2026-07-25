@@ -207,7 +207,11 @@ internal sealed partial class PowerForgeReleaseService
                        spec.Tools is not null &&
                        !request.ModuleOnly &&
                        !request.PackagesOnly;
-        var runAppleApps = spec.AppleApps is not null && !request.ModuleOnly && !request.PackagesOnly && !request.ToolsOnly;
+        var runAppleApps = spec.AppleApps is not null &&
+                           !request.SkipAppleApps &&
+                           !request.ModuleOnly &&
+                           !request.PackagesOnly &&
+                           !request.ToolsOnly;
         var appleTargetMatches = runAppleApps
             ? ResolveAppleTargetMatches(spec.AppleApps!, selectedTargets)
             : Array.Empty<string>();

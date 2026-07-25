@@ -184,9 +184,13 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
             new ProjectBuildHostService(),
             new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
             new ModuleBuildHostService(new ThrowingPowerShellRunner()),
-            configPath =>
+            (configPath, request) =>
             {
                 capturedConfig = configPath;
+                Assert.True(request.SkipAppleApps);
+                Assert.False(request.PublishNuget);
+                Assert.False(request.PublishProjectGitHub);
+                Assert.False(request.PublishToolGitHub);
                 return new PowerForgeReleaseResult {
                     Success = true,
                     ToolPlan = new PowerForgeToolReleasePlan(),
@@ -212,6 +216,69 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Equal(ReleaseBuildAdapterKind.ToolBuild, adapter.AdapterKind);
         Assert.Contains(toolDirectory, adapter.ArtifactDirectories);
         Assert.Contains(zipPath, adapter.ArtifactFiles);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WorkspaceValidationContract_UsesUnifiedReleaseEngine()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ValidatedRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("ValidatedRepo", "Build"));
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "Packages": {
+                "RootPath": "..",
+                "Build": true
+              },
+              "WorkspaceValidation": {
+                "ConfigPath": "workspace.validation.json"
+              }
+            }
+            """);
+        var packagePath = Path.Combine(repositoryRoot, "Artifacts", "ValidatedRepo.1.0.0.nupkg");
+        Directory.CreateDirectory(Path.GetDirectoryName(packagePath)!);
+        File.WriteAllText(packagePath, "package");
+        var unifiedCalls = 0;
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()),
+            (configPath, _) =>
+            {
+                unifiedCalls++;
+                Assert.Equal(releaseConfig, configPath);
+                return new PowerForgeReleaseResult {
+                    Success = true,
+                    WorkspaceValidation = new WorkspaceValidationResult {
+                        Succeeded = true
+                    },
+                    Packages = new ProjectBuildHostExecutionResult {
+                        Success = true,
+                        Result = new ProjectBuildResult {
+                            Success = true,
+                            Release = new DotNetRepositoryReleaseResult {
+                                Success = true,
+                                Projects = {
+                                    new DotNetRepositoryProjectResult {
+                                        ProjectName = "ValidatedRepo",
+                                        Packages = { packagePath }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                };
+            });
+
+        var result = await service.ExecuteAsync(repositoryRoot);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, unifiedCalls);
+        Assert.Equal(ReleaseBuildAdapterKind.ProjectBuild, Assert.Single(result.AdapterResults).AdapterKind);
     }
 
     private sealed class TemporaryDirectoryScope : IDisposable

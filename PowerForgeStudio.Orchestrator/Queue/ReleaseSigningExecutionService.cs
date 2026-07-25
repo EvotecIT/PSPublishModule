@@ -2,6 +2,7 @@ using PowerForge;
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Signing;
 using PowerForgeStudio.Orchestrator.Host;
+using System.Text.Json;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
@@ -78,6 +79,8 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
             receipts.Add(await SignArtifactAsync(queueItem.RootPath, artifact, settings, cancellationToken));
         }
 
+        RefreshUnifiedToolArchives(queueItem, receipts);
+
         var failed = receipts.Count(receipt => receipt.Status == ReleaseSigningReceiptStatus.Failed);
         var signed = receipts.Count(receipt => receipt.Status == ReleaseSigningReceiptStatus.Signed);
         var skipped = receipts.Count(receipt => receipt.Status == ReleaseSigningReceiptStatus.Skipped);
@@ -92,6 +95,74 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
             Summary: summary,
             SourceCheckpointStateJson: queueItem.CheckpointStateJson,
             Receipts: receipts);
+    }
+
+    private void RefreshUnifiedToolArchives(ReleaseQueueItem queueItem, List<ReleaseSigningReceipt> receipts)
+    {
+        var buildResult = _checkpointReader.TryReadBuildResult(queueItem);
+        if (string.IsNullOrWhiteSpace(buildResult?.UnifiedReleaseStateJson))
+            return;
+
+        var signedDirectories = receipts
+            .Where(static receipt =>
+                receipt.Status == ReleaseSigningReceiptStatus.Signed &&
+                string.Equals(receipt.ArtifactKind, "Directory", StringComparison.OrdinalIgnoreCase))
+            .Select(static receipt => receipt.ArtifactPath)
+            .ToArray();
+        if (signedDirectories.Length == 0)
+            return;
+
+        try
+        {
+            var unified = JsonSerializer.Deserialize<PowerForgeReleaseResult>(buildResult.UnifiedReleaseStateJson!);
+            if (unified is null)
+                throw new InvalidOperationException("Unified release build state could not be deserialized after signing.");
+
+            var refreshedArchives = PowerForgeReleaseService.RefreshBuiltToolArchivesAfterSigning(unified, signedDirectories);
+            foreach (var archivePath in refreshedArchives)
+            {
+                var receiptIndex = receipts.FindIndex(receipt =>
+                    string.Equals(receipt.ArtifactPath, archivePath, StringComparison.OrdinalIgnoreCase));
+                if (receiptIndex < 0)
+                    continue;
+
+                receipts[receiptIndex] = receipts[receiptIndex] with {
+                    Status = ReleaseSigningReceiptStatus.Signed,
+                    Summary = "Archive rebuilt from the signed tool output directory.",
+                    SignedAtUtc = DateTimeOffset.UtcNow
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            var summary = FirstLine(ex.Message) ?? "Signed tool archives could not be rebuilt.";
+            var archiveIndexes = receipts
+                .Select((receipt, index) => new { receipt, index })
+                .Where(static item => item.receipt.ArtifactPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                .Select(static item => item.index)
+                .ToArray();
+            foreach (var index in archiveIndexes)
+            {
+                receipts[index] = receipts[index] with {
+                    Status = ReleaseSigningReceiptStatus.Failed,
+                    Summary = summary,
+                    SignedAtUtc = DateTimeOffset.UtcNow
+                };
+            }
+
+            if (archiveIndexes.Length == 0)
+            {
+                receipts.Add(new ReleaseSigningReceipt(
+                    RootPath: queueItem.RootPath,
+                    RepositoryName: queueItem.RepositoryName,
+                    AdapterKind: ReleaseBuildAdapterKind.ToolBuild.ToString(),
+                    ArtifactPath: queueItem.RootPath,
+                    ArtifactKind: "Archive",
+                    Status: ReleaseSigningReceiptStatus.Failed,
+                    Summary: summary,
+                    SignedAtUtc: DateTimeOffset.UtcNow));
+            }
+        }
     }
 
     private async Task<ReleaseSigningReceipt> SignArtifactAsync(

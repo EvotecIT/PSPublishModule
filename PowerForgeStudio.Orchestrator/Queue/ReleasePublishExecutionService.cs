@@ -63,7 +63,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
             queueItems,
             ReleaseQueueStage.Publish,
             TryDeserializeSigningResult,
-            static (item, signingResult) => ProjectPendingTargets(item, signingResult),
+            (item, signingResult) => ProjectPendingTargets(item, signingResult),
             static target => $"{target.RootPath}|{target.AdapterKind}|{target.TargetKind}|{target.SourcePath}");
     }
 
@@ -212,7 +212,7 @@ public sealed partial class ReleasePublishExecutionService
     private ReleaseSigningExecutionResult? TryDeserializeSigningResult(ReleaseQueueItem queueItem)
         => _checkpointSerializer.TryDeserialize<ReleaseSigningExecutionResult>(queueItem.CheckpointStateJson);
 
-    private static IEnumerable<ReleasePublishTarget> ProjectPendingTargets(ReleaseQueueItem item, ReleaseSigningExecutionResult signingResult)
+    private IEnumerable<ReleasePublishTarget> ProjectPendingTargets(ReleaseQueueItem item, ReleaseSigningExecutionResult signingResult)
     {
         var targets = new List<ReleasePublishTarget>();
         var receipts = signingResult.Receipts ?? [];
@@ -257,6 +257,12 @@ public sealed partial class ReleasePublishExecutionService
                     SourcePath: group.First(receipt => string.Equals(receipt.ArtifactKind, "Directory", StringComparison.OrdinalIgnoreCase)).ArtifactPath,
                     Destination: "Configured PowerShell repository"));
             }
+        }
+
+        if (!targets.Any(static target => string.Equals(target.TargetKind, "GitHub", StringComparison.OrdinalIgnoreCase)) &&
+            TryBuildUnifiedGitHubTarget(item, signingResult) is { } unifiedTarget)
+        {
+            targets.Add(unifiedTarget);
         }
 
         return targets;

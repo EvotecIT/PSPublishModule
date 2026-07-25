@@ -12,7 +12,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
     private readonly ProjectBuildHostService _projectBuildHostService;
     private readonly ProjectBuildCommandHostService _projectBuildCommandHostService;
     private readonly ModuleBuildHostService _moduleBuildHostService;
-    private readonly Func<string, PowerForgeReleaseResult> _executeUnifiedReleaseBuild;
+    private readonly Func<string, PowerForgeReleaseRequest, PowerForgeReleaseResult> _executeUnifiedReleaseBuild;
 
     public ReleaseBuildExecutionService()
         : this(new RepositoryCatalogScanner(), new ProjectBuildHostService(), new ProjectBuildCommandHostService(), new ModuleBuildHostService())
@@ -24,7 +24,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         ProjectBuildHostService projectBuildHostService,
         ProjectBuildCommandHostService projectBuildCommandHostService,
         ModuleBuildHostService moduleBuildHostService,
-        Func<string, PowerForgeReleaseResult>? executeUnifiedReleaseBuild = null)
+        Func<string, PowerForgeReleaseRequest, PowerForgeReleaseResult>? executeUnifiedReleaseBuild = null)
     {
         _catalogScanner = catalogScanner;
         _projectBuildHostService = projectBuildHostService;
@@ -52,7 +52,8 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         var startedAt = DateTimeOffset.UtcNow;
         if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
         {
-            var unified = _executeUnifiedReleaseBuild(repository.UnifiedReleaseConfigPath!);
+            var configPath = repository.UnifiedReleaseConfigPath!;
+            var unified = _executeUnifiedReleaseBuild(configPath, CreateUnifiedReleaseBuildRequest(configPath));
             results.AddRange(CreateUnifiedAdapterResults(repository, unified, DateTimeOffset.UtcNow - startedAt));
             return ReleaseQueueExecutionResultFactory.CreateBuildResult(
                 repositoryRoot,
@@ -77,18 +78,21 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             results);
     }
 
-    private static PowerForgeReleaseResult ExecuteUnifiedReleaseBuild(string configPath)
-    {
-        var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
-        var request = new PowerForgeReleaseRequest {
+    internal static PowerForgeReleaseRequest CreateUnifiedReleaseBuildRequest(string configPath)
+        => new() {
             ConfigPath = configPath,
             PublishNuget = false,
             PublishProjectGitHub = false,
             PublishToolGitHub = false,
             ModuleRunMode = ConfigurationGateMode.Build,
             ModuleNoSign = true,
-            EnableSigning = false
+            EnableSigning = false,
+            SkipAppleApps = true
         };
+
+    private static PowerForgeReleaseResult ExecuteUnifiedReleaseBuild(string configPath, PowerForgeReleaseRequest request)
+    {
+        var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
         return new PowerForgeReleaseService(new NullLogger()).Execute(spec, request);
     }
 

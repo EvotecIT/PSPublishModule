@@ -170,13 +170,15 @@ public sealed class RepositoryCatalogScanner
                            tools.ValueKind == JsonValueKind.Object;
             var hasGitHub = document.RootElement.TryGetProperty("GitHub", out var gitHub) &&
                             gitHub.ValueKind == JsonValueKind.Object;
-            return moduleConfigPath is not null || includesPackages || hasTools || hasGitHub
+            var hasWorkspaceValidation = document.RootElement.TryGetProperty("WorkspaceValidation", out var workspaceValidation) &&
+                                         workspaceValidation.ValueKind == JsonValueKind.Object;
+            return moduleConfigPath is not null || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation
                 ? new ReleaseBuildContract(
                     releaseConfigPath,
                     moduleConfigPath,
                     includesPackages,
                     moduleIncludesPackages,
-                    RequiresUnifiedExecution: hasTools || hasGitHub)
+                    RequiresUnifiedExecution: hasTools || hasGitHub || hasWorkspaceValidation)
                 : null;
         }
         catch (Exception ex) when (

@@ -123,4 +123,126 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public async Task ExecuteAsync_UnifiedRelease_PublishesNonZipToolAsset()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "Tools": {
+                "ProjectRoot": "..",
+                "Targets": []
+              },
+              "GitHub": {
+                "Publish": true,
+                "Owner": "EvotecIT",
+                "Repository": "UnifiedRepo"
+              }
+            }
+            """);
+        var executablePath = Path.Combine(repositoryRoot, "Artifacts", "UnifiedRepo.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(executablePath)!);
+        File.WriteAllText(executablePath, "signed");
+        var unified = new PowerForgeReleaseResult {
+            Success = true,
+            ConfigPath = releaseConfig,
+            ReleaseAssets = [executablePath],
+            ReleaseAssetEntries = [
+                new PowerForgeReleaseAssetEntry {
+                    Path = executablePath,
+                    Category = PowerForgeReleaseAssetCategory.Tool
+                }
+            ]
+        };
+        var buildResult = new ReleaseBuildExecutionResult(
+            repositoryRoot,
+            true,
+            "Build completed.",
+            1,
+            [
+                new ReleaseBuildAdapterResult(
+                    ReleaseBuildAdapterKind.ToolBuild,
+                    true,
+                    "Tool build completed.",
+                    0,
+                    1,
+                    [],
+                    [executablePath])
+            ],
+            JsonSerializer.Serialize(unified));
+        var signingResult = new ReleaseSigningExecutionResult(
+            repositoryRoot,
+            true,
+            "Signing completed.",
+            JsonSerializer.Serialize(buildResult),
+            [
+                new ReleaseSigningReceipt(
+                    repositoryRoot,
+                    "UnifiedRepo",
+                    ReleaseBuildAdapterKind.ToolBuild.ToString(),
+                    executablePath,
+                    "File",
+                    ReleaseSigningReceiptStatus.Signed,
+                    "Signed.",
+                    DateTimeOffset.UtcNow)
+            ]);
+        var queueItem = new ReleaseQueueItem(
+            repositoryRoot,
+            "UnifiedRepo",
+            ReleaseRepositoryKind.Library,
+            ReleaseWorkspaceKind.PrimaryRepository,
+            1,
+            ReleaseQueueStage.Publish,
+            ReleaseQueueItemStatus.ReadyToRun,
+            "Ready.",
+            "publish.ready",
+            JsonSerializer.Serialize(signingResult),
+            DateTimeOffset.UtcNow);
+        string? capturedState = null;
+        var service = new ReleasePublishExecutionService(
+            new RepositoryCatalogScanner(),
+            new ModuleBuildHostService(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(),
+            new ProjectBuildPublishHostService(),
+            (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, string.Empty, string.Empty, "dotnet", TimeSpan.Zero, false, null)),
+            publishUnifiedGitHub: (_, stateJson) =>
+            {
+                capturedState = stateJson;
+                return new PowerForgeReleaseResult {
+                    Success = true,
+                    UnifiedGitHubRelease = new PowerForgeUnifiedGitHubReleaseResult {
+                        Owner = "EvotecIT",
+                        Repository = "UnifiedRepo",
+                        TagName = "v1.0.0",
+                        Success = true,
+                        AssetPaths = [executablePath]
+                    }
+                };
+            });
+
+        try
+        {
+            var targets = service.BuildPendingTargets([queueItem]);
+            var target = Assert.Single(targets);
+            Assert.Equal("GitHub", target.TargetKind);
+            Assert.Equal(executablePath, target.SourcePath);
+
+            using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+            var result = await service.ExecuteAsync(queueItem);
+
+            Assert.True(result.Succeeded);
+            Assert.NotNull(capturedState);
+            Assert.Equal(ReleasePublishReceiptStatus.Published, Assert.Single(result.Receipts).Status);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
 }

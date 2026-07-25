@@ -49,6 +49,11 @@ internal sealed class PowerForgeReleaseRequest
 
     public bool ToolsOnly { get; set; }
 
+    /// <summary>
+    /// Prevents configured Apple application lanes from running while other unified release lanes execute.
+    /// </summary>
+    public bool SkipAppleApps { get; set; }
+
     public bool? PublishNuget { get; set; }
 
     public bool? PublishProjectGitHub { get; set; }

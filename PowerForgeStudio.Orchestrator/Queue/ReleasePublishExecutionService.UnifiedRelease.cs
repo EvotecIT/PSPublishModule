@@ -1,12 +1,60 @@
 using System.Text.Json;
 using PowerForge;
 using PowerForgeStudio.Domain.Publish;
+using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Signing;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
 public sealed partial class ReleasePublishExecutionService
 {
+    private ReleasePublishTarget? TryBuildUnifiedGitHubTarget(
+        ReleaseQueueItem item,
+        ReleaseSigningExecutionResult signingResult)
+    {
+        try
+        {
+            var buildResult = _checkpointSerializer.TryDeserialize<ReleaseBuildExecutionResult>(signingResult.SourceCheckpointStateJson);
+            if (string.IsNullOrWhiteSpace(buildResult?.UnifiedReleaseStateJson))
+                return null;
+
+            var unified = JsonSerializer.Deserialize<PowerForgeReleaseResult>(buildResult.UnifiedReleaseStateJson!);
+            if (unified is null)
+                return null;
+
+            var repository = _catalogScanner.InspectRepository(item.RootPath);
+            var configPath = unified.ConfigPath ?? repository.UnifiedReleaseConfigPath;
+            if (string.IsNullOrWhiteSpace(configPath))
+                return null;
+
+            var spec = PowerForgeReleaseService.LoadConfiguration(configPath!);
+            if (spec.GitHub?.Publish != true && spec.Tools?.GitHub.Publish != true)
+                return null;
+
+            var assets = unified.ReleaseAssets
+                .Concat(unified.ReleaseAssetEntries.Select(static entry => entry.StagedPath ?? entry.Path))
+                .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var sourcePath = assets.FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(sourcePath))
+                return null;
+
+            return new ReleasePublishTarget(
+                RootPath: item.RootPath,
+                RepositoryName: item.RepositoryName,
+                AdapterKind: "UnifiedRelease",
+                TargetName: $"{assets.Length} unified GitHub asset(s)",
+                TargetKind: "GitHub",
+                SourcePath: sourcePath,
+                Destination: "Configured unified GitHub release");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private IReadOnlyList<ReleasePublishReceipt> ExecuteUnifiedGitHubPublish(
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
         ReleaseSigningExecutionResult signingResult)

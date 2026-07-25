@@ -122,6 +122,35 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
     }
 
     [Fact]
+    public void InspectRepository_WorkspaceValidation_RetainsUnifiedReleaseContract()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryPath = scope.CreateRepository("ValidatedRepo");
+        var buildPath = Path.Combine(repositoryPath, "Build");
+        File.Delete(Path.Combine(buildPath, "Build-Module.ps1"));
+        var releaseConfig = Path.Combine(buildPath, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "Packages": {
+                "RootPath": "..",
+                "Build": true
+              },
+              "WorkspaceValidation": {
+                "ConfigPath": "workspace.validation.json"
+              }
+            }
+            """);
+
+        var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
+
+        Assert.True(entry.IsReleaseManaged);
+        Assert.Equal(releaseConfig, entry.UnifiedReleaseConfigPath);
+        Assert.Equal(releaseConfig, entry.PrimaryBuildScriptPath);
+    }
+
+    [Fact]
     public void InspectRepository_ModuleOwnedPackages_SuppressesOuterPackageContract()
     {
         using var scope = new TemporaryDirectoryScope();
