@@ -142,13 +142,14 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
         var repository = _catalogScanner.InspectRepository(queueItem.RootPath);
         var receipts = new List<ReleasePublishReceipt>();
         var unifiedOwnsGitHub = UnifiedReleaseOwnsGitHub(repository.UnifiedReleaseConfigPath);
+        var unifiedOwnsModulePackages = UnifiedReleaseOwnsModulePackages(repository.UnifiedReleaseConfigPath);
 
         if (!string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath))
         {
             receipts.AddRange(await ExecuteProjectPublishAsync(repository, signingResult, cancellationToken, unifiedOwnsGitHub));
         }
 
-        if (!string.IsNullOrWhiteSpace(repository.ModuleBuildScriptPath))
+        if (!string.IsNullOrWhiteSpace(repository.ModuleBuildScriptPath) && !unifiedOwnsModulePackages)
         {
             receipts.AddRange(await ExecuteModulePublishAsync(repository, signingResult, cancellationToken, unifiedOwnsGitHub));
         }

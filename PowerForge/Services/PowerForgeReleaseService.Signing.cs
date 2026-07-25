@@ -199,6 +199,7 @@ internal sealed partial class PowerForgeReleaseService
             .ToArray();
         if (manifestEntries.Length == 0)
             return null;
+        var archiveManifestVersions = ReadArchiveManifestVersions(archivePath, manifestEntries);
 
         foreach (var signedDirectory in signedDirectories.Where(Directory.Exists))
         {
@@ -206,6 +207,14 @@ internal sealed partial class PowerForgeReleaseService
             {
                 foreach (var manifestEntry in manifestEntries)
                 {
+                    if (!archiveManifestVersions.TryGetValue(manifestEntry, out var archiveVersion) ||
+                        !ModuleManifestValueReader.TryGetTopLevelString(manifestPath, "ModuleVersion", out var candidateVersion) ||
+                        string.IsNullOrWhiteSpace(candidateVersion) ||
+                        !ModuleVersionsMatch(archiveVersion, candidateVersion!))
+                    {
+                        continue;
+                    }
+
                     var sourceRoot = ResolveArchiveRootFromManifest(manifestPath, manifestEntry);
                     if (sourceRoot is null || !Directory.Exists(sourceRoot))
                         continue;
@@ -220,6 +229,44 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         return null;
+    }
+
+    private static IReadOnlyDictionary<string, string> ReadArchiveManifestVersions(
+        string archivePath,
+        IReadOnlyCollection<string> manifestEntries)
+    {
+        var versions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        using var archive = ZipFile.OpenRead(archivePath);
+        foreach (var manifestEntry in manifestEntries)
+        {
+            var entry = archive.GetEntry(manifestEntry);
+            if (entry is null)
+                continue;
+
+            using var reader = new StreamReader(entry.Open());
+            var manifestText = reader.ReadToEnd();
+            if (ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(
+                    manifestText,
+                    "ModuleVersion",
+                    out var version) &&
+                !string.IsNullOrWhiteSpace(version))
+            {
+                versions[manifestEntry] = version!;
+            }
+        }
+
+        return versions;
+    }
+
+    private static bool ModuleVersionsMatch(string archiveVersion, string candidateVersion)
+    {
+        if (Version.TryParse(archiveVersion, out var parsedArchive) &&
+            Version.TryParse(candidateVersion, out var parsedCandidate))
+        {
+            return parsedArchive.Equals(parsedCandidate);
+        }
+
+        return string.Equals(archiveVersion, candidateVersion, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? ResolveArchiveRootFromManifest(string manifestPath, string manifestEntry)

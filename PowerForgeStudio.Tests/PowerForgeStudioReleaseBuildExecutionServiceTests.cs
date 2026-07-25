@@ -79,8 +79,7 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
     {
         using var scope = new TemporaryDirectoryScope();
         var repositoryRoot = scope.CreateDirectory("JsonModuleRepo");
-        var buildDirectory = scope.CreateDirectory(Path.Combine("JsonModuleRepo", "Build"));
-        File.WriteAllText(Path.Combine(buildDirectory, "Build-Project.ps1"), "# unified entry point");
+        scope.CreateDirectory(Path.Combine("JsonModuleRepo", "Build"));
         var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
         var moduleRoot = scope.CreateDirectory(Path.Combine("JsonModuleRepo", "src", "JsonModuleRepo"));
         var configuredArtifactRoot = Path.Combine(moduleRoot, "out");
@@ -99,21 +98,6 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
               ]
             }
             """);
-        File.WriteAllText(
-            Path.Combine(buildDirectory, "release.json"),
-            """
-            {
-              "Module": {
-                "RepositoryRoot": "..",
-                "ConfigPath": "powerforge.json"
-              },
-              "Packages": {
-                "RootPath": "..",
-                "Build": true
-              }
-            }
-            """);
-
         PowerShellRunRequest? captured = null;
         var moduleRunner = new CapturingPowerShellRunner(request =>
         {
@@ -135,15 +119,14 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
         var result = await service.ExecuteAsync(repositoryRoot);
 
         Assert.True(result.Succeeded);
-        Assert.Contains(result.AdapterResults, adapter => adapter.AdapterKind == ReleaseBuildAdapterKind.ProjectBuild);
-        var adapter = Assert.Single(result.AdapterResults, adapter => adapter.AdapterKind == ReleaseBuildAdapterKind.ModuleBuild);
+        var adapter = Assert.Single(result.AdapterResults);
         Assert.Equal(ReleaseBuildAdapterKind.ModuleBuild, adapter.AdapterKind);
         Assert.NotNull(captured);
         Assert.Contains($"ConfigPath = '{moduleConfig}'", captured!.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("$buildScriptPath =", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['BuildFramework'] = 'auto'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['RunMode'] = 'Build'", captured.CommandText!, StringComparison.Ordinal);
-        Assert.Contains("$moduleBuildArguments['IncludeProjectPackages'] = $false", captured.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("$moduleBuildArguments['IncludeProjectPackages'] = $false", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['SkipInstall'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['NoSign'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(captured.PreferPwsh);
@@ -219,6 +202,122 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Equal(ReleaseBuildAdapterKind.ToolBuild, adapter.AdapterKind);
         Assert.Contains(toolDirectory, adapter.ArtifactDirectories);
         Assert.Contains(zipPath, adapter.ArtifactFiles);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ModuleReleaseContract_UsesUnifiedEngineAndPreservesOverrides()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("UnifiedModuleRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("UnifiedModuleRepo", "Build"));
+        scope.CreateDirectory(Path.Combine("UnifiedModuleRepo", "src", "UnifiedModuleRepo"));
+        var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+        File.WriteAllText(
+            moduleConfig,
+            """{ "Build": { "Name": "UnifiedModuleRepo", "SourcePath": "src/UnifiedModuleRepo" } }""");
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "Module": {
+                "RepositoryRoot": "..",
+                "ConfigPath": "powerforge.json",
+                "IncludesPackages": true,
+                "Framework": "net10.0",
+                "NoDotnetBuild": false,
+                "ModuleVersion": "4.2.0",
+                "PreReleaseTag": "preview7"
+              }
+            }
+            """);
+        var unifiedCalls = 0;
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()),
+            (configPath, request) =>
+            {
+                unifiedCalls++;
+                Assert.Equal(releaseConfig, configPath);
+                Assert.Equal(ConfigurationGateMode.Build, request.ModuleRunMode);
+                Assert.True(request.ModuleSkipInstall);
+                Assert.True(request.ModuleNoSign);
+                Assert.False(request.PublishNuget);
+                Assert.False(string.IsNullOrWhiteSpace(request.ModuleHostPath));
+
+                var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
+                Assert.True(spec.Module!.IncludesPackages);
+                Assert.Equal("net10.0", spec.Module.Framework);
+                Assert.False(spec.Module.NoDotnetBuild);
+                Assert.Equal("4.2.0", spec.Module.ModuleVersion);
+                Assert.Equal("preview7", spec.Module.PreReleaseTag);
+                return new PowerForgeReleaseResult {
+                    Success = true,
+                    ConfigPath = configPath,
+                    ModulePlan = new PowerForgeModuleReleasePlanSummary {
+                        ConfigPath = moduleConfig,
+                        IncludesPackages = true
+                    },
+                    Module = new ModuleBuildHostExecutionResult {
+                        ExitCode = 0,
+                        Executable = "pwsh"
+                    }
+                };
+            });
+
+        var result = await service.ExecuteAsync(repositoryRoot);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, unifiedCalls);
+        Assert.False(string.IsNullOrWhiteSpace(result.UnifiedReleaseConfigSha256));
+        Assert.Equal(ReleaseBuildAdapterKind.ModuleBuild, Assert.Single(result.AdapterResults).AdapterKind);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_AppleOnlyRelease_CheckpointsPlanWithoutExecutingActions()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("AppleOnlyRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("AppleOnlyRepo", "Build"));
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "AppleApps": {
+                "Archive": true,
+                "Apps": [
+                  { "Name": "Sample iOS", "Enabled": true, "BundleId": "com.evotecit.sample" }
+                ]
+              }
+            }
+            """);
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()),
+            (configPath, request) =>
+            {
+                Assert.Equal(releaseConfig, configPath);
+                Assert.True(request.PlanOnly);
+                Assert.False(request.SkipAppleApps);
+                return new PowerForgeReleaseResult {
+                    Success = true,
+                    ConfigPath = configPath,
+                    AppleAppPlan = new PowerForgeAppleReleasePlan {
+                        Archive = true
+                    }
+                };
+            });
+
+        var result = await service.ExecuteAsync(repositoryRoot);
+
+        Assert.True(result.Succeeded);
+        Assert.False(string.IsNullOrWhiteSpace(result.UnifiedReleaseStateJson));
+        Assert.Equal(ReleaseBuildAdapterKind.AppleBuild, Assert.Single(result.AdapterResults).AdapterKind);
     }
 
     [Fact]

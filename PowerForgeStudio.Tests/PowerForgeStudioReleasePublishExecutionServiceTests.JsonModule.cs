@@ -16,17 +16,6 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
     {
         var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
         var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
-        File.WriteAllText(Path.Combine(buildDirectory, "Build-Project.ps1"), "# unified entry point");
-        File.WriteAllText(
-            Path.Combine(buildDirectory, "release.json"),
-            """
-            {
-              "Module": {
-                "RepositoryRoot": "..",
-                "ConfigPath": "powerforge.json"
-              }
-            }
-            """);
         File.WriteAllText(
             Path.Combine(repositoryRoot, "powerforge.json"),
             """
@@ -149,15 +138,27 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         var moduleRoot = Directory.CreateDirectory(Path.Combine(repositoryRoot, "src", "BrokenModule")).FullName;
         var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
         File.WriteAllText(moduleConfig, """{ "Build": { "Name": "BrokenModule", "SourcePath": "src/BrokenModule" } }""");
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
         File.WriteAllText(
-            Path.Combine(buildDirectory, "release.json"),
+            releaseConfig,
             """{ "Module": { "RepositoryRoot": "..", "ConfigPath": "powerforge.json" } }""");
         var packageDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Artifacts", "Packed", "BrokenModule")).FullName;
+        var buildResult = new ReleaseBuildExecutionResult(
+            repositoryRoot,
+            true,
+            "Build completed.",
+            1,
+            [],
+            UnifiedReleaseStateJson: JsonSerializer.Serialize(new PowerForgeReleaseResult {
+                Success = true,
+                ConfigPath = releaseConfig
+            }),
+            UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig));
         var signingResult = new ReleaseSigningExecutionResult(
             repositoryRoot,
             true,
             "Signing completed.",
-            null,
+            JsonSerializer.Serialize(buildResult),
             [
                 new ReleaseSigningReceipt(
                     repositoryRoot,

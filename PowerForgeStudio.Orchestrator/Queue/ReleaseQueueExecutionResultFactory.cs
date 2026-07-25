@@ -10,7 +10,8 @@ public static class ReleaseQueueExecutionResultFactory
         string rootPath,
         TimeSpan duration,
         IReadOnlyList<ReleaseBuildAdapterResult> adapterResults,
-        string? unifiedReleaseStateJson = null)
+        string? unifiedReleaseStateJson = null,
+        string? unifiedReleaseConfigSha256 = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentNullException.ThrowIfNull(adapterResults);
@@ -28,7 +29,8 @@ public static class ReleaseQueueExecutionResultFactory
             Summary: summary,
             DurationSeconds: Math.Round(duration.TotalSeconds, 2),
             AdapterResults: adapterResults,
-            UnifiedReleaseStateJson: unifiedReleaseStateJson);
+            UnifiedReleaseStateJson: unifiedReleaseStateJson,
+            UnifiedReleaseConfigSha256: unifiedReleaseConfigSha256);
     }
 
     public static ReleasePublishExecutionResult CreatePublishResult(

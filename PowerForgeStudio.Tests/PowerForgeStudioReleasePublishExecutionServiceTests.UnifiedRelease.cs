@@ -50,7 +50,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     [],
                     [zipPath])
             ],
-            UnifiedReleaseStateJson: "{}");
+            UnifiedReleaseStateJson: "{}",
+            UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig));
         var signingResult = new ReleaseSigningExecutionResult(
             repositoryRoot,
             true,
@@ -174,7 +175,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     [],
                     [executablePath])
             ],
-            JsonSerializer.Serialize(unified));
+            UnifiedReleaseStateJson: JsonSerializer.Serialize(unified),
+            UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig));
         var signingResult = new ReleaseSigningExecutionResult(
             repositoryRoot,
             true,
@@ -277,7 +279,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             "Build completed.",
             1,
             [],
-            JsonSerializer.Serialize(unified));
+            UnifiedReleaseStateJson: JsonSerializer.Serialize(unified),
+            UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig));
         var signingResult = new ReleaseSigningExecutionResult(
             repositoryRoot,
             true,
@@ -352,7 +355,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             "Build completed.",
             1,
             [],
-            JsonSerializer.Serialize(unified));
+            UnifiedReleaseStateJson: JsonSerializer.Serialize(unified),
+            UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig));
         var signingResult = new ReleaseSigningExecutionResult(
             repositoryRoot,
             true,
@@ -393,6 +397,235 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_UnifiedRelease_ValidContractDriftRequiresRebuild()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """{ "GitHub": { "Publish": true, "Owner": "EvotecIT", "Repository": "Original" } }""");
+        var unified = new PowerForgeReleaseResult {
+            Success = true,
+            ConfigPath = releaseConfig
+        };
+        var buildResult = new ReleaseBuildExecutionResult(
+            repositoryRoot,
+            true,
+            "Build completed.",
+            1,
+            [],
+            UnifiedReleaseStateJson: JsonSerializer.Serialize(unified),
+            UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig));
+        var signingResult = new ReleaseSigningExecutionResult(
+            repositoryRoot,
+            true,
+            "Signing completed.",
+            JsonSerializer.Serialize(buildResult),
+            []);
+        var queueItem = new ReleaseQueueItem(
+            repositoryRoot,
+            "DriftedUnifiedRepo",
+            ReleaseRepositoryKind.Library,
+            ReleaseWorkspaceKind.PrimaryRepository,
+            1,
+            ReleaseQueueStage.Publish,
+            ReleaseQueueItemStatus.ReadyToRun,
+            "Ready.",
+            "publish.ready",
+            JsonSerializer.Serialize(signingResult),
+            DateTimeOffset.UtcNow);
+        File.WriteAllText(
+            releaseConfig,
+            """{ "GitHub": { "Publish": true, "Owner": "EvotecIT", "Repository": "Changed" } }""");
+        var publishCalls = 0;
+        var service = new ReleasePublishExecutionService(
+            new RepositoryCatalogScanner(),
+            new ModuleBuildHostService(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(),
+            new ProjectBuildPublishHostService(),
+            (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, string.Empty, string.Empty, "dotnet", TimeSpan.Zero, false, null)),
+            publishUnifiedRelease: (_, _) =>
+            {
+                publishCalls++;
+                return new PowerForgeReleaseResult { Success = true };
+            });
+
+        try
+        {
+            var target = Assert.Single(service.BuildPendingTargets([queueItem]));
+            Assert.Equal("ConfigurationError", target.TargetKind);
+            Assert.Contains("changed after the build checkpoint", target.Destination, StringComparison.OrdinalIgnoreCase);
+
+            var result = await service.ExecuteAsync(queueItem);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(0, publishCalls);
+            Assert.Equal(ReleasePublishReceiptStatus.Failed, Assert.Single(result.Receipts).Status);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnifiedRelease_DisabledAppleAppsDoNotProjectPublishTarget()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "AppleApps": {
+                "Archive": true,
+                "Apps": [
+                  { "Name": "Disabled", "Enabled": false, "BundleId": "com.evotecit.disabled" }
+                ]
+              }
+            }
+            """);
+        var buildResult = new ReleaseBuildExecutionResult(
+            repositoryRoot,
+            true,
+            "Build completed.",
+            1,
+            [],
+            UnifiedReleaseStateJson: JsonSerializer.Serialize(new PowerForgeReleaseResult {
+                Success = true,
+                ConfigPath = releaseConfig
+            }),
+            UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig));
+        var signingResult = new ReleaseSigningExecutionResult(
+            repositoryRoot,
+            true,
+            "Signing completed.",
+            JsonSerializer.Serialize(buildResult),
+            []);
+        var queueItem = new ReleaseQueueItem(
+            repositoryRoot,
+            "DisabledAppleRepo",
+            ReleaseRepositoryKind.Library,
+            ReleaseWorkspaceKind.PrimaryRepository,
+            1,
+            ReleaseQueueStage.Publish,
+            ReleaseQueueItemStatus.ReadyToRun,
+            "Ready.",
+            "publish.ready",
+            JsonSerializer.Serialize(signingResult),
+            DateTimeOffset.UtcNow);
+        var service = new ReleasePublishExecutionService();
+
+        try
+        {
+            Assert.Empty(service.BuildPendingTargets([queueItem]));
+
+            var result = await service.ExecuteAsync(queueItem);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(ReleasePublishReceiptStatus.Skipped, Assert.Single(result.Receipts).Status);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnifiedRelease_PublishesModuleOwnedPackagesThroughSharedEngine()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+        var sourceDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "src", "UnifiedModuleRepo")).FullName;
+        var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+        File.WriteAllText(
+            moduleConfig,
+            $$"""{ "Build": { "Name": "UnifiedModuleRepo", "SourcePath": "{{sourceDirectory.Replace("\\", "\\\\")}}" } }""");
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "Module": {
+                "RepositoryRoot": "..",
+                "ConfigPath": "powerforge.json",
+                "IncludesPackages": true
+              }
+            }
+            """);
+        var buildResult = new ReleaseBuildExecutionResult(
+            repositoryRoot,
+            true,
+            "Build completed.",
+            1,
+            [],
+            UnifiedReleaseStateJson: JsonSerializer.Serialize(new PowerForgeReleaseResult {
+                Success = true,
+                ConfigPath = releaseConfig
+            }),
+            UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig));
+        var signingResult = new ReleaseSigningExecutionResult(
+            repositoryRoot,
+            true,
+            "Signing completed.",
+            JsonSerializer.Serialize(buildResult),
+            []);
+        var queueItem = new ReleaseQueueItem(
+            repositoryRoot,
+            "UnifiedModuleRepo",
+            ReleaseRepositoryKind.Module,
+            ReleaseWorkspaceKind.PrimaryRepository,
+            1,
+            ReleaseQueueStage.Publish,
+            ReleaseQueueItemStatus.ReadyToRun,
+            "Ready.",
+            "publish.ready",
+            JsonSerializer.Serialize(signingResult),
+            DateTimeOffset.UtcNow);
+        var publishCalls = 0;
+        var service = new ReleasePublishExecutionService(
+            new RepositoryCatalogScanner(),
+            new ModuleBuildHostService(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(),
+            new ProjectBuildPublishHostService(),
+            (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, string.Empty, string.Empty, "dotnet", TimeSpan.Zero, false, null)),
+            publishUnifiedRelease: (_, _) =>
+            {
+                publishCalls++;
+                return new PowerForgeReleaseResult {
+                    Success = true,
+                    Module = new ModuleBuildHostExecutionResult {
+                        ExitCode = 0,
+                        Executable = "pwsh"
+                    }
+                };
+            });
+
+        try
+        {
+            var target = Assert.Single(service.BuildPendingTargets([queueItem]));
+            Assert.Equal("ModulePackages", target.TargetKind);
+
+            using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+            var result = await service.ExecuteAsync(queueItem);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(1, publishCalls);
+            var receipt = Assert.Single(result.Receipts);
+            Assert.Equal("ModulePackages", receipt.TargetKind);
+            Assert.Equal(ReleasePublishReceiptStatus.Published, receipt.Status);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task ExecuteAsync_UnifiedRelease_ProjectsAndPublishesAppleActions()
     {
         var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
@@ -423,7 +656,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             "Build completed.",
             1,
             [],
-            JsonSerializer.Serialize(unified));
+            UnifiedReleaseStateJson: JsonSerializer.Serialize(unified),
+            UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig));
         var signingResult = new ReleaseSigningExecutionResult(
             repositoryRoot,
             true,

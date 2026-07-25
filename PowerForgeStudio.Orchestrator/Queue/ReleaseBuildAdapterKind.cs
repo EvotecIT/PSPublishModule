@@ -4,5 +4,6 @@ public enum ReleaseBuildAdapterKind
 {
     ProjectBuild = 0,
     ModuleBuild = 1,
-    ToolBuild = 2
+    ToolBuild = 2,
+    AppleBuild = 3
 }

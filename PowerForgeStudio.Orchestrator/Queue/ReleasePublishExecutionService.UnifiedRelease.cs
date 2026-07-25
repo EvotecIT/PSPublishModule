@@ -3,6 +3,7 @@ using PowerForge;
 using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Signing;
+using PowerForgeStudio.Orchestrator.Host;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
@@ -27,6 +28,7 @@ public sealed partial class ReleasePublishExecutionService
             if (string.IsNullOrWhiteSpace(configPath))
                 return [];
 
+            UnifiedReleaseConfigFingerprint.Validate(configPath, buildResult.UnifiedReleaseConfigSha256);
             var spec = PowerForgeReleaseService.LoadConfiguration(configPath!);
             var targets = new List<ReleasePublishTarget>();
             var assets = unified.ReleaseAssets
@@ -63,13 +65,26 @@ public sealed partial class ReleasePublishExecutionService
                     Destination: "Windows Package Manager"));
             }
 
-            if (spec.AppleApps is not null)
+            if (spec.Module?.IncludesPackages == true)
             {
                 targets.Add(new ReleasePublishTarget(
                     RootPath: item.RootPath,
                     RepositoryName: item.RepositoryName,
                     AdapterKind: "UnifiedRelease",
-                    TargetName: $"{spec.AppleApps.Apps.Count(static app => app.Enabled)} Apple application(s)",
+                    TargetName: "Module-owned package release",
+                    TargetKind: "ModulePackages",
+                    SourcePath: configPath,
+                    Destination: "Configured module package destinations"));
+            }
+
+            var enabledAppleApps = spec.AppleApps?.Apps.Count(static app => app.Enabled) ?? 0;
+            if (enabledAppleApps > 0 && HasConfiguredApplePublishAction(spec.AppleApps!))
+            {
+                targets.Add(new ReleasePublishTarget(
+                    RootPath: item.RootPath,
+                    RepositoryName: item.RepositoryName,
+                    AdapterKind: "UnifiedRelease",
+                    TargetName: $"{enabledAppleApps} Apple application(s)",
                     TargetKind: "Apple",
                     SourcePath: configPath,
                     Destination: "Configured Apple release destinations"));
@@ -106,6 +121,10 @@ public sealed partial class ReleasePublishExecutionService
 
         try
         {
+            UnifiedReleaseConfigFingerprint.Validate(
+                repository.UnifiedReleaseConfigPath!,
+                buildResult.UnifiedReleaseConfigSha256);
+            var spec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
             var result = _publishUnifiedRelease(repository.UnifiedReleaseConfigPath!, buildResult.UnifiedReleaseStateJson!);
             var receipts = result.ToolGitHubReleases
                 .Select(release => ReleaseQueueReceiptFactory.CreatePublishReceipt(
@@ -119,6 +138,20 @@ public sealed partial class ReleasePublishExecutionService
                     release.Success ? $"GitHub release {release.TagName} published." : release.ErrorMessage ?? "Tool GitHub release failed.",
                     release.AssetPaths.FirstOrDefault()))
                 .ToList();
+
+            if (spec.Module?.IncludesPackages == true && result.Module is { } modulePublish)
+            {
+                receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                    repository.RootPath,
+                    repository.Name,
+                    "UnifiedRelease",
+                    "Module-owned package release",
+                    "ModulePackages",
+                    "Configured module package destinations",
+                    modulePublish.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
+                    modulePublish.Succeeded ? "Module-owned package publish workflow completed." : FirstLine(modulePublish.StandardError) ?? "Module-owned package publish workflow failed.",
+                    result.ModuleAssets.FirstOrDefault()));
+            }
 
             if (result.UnifiedGitHubRelease is { } unified)
             {
@@ -184,6 +217,7 @@ public sealed partial class ReleasePublishExecutionService
             spec,
             new PowerForgeReleaseRequest {
                 ConfigPath = configPath,
+                ModuleHostPath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
                 ModuleRunMode = ConfigurationGateMode.Publish,
                 AppleActionConfirmed = true
             },
@@ -204,4 +238,32 @@ public sealed partial class ReleasePublishExecutionService
             return false;
         }
     }
+
+    private static bool UnifiedReleaseOwnsModulePackages(string? configPath)
+    {
+        if (string.IsNullOrWhiteSpace(configPath))
+            return false;
+
+        try
+        {
+            return PowerForgeReleaseService.LoadConfiguration(configPath!).Module?.IncludesPackages == true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool HasConfiguredApplePublishAction(PowerForgeAppleReleaseOptions options)
+        => options.Archive ||
+           options.Upload ||
+           options.PrepareDistribution ||
+           options.SyncMetadata ||
+           options.SyncAppInfo ||
+           options.SyncScreenshots ||
+           options.CheckReleaseReadiness ||
+           options.DistributeTestFlight ||
+           options.SubmitTestFlightBetaReview ||
+           options.SubmitForReview ||
+           options.ReleaseApprovedVersion;
 }

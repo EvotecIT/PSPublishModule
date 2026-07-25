@@ -50,7 +50,7 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
     }
 
     [Fact]
-    public void InspectRepository_UnifiedReleaseWithPackages_PreservesBothBuildContracts()
+    public void InspectRepository_ModuleAndPackages_RoutesThroughUnifiedContract()
     {
         using var scope = new TemporaryDirectoryScope();
         var repositoryPath = scope.CreateRepository("UnifiedRepo");
@@ -87,7 +87,8 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
             PowerForgeStudio.Orchestrator.Portfolio.RepositoryPlanPreviewService.ResolveProjectConfigPath(
                 entry.ProjectBuildScriptPath!,
                 repositoryPath));
-        Assert.Null(entry.UnifiedReleaseConfigPath);
+        Assert.Equal(releaseConfig, entry.UnifiedReleaseConfigPath);
+        Assert.Equal(releaseConfig, entry.PrimaryBuildScriptPath);
     }
 
     [Fact]
@@ -182,7 +183,7 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
     }
 
     [Fact]
-    public void InspectRepository_SplitRelease_PrefersDeclaredJsonModuleOverLegacyScript()
+    public void InspectRepository_ModuleRelease_PrefersDeclaredJsonAndRoutesThroughUnifiedContract()
     {
         using var scope = new TemporaryDirectoryScope();
         var repositoryPath = scope.CreateRepository("SplitModuleRepo");
@@ -203,7 +204,7 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
 
         var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
 
-        Assert.Null(entry.UnifiedReleaseConfigPath);
+        Assert.Equal(Path.Combine(buildPath, "release.json"), entry.UnifiedReleaseConfigPath);
         Assert.Equal(moduleConfig, entry.ModuleBuildScriptPath);
     }
 
@@ -293,6 +294,7 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
         Assert.Equal(ReleaseRepositoryKind.Module, entry.RepositoryKind);
         Assert.Equal(moduleConfig, entry.ModuleBuildScriptPath);
         Assert.Null(entry.ProjectBuildScriptPath);
+        Assert.Equal(Path.Combine(buildPath, "release.json"), entry.UnifiedReleaseConfigPath);
     }
 
     [Fact]
@@ -307,6 +309,24 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
         var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
 
         Assert.Null(entry.ModuleBuildScriptPath);
+    }
+
+    [Theory]
+    [InlineData("Build")]
+    [InlineData(".powerforge")]
+    public void InspectRepository_StandardFallbackModuleConfig_IsDetected(string configDirectory)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryPath = scope.CreateRepository("FallbackJsonModuleRepo");
+        File.Delete(Path.Combine(repositoryPath, "Build", "Build-Module.ps1"));
+        var directory = Directory.CreateDirectory(Path.Combine(repositoryPath, configDirectory)).FullName;
+        var moduleConfig = Path.Combine(directory, "powerforge.json");
+        File.WriteAllText(moduleConfig, """{ "Build": { "Name": "FallbackJsonModuleRepo", "SourcePath": "." } }""");
+
+        var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
+
+        Assert.Equal(moduleConfig, entry.ModuleBuildScriptPath);
+        Assert.Equal(ReleaseRepositoryKind.Module, entry.RepositoryKind);
     }
 
     [Fact]

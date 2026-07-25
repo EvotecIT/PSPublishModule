@@ -152,6 +152,49 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void RefreshBuiltArchivesAfterSigning_MatchesSignedModuleByManifestVersion()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var signedRoot = Path.Combine(root, "signed");
+            var oldModuleRoot = Path.Combine(signedRoot, "old", "PSPublishModule");
+            Directory.CreateDirectory(oldModuleRoot);
+            File.WriteAllText(Path.Combine(oldModuleRoot, "PSPublishModule.psd1"), "@{ ModuleVersion = '0.9.0' }");
+            File.WriteAllText(Path.Combine(oldModuleRoot, "PSPublishModule.dll"), "signed-old");
+
+            var currentModuleRoot = Path.Combine(signedRoot, "current", "PSPublishModule");
+            Directory.CreateDirectory(currentModuleRoot);
+            File.WriteAllText(Path.Combine(currentModuleRoot, "PSPublishModule.psd1"), "@{ ModuleVersion = '1.0.0' }");
+            File.WriteAllText(Path.Combine(currentModuleRoot, "PSPublishModule.dll"), "signed-current");
+
+            var unsignedRoot = Path.Combine(root, "unsigned");
+            var unsignedModuleRoot = Path.Combine(unsignedRoot, "PSPublishModule");
+            Directory.CreateDirectory(unsignedModuleRoot);
+            File.WriteAllText(Path.Combine(unsignedModuleRoot, "PSPublishModule.psd1"), "@{ ModuleVersion = '1.0.0' }");
+            File.WriteAllText(Path.Combine(unsignedModuleRoot, "PSPublishModule.dll"), "unsigned");
+            var archivePath = Path.Combine(root, "PSPublishModule.v1.0.0.zip");
+            ZipFile.CreateFromDirectory(unsignedRoot, archivePath);
+            var result = new PowerForgeReleaseResult {
+                ReleaseAssetEntries = [
+                    new PowerForgeReleaseAssetEntry {
+                        Path = archivePath,
+                        Category = PowerForgeReleaseAssetCategory.Module
+                    }
+                ]
+            };
+
+            PowerForgeReleaseService.RefreshBuiltArchivesAfterSigning(result, [signedRoot]);
+
+            Assert.Equal("signed-current", ReadArchiveText(archivePath, "PSPublishModule/PSPublishModule.dll"));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void RefreshBuiltArchivesAfterSigning_UnmatchedModuleZipFails()
     {
         var root = CreateSandbox();

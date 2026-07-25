@@ -61,7 +61,8 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 repositoryRoot,
                 DateTimeOffset.UtcNow - startedAt,
                 results,
-                JsonSerializer.Serialize(unified));
+                JsonSerializer.Serialize(unified),
+                UnifiedReleaseConfigFingerprint.Compute(configPath));
         }
 
         if (!string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath))
@@ -81,7 +82,8 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
     }
 
     internal static PowerForgeReleaseRequest CreateUnifiedReleaseBuildRequest(string configPath, string moduleHostPath)
-        => new() {
+    {
+        var request = new PowerForgeReleaseRequest {
             ConfigPath = configPath,
             ModuleHostPath = moduleHostPath,
             PublishNuget = false,
@@ -94,6 +96,20 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             SkipAppleApps = true,
             SubmitWinget = false
         };
+
+        var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
+        if (spec.AppleApps is not null &&
+            spec.Module is null &&
+            spec.Packages is null &&
+            spec.Tools is null &&
+            spec.WorkspaceValidation is null)
+        {
+            request.SkipAppleApps = false;
+            request.PlanOnly = true;
+        }
+
+        return request;
+    }
 
     private static PowerForgeReleaseResult ExecuteUnifiedReleaseBuild(string configPath, PowerForgeReleaseRequest request)
     {
@@ -153,6 +169,19 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 artifacts.Directories,
                 artifacts.Files,
                 ErrorTail: TrimTail(unified.Tools?.ErrorMessage ?? unified.DotNetTools?.ErrorMessage ?? unified.ErrorMessage)));
+        }
+
+        if (unified.AppleAppPlan is not null)
+        {
+            results.Add(new ReleaseBuildAdapterResult(
+                ReleaseBuildAdapterKind.AppleBuild,
+                unified.Success,
+                unified.Success ? "Unified Apple release plan checkpointed without executing external actions." : "Unified Apple release planning failed.",
+                unified.Success ? 0 : 1,
+                Math.Round(duration.TotalSeconds, 2),
+                [],
+                [],
+                ErrorTail: TrimTail(unified.ErrorMessage)));
         }
 
         if (results.Count == 0)

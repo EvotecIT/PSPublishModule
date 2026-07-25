@@ -728,6 +728,41 @@ internal sealed partial class PowerForgeReleaseService
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
         var sharedReleaseVersion = request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, builtResult);
 
+        if (spec.Module?.IncludesPackages == true)
+        {
+            var modulePublishRequest = new PowerForgeReleaseRequest {
+                ConfigPath = configPath,
+                Configuration = request.Configuration,
+                ModuleHostPath = request.ModuleHostPath,
+                ModuleRunMode = ConfigurationGateMode.Publish,
+                ModuleNoDotnetBuild = true,
+                ModuleNoSign = true,
+                ModuleSkipInstall = true,
+                ModuleSignModule = false,
+                ResolvedReleaseVersion = sharedReleaseVersion
+            };
+            var modulePublish = PrepareModuleRelease(
+                spec.Module,
+                configPath,
+                modulePublishRequest,
+                NormalizeConfiguration(request.Configuration),
+                packagePublishingRequested: true,
+                publishUnifiedGitHub: spec.GitHub?.Publish == true);
+            var modulePublishResult = new ModuleBuildHostService()
+                .ExecuteBuildAsync(modulePublish.Request)
+                .GetAwaiter()
+                .GetResult();
+            builtResult.Module = modulePublishResult;
+            if (!modulePublishResult.Succeeded)
+            {
+                builtResult.Success = false;
+                builtResult.ErrorMessage = BuildModuleFailureMessage(
+                    modulePublish.Request.ConfigPath ?? modulePublish.Request.ScriptPath ?? "module package publish",
+                    modulePublishResult);
+                return builtResult;
+            }
+        }
+
         if (spec.AppleApps is not null)
         {
             var appleResult = Execute(

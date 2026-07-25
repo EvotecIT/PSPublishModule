@@ -97,8 +97,19 @@ public sealed class RepositoryCatalogScanner
 
     private static string? FindDirectModuleBuildConfig(string directoryPath)
     {
-        var directConfig = Path.Combine(directoryPath, "powerforge.json");
-        return IsModulePipelineConfig(directConfig) ? directConfig : null;
+        foreach (var relativePath in new[]
+        {
+            "powerforge.json",
+            Path.Combine("Build", "powerforge.json"),
+            Path.Combine(".powerforge", "powerforge.json")
+        })
+        {
+            var candidate = Path.Combine(directoryPath, relativePath);
+            if (IsModulePipelineConfig(candidate))
+                return candidate;
+        }
+
+        return null;
     }
 
     private static IEnumerable<string> EnumerateBuildFiles(string directoryPath, string fileName, bool includeImmediateChildBuildFolders)
@@ -135,8 +146,9 @@ public sealed class RepositoryCatalogScanner
                                    packages.ValueKind == JsonValueKind.Object;
             string? moduleConfigPath = null;
             var moduleIncludesPackages = false;
-            if (document.RootElement.TryGetProperty("Module", out var module) &&
-                module.ValueKind == JsonValueKind.Object)
+            var hasModule = document.RootElement.TryGetProperty("Module", out var module) &&
+                            module.ValueKind == JsonValueKind.Object;
+            if (hasModule)
             {
                 moduleIncludesPackages = module.TryGetProperty("IncludesPackages", out var includesPackagesElement) &&
                                          includesPackagesElement.ValueKind == JsonValueKind.True;
@@ -174,13 +186,13 @@ public sealed class RepositoryCatalogScanner
                             winget.ValueKind == JsonValueKind.Object;
             var hasAppleApps = document.RootElement.TryGetProperty("AppleApps", out var appleApps) &&
                                appleApps.ValueKind == JsonValueKind.Object;
-            return moduleConfigPath is not null || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps
+            return hasModule || includesPackages || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps
                 ? new ReleaseBuildContract(
                     releaseConfigPath,
                     moduleConfigPath,
                     includesPackages,
                     moduleIncludesPackages,
-                    RequiresUnifiedExecution: hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps)
+                    RequiresUnifiedExecution: hasModule || hasTools || hasGitHub || hasWorkspaceValidation || hasWinget || hasAppleApps)
                 : null;
         }
         catch (Exception ex) when (
