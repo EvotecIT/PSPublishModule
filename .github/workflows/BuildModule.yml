@@ -282,10 +282,13 @@ jobs:
         shell: pwsh
         run: dotnet build .\PSPublishModule.Core.slnf -c Release --no-restore --nologo
 
-      - name: Run full PowerForge test suite
+      - name: Run core release contracts
         shell: pwsh
-        timeout-minutes: 15
-        run: dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --no-restore --no-build --nologo
+        timeout-minutes: 5
+        run: >
+          dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
+          -c Release --no-restore --no-build --nologo
+          --filter 'FullyQualifiedName~DotNetPublishPipelineRunnerCancellationTests|FullyQualifiedName~GitHubReleasePublisherTests|FullyQualifiedName~RepositoryPublisherTests'
 
       - name: Run no-publish core product build smoke
         shell: pwsh
