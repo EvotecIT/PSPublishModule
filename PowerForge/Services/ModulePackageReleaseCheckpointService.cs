@@ -22,7 +22,7 @@ internal sealed class ModulePackageReleaseCheckpointService
         {
             var request = new ProjectBuildHostRequest
             {
-                ConfigPath = lane.ConfigPath,
+                ConfigPath = lane.ResolutionConfigPath,
                 ExecuteBuild = false,
                 PlanOnly = true,
                 UpdateVersions = false,
@@ -32,7 +32,7 @@ internal sealed class ModulePackageReleaseCheckpointService
             };
             var execution = lane.Reference is not null
                 ? _projectBuildHostService.Execute(request, lane.Reference, lane.ConfigPath)
-                : _projectBuildHostService.Execute(request, lane.Inline!, lane.ConfigPath);
+                : _projectBuildHostService.Execute(request, lane.Inline!, lane.ResolutionConfigPath);
             if (!execution.Success || execution.Result.Release is null)
             {
                 throw new InvalidOperationException(
@@ -111,6 +111,7 @@ internal sealed class ModulePackageReleaseCheckpointService
                         $"ProjectBuild:{index}",
                         project.Configuration.Name ?? Path.GetFileNameWithoutExtension(configPath),
                         configPath,
+                        configPath,
                         project.Configuration,
                         null,
                         project.Configuration.PublishNuget ?? (publish.PublishNuget == true),
@@ -122,6 +123,7 @@ internal sealed class ModulePackageReleaseCheckpointService
                         $"PackageBuild:{index}",
                         package.Configuration.Name ?? "Inline package build",
                         moduleConfigPath,
+                        Path.Combine(context.ProjectRoot, Path.GetFileName(moduleConfigPath)),
                         null,
                         package.Configuration,
                         package.Configuration.PublishNuget == true,
@@ -143,6 +145,7 @@ internal sealed class ModulePackageReleaseLane
         string key,
         string name,
         string configPath,
+        string resolutionConfigPath,
         ProjectBuildConfigurationReference? reference,
         PackageBuildConfiguration? inline,
         bool publishNuget,
@@ -151,6 +154,7 @@ internal sealed class ModulePackageReleaseLane
         Key = key;
         Name = name;
         ConfigPath = configPath;
+        ResolutionConfigPath = resolutionConfigPath;
         Reference = reference;
         Inline = inline;
         PublishNuget = publishNuget;
@@ -162,6 +166,8 @@ internal sealed class ModulePackageReleaseLane
     internal string Name { get; }
 
     internal string ConfigPath { get; }
+
+    internal string ResolutionConfigPath { get; }
 
     internal ProjectBuildConfigurationReference? Reference { get; }
 

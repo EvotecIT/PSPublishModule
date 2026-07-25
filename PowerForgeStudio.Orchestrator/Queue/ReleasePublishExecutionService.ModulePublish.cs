@@ -9,6 +9,7 @@ public sealed partial class ReleasePublishExecutionService
     private async Task<ModulePackageDetails?> ResolveModulePackageDetailsAsync(
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
         ReleaseSigningExecutionResult signingResult,
+        ModulePipelineConfigurationContext? directModuleContext,
         CancellationToken cancellationToken)
     {
         var receipts = signingResult.Receipts
@@ -47,7 +48,7 @@ public sealed partial class ReleasePublishExecutionService
             return null;
 
         var expected = ReadUnifiedReleaseCheckpoint(signingResult)?.ModulePlan
-                       ?? ResolveDirectModulePlan(repository.ModuleBuildScriptPath);
+                       ?? ResolveDirectModulePlan(directModuleContext);
         var selected = expected is null
             ? manifests[0]
             : manifests.FirstOrDefault(manifest => ModuleManifestMatchesPlan(manifest.Info, expected));
@@ -97,12 +98,12 @@ public sealed partial class ReleasePublishExecutionService
                    StringComparison.OrdinalIgnoreCase);
     }
 
-    private static PowerForgeModuleReleasePlanSummary? ResolveDirectModulePlan(string? moduleBuildScriptPath)
+    private static PowerForgeModuleReleasePlanSummary? ResolveDirectModulePlan(
+        ModulePipelineConfigurationContext? context)
     {
-        if (!string.Equals(Path.GetExtension(moduleBuildScriptPath), ".json", StringComparison.OrdinalIgnoreCase))
+        if (context is null)
             return null;
 
-        var context = new ModulePipelineConfigurationService().Load(moduleBuildScriptPath!);
         var preRelease = (context.Spec.Segments ?? [])
             .OfType<ConfigurationManifestSegment>()
             .Select(segment => segment.Configuration?.Prerelease)
@@ -150,6 +151,7 @@ public sealed partial class ReleasePublishExecutionService
                 repository.RootPath,
                 repository.ModuleBuildScriptPath!,
                 cancellationToken);
+            ValidateModulePublishCheckpoint(repository, signingResult);
         }
         catch (Exception ex)
         {
@@ -160,7 +162,11 @@ public sealed partial class ReleasePublishExecutionService
         if (publishSet.Configurations.Count == 0)
             return [];
 
-        var packageDetails = await ResolveModulePackageDetailsAsync(repository, signingResult, cancellationToken);
+        var packageDetails = await ResolveModulePackageDetailsAsync(
+            repository,
+            signingResult,
+            publishSet.Context,
+            cancellationToken);
         var receipts = new List<ReleasePublishReceipt>();
         foreach (var publishConfig in publishSet.Configurations.Where(config => config.Enabled))
         {

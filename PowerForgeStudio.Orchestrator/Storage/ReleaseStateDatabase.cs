@@ -16,7 +16,7 @@ namespace PowerForgeStudio.Orchestrator.Storage;
 
 public sealed class ReleaseStateDatabase
 {
-    private const string CurrentSchemaVersion = "17";
+    private const string CurrentSchemaVersion = "18";
     private readonly SQLite _sqlite = new() {
         BusyTimeoutMs = 10_000
     };
@@ -225,6 +225,9 @@ public sealed class ReleaseStateDatabase
                 ["family_key"] = "TEXT NULL",
                 ["display_name"] = "TEXT NULL"
             },
+            ["release_portfolio_snapshot"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
+                ["unified_release_config_path"] = "TEXT NULL"
+            },
             ["release_queue_session"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
                 ["scope_key"] = "TEXT NULL",
                 ["scope_display_name"] = "TEXT NULL"
@@ -311,6 +314,7 @@ public sealed class ReleaseStateDatabase
                 workspace_kind TEXT NOT NULL,
                 module_build_script_path TEXT NULL,
                 project_build_script_path TEXT NULL,
+                unified_release_config_path TEXT NULL,
                 is_worktree INTEGER NOT NULL,
                 has_website_signals INTEGER NOT NULL,
                 is_git_repository INTEGER NOT NULL,
@@ -492,6 +496,12 @@ public sealed class ReleaseStateDatabase
         {
             await _sqlite.ExecuteNonQueryAsync(DatabasePath, command, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
+
+        await EnsureColumnExistsAsync(
+            tableName: "release_portfolio_snapshot",
+            columnName: "unified_release_config_path",
+            columnDefinition: "TEXT NULL",
+            cancellationToken).ConfigureAwait(false);
 
         await EnsureColumnExistsAsync(
             tableName: "release_portfolio_view_state",
@@ -807,6 +817,7 @@ public sealed class ReleaseStateDatabase
                     workspace_kind,
                     module_build_script_path,
                     project_build_script_path,
+                    unified_release_config_path,
                     is_worktree,
                     has_website_signals,
                     is_git_repository,
@@ -826,6 +837,7 @@ public sealed class ReleaseStateDatabase
                     @WorkspaceKind,
                     @ModuleBuildScriptPath,
                     @ProjectBuildScriptPath,
+                    @UnifiedReleaseConfigPath,
                     @IsWorktree,
                     @HasWebsiteSignals,
                     @IsGitRepository,
@@ -847,6 +859,7 @@ public sealed class ReleaseStateDatabase
                     ["@WorkspaceKind"] = item.WorkspaceKind.ToString(),
                     ["@ModuleBuildScriptPath"] = item.Repository.ModuleBuildScriptPath,
                     ["@ProjectBuildScriptPath"] = item.Repository.ProjectBuildScriptPath,
+                    ["@UnifiedReleaseConfigPath"] = item.Repository.UnifiedReleaseConfigPath,
                     ["@IsWorktree"] = item.Repository.IsWorktree ? 1 : 0,
                     ["@HasWebsiteSignals"] = item.Repository.HasWebsiteSignals ? 1 : 0,
                     ["@IsGitRepository"] = item.Git.IsGitRepository ? 1 : 0,
@@ -949,6 +962,7 @@ public sealed class ReleaseStateDatabase
                    workspace_kind,
                    module_build_script_path,
                    project_build_script_path,
+                   unified_release_config_path,
                    is_worktree,
                    has_website_signals,
                    is_git_repository,
@@ -970,17 +984,18 @@ public sealed class ReleaseStateDatabase
                 WorkspaceKind: reader.GetString(3),
                 ModuleBuildScriptPath: reader.IsDBNull(4) ? null : reader.GetString(4),
                 ProjectBuildScriptPath: reader.IsDBNull(5) ? null : reader.GetString(5),
-                IsWorktree: reader.GetInt32(6) == 1,
-                HasWebsiteSignals: reader.GetInt32(7) == 1,
-                IsGitRepository: reader.GetInt32(8) == 1,
-                BranchName: reader.IsDBNull(9) ? null : reader.GetString(9),
-                UpstreamBranch: reader.IsDBNull(10) ? null : reader.GetString(10),
-                AheadCount: reader.GetInt32(11),
-                BehindCount: reader.GetInt32(12),
-                TrackedChangeCount: reader.GetInt32(13),
-                UntrackedChangeCount: reader.GetInt32(14),
-                ReadinessKind: reader.GetString(15),
-                ReadinessReason: reader.GetString(16)),
+                UnifiedReleaseConfigPath: reader.IsDBNull(6) ? null : reader.GetString(6),
+                IsWorktree: reader.GetInt32(7) == 1,
+                HasWebsiteSignals: reader.GetInt32(8) == 1,
+                IsGitRepository: reader.GetInt32(9) == 1,
+                BranchName: reader.IsDBNull(10) ? null : reader.GetString(10),
+                UpstreamBranch: reader.IsDBNull(11) ? null : reader.GetString(11),
+                AheadCount: reader.GetInt32(12),
+                BehindCount: reader.GetInt32(13),
+                TrackedChangeCount: reader.GetInt32(14),
+                UntrackedChangeCount: reader.GetInt32(15),
+                ReadinessKind: reader.GetString(16),
+                ReadinessReason: reader.GetString(17)),
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         var planRows = await _sqlite.QueryReadOnlyAsListAsync(
@@ -1078,7 +1093,8 @@ public sealed class ReleaseStateDatabase
                     ModuleBuildScriptPath: row.ModuleBuildScriptPath,
                     ProjectBuildScriptPath: row.ProjectBuildScriptPath,
                     IsWorktree: row.IsWorktree,
-                    HasWebsiteSignals: row.HasWebsiteSignals);
+                    HasWebsiteSignals: row.HasWebsiteSignals,
+                    UnifiedReleaseConfigPath: row.UnifiedReleaseConfigPath);
                 var gitSnapshot = new RepositoryGitSnapshot(
                     IsGitRepository: row.IsGitRepository,
                     BranchName: row.BranchName,
@@ -1610,6 +1626,7 @@ public sealed class ReleaseStateDatabase
         string WorkspaceKind,
         string? ModuleBuildScriptPath,
         string? ProjectBuildScriptPath,
+        string? UnifiedReleaseConfigPath,
         bool IsWorktree,
         bool HasWebsiteSignals,
         bool IsGitRepository,

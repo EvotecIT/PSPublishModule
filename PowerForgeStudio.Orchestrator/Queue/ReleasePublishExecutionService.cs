@@ -154,7 +154,21 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
 
         if (!string.IsNullOrWhiteSpace(repository.ModuleBuildScriptPath))
         {
-            receipts.AddRange(await ExecuteModulePublishAsync(repository, signingResult, cancellationToken, unifiedOwnsGitHub));
+            var moduleReceipts = await ExecuteModulePublishAsync(
+                repository,
+                signingResult,
+                cancellationToken,
+                unifiedOwnsGitHub);
+            receipts.AddRange(moduleReceipts);
+            if (moduleReceipts.Any(static receipt =>
+                    receipt.Status == ReleasePublishReceiptStatus.Failed &&
+                    string.Equals(
+                        receipt.TargetKind,
+                        "Module publish configuration",
+                        StringComparison.OrdinalIgnoreCase)))
+            {
+                return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))

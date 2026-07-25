@@ -3,6 +3,73 @@ namespace PowerForge.Tests;
 public sealed class ModulePackageReleaseCheckpointServiceTests
 {
     [Fact]
+    public void Capture_resolves_inline_package_paths_from_the_module_project_root()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N"));
+        var moduleRoot = Path.Combine(root, "Module");
+        Directory.CreateDirectory(moduleRoot);
+        try
+        {
+            var projectPath = Path.Combine(moduleRoot, "Sample.Library.csproj");
+            File.WriteAllText(
+                projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <Version>1.0.0</Version>
+                    <PackageId>Sample.Library</PackageId>
+                    <IsPackable>true</IsPackable>
+                  </PropertyGroup>
+                </Project>
+                """);
+            var moduleConfig = Path.Combine(root, "powerforge.json");
+            File.WriteAllText(
+                moduleConfig,
+                """
+                {
+                  "Build": { "Name": "Sample", "SourcePath": "Module" },
+                  "Segments": [
+                    {
+                      "Type": "PackageBuild",
+                      "Configuration": {
+                        "RootPath": ".",
+                        "IncludeProjects": [ "Sample.Library" ],
+                        "UpdateVersions": false,
+                        "Build": false,
+                        "PublishNuget": true
+                      }
+                    }
+                  ]
+                }
+                """);
+            var releaseConfig = Path.Combine(root, "release.json");
+            var spec = new PowerForgeReleaseSpec
+            {
+                Module = new PowerForgeModuleReleaseOptions
+                {
+                    RepositoryRoot = ".",
+                    ConfigPath = "powerforge.json",
+                    IncludesPackages = true
+                }
+            };
+
+            var checkpoint = Assert.Single(
+                new ModulePackageReleaseCheckpointService().Capture(releaseConfig, spec));
+            var project = Assert.Single(checkpoint.Release.Projects);
+
+            Assert.Equal(Path.GetFullPath(projectPath), Path.GetFullPath(project.CsprojPath));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Restore_uses_unique_segment_keys_for_unnamed_inline_lanes()
     {
         var root = Path.Combine(

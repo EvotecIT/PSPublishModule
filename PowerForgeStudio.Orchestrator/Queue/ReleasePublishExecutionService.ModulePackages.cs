@@ -12,6 +12,7 @@ public sealed partial class ReleasePublishExecutionService
         ReleaseSigningExecutionResult signingResult,
         CancellationToken cancellationToken)
     {
+        ValidateModulePublishCheckpoint(repository, signingResult);
         var lanes = ModulePackageReleaseCheckpointService.ResolveLanes(
             repository.UnifiedReleaseConfigPath!,
             spec);
@@ -33,9 +34,10 @@ public sealed partial class ReleasePublishExecutionService
         foreach (var lane in lanes.Where(static lane => lane.PublishNuget || lane.PublishGitHub))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            ValidateModulePublishCheckpoint(repository, signingResult);
             var publishConfig = lane.Reference is not null
                 ? _projectBuildPublishHostService.LoadConfiguration(lane.Reference, lane.ConfigPath)
-                : _projectBuildPublishHostService.LoadConfiguration(lane.Inline!, lane.ConfigPath);
+                : _projectBuildPublishHostService.LoadConfiguration(lane.Inline!, lane.ResolutionConfigPath);
 
             var plan = ModulePackageReleaseCheckpointService
                 .Restore(lane, unified.ModulePackagePlans)

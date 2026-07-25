@@ -5,6 +5,42 @@ namespace PowerForgeStudio.Orchestrator.Queue;
 
 public sealed partial class ReleasePublishExecutionService
 {
+    private void ValidateModulePublishCheckpoint(
+        PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
+        ReleaseSigningExecutionResult signingResult)
+    {
+        var unifiedConfigPath = repository.UnifiedReleaseConfigPath;
+        var directJsonConfigPath =
+            string.Equals(
+                Path.GetExtension(repository.ModuleBuildScriptPath),
+                ".json",
+                StringComparison.OrdinalIgnoreCase)
+                ? repository.ModuleBuildScriptPath
+                : null;
+        if (string.IsNullOrWhiteSpace(unifiedConfigPath) &&
+            string.IsNullOrWhiteSpace(directJsonConfigPath))
+        {
+            return;
+        }
+
+        var buildResult = _checkpointSerializer.TryDeserialize<ReleaseBuildExecutionResult>(
+            signingResult.SourceCheckpointStateJson);
+        if (buildResult is null)
+            throw new InvalidOperationException("The signed module build checkpoint is missing. Rebuild before publishing.");
+
+        if (!string.IsNullOrWhiteSpace(unifiedConfigPath))
+        {
+            UnifiedReleaseConfigFingerprint.Validate(
+                unifiedConfigPath!,
+                buildResult.UnifiedReleaseConfigSha256);
+            return;
+        }
+
+        UnifiedReleaseConfigFingerprint.ValidateModuleConfig(
+            directJsonConfigPath!,
+            buildResult.ModuleBuildConfigSha256);
+    }
+
     private async Task<ModulePublishConfigurationSet> ExportModulePublishConfigsAsync(
         string repositoryRoot,
         string buildInputPath,
