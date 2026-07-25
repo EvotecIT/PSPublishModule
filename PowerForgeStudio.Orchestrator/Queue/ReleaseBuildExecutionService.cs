@@ -124,6 +124,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             ConfigPath = configBacked ? buildInputPath : null,
             ScriptPath = configBacked ? null : buildInputPath,
             ModulePath = modulePath,
+            Framework = configBacked ? "auto" : null,
             RunMode = configBacked ? ConfigurationGateMode.Build : null,
             SkipInstall = configBacked,
             NoSign = configBacked
@@ -198,45 +199,14 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             return;
         }
 
-        var tokenIndex = path.IndexOfAny(['<', '{']);
-        if (tokenIndex < 0)
-        {
-            return;
-        }
-
-        var searchRoot = path[..tokenIndex].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (!Directory.Exists(searchRoot))
-        {
-            return;
-        }
-
-        var tokenEnd = path.IndexOfAny(['>', '}'], tokenIndex + 1);
-        if (tokenEnd < 0)
-        {
-            return;
-        }
-
-        var relativeSuffix = path[(tokenEnd + 1)..]
-            .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var currentArtifact = Directory.EnumerateDirectories(searchRoot)
-            .Select(directory => string.IsNullOrWhiteSpace(relativeSuffix)
-                ? directory
-                : Path.Combine(directory, relativeSuffix))
+        var currentArtifact = PathTokenCandidateResolver.ResolveExistingPaths(path)
             .Where(Directory.Exists)
-            .Select(directory => new
-            {
-                Path = directory,
-                LastWriteUtc = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
-                    .Select(File.GetLastWriteTimeUtc)
-                    .DefaultIfEmpty(Directory.GetLastWriteTimeUtc(directory))
-                    .Max()
-            })
-            .OrderByDescending(candidate => candidate.LastWriteUtc)
-            .ThenByDescending(candidate => candidate.Path, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(PathTokenCandidateResolver.GetLatestWriteTimeUtc)
+            .ThenByDescending(candidate => candidate, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
         if (currentArtifact is not null)
         {
-            directories.Add(currentArtifact.Path);
+            directories.Add(currentArtifact);
         }
     }
 

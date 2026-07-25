@@ -84,8 +84,8 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
         var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
         var moduleRoot = scope.CreateDirectory(Path.Combine("JsonModuleRepo", "src", "JsonModuleRepo"));
         var configuredArtifactRoot = Path.Combine(moduleRoot, "out");
-        var configuredArtifact = Path.Combine(configuredArtifactRoot, "v1.0.0");
-        var staleArtifact = Directory.CreateDirectory(Path.Combine(configuredArtifactRoot, "v0.9.0")).FullName;
+        var configuredArtifact = Path.Combine(configuredArtifactRoot, "package-v1.0.0");
+        var staleArtifact = Directory.CreateDirectory(Path.Combine(configuredArtifactRoot, "package-v0.9.0")).FullName;
         File.WriteAllText(Path.Combine(staleArtifact, "JsonModuleRepo.zip"), "stale");
         File.SetLastWriteTimeUtc(Path.Combine(staleArtifact, "JsonModuleRepo.zip"), DateTime.UtcNow.AddDays(-1));
         File.WriteAllText(
@@ -95,7 +95,7 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
               "SchemaVersion": 1,
               "Build": { "Name": "JsonModuleRepo", "SourcePath": "src/JsonModuleRepo" },
               "Segments": [
-                { "Type": "Packed", "Configuration": { "Enabled": true, "Path": "out/<TagModuleVersionWithPreRelease>" } }
+                { "Type": "Packed", "Configuration": { "Enabled": true, "Path": "out/package-<TagModuleVersionWithPreRelease>" } }
               ]
             }
             """);
@@ -132,9 +132,12 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.NotNull(captured);
         Assert.Contains($"ConfigPath = '{moduleConfig}'", captured!.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("$buildScriptPath =", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$moduleBuildArguments['BuildFramework'] = 'auto'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['RunMode'] = 'Build'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['SkipInstall'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['NoSign'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.True(captured.PreferPwsh);
+        Assert.Equal(8, captured.RequiredRuntimeMajor);
         Assert.Contains(configuredArtifact, adapter.ArtifactDirectories);
         Assert.Contains(Path.Combine(configuredArtifact, "JsonModuleRepo.zip"), adapter.ArtifactFiles);
         Assert.DoesNotContain(Path.Combine(staleArtifact, "JsonModuleRepo.zip"), adapter.ArtifactFiles);

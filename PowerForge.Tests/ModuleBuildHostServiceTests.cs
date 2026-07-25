@@ -74,6 +74,30 @@ public sealed class ModuleBuildHostServiceTests
     }
 
     [Fact]
+    public async Task ExecuteBuildAsync_ForwardsExplicitSignModuleFalseToJsonConfig()
+    {
+        PowerShellRunRequest? captured = null;
+        var service = new ModuleBuildHostService(new StubPowerShellRunner(request =>
+        {
+            captured = request;
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        }));
+
+        var result = await service.ExecuteBuildAsync(new ModuleBuildHostBuildRequest
+        {
+            RepositoryRoot = @"C:\repo",
+            ConfigPath = @"C:\repo\powerforge.json",
+            ModulePath = @"C:\repo\PSPublishModule.dll",
+            SignModule = false,
+            SignModuleWasSpecified = true
+        });
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(captured);
+        Assert.Contains("$moduleBuildArguments['SignModule'] = $false", captured!.CommandText!, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ExecuteBuildAsync_ImportsConfiguredLocalAssemblyWithoutInstalledModuleFallback()
     {
         var modulePath = Path.GetTempFileName();

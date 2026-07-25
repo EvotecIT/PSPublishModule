@@ -85,6 +85,11 @@ public sealed class ModuleBuildHostBuildRequest
     public bool SignModule { get; set; }
 
     /// <summary>
+    /// Indicates that <see cref="SignModule"/> was explicitly selected, including an explicit false value.
+    /// </summary>
+    public bool SignModuleWasSpecified { get; set; }
+
+    /// <summary>
     /// Includes project-package work declared by the module build script.
     /// </summary>
     public bool IncludeProjectPackages { get; set; } = true;

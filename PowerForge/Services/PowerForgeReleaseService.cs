@@ -932,6 +932,7 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException("Module TimeoutSeconds must be greater than zero.");
         var includeProjectPackages = options.IncludesPackages && !request.ModuleOnly;
         var noDotnetBuildOverride = request.ModuleNoDotnetBuild ?? options.NoDotnetBuild;
+        var signModuleOverride = request.ModuleSignModule ?? options.SignModule;
         var moduleName = string.IsNullOrWhiteSpace(options.ModuleName)
             ? moduleConfig?.Spec.Build.Name
             : options.ModuleName;
@@ -956,7 +957,8 @@ internal sealed partial class PowerForgeReleaseService
                 ? request.ModulePreReleaseTag ?? options.PreReleaseTag
                 : PackageVersionUtility.GetPrereleaseVersion(request.ResolvedReleaseVersion!) ?? string.Empty,
             NoSign = request.ModuleNoSign ?? options.NoSign ?? false,
-            SignModule = request.ModuleSignModule ?? options.SignModule ?? false,
+            SignModule = signModuleOverride ?? false,
+            SignModuleWasSpecified = signModuleOverride.HasValue,
             IncludeProjectPackages = includeProjectPackages,
             Timeout = TimeSpan.FromSeconds(timeoutSeconds),
             CertificateThumbprint = request.ModuleCertificateThumbprint,

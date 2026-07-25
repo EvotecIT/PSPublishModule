@@ -122,6 +122,47 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void UnifiedGitHubRelease_ModuleVersionSourceResolvesTokenizedBuiltDirectory()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var sourceManifestPath = Path.Combine(root, "Company.Tools.psd1");
+            File.WriteAllText(sourceManifestPath, "@{ ModuleVersion = '3.0.73' }");
+            var staleDirectory = Directory.CreateDirectory(
+                Path.Combine(root, "Artifacts", "Unpacked", "v3.0.73")).FullName;
+            var staleManifest = Path.Combine(staleDirectory, "Company.Tools.psd1");
+            File.WriteAllText(staleManifest, "@{ ModuleVersion = '3.0.73' }");
+            File.SetLastWriteTimeUtc(staleManifest, DateTime.UtcNow.AddDays(-1));
+            var builtDirectory = Directory.CreateDirectory(
+                Path.Combine(root, "Artifacts", "Unpacked", "v3.0.74")).FullName;
+            var builtManifest = Path.Combine(builtDirectory, "Company.Tools.psd1");
+            File.WriteAllText(builtManifest, "@{ ModuleVersion = '3.0.74' }");
+            File.SetLastWriteTimeUtc(builtManifest, DateTime.UtcNow);
+
+            var plan = new PowerForgeModuleReleasePlanSummary
+            {
+                ModuleName = "Company.Tools",
+                ManifestPath = sourceManifestPath,
+                ModuleVersion = "3.0.X"
+            };
+
+            PowerForgeReleaseService.UpdateResolvedModuleVersion(
+                plan,
+                new[]
+                {
+                    Path.Combine(root, "Artifacts", "Unpacked", "<TagModuleVersionWithPreRelease>")
+                });
+
+            Assert.Equal("3.0.74", plan.ModuleVersion);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void UnifiedGitHubRelease_AcceptsXInsidePrereleaseLabel()
     {
         var result = new PowerForgeReleaseResult

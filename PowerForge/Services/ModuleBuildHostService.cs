@@ -340,8 +340,15 @@ public sealed class ModuleBuildHostService
                     : null);
         if (request.NoSign)
             arguments.Add("$moduleBuildArguments['NoSign'] = $true");
-        else if (request.SignModule)
-            arguments.Add("$moduleBuildArguments['SignModule'] = $true");
+        else
+            AddDirectBooleanArgument(
+                arguments,
+                "SignModule",
+                request.SignModule
+                    ? true
+                    : request.SignModuleWasSpecified
+                        ? false
+                        : null);
         if (!request.IncludeProjectPackages)
             arguments.Add("$moduleBuildArguments['IncludeProjectPackages'] = $false");
         if (request.SkipInstall)
