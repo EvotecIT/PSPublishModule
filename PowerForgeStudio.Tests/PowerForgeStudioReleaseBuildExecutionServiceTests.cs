@@ -138,6 +138,46 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_DirectJsonModuleRejectsConfigDriftDuringBuild()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("JsonModuleDriftRepo");
+        scope.CreateDirectory(Path.Combine("JsonModuleDriftRepo", "Build"));
+        scope.CreateDirectory(Path.Combine("JsonModuleDriftRepo", "Module"));
+        var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+        File.WriteAllText(
+            moduleConfig,
+            """{ "Build": { "Name": "JsonModuleDriftRepo", "SourcePath": "Module" }, "Segments": [] }""");
+        var moduleRunner = new CapturingPowerShellRunner(_ =>
+        {
+            File.WriteAllText(
+                moduleConfig,
+                """
+                {
+                  "Build": { "Name": "JsonModuleDriftRepo", "SourcePath": "Module" },
+                  "Segments": [
+                    {
+                      "Type": "GalleryNuget",
+                      "Configuration": { "Destination": "PowerShellGallery", "Enabled": true }
+                    }
+                  ]
+                }
+                """);
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        });
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(moduleRunner));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.ExecuteAsync(repositoryRoot));
+
+        Assert.Contains("changed while the build was running", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_UnifiedRelease_UsesSharedEngineAndCapturesToolArtifacts()
     {
         using var scope = new TemporaryDirectoryScope();
