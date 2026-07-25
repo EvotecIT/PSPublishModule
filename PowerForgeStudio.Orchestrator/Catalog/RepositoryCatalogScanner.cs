@@ -61,7 +61,8 @@ public sealed class RepositoryCatalogScanner
             ? releaseModuleBuildConfig ?? FindDirectModuleBuildConfig(directoryPath)
             : null;
         var moduleBuildInput = moduleBuildScript ?? moduleBuildConfig;
-        var projectBuildScript = releaseContract?.IncludesPackages == true
+        var projectBuildScript = releaseContract?.IncludesPackages == true &&
+                                 !releaseContract.ModuleIncludesPackages
             ? releaseContract.ConfigPath
             : releaseModuleBuildConfig is null
                 ? FindBuildScript(directoryPath, "Build-Project.ps1", includeImmediateChildBuildFolders)
@@ -132,33 +133,38 @@ public sealed class RepositoryCatalogScanner
             var includesPackages = document.RootElement.TryGetProperty("Packages", out var packages) &&
                                    packages.ValueKind == JsonValueKind.Object;
             string? moduleConfigPath = null;
+            var moduleIncludesPackages = false;
             if (document.RootElement.TryGetProperty("Module", out var module) &&
-                module.ValueKind == JsonValueKind.Object &&
-                module.TryGetProperty("ConfigPath", out var configPathElement))
+                module.ValueKind == JsonValueKind.Object)
             {
-                var configuredPath = configPathElement.GetString();
-                if (!string.IsNullOrWhiteSpace(configuredPath))
+                moduleIncludesPackages = module.TryGetProperty("IncludesPackages", out var includesPackagesElement) &&
+                                         includesPackagesElement.ValueKind == JsonValueKind.True;
+                if (module.TryGetProperty("ConfigPath", out var configPathElement))
                 {
-                    var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
-                    var repositoryRoot = releaseDirectory;
-                    if (module.TryGetProperty("RepositoryRoot", out var rootElement) &&
-                        !string.IsNullOrWhiteSpace(rootElement.GetString()))
+                    var configuredPath = configPathElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(configuredPath))
                     {
-                        repositoryRoot = Path.GetFullPath(Path.Combine(releaseDirectory, rootElement.GetString()!));
-                    }
+                        var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
+                        var repositoryRoot = releaseDirectory;
+                        if (module.TryGetProperty("RepositoryRoot", out var rootElement) &&
+                            !string.IsNullOrWhiteSpace(rootElement.GetString()))
+                        {
+                            repositoryRoot = Path.GetFullPath(Path.Combine(releaseDirectory, rootElement.GetString()!));
+                        }
 
-                    var fullPath = Path.GetFullPath(Path.IsPathRooted(configuredPath)
-                        ? configuredPath
-                        : Path.Combine(repositoryRoot, configuredPath));
-                    if (IsModulePipelineConfig(fullPath))
-                    {
-                        moduleConfigPath = fullPath;
+                        var fullPath = Path.GetFullPath(Path.IsPathRooted(configuredPath)
+                            ? configuredPath
+                            : Path.Combine(repositoryRoot, configuredPath));
+                        if (IsModulePipelineConfig(fullPath))
+                        {
+                            moduleConfigPath = fullPath;
+                        }
                     }
                 }
             }
 
             return moduleConfigPath is not null || includesPackages
-                ? new ReleaseBuildContract(releaseConfigPath, moduleConfigPath, includesPackages)
+                ? new ReleaseBuildContract(releaseConfigPath, moduleConfigPath, includesPackages, moduleIncludesPackages)
                 : null;
         }
         catch (Exception ex) when (
@@ -180,7 +186,8 @@ public sealed class RepositoryCatalogScanner
     private sealed record ReleaseBuildContract(
         string ConfigPath,
         string? ModuleConfigPath,
-        bool IncludesPackages);
+        bool IncludesPackages,
+        bool ModuleIncludesPackages);
 
     private static string? FindBuildScript(string directoryPath, string fileName, bool includeImmediateChildBuildFolders)
     {

@@ -126,6 +126,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             ModulePath = modulePath,
             Framework = configBacked ? "auto" : null,
             RunMode = configBacked ? ConfigurationGateMode.Build : null,
+            IncludeProjectPackages = string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath),
             SkipInstall = configBacked,
             NoSign = configBacked
         }, cancellationToken);

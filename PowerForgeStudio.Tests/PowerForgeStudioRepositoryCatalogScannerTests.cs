@@ -90,6 +90,41 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
     }
 
     [Fact]
+    public void InspectRepository_ModuleOwnedPackages_SuppressesOuterPackageContract()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryPath = scope.CreateRepository("ModuleOwnedPackagesRepo");
+        var buildPath = Path.Combine(repositoryPath, "Build");
+        File.Delete(Path.Combine(buildPath, "Build-Module.ps1"));
+        Directory.CreateDirectory(Path.Combine(repositoryPath, "src", "ModuleOwnedPackagesRepo"));
+        var moduleConfig = Path.Combine(repositoryPath, "powerforge.json");
+        File.WriteAllText(
+            moduleConfig,
+            """{ "Build": { "Name": "ModuleOwnedPackagesRepo", "SourcePath": "src/ModuleOwnedPackagesRepo" } }""");
+        File.WriteAllText(
+            Path.Combine(buildPath, "release.json"),
+            """
+            {
+              "Module": {
+                "RepositoryRoot": "..",
+                "ConfigPath": "powerforge.json",
+                "IncludesPackages": true
+              },
+              "Packages": {
+                "RootPath": "..",
+                "Build": true
+              }
+            }
+            """);
+
+        var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
+
+        Assert.Equal(ReleaseRepositoryKind.Module, entry.RepositoryKind);
+        Assert.Equal(moduleConfig, entry.ModuleBuildScriptPath);
+        Assert.Null(entry.ProjectBuildScriptPath);
+    }
+
+    [Fact]
     public void InspectRepository_InvalidModuleConfig_IsNotDetected()
     {
         using var scope = new TemporaryDirectoryScope();

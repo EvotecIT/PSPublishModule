@@ -106,6 +106,10 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
               "Module": {
                 "RepositoryRoot": "..",
                 "ConfigPath": "powerforge.json"
+              },
+              "Packages": {
+                "RootPath": "..",
+                "Build": true
               }
             }
             """);
@@ -120,20 +124,26 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
         });
         var service = new ReleaseBuildExecutionService(
             new RepositoryCatalogScanner(),
-            new ProjectBuildHostService(),
+            new ProjectBuildHostService(
+                new NullLogger(),
+                executeRelease: _ => new DotNetRepositoryReleaseResult { Success = true },
+                publishGitHub: null,
+                validateGitHubPreflight: null),
             new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
             new ModuleBuildHostService(moduleRunner));
 
         var result = await service.ExecuteAsync(repositoryRoot);
 
         Assert.True(result.Succeeded);
-        var adapter = Assert.Single(result.AdapterResults);
+        Assert.Contains(result.AdapterResults, adapter => adapter.AdapterKind == ReleaseBuildAdapterKind.ProjectBuild);
+        var adapter = Assert.Single(result.AdapterResults, adapter => adapter.AdapterKind == ReleaseBuildAdapterKind.ModuleBuild);
         Assert.Equal(ReleaseBuildAdapterKind.ModuleBuild, adapter.AdapterKind);
         Assert.NotNull(captured);
         Assert.Contains($"ConfigPath = '{moduleConfig}'", captured!.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("$buildScriptPath =", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['BuildFramework'] = 'auto'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['RunMode'] = 'Build'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$moduleBuildArguments['IncludeProjectPackages'] = $false", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['SkipInstall'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['NoSign'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(captured.PreferPwsh);
