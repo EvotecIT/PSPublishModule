@@ -338,6 +338,8 @@ public sealed class ModuleBuildHostService
             arguments.Add("$moduleBuildArguments['SignModule'] = $true");
         if (!request.IncludeProjectPackages)
             arguments.Add("$moduleBuildArguments['IncludeProjectPackages'] = $false");
+        if (request.SkipInstall)
+            arguments.Add("$moduleBuildArguments['SkipInstall'] = $true");
         if (request.UnifiedGitHubRelease)
             arguments.Add("$moduleBuildArguments['PowerForgeUnifiedGitHubRelease'] = $true");
 

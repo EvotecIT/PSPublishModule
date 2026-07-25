@@ -16,7 +16,7 @@ Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <stri
 
 ### Config
 ```powershell
-Invoke-ModuleBuild -ConfigPath <string> [-RunMode <ConfigurationGateMode>] [-ModuleVersion <string>] [-PreReleaseTag <string>] [-BuildConfiguration <string>] [-BuildFramework <string>] [-NoDotnetBuild] [-NoSign] [-SignModule] [-IncludeProjectPackages <bool>] [-PowerForgeUnifiedGitHubRelease] [-CertificateThumbprint <string>] [-SignIncludeBinaries <bool>] [-SignIncludeInternals <bool>] [-SignIncludeExe <bool>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild -ConfigPath <string> [-RunMode <ConfigurationGateMode>] [-ModuleVersion <string>] [-PreReleaseTag <string>] [-BuildConfiguration <string>] [-BuildFramework <string>] [-NoDotnetBuild] [-NoSign] [-SignModule] [-IncludeProjectPackages <bool>] [-PowerForgeUnifiedGitHubRelease] [-CertificateThumbprint <string>] [-SignIncludeBinaries <bool>] [-SignIncludeInternals <bool>] [-SignIncludeExe <bool>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-SkipInstall] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Configuration
@@ -953,7 +953,7 @@ Skips installing the module after build.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Modern
+Parameter Sets: Modern, Config
 Aliases: None
 Possible values:
 

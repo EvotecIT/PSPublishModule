@@ -61,7 +61,20 @@
       "allOf": [
         {
           "not": {
-            "required": [ "ConfigPath", "ScriptPath" ]
+            "allOf": [
+              {
+                "required": [ "ConfigPath" ],
+                "properties": {
+                  "ConfigPath": { "type": "string", "pattern": "\\S" }
+                }
+              },
+              {
+                "required": [ "ScriptPath" ],
+                "properties": {
+                  "ScriptPath": { "type": "string", "pattern": "\\S" }
+                }
+              }
+            ]
           }
         }
       ]

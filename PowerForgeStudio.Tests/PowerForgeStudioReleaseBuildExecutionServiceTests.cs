@@ -129,6 +129,9 @@ public sealed class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.NotNull(captured);
         Assert.Contains($"ConfigPath = '{moduleConfig}'", captured!.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("$buildScriptPath =", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$moduleBuildArguments['RunMode'] = 'Build'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$moduleBuildArguments['SkipInstall'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$moduleBuildArguments['NoSign'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains(configuredArtifactRoot, adapter.ArtifactDirectories);
         Assert.Contains(Path.Combine(configuredArtifact, "JsonModuleRepo.zip"), adapter.ArtifactFiles);
     }

@@ -21434,6 +21434,18 @@ and Publish enables configured publish destinations.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipInstall</maml:name>
+          <maml:description>
+            <maml:para>Skips installing the module after build.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>UpdateDiagnosticsBaseline</maml:name>
           <maml:description>
             <maml:para>Updates a diagnostics baseline file from the current run.</maml:para>

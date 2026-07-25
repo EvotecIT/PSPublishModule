@@ -85,6 +85,11 @@ public sealed class ModuleBuildHostBuildRequest
     public bool IncludeProjectPackages { get; set; } = true;
 
     /// <summary>
+    /// Skips installing the module after a JSON-backed build.
+    /// </summary>
+    public bool SkipInstall { get; set; }
+
+    /// <summary>
     /// Maximum runtime for the out-of-process module workflow.
     /// </summary>
     public TimeSpan Timeout { get; set; } = TimeSpan.FromHours(2);

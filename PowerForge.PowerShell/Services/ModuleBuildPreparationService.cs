@@ -161,6 +161,10 @@ internal sealed class ModuleBuildPreparationService
         var moduleBuilds = segments.OfType<ConfigurationBuildSegment>().ToArray();
         var options = segments.OfType<ConfigurationOptionsSegment>().LastOrDefault();
         spec.Diagnostics ??= new ModulePipelineDiagnosticsOptions();
+        spec.Install ??= new ModulePipelineInstallOptions();
+
+        if (request.SkipInstall)
+            spec.Install.Enabled = false;
 
         if (!string.IsNullOrWhiteSpace(request.ModuleVersion))
         {

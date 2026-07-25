@@ -123,7 +123,10 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             RepositoryRoot = repository.RootPath,
             ConfigPath = configBacked ? buildInputPath : null,
             ScriptPath = configBacked ? null : buildInputPath,
-            ModulePath = modulePath
+            ModulePath = modulePath,
+            RunMode = configBacked ? ConfigurationGateMode.Build : null,
+            SkipInstall = configBacked,
+            NoSign = configBacked
         }, cancellationToken);
         var artifactInfo = CollectModuleArtifacts(repository.RootPath, buildInputPath);
         var succeeded = execution.Succeeded;

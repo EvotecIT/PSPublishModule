@@ -340,6 +340,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
 
     /// <summary>Skips installing the module after build.</summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
     public SwitchParameter SkipInstall { get; set; }
 
     /// <summary>Installation strategy used when installing the module.</summary>

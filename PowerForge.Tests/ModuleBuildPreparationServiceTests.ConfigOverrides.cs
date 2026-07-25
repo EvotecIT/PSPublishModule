@@ -41,6 +41,7 @@ public sealed partial class ModuleBuildPreparationServiceTests
                 CurrentPath = root.FullName,
                 ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
                 UnifiedGitHubRelease = true,
+                SkipInstall = true,
                 DiagnosticsBaselinePath = baselinePath,
                 DiagnosticsBaselinePathWasBound = true,
                 GenerateDiagnosticsBaseline = false,
@@ -54,6 +55,7 @@ public sealed partial class ModuleBuildPreparationServiceTests
             });
 
             Assert.Equal(baselinePath, prepared.PipelineSpec.Diagnostics.BaselinePath);
+            Assert.False(prepared.PipelineSpec.Install.Enabled);
             Assert.False(prepared.PipelineSpec.Diagnostics.GenerateBaseline);
             Assert.True(prepared.PipelineSpec.Diagnostics.UpdateBaseline);
             Assert.True(prepared.PipelineSpec.Diagnostics.FailOnNewDiagnostics);
