@@ -1,5 +1,9 @@
+using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Management.Automation;
+using System.Management.Automation.Host;
 using System.Management.Automation.Runspaces;
+using System.Security;
 using System.Threading;
 using System.Threading.Tasks;
 using PSPublishModule;
@@ -95,6 +99,53 @@ public sealed class AsyncPSCmdletTests
         var item = Assert.Single(result);
         Assert.Equal(0, item.BaseObject);
     }
+
+    [Fact]
+    public void AsyncPSCmdlet_marshals_terminating_errors_to_the_pipeline_thread()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncTerminatingError",
+            typeof(TestAsyncTerminatingErrorCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncTerminatingError");
+        TestAsyncTerminatingErrorCommand.Reset();
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => powerShell.Invoke());
+
+        Assert.StartsWith("AsyncTerminatingError,", exception.ErrorRecord.FullyQualifiedErrorId, StringComparison.Ordinal);
+        Assert.Equal("async terminating failure", exception.InnerException?.Message);
+        Assert.False(TestAsyncTerminatingErrorCommand.ReachedAfterTermination);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AsyncPSCmdlet_marshals_ShouldContinue_to_the_pipeline_thread(bool approved)
+    {
+        var sessionState = InitialSessionState.Create();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncShouldContinue",
+            typeof(TestAsyncShouldContinueCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(new ChoiceHost(approved), sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncShouldContinue");
+
+        var result = powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors, string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
+        var item = Assert.Single(result);
+        Assert.Equal(approved, item.BaseObject);
+    }
 }
 
 [Cmdlet(VerbsDiagnostic.Test, "AsyncThreadAffinity")]
@@ -188,6 +239,102 @@ public sealed class TestAsyncTaskSchedulerCommand : AsyncPSCmdlet
         await Task.Yield();
         WriteObject(_scheduler.QueuedTaskCount);
     }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncTerminatingError")]
+public sealed class TestAsyncTerminatingErrorCommand : AsyncPSCmdlet
+{
+    private static int _reachedAfterTermination;
+
+    public static bool ReachedAfterTermination => Volatile.Read(ref _reachedAfterTermination) != 0;
+
+    public static void Reset()
+        => Volatile.Write(ref _reachedAfterTermination, 0);
+
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        ThrowTerminatingError(new ErrorRecord(
+            new InvalidOperationException("async terminating failure"),
+            "AsyncTerminatingError",
+            ErrorCategory.InvalidOperation,
+            targetObject: null));
+        Volatile.Write(ref _reachedAfterTermination, 1);
+        WriteObject("unreachable");
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncShouldContinue")]
+public sealed class TestAsyncShouldContinueCommand : AsyncPSCmdlet
+{
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        WriteObject(ShouldContinue("Proceed?", "Question"));
+    }
+}
+
+public sealed class ChoiceHost(bool approved) : PSHost
+{
+    private readonly Guid _id = Guid.NewGuid();
+    private readonly ChoiceHostUserInterface _ui = new(approved);
+
+    public override Guid InstanceId => _id;
+    public override string Name => nameof(ChoiceHost);
+    public override Version Version => new(1, 0);
+    public override PSHostUserInterface UI => _ui;
+    public override CultureInfo CurrentCulture => CultureInfo.InvariantCulture;
+    public override CultureInfo CurrentUICulture => CultureInfo.InvariantCulture;
+    public override void EnterNestedPrompt() { }
+    public override void ExitNestedPrompt() { }
+    public override void NotifyBeginApplication() { }
+    public override void NotifyEndApplication() { }
+    public override void SetShouldExit(int exitCode) { }
+}
+
+public sealed class ChoiceHostUserInterface(bool approved) : PSHostUserInterface
+{
+    public override PSHostRawUserInterface RawUI => null!;
+
+    public override int PromptForChoice(
+        string caption,
+        string message,
+        Collection<ChoiceDescription> choices,
+        int defaultChoice)
+        => approved ? 0 : 1;
+
+    public override string ReadLine() => string.Empty;
+    public override SecureString ReadLineAsSecureString() => new();
+    public override void Write(string value) { }
+    public override void Write(ConsoleColor foregroundColor, ConsoleColor backgroundColor, string value) { }
+    public override void WriteLine(string value) { }
+    public override void WriteErrorLine(string value) { }
+    public override void WriteDebugLine(string message) { }
+    public override void WriteProgress(long sourceId, ProgressRecord record) { }
+    public override void WriteVerboseLine(string message) { }
+    public override void WriteWarningLine(string message) { }
+
+    public override PSCredential PromptForCredential(
+        string caption,
+        string message,
+        string userName,
+        string targetName)
+        => new(userName, new SecureString());
+
+    public override PSCredential PromptForCredential(
+        string caption,
+        string message,
+        string userName,
+        string targetName,
+        PSCredentialTypes allowedCredentialTypes,
+        PSCredentialUIOptions options)
+        => PromptForCredential(caption, message, userName, targetName);
+
+    public override Dictionary<string, PSObject> Prompt(
+        string caption,
+        string message,
+        Collection<FieldDescription> descriptions)
+        => [];
 }
 
 public sealed class ForwardingTaskScheduler : TaskScheduler

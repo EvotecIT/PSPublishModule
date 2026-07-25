@@ -31,12 +31,14 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
         Output,
         OutputEnumerate,
         Error,
+        TerminatingError,
         Warning,
         Verbose,
         Debug,
         Information,
         Progress,
         ShouldProcess,
+        ShouldContinue,
         PromptForCredential
     }
 
@@ -104,6 +106,18 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
         return (bool)replyPipe.Take(CancelToken)!;
     }
 
+    /// <summary>Thread-safe ShouldContinue bridge for asynchronous cmdlet code.</summary>
+    public new bool ShouldContinue(string query, string caption)
+    {
+        ThrowIfStopped();
+        if (_currentOutPipe is null || IsPipelineThread)
+            return base.ShouldContinue(query, caption);
+
+        using var replyPipe = new BlockingCollection<object?>(boundedCapacity: 1);
+        _currentOutPipe.Add(new PipelineItem((query, caption), PipelineType.ShouldContinue, replyPipe), CancelToken);
+        return (bool)replyPipe.Take(CancelToken)!;
+    }
+
     /// <summary>Thread-safe credential prompt bridge for asynchronous cmdlet code.</summary>
     public PSCredential? PromptForCredential(string caption, string message, string userName, string targetName)
     {
@@ -144,6 +158,20 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
         }
 
         _currentOutPipe.Add(new PipelineItem(errorRecord, PipelineType.Error), CancelToken);
+    }
+
+    /// <summary>Thread-safe terminating-error bridge for asynchronous cmdlet code.</summary>
+    protected new void ThrowTerminatingError(ErrorRecord errorRecord)
+    {
+        ThrowIfStopped();
+        if (_currentOutPipe is null || IsPipelineThread)
+        {
+            base.ThrowTerminatingError(errorRecord);
+            return;
+        }
+
+        _currentOutPipe.Add(new PipelineItem(errorRecord, PipelineType.TerminatingError), CancelToken);
+        throw new PipelineStoppedException();
     }
 
     /// <summary>Thread-safe warning bridge for asynchronous cmdlet code.</summary>
@@ -256,6 +284,9 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
                 case PipelineType.Error:
                     base.WriteError((ErrorRecord)item.Value!);
                     break;
+                case PipelineType.TerminatingError:
+                    base.ThrowTerminatingError((ErrorRecord)item.Value!);
+                    break;
                 case PipelineType.Warning:
                     base.WriteWarning((string)item.Value!);
                     break;
@@ -274,6 +305,10 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
                 case PipelineType.ShouldProcess:
                     var should = ((string Target, string Action))item.Value!;
                     item.ReplyPipe!.Add(base.ShouldProcess(should.Target, should.Action), CancelToken);
+                    break;
+                case PipelineType.ShouldContinue:
+                    var shouldContinue = ((string Query, string Caption))item.Value!;
+                    item.ReplyPipe!.Add(base.ShouldContinue(shouldContinue.Query, shouldContinue.Caption), CancelToken);
                     break;
                 case PipelineType.PromptForCredential:
                     var prompt = ((string Caption, string Message, string UserName, string TargetName))item.Value!;
