@@ -24,6 +24,34 @@ public sealed partial class ReleasePublishExecutionService
                 return [];
 
             var repository = _catalogScanner.InspectRepository(item.RootPath);
+            var directModuleConfigPath =
+                string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath) &&
+                string.Equals(
+                    Path.GetExtension(repository.ModuleBuildScriptPath),
+                    ".json",
+                    StringComparison.OrdinalIgnoreCase)
+                    ? repository.ModuleBuildScriptPath
+                    : null;
+            if (!string.IsNullOrWhiteSpace(directModuleConfigPath))
+            {
+                UnifiedReleaseConfigFingerprint.ValidateModuleConfig(
+                    directModuleConfigPath!,
+                    buildResult.ModuleBuildConfigSha256);
+                return unified.ModulePackagePlans.Length == 0
+                    ? []
+                    :
+                    [
+                        new ReleasePublishTarget(
+                            RootPath: item.RootPath,
+                            RepositoryName: item.RepositoryName,
+                            AdapterKind: "ModuleBuild",
+                            TargetName: "Module-owned package release",
+                            TargetKind: "ModulePackages",
+                            SourcePath: directModuleConfigPath,
+                            Destination: "Configured module package destinations")
+                    ];
+            }
+
             var configPath = unified.ConfigPath ?? repository.UnifiedReleaseConfigPath;
             if (string.IsNullOrWhiteSpace(configPath))
                 return [];

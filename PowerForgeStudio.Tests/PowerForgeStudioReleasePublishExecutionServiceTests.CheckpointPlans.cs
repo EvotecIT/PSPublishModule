@@ -1,4 +1,7 @@
+using System.Text.Json;
 using PowerForge;
+using PowerForgeStudio.Domain.Catalog;
+using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Signing;
 using PowerForgeStudio.Orchestrator.Catalog;
 using PowerForgeStudio.Orchestrator.Queue;
@@ -7,6 +10,140 @@ namespace PowerForgeStudio.Tests;
 
 public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
 {
+    [Fact]
+    public async Task ExecuteAsync_publishes_direct_json_module_package_lanes_from_checkpoint()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForgeStudio.Tests",
+            Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+            File.WriteAllText(
+                moduleConfig,
+                """
+                {
+                  "Build": { "Name": "DirectPackages", "SourcePath": "." },
+                  "Segments": [
+                    {
+                      "Type": "PackageBuild",
+                      "Configuration": {
+                        "Name": "Direct packages",
+                        "StagingPath": "PackageArtifacts",
+                        "PublishNuget": true,
+                        "PublishApiKey": "test-key",
+                        "PublishSource": "https://example.test/v3/index.json"
+                      }
+                    }
+                  ]
+                }
+                """);
+            var packageDirectory = Directory.CreateDirectory(
+                Path.Combine(repositoryRoot, "PackageArtifacts")).FullName;
+            var packagePath = Path.Combine(packageDirectory, "Direct.Library.1.0.0.nupkg");
+            File.WriteAllText(packagePath, "signed package");
+            var checkpoint = new PowerForgeReleaseResult
+            {
+                Success = true,
+                ConfigPath = moduleConfig,
+                ModulePackagePlans =
+                [
+                    new PowerForgeModulePackageReleaseCheckpoint
+                    {
+                        Key = "PackageBuild:0",
+                        Name = "Direct packages",
+                        ConfigPath = moduleConfig,
+                        Release = new DotNetRepositoryReleaseResult
+                        {
+                            Success = true,
+                            Projects =
+                            {
+                                new DotNetRepositoryProjectResult
+                                {
+                                    ProjectName = "Direct.Library",
+                                    PackageId = "Direct.Library",
+                                    NewVersion = "1.0.0",
+                                    Packages = { packagePath }
+                                }
+                            }
+                        }
+                    }
+                ]
+            };
+            var buildResult = new ReleaseBuildExecutionResult(
+                repositoryRoot,
+                true,
+                "Build completed.",
+                1,
+                [],
+                UnifiedReleaseStateJson: JsonSerializer.Serialize(checkpoint),
+                ModuleBuildConfigSha256:
+                    UnifiedReleaseConfigFingerprint.ComputeModuleConfig(moduleConfig));
+            var signingReceipt = ReleaseSigningArtifactIntegrity.Capture(
+                new ReleaseSigningReceipt(
+                    repositoryRoot,
+                    "DirectPackages",
+                    ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                    packagePath,
+                    "File",
+                    ReleaseSigningReceiptStatus.Signed,
+                    "Signed.",
+                    DateTimeOffset.UtcNow));
+            var signingResult = new ReleaseSigningExecutionResult(
+                repositoryRoot,
+                true,
+                "Signing completed.",
+                JsonSerializer.Serialize(buildResult),
+                [signingReceipt]);
+            var queueItem = new ReleaseQueueItem(
+                repositoryRoot,
+                "DirectPackages",
+                ReleaseRepositoryKind.Library,
+                ReleaseWorkspaceKind.PrimaryRepository,
+                1,
+                ReleaseQueueStage.Publish,
+                ReleaseQueueItemStatus.ReadyToRun,
+                "Ready.",
+                "publish.ready",
+                JsonSerializer.Serialize(signingResult),
+                DateTimeOffset.UtcNow);
+            DotNetNuGetPushRequest? captured = null;
+            var service = new ReleasePublishExecutionService(
+                new RepositoryCatalogScanner(),
+                new ModuleBuildHostService(),
+                new ProjectBuildHostService(),
+                new ProjectBuildCommandHostService(),
+                new ProjectBuildPublishHostService(),
+                (request, _) =>
+                {
+                    captured = request;
+                    return Task.FromResult(new DotNetNuGetPushResult(
+                        0,
+                        "published",
+                        string.Empty,
+                        "dotnet",
+                        TimeSpan.Zero,
+                        false,
+                        null));
+                });
+
+            using var _ = new EnvironmentScope()
+                .Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+            var pending = service.BuildPendingTargets([queueItem]);
+            var result = await service.ExecuteAsync(queueItem);
+
+            Assert.Contains(pending, target => target.TargetKind == "ModulePackages");
+            Assert.True(result.Succeeded);
+            Assert.NotNull(captured);
+            Assert.Equal(packagePath, captured!.PackagePath);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public async Task ExecuteAsync_matches_module_package_archives_to_exact_project_identities()
     {

@@ -39,10 +39,14 @@ public sealed partial class ReleasePublishExecutionService
         {
             var adapterKind = group.Key;
             var paths = group.Select(receipt => receipt.ArtifactPath).ToArray();
-            var unifiedOwnsModulePackages =
-                !string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath) &&
-                string.Equals(adapterKind, ReleaseBuildAdapterKind.ModuleBuild.ToString(), StringComparison.OrdinalIgnoreCase);
-            if (!unifiedOwnsModulePackages &&
+            var checkpointOwnsModulePackages =
+                string.Equals(
+                    adapterKind,
+                    ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                    StringComparison.OrdinalIgnoreCase) &&
+                (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath) ||
+                 GetCheckpointedModulePackagePlans(signingResult).Length > 0);
+            if (!checkpointOwnsModulePackages &&
                 paths.Any(path => path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase)))
             {
                 targets.Add(new ReleasePublishTarget(

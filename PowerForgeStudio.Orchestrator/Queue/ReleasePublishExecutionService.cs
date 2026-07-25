@@ -177,10 +177,40 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
             }
         }
 
+        var checkpointedModulePackagePlans =
+            GetCheckpointedModulePackagePlans(signingResult);
+        if (string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath) &&
+            string.Equals(
+                Path.GetExtension(repository.ModuleBuildScriptPath),
+                ".json",
+                StringComparison.OrdinalIgnoreCase) &&
+            checkpointedModulePackagePlans.Length > 0)
+        {
+            var directModuleSpec = new PowerForgeReleaseSpec
+            {
+                Module = new PowerForgeModuleReleaseOptions
+                {
+                    ConfigPath = repository.ModuleBuildScriptPath,
+                    IncludesPackages = true
+                }
+            };
+            var modulePackageReceipts = await ExecuteModuleOwnedPackagePublishAsync(
+                repository,
+                directModuleSpec,
+                signingResult,
+                cancellationToken);
+            receipts.AddRange(modulePackageReceipts);
+            if (modulePackageReceipts.Any(static receipt =>
+                    receipt.Status == ReleasePublishReceiptStatus.Failed))
+            {
+                return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
         {
             var unifiedSpec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
-            if (GetCheckpointedModulePackagePlans(signingResult).Length > 0)
+            if (checkpointedModulePackagePlans.Length > 0)
             {
                 var modulePackageReceipts = await ExecuteModuleOwnedPackagePublishAsync(
                     repository,

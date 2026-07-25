@@ -100,9 +100,18 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             results.Add(await ExecuteProjectBuildAsync(repository, cancellationToken));
         }
 
+        PowerForgeReleaseResult? directModuleCheckpoint = null;
         if (!string.IsNullOrWhiteSpace(repository.ModuleBuildScriptPath))
         {
-            results.Add(await ExecuteModuleBuildAsync(repository, cancellationToken));
+            var moduleResult = await ExecuteModuleBuildAsync(repository, cancellationToken);
+            results.Add(moduleResult);
+            if (!string.IsNullOrWhiteSpace(directModuleConfigPath) &&
+                string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath) &&
+                moduleResult.Succeeded)
+            {
+                directModuleCheckpoint = CreateDirectModulePackageCheckpoint(
+                    directModuleConfigPath!);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(directModuleConfigPath))
@@ -119,6 +128,9 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             repositoryRoot,
             DateTimeOffset.UtcNow - startedAt,
             results,
+            unifiedReleaseStateJson: directModuleCheckpoint is null
+                ? null
+                : SerializeUnifiedCheckpoint(directModuleCheckpoint),
             moduleBuildConfigSha256: directModuleConfigFingerprint);
     }
 
@@ -266,6 +278,38 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 ErrorTail: TrimTail(unified.ErrorMessage)));
         }
 
+        var releaseMetadata = CollectExplicitArtifacts(
+            [unified.ReleaseManifestPath ?? string.Empty, unified.ReleaseChecksumsPath ?? string.Empty]);
+        if (releaseMetadata.Directories.Count > 0 || releaseMetadata.Files.Count > 0)
+        {
+            if (results.Count == 0)
+            {
+                results.Add(new ReleaseBuildAdapterResult(
+                    ReleaseBuildAdapterKind.ProjectBuild,
+                    unified.Success,
+                    unified.Success
+                        ? "Unified release metadata checkpointed for signing."
+                        : "Unified release metadata generation failed.",
+                    unified.Success ? 0 : 1,
+                    Math.Round(duration.TotalSeconds, 2),
+                    releaseMetadata.Directories,
+                    releaseMetadata.Files,
+                    ErrorTail: TrimTail(unified.ErrorMessage)));
+            }
+            else
+            {
+                var first = results[0];
+                var artifacts = MergeArtifactCollections(
+                    new ArtifactCollection(first.ArtifactDirectories, first.ArtifactFiles),
+                    releaseMetadata);
+                results[0] = first with
+                {
+                    ArtifactDirectories = artifacts.Directories,
+                    ArtifactFiles = artifacts.Files
+                };
+            }
+        }
+
         if (results.Count == 0)
         {
             results.Add(new ReleaseBuildAdapterResult(
@@ -292,6 +336,35 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         }
 
         return JsonSerializer.Serialize(checkpoint);
+    }
+
+    private static PowerForgeReleaseResult? CreateDirectModulePackageCheckpoint(
+        string configPath)
+    {
+        var context = new ModulePipelineConfigurationService().Load(configPath);
+        var packagePlans = new ModulePackageReleaseCheckpointService().Capture(context);
+        if (packagePlans.Length == 0)
+            return null;
+
+        var preRelease = (context.Spec.Segments ?? [])
+            .OfType<ConfigurationManifestSegment>()
+            .Select(static segment => segment.Configuration?.Prerelease)
+            .LastOrDefault(static value => !string.IsNullOrWhiteSpace(value));
+        return new PowerForgeReleaseResult
+        {
+            Success = true,
+            ConfigPath = configPath,
+            ModulePlan = new PowerForgeModuleReleasePlanSummary
+            {
+                ModuleName = context.Spec.Build.Name,
+                ConfigPath = configPath,
+                IncludesPackages = true,
+                IncludesProjectPackages = true,
+                ModuleVersion = context.EffectiveVersion,
+                PreReleaseTag = preRelease
+            },
+            ModulePackagePlans = packagePlans
+        };
     }
 
     private async Task<ReleaseBuildAdapterResult> ExecuteProjectBuildAsync(PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository, CancellationToken cancellationToken)
@@ -411,6 +484,9 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         var candidateDirectories = string.Equals(Path.GetExtension(buildInputPath), ".json", StringComparison.OrdinalIgnoreCase) &&
                                    new ModulePipelineConfigurationService().TryLoad(buildInputPath, out var context)
             ? context!.ArtifactPaths
+                .Concat(context.PackageArtifactPaths)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()
             : new[]
             {
                 Path.Combine(repositoryRoot, "Artefacts", "Unpacked"),

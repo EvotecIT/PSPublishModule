@@ -4653,7 +4653,7 @@ internal sealed partial class PowerForgeReleaseService
 
     private static bool HasSigningOverrides(PowerForgeReleaseRequest request)
     {
-        return request.EnableSigning == true
+        return request.EnableSigning.HasValue
             || !string.IsNullOrWhiteSpace(request.SignProfile)
             || HasExplicitSigningValueOverrides(request);
     }

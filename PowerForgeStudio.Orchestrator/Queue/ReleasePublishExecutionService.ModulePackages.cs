@@ -167,9 +167,22 @@ public sealed partial class ReleasePublishExecutionService
     {
         if (!string.IsNullOrWhiteSpace(spec.Module?.ConfigPath))
         {
-            return ModulePackageReleaseCheckpointService.ResolveLanes(
-                repository.UnifiedReleaseConfigPath!,
-                spec);
+            if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
+            {
+                return ModulePackageReleaseCheckpointService.ResolveLanes(
+                    repository.UnifiedReleaseConfigPath!,
+                    spec);
+            }
+
+            if (string.Equals(
+                    Path.GetExtension(repository.ModuleBuildScriptPath),
+                    ".json",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                var context = new ModulePipelineConfigurationService().Load(
+                    repository.ModuleBuildScriptPath!);
+                return ModulePackageReleaseCheckpointService.ResolveLanes(context);
+            }
         }
 
         if (string.IsNullOrWhiteSpace(spec.Module?.ScriptPath) ||
