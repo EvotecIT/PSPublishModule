@@ -182,6 +182,32 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
     }
 
     [Fact]
+    public void InspectRepository_SplitRelease_PrefersDeclaredJsonModuleOverLegacyScript()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryPath = scope.CreateRepository("SplitModuleRepo");
+        var buildPath = Path.Combine(repositoryPath, "Build");
+        var moduleConfig = Path.Combine(repositoryPath, "powerforge.json");
+        Directory.CreateDirectory(Path.Combine(repositoryPath, "src", "SplitModuleRepo"));
+        File.WriteAllText(moduleConfig, """{ "Build": { "Name": "SplitModuleRepo", "SourcePath": "src/SplitModuleRepo" } }""");
+        File.WriteAllText(
+            Path.Combine(buildPath, "release.json"),
+            """
+            {
+              "Module": {
+                "RepositoryRoot": "..",
+                "ConfigPath": "powerforge.json"
+              }
+            }
+            """);
+
+        var entry = new RepositoryCatalogScanner().InspectRepository(repositoryPath);
+
+        Assert.Null(entry.UnifiedReleaseConfigPath);
+        Assert.Equal(moduleConfig, entry.ModuleBuildScriptPath);
+    }
+
+    [Fact]
     public void InspectRepository_Winget_RetainsUnifiedReleaseContract()
     {
         using var scope = new TemporaryDirectoryScope();
@@ -288,7 +314,6 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
     {
         using var scope = new TemporaryDirectoryScope();
         var invalidRepository = scope.CreateRepository("InvalidReleaseRepo");
-        File.Delete(Path.Combine(invalidRepository, "Build", "Build-Module.ps1"));
         File.WriteAllText(
             Path.Combine(invalidRepository, "Build", "release.json"),
             """{ "Module": { "RepositoryRoot": 42, "ConfigPath": { "file": "powerforge.json" } } }""");
@@ -297,7 +322,9 @@ public sealed class PowerForgeStudioRepositoryCatalogScannerTests
         var entries = new RepositoryCatalogScanner().Scan(scope.RootPath);
 
         Assert.Equal(2, entries.Count);
-        Assert.Null(entries.Single(entry => entry.Name == "InvalidReleaseRepo").ModuleBuildScriptPath);
+        var invalidEntry = entries.Single(entry => entry.Name == "InvalidReleaseRepo");
+        Assert.Equal(Path.Combine(invalidRepository, "Build", "release.json"), invalidEntry.UnifiedReleaseConfigPath);
+        Assert.Equal(invalidEntry.UnifiedReleaseConfigPath, invalidEntry.PrimaryBuildScriptPath);
         Assert.NotNull(entries.Single(entry => entry.Name == "ValidModuleRepo").ModuleBuildScriptPath);
     }
 

@@ -32,21 +32,21 @@ Keep that ownership split. The coordinated module pipeline provides one release-
 The existing `Build-Module {}` / `New-Configuration*` authoring model can declare package builds, release staging,
 version coordination, and publishing intent in the same settings block.
 
-The operator runs the familiar command:
+PSPublishModule itself uses the canonical JSON-first entry point:
 
 ```powershell
-.\Build\Build-Module.ps1
+.\Build\Build-Project.ps1
 ```
 
-or selects the wrapper's publish gate when explicit gate controls are exposed:
+The complete repository release uses the same entry point:
 
 ```powershell
-.\Build\Build-Module.ps1 -ConfigurationGateMode Publish
+.\Build\Build-Project.ps1 -Publish
 ```
 
-Internally, `Build-Module {}` keeps using the module pipeline and carries package and release coordination
-segments in the same runtime. This keeps the user-facing DSL in one place without turning the module script into
-a second package engine.
+`Build/Build-Project.ps1` loads `Build/release.json`, which coordinates the module recipe in `powerforge.json`
+with packages, tools, signing, and the unified GitHub release. External module repositories can continue using
+the `Build-Module {}` DSL; both entry-point styles run the same shared module and release engines.
 
 Repositories that also ship native CLI archives can keep those targets in the broader
 `Invoke-PowerForgeRelease` configuration. Their publish wrapper should select the module `Publish` gate and the
@@ -500,18 +500,18 @@ implementation for package build, module build, and GitHub publishing.
 
 ## Validation Contract
 
-Use gate modes for the same wrapper in CI and at release time:
+Use run modes through the same JSON-first wrapper in CI and at release time:
 
 - `Manifest`: refresh module metadata without package builds or publishing.
 - `Build`: resolve coordinated versions, build packages, feed them to the module build, and stage artifacts without publishing.
 - `Publish`: rebuild or reuse the exact coordinated package state and publish in `Release.PublishOrder`.
 
-For a wrapper exposing `-ConfigurationGateMode`, the practical sequence is:
+For PSPublishModule's self-build, the practical sequence is:
 
 ```powershell
-.\Build\Build-Module.ps1 -ConfigurationGateMode Manifest
-.\Build\Build-Module.ps1 -ConfigurationGateMode Build
-.\Build\Build-Module.ps1 -ConfigurationGateMode Publish
+.\Build\Build-Project.ps1 -RunMode Manifest -ModuleOnly
+.\Build\Build-Project.ps1 -RunMode Build
+.\Build\Build-Project.ps1 -Publish
 ```
 
 The Build gate should report the same resolved version for the primary package and module, list the local NuGet

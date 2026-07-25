@@ -54,11 +54,7 @@ public sealed class RepositoryCatalogScanner
     {
         var moduleBuildScript = FindBuildScript(directoryPath, "Build-Module.ps1", includeImmediateChildBuildFolders);
         var releaseContract = FindReleaseBuildContract(directoryPath, includeImmediateChildBuildFolders);
-        var releaseModuleBuildConfig = releaseContract?.RequiresUnifiedExecution == true
-            ? releaseContract.ModuleConfigPath
-            : moduleBuildScript is null
-                ? releaseContract?.ModuleConfigPath
-                : null;
+        var releaseModuleBuildConfig = releaseContract?.ModuleConfigPath;
         var moduleBuildConfig = releaseModuleBuildConfig ?? (moduleBuildScript is null
             ? FindDirectModuleBuildConfig(directoryPath)
             : null);
@@ -194,7 +190,15 @@ public sealed class RepositoryCatalogScanner
             ArgumentException or
             NotSupportedException)
         {
-            return null;
+            // Preserve the discovered release contract even when it cannot be parsed.
+            // Planning and execution must surface the configuration error rather than
+            // silently falling back to incomplete module/project adapters.
+            return new ReleaseBuildContract(
+                releaseConfigPath,
+                ModuleConfigPath: null,
+                IncludesPackages: false,
+                ModuleIncludesPackages: false,
+                RequiresUnifiedExecution: true);
         }
     }
 

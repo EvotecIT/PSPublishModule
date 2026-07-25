@@ -360,6 +360,7 @@ public sealed class ModuleBuildPipeline
 
     private static bool ShouldCleanReplaceSingleFileBinaryPayload(ModuleBuildSpec spec)
         => !spec.RefreshManifestOnly &&
+           !spec.SkipDotNetBuild &&
            spec.DevelopmentBinariesMode != ModuleDevelopmentBinaryMode.Off &&
            spec.DevelopmentSourceBootstrapperMode == ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile &&
            !string.IsNullOrWhiteSpace(ResolveDevelopmentBinaryRoot(spec));

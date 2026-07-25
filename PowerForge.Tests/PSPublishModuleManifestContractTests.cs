@@ -168,7 +168,8 @@ public sealed class PSPublishModuleManifestContractTests
         {
             Path.Combine(repoRoot, ".github", "workflows", "BuildModule.yml"),
             Path.Combine(repoRoot, ".github", "workflows", "private-gallery-live-validation.yml"),
-            Path.Combine(repoRoot, "README.MD")
+            Path.Combine(repoRoot, "README.MD"),
+            Path.Combine(repoRoot, "Docs", "PSPublishModule.UnifiedModuleProjectRelease.md")
         })
         {
             Assert.DoesNotContain(
