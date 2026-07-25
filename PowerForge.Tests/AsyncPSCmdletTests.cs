@@ -128,6 +128,33 @@ public sealed class AsyncPSCmdletTests
     }
 
     [Fact]
+    public void AsyncPSCmdlet_drops_background_stream_writes_during_pipeline_stop()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncCancellationWrite",
+            typeof(TestAsyncCancellationWriteCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncCancellationWrite");
+        TestAsyncCancellationWriteCommand.Reset();
+
+        var invocation = powerShell.BeginInvoke();
+        Assert.True(
+            TestAsyncCancellationWriteCommand.Started.Wait(TimeSpan.FromSeconds(5)),
+            "The asynchronous cmdlet did not start in time.");
+
+        powerShell.Stop();
+        Assert.Throws<PipelineStoppedException>(() => powerShell.EndInvoke(invocation));
+
+        Assert.Null(TestAsyncCancellationWriteCommand.BackgroundWriteException);
+    }
+
+    [Fact]
     public void AsyncPSCmdlet_marshals_terminating_errors_to_the_pipeline_thread()
     {
         var sessionState = InitialSessionState.CreateDefault();
@@ -318,6 +345,9 @@ public sealed class AsyncPSCmdletTests
 
         powerShell.Invoke();
 
+        Assert.True(
+            TestAsyncDisposeDuringHookCommand.TokenRead.Wait(TimeSpan.FromSeconds(5)),
+            "The asynchronous hook did not finish reading the token in time.");
         Assert.True(TestAsyncDisposeDuringHookCommand.ReadTokenAfterDispose);
         Assert.Null(TestAsyncDisposeDuringHookCommand.TokenReadException);
     }
@@ -442,6 +472,44 @@ public sealed class TestAsyncCancellationCommand : AsyncPSCmdlet
     {
         _started.Set();
         await Task.Delay(Timeout.InfiniteTimeSpan, CancelToken);
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncCancellationWrite")]
+public sealed class TestAsyncCancellationWriteCommand : AsyncPSCmdlet
+{
+    private static ManualResetEventSlim _started = new();
+
+    public static ManualResetEventSlim Started => _started;
+
+    public static Exception? BackgroundWriteException { get; private set; }
+
+    public static void Reset()
+    {
+        _started.Dispose();
+        _started = new ManualResetEventSlim();
+        BackgroundWriteException = null;
+    }
+
+    protected override async Task ProcessRecordAsync()
+    {
+        _started.Set();
+        try
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, CancelToken);
+        }
+        catch (OperationCanceledException) when (CancelToken.IsCancellationRequested)
+        {
+            try
+            {
+                WriteProgress(new ProgressRecord(1, "cancelled", "finishing"));
+                WriteWarning("cancelled");
+            }
+            catch (Exception exception)
+            {
+                BackgroundWriteException = exception;
+            }
+        }
     }
 }
 
@@ -592,12 +660,18 @@ public sealed class TestAsyncEarlyShouldProcessCommand : AsyncPSCmdlet
 [Cmdlet(VerbsDiagnostic.Test, "AsyncDisposeDuringHook")]
 public sealed class TestAsyncDisposeDuringHookCommand : AsyncPSCmdlet
 {
+    private static ManualResetEventSlim _tokenRead = new();
+
+    public static ManualResetEventSlim TokenRead => _tokenRead;
+
     public static bool ReadTokenAfterDispose { get; private set; }
 
     public static Exception? TokenReadException { get; private set; }
 
     public static void Reset()
     {
+        _tokenRead.Dispose();
+        _tokenRead = new ManualResetEventSlim();
         ReadTokenAfterDispose = false;
         TokenReadException = null;
     }
@@ -610,6 +684,7 @@ public sealed class TestAsyncDisposeDuringHookCommand : AsyncPSCmdlet
         {
             var token = CancelToken;
             ReadTokenAfterDispose = true;
+            _tokenRead.Set();
             await Task.Delay(Timeout.InfiniteTimeSpan, token);
         }
         catch (OperationCanceledException)
@@ -619,6 +694,7 @@ public sealed class TestAsyncDisposeDuringHookCommand : AsyncPSCmdlet
         catch (Exception exception)
         {
             TokenReadException = exception;
+            _tokenRead.Set();
             throw;
         }
     }
