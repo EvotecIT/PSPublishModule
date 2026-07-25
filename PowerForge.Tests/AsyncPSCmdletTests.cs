@@ -173,6 +173,60 @@ public sealed class AsyncPSCmdletTests
         var item = Assert.Single(result);
         Assert.Equal(approved, item.BaseObject);
     }
+
+    [Fact]
+    public void AsyncPSCmdlet_preserves_operation_cancellation_that_is_not_a_pipeline_stop()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncOperationCancellation",
+            typeof(TestAsyncOperationCancellationCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncOperationCancellation");
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => powerShell.Invoke());
+
+        Assert.IsAssignableFrom<OperationCanceledException>(exception.InnerException);
+        Assert.IsNotType<PipelineStoppedException>(exception.InnerException);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_drops_late_worker_writes_after_the_pipeline_closes()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncLateWrite",
+            typeof(TestAsyncLateWriteCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncLateWrite");
+        TestAsyncLateWriteCommand.Reset();
+
+        powerShell.Invoke();
+        TestAsyncLateWriteCommand.WriteAfterCompletion();
+
+        Assert.Null(TestAsyncLateWriteCommand.LateWriteException);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_dispose_requests_cancellation()
+    {
+        using var command = new TestAsyncDisposableCommand();
+        var stoppingToken = command.StoppingToken;
+
+        command.Dispose();
+
+        Assert.True(stoppingToken.IsCancellationRequested);
+    }
 }
 
 [Cmdlet(VerbsDiagnostic.Test, "AsyncThreadAffinity")]
@@ -319,6 +373,54 @@ public sealed class TestAsyncShouldContinueCommand : AsyncPSCmdlet
         await Task.Yield();
         WriteObject(ShouldContinue("Proceed?", "Question"));
     }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncOperationCancellation")]
+public sealed class TestAsyncOperationCancellationCommand : AsyncPSCmdlet
+{
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        throw new OperationCanceledException("operation timeout");
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncLateWrite")]
+public sealed class TestAsyncLateWriteCommand : AsyncPSCmdlet
+{
+    private static TestAsyncLateWriteCommand? _instance;
+
+    public static Exception? LateWriteException { get; private set; }
+
+    public static void Reset()
+    {
+        _instance = null;
+        LateWriteException = null;
+    }
+
+    public static void WriteAfterCompletion()
+    {
+        try
+        {
+            _instance!.WriteWarning("late");
+        }
+        catch (Exception exception)
+        {
+            LateWriteException = exception;
+        }
+    }
+
+    protected override Task ProcessRecordAsync()
+    {
+        _instance = this;
+        return Task.CompletedTask;
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncDisposable")]
+public sealed class TestAsyncDisposableCommand : AsyncPSCmdlet
+{
+    public CancellationToken StoppingToken => CancelToken;
 }
 
 public sealed class ChoiceHost(bool approved) : PSHost
