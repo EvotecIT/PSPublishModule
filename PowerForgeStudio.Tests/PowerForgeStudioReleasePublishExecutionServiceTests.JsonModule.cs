@@ -24,7 +24,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
               "SchemaVersion": 1,
               "Build": {
                 "Name": "JsonModuleRepo",
-                "SourcePath": "src/JsonModuleRepo"
+                "SourcePath": "src/JsonModuleRepo",
+                "Version": "1.2.3"
               },
               "Segments": [
                 {
@@ -46,6 +47,16 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
 
         var packageDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Artifacts", "Packed", "JsonModuleRepo")).FullName;
         var manifestPath = Path.Combine(packageDirectory, "JsonModuleRepo.psd1");
+        var dependencyDirectory = Directory.CreateDirectory(Path.Combine(packageDirectory, "AaaDependency")).FullName;
+        var dependencyManifestPath = Path.Combine(dependencyDirectory, "AaaDependency.psd1");
+        File.WriteAllText(
+            dependencyManifestPath,
+            """
+            @{
+                RootModule = 'AaaDependency.psm1'
+                ModuleVersion = '9.9.9'
+            }
+            """);
         File.WriteAllText(
             manifestPath,
             """
@@ -67,7 +78,16 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             Summary: "Signing completed.",
             SourceCheckpointStateJson: JsonSerializer.Serialize(buildResult),
             Receipts: [
-                new ReleaseSigningReceipt(
+                ReleaseSigningArtifactIntegrity.Capture(new ReleaseSigningReceipt(
+                    RootPath: repositoryRoot,
+                    RepositoryName: "JsonModuleRepo",
+                    AdapterKind: ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                    ArtifactPath: dependencyManifestPath,
+                    ArtifactKind: "File",
+                    Status: ReleaseSigningReceiptStatus.Signed,
+                    Summary: "Dependency manifest signed.",
+                    SignedAtUtc: DateTimeOffset.UtcNow)),
+                ReleaseSigningArtifactIntegrity.Capture(new ReleaseSigningReceipt(
                     RootPath: repositoryRoot,
                     RepositoryName: "JsonModuleRepo",
                     AdapterKind: ReleaseBuildAdapterKind.ModuleBuild.ToString(),
@@ -75,8 +95,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     ArtifactKind: "Directory",
                     Status: ReleaseSigningReceiptStatus.Signed,
                     Summary: "Package directory signed.",
-                    SignedAtUtc: DateTimeOffset.UtcNow),
-                new ReleaseSigningReceipt(
+                    SignedAtUtc: DateTimeOffset.UtcNow)),
+                ReleaseSigningArtifactIntegrity.Capture(new ReleaseSigningReceipt(
                     RootPath: repositoryRoot,
                     RepositoryName: "JsonModuleRepo",
                     AdapterKind: ReleaseBuildAdapterKind.ModuleBuild.ToString(),
@@ -84,7 +104,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     ArtifactKind: "File",
                     Status: ReleaseSigningReceiptStatus.Signed,
                     Summary: "Manifest signed.",
-                    SignedAtUtc: DateTimeOffset.UtcNow)
+                    SignedAtUtc: DateTimeOffset.UtcNow))
             ]);
         var queueItem = new ReleaseQueueItem(
             RootPath: repositoryRoot,
@@ -131,6 +151,150 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             Assert.Equal("gallery-key", captured.ApiKey);
             Assert.Equal("PSGallery", captured.RepositoryName);
             Assert.Equal(ReleasePublishReceiptStatus.Published, Assert.Single(result.Receipts).Status);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DirectJsonWithoutPublishSegments_HasNoExternalTarget()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(repositoryRoot, "src", "BuildOnlyModule")).FullName;
+            var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+            File.WriteAllText(
+                moduleConfig,
+                """{ "Build": { "Name": "BuildOnlyModule", "SourcePath": "src/BuildOnlyModule", "Version": "1.0.0" } }""");
+            var packageDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Artifacts", "BuildOnlyModule")).FullName;
+            File.WriteAllText(
+                Path.Combine(packageDirectory, "BuildOnlyModule.psd1"),
+                "@{ RootModule = 'BuildOnlyModule.psm1'; ModuleVersion = '1.0.0' }");
+            var buildResult = new ReleaseBuildExecutionResult(
+                repositoryRoot,
+                true,
+                "Build completed.",
+                1,
+                [],
+                ModuleBuildConfigSha256: UnifiedReleaseConfigFingerprint.ComputeModuleConfig(moduleConfig));
+            var signingResult = new ReleaseSigningExecutionResult(
+                repositoryRoot,
+                true,
+                "Signing completed.",
+                JsonSerializer.Serialize(buildResult),
+                [
+                    ReleaseSigningArtifactIntegrity.Capture(new ReleaseSigningReceipt(
+                        repositoryRoot,
+                        "BuildOnlyModule",
+                        ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                        packageDirectory,
+                        "Directory",
+                        ReleaseSigningReceiptStatus.Signed,
+                        "Signed.",
+                        DateTimeOffset.UtcNow))
+                ]);
+            var queueItem = new ReleaseQueueItem(
+                repositoryRoot,
+                "BuildOnlyModule",
+                ReleaseRepositoryKind.Module,
+                ReleaseWorkspaceKind.PrimaryRepository,
+                1,
+                ReleaseQueueStage.Publish,
+                ReleaseQueueItemStatus.ReadyToRun,
+                "Ready.",
+                "publish.ready",
+                JsonSerializer.Serialize(signingResult),
+                DateTimeOffset.UtcNow);
+            var service = new ReleasePublishExecutionService();
+
+            Assert.Empty(service.BuildPendingTargets([queueItem]));
+
+            var result = await service.ExecuteAsync(queueItem);
+            Assert.True(result.Succeeded);
+            Assert.Equal(ReleasePublishReceiptStatus.Skipped, Assert.Single(result.Receipts).Status);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DirectJsonRejectsArtifactModifiedAfterSigning()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(repositoryRoot, "src", "TamperModule")).FullName;
+            var moduleConfig = Path.Combine(repositoryRoot, "powerforge.json");
+            File.WriteAllText(
+                moduleConfig,
+                """
+                {
+                  "Build": { "Name": "TamperModule", "SourcePath": "src/TamperModule", "Version": "1.0.0" },
+                  "Segments": [
+                    {
+                      "Type": "GalleryNuget",
+                      "Configuration": {
+                        "Destination": "PowerShellGallery",
+                        "Enabled": true,
+                        "Tool": "PSResourceGet",
+                        "RepositoryName": "PSGallery"
+                      }
+                    }
+                  ]
+                }
+                """);
+            var packageDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Artifacts", "TamperModule")).FullName;
+            var manifestPath = Path.Combine(packageDirectory, "TamperModule.psd1");
+            File.WriteAllText(manifestPath, "@{ RootModule = 'TamperModule.psm1'; ModuleVersion = '1.0.0' }");
+            var buildResult = new ReleaseBuildExecutionResult(
+                repositoryRoot,
+                true,
+                "Build completed.",
+                1,
+                [],
+                ModuleBuildConfigSha256: UnifiedReleaseConfigFingerprint.ComputeModuleConfig(moduleConfig));
+            var signedReceipt = ReleaseSigningArtifactIntegrity.Capture(new ReleaseSigningReceipt(
+                repositoryRoot,
+                "TamperModule",
+                ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                packageDirectory,
+                "Directory",
+                ReleaseSigningReceiptStatus.Signed,
+                "Signed.",
+                DateTimeOffset.UtcNow));
+            var signingResult = new ReleaseSigningExecutionResult(
+                repositoryRoot,
+                true,
+                "Signing completed.",
+                JsonSerializer.Serialize(buildResult),
+                [signedReceipt]);
+            var queueItem = new ReleaseQueueItem(
+                repositoryRoot,
+                "TamperModule",
+                ReleaseRepositoryKind.Module,
+                ReleaseWorkspaceKind.PrimaryRepository,
+                1,
+                ReleaseQueueStage.Publish,
+                ReleaseQueueItemStatus.ReadyToRun,
+                "Ready.",
+                "publish.ready",
+                JsonSerializer.Serialize(signingResult),
+                DateTimeOffset.UtcNow);
+            File.AppendAllText(manifestPath, Environment.NewLine + "# tampered");
+            var service = new ReleasePublishExecutionService();
+
+            var target = Assert.Single(service.BuildPendingTargets([queueItem]));
+            Assert.Equal("ConfigurationError", target.TargetKind);
+            Assert.Contains("changed after approval", target.Destination, StringComparison.OrdinalIgnoreCase);
+
+            using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+            var result = await service.ExecuteAsync(queueItem);
+            Assert.False(result.Succeeded);
         }
         finally
         {

@@ -7,8 +7,7 @@ namespace PowerForgeStudio.Orchestrator.Queue;
 public sealed partial class ReleasePublishExecutionService
 {
     private async Task<ModulePackageDetails?> ResolveModulePackageDetailsAsync(
-        string repositoryRoot,
-        string repositoryName,
+        PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
         ReleaseSigningExecutionResult signingResult,
         CancellationToken cancellationToken)
     {
@@ -37,7 +36,7 @@ public sealed partial class ReleasePublishExecutionService
         foreach (var candidateManifest in candidateManifests.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             var readInfo = await ReadModuleManifestAsync(
-                repositoryRoot,
+                repository.RootPath,
                 candidateManifest,
                 cancellationToken);
             if (readInfo is not null)
@@ -47,10 +46,11 @@ public sealed partial class ReleasePublishExecutionService
         if (manifests.Count == 0)
             return null;
 
-        var expected = ReadUnifiedReleaseCheckpoint(signingResult)?.ModulePlan;
-        var selected = string.IsNullOrWhiteSpace(expected?.ModuleVersion)
+        var expected = ReadUnifiedReleaseCheckpoint(signingResult)?.ModulePlan
+                       ?? ResolveDirectModulePlan(repository.ModuleBuildScriptPath);
+        var selected = expected is null
             ? manifests[0]
-            : manifests.FirstOrDefault(manifest => ModuleManifestMatchesPlan(manifest.Info, expected!));
+            : manifests.FirstOrDefault(manifest => ModuleManifestMatchesPlan(manifest.Info, expected));
         if (string.IsNullOrWhiteSpace(selected.Path))
             return null;
 
@@ -80,6 +80,9 @@ public sealed partial class ReleasePublishExecutionService
             return false;
         }
 
+        if (string.IsNullOrWhiteSpace(plan.ModuleVersion))
+            return true;
+
         var versionsMatch = Version.TryParse(manifest.Version, out var manifestVersion) &&
                             Version.TryParse(plan.ModuleVersion, out var plannedVersion)
             ? manifestVersion.Equals(plannedVersion)
@@ -92,6 +95,24 @@ public sealed partial class ReleasePublishExecutionService
                    NormalizeModulePreRelease(manifest.PreRelease),
                    NormalizeModulePreRelease(plan.PreReleaseTag),
                    StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static PowerForgeModuleReleasePlanSummary? ResolveDirectModulePlan(string? moduleBuildScriptPath)
+    {
+        if (!string.Equals(Path.GetExtension(moduleBuildScriptPath), ".json", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var context = new ModulePipelineConfigurationService().Load(moduleBuildScriptPath!);
+        var preRelease = (context.Spec.Segments ?? [])
+            .OfType<ConfigurationManifestSegment>()
+            .Select(segment => segment.Configuration?.Prerelease)
+            .LastOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        return new PowerForgeModuleReleasePlanSummary
+        {
+            ModuleName = context.Spec.Build.Name,
+            ModuleVersion = context.EffectiveVersion,
+            PreReleaseTag = preRelease
+        };
     }
 
     private static string NormalizeModulePreRelease(string? value)
@@ -139,7 +160,7 @@ public sealed partial class ReleasePublishExecutionService
         if (publishSet.Configurations.Count == 0)
             return [];
 
-        var packageDetails = await ResolveModulePackageDetailsAsync(repository.RootPath, repository.Name, signingResult, cancellationToken);
+        var packageDetails = await ResolveModulePackageDetailsAsync(repository, signingResult, cancellationToken);
         var receipts = new List<ReleasePublishReceipt>();
         foreach (var publishConfig in publishSet.Configurations.Where(config => config.Enabled))
         {

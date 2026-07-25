@@ -59,6 +59,7 @@ public sealed partial class ReleasePublishExecutionService
                 AllowsAdapterGitHubTarget(
                     repository.UnifiedReleaseConfigPath,
                     unifiedSpec,
+                    repository.ModuleBuildScriptPath,
                     adapterKind))
             {
                 targets.Add(new ReleasePublishTarget(
@@ -75,7 +76,8 @@ public sealed partial class ReleasePublishExecutionService
                 group.Any(receipt => string.Equals(receipt.ArtifactKind, "Directory", StringComparison.OrdinalIgnoreCase)) &&
                 AllowsModuleRepositoryTarget(
                     repository.UnifiedReleaseConfigPath,
-                    unifiedSpec))
+                    unifiedSpec,
+                    repository.ModuleBuildScriptPath))
             {
                 targets.Add(new ReleasePublishTarget(
                     RootPath: item.RootPath,
@@ -98,7 +100,10 @@ public sealed partial class ReleasePublishExecutionService
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath) &&
+        var hasPersistedIntegrityCheckpoint =
+            !string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath) ||
+            string.Equals(Path.GetExtension(repository.ModuleBuildScriptPath), ".json", StringComparison.OrdinalIgnoreCase);
+        if (hasPersistedIntegrityCheckpoint &&
             targets.Any(static target =>
                 !string.Equals(target.TargetKind, "ConfigurationError", StringComparison.OrdinalIgnoreCase)))
         {
@@ -161,10 +166,14 @@ public sealed partial class ReleasePublishExecutionService
     private static bool AllowsAdapterGitHubTarget(
         string? releaseConfigPath,
         PowerForgeReleaseSpec? spec,
+        string? moduleBuildScriptPath,
         string adapterKind)
     {
         if (string.IsNullOrWhiteSpace(releaseConfigPath))
-            return true;
+        {
+            return !string.Equals(adapterKind, ReleaseBuildAdapterKind.ModuleBuild.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                   AllowsDirectModulePublishDestination(moduleBuildScriptPath, PublishDestination.GitHub);
+        }
         if (spec is null || spec.GitHub?.Publish == true)
             return false;
 
@@ -183,10 +192,11 @@ public sealed partial class ReleasePublishExecutionService
 
     private static bool AllowsModuleRepositoryTarget(
         string? releaseConfigPath,
-        PowerForgeReleaseSpec? spec)
+        PowerForgeReleaseSpec? spec,
+        string? moduleBuildScriptPath)
     {
         if (string.IsNullOrWhiteSpace(releaseConfigPath))
-            return true;
+            return AllowsDirectModulePublishDestination(moduleBuildScriptPath, PublishDestination.PowerShellGallery);
         if (spec is null)
             return false;
 
@@ -194,6 +204,30 @@ public sealed partial class ReleasePublishExecutionService
             releaseConfigPath!,
             spec,
             PublishDestination.PowerShellGallery);
+    }
+
+    private static bool AllowsDirectModulePublishDestination(
+        string? moduleBuildScriptPath,
+        PublishDestination destination)
+    {
+        if (!string.Equals(Path.GetExtension(moduleBuildScriptPath), ".json", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        try
+        {
+            var context = new ModulePipelineConfigurationService().Load(moduleBuildScriptPath!);
+            return (context.Spec.Segments ?? [])
+                .OfType<ConfigurationPublishSegment>()
+                .Any(segment =>
+                    segment.Configuration.Enabled &&
+                    segment.Configuration.Destination == destination);
+        }
+        catch
+        {
+            // Keep malformed or stale JSON visible so execution returns the explicit
+            // configuration failure instead of silently treating publication as disabled.
+            return true;
+        }
     }
 
     private static bool AllowsModulePublishDestination(

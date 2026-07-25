@@ -66,7 +66,7 @@ $operation = if ($Plan) {
     'Plan unified PowerForge release'
 } elseif ($Validate) {
     'Validate unified PowerForge release'
-} elseif ($Publish -or $PublishNuget -or $PublishProjectGitHub -or $PublishToolGitHub) {
+} elseif ($Publish -or $RunMode -eq 'Publish' -or $PublishNuget -or $PublishProjectGitHub -or $PublishToolGitHub) {
     'Publish unified PowerForge release'
 } else {
     'Build unified PowerForge release'

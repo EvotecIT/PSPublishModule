@@ -355,7 +355,7 @@
         "Path": "Artefacts/Unpacked/<TagModuleVersionWithPreRelease>",
         "RequiredModules": {
           "Enabled": true,
-          "Path": "Artefacts/Unpacked/<TagModuleVersionWithPreRelease>/Modules"
+          "Path": "Modules"
         },
         "FilesOutput": [
           {

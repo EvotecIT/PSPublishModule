@@ -191,6 +191,7 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.Contains("$invokeParams.ModuleSignModule = $true", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("[switch] $ModuleNoDotnetBuild", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("$invokeParams.ModuleRunMode = if ($Publish) { 'Publish' } else { $RunMode }", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("$Publish -or $RunMode -eq 'Publish' -or $PublishNuget", projectWrapperScript, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "$invokeParams.ModuleRunMode = if ($Publish -or $PublishNuget -or $PublishProjectGitHub)",
             projectWrapperScript,
@@ -212,8 +213,19 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.True(unifiedGitHub.GetProperty("Publish").GetBoolean());
         Assert.Equal("Module", unifiedGitHub.GetProperty("VersionSource").GetString());
         Assert.Equal("v{Version}", unifiedGitHub.GetProperty("TagTemplate").GetString());
-
         using var moduleDocument = JsonDocument.Parse(moduleConfig);
+        var unpacked = moduleDocument.RootElement.GetProperty("Segments")
+            .EnumerateArray()
+            .Single(segment => string.Equals(
+                segment.GetProperty("Type").GetString(),
+                "Unpacked",
+                StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(
+            "Modules",
+            unpacked.GetProperty("Configuration")
+                .GetProperty("RequiredModules")
+                .GetProperty("Path")
+                .GetString());
         var segments = moduleDocument.RootElement.GetProperty("Segments").EnumerateArray().ToArray();
         Assert.Contains(segments, segment => segment.GetProperty("Type").GetString() == "Manifest");
         Assert.Contains(segments, segment => segment.GetProperty("Type").GetString() == "BuildLibraries");
