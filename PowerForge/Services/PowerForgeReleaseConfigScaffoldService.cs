@@ -95,6 +95,8 @@ public sealed class PowerForgeReleaseConfigScaffoldService
         var packages = string.IsNullOrWhiteSpace(packageConfigPath)
             ? null
             : LoadProjectBuildConfig(packageConfigPath!);
+        if (packages is not null)
+            RebasePackageConfigPaths(packages, packageConfigPath!, outputPath);
         var modulePipeline = string.IsNullOrWhiteSpace(moduleConfigPath)
             ? null
             : LoadModulePipelineConfig(moduleConfigPath!);
@@ -207,6 +209,47 @@ public sealed class PowerForgeReleaseConfigScaffoldService
             throw new InvalidOperationException($"Unable to deserialize project-build config: {path}");
 
         return config;
+    }
+
+    private static void RebasePackageConfigPaths(
+        ProjectBuildConfiguration config,
+        string sourceConfigPath,
+        string outputPath)
+    {
+        var sourceDirectory = Path.GetDirectoryName(sourceConfigPath) ?? Directory.GetCurrentDirectory();
+        var outputDirectory = Path.GetDirectoryName(outputPath) ?? Directory.GetCurrentDirectory();
+        var sourceRoot = string.IsNullOrWhiteSpace(config.RootPath)
+            ? sourceDirectory
+            : PathTokenProtection.GetFullPath(sourceDirectory, config.RootPath!);
+        config.RootPath = GetRelativePathCompat(outputDirectory, sourceRoot).Replace('\\', '/');
+        config.PlanOutputPath = RebaseConfigRelativePath(
+            config.PlanOutputPath,
+            sourceDirectory,
+            outputDirectory);
+        config.PublishApiKeyFilePath = RebaseConfigRelativePath(
+            config.PublishApiKeyFilePath,
+            sourceDirectory,
+            outputDirectory);
+        config.NugetCredentialSecretFilePath = RebaseConfigRelativePath(
+            config.NugetCredentialSecretFilePath,
+            sourceDirectory,
+            outputDirectory);
+        config.GitHubAccessTokenFilePath = RebaseConfigRelativePath(
+            config.GitHubAccessTokenFilePath,
+            sourceDirectory,
+            outputDirectory);
+    }
+
+    private static string? RebaseConfigRelativePath(
+        string? path,
+        string sourceDirectory,
+        string outputDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(path) || PathTokenProtection.IsPathRooted(path!))
+            return path;
+
+        var fullPath = PathTokenProtection.GetFullPath(sourceDirectory, path!);
+        return GetRelativePathCompat(outputDirectory, fullPath).Replace('\\', '/');
     }
 
     private static ModulePipelineSpec LoadModulePipelineConfig(string path)

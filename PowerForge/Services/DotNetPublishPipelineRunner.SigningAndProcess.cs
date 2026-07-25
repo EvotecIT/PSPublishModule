@@ -282,7 +282,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyList<string> args,
         IReadOnlyDictionary<string, string?>? environmentVariables = null)
     {
-        var result = RunProcess("dotnet", workingDir, args, environmentVariables);
+        var result = RunCancellableProcess("dotnet", workingDir, args, environmentVariables);
         if (result.ExitCode != 0)
         {
             var stderr = (result.StdErr ?? string.Empty).TrimEnd();
@@ -309,6 +309,26 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.TrimEnd());
             if (!string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.TrimEnd());
         }
+    }
+
+    private (int ExitCode, string StdOut, string StdErr) RunCancellableProcess(
+        string fileName,
+        string workingDir,
+        IReadOnlyList<string> args,
+        IReadOnlyDictionary<string, string?>? environmentVariables)
+    {
+        var result = _processRunner.RunAsync(
+                new ProcessRunRequest(
+                    fileName,
+                    string.IsNullOrWhiteSpace(workingDir) ? Environment.CurrentDirectory : workingDir,
+                    args,
+                    Timeout.InfiniteTimeSpan,
+                    environmentVariables),
+                _cancellationToken.Value)
+            .GetAwaiter()
+            .GetResult();
+        _cancellationToken.Value.ThrowIfCancellationRequested();
+        return (result.ExitCode, result.StdOut, result.StdErr);
     }
 
     private static (int ExitCode, string StdOut, string StdErr) RunProcess(

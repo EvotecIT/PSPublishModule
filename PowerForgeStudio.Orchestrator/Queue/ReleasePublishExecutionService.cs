@@ -20,7 +20,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
     private readonly Func<DotNetNuGetPushRequest, CancellationToken, Task<DotNetNuGetPushResult>> _pushNuGetPackageAsync;
     private readonly Func<GitHubReleasePublishRequest, CancellationToken, Task<GitHubReleasePublishResult>> _publishGitHubReleaseAsync;
     private readonly Func<RepositoryPublishRequest, CancellationToken, Task<RepositoryPublishResult>> _publishRepositoryAsync;
-    private readonly Func<string, string, PowerForgeReleaseResult> _publishUnifiedRelease;
+    private readonly Func<string, string, CancellationToken, PowerForgeReleaseResult> _publishUnifiedRelease;
 
     public ReleasePublishExecutionService()
         : this(
@@ -44,7 +44,8 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
         Func<DotNetNuGetPushRequest, CancellationToken, Task<DotNetNuGetPushResult>> pushNuGetPackageAsync,
         Func<GitHubReleasePublishRequest, CancellationToken, Task<GitHubReleasePublishResult>>? publishGitHubReleaseAsync = null,
         Func<RepositoryPublishRequest, CancellationToken, Task<RepositoryPublishResult>>? publishRepositoryAsync = null,
-        Func<string, string, PowerForgeReleaseResult>? publishUnifiedRelease = null)
+        Func<string, string, PowerForgeReleaseResult>? publishUnifiedRelease = null,
+        Func<string, string, CancellationToken, PowerForgeReleaseResult>? publishUnifiedReleaseWithCancellation = null)
     {
         _catalogScanner = catalogScanner;
         _moduleBuildHostService = moduleBuildHostService;
@@ -54,7 +55,10 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
         _pushNuGetPackageAsync = pushNuGetPackageAsync;
         _publishGitHubReleaseAsync = publishGitHubReleaseAsync ?? ((request, _) => Task.FromResult(new GitHubReleasePublisher(new NullLogger()).PublishRelease(request)));
         _publishRepositoryAsync = publishRepositoryAsync ?? ((request, _) => Task.FromResult(new RepositoryPublisher(new NullLogger()).Publish(request)));
-        _publishUnifiedRelease = publishUnifiedRelease ?? PublishUnifiedRelease;
+        _publishUnifiedRelease = publishUnifiedReleaseWithCancellation
+            ?? (publishUnifiedRelease is not null
+                ? (configPath, stateJson, _) => publishUnifiedRelease(configPath, stateJson)
+                : PublishUnifiedRelease);
     }
 
     public IReadOnlyList<ReleasePublishTarget> BuildPendingTargets(IEnumerable<ReleaseQueueItem> queueItems)
@@ -155,7 +159,22 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
 
         if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
         {
-            receipts.AddRange(ExecuteUnifiedPublish(repository, signingResult));
+            var unifiedSpec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
+            if (HasConfiguredModulePackagePublication(repository.UnifiedReleaseConfigPath!, unifiedSpec))
+            {
+                var modulePackageReceipts = await ExecuteModuleOwnedPackagePublishAsync(
+                    repository,
+                    unifiedSpec,
+                    signingResult,
+                    cancellationToken);
+                receipts.AddRange(modulePackageReceipts);
+                if (modulePackageReceipts.Any(static receipt =>
+                        receipt.Status == ReleasePublishReceiptStatus.Failed))
+                {
+                    return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+                }
+            }
+            receipts.AddRange(await ExecuteUnifiedPublishAsync(repository, signingResult, cancellationToken));
         }
 
         if (receipts.Count == 0)
@@ -231,66 +250,6 @@ public sealed partial class ReleasePublishExecutionService
 
     private ReleaseSigningExecutionResult? TryDeserializeSigningResult(ReleaseQueueItem queueItem)
         => _checkpointSerializer.TryDeserialize<ReleaseSigningExecutionResult>(queueItem.CheckpointStateJson);
-
-    private IEnumerable<ReleasePublishTarget> ProjectPendingTargets(ReleaseQueueItem item, ReleaseSigningExecutionResult signingResult)
-    {
-        var targets = new List<ReleasePublishTarget>();
-        var receipts = signingResult.Receipts ?? [];
-        var grouped = receipts.GroupBy(receipt => receipt.AdapterKind, StringComparer.OrdinalIgnoreCase);
-        foreach (var group in grouped)
-        {
-            var adapterKind = group.Key;
-            var paths = group.Select(receipt => receipt.ArtifactPath).ToArray();
-            if (paths.Any(path => path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase)))
-            {
-                targets.Add(new ReleasePublishTarget(
-                    RootPath: item.RootPath,
-                    RepositoryName: item.RepositoryName,
-                    AdapterKind: adapterKind,
-                    TargetName: $"{group.Count(path => path.ArtifactPath.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase))} NuGet package(s)",
-                    TargetKind: "NuGet",
-                    SourcePath: paths.FirstOrDefault(path => path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase)),
-                    Destination: "Configured NuGet feed"));
-            }
-
-            if (paths.Any(path => path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
-            {
-                targets.Add(new ReleasePublishTarget(
-                    RootPath: item.RootPath,
-                    RepositoryName: item.RepositoryName,
-                    AdapterKind: adapterKind,
-                    TargetName: $"{paths.Count(path => path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))} GitHub asset(s)",
-                    TargetKind: "GitHub",
-                    SourcePath: paths.FirstOrDefault(path => path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)),
-                    Destination: "Configured GitHub release"));
-            }
-
-            if (string.Equals(adapterKind, ReleaseBuildAdapterKind.ModuleBuild.ToString(), StringComparison.OrdinalIgnoreCase) &&
-                group.Any(receipt => string.Equals(receipt.ArtifactKind, "Directory", StringComparison.OrdinalIgnoreCase)))
-            {
-                targets.Add(new ReleasePublishTarget(
-                    RootPath: item.RootPath,
-                    RepositoryName: item.RepositoryName,
-                    AdapterKind: adapterKind,
-                    TargetName: "Module package",
-                    TargetKind: "PowerShellRepository",
-                    SourcePath: group.First(receipt => string.Equals(receipt.ArtifactKind, "Directory", StringComparison.OrdinalIgnoreCase)).ArtifactPath,
-                    Destination: "Configured PowerShell repository"));
-            }
-        }
-
-        foreach (var unifiedTarget in BuildUnifiedPublishTargets(item, signingResult))
-        {
-            if (!targets.Any(target =>
-                    string.Equals(target.TargetKind, unifiedTarget.TargetKind, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(target.SourcePath, unifiedTarget.SourcePath, StringComparison.OrdinalIgnoreCase)))
-            {
-                targets.Add(unifiedTarget);
-            }
-        }
-
-        return targets;
-    }
 
     private static ReleasePublishReceipt FailedReceipt(string rootPath, string repositoryName, string adapterKind, string targetKind, string? destination, string summary)
         => ReleaseQueueReceiptFactory.FailedPublishReceipt(rootPath, repositoryName, adapterKind, targetKind, destination, summary);

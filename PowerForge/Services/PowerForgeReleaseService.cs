@@ -52,7 +52,7 @@ internal sealed partial class PowerForgeReleaseService
     private readonly Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, PowerForgeToolReleaseResult> _runTools;
     private readonly Func<PowerForgeToolReleaseSpec, string, (DotNetPublishSpec Spec, string SourceConfigPath)> _loadDotNetToolsSpec;
     private readonly Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, ISet<PowerForgeReleaseToolOutputKind>, DotNetPublishPlan> _planDotNetTools;
-    private readonly Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, DotNetPublishResult> _runDotNetTools;
+    private readonly Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult> _runDotNetTools;
     private readonly Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> _publishGitHubRelease;
     private readonly Func<PowerForgeWingetSubmissionPlan, PowerForgeWingetSubmissionResult> _submitWinget;
     private readonly Func<AppleAppArchiveRequest, AppleAppArchiveResult> _archiveAppleApp;
@@ -98,8 +98,8 @@ internal sealed partial class PowerForgeReleaseService
             null,
             runToolsWithProgress: (plan, progress) =>
                 new PowerForgeToolReleaseService(logger).Run(plan, progress),
-            runDotNetToolsWithProgress: (plan, progress) =>
-                new DotNetPublishPipelineRunner(logger).Run(plan, progress))
+            runDotNetToolsWithProgressAndCancellation: (plan, progress, cancellationToken) =>
+                new DotNetPublishPipelineRunner(logger).Run(plan, progress, cancellationToken))
     {
     }
 
@@ -148,7 +148,8 @@ internal sealed partial class PowerForgeReleaseService
         Action<TimeSpan>? delay = null,
         AppleReleaseArtifactService? appleArtifactService = null,
         Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, PowerForgeToolReleaseResult>? runToolsWithProgress = null,
-        Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, DotNetPublishResult>? runDotNetToolsWithProgress = null)
+        Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, DotNetPublishResult>? runDotNetToolsWithProgress = null,
+        Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult>? runDotNetToolsWithProgressAndCancellation = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
@@ -160,7 +161,10 @@ internal sealed partial class PowerForgeReleaseService
         _planDotNetTools = planDotNetTools ?? throw new ArgumentNullException(nameof(planDotNetTools));
         if (runDotNetTools is null)
             throw new ArgumentNullException(nameof(runDotNetTools));
-        _runDotNetTools = runDotNetToolsWithProgress ?? ((plan, _) => runDotNetTools(plan));
+        _runDotNetTools = runDotNetToolsWithProgressAndCancellation
+            ?? (runDotNetToolsWithProgress is not null
+                ? (plan, progress, _) => runDotNetToolsWithProgress(plan, progress)
+                : (plan, _, _) => runDotNetTools(plan));
         _publishGitHubRelease = publishGitHubRelease ?? throw new ArgumentNullException(nameof(publishGitHubRelease));
         _submitWinget = submitWinget ?? (plan => new WingetSubmissionService(logger).Run(plan));
         _archiveAppleApp = archiveAppleApp ?? (request => new AppleAppArchiveService().CreateArchiveAsync(request).GetAwaiter().GetResult());
@@ -509,7 +513,7 @@ internal sealed partial class PowerForgeReleaseService
                         var toolProgress = request.Progress is IPowerForgeReleaseProgressReporterV2 detailedProgress
                             ? new DotNetPublishReleaseProgressAdapter(detailedProgress, dotNetPlan)
                             : null;
-                        var dotNetTools = _runDotNetTools(dotNetPlan, toolProgress);
+                        var dotNetTools = _runDotNetTools(dotNetPlan, toolProgress, request.CancellationToken);
                         request.CancellationToken.ThrowIfCancellationRequested();
                         FilterDotNetToolResult(dotNetTools, selectedToolOutputs);
                         result.DotNetTools = dotNetTools;
@@ -739,44 +743,9 @@ internal sealed partial class PowerForgeReleaseService
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
         var sharedReleaseVersion = request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, builtResult);
 
-        if (spec.Module?.IncludesPackages == true)
-        {
-            var modulePublishRequest = new PowerForgeReleaseRequest {
-                ConfigPath = configPath,
-                Configuration = request.Configuration,
-                ModuleHostPath = request.ModuleHostPath,
-                ModuleRunMode = ConfigurationGateMode.Publish,
-                ModuleNoDotnetBuild = true,
-                ModuleNoSign = true,
-                ModuleSkipInstall = true,
-                ModuleSignModule = false,
-                ModuleIncludePublishing = false,
-                ResolvedReleaseVersion = sharedReleaseVersion
-            };
-            var modulePublish = PrepareModuleRelease(
-                spec.Module,
-                configPath,
-                modulePublishRequest,
-                NormalizeConfiguration(request.Configuration),
-                packagePublishingRequested: true,
-                publishUnifiedGitHub: spec.GitHub?.Publish == true);
-            var modulePublishResult = new ModuleBuildHostService()
-                .ExecuteBuildAsync(modulePublish.Request, request.CancellationToken)
-                .GetAwaiter()
-                .GetResult();
-            builtResult.Module = modulePublishResult;
-            if (!modulePublishResult.Succeeded)
-            {
-                builtResult.Success = false;
-                builtResult.ErrorMessage = BuildModuleFailureMessage(
-                    modulePublish.Request.ConfigPath ?? modulePublish.Request.ScriptPath ?? "module package publish",
-                    modulePublishResult);
-                return builtResult;
-            }
-        }
-
         if (spec.AppleApps is not null)
         {
+            request.CancellationToken.ThrowIfCancellationRequested();
             var appleResult = Execute(
                 spec,
                 new PowerForgeReleaseRequest {
@@ -793,7 +762,8 @@ internal sealed partial class PowerForgeReleaseService
                     PublishProjectGitHub = false,
                     PublishToolGitHub = false,
                     SubmitWinget = false,
-                    ResolvedReleaseVersion = sharedReleaseVersion
+                    ResolvedReleaseVersion = sharedReleaseVersion,
+                    CancellationToken = request.CancellationToken
                 });
             builtResult.AppleAppPlan = appleResult.AppleAppPlan;
             builtResult.AppleApps = appleResult.AppleApps;
@@ -808,6 +778,7 @@ internal sealed partial class PowerForgeReleaseService
 
         if (spec.Tools is not null && (request.PublishToolGitHub ?? spec.Tools.GitHub.Publish))
         {
+            request.CancellationToken.ThrowIfCancellationRequested();
             if (builtResult.DotNetToolPlan is not null && builtResult.DotNetTools is not null)
             {
                 builtResult.ToolGitHubReleases = PublishDotNetToolGitHubReleases(
@@ -837,6 +808,7 @@ internal sealed partial class PowerForgeReleaseService
         var moduleSelected = spec.Module is not null && !request.PackagesOnly && !request.ToolsOnly;
         if (ShouldPublishUnifiedGitHub(spec, request, moduleSelected))
         {
+            request.CancellationToken.ThrowIfCancellationRequested();
             var unified = PublishUnifiedGitHubRelease(spec, configDirectory, builtResult, sharedReleaseVersion);
             builtResult.UnifiedGitHubRelease = unified;
             if (!unified.Success)
@@ -847,7 +819,9 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
 
+        request.CancellationToken.ThrowIfCancellationRequested();
         SubmitWingetOutputs(spec, request, configDirectory, builtResult);
+        request.CancellationToken.ThrowIfCancellationRequested();
         if (!builtResult.Success)
             return builtResult;
 

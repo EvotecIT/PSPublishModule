@@ -45,6 +45,53 @@ public sealed class ProjectBuildPublishHostService
             throw new InvalidOperationException($"Unable to resolve the configuration directory for '{resolvedConfigPath}'.");
 
         var config = new ProjectBuildSupportService(_logger).LoadConfig(resolvedConfigPath);
+        return CreateHostConfiguration(config, resolvedConfigPath, configDirectory);
+    }
+
+    /// <summary>
+    /// Resolves publish settings for an inline module package-build configuration.
+    /// </summary>
+    public ProjectBuildPublishHostConfiguration LoadConfiguration(
+        PackageBuildConfiguration configuration,
+        string sourceConfigPath)
+    {
+        FrameworkCompatibility.NotNull(configuration, nameof(configuration));
+        FrameworkCompatibility.NotNullOrWhiteSpace(sourceConfigPath, nameof(sourceConfigPath));
+
+        var resolvedConfigPath = PathValueResolver.Resolve(Directory.GetCurrentDirectory(), sourceConfigPath);
+        var configDirectory = Path.GetDirectoryName(resolvedConfigPath);
+        if (string.IsNullOrWhiteSpace(configDirectory))
+            throw new InvalidOperationException($"Unable to resolve the configuration directory for '{resolvedConfigPath}'.");
+
+        var config = ProjectBuildConfigurationAdapter.FromPackageBuild(configuration);
+        return CreateHostConfiguration(config, resolvedConfigPath, configDirectory);
+    }
+
+    /// <summary>
+    /// Resolves publish settings from a referenced project-build configuration with module-lane overrides applied.
+    /// </summary>
+    public ProjectBuildPublishHostConfiguration LoadConfiguration(
+        ProjectBuildConfigurationReference reference,
+        string configPath)
+    {
+        FrameworkCompatibility.NotNull(reference, nameof(reference));
+        FrameworkCompatibility.NotNullOrWhiteSpace(configPath, nameof(configPath));
+
+        var resolvedConfigPath = PathValueResolver.Resolve(Directory.GetCurrentDirectory(), configPath);
+        var configDirectory = Path.GetDirectoryName(resolvedConfigPath);
+        if (string.IsNullOrWhiteSpace(configDirectory))
+            throw new InvalidOperationException($"Unable to resolve the configuration directory for '{resolvedConfigPath}'.");
+
+        var config = new ProjectBuildSupportService(_logger).LoadConfig(resolvedConfigPath);
+        ProjectBuildConfigurationAdapter.ApplyReference(config, reference);
+        return CreateHostConfiguration(config, resolvedConfigPath, configDirectory);
+    }
+
+    private static ProjectBuildPublishHostConfiguration CreateHostConfiguration(
+        ProjectBuildConfiguration config,
+        string resolvedConfigPath,
+        string configDirectory)
+    {
         var feed = ProjectBuildPackageFeedResolver.Resolve(config, configDirectory);
         var publishSource = string.IsNullOrWhiteSpace(feed.PublishSource)
             ? ProjectBuildPackageFeedResolver.GetDefaultPublishSource()

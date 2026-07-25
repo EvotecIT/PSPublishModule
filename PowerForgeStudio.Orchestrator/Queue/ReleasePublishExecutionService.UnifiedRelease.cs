@@ -64,21 +64,34 @@ public sealed partial class ReleasePublishExecutionService
 
             var wingetSubmissionEnabled = spec.Winget is { } winget &&
                                           (winget.Submit || winget.Submission?.Enabled == true);
-            var wingetSource = unified.WingetManifestPaths
-                .FirstOrDefault(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path));
-            if (wingetSubmissionEnabled && wingetSource is not null)
+            var wingetPaths = unified.WingetManifestPaths
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var missingWingetPaths = wingetPaths
+                .Where(static path => !File.Exists(path))
+                .ToArray();
+            if (wingetSubmissionEnabled && (wingetPaths.Length == 0 || missingWingetPaths.Length > 0))
+            {
+                throw new InvalidOperationException(
+                    wingetPaths.Length == 0
+                        ? "WinGet submission is enabled, but the build checkpoint contains no WinGet manifests."
+                        : "Checkpointed WinGet manifests are missing: " + string.Join(", ", missingWingetPaths));
+            }
+
+            if (wingetSubmissionEnabled)
             {
                 targets.Add(new ReleasePublishTarget(
                     RootPath: item.RootPath,
                     RepositoryName: item.RepositoryName,
                     AdapterKind: "UnifiedRelease",
-                    TargetName: $"{unified.WingetManifestPaths.Length} WinGet manifest(s)",
+                    TargetName: $"{wingetPaths.Length} WinGet manifest(s)",
                     TargetKind: "Winget",
-                    SourcePath: wingetSource,
+                    SourcePath: wingetPaths[0],
                     Destination: "Windows Package Manager"));
             }
 
-            if (spec.Module?.IncludesPackages == true)
+            if (HasConfiguredModulePackagePublication(configPath!, spec))
             {
                 targets.Add(new ReleasePublishTarget(
                     RootPath: item.RootPath,
@@ -120,9 +133,10 @@ public sealed partial class ReleasePublishExecutionService
         }
     }
 
-    private IReadOnlyList<ReleasePublishReceipt> ExecuteUnifiedPublish(
+    private async Task<IReadOnlyList<ReleasePublishReceipt>> ExecuteUnifiedPublishAsync(
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
-        ReleaseSigningExecutionResult signingResult)
+        ReleaseSigningExecutionResult signingResult,
+        CancellationToken cancellationToken)
     {
         var buildResult = _checkpointSerializer.TryDeserialize<ReleaseBuildExecutionResult>(signingResult.SourceCheckpointStateJson);
         if (buildResult is null || string.IsNullOrWhiteSpace(buildResult.UnifiedReleaseStateJson))
@@ -138,7 +152,15 @@ public sealed partial class ReleasePublishExecutionService
                 repository.UnifiedReleaseConfigPath!,
                 buildResult.UnifiedReleaseConfigSha256);
             var spec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
-            var result = _publishUnifiedRelease(repository.UnifiedReleaseConfigPath!, buildResult.UnifiedReleaseStateJson!);
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = await Task.Run(
+                    () => _publishUnifiedRelease(
+                        repository.UnifiedReleaseConfigPath!,
+                        buildResult.UnifiedReleaseStateJson!,
+                        cancellationToken),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             var receipts = result.ToolGitHubReleases
                 .Select(release => ReleaseQueueReceiptFactory.CreatePublishReceipt(
                     repository.RootPath,
@@ -151,20 +173,6 @@ public sealed partial class ReleasePublishExecutionService
                     release.Success ? $"GitHub release {release.TagName} published." : release.ErrorMessage ?? "Tool GitHub release failed.",
                     release.AssetPaths.FirstOrDefault()))
                 .ToList();
-
-            if (spec.Module?.IncludesPackages == true && result.Module is { } modulePublish)
-            {
-                receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
-                    repository.RootPath,
-                    repository.Name,
-                    "UnifiedRelease",
-                    "Module-owned package release",
-                    "ModulePackages",
-                    "Configured module package destinations",
-                    modulePublish.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
-                    modulePublish.Succeeded ? "Module-owned package publish workflow completed." : FirstLine(modulePublish.StandardError) ?? "Module-owned package publish workflow failed.",
-                    result.ModuleAssets.FirstOrDefault()));
-            }
 
             if (result.UnifiedGitHubRelease is { } unified)
             {
@@ -213,6 +221,10 @@ public sealed partial class ReleasePublishExecutionService
 
             return receipts;
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             return [
@@ -221,7 +233,10 @@ public sealed partial class ReleasePublishExecutionService
         }
     }
 
-    private static PowerForgeReleaseResult PublishUnifiedRelease(string configPath, string stateJson)
+    private static PowerForgeReleaseResult PublishUnifiedRelease(
+        string configPath,
+        string stateJson,
+        CancellationToken cancellationToken)
     {
         var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
         var builtResult = JsonSerializer.Deserialize<PowerForgeReleaseResult>(stateJson)
@@ -232,7 +247,8 @@ public sealed partial class ReleasePublishExecutionService
                 ConfigPath = configPath,
                 ModuleHostPath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
                 ModuleRunMode = ConfigurationGateMode.Publish,
-                AppleActionConfirmed = true
+                AppleActionConfirmed = true,
+                CancellationToken = cancellationToken
             },
             builtResult);
     }

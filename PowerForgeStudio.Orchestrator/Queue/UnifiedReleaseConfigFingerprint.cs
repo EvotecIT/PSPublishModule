@@ -39,6 +39,7 @@ internal static class UnifiedReleaseConfigFingerprint
             AppendFile(hash, "module-packages", moduleConfigPath);
         }
 
+        AppendApplePublicationInputs(hash, fullPath, spec.AppleApps);
         return Convert.ToHexString(hash.GetHashAndReset());
     }
 
@@ -60,11 +61,52 @@ internal static class UnifiedReleaseConfigFingerprint
 
     private static void AppendFile(IncrementalHash hash, string label, string path)
     {
+        if (!File.Exists(path))
+            throw new FileNotFoundException($"Checkpoint input file was not found: {path}", path);
+
         var labelBytes = Encoding.UTF8.GetBytes(label);
         var content = File.ReadAllBytes(path);
         hash.AppendData(BitConverter.GetBytes(labelBytes.Length));
         hash.AppendData(labelBytes);
         hash.AppendData(BitConverter.GetBytes(content.Length));
         hash.AppendData(content);
+    }
+
+    private static void AppendApplePublicationInputs(
+        IncrementalHash hash,
+        string releaseConfigPath,
+        PowerForgeAppleReleaseOptions? apple)
+    {
+        if (apple is null)
+            return;
+
+        var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
+        var projectRoot = string.IsNullOrWhiteSpace(apple.ProjectRoot)
+            ? releaseDirectory
+            : PathTokenProtection.GetFullPath(releaseDirectory, apple.ProjectRoot!);
+        if (apple.SyncMetadata)
+            AppendConfiguredPaths(hash, "apple-metadata", projectRoot, apple.MetadataConfigPath, apple.MetadataConfigPaths);
+        if (apple.SyncAppInfo)
+            AppendConfiguredPaths(hash, "apple-app-info", projectRoot, apple.AppInfoConfigPath, apple.AppInfoConfigPaths);
+        if (apple.SyncScreenshots)
+            AppendConfiguredPaths(hash, "apple-screenshots", projectRoot, apple.ScreenshotConfigPath, apple.ScreenshotConfigPaths);
+    }
+
+    private static void AppendConfiguredPaths(
+        IncrementalHash hash,
+        string label,
+        string projectRoot,
+        string? primaryPath,
+        IEnumerable<string>? additionalPaths)
+    {
+        var paths = new[] { primaryPath }
+            .Concat(additionalPaths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => PathTokenProtection.GetFullPath(projectRoot, path!))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        for (var index = 0; index < paths.Length; index++)
+            AppendFile(hash, $"{label}:{index}", paths[index]);
     }
 }

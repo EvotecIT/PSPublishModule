@@ -108,6 +108,38 @@ public sealed class ProjectBuildHostService
         return ExecuteCore(request, config, fullConfigPath, configDirectory, startedAt);
     }
 
+    /// <summary>
+    /// Executes or plans an inline module package-build configuration without writing a temporary JSON file.
+    /// </summary>
+    public ProjectBuildHostExecutionResult Execute(
+        ProjectBuildHostRequest request,
+        PackageBuildConfiguration configuration,
+        string sourceConfigPath)
+    {
+        if (configuration is null)
+            throw new ArgumentNullException(nameof(configuration));
+
+        var config = ProjectBuildConfigurationAdapter.FromPackageBuild(configuration);
+        return Execute(request, config, sourceConfigPath);
+    }
+
+    /// <summary>
+    /// Executes or plans a referenced project-build configuration with module-lane overrides applied.
+    /// </summary>
+    public ProjectBuildHostExecutionResult Execute(
+        ProjectBuildHostRequest request,
+        ProjectBuildConfigurationReference reference,
+        string configPath)
+    {
+        if (reference is null)
+            throw new ArgumentNullException(nameof(reference));
+
+        var resolvedConfigPath = PathValueResolver.Resolve(Directory.GetCurrentDirectory(), configPath);
+        var config = new ProjectBuildSupportService(_logger).LoadConfig(resolvedConfigPath);
+        ProjectBuildConfigurationAdapter.ApplyReference(config, reference);
+        return Execute(request, config, resolvedConfigPath);
+    }
+
     private ProjectBuildHostExecutionResult ExecuteCore(
         ProjectBuildHostRequest request,
         ProjectBuildConfiguration config,
