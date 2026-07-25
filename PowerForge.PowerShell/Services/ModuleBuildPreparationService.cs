@@ -239,6 +239,7 @@ internal sealed class ModuleBuildPreparationService
                     segment is not ConfigurationProjectBuildSegment &&
                     segment is not ConfigurationPackageBuildSegment)
                 .ToArray();
+            ModuleBuildPackageOwnershipPolicy.RemoveUnavailableVersionSources(segments);
             spec.Segments = segments;
         }
 

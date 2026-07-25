@@ -149,7 +149,17 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
 
         if (!string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath))
         {
-            receipts.AddRange(await ExecuteProjectPublishAsync(repository, signingResult, cancellationToken, unifiedOwnsGitHub));
+            var projectReceipts = await ExecuteProjectPublishAsync(
+                repository,
+                signingResult,
+                cancellationToken,
+                unifiedOwnsGitHub);
+            receipts.AddRange(projectReceipts);
+            if (projectReceipts.Any(static receipt =>
+                    receipt.Status == ReleasePublishReceiptStatus.Failed))
+            {
+                return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(repository.ModuleBuildScriptPath))
@@ -161,11 +171,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
                 unifiedOwnsGitHub);
             receipts.AddRange(moduleReceipts);
             if (moduleReceipts.Any(static receipt =>
-                    receipt.Status == ReleasePublishReceiptStatus.Failed &&
-                    string.Equals(
-                        receipt.TargetKind,
-                        "Module publish configuration",
-                        StringComparison.OrdinalIgnoreCase)))
+                    receipt.Status == ReleasePublishReceiptStatus.Failed))
             {
                 return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
             }
@@ -467,10 +473,37 @@ public sealed partial class ReleasePublishExecutionService
                     .Where(path => path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
+                if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
+                {
+                    var checkpointedPlan = ReadCheckpointedProjectPlan(signingResult);
+                    if (checkpointedPlan is null)
+                    {
+                        packages.Clear();
+                    }
+                    else
+                    {
+                        var approvedPackageNames = checkpointedPlan.Projects
+                            .SelectMany(static project => project.Packages)
+                            .Select(Path.GetFileName)
+                            .Where(static name => !string.IsNullOrWhiteSpace(name))
+                            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                        packages = packages
+                            .Where(path => approvedPackageNames.Contains(Path.GetFileName(path)))
+                            .ToList();
+                    }
+                }
 
                 if (packages.Count == 0)
                 {
-                    receipts.Add(FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ProjectBuild.ToString(), "NuGet publish", config.PublishSource, "No signed .nupkg packages were found for publishing."));
+                    receipts.Add(FailedReceipt(
+                        repository.RootPath,
+                        repository.Name,
+                        ReleaseBuildAdapterKind.ProjectBuild.ToString(),
+                        "NuGet publish",
+                        config.PublishSource,
+                        string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath)
+                            ? "No signed .nupkg packages were found for publishing."
+                            : "No signed checkpointed .nupkg packages were found for publishing."));
                 }
                 else
                 {

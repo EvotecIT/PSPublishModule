@@ -198,6 +198,54 @@ public sealed class UnifiedReleaseCheckpointIntegrityTests
     }
 
     [Fact]
+    public void Fingerprint_changes_when_apple_screenshot_payload_changes()
+    {
+        using var scope = new TestDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("AppleScreenshotFingerprintRepo");
+        var buildRoot = scope.CreateDirectory(Path.Combine("AppleScreenshotFingerprintRepo", "Build"));
+        var screenshotRoot = scope.CreateDirectory(
+            Path.Combine("AppleScreenshotFingerprintRepo", "Screenshots"));
+        var screenshotPath = Path.Combine(screenshotRoot, "01.png");
+        File.WriteAllBytes(screenshotPath, [1, 2, 3, 4]);
+        var screenshotConfig = Path.Combine(repositoryRoot, "screenshots.json");
+        File.WriteAllText(
+            screenshotConfig,
+            """
+            {
+              "AppId": "123456789",
+              "Locale": "en-US",
+              "ScreenshotSets": [
+                {
+                  "ScreenshotDisplayType": "APP_IPHONE_65",
+                  "Path": "Screenshots",
+                  "Filter": "*.png"
+                }
+              ]
+            }
+            """);
+        var releaseConfig = Path.Combine(buildRoot, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """
+            {
+              "AppleApps": {
+                "ProjectRoot": "..",
+                "SyncScreenshots": true,
+                "ScreenshotConfigPath": "screenshots.json",
+                "Apps": []
+              }
+            }
+            """);
+
+        var fingerprint = UnifiedReleaseConfigFingerprint.Compute(releaseConfig);
+        File.WriteAllBytes(screenshotPath, [4, 3, 2, 1]);
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => UnifiedReleaseConfigFingerprint.Validate(releaseConfig, fingerprint));
+        Assert.Contains("changed after the build checkpoint", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_forwards_cancellation_to_unified_release_request()
     {
         using var scope = new TestDirectoryScope();

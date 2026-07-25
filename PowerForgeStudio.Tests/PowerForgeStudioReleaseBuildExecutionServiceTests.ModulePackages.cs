@@ -7,6 +7,130 @@ namespace PowerForgeStudio.Tests;
 public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 {
     [Fact]
+    public async Task ExecuteAsync_checkpoints_script_exported_module_publish_configuration()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ScriptModuleRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("ScriptModuleRepo", "Build"));
+        var scriptPath = Path.Combine(repositoryRoot, "Build-Module.ps1");
+        File.WriteAllText(scriptPath, "# module recipe");
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """{ "Module": { "RepositoryRoot": "..", "ScriptPath": "Build-Module.ps1" } }""");
+        var expectedConfigurations = new[]
+        {
+            new PublishConfiguration {
+                Destination = PublishDestination.PowerShellGallery,
+                Enabled = true,
+                RepositoryName = "PSGallery"
+            }
+        };
+        var moduleHost = new ModuleBuildHostService(new CapturingPowerShellRunner(request =>
+        {
+            var marker = "$targetJson = '";
+            var start = request.CommandText?.IndexOf(marker, StringComparison.Ordinal) ?? -1;
+            if (start < 0)
+                return new PowerShellRunResult(1, string.Empty, "Export path missing.", "pwsh");
+            start += marker.Length;
+            var end = request.CommandText!.IndexOf('\'', start);
+            var outputPath = request.CommandText[start..end];
+            File.WriteAllText(
+                outputPath,
+                """
+                {
+                  "Segments": [
+                    {
+                      "Type": "GalleryNuget",
+                      "Configuration": {
+                        "Destination": "PowerShellGallery",
+                        "Enabled": true,
+                        "RepositoryName": "PSGallery"
+                      }
+                    }
+                  ]
+                }
+                """);
+            return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh");
+        }));
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            moduleHost,
+            (_, _) => new PowerForgeReleaseResult {
+                Success = true,
+                ConfigPath = releaseConfig,
+                ModulePlan = new PowerForgeModuleReleasePlanSummary {
+                    ModuleName = "Sample",
+                    ScriptPath = scriptPath
+                },
+                Module = new ModuleBuildHostExecutionResult { ExitCode = 0 }
+            });
+
+        var result = await service.ExecuteAsync(repositoryRoot);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(
+            UnifiedReleaseConfigFingerprint.ComputeModulePublishConfigurations(
+                expectedConfigurations),
+            result.ModulePublishConfigSha256);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_checkpoints_only_planned_top_level_packages_for_signing()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("PackageCheckpointRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("PackageCheckpointRepo", "Build"));
+        var artifactDirectory = scope.CreateDirectory(
+            Path.Combine("PackageCheckpointRepo", "Artifacts"));
+        var releaseConfig = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            releaseConfig,
+            """{ "Packages": { "RootPath": "..", "Build": true } }""");
+        var currentPackage = Path.Combine(artifactDirectory, "Sample.1.0.0.nupkg");
+        var stalePackage = Path.Combine(artifactDirectory, "Sample.0.9.0.nupkg");
+        File.WriteAllText(currentPackage, "current");
+        File.WriteAllText(stalePackage, "stale");
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()),
+            (_, _) => new PowerForgeReleaseResult {
+                Success = true,
+                ConfigPath = releaseConfig,
+                Packages = new ProjectBuildHostExecutionResult {
+                    Success = true,
+                    RootPath = repositoryRoot,
+                    OutputPath = artifactDirectory,
+                    Result = new ProjectBuildResult {
+                        Success = true,
+                        Release = new DotNetRepositoryReleaseResult {
+                            Success = true,
+                            Projects = {
+                                new DotNetRepositoryProjectResult {
+                                    ProjectName = "Sample",
+                                    PackageId = "Sample",
+                                    NewVersion = "1.0.0",
+                                    Packages = { currentPackage }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+        var result = await service.ExecuteAsync(repositoryRoot);
+
+        Assert.True(result.Succeeded);
+        var adapter = Assert.Single(result.AdapterResults);
+        Assert.Contains(currentPackage, adapter.ArtifactFiles);
+        Assert.DoesNotContain(stalePackage, adapter.ArtifactFiles);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_package_only_release_uses_unified_checkpoint_path()
     {
         using var scope = new TemporaryDirectoryScope();

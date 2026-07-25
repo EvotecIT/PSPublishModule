@@ -69,6 +69,11 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             var unified = await Task.Run(
                 () => _executeUnifiedReleaseBuild(configPath, unifiedRequest),
                 cancellationToken).ConfigureAwait(false);
+            var modulePublishConfigFingerprint =
+                await CaptureScriptModulePublishConfigFingerprintAsync(
+                    repository,
+                    unified,
+                    cancellationToken).ConfigureAwait(false);
             var completedFingerprint = UnifiedReleaseConfigFingerprint.Compute(configPath);
             if (!string.Equals(configFingerprint, completedFingerprint, StringComparison.OrdinalIgnoreCase))
             {
@@ -82,7 +87,8 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 DateTimeOffset.UtcNow - startedAt,
                 results,
                 SerializeUnifiedCheckpoint(unified),
-                configFingerprint);
+                configFingerprint,
+                modulePublishConfigSha256: modulePublishConfigFingerprint);
         }
 
         if (!string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath))
@@ -213,14 +219,18 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
 
         if (unified.AppleAppPlan is not null)
         {
+            var artifacts = CollectExplicitArtifacts(
+                unified.AppleAppPlan.Apps
+                    .Where(static app => app.Upload)
+                    .Select(static app => app.ArchivePath));
             results.Add(new ReleaseBuildAdapterResult(
                 ReleaseBuildAdapterKind.AppleBuild,
                 unified.Success,
                 unified.Success ? "Unified Apple release plan checkpointed without executing external actions." : "Unified Apple release planning failed.",
                 unified.Success ? 0 : 1,
                 Math.Round(duration.TotalSeconds, 2),
-                [],
-                [],
+                artifacts.Directories,
+                artifacts.Files,
                 ErrorTail: TrimTail(unified.ErrorMessage)));
         }
 
@@ -359,7 +369,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         AddArtifactDirectory(Path.Combine(execution.RootPath, "Artefacts", "ProjectBuild"), directories);
 
         AddReleaseArtifactFiles(execution.Result.Release, files);
-        CollectArtifactFiles(directories, files);
+        CollectArtifactFiles(directories, files, includePackages: false);
         return new ArtifactCollection(directories.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(), files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList());
     }
 
@@ -512,17 +522,61 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         }
     }
 
-    private static void CollectArtifactFiles(IEnumerable<string> directories, ISet<string> files)
+    private static void CollectArtifactFiles(
+        IEnumerable<string> directories,
+        ISet<string> files,
+        bool includePackages = true)
     {
+        var extensions = includePackages
+            ? new[] { "*.nupkg", "*.snupkg", "*.zip", "*.psd1", "*.psm1", "*.dll" }
+            : new[] { "*.zip", "*.psd1", "*.psm1", "*.dll" };
         foreach (var directory in directories)
         {
-            foreach (var extension in new[] { "*.nupkg", "*.snupkg", "*.zip", "*.psd1", "*.psm1", "*.dll" })
+            foreach (var extension in extensions)
             {
                 foreach (var file in Directory.EnumerateFiles(directory, extension, SearchOption.AllDirectories))
                 {
                     files.Add(file);
                 }
             }
+        }
+    }
+
+    private async Task<string?> CaptureScriptModulePublishConfigFingerprintAsync(
+        PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
+        PowerForgeReleaseResult unified,
+        CancellationToken cancellationToken)
+    {
+        var scriptPath = unified.ModulePlan?.ScriptPath;
+        if (string.IsNullOrWhiteSpace(scriptPath))
+            return null;
+
+        var outputPath = PowerForgeStudioHostPaths.GetRuntimeFilePath(
+            repository.Name,
+            "module-publish-checkpoint",
+            "powerforge.publish.json");
+        try
+        {
+            var execution = await _moduleBuildHostService.ExportPipelineJsonAsync(
+                new ModuleBuildHostExportRequest {
+                    RepositoryRoot = repository.RootPath,
+                    ScriptPath = scriptPath!,
+                    ModulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
+                    OutputPath = outputPath
+                },
+                cancellationToken).ConfigureAwait(false);
+            if (!execution.Succeeded || !File.Exists(outputPath))
+            {
+                throw new InvalidOperationException(
+                    $"Module publish configuration checkpoint export failed for '{scriptPath}' (exit {execution.ExitCode}).");
+            }
+
+            var configurations = new ModulePublishConfigurationReader().Read(outputPath);
+            return UnifiedReleaseConfigFingerprint.ComputeModulePublishConfigurations(configurations);
+        }
+        finally
+        {
+            try { File.Delete(outputPath); } catch { }
         }
     }
 

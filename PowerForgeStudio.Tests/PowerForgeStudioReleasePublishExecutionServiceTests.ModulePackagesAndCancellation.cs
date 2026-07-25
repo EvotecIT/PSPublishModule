@@ -36,12 +36,35 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 }
                 """);
             var signedPackage = Path.Combine(repositoryRoot, "Sample.Library.1.0.0.nupkg");
+            var stalePackage = Path.Combine(repositoryRoot, "Sample.Library.0.9.0.nupkg");
             File.WriteAllText(signedPackage, "signed-package");
+            File.WriteAllText(stalePackage, "stale-package");
+            var checkpointedPlan = new DotNetRepositoryReleaseResult {
+                Success = true,
+                Projects = {
+                    new DotNetRepositoryProjectResult {
+                        ProjectName = "Sample.Library",
+                        PackageId = "Sample.Library",
+                        NewVersion = "1.0.0",
+                        Packages = { signedPackage }
+                    }
+                }
+            };
             var queueItem = CreateUnifiedPublishQueueItem(
                 repositoryRoot,
                 "Sample",
                 releaseConfig,
-                new PowerForgeReleaseResult { Success = true, ConfigPath = releaseConfig },
+                new PowerForgeReleaseResult {
+                    Success = true,
+                    ConfigPath = releaseConfig,
+                    Packages = new ProjectBuildHostExecutionResult {
+                        Success = true,
+                        Result = new ProjectBuildResult {
+                            Success = true,
+                            Release = checkpointedPlan
+                        }
+                    }
+                },
                 [
                     new ReleaseSigningReceipt(
                         repositoryRoot,
@@ -51,9 +74,18 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                         "File",
                         ReleaseSigningReceiptStatus.Signed,
                         "Signed.",
+                        DateTimeOffset.UtcNow),
+                    new ReleaseSigningReceipt(
+                        repositoryRoot,
+                        "Sample",
+                        ReleaseBuildAdapterKind.ProjectBuild.ToString(),
+                        stalePackage,
+                        "File",
+                        ReleaseSigningReceiptStatus.Signed,
+                        "Signed.",
                         DateTimeOffset.UtcNow)
                 ]);
-            DotNetNuGetPushRequest? capturedPush = null;
+            var capturedPushes = new List<DotNetNuGetPushRequest>();
             var service = new ReleasePublishExecutionService(
                 new RepositoryCatalogScanner(),
                 new ModuleBuildHostService(),
@@ -62,7 +94,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 new ProjectBuildPublishHostService(),
                 (request, _) =>
                 {
-                    capturedPush = request;
+                    capturedPushes.Add(request);
                     return Task.FromResult(new DotNetNuGetPushResult(
                         0,
                         "published",
@@ -78,8 +110,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             var result = await service.ExecuteAsync(queueItem);
 
             Assert.True(result.Succeeded);
-            Assert.NotNull(capturedPush);
-            Assert.Equal(signedPackage, capturedPush!.PackagePath);
+            var capturedPush = Assert.Single(capturedPushes);
+            Assert.Equal(signedPackage, capturedPush.PackagePath);
             Assert.Equal("nested-key", capturedPush.ApiKey);
             Assert.Equal("https://nested.example.test/v3/index.json", capturedPush.Source);
         }

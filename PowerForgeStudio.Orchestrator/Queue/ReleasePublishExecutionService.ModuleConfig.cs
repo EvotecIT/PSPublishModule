@@ -41,6 +41,32 @@ public sealed partial class ReleasePublishExecutionService
             buildResult.ModuleBuildConfigSha256);
     }
 
+    private void ValidateModulePublishConfigurationCheckpoint(
+        ReleaseSigningExecutionResult signingResult,
+        IReadOnlyList<PublishConfiguration> configurations)
+    {
+        var buildResult = _checkpointSerializer.TryDeserialize<ReleaseBuildExecutionResult>(
+            signingResult.SourceCheckpointStateJson);
+        var unified = ReadUnifiedReleaseCheckpoint(signingResult);
+        if (string.IsNullOrWhiteSpace(unified?.ModulePlan?.ScriptPath))
+            return;
+        if (string.IsNullOrWhiteSpace(buildResult?.ModulePublishConfigSha256))
+        {
+            throw new InvalidOperationException(
+                "Script-backed module publish configuration fingerprint is missing from the build checkpoint. Rebuild before publishing.");
+        }
+
+        var actual = UnifiedReleaseConfigFingerprint.ComputeModulePublishConfigurations(configurations);
+        if (!string.Equals(
+                actual,
+                buildResult.ModulePublishConfigSha256,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Script-backed module publish configuration changed after the build checkpoint. Rebuild and approve the updated contract before publishing.");
+        }
+    }
+
     private async Task<ModulePublishConfigurationSet> ExportModulePublishConfigsAsync(
         string repositoryRoot,
         string buildInputPath,

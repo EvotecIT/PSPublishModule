@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using PowerForge;
 using PowerForgeStudio.Orchestrator.Catalog;
 
@@ -41,6 +42,16 @@ internal static class UnifiedReleaseConfigFingerprint
         var fullPath = Path.GetFullPath(configPath);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         AppendModuleConfigInputs(hash, fullPath);
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
+    internal static string ComputeModulePublishConfigurations(
+        IEnumerable<PublishConfiguration> configurations)
+    {
+        ArgumentNullException.ThrowIfNull(configurations);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var payload = JsonSerializer.SerializeToUtf8Bytes(configurations.ToArray());
+        hash.AppendData(payload);
         return Convert.ToHexString(hash.GetHashAndReset());
     }
 
@@ -119,10 +130,18 @@ internal static class UnifiedReleaseConfigFingerprint
         if (apple.SyncAppInfo)
             AppendConfiguredPaths(hash, "apple-app-info", projectRoot, apple.AppInfoConfigPath, apple.AppInfoConfigPaths);
         if (apple.SyncScreenshots)
-            AppendConfiguredPaths(hash, "apple-screenshots", projectRoot, apple.ScreenshotConfigPath, apple.ScreenshotConfigPaths);
+        {
+            var screenshotConfigs = AppendConfiguredPaths(
+                hash,
+                "apple-screenshots",
+                projectRoot,
+                apple.ScreenshotConfigPath,
+                apple.ScreenshotConfigPaths);
+            AppendScreenshotPayloads(hash, screenshotConfigs);
+        }
     }
 
-    private static void AppendConfiguredPaths(
+    private static string[] AppendConfiguredPaths(
         IncrementalHash hash,
         string label,
         string projectRoot,
@@ -138,5 +157,49 @@ internal static class UnifiedReleaseConfigFingerprint
             .ToArray();
         for (var index = 0; index < paths.Length; index++)
             AppendFile(hash, $"{label}:{index}", paths[index]);
+        return paths;
+    }
+
+    private static void AppendScreenshotPayloads(
+        IncrementalHash hash,
+        IReadOnlyList<string> screenshotConfigPaths)
+    {
+        for (var configIndex = 0; configIndex < screenshotConfigPaths.Count; configIndex++)
+        {
+            var configPath = screenshotConfigPaths[configIndex];
+            var spec = JsonSerializer.Deserialize<AppStoreConnectScreenshotSyncSpec>(
+                           File.ReadAllText(configPath),
+                           new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                       ?? throw new InvalidOperationException(
+                           $"Unable to deserialize screenshot sync config: {configPath}");
+            var baseDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
+            for (var setIndex = 0; setIndex < spec.ScreenshotSets.Length; setIndex++)
+            {
+                var set = spec.ScreenshotSets[setIndex];
+                var folder = PathTokenProtection.GetFullPath(baseDirectory, set.Path);
+                if (!Directory.Exists(folder))
+                    throw new DirectoryNotFoundException($"Screenshot folder was not found: {folder}");
+
+                var filter = string.IsNullOrWhiteSpace(set.Filter) ? "*.png" : set.Filter;
+                var maximum = set.MaxCount <= 0 ? 10 : Math.Min(set.MaxCount, 10);
+                var files = Directory.GetFiles(folder, filter)
+                    .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+                    .Take(maximum)
+                    .ToArray();
+                if (files.Length == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"No screenshots matched '{filter}' in '{folder}'.");
+                }
+
+                for (var fileIndex = 0; fileIndex < files.Length; fileIndex++)
+                {
+                    AppendFile(
+                        hash,
+                        $"apple-screenshot-payload:{configIndex}:{setIndex}:{fileIndex}",
+                        files[fileIndex]);
+                }
+            }
+        }
     }
 }

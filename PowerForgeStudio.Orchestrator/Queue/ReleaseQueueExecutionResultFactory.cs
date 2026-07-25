@@ -12,7 +12,8 @@ public static class ReleaseQueueExecutionResultFactory
         IReadOnlyList<ReleaseBuildAdapterResult> adapterResults,
         string? unifiedReleaseStateJson = null,
         string? unifiedReleaseConfigSha256 = null,
-        string? moduleBuildConfigSha256 = null)
+        string? moduleBuildConfigSha256 = null,
+        string? modulePublishConfigSha256 = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentNullException.ThrowIfNull(adapterResults);
@@ -32,7 +33,8 @@ public static class ReleaseQueueExecutionResultFactory
             AdapterResults: adapterResults,
             UnifiedReleaseStateJson: unifiedReleaseStateJson,
             UnifiedReleaseConfigSha256: unifiedReleaseConfigSha256,
-            ModuleBuildConfigSha256: moduleBuildConfigSha256);
+            ModuleBuildConfigSha256: moduleBuildConfigSha256,
+            ModulePublishConfigSha256: modulePublishConfigSha256);
     }
 
     public static ReleasePublishExecutionResult CreatePublishResult(

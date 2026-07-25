@@ -8,4 +8,5 @@ public sealed record ReleaseBuildExecutionResult(
     IReadOnlyList<ReleaseBuildAdapterResult> AdapterResults,
     string? UnifiedReleaseStateJson = null,
     string? UnifiedReleaseConfigSha256 = null,
-    string? ModuleBuildConfigSha256 = null);
+    string? ModuleBuildConfigSha256 = null,
+    string? ModulePublishConfigSha256 = null);

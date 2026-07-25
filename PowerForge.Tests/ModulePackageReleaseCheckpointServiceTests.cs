@@ -3,6 +3,23 @@ namespace PowerForge.Tests;
 public sealed class ModulePackageReleaseCheckpointServiceTests
 {
     [Fact]
+    public void ResolveLanes_treats_script_backed_package_ownership_as_legacy_module_work()
+    {
+        var lanes = ModulePackageReleaseCheckpointService.ResolveLanes(
+            Path.Combine(Path.GetTempPath(), "release.json"),
+            new PowerForgeReleaseSpec
+            {
+                Module = new PowerForgeModuleReleaseOptions
+                {
+                    ScriptPath = "Build-Module.ps1",
+                    IncludesPackages = true
+                }
+            });
+
+        Assert.Empty(lanes);
+    }
+
+    [Fact]
     public void Capture_resolves_inline_package_paths_from_the_module_project_root()
     {
         var root = Path.Combine(

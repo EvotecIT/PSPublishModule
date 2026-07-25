@@ -152,6 +152,9 @@ public sealed partial class ReleasePublishExecutionService
                 repository.ModuleBuildScriptPath!,
                 cancellationToken);
             ValidateModulePublishCheckpoint(repository, signingResult);
+            ValidateModulePublishConfigurationCheckpoint(
+                signingResult,
+                publishSet.Configurations);
         }
         catch (Exception ex)
         {

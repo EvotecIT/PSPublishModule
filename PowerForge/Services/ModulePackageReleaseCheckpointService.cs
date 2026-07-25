@@ -83,10 +83,7 @@ internal sealed class ModulePackageReleaseCheckpointService
         if (spec.Module?.IncludesPackages != true)
             return [];
         if (string.IsNullOrWhiteSpace(spec.Module.ConfigPath))
-        {
-            throw new InvalidOperationException(
-                "Module-owned package publication requires Module.ConfigPath so the declared JSON package lanes can be resumed.");
-        }
+            return [];
 
         var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
         var repositoryRoot = string.IsNullOrWhiteSpace(spec.Module.RepositoryRoot)

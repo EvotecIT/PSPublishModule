@@ -423,13 +423,17 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         using var scope = new TemporaryDirectoryScope();
         var repositoryRoot = scope.CreateDirectory("AppleOnlyRepo");
         var buildDirectory = scope.CreateDirectory(Path.Combine("AppleOnlyRepo", "Build"));
+        var archivePath = scope.CreateDirectory(
+            Path.Combine("AppleOnlyRepo", "Artifacts", "Sample.xcarchive"));
+        File.WriteAllText(Path.Combine(archivePath, "Info.plist"), "approved archive");
         var releaseConfig = Path.Combine(buildDirectory, "release.json");
         File.WriteAllText(
             releaseConfig,
             """
             {
               "AppleApps": {
-                "Archive": true,
+                "Archive": false,
+                "Upload": true,
                 "Apps": [
                   { "Name": "Sample iOS", "Enabled": true, "BundleId": "com.evotecit.sample" }
                 ]
@@ -450,7 +454,15 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                     Success = true,
                     ConfigPath = configPath,
                     AppleAppPlan = new PowerForgeAppleReleasePlan {
-                        Archive = true
+                        Archive = false,
+                        Upload = true,
+                        Apps = [
+                            new PowerForgeAppleAppReleaseTargetPlan {
+                                Name = "Sample iOS",
+                                Upload = true,
+                                ArchivePath = archivePath
+                            }
+                        ]
                     }
                 };
             });
@@ -459,7 +471,9 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 
         Assert.True(result.Succeeded);
         Assert.False(string.IsNullOrWhiteSpace(result.UnifiedReleaseStateJson));
-        Assert.Equal(ReleaseBuildAdapterKind.AppleBuild, Assert.Single(result.AdapterResults).AdapterKind);
+        var adapter = Assert.Single(result.AdapterResults);
+        Assert.Equal(ReleaseBuildAdapterKind.AppleBuild, adapter.AdapterKind);
+        Assert.Equal([archivePath], adapter.ArtifactDirectories);
     }
 
     [Fact]
