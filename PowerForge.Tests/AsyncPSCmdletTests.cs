@@ -227,6 +227,59 @@ public sealed class AsyncPSCmdletTests
 
         Assert.True(stoppingToken.IsCancellationRequested);
     }
+
+    [Fact]
+    public void AsyncPSCmdlet_allows_ShouldProcess_before_the_async_base_hook_starts()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncEarlyShouldProcess",
+            typeof(TestAsyncEarlyShouldProcessCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell
+            .AddCommand("Test-AsyncEarlyShouldProcess")
+            .AddParameter("Confirm", false);
+
+        var result = powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors, string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
+        Assert.True((bool)Assert.Single(result).BaseObject);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_keeps_the_cancellation_source_alive_until_the_async_hook_exits()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncDisposeDuringHook",
+            typeof(TestAsyncDisposeDuringHookCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncDisposeDuringHook");
+        TestAsyncDisposeDuringHookCommand.Reset();
+
+        powerShell.Invoke();
+
+        Assert.True(TestAsyncDisposeDuringHookCommand.ReadTokenAfterDispose);
+        Assert.Null(TestAsyncDisposeDuringHookCommand.TokenReadException);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_normalizes_synchronous_cancellation_after_stop()
+    {
+        using var command = new TestAsyncSynchronousStopCommand();
+
+        Assert.Throws<PipelineStoppedException>(command.InvokeProcessRecord);
+    }
 }
 
 [Cmdlet(VerbsDiagnostic.Test, "AsyncThreadAffinity")]
@@ -421,6 +474,72 @@ public sealed class TestAsyncLateWriteCommand : AsyncPSCmdlet
 public sealed class TestAsyncDisposableCommand : AsyncPSCmdlet
 {
     public CancellationToken StoppingToken => CancelToken;
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncEarlyShouldProcess", SupportsShouldProcess = true)]
+public sealed class TestAsyncEarlyShouldProcessCommand : AsyncPSCmdlet
+{
+    private bool _approved;
+
+    protected override void ProcessRecord()
+    {
+        _approved = ShouldProcess("target");
+        base.ProcessRecord();
+    }
+
+    protected override Task ProcessRecordAsync()
+    {
+        WriteObject(_approved);
+        return Task.CompletedTask;
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncDisposeDuringHook")]
+public sealed class TestAsyncDisposeDuringHookCommand : AsyncPSCmdlet
+{
+    public static bool ReadTokenAfterDispose { get; private set; }
+
+    public static Exception? TokenReadException { get; private set; }
+
+    public static void Reset()
+    {
+        ReadTokenAfterDispose = false;
+        TokenReadException = null;
+    }
+
+    protected override async Task ProcessRecordAsync()
+    {
+        Dispose();
+        await Task.Yield();
+        try
+        {
+            var token = CancelToken;
+            ReadTokenAfterDispose = true;
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            TokenReadException = exception;
+            throw;
+        }
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncSynchronousStop")]
+public sealed class TestAsyncSynchronousStopCommand : AsyncPSCmdlet
+{
+    public void InvokeProcessRecord()
+        => base.ProcessRecord();
+
+    protected override Task ProcessRecordAsync()
+    {
+        Dispose();
+        throw new OperationCanceledException("stopped synchronously");
+    }
 }
 
 public sealed class ChoiceHost(bool approved) : PSHost
