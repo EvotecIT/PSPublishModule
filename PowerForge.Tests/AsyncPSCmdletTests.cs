@@ -619,6 +619,71 @@ public sealed class AsyncPSCmdletTests
     }
 
     [Fact]
+    public void AsyncPSCmdlet_drops_constructor_writes_before_pipeline_startup()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncConstructorWrite",
+            typeof(TestAsyncConstructorWriteCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncConstructorWrite");
+
+        var result = powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors);
+        Assert.Empty(powerShell.Streams.Warning);
+        Assert.Equal("completed", Assert.Single(result).BaseObject);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_snapshots_mutable_progress_before_queueing()
+    {
+        var sessionState = InitialSessionState.Create();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncProgressSnapshot",
+            typeof(TestAsyncProgressSnapshotCommand),
+            helpFileName: null));
+
+        var host = new ChoiceHost(approved: true);
+        using var runspace = RunspaceFactory.CreateRunspace(host, sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncProgressSnapshot");
+
+        var result = powerShell.Invoke();
+
+        Assert.Equal("completed", Assert.Single(result).BaseObject);
+        Assert.Equal(10, Assert.Single(host.ProgressRecords).PercentComplete);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_preserves_pipeline_failure_when_cancellation_callbacks_throw()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncPipelineFailureWithThrowingCancellation",
+            typeof(TestAsyncPipelineFailureWithThrowingCancellationCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncPipelineFailureWithThrowingCancellation");
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => powerShell.Invoke());
+
+        Assert.StartsWith("PipelineFailure,", exception.ErrorRecord.FullyQualifiedErrorId, StringComparison.Ordinal);
+        Assert.Equal("pipeline failure", exception.InnerException?.Message);
+    }
+
+    [Fact]
     public void AsyncPSCmdlet_keeps_the_cancellation_source_alive_until_the_async_hook_exits()
     {
         var sessionState = InitialSessionState.CreateDefault();

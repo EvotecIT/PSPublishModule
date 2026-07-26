@@ -509,6 +509,51 @@ public sealed class TestAsyncEarlyShouldProcessCommand : AsyncPSCmdlet
     }
 }
 
+[Cmdlet(VerbsDiagnostic.Test, "AsyncConstructorWrite")]
+public sealed class TestAsyncConstructorWriteCommand : AsyncPSCmdlet
+{
+    public TestAsyncConstructorWriteCommand()
+        => WriteWarning("constructor output must not reach PowerShell");
+
+    protected override Task ProcessRecordAsync()
+    {
+        WriteObject("completed");
+        return Task.CompletedTask;
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncProgressSnapshot")]
+public sealed class TestAsyncProgressSnapshotCommand : AsyncPSCmdlet
+{
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        var progress = new ProgressRecord(17, "snapshot", "queued")
+        {
+            PercentComplete = 10
+        };
+        WriteProgress(progress);
+        progress.PercentComplete = 90;
+        WriteObject("completed");
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncPipelineFailureWithThrowingCancellation")]
+public sealed class TestAsyncPipelineFailureWithThrowingCancellationCommand : AsyncPSCmdlet
+{
+    protected override async Task ProcessRecordAsync()
+    {
+        _ = CancelToken.Register(
+            static () => throw new InvalidOperationException("cancellation callback failed"));
+        await Task.Yield();
+        ThrowTerminatingError(new ErrorRecord(
+            new InvalidOperationException("pipeline failure"),
+            "PipelineFailure",
+            ErrorCategory.InvalidOperation,
+            targetObject: null));
+    }
+}
+
 [Cmdlet(VerbsDiagnostic.Test, "AsyncDisposeDuringHook")]
 public sealed class TestAsyncDisposeDuringHookCommand : AsyncPSCmdlet
 {
@@ -574,6 +619,8 @@ public sealed class ChoiceHost(bool approved, Exception? promptFailure = null) :
     public override string Name => nameof(ChoiceHost);
     public override Version Version => new(1, 0);
     public override PSHostUserInterface UI => _ui;
+
+    public IReadOnlyList<ProgressRecord> ProgressRecords => _ui.ProgressRecords;
     public override CultureInfo CurrentCulture => CultureInfo.InvariantCulture;
     public override CultureInfo CurrentUICulture => CultureInfo.InvariantCulture;
     public override void EnterNestedPrompt() { }
@@ -585,6 +632,10 @@ public sealed class ChoiceHost(bool approved, Exception? promptFailure = null) :
 
 public sealed class ChoiceHostUserInterface(bool approved, Exception? promptFailure) : PSHostUserInterface
 {
+    private readonly List<ProgressRecord> _progressRecords = new();
+
+    public IReadOnlyList<ProgressRecord> ProgressRecords => _progressRecords;
+
     public override PSHostRawUserInterface RawUI => null!;
 
     public override int PromptForChoice(
@@ -601,7 +652,12 @@ public sealed class ChoiceHostUserInterface(bool approved, Exception? promptFail
     public override void WriteLine(string value) { }
     public override void WriteErrorLine(string value) { }
     public override void WriteDebugLine(string message) { }
-    public override void WriteProgress(long sourceId, ProgressRecord record) { }
+    public override void WriteProgress(long sourceId, ProgressRecord record)
+        => _progressRecords.Add(
+            new ProgressRecord(record.ActivityId, record.Activity, record.StatusDescription)
+            {
+                PercentComplete = record.PercentComplete
+            });
     public override void WriteVerboseLine(string message) { }
     public override void WriteWarningLine(string message) { }
 
