@@ -308,6 +308,61 @@ public sealed class TestAsyncCancellationWriteCommand : AsyncPSCmdlet
     }
 }
 
+[Cmdlet(VerbsDiagnostic.Test, "AsyncCapturedCancellationWrite")]
+public sealed class TestAsyncCapturedCancellationWriteCommand : AsyncPSCmdlet
+{
+    private static ManualResetEventSlim _started = new();
+    private static ManualResetEventSlim _writeAttempted = new();
+
+    public static ManualResetEventSlim Started => _started;
+    public static ManualResetEventSlim WriteAttempted => _writeAttempted;
+
+    public static Exception? BackgroundWriteException { get; private set; }
+
+    public static void Reset()
+    {
+        _started.Dispose();
+        _writeAttempted.Dispose();
+        _started = new ManualResetEventSlim();
+        _writeAttempted = new ManualResetEventSlim();
+        BackgroundWriteException = null;
+    }
+
+    protected override async Task ProcessRecordAsync()
+    {
+        var streams = CapturePipelineStreams();
+        _started.Set();
+        try
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, CancelToken);
+        }
+        catch (OperationCanceledException) when (CancelToken.IsCancellationRequested)
+        {
+            var completed = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            ThreadPool.UnsafeQueueUserWorkItem(
+                _ =>
+                {
+                    try
+                    {
+                        streams.WriteWarning("cancelled callback");
+                    }
+                    catch (Exception exception)
+                    {
+                        BackgroundWriteException = exception;
+                    }
+                    finally
+                    {
+                        _writeAttempted.Set();
+                        completed.TrySetResult(true);
+                    }
+                },
+                null);
+            await completed.Task.ConfigureAwait(false);
+        }
+    }
+}
+
 [Cmdlet(VerbsDiagnostic.Test, "AsyncTerminatingError")]
 public sealed class TestAsyncTerminatingErrorCommand : AsyncPSCmdlet
 {
@@ -621,8 +676,21 @@ public sealed class TestAsyncProgressSnapshotCommand : AsyncPSCmdlet
         {
             PercentComplete = 10
         };
+        var totalProperty = progress.GetType().GetProperty("Total");
+        if (totalProperty is not null)
+        {
+            totalProperty.SetValue(
+                progress,
+                Convert.ChangeType(42, totalProperty.PropertyType, CultureInfo.InvariantCulture));
+        }
         WriteProgress(progress);
         progress.PercentComplete = 90;
+        if (totalProperty is not null)
+        {
+            totalProperty.SetValue(
+                progress,
+                Convert.ChangeType(99, totalProperty.PropertyType, CultureInfo.InvariantCulture));
+        }
         WriteObject("completed");
     }
 }
@@ -742,11 +810,7 @@ public sealed class ChoiceHostUserInterface(bool approved, Exception? promptFail
     public override void WriteErrorLine(string value) { }
     public override void WriteDebugLine(string message) { }
     public override void WriteProgress(long sourceId, ProgressRecord record)
-        => _progressRecords.Add(
-            new ProgressRecord(record.ActivityId, record.Activity, record.StatusDescription)
-            {
-                PercentComplete = record.PercentComplete
-            });
+        => _progressRecords.Add(record);
     public override void WriteVerboseLine(string message) { }
     public override void WriteWarningLine(string message) { }
 

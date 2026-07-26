@@ -322,6 +322,35 @@ public sealed class AsyncPSCmdletTests
     }
 
     [Fact]
+    public void AsyncPSCmdlet_drops_captured_callback_writes_after_pipeline_stop()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncCapturedCancellationWrite",
+            typeof(TestAsyncCapturedCancellationWriteCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncCapturedCancellationWrite");
+        TestAsyncCapturedCancellationWriteCommand.Reset();
+
+        var invocation = powerShell.BeginInvoke();
+        Assert.True(
+            TestAsyncCapturedCancellationWriteCommand.Started.Wait(TimeSpan.FromSeconds(5)),
+            "The asynchronous cmdlet did not start in time.");
+
+        powerShell.Stop();
+        Assert.Throws<PipelineStoppedException>(() => powerShell.EndInvoke(invocation));
+        Assert.True(
+            TestAsyncCapturedCancellationWriteCommand.WriteAttempted.Wait(TimeSpan.FromSeconds(5)),
+            "The captured callback did not observe the stop in time.");
+        Assert.Null(TestAsyncCapturedCancellationWriteCommand.BackgroundWriteException);
+    }
+
+    [Fact]
     public void AsyncPSCmdlet_marshals_terminating_errors_to_the_pipeline_thread()
     {
         var sessionState = InitialSessionState.CreateDefault();
@@ -715,7 +744,15 @@ public sealed class AsyncPSCmdletTests
         var result = powerShell.Invoke();
 
         Assert.Equal("completed", Assert.Single(result).BaseObject);
-        Assert.Equal(10, Assert.Single(host.ProgressRecords).PercentComplete);
+        var captured = Assert.Single(host.ProgressRecords);
+        Assert.Equal(10, captured.PercentComplete);
+        var totalProperty = captured.GetType().GetProperty("Total");
+        if (totalProperty is not null)
+        {
+            Assert.Equal(
+                Convert.ChangeType(42, totalProperty.PropertyType, CultureInfo.InvariantCulture),
+                totalProperty.GetValue(captured));
+        }
     }
 
     [Fact]

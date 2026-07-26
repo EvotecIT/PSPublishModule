@@ -73,7 +73,8 @@ public abstract partial class AsyncPSCmdlet : PSCmdlet, IDisposable
         ShouldContinueAll,
         ShouldContinueSecurity,
         PromptForCredential,
-        PromptForCredentialOptions
+        PromptForCredentialOptions,
+        HookCompleted
     }
 
     private sealed class PipelineReply
@@ -178,12 +179,14 @@ public abstract partial class AsyncPSCmdlet : PSCmdlet, IDisposable
             object? value,
             PipelineType type,
             PipelineReplyChannel? replyPipe = null,
-            long hookGeneration = 0)
+            long hookGeneration = 0,
+            bool dropOnStop = false)
         {
             Value = value;
             Type = type;
             ReplyPipe = replyPipe;
             HookGeneration = hookGeneration;
+            DropOnStop = dropOnStop;
         }
 
         public object? Value { get; }
@@ -194,11 +197,28 @@ public abstract partial class AsyncPSCmdlet : PSCmdlet, IDisposable
 
         public long HookGeneration { get; private set; }
 
+        public bool DropOnStop { get; }
+
         public void BindToHook(long hookGeneration)
         {
             if (HookGeneration == 0)
                 HookGeneration = hookGeneration;
         }
+    }
+
+    private sealed class PipelinePumpLease
+    {
+        private int _active = 1;
+
+        public PipelinePumpLease(long generation)
+            => Generation = generation;
+
+        public long Generation { get; }
+
+        public bool IsActive => Volatile.Read(ref _active) != 0;
+
+        public void Close()
+            => Volatile.Write(ref _active, 0);
     }
 
     /// <summary>
@@ -256,11 +276,17 @@ public abstract partial class AsyncPSCmdlet : PSCmdlet, IDisposable
             => Queue(text, PipelineType.CommandDetail);
 
         private void Queue(object? value, PipelineType type)
-            => _ = _owner.TryQueue(new PipelineItem(value, type, hookGeneration: _hookGeneration));
+            => _ = _owner.TryQueue(
+                new PipelineItem(
+                    value,
+                    type,
+                    hookGeneration: _hookGeneration,
+                    dropOnStop: true));
     }
 
     private readonly CancellationTokenSource _cancelSource = new();
     private readonly AsyncLocal<long> _hookGeneration = new();
+    private readonly AsyncLocal<PipelinePumpLease?> _pipelinePumpLease = new();
     private readonly int _constructionThreadId = Environment.CurrentManagedThreadId;
     private readonly object _lifecycleLock = new();
     private static readonly SynchronizationContext HookSynchronizationContext = new AsyncHookSynchronizationContext();
@@ -269,6 +295,7 @@ public abstract partial class AsyncPSCmdlet : PSCmdlet, IDisposable
     private Action? _pumpQueuedItems;
     private SynchronizationContext? _pipelineSynchronizationContext;
     private long _activeHookGeneration;
+    private long _acceptingHookWritesGeneration;
     private long _nextHookGeneration;
     private bool _cancelSourceDisposed;
     private bool _disposeRequested;
