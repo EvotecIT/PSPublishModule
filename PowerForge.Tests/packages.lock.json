@@ -71,6 +71,11 @@
           "Jint": "[4.0.0, 5.0.0)"
         }
       },
+      "BouncyCastle.Cryptography": {
+        "type": "Transitive",
+        "resolved": "2.6.2",
+        "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
+      },
       "ChartForgeX": {
         "type": "Transitive",
         "resolved": "0.1.6",
@@ -97,8 +102,8 @@
       },
       "HtmlTinkerX": {
         "type": "Transitive",
-        "resolved": "2.2.0",
-        "contentHash": "qB7S0sMrR/nnVwu0qpq0uKE4IrWOj2GCgSrUHYi7zrCCNmVaewDGtqly3JxMRGNsJA/iIUzXM9h8fgsUGWxVZQ==",
+        "resolved": "2.2.1",
+        "contentHash": "tVVBTnxYiQvCEoszj8nEMGNJEUxjhbnFyoSUojaQ0pr246F9WQU3tXSS0icCGrRx54nd5HJnDUWRvwqgC2Aq/w==",
         "dependencies": {
           "AngleSharp": "1.5.2",
           "AngleSharp.Css": "1.0.0-beta.216",
@@ -109,7 +114,7 @@
           "Jint": "4.8.0",
           "Microsoft.Playwright": "1.59.0",
           "NUglify": "1.21.17",
-          "OfficeIMO.Markdown.Html": "0.1.13",
+          "OfficeIMO.Markdown.Html": "3.0.2",
           "PreMailer.Net": "2.7.2"
         }
       },
@@ -460,6 +465,28 @@
         "resolved": "3.0.2",
         "contentHash": "QRk5Gqc7ID9knhroFpmzcY/qacHcJJLlErvW2ZDll7mIoSuY8z8NRHeY/JicSPjQDuM1Dgu7tLRMp+lT6gZR5Q=="
       },
+      "OfficeIMO.Email": {
+        "type": "Transitive",
+        "resolved": "3.0.2",
+        "contentHash": "528fsOana65ZGKyhzLsS7ruriaWsT3a7zV57o9kryhFlYtX562OdJfAmvw/hhZ6ODnFZ73cKotKrJqrhdKMqwA==",
+        "dependencies": {
+          "OfficeIMO.Drawing": "3.0.2",
+          "OfficeIMO.Rtf": "3.0.2",
+          "OfficeIMO.Security": "3.0.2"
+        }
+      },
+      "OfficeIMO.Html": {
+        "type": "Transitive",
+        "resolved": "3.0.2",
+        "contentHash": "w7Zep9y3sy6fS7pACodShourecsxtLfRq7TkrhnF/DuELZL2st23nKvQCfKh3uRlvpl4e/cklW9r0tW9Qe0GJQ==",
+        "dependencies": {
+          "AngleSharp": "1.5.2",
+          "AngleSharp.Css": "1.0.0-beta.216",
+          "OfficeIMO.Drawing": "3.0.2",
+          "OfficeIMO.Email": "3.0.2",
+          "OfficeIMO.Rtf": "3.0.2"
+        }
+      },
       "OfficeIMO.Markdown": {
         "type": "Transitive",
         "resolved": "3.0.2",
@@ -470,11 +497,27 @@
       },
       "OfficeIMO.Markdown.Html": {
         "type": "Transitive",
-        "resolved": "0.1.13",
-        "contentHash": "9f4V0tM164RcwKGyf681aj2NKc4zk7xMWu1pW23idj9sllazRmZ/Vma++//QSMShbDGsGQPPWU+rX1gT7280xg==",
+        "resolved": "3.0.2",
+        "contentHash": "6icQhCN0jWiry7ckDfJTTyt5C6tcuM3p1YZRSQxeYAOxBoChgp0HVCskme+1njyjymhBO9X/SPVYnEdQlKPkMA==",
         "dependencies": {
-          "AngleSharp": "1.3.0",
-          "OfficeIMO.Markdown": "0.6.13"
+          "OfficeIMO.Html": "3.0.2",
+          "OfficeIMO.Markdown": "3.0.2"
+        }
+      },
+      "OfficeIMO.Rtf": {
+        "type": "Transitive",
+        "resolved": "3.0.2",
+        "contentHash": "MRHBug0kV30g4DQcUwAM1uTdehGaPOF0cnGU3qLdfbUfenWYsS6WqfWIVAl74a1K/n4QaH25EK86rGunj/X5AQ==",
+        "dependencies": {
+          "OfficeIMO.Drawing": "3.0.2"
+        }
+      },
+      "OfficeIMO.Security": {
+        "type": "Transitive",
+        "resolved": "3.0.2",
+        "contentHash": "ClByppCSqcWEBnQVDBHSGpNh6SQG54Kb6iO/fsATYlaglo3ZWX8aQLM656Laa66ktyp5WiAjc1PkTuEnK5lTBQ==",
+        "dependencies": {
+          "BouncyCastle.Cryptography": "[2.6.2, 3.0.0)"
         }
       },
       "PreMailer.Net": {
@@ -905,9 +948,9 @@
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
-          "HtmlTinkerX": "[2.2.0, )",
+          "HtmlTinkerX": "[2.2.1, )",
           "Magick.NET-Q8-AnyCPU": "[14.15.0, )",
-          "OfficeIMO.Markdown": "[0.6.13, )",
+          "OfficeIMO.Markdown": "[3.0.2, )",
           "PowerForge": "[3.0.78, )",
           "Scriban": "[7.2.5, )",
           "YamlDotNet": "[15.1.2, )"
