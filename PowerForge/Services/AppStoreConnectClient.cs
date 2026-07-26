@@ -1001,7 +1001,9 @@ public sealed partial class AppStoreConnectClient : IDisposable
             ApplePlatform.iPadOS => "IOS",
             ApplePlatform.macOS => "MAC_OS",
             ApplePlatform.tvOS => "TV_OS",
-            ApplePlatform.watchOS => "WATCH_OS",
+            // App Store Connect classifies watch-only and companion Watch apps under IOS.
+            // watchOS remains a distinct Xcode archive destination, not a Platform API value.
+            ApplePlatform.watchOS => "IOS",
             ApplePlatform.visionOS => "VISION_OS",
             _ => platform.ToString().ToUpperInvariant()
         };
