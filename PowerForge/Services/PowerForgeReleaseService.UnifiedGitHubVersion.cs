@@ -163,23 +163,27 @@ internal sealed partial class PowerForgeReleaseService
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var configuredPath in artifactPaths.Where(path => !string.IsNullOrWhiteSpace(path)))
         {
-            var path = Path.GetFullPath(configuredPath);
-            if (File.Exists(path))
+            foreach (var path in PathTokenCandidateResolver.ResolveExistingPaths(configuredPath)
+                .OrderByDescending(PathTokenCandidateResolver.GetLatestWriteTimeUtc)
+                .ThenByDescending(candidate => candidate, StringComparer.OrdinalIgnoreCase))
             {
-                if (seen.Add(path))
-                    yield return path;
-                continue;
-            }
+                if (File.Exists(path))
+                {
+                    if (seen.Add(path))
+                        yield return path;
+                    continue;
+                }
 
-            if (!Directory.Exists(path))
-                continue;
+                if (!Directory.Exists(path))
+                    continue;
 
-            foreach (var file in Directory.EnumerateFiles(path, "*.zip", SearchOption.TopDirectoryOnly)
-                .Concat(Directory.EnumerateFiles(path, manifestName, SearchOption.AllDirectories)))
-            {
-                var fullPath = Path.GetFullPath(file);
-                if (seen.Add(fullPath))
-                    yield return fullPath;
+                foreach (var file in Directory.EnumerateFiles(path, "*.zip", SearchOption.TopDirectoryOnly)
+                    .Concat(Directory.EnumerateFiles(path, manifestName, SearchOption.AllDirectories)))
+                {
+                    var fullPath = Path.GetFullPath(file);
+                    if (seen.Add(fullPath))
+                        yield return fullPath;
+                }
             }
         }
     }

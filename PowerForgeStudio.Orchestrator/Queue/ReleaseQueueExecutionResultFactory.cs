@@ -9,7 +9,11 @@ public static class ReleaseQueueExecutionResultFactory
     public static ReleaseBuildExecutionResult CreateBuildResult(
         string rootPath,
         TimeSpan duration,
-        IReadOnlyList<ReleaseBuildAdapterResult> adapterResults)
+        IReadOnlyList<ReleaseBuildAdapterResult> adapterResults,
+        string? unifiedReleaseStateJson = null,
+        string? unifiedReleaseConfigSha256 = null,
+        string? moduleBuildConfigSha256 = null,
+        string? moduleExportedConfigSha256 = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentNullException.ThrowIfNull(adapterResults);
@@ -26,7 +30,11 @@ public static class ReleaseQueueExecutionResultFactory
             Succeeded: succeeded,
             Summary: summary,
             DurationSeconds: Math.Round(duration.TotalSeconds, 2),
-            AdapterResults: adapterResults);
+            AdapterResults: adapterResults,
+            UnifiedReleaseStateJson: unifiedReleaseStateJson,
+            UnifiedReleaseConfigSha256: unifiedReleaseConfigSha256,
+            ModuleBuildConfigSha256: moduleBuildConfigSha256,
+            ModuleExportedConfigSha256: moduleExportedConfigSha256);
     }
 
     public static ReleasePublishExecutionResult CreatePublishResult(

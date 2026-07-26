@@ -11,6 +11,14 @@
       "additionalProperties": false,
       "properties": {
         "RepositoryRoot": { "type": [ "string", "null" ] },
+        "ModuleName": {
+          "type": [ "string", "null" ],
+          "description": "Module name used to expand module artifact path tokens. JSON-first scaffolding reads this from Build.Name."
+        },
+        "ConfigPath": {
+          "type": [ "string", "null" ],
+          "description": "Module pipeline JSON configuration. Relative paths are resolved from RepositoryRoot. Mutually exclusive with ScriptPath."
+        },
         "ScriptPath": { "type": [ "string", "null" ] },
         "ModulePath": { "type": [ "string", "null" ] },
         "ManifestPath": {
@@ -31,7 +39,9 @@
         },
         "Framework": {
           "type": [ "string", "null" ],
-          "enum": [ "auto", "net10.0", "net8.0", null ]
+          "enum": [ "auto", "net10.0", "net8.0", null ],
+          "default": "auto",
+          "description": "PowerShell module target framework and child-host requirement. Omitted or auto selects a compatible PowerShell 7 host; set an explicit framework only when the module requires it."
         },
         "NoDotnetBuild": { "type": [ "boolean", "null" ] },
         "ModuleVersion": { "type": [ "string", "null" ] },
@@ -47,7 +57,27 @@
           "type": "array",
           "items": { "type": "string" }
         }
-      }
+      },
+      "allOf": [
+        {
+          "not": {
+            "allOf": [
+              {
+                "required": [ "ConfigPath" ],
+                "properties": {
+                  "ConfigPath": { "type": "string", "pattern": "\\S" }
+                }
+              },
+              {
+                "required": [ "ScriptPath" ],
+                "properties": {
+                  "ScriptPath": { "type": "string", "pattern": "\\S" }
+                }
+              }
+            ]
+          }
+        }
+      ]
     },
     "Packages": { "$ref": "project.build.schema.json" },
     "WorkspaceValidation": {

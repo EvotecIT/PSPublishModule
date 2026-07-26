@@ -11,17 +11,17 @@ Creates/updates a module structure and triggers the build pipeline (legacy DSL c
 ## SYNTAX
 ### Modern (Default)
 ```powershell
-Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <string>] [-RunMode <ConfigurationGateMode>] [-FunctionsToExportFolder <string>] [-AliasesToExportFolder <string>] [-ExcludeFromPackage <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-IncludeRoot <string[]>] [-IncludePS1 <string[]>] [-IncludeAll <string[]>] [-IncludeCustomCode <scriptblock>] [-IncludeToArray <IDictionary>] [-LibrariesCore <string>] [-LibrariesDefault <string>] [-LibrariesStandard <string>] [-Legacy] [-NoInteractive] [-StagingPath <string>] [-CsprojPath <string>] [-DotNetConfiguration <string>] [-DotNetFramework <string[]>] [-SkipInstall] [-InstallStrategy <InstallationStrategy>] [-KeepVersions <int>] [-InstallRoots <string[]>] [-LegacyFlatHandling <LegacyFlatModuleHandling>] [-PreserveInstallVersions <string[]>] [-KeepStaging] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <string>] [-RunMode <ConfigurationGateMode>] [-FunctionsToExportFolder <string>] [-AliasesToExportFolder <string>] [-ExcludeFromPackage <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-IncludeRoot <string[]>] [-IncludePS1 <string[]>] [-IncludeAll <string[]>] [-IncludeCustomCode <scriptblock>] [-IncludeToArray <IDictionary>] [-LibrariesCore <string>] [-LibrariesDefault <string>] [-LibrariesStandard <string>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-StagingPath <string>] [-CsprojPath <string>] [-DotNetConfiguration <string>] [-DotNetFramework <string[]>] [-SkipInstall] [-InstallStrategy <InstallationStrategy>] [-KeepVersions <int>] [-InstallRoots <string[]>] [-LegacyFlatHandling <LegacyFlatModuleHandling>] [-PreserveInstallVersions <string[]>] [-KeepStaging] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Config
 ```powershell
-Invoke-ModuleBuild -ConfigPath <string> [-RunMode <ConfigurationGateMode>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild -ConfigPath <string> [-RunMode <ConfigurationGateMode>] [-ModuleVersion <string>] [-PreReleaseTag <string>] [-BuildConfiguration <string>] [-BuildFramework <string>] [-NoDotnetBuild] [-NoSign] [-SignModule] [-IncludeProjectPackages <bool>] [-IncludeModulePublishing <bool>] [-PowerForgeUnifiedGitHubRelease] [-CertificateThumbprint <string>] [-SignIncludeBinaries <bool>] [-SignIncludeInternals <bool>] [-SignIncludeExe <bool>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-StagingPath <string>] [-ReuseStaging] [-SkipInstall] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Configuration
 ```powershell
-Invoke-ModuleBuild -Configuration <IDictionary> [-RunMode <ConfigurationGateMode>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild -Configuration <IDictionary> [-RunMode <ConfigurationGateMode>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -99,6 +99,54 @@ Folder name containing aliases to export. Default: Public.
 ```yaml
 Type: String
 Parameter Sets: Modern
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -BuildConfiguration
+Overrides the .NET build configuration declared by a JSON configuration.
+
+```yaml
+Type: String
+Parameter Sets: Config
+Aliases: None
+Possible values: Release, Debug
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -BuildFramework
+Overrides the .NET framework declared by a JSON configuration. Auto preserves the configured framework matrix.
+
+```yaml
+Type: String
+Parameter Sets: Config
+Aliases: None
+Possible values: auto, net10.0, net8.0, net472
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -CertificateThumbprint
+Overrides the signing certificate thumbprint declared by a JSON configuration.
+
+```yaml
+Type: String
+Parameter Sets: Config
 Aliases: None
 Possible values:
 
@@ -382,6 +430,40 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -IncludeModulePublishing
+Controls whether module repository and GitHub publish segments declared by a JSON configuration are included.
+Parent release hosts disable them when publishing signed checkpointed module artifacts directly.
+
+```yaml
+Type: Boolean
+Parameter Sets: Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IncludeProjectPackages
+Controls whether project/package segments declared by a JSON configuration are included.
+Unified release orchestration disables them when the outer package lane owns publication.
+
+```yaml
+Type: Boolean
+Parameter Sets: Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -IncludePS1
 Folders from which to include .ps1 files in artefacts.
 
@@ -624,8 +706,72 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -ModuleVersion
+Overrides the module version declared by a JSON configuration.
+
+```yaml
+Type: String
+Parameter Sets: Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NoDotnetBuild
+Skips the configured .NET project build and reuses the existing module binary payload.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -NoInteractive
 Disables the interactive progress UI and emits plain log output.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Modern, Config, Configuration
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NoSign
+Disables module signing declared by a JSON configuration.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PassThru
+Writes the completed module pipeline result to the PowerShell success stream.
 
 ```yaml
 Type: SwitchParameter
@@ -656,12 +802,77 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -PowerForgeUnifiedGitHubRelease
+Indicates that a parent unified release owns GitHub publication and suppresses
+GitHub publish segments declared by the JSON module configuration.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PreReleaseTag
+Overrides the prerelease tag declared by a JSON configuration.
+
+```yaml
+Type: String
+Parameter Sets: Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -PreserveInstallVersions
 Version folders to preserve when pruning installed versions.
 
 ```yaml
 Type: String[]
 Parameter Sets: Modern
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Quiet
+Suppresses host rendering and log output. Intended for callers that request structured results.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Modern, Config, Configuration
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ReuseStaging
+Reuses an existing staged module output for an internal deferred publication pass.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Config
 Aliases: None
 Possible values:
 
@@ -706,12 +917,76 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -SignIncludeBinaries
+Overrides whether binary files are signed for a JSON configuration.
+
+```yaml
+Type: Nullable`1
+Parameter Sets: Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SignIncludeExe
+Overrides whether executable files are signed for a JSON configuration.
+
+```yaml
+Type: Nullable`1
+Parameter Sets: Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SignIncludeInternals
+Overrides whether internal files are signed for a JSON configuration.
+
+```yaml
+Type: Nullable`1
+Parameter Sets: Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SignModule
+Enables module signing declared by a JSON configuration.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -SkipInstall
 Skips installing the module after build.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Modern
+Parameter Sets: Modern, Config
 Aliases: None
 Possible values:
 
@@ -727,7 +1002,7 @@ Staging directory for the PowerForge pipeline. When omitted, a temporary folder 
 
 ```yaml
 Type: String
-Parameter Sets: Modern
+Parameter Sets: Modern, Config
 Aliases: None
 Possible values:
 
@@ -763,7 +1038,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `System.Object`
+- `PowerForge.ModulePipelineResult`
 
 ## RELATED LINKS
 

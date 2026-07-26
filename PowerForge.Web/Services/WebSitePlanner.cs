@@ -207,11 +207,5 @@ public static class WebSitePlanner
     }
 
     private static bool GlobMatch(string pattern, string value)
-    {
-        if (string.IsNullOrWhiteSpace(pattern)) return false;
-        var regex = "^" + System.Text.RegularExpressions.Regex.Escape(pattern)
-            .Replace("\\*\\*", ".*")
-            .Replace("\\*", "[^/]*") + "$";
-        return System.Text.RegularExpressions.Regex.IsMatch(value, regex, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-    }
+        => WebGlobMatcher.IsMatch(pattern, value);
 }

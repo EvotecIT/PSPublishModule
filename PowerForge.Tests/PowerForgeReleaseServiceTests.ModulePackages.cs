@@ -3,20 +3,149 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void Execute_ModulePlan_InfersModuleNameFromJsonBuildContract()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "powerforge.json"),
+                """{ "Build": { "Name": "InferredModule", "SourcePath": ".", "Version": "1.2.3" } }""");
+            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = ".",
+                        ConfigPath = "powerforge.json",
+                        ArtifactPaths = [Path.Combine("Artifacts", "<ModuleName>", "<ModuleVersion>")]
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("InferredModule", result.ModulePlan!.ModuleName);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_ModuleValidate_RejectsInvalidJsonBuildContract()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "powerforge.json"), """{ "Build": { "Name": "MissingSource" } }""");
+            var spec = new PowerForgeReleaseSpec
+            {
+                Module = new PowerForgeModuleReleaseOptions
+                {
+                    RepositoryRoot = ".",
+                    ConfigPath = "powerforge.json"
+                }
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => new PowerForgeReleaseService(new NullLogger()).Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ValidateOnly = true
+                }));
+
+            Assert.Contains("Build.SourcePath", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_ModulePlan_AllowsConfiguredAssemblyThatWillBeBuiltLater()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var moduleConfig = Path.Combine(root, "powerforge.json");
+            var missingModulePath = Path.Combine(root, "PSPublishModule", "bin", "Release", "net8.0", "PSPublishModule.dll");
+            File.WriteAllText(moduleConfig, """{ "SchemaVersion": 1, "Build": { "Name": "PSPublishModule", "SourcePath": ".", "Version": "3.0.X" }, "Segments": [] }""");
+
+            var spec = new PowerForgeReleaseSpec
+            {
+                Module = new PowerForgeModuleReleaseOptions
+                {
+                    RepositoryRoot = ".",
+                    ConfigPath = "powerforge.json",
+                    ModulePath = missingModulePath,
+                    ModuleVersion = "3.0.X",
+                    ArtifactPaths = [Path.Combine("Artifacts", "<TagModuleVersionWithPreRelease>")]
+                }
+            };
+            var service = new PowerForgeReleaseService(new NullLogger());
+
+            var plan = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.True(plan.Success, plan.ErrorMessage);
+            Assert.Equal(missingModulePath, plan.ModulePlan!.ModulePath);
+            Assert.Equal(
+                Path.Combine(root, "Artifacts", "<TagModuleVersionWithPreRelease>"),
+                Assert.Single(plan.ModulePlan.ArtifactPaths));
+
+            var validation = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ValidateOnly = true
+                });
+
+            Assert.True(validation.Success, validation.ErrorMessage);
+            Assert.Equal(missingModulePath, validation.ModulePlan!.ModulePath);
+
+            var exception = Assert.Throws<FileNotFoundException>(() => service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json")
+                }));
+            Assert.Equal(missingModulePath, exception.FileName);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_CoordinatedVersions_RunPackagesFirstAndApplyHighestVersionToModule()
     {
         var root = CreateSandbox();
         try
         {
-            var buildScript = Path.Combine(root, "Module", "Build", "Build-Module.ps1");
+            var moduleConfig = Path.Combine(root, "powerforge.json");
             var manifestPath = Path.Combine(root, "Module", "PSPublishModule.psd1");
-            Directory.CreateDirectory(Path.GetDirectoryName(buildScript)!);
-            File.WriteAllText(buildScript, "# test build script");
+            Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
+            File.WriteAllText(moduleConfig, """{ "SchemaVersion": 1, "Build": { "Name": "PSPublishModule", "SourcePath": "Module", "Version": "3.0.X" }, "Segments": [] }""");
             File.WriteAllText(manifestPath, "@{ ModuleVersion = '3.0.75' }");
 
             ProjectBuildHostRequest? capturedRequest = null;
             string? toolReleaseVersion = null;
             var progress = new RecordingReleaseProgress();
+            using var cancellation = new CancellationTokenSource();
             var service = new PowerForgeReleaseService(
                 new NullLogger(),
                 executePackages: (packageRequest, _, configPath) =>
@@ -55,6 +184,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     Module = new PowerForgeModuleReleaseOptions
                     {
                         RepositoryRoot = ".",
+                        ConfigPath = "powerforge.json",
                         ManifestPath = "Module/PSPublishModule.psd1",
                         ModuleVersion = "3.0.X",
                         SynchronizeVersionWithPackages = true,
@@ -74,7 +204,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     PlanOnly = true,
-                    Progress = progress
+                    Progress = progress,
+                    CancellationToken = cancellation.Token
                 });
 
             Assert.True(result.Success, result.ErrorMessage);
@@ -84,7 +215,10 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(capturedRequest.PlanOnly);
             Assert.False(capturedRequest.ExecuteBuild);
             Assert.False(capturedRequest.PublishNuget);
+            Assert.Equal(cancellation.Token, capturedRequest.CancellationToken);
             Assert.Equal("3.1.0", result.ModulePlan!.ModuleVersion);
+            Assert.Equal(moduleConfig, result.ModulePlan.ConfigPath);
+            Assert.Null(result.ModulePlan.ScriptPath);
             Assert.Null(result.ModulePlan.PreReleaseTag);
             Assert.Equal("3.1.0", toolReleaseVersion);
             Assert.Equal(

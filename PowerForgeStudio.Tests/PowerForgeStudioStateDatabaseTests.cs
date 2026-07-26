@@ -25,7 +25,8 @@ public sealed class PowerForgeStudioStateDatabaseTests
                     ModuleBuildScriptPath: @"C:\Support\GitHub\DbaClientX\Build\Build-Module.ps1",
                     ProjectBuildScriptPath: @"C:\Support\GitHub\DbaClientX\Build\Build-Project.ps1",
                     IsWorktree: false,
-                    HasWebsiteSignals: false),
+                    HasWebsiteSignals: false,
+                    UnifiedReleaseConfigPath: @"C:\Support\GitHub\DbaClientX\Build\release.json"),
                 new RepositoryGitSnapshot(true, "main", "origin/main", 1, 0, 0, 0),
                 new RepositoryReadiness(RepositoryReadinessKind.Attention, "Ahead of upstream."),
                 PlanResults: [
@@ -70,6 +71,10 @@ public sealed class PowerForgeStudioStateDatabaseTests
         Assert.True(reloaded.GitHubInbox.BranchProtectionEnabled);
         Assert.Equal(RepositoryReleaseDriftStatus.Attention, reloaded.ReleaseDrift!.Status);
         Assert.Equal(RepositoryGitDiagnosticCode.ProtectedBaseBranchFlow, reloaded.Git.PrimaryActionableDiagnostic?.Code);
+        Assert.Equal(
+            @"C:\Support\GitHub\DbaClientX\Build\release.json",
+            reloaded.Repository.UnifiedReleaseConfigPath);
+        Assert.True(reloaded.Repository.IsReleaseManaged);
         Assert.Single(reloaded.PlanResults!);
     }
 
@@ -175,7 +180,9 @@ public sealed class PowerForgeStudioStateDatabaseTests
                     ArtifactKind: "ModuleManifest",
                     Status: ReleaseSigningReceiptStatus.Signed,
                     Summary: "Signed manifest.",
-                    SignedAtUtc: DateTimeOffset.UtcNow)
+                    SignedAtUtc: DateTimeOffset.UtcNow) {
+                    ContentSha256 = "ABC123"
+                }
             ]);
 
         var receipts = await stateDatabase.LoadSigningReceiptsAsync("session-1");
@@ -184,6 +191,7 @@ public sealed class PowerForgeStudioStateDatabaseTests
         Assert.Equal(@"C:\Temp\DbaClientX\DbaClientX.psd1", receipt.ArtifactPath);
         Assert.Equal("ModuleManifest", receipt.ArtifactKind);
         Assert.Equal(ReleaseSigningReceiptStatus.Signed, receipt.Status);
+        Assert.Equal("ABC123", receipt.ContentSha256);
     }
 
     [Fact]

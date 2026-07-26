@@ -38,7 +38,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 var tasks = phases.ToDictionary(
                     phase => phase,
                     phase => context.AddTask($"[grey]{Markup.Escape(GetPhaseName(phase))} — pending[/]", maxValue: 100, autoStart: false));
-                var reporter = new Reporter(tasks);
+                var reporter = new Reporter(context, tasks);
                 try
                 {
                     result = run(reporter);
@@ -91,8 +91,15 @@ internal static class SpectrePowerForgeReleaseConsoleUi
 
     private static PowerForgeReleaseProgressPhase[] ResolvePhases(PowerForgeReleaseSpec spec, PowerForgeReleaseRequest request)
     {
-        var runModule = spec.Module is not null && (!request.PackagesOnly && !request.ToolsOnly || request.ModuleOnly);
+        var hasTargetAwareSelection =
+            request.Targets.Any(static target => !string.IsNullOrWhiteSpace(target)) &&
+            (spec.Tools is not null || spec.AppleApps is not null);
+        var runModule = !hasTargetAwareSelection &&
+                        spec.Module is not null &&
+                        (!request.PackagesOnly && !request.ToolsOnly || request.ModuleOnly);
         var runPackages = spec.Packages is not null && !request.ModuleOnly && !request.ToolsOnly;
+        if (hasTargetAwareSelection)
+            runPackages = false;
         var runTools = spec.Tools is not null && !request.ModuleOnly && !request.PackagesOnly;
         var phases = new List<PowerForgeReleaseProgressPhase>();
 
@@ -111,7 +118,9 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             if (runPackages) phases.Add(PowerForgeReleaseProgressPhase.Packages);
             if (runTools) phases.Add(PowerForgeReleaseProgressPhase.Tools);
         }
-        if (!request.PlanOnly && !request.ValidateOnly && spec.GitHub?.Publish == true)
+        if (!request.PlanOnly &&
+            !request.ValidateOnly &&
+            PowerForgeReleaseService.ShouldPublishUnifiedGitHub(spec, request, runModule))
             phases.Add(PowerForgeReleaseProgressPhase.GitHub);
         return phases.ToArray();
     }
@@ -163,12 +172,22 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             _ => phase.ToString()
         };
 
-    private sealed class Reporter : IPowerForgeReleaseProgressReporter
+    private sealed class Reporter : IPowerForgeReleaseProgressReporterV2
     {
+        private readonly ProgressContext _context;
         private readonly IReadOnlyDictionary<PowerForgeReleaseProgressPhase, ProgressTask> _tasks;
         private readonly HashSet<PowerForgeReleaseProgressPhase> _failed = new();
+        private readonly Dictionary<string, ProgressTask> _itemTasks = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, PowerForgeReleaseProgressItem> _items = new(StringComparer.OrdinalIgnoreCase);
+        private readonly object _sync = new();
 
-        public Reporter(IReadOnlyDictionary<PowerForgeReleaseProgressPhase, ProgressTask> tasks) => _tasks = tasks;
+        public Reporter(
+            ProgressContext context,
+            IReadOnlyDictionary<PowerForgeReleaseProgressPhase, ProgressTask> tasks)
+        {
+            _context = context;
+            _tasks = tasks;
+        }
 
         public void PhaseStarted(PowerForgeReleaseProgressPhase phase, int totalItems, string? detail = null)
         {
@@ -197,6 +216,77 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             task.StopTask();
         }
 
+        public void ItemsPlanned(
+            PowerForgeReleaseProgressPhase phase,
+            IReadOnlyList<PowerForgeReleaseProgressItem> items)
+        {
+            if (items is null || items.Count == 0)
+                return;
+
+            lock (_sync)
+            {
+                foreach (var item in items)
+                {
+                    if (item is null)
+                        continue;
+
+                    var key = ItemKey(item);
+                    if (_itemTasks.ContainsKey(key))
+                        continue;
+
+                    _items[key] = item;
+                    _itemTasks[key] = _context.AddTask(
+                        BuildItemLabel(item, PowerForgeReleaseProgressItemState.Planned, null),
+                        maxValue: 1,
+                        autoStart: false);
+                }
+            }
+
+            if (_tasks.TryGetValue(phase, out var phaseTask))
+                phaseTask.Description = Label(phase, $"{CountItems(phase)} detailed step(s)", "cyan");
+        }
+
+        public void ItemUpdated(
+            PowerForgeReleaseProgressItem item,
+            PowerForgeReleaseProgressItemState state,
+            string? detail = null)
+        {
+            if (item is null)
+                return;
+
+            ProgressTask task;
+            lock (_sync)
+            {
+                var key = ItemKey(item);
+                if (!_itemTasks.TryGetValue(key, out task!))
+                {
+                    _items[key] = item;
+                    task = _context.AddTask(
+                        BuildItemLabel(item, PowerForgeReleaseProgressItemState.Planned, null),
+                        maxValue: 1,
+                        autoStart: false);
+                    _itemTasks[key] = task;
+                }
+            }
+
+            task.Description = BuildItemLabel(item, state, detail);
+            switch (state)
+            {
+                case PowerForgeReleaseProgressItemState.Started:
+                    if (!task.IsStarted) task.StartTask();
+                    task.IsIndeterminate = true;
+                    break;
+                case PowerForgeReleaseProgressItemState.Completed:
+                case PowerForgeReleaseProgressItemState.Failed:
+                case PowerForgeReleaseProgressItemState.Skipped:
+                    if (!task.IsStarted) task.StartTask();
+                    task.IsIndeterminate = false;
+                    task.Value = task.MaxValue;
+                    task.StopTask();
+                    break;
+            }
+        }
+
         public void FinishRemaining(bool success)
         {
             foreach (var entry in _tasks)
@@ -213,6 +303,23 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 entry.Value.Value = 100;
                 entry.Value.StopTask();
             }
+
+            lock (_sync)
+            {
+                foreach (var entry in _itemTasks)
+                {
+                    var task = entry.Value;
+                    if (task.IsFinished) continue;
+                    var item = _items[entry.Key];
+                    var state = task.IsStarted && !success
+                        ? PowerForgeReleaseProgressItemState.Failed
+                        : PowerForgeReleaseProgressItemState.Skipped;
+                    ItemUpdated(
+                        item,
+                        state,
+                        success ? "not required" : "skipped after failure");
+                }
+            }
         }
 
         private static string Label(PowerForgeReleaseProgressPhase phase, string? detail, string color, string? status = null)
@@ -220,6 +327,63 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             var prefix = string.IsNullOrWhiteSpace(status) ? string.Empty : status + " ";
             var suffix = string.IsNullOrWhiteSpace(detail) ? string.Empty : " — " + detail;
             return $"[{color}]{Markup.Escape(prefix + GetPhaseName(phase) + suffix)}[/]";
+        }
+
+        private int CountItems(PowerForgeReleaseProgressPhase phase)
+        {
+            lock (_sync)
+                return _items.Values.Count(item => item.Phase == phase);
+        }
+
+        private static string ItemKey(PowerForgeReleaseProgressItem item)
+            => $"{item.Phase}:{item.Key}";
+
+        private static string BuildItemLabel(
+            PowerForgeReleaseProgressItem item,
+            PowerForgeReleaseProgressItemState state,
+            string? detail)
+        {
+            var ordinal = item.Position > 0 && item.Total > 0
+                ? $"{item.Position:00}/{item.Total:00} "
+                : string.Empty;
+            var status = GetItemIcon(item, state) + " ";
+            var color = state switch
+            {
+                PowerForgeReleaseProgressItemState.Started => "cyan",
+                PowerForgeReleaseProgressItemState.Completed => "green",
+                PowerForgeReleaseProgressItemState.Failed => "red",
+                _ => "grey"
+            };
+            var suffix = string.IsNullOrWhiteSpace(detail) ? string.Empty : $" — {detail}";
+            return $"[{color}]{Markup.Escape($"  {status}{ordinal}{item.Title}{suffix}")}[/]";
+        }
+
+        private static string GetItemIcon(
+            PowerForgeReleaseProgressItem item,
+            PowerForgeReleaseProgressItemState state)
+        {
+            var unicode = ConsoleEncoding.ShouldRenderUnicode(AnsiConsole.Profile.Capabilities.Unicode);
+            if (state == PowerForgeReleaseProgressItemState.Completed) return unicode ? "✓" : "+";
+            if (state == PowerForgeReleaseProgressItemState.Failed) return "x";
+            if (state == PowerForgeReleaseProgressItemState.Skipped) return "–";
+            if (!unicode) return "·";
+
+            return item.Kind switch
+            {
+                nameof(ModulePipelineStepKind.Build) => "🔨",
+                nameof(ModulePipelineStepKind.Documentation) => "📝",
+                nameof(ModulePipelineStepKind.Formatting) => "🎨",
+                nameof(ModulePipelineStepKind.Signing) => "🔏",
+                nameof(ModulePipelineStepKind.Validation) => "🔎",
+                nameof(ModulePipelineStepKind.Tests) => "🧪",
+                nameof(ModulePipelineStepKind.Artefact) => "📦",
+                nameof(ModulePipelineStepKind.Install) => "📥",
+                nameof(ModulePipelineStepKind.Cleanup) => "🧹",
+                nameof(ProjectBuildProgressPhase.NuGetPublish) => "🚀",
+                nameof(ProjectBuildProgressPhase.PackageSigning) => "🔏",
+                "ToolPublish" => "🚀",
+                _ => "•"
+            };
         }
     }
 }

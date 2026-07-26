@@ -11,16 +11,29 @@ public sealed partial class DotNetPublishPipelineRunner
     /// Executes the provided <paramref name="plan"/>.
     /// </summary>
     public DotNetPublishResult Run(DotNetPublishPlan plan, IDotNetPublishProgressReporter? progress)
-        => RunWithReservationOwner(plan, progress, CreateMsiReservationOwner());
+        => Run(plan, progress, CancellationToken.None);
+
+    /// <summary>
+    /// Executes the provided <paramref name="plan"/> and cancels the active child process when requested.
+    /// </summary>
+    public DotNetPublishResult Run(
+        DotNetPublishPlan plan,
+        IDotNetPublishProgressReporter? progress,
+        CancellationToken cancellationToken)
+        => RunWithReservationOwner(plan, progress, CreateMsiReservationOwner(), cancellationToken);
 
     internal DotNetPublishResult RunWithReservationOwner(
         DotNetPublishPlan plan,
         IDotNetPublishProgressReporter? progress,
-        string msiReservationOwner)
+        string msiReservationOwner,
+        CancellationToken cancellationToken = default)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (string.IsNullOrWhiteSpace(msiReservationOwner))
             throw new ArgumentException("MSI reservation owner cannot be empty.", nameof(msiReservationOwner));
+        cancellationToken.ThrowIfCancellationRequested();
+        var previousCancellationToken = _cancellationToken.Value;
+        _cancellationToken.Value = cancellationToken;
         progress ??= NullDotNetPublishProgressReporter.Instance;
 
         var runStartedUtc = DateTimeOffset.UtcNow;
@@ -50,6 +63,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
             foreach (var step in plan.Steps ?? Array.Empty<DotNetPublishStep>())
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 progress.StepStarting(step);
                 var stepStartedUtc = DateTimeOffset.UtcNow;
                 var stepStopwatch = Stopwatch.StartNew();
@@ -123,6 +137,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     progress.StepCompleted(step);
                     stepSucceeded = true;
                 }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     stepError = ex.GetBaseException().Message;
@@ -175,6 +193,10 @@ public sealed partial class DotNetPublishPipelineRunner
             successResult.RunReportPath = runReportPath;
             successResult.RunReportMarkdownPath = runReportMarkdownPath;
             return successResult;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -231,6 +253,7 @@ public sealed partial class DotNetPublishPipelineRunner
             finally
             {
                 ClearMsiVersionStateWrites(msiReservationOwner);
+                _cancellationToken.Value = previousCancellationToken;
             }
         }
     }

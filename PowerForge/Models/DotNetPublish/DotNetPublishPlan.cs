@@ -89,6 +89,9 @@ public sealed class DotNetPublishTargetPlan
     /// <summary>Resolved project path (*.csproj).</summary>
     public string ProjectPath { get; set; } = string.Empty;
 
+    /// <summary>Project version captured while the publish plan was created.</summary>
+    public string? Version { get; set; }
+
     /// <summary>Resolved publish options.</summary>
     public DotNetPublishPublishOptions Publish { get; set; } = new();
 

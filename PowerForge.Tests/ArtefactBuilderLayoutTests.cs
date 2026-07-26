@@ -3,6 +3,7 @@ using PowerForge;
 
 namespace PowerForge.Tests;
 
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed class ArtefactBuilderLayoutTests
 {
     [Theory]

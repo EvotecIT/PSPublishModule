@@ -603,6 +603,39 @@ public sealed class ModulePipelineDevelopmentBootstrapperTests
     }
 
     [Fact]
+    public void BuildToStaging_WithSkipDotNetBuildAndReplaceSingleFileSource_PreservesStagedPayload()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "repo"));
+            ModulePipelineMissingAnalysisServiceTests.WriteMinimalModule(projectRoot.FullName, moduleName, "1.0.0");
+            var libCore = Directory.CreateDirectory(Path.Combine(projectRoot.FullName, "Lib", "Core"));
+            File.WriteAllText(Path.Combine(libCore.FullName, "Humanizer.dll"), string.Empty);
+            File.WriteAllText(Path.Combine(projectRoot.FullName, moduleName + ".Libraries.ps1"), "Lib\\Core\\Humanizer.dll");
+
+            var spec = CreateDevelopmentBinarySpec(
+                projectRoot.FullName,
+                moduleName,
+                ModuleDevelopmentBinaryMode.Environment,
+                sourceBootstrapperMode: ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile,
+                includeProjectPath: false);
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            plan.BuildSpec.SkipDotNetBuild = true;
+
+            var result = ModuleBuildPipelineFactory.Create(new NullLogger()).BuildToStaging(plan.BuildSpec);
+
+            Assert.True(File.Exists(Path.Combine(result.StagingPath, "Lib", "Core", "Humanizer.dll")));
+            Assert.True(File.Exists(Path.Combine(result.StagingPath, moduleName + ".Libraries.ps1")));
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Pipeline_WithReplaceSingleFileStagedCleanup_PreservesExternalAssetsUnderLib()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -122,8 +122,9 @@ internal sealed class ModuleBuildPreparationService
         if (!File.Exists(configFullPath))
             throw new FileNotFoundException($"Module build config file not found: {configFullPath}", configFullPath);
 
-        var spec = ReadPipelineSpecJson(configFullPath);
+        var spec = new ModulePipelineConfigurationService().Load(configFullPath).Spec;
         ResolvePipelineSpecPaths(spec, configFullPath);
+        ApplyConfigOverrides(spec, request);
         spec.Segments = AddRunModeSegment(spec.Segments ?? Array.Empty<IConfigurationSegment>(), request.RunMode);
 
         if (spec.Build is null)
@@ -148,6 +149,166 @@ internal sealed class ModuleBuildPreparationService
             ConfigFilePath = configFullPath
         };
     }
+
+    private static void ApplyConfigOverrides(ModulePipelineSpec spec, ModuleBuildPreparationRequest request)
+    {
+        if (spec.Build is null)
+            return;
+
+        var segments = spec.Segments ?? Array.Empty<IConfigurationSegment>();
+        var manifest = segments.OfType<ConfigurationManifestSegment>().LastOrDefault();
+        var libraryBuilds = segments.OfType<ConfigurationBuildLibrariesSegment>().ToArray();
+        var moduleBuilds = segments.OfType<ConfigurationBuildSegment>().ToArray();
+        var optionSegments = segments.OfType<ConfigurationOptionsSegment>().ToArray();
+        var options = optionSegments.LastOrDefault();
+        spec.Diagnostics ??= new ModulePipelineDiagnosticsOptions();
+        spec.Install ??= new ModulePipelineInstallOptions();
+
+        if (!string.IsNullOrWhiteSpace(request.StagingPath))
+            spec.Build.StagingPath = request.ResolvePath!(request.StagingPath!);
+        if (request.ReuseStaging)
+            spec.Build.ReuseStaging = true;
+
+        if (request.SkipInstall)
+            spec.Install.Enabled = false;
+
+        if (!string.IsNullOrWhiteSpace(request.ModuleVersion))
+        {
+            spec.Build.Version = request.ModuleVersion!;
+            if (manifest is not null)
+                manifest.Configuration.ModuleVersion = request.ModuleVersion!;
+        }
+
+        if (request.PreReleaseTag is not null)
+        {
+            spec.Build.PreReleaseTag = request.PreReleaseTag;
+            if (manifest is not null)
+                manifest.Configuration.Prerelease = NullIfWhiteSpace(request.PreReleaseTag);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.BuildConfiguration))
+        {
+            spec.Build.Configuration = request.BuildConfiguration!;
+            foreach (var libraryBuild in libraryBuilds)
+                libraryBuild.BuildLibraries.Configuration = request.BuildConfiguration;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.BuildFramework) &&
+            !string.Equals(request.BuildFramework, "auto", StringComparison.OrdinalIgnoreCase))
+        {
+            spec.Build.Frameworks = new[] { request.BuildFramework! };
+            foreach (var libraryBuild in libraryBuilds)
+                libraryBuild.BuildLibraries.Framework = new[] { request.BuildFramework! };
+        }
+
+        if (request.NoDotnetBuildWasBound)
+            spec.Build.SkipDotNetBuild = request.NoDotnetBuild;
+
+        var hardNoSign = request.NoSignWasBound && request.NoSign;
+        if (hardNoSign)
+        {
+            foreach (var optionSegment in optionSegments)
+            {
+                if (optionSegment.Options.Delivery is not null)
+                    optionSegment.Options.Delivery.Sign = false;
+            }
+        }
+
+        var signingOverride = hardNoSign
+            ? false
+            : request.SignModuleWasBound
+                ? request.SignModule
+                : (bool?)null;
+        if (signingOverride.HasValue)
+        {
+            if (moduleBuilds.Length == 0)
+            {
+                var moduleBuild = new ConfigurationBuildSegment
+                {
+                    BuildModule = new BuildModuleConfiguration { SignMerged = signingOverride.Value }
+                };
+                segments = segments.Concat(new IConfigurationSegment[] { moduleBuild }).ToArray();
+                spec.Segments = segments;
+            }
+            else
+            {
+                foreach (var moduleBuild in moduleBuilds)
+                    moduleBuild.BuildModule.SignMerged = signingOverride.Value;
+            }
+        }
+
+        if (!request.IncludeProjectPackages)
+        {
+            segments = segments
+                .Where(static segment =>
+                    segment is not ConfigurationProjectBuildSegment &&
+                    segment is not ConfigurationPackageBuildSegment)
+                .ToArray();
+            ModuleBuildPackageOwnershipPolicy.RemoveUnavailableVersionSources(segments);
+            spec.Segments = segments;
+        }
+
+        if (!request.IncludeModulePublishing)
+        {
+            segments = segments
+                .Where(static segment => segment is not ConfigurationPublishSegment)
+                .ToArray();
+            spec.Segments = segments;
+        }
+
+        if (request.UnifiedGitHubRelease)
+        {
+            segments = segments
+                .Where(static segment =>
+                    segment is not ConfigurationPublishSegment publish ||
+                    publish.Configuration.Destination != PublishDestination.GitHub)
+                .ToArray();
+            spec.Segments = segments;
+        }
+
+        if (request.DiagnosticsBaselinePathWasBound)
+        {
+            spec.Diagnostics.BaselinePath = string.IsNullOrWhiteSpace(request.DiagnosticsBaselinePath)
+                ? null
+                : request.ResolvePath!(request.DiagnosticsBaselinePath!);
+        }
+        if (request.GenerateDiagnosticsBaselineWasBound)
+            spec.Diagnostics.GenerateBaseline = request.GenerateDiagnosticsBaseline;
+        if (request.UpdateDiagnosticsBaselineWasBound)
+            spec.Diagnostics.UpdateBaseline = request.UpdateDiagnosticsBaseline;
+        if (request.FailOnNewDiagnosticsWasBound)
+            spec.Diagnostics.FailOnNewDiagnostics = request.FailOnNewDiagnostics;
+        if (request.FailOnDiagnosticsSeverityWasBound)
+            spec.Diagnostics.FailOnSeverity = request.FailOnDiagnosticsSeverity;
+
+        var hasSigningOptions = !string.IsNullOrWhiteSpace(request.CertificateThumbprint) ||
+                                request.SignIncludeBinaries.HasValue ||
+                                request.SignIncludeInternals.HasValue ||
+                                request.SignIncludeExe.HasValue;
+        if (!hasSigningOptions)
+            return;
+
+        options ??= new ConfigurationOptionsSegment();
+        if (!segments.Contains(options))
+        {
+            segments = segments.Concat(new IConfigurationSegment[] { options }).ToArray();
+            spec.Segments = segments;
+        }
+
+        options.Options.Signing ??= new SigningOptionsConfiguration();
+        var signing = options.Options.Signing;
+        if (!string.IsNullOrWhiteSpace(request.CertificateThumbprint))
+            signing.CertificateThumbprint = request.CertificateThumbprint;
+        if (request.SignIncludeBinaries.HasValue)
+            signing.IncludeBinaries = request.SignIncludeBinaries.Value;
+        if (request.SignIncludeInternals.HasValue)
+            signing.IncludeInternals = request.SignIncludeInternals.Value;
+        if (request.SignIncludeExe.HasValue)
+            signing.IncludeExe = request.SignIncludeExe.Value;
+    }
+
+    private static string? NullIfWhiteSpace(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value;
 
     private static IConfigurationSegment[] AddRunModeSegment(
         IReadOnlyList<IConfigurationSegment>? segments,

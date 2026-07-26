@@ -132,6 +132,22 @@ public sealed partial class DotNetPublishPipelineRunner
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start hook command: {fileName}");
+        var cancellationToken = _cancellationToken.Value;
+        using var cancellationRegistration = cancellationToken.Register(() =>
+        {
+            try
+            {
+#if NET472
+                process.Kill();
+#else
+                process.Kill(entireProcessTree: true);
+#endif
+            }
+            catch (Exception ex)
+            {
+                _logger.Verbose($"Hook cancellation kill failed for '{fileName}': {ex.Message}");
+            }
+        });
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
         var timeoutMs = (int)Math.Min(Math.Max(1, timeout.TotalMilliseconds), int.MaxValue);
@@ -171,6 +187,7 @@ public sealed partial class DotNetPublishPipelineRunner
 #else
         process.WaitForExit();
 #endif
+        cancellationToken.ThrowIfCancellationRequested();
         return (
             process.ExitCode,
             stdoutTask.GetAwaiter().GetResult(),

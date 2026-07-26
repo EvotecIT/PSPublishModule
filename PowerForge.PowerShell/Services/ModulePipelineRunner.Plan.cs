@@ -548,6 +548,15 @@ public sealed partial class ModulePipelineRunner
             }
         }
 
+        if (spec.Build.PreReleaseTag is not null)
+        {
+            preRelease = string.IsNullOrWhiteSpace(spec.Build.PreReleaseTag)
+                ? null
+                : spec.Build.PreReleaseTag.Trim();
+            if (manifestConfiguration is not null)
+                manifestConfiguration.Prerelease = preRelease;
+        }
+
         ApplyGateModeToPlanInputs(
             gateMode,
             ref refreshPsd1Only);
@@ -615,9 +624,10 @@ public sealed partial class ModulePipelineRunner
         }
 
         // Resolve .csproj path: explicit build setting wins, otherwise derive from BuildLibraries NETProjectPath/ProjectName.
-        var csproj = !string.IsNullOrWhiteSpace(spec.Build.CsprojPath)
+        var configuredCsproj = !string.IsNullOrWhiteSpace(spec.Build.CsprojPath)
             ? spec.Build.CsprojPath
             : ModulePipelinePlanningHelpers.TryResolveCsprojPath(projectRoot, moduleName, netProjectPath, netProjectName);
+        var csproj = spec.Build.SkipDotNetBuild ? null : configuredCsproj;
 
         var dotnetConfig = !string.IsNullOrWhiteSpace(dotnetConfigFromSegments)
             ? dotnetConfigFromSegments!
@@ -669,7 +679,7 @@ public sealed partial class ModulePipelineRunner
             syncNETProjectVersion = false;
         }
 
-        var csprojRequiredReasons = refreshPsd1Only
+        var configuredCsprojRequiredReasons = refreshPsd1Only
             ? Array.Empty<string>()
             : BuildMissingCsprojReasonList(
                 spec,
@@ -685,13 +695,20 @@ public sealed partial class ModulePipelineRunner
                 binaryModuleDocumentationRequested == true,
                 developmentBinariesMode,
                 developmentBinariesPath);
+        var csprojRequiredReasons = spec.Build.SkipDotNetBuild &&
+                                    configuredCsprojRequiredReasons.Length == 0 &&
+                                    !string.IsNullOrWhiteSpace(configuredCsproj)
+            ? new[] { "CsprojPath" }
+            : configuredCsprojRequiredReasons;
 
         var buildSpec = new ModuleBuildSpec
         {
             Name = moduleName,
             SourcePath = projectRoot,
             StagingPath = spec.Build.StagingPath,
-            CsprojPath = refreshPsd1Only ? string.Empty : csproj,
+            ReuseStaging = spec.Build.ReuseStaging,
+            CsprojPath = refreshPsd1Only || spec.Build.SkipDotNetBuild ? string.Empty : csproj,
+            SkipDotNetBuild = spec.Build.SkipDotNetBuild,
             Version = resolved,
             Configuration = dotnetConfig,
             Frameworks = frameworks,
@@ -958,7 +975,7 @@ public sealed partial class ModulePipelineRunner
             manifest: manifestConfiguration,
             buildSpec: buildSpec,
             resolvedCsprojPath: csproj,
-            syncNETProjectVersion: syncNETProjectVersion,
+            syncNETProjectVersion: !spec.Build.SkipDotNetBuild && syncNETProjectVersion,
             compatiblePSEditions: compatible,
             requiredModules: requiredModules,
             externalModuleDependencies: externalModules

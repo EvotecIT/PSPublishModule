@@ -160,7 +160,9 @@ internal static partial class Program
                 cmdLogger.Success($"Module: {(planOnly || validateOnly ? "planned" : "completed")} ({moduleAssetCount} asset path(s)).");
                 if (result.ModulePlan is not null)
                 {
-                    cmdLogger.Info($"Module script: {result.ModulePlan.ScriptPath}");
+                    var moduleSource = result.ModulePlan.ConfigPath ?? result.ModulePlan.ScriptPath;
+                    if (!string.IsNullOrWhiteSpace(moduleSource))
+                        cmdLogger.Info($"Module config: {moduleSource}");
                     if (!string.IsNullOrWhiteSpace(result.ModulePlan.ModuleVersion))
                         cmdLogger.Info($"Module version override: {result.ModulePlan.ModuleVersion}");
                     if (!string.IsNullOrWhiteSpace(result.ModulePlan.PreReleaseTag))

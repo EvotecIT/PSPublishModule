@@ -1,19 +1,26 @@
 namespace PowerForge;
 
 /// <summary>
-/// Host-facing request for executing a module build script through shared orchestration.
+/// Host-facing request for executing a module build through shared orchestration.
 /// </summary>
 public sealed class ModuleBuildHostBuildRequest
 {
+    internal IPowerForgeReleaseProgressReporterV2? Progress { get; set; }
+
     /// <summary>
     /// Repository root used as the command working directory.
     /// </summary>
     public string RepositoryRoot { get; set; } = string.Empty;
 
     /// <summary>
-    /// Path to the repository's <c>Build-Module.ps1</c> script.
+    /// Path to a module pipeline JSON configuration. Mutually exclusive with <see cref="ScriptPath"/>.
     /// </summary>
-    public string ScriptPath { get; set; } = string.Empty;
+    public string? ConfigPath { get; set; }
+
+    /// <summary>
+    /// Path to the repository's legacy <c>Build-Module.ps1</c> script.
+    /// </summary>
+    public string? ScriptPath { get; set; }
 
     /// <summary>
     /// Path to the PSPublishModule manifest that should be imported.
@@ -53,6 +60,11 @@ public sealed class ModuleBuildHostBuildRequest
     public bool NoDotnetBuild { get; set; }
 
     /// <summary>
+    /// Indicates that <see cref="NoDotnetBuild"/> was explicitly selected, including an explicit false value.
+    /// </summary>
+    public bool NoDotnetBuildWasSpecified { get; set; }
+
+    /// <summary>
     /// Optional module version override.
     /// </summary>
     public string? ModuleVersion { get; set; }
@@ -61,6 +73,22 @@ public sealed class ModuleBuildHostBuildRequest
     /// Optional prerelease tag override.
     /// </summary>
     public string? PreReleaseTag { get; set; }
+
+    /// <summary>
+    /// Optional persistent staging directory override used by staged release hosts.
+    /// </summary>
+    public string? StagingPath { get; set; }
+
+    /// <summary>
+    /// Reuses the existing staged module output during a deferred JSON publication pass.
+    /// </summary>
+    internal bool ReuseStaging { get; set; }
+
+    /// <summary>
+    /// Requires a legacy script to expose the staging and no-build parameters needed
+    /// to publish the exact output produced by an earlier deferred build.
+    /// </summary>
+    internal bool RequireReusableOutput { get; set; }
 
     /// <summary>
     /// Disables module signing when true.
@@ -73,9 +101,25 @@ public sealed class ModuleBuildHostBuildRequest
     public bool SignModule { get; set; }
 
     /// <summary>
+    /// Indicates that <see cref="SignModule"/> was explicitly selected, including an explicit false value.
+    /// </summary>
+    public bool SignModuleWasSpecified { get; set; }
+
+    /// <summary>
     /// Includes project-package work declared by the module build script.
     /// </summary>
     public bool IncludeProjectPackages { get; set; } = true;
+
+    /// <summary>
+    /// Includes module repository and GitHub publish segments declared by the module configuration.
+    /// Parent release hosts disable these when they publish signed checkpointed module artifacts directly.
+    /// </summary>
+    public bool IncludeModulePublishing { get; set; } = true;
+
+    /// <summary>
+    /// Skips installing the module after a JSON-backed build.
+    /// </summary>
+    public bool SkipInstall { get; set; }
 
     /// <summary>
     /// Maximum runtime for the out-of-process module workflow.

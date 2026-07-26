@@ -5,10 +5,16 @@ namespace PowerForge;
 /// </summary>
 public sealed class ProjectBuildHostRequest
 {
+    internal IProjectBuildProgressReporter? Progress { get; set; }
     internal Action? RemotePublishAttempted { get; set; }
     internal bool CoordinatedReleaseCheckpointActive { get; set; }
     internal string? ReleaseVersionFloor { get; set; }
     internal string? ReleaseVersionFloorProject { get; set; }
+
+    /// <summary>
+    /// Cancels active project build and package child processes.
+    /// </summary>
+    public CancellationToken CancellationToken { get; set; }
 
     /// <summary>
     /// Path to the <c>project.build.json</c> configuration file.

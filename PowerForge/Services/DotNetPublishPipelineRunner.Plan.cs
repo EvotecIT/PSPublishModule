@@ -191,6 +191,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 Name = t.Name.Trim(),
                 Kind = t.Kind,
                 ProjectPath = resolvedProjectPath,
+                Version = CsprojVersionEditor.TryGetVersion(resolvedProjectPath, out var projectVersion)
+                    ? projectVersion
+                    : null,
                 Publish = publish,
                 Combinations = combos
             });

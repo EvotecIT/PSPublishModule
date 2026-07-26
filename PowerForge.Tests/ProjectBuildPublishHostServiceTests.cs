@@ -24,6 +24,7 @@ public sealed class ProjectBuildPublishHostServiceTests
               "GitHubUsername": "EvotecIT",
               "GitHubRepositoryName": "PSPublishModule",
               "GitHubReleaseMode": "PerProject",
+              "SkipDuplicate": false,
               "PublishFailFast": false,
             }
             """);
@@ -43,6 +44,7 @@ public sealed class ProjectBuildPublishHostServiceTests
             Assert.Equal("EvotecIT", configuration.GitHubUsername);
             Assert.Equal("PSPublishModule", configuration.GitHubRepositoryName);
             Assert.Equal("PerProject", configuration.GitHubReleaseMode);
+            Assert.False(configuration.SkipDuplicate);
             Assert.False(configuration.PublishFailFast);
         }
         finally
@@ -79,6 +81,44 @@ public sealed class ProjectBuildPublishHostServiceTests
             Assert.Equal("https://nuget.pkg.github.com/EvotecIT/index.json", configuration.PublishSource);
             Assert.Equal("github-packages-token", configuration.PublishApiKey);
             Assert.Equal("github-packages-token", configuration.GitHubToken);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void LoadConfiguration_UsesPackagesSectionFromUnifiedReleaseConfig()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var buildDirectory = Directory.CreateDirectory(Path.Combine(root, "Build")).FullName;
+        var configPath = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            configPath,
+            """
+            {
+              "Module": {
+                "RepositoryRoot": "..",
+                "ConfigPath": "powerforge.json"
+              },
+              "Packages": {
+                "PublishNuget": true,
+                "PublishApiKey": "test-key",
+                "PublishSource": "https://packages.example/v3/index.json",
+                "PublishGitHub": false
+              }
+            }
+            """);
+
+        try
+        {
+            var configuration = new ProjectBuildPublishHostService().LoadConfiguration(configPath);
+
+            Assert.True(configuration.PublishNuget);
+            Assert.False(configuration.PublishGitHub);
+            Assert.Equal("test-key", configuration.PublishApiKey);
+            Assert.Equal("https://packages.example/v3/index.json", configuration.PublishSource);
         }
         finally
         {

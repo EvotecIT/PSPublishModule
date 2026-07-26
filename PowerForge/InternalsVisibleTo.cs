@@ -6,4 +6,5 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("PowerForge.PowerShell")]
 [assembly: InternalsVisibleTo("PowerForge.Web")]
 [assembly: InternalsVisibleTo("PowerForgeStudio.Tests")]
+[assembly: InternalsVisibleTo("PowerForgeStudio.Orchestrator")]
 [assembly: InternalsVisibleTo("PSPublishModule")]

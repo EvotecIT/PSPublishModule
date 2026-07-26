@@ -3,7 +3,9 @@
   "SchemaVersion": 1,
   "Module": {
     "RepositoryRoot": "..",
-    "ScriptPath": "Module/Build/Build-Module.ps1",
+    "ModuleName": "PSPublishModule",
+    "ConfigPath": "powerforge.json",
+    "ModulePath": "PSPublishModule/bin/{Configuration}/{Framework}/PSPublishModule.dll",
     "ManifestPath": "Module/PSPublishModule.psd1",
     "ArtifactPaths": [
       "Module/Artefacts/Packed",
@@ -13,6 +15,7 @@
     "IncludesPackages": false,
     "SynchronizeVersionWithPackages": true,
     "VersionPrimaryProject": "PowerForge",
+    "Framework": "auto",
     "ModuleVersion": "3.0.X",
     "TimeoutSeconds": 7200
   },

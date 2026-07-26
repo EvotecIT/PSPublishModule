@@ -22,6 +22,8 @@ public sealed class PowerForgeCliAppleReleaseTests
                   CURRENT_PROJECT_VERSION = 9;
                 }
                 """);
+            var apiKeyDirectory = Directory.CreateDirectory(Path.Combine(tempRoot, ".appstoreconnect"));
+            File.WriteAllText(Path.Combine(apiKeyDirectory.FullName, "AuthKey_TEST123456.p8"), "test-private-key");
             var configPath = Path.Combine(tempRoot, "powerforge.release.json");
             WriteReleaseConfig(configPath, submitForReview: false, includeInvalidModule: true);
 
@@ -110,6 +112,9 @@ public sealed class PowerForgeCliAppleReleaseTests
               """ : string.Empty)}}
               "AppleApps": {
                 "ProjectRoot": ".",
+                "AppStoreConnectApiKeyPath": ".appstoreconnect/AuthKey_TEST123456.p8",
+                "AppStoreConnectApiKeyId": "TEST123456",
+                "AppStoreConnectApiIssuerId": "00000000-0000-0000-0000-000000000000",
                 "Archive": false,
                 "Upload": false,
                 "SubmitForReview": {{submitForReview.ToString().ToLowerInvariant()}},

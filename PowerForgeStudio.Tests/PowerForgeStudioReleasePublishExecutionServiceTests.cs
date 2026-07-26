@@ -11,67 +11,75 @@ using PowerForgeStudio.Orchestrator.Queue;
 
 namespace PowerForgeStudio.Tests;
 
-public sealed class PowerForgeStudioReleasePublishExecutionServiceTests
+public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
 {
     [Fact]
     public void BuildPendingTargets_PublishReadyItem_ReturnsGroupedTargetsFromSigningCheckpoint()
     {
-        var repositoryRoot = @"C:\Support\GitHub\PSPublishModule";
-        var signingResult = new ReleaseSigningExecutionResult(
-            RootPath: repositoryRoot,
-            Succeeded: true,
-            Summary: "Signing completed.",
-            SourceCheckpointStateJson: "{}",
-            Receipts: [
-                new ReleaseSigningReceipt(
-                    RootPath: repositoryRoot,
-                    RepositoryName: "PSPublishModule",
-                    AdapterKind: ReleaseBuildAdapterKind.ProjectBuild.ToString(),
-                    ArtifactPath: Path.Combine(repositoryRoot, "Artefacts", "ProjectBuild", "Package.1.0.0.nupkg"),
-                    ArtifactKind: "File",
-                    Status: ReleaseSigningReceiptStatus.Signed,
-                    Summary: "Signed.",
-                    SignedAtUtc: DateTimeOffset.UtcNow),
-                new ReleaseSigningReceipt(
-                    RootPath: repositoryRoot,
-                    RepositoryName: "PSPublishModule",
-                    AdapterKind: ReleaseBuildAdapterKind.ProjectBuild.ToString(),
-                    ArtifactPath: Path.Combine(repositoryRoot, "Artefacts", "ProjectBuild", "Package.1.0.0.zip"),
-                    ArtifactKind: "File",
-                    Status: ReleaseSigningReceiptStatus.Signed,
-                    Summary: "Signed.",
-                    SignedAtUtc: DateTimeOffset.UtcNow),
-                new ReleaseSigningReceipt(
-                    RootPath: repositoryRoot,
-                    RepositoryName: "PSPublishModule",
-                    AdapterKind: ReleaseBuildAdapterKind.ModuleBuild.ToString(),
-                    ArtifactPath: Path.Combine(repositoryRoot, "Artefacts", "Packed", "PSPublishModule"),
-                    ArtifactKind: "Directory",
-                    Status: ReleaseSigningReceiptStatus.Signed,
-                    Summary: "Signed.",
-                    SignedAtUtc: DateTimeOffset.UtcNow)
-            ]);
+        var repositoryRoot = Directory.CreateDirectory(
+            Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var signingResult = new ReleaseSigningExecutionResult(
+                RootPath: repositoryRoot,
+                Succeeded: true,
+                Summary: "Signing completed.",
+                SourceCheckpointStateJson: "{}",
+                Receipts: [
+                    new ReleaseSigningReceipt(
+                        RootPath: repositoryRoot,
+                        RepositoryName: "PSPublishModule",
+                        AdapterKind: ReleaseBuildAdapterKind.ProjectBuild.ToString(),
+                        ArtifactPath: Path.Combine(repositoryRoot, "Artefacts", "ProjectBuild", "Package.1.0.0.nupkg"),
+                        ArtifactKind: "File",
+                        Status: ReleaseSigningReceiptStatus.Signed,
+                        Summary: "Signed.",
+                        SignedAtUtc: DateTimeOffset.UtcNow),
+                    new ReleaseSigningReceipt(
+                        RootPath: repositoryRoot,
+                        RepositoryName: "PSPublishModule",
+                        AdapterKind: ReleaseBuildAdapterKind.ProjectBuild.ToString(),
+                        ArtifactPath: Path.Combine(repositoryRoot, "Artefacts", "ProjectBuild", "Package.1.0.0.zip"),
+                        ArtifactKind: "File",
+                        Status: ReleaseSigningReceiptStatus.Signed,
+                        Summary: "Signed.",
+                        SignedAtUtc: DateTimeOffset.UtcNow),
+                    new ReleaseSigningReceipt(
+                        RootPath: repositoryRoot,
+                        RepositoryName: "PSPublishModule",
+                        AdapterKind: ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                        ArtifactPath: Path.Combine(repositoryRoot, "Artefacts", "Packed", "PSPublishModule"),
+                        ArtifactKind: "Directory",
+                        Status: ReleaseSigningReceiptStatus.Signed,
+                        Summary: "Signed.",
+                        SignedAtUtc: DateTimeOffset.UtcNow)
+                ]);
 
-        var queueItem = new ReleaseQueueItem(
-            RootPath: repositoryRoot,
-            RepositoryName: "PSPublishModule",
-            RepositoryKind: ReleaseRepositoryKind.Mixed,
-            WorkspaceKind: ReleaseWorkspaceKind.PrimaryRepository,
-            QueueOrder: 1,
-            Stage: ReleaseQueueStage.Publish,
-            Status: ReleaseQueueItemStatus.ReadyToRun,
-            Summary: "Ready for publish.",
-            CheckpointKey: "publish.ready",
-            CheckpointStateJson: JsonSerializer.Serialize(signingResult),
-            UpdatedAtUtc: DateTimeOffset.UtcNow);
+            var queueItem = new ReleaseQueueItem(
+                RootPath: repositoryRoot,
+                RepositoryName: "PSPublishModule",
+                RepositoryKind: ReleaseRepositoryKind.Mixed,
+                WorkspaceKind: ReleaseWorkspaceKind.PrimaryRepository,
+                QueueOrder: 1,
+                Stage: ReleaseQueueStage.Publish,
+                Status: ReleaseQueueItemStatus.ReadyToRun,
+                Summary: "Ready for publish.",
+                CheckpointKey: "publish.ready",
+                CheckpointStateJson: JsonSerializer.Serialize(signingResult),
+                UpdatedAtUtc: DateTimeOffset.UtcNow);
 
-        var service = new ReleasePublishExecutionService();
-        var targets = service.BuildPendingTargets([queueItem]);
+            var service = new ReleasePublishExecutionService();
+            var targets = service.BuildPendingTargets([queueItem]);
 
-        Assert.Equal(3, targets.Count);
-        Assert.Contains(targets, target => target.TargetKind == "NuGet");
-        Assert.Contains(targets, target => target.TargetKind == "GitHub");
-        Assert.Contains(targets, target => target.TargetKind == "PowerShellRepository");
+            Assert.Equal(3, targets.Count);
+            Assert.Contains(targets, target => target.TargetKind == "NuGet");
+            Assert.Contains(targets, target => target.TargetKind == "GitHub");
+            Assert.Contains(targets, target => target.TargetKind == "PowerShellRepository");
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
     }
 
     [Fact]
@@ -492,7 +500,7 @@ public sealed class PowerForgeStudioReleasePublishExecutionServiceTests
             CheckpointStateJson: JsonSerializer.Serialize(signingResult),
             UpdatedAtUtc: DateTimeOffset.UtcNow);
 
-        RepositoryPublishRequest? captured = null;
+        ModuleCheckpointPublishRequest? captured = null;
         var moduleRunner = new StubPowerShellRunner((request) => {
                 if (request.InvocationMode != PowerShellInvocationMode.Command || string.IsNullOrWhiteSpace(request.CommandText))
                     return new PowerShellRunResult(1, string.Empty, "Unexpected invocation.", "pwsh");
@@ -534,15 +542,9 @@ public sealed class PowerForgeStudioReleasePublishExecutionServiceTests
             new ProjectBuildCommandHostService(),
             new ProjectBuildPublishHostService(),
             (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, "published", string.Empty, "dotnet", TimeSpan.Zero, timedOut: false, errorMessage: null)),
-            publishRepositoryAsync: (request, _) => {
+            publishCheckpointedModuleAsync: (request, _) => {
                 captured = request;
-                return Task.FromResult(new RepositoryPublishResult(
-                    path: request.Path,
-                    isNupkg: request.IsNupkg,
-                    repositoryName: request.RepositoryName ?? "PSGallery",
-                    tool: request.Tool,
-                    repositoryCreated: false,
-                    repositoryUnregistered: false));
+                return Task.FromResult(CreateSuccessfulCheckpointedModulePublish(request));
             });
 
         try
@@ -556,13 +558,10 @@ public sealed class PowerForgeStudioReleasePublishExecutionServiceTests
             Assert.True(
                 captured is not null,
                 string.Join(" | ", result.Receipts.Select(receipt => $"{receipt.TargetKind}:{receipt.Status}:{receipt.Summary}")));
-            Assert.Equal(packageDirectory, captured!.Path);
-            Assert.False(captured.IsNupkg);
-            Assert.Equal("PSGallery", captured.RepositoryName);
-            Assert.Equal(PublishTool.PSResourceGet, captured.Tool);
-            Assert.Equal("gallery-key", captured.ApiKey);
-            Assert.True(captured.SkipDependenciesCheck);
-            Assert.False(captured.SkipModuleManifestValidate);
+            Assert.Equal(packageDirectory, captured!.ModulePath);
+            Assert.Equal("PSGallery", captured.Publish.RepositoryName);
+            Assert.Equal(PublishTool.PSResourceGet, captured.Publish.Tool);
+            Assert.Equal("gallery-key", ModulePublisher.ResolvePublishApiKey(captured.Publish, captured.ProjectRoot));
             var receipt = Assert.Single(result.Receipts);
             Assert.Equal(ReleasePublishReceiptStatus.Published, receipt.Status);
             Assert.Contains("PSGallery", receipt.Summary, StringComparison.OrdinalIgnoreCase);
@@ -631,7 +630,7 @@ public sealed class PowerForgeStudioReleasePublishExecutionServiceTests
             CheckpointStateJson: JsonSerializer.Serialize(signingResult),
             UpdatedAtUtc: DateTimeOffset.UtcNow);
 
-        RepositoryPublishRequest? captured = null;
+        ModuleCheckpointPublishRequest? captured = null;
         var moduleRunner = new StubPowerShellRunner((request) => {
                 if (request.InvocationMode != PowerShellInvocationMode.Command || string.IsNullOrWhiteSpace(request.CommandText))
                     return new PowerShellRunResult(1, string.Empty, "Unexpected invocation.", "pwsh");
@@ -683,15 +682,9 @@ public sealed class PowerForgeStudioReleasePublishExecutionServiceTests
             new ProjectBuildCommandHostService(),
             new ProjectBuildPublishHostService(),
             (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, "published", string.Empty, "dotnet", TimeSpan.Zero, timedOut: false, errorMessage: null)),
-            publishRepositoryAsync: (request, _) => {
+            publishCheckpointedModuleAsync: (request, _) => {
                 captured = request;
-                return Task.FromResult(new RepositoryPublishResult(
-                    path: request.Path,
-                    isNupkg: request.IsNupkg,
-                    repositoryName: request.RepositoryName ?? "JFrogPS",
-                    tool: request.Tool,
-                    repositoryCreated: false,
-                    repositoryUnregistered: false));
+                return Task.FromResult(CreateSuccessfulCheckpointedModulePublish(request));
             });
 
         try
@@ -703,12 +696,12 @@ public sealed class PowerForgeStudioReleasePublishExecutionServiceTests
 
             Assert.True(result.Succeeded);
             Assert.NotNull(captured);
-            Assert.Equal(packageDirectory, captured!.Path);
-            Assert.Equal("JFrogPS", captured.RepositoryName);
-            Assert.Null(captured.ApiKey);
-            Assert.NotNull(captured.Repository?.CredentialProvider);
-            Assert.Equal(RepositoryCredentialProviderKind.JFrogOidc, captured.Repository!.CredentialProvider!.Kind);
-            Assert.Equal("azure-oidc", captured.Repository.CredentialProvider.JFrogOidcProvider);
+            Assert.Equal(packageDirectory, captured!.ModulePath);
+            Assert.Equal("JFrogPS", captured.Publish.RepositoryName);
+            Assert.True(string.IsNullOrWhiteSpace(captured.Publish.ApiKey));
+            Assert.NotNull(captured.Publish.Repository?.CredentialProvider);
+            Assert.Equal(RepositoryCredentialProviderKind.JFrogOidc, captured.Publish.Repository!.CredentialProvider!.Kind);
+            Assert.Equal("azure-oidc", captured.Publish.Repository.CredentialProvider.JFrogOidcProvider);
             var receipt = Assert.Single(result.Receipts);
             Assert.Equal(ReleasePublishReceiptStatus.Published, receipt.Status);
         }

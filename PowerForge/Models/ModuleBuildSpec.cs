@@ -17,12 +17,30 @@ public sealed class ModuleBuildSpec
     public string? StagingPath { get; set; }
 
     /// <summary>
+    /// Reuses the existing contents of <see cref="StagingPath"/> instead of copying the source module again.
+    /// Intended for a deferred publish pass over an output produced earlier in the same release.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool ReuseStaging { get; set; }
+
+    /// <summary>
     /// Optional path to a .NET project (.csproj) to publish into the module. When null/empty, binary build is skipped.
     /// </summary>
     public string? CsprojPath { get; set; }
 
+    /// <summary>
+    /// When true, skips the configured .NET project build for this run and reuses the existing module binary payload.
+    /// </summary>
+    public bool SkipDotNetBuild { get; set; }
+
     /// <summary>Base module version used for manifest patching and install resolution.</summary>
     public string Version { get; set; } = "1.0.0";
+
+    /// <summary>
+    /// Optional prerelease override for this invocation. A non-null empty value explicitly clears
+    /// a prerelease label inherited from the source manifest or a manifest segment.
+    /// </summary>
+    public string? PreReleaseTag { get; set; }
 
     /// <summary>Build configuration used for publishing (e.g., Release or Debug).</summary>
     public string Configuration { get; set; } = "Release";

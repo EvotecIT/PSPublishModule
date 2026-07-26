@@ -51,6 +51,10 @@ public sealed class PowerShellRunRequest
     public bool CaptureOutput { get; }
     /// <summary>When true, capture standard error.</summary>
     public bool CaptureError { get; }
+    /// <summary>Optional callback invoked for each captured standard-output line.</summary>
+    public Action<string>? OutputLineReceived { get; }
+    /// <summary>Optional callback invoked for each captured standard-error line.</summary>
+    public Action<string>? ErrorLineReceived { get; }
     /// <summary>Gets the invocation mode for the request.</summary>
     public PowerShellInvocationMode InvocationMode { get; }
     /// <summary>
@@ -66,6 +70,47 @@ public sealed class PowerShellRunRequest
         string? executableOverride = null,
         bool captureOutput = true,
         bool captureError = true)
+        : this(
+            scriptPath,
+            arguments,
+            timeout,
+            preferPwsh,
+            workingDirectory,
+            environmentVariables,
+            executableOverride,
+            captureOutput,
+            captureError,
+            outputLineReceived: null,
+            errorLineReceived: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new streaming file-based request while retaining captured output.
+    /// </summary>
+    /// <param name="scriptPath">Path to the script to execute with <c>-File</c>.</param>
+    /// <param name="arguments">Arguments passed to the script.</param>
+    /// <param name="timeout">Maximum allowed execution time.</param>
+    /// <param name="preferPwsh">When true, prefer <c>pwsh</c>.</param>
+    /// <param name="workingDirectory">Optional working directory.</param>
+    /// <param name="environmentVariables">Optional environment variable overrides.</param>
+    /// <param name="executableOverride">Optional explicit executable.</param>
+    /// <param name="captureOutput">When true, capture standard output.</param>
+    /// <param name="captureError">When true, capture standard error.</param>
+    /// <param name="outputLineReceived">Optional standard-output line callback.</param>
+    /// <param name="errorLineReceived">Optional standard-error line callback.</param>
+    public PowerShellRunRequest(
+        string scriptPath,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        bool preferPwsh,
+        string? workingDirectory,
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        string? executableOverride,
+        bool captureOutput,
+        bool captureError,
+        Action<string>? outputLineReceived,
+        Action<string>? errorLineReceived)
     {
         ScriptPath = scriptPath;
         CommandText = null;
@@ -77,6 +122,8 @@ public sealed class PowerShellRunRequest
         ExecutableOverride = executableOverride;
         CaptureOutput = captureOutput;
         CaptureError = captureError;
+        OutputLineReceived = outputLineReceived;
+        ErrorLineReceived = errorLineReceived;
         InvocationMode = PowerShellInvocationMode.File;
         RequiredRuntimeMajor = 0;
     }
@@ -102,6 +149,43 @@ public sealed class PowerShellRunRequest
         string? executableOverride = null,
         bool captureOutput = true,
         bool captureError = true)
+        => ForCommand(
+            commandText,
+            timeout,
+            preferPwsh,
+            workingDirectory,
+            environmentVariables,
+            executableOverride,
+            captureOutput,
+            captureError,
+            outputLineReceived: null,
+            errorLineReceived: null);
+
+    /// <summary>
+    /// Creates a streaming command-based request while retaining captured output.
+    /// </summary>
+    /// <param name="commandText">Inline PowerShell text to execute with <c>-Command</c>.</param>
+    /// <param name="timeout">Maximum allowed execution time before killing the process.</param>
+    /// <param name="preferPwsh">When true, prefer <c>pwsh</c>.</param>
+    /// <param name="workingDirectory">Optional working directory.</param>
+    /// <param name="environmentVariables">Optional environment variable overrides.</param>
+    /// <param name="executableOverride">Optional explicit executable.</param>
+    /// <param name="captureOutput">When true, capture standard output.</param>
+    /// <param name="captureError">When true, capture standard error.</param>
+    /// <param name="outputLineReceived">Optional standard-output line callback.</param>
+    /// <param name="errorLineReceived">Optional standard-error line callback.</param>
+    /// <returns>PowerShell command request.</returns>
+    public static PowerShellRunRequest ForCommand(
+        string commandText,
+        TimeSpan timeout,
+        bool preferPwsh,
+        string? workingDirectory,
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        string? executableOverride,
+        bool captureOutput,
+        bool captureError,
+        Action<string>? outputLineReceived,
+        Action<string>? errorLineReceived)
     {
         if (string.IsNullOrWhiteSpace(commandText))
             throw new ArgumentException("Command text is required.", nameof(commandText));
@@ -117,6 +201,8 @@ public sealed class PowerShellRunRequest
             executableOverride: executableOverride,
             captureOutput: captureOutput,
             captureError: captureError,
+            outputLineReceived: outputLineReceived,
+            errorLineReceived: errorLineReceived,
             requiredRuntimeMajor: 0,
             invocationMode: PowerShellInvocationMode.Command);
     }
@@ -142,6 +228,43 @@ public sealed class PowerShellRunRequest
         string? executableOverride = null,
         bool captureOutput = true,
         bool captureError = true)
+        => ForCompatibleCommand(
+            commandText,
+            timeout,
+            requiredRuntimeMajor,
+            workingDirectory,
+            environmentVariables,
+            executableOverride,
+            captureOutput,
+            captureError,
+            outputLineReceived: null,
+            errorLineReceived: null);
+
+    /// <summary>
+    /// Creates a streaming command request that requires a compatible PowerShell Core host.
+    /// </summary>
+    /// <param name="commandText">Inline PowerShell text to execute with <c>-Command</c>.</param>
+    /// <param name="timeout">Maximum allowed execution time before killing the process.</param>
+    /// <param name="requiredRuntimeMajor">Minimum .NET runtime major required from <c>pwsh</c>.</param>
+    /// <param name="workingDirectory">Optional working directory.</param>
+    /// <param name="environmentVariables">Optional environment variable overrides.</param>
+    /// <param name="executableOverride">Optional explicit executable.</param>
+    /// <param name="captureOutput">When true, capture standard output.</param>
+    /// <param name="captureError">When true, capture standard error.</param>
+    /// <param name="outputLineReceived">Optional standard-output line callback.</param>
+    /// <param name="errorLineReceived">Optional standard-error line callback.</param>
+    /// <returns>PowerShell command request.</returns>
+    public static PowerShellRunRequest ForCompatibleCommand(
+        string commandText,
+        TimeSpan timeout,
+        int requiredRuntimeMajor,
+        string? workingDirectory,
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        string? executableOverride,
+        bool captureOutput,
+        bool captureError,
+        Action<string>? outputLineReceived,
+        Action<string>? errorLineReceived)
     {
         if (string.IsNullOrWhiteSpace(commandText))
             throw new ArgumentException("Command text is required.", nameof(commandText));
@@ -159,6 +282,8 @@ public sealed class PowerShellRunRequest
             executableOverride: executableOverride,
             captureOutput: captureOutput,
             captureError: captureError,
+            outputLineReceived: outputLineReceived,
+            errorLineReceived: errorLineReceived,
             requiredRuntimeMajor: requiredRuntimeMajor,
             invocationMode: PowerShellInvocationMode.Command);
     }
@@ -174,6 +299,8 @@ public sealed class PowerShellRunRequest
         string? executableOverride,
         bool captureOutput,
         bool captureError,
+        Action<string>? outputLineReceived,
+        Action<string>? errorLineReceived,
         int requiredRuntimeMajor,
         PowerShellInvocationMode invocationMode)
     {
@@ -187,6 +314,8 @@ public sealed class PowerShellRunRequest
         ExecutableOverride = executableOverride;
         CaptureOutput = captureOutput;
         CaptureError = captureError;
+        OutputLineReceived = outputLineReceived;
+        ErrorLineReceived = errorLineReceived;
         RequiredRuntimeMajor = requiredRuntimeMajor;
         InvocationMode = invocationMode;
     }
@@ -220,10 +349,17 @@ public interface IPowerShellRunner
     /// </summary>
     PowerShellRunResult Run(PowerShellRunRequest request);
 }
+
+internal interface ICancellablePowerShellRunner
+{
+    Task<PowerShellRunResult> RunAsync(
+        PowerShellRunRequest request,
+        CancellationToken cancellationToken);
+}
 /// <summary>
 /// Default implementation that locates <c>pwsh</c> or <c>powershell.exe</c> on PATH and executes a script with <c>-File</c>.
 /// </summary>
-public sealed class PowerShellRunner : IPowerShellRunner
+public sealed class PowerShellRunner : IPowerShellRunner, ICancellablePowerShellRunner
 {
     private readonly IProcessRunner _processRunner;
 
@@ -238,6 +374,16 @@ public sealed class PowerShellRunner : IPowerShellRunner
 
     /// <inheritdoc />
     public PowerShellRunResult Run(PowerShellRunRequest request)
+        => RunAsync(request, CancellationToken.None).GetAwaiter().GetResult();
+
+    async Task<PowerShellRunResult> ICancellablePowerShellRunner.RunAsync(
+        PowerShellRunRequest request,
+        CancellationToken cancellationToken)
+        => await RunAsync(request, cancellationToken).ConfigureAwait(false);
+
+    private async Task<PowerShellRunResult> RunAsync(
+        PowerShellRunRequest request,
+        CancellationToken cancellationToken)
     {
         string? resolutionError = null;
         var exe = request.RequiredRuntimeMajor > 0
@@ -250,7 +396,7 @@ public sealed class PowerShellRunner : IPowerShellRunner
         }
 
         var arguments = BuildArguments(request);
-        var processResult = _processRunner.RunAsync(
+        var processResult = await _processRunner.RunAsync(
             new ProcessRunRequest(
                 exe,
                 request.WorkingDirectory ?? Environment.CurrentDirectory,
@@ -258,7 +404,11 @@ public sealed class PowerShellRunner : IPowerShellRunner
                 request.Timeout,
                 request.EnvironmentVariables,
                 request.CaptureOutput,
-                request.CaptureError)).GetAwaiter().GetResult();
+                request.CaptureError,
+                request.OutputLineReceived,
+                request.ErrorLineReceived),
+            cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
 
         return new PowerShellRunResult(processResult.ExitCode, processResult.StdOut, processResult.StdErr, exe);
     }

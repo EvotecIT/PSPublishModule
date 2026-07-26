@@ -122,6 +122,7 @@ public sealed class PowerForgeReleaseRequestMapperTests
             {
                 ModuleTimeoutSeconds = 10800,
                 ModuleCertificateThumbprint = "ABC123",
+                ModuleSkipInstall = true,
                 ModuleSignIncludeBinaries = true,
                 ModuleSignIncludeInternals = false,
                 ModuleSignIncludeExe = true,
@@ -134,6 +135,7 @@ public sealed class PowerForgeReleaseRequestMapperTests
 
         Assert.Equal(10800, request.ModuleTimeoutSeconds);
         Assert.Equal("ABC123", request.ModuleCertificateThumbprint);
+        Assert.True(request.ModuleSkipInstall);
         Assert.True(request.ModuleSignIncludeBinaries);
         Assert.False(request.ModuleSignIncludeInternals);
         Assert.True(request.ModuleSignIncludeExe);

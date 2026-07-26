@@ -49,11 +49,11 @@ internal sealed partial class PowerForgeReleaseService
     private readonly ILogger _logger;
     private readonly Func<ProjectBuildHostRequest, ProjectBuildConfiguration, string, ProjectBuildHostExecutionResult> _executePackages;
     private readonly Func<PowerForgeToolReleaseSpec, string, PowerForgeReleaseRequest, PowerForgeToolReleasePlan> _planTools;
-    private readonly Func<PowerForgeToolReleasePlan, PowerForgeToolReleaseResult> _runTools;
+    private readonly Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, CancellationToken, PowerForgeToolReleaseResult> _runTools;
     private readonly Func<PowerForgeToolReleaseSpec, string, (DotNetPublishSpec Spec, string SourceConfigPath)> _loadDotNetToolsSpec;
     private readonly Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, ISet<PowerForgeReleaseToolOutputKind>, DotNetPublishPlan> _planDotNetTools;
-    private readonly Func<DotNetPublishPlan, DotNetPublishResult> _runDotNetTools;
-    private readonly Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> _publishGitHubRelease;
+    private readonly Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult> _runDotNetTools;
+    private readonly Func<GitHubReleasePublishRequest, CancellationToken, GitHubReleasePublishResult> _publishGitHubRelease;
     private readonly Func<PowerForgeWingetSubmissionPlan, PowerForgeWingetSubmissionResult> _submitWinget;
     private readonly Func<AppleAppArchiveRequest, AppleAppArchiveResult> _archiveAppleApp;
     private readonly Func<AppleAppArchiveUploadRequest, AppleAppArchiveUploadResult> _uploadAppleApp;
@@ -95,7 +95,15 @@ internal sealed partial class PowerForgeReleaseService
             plan => new WingetSubmissionService(logger).Run(plan),
             request => new AppleAppArchiveService().CreateArchiveAsync(request).GetAwaiter().GetResult(),
             request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult(),
-            null)
+            null,
+            runToolsWithProgress: (plan, progress) =>
+                new PowerForgeToolReleaseService(logger).Run(plan, progress),
+            runToolsWithProgressAndCancellation: (plan, progress, cancellationToken) =>
+                new PowerForgeToolReleaseService(logger).Run(plan, progress, cancellationToken),
+            runDotNetToolsWithProgressAndCancellation: (plan, progress, cancellationToken) =>
+                new DotNetPublishPipelineRunner(logger).Run(plan, progress, cancellationToken),
+            publishGitHubReleaseWithCancellation: (publishRequest, cancellationToken) =>
+                new GitHubReleasePublisher(logger).PublishRelease(publishRequest, cancellationToken))
     {
     }
 
@@ -142,16 +150,35 @@ internal sealed partial class PowerForgeReleaseService
         Func<AppStoreConnectApiCredential, string, AppStoreConnectBuildUploadInfo?>? getAppleBuildUpload = null,
         Func<PowerForgeAppleAppReleaseTargetPlan, bool>? generateAppleProject = null,
         Action<TimeSpan>? delay = null,
-        AppleReleaseArtifactService? appleArtifactService = null)
+        AppleReleaseArtifactService? appleArtifactService = null,
+        Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, PowerForgeToolReleaseResult>? runToolsWithProgress = null,
+        Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, DotNetPublishResult>? runDotNetToolsWithProgress = null,
+        Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult>? runDotNetToolsWithProgressAndCancellation = null,
+        Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, CancellationToken, PowerForgeToolReleaseResult>? runToolsWithProgressAndCancellation = null,
+        Func<ModuleBuildHostBuildRequest, CancellationToken, ModuleBuildHostExecutionResult>? executeModuleBuild = null,
+        Func<GitHubReleasePublishRequest, CancellationToken, GitHubReleasePublishResult>? publishGitHubReleaseWithCancellation = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
         _planTools = planTools ?? throw new ArgumentNullException(nameof(planTools));
-        _runTools = runTools ?? throw new ArgumentNullException(nameof(runTools));
+        if (runTools is null)
+            throw new ArgumentNullException(nameof(runTools));
+        _runTools = runToolsWithProgressAndCancellation
+            ?? (runToolsWithProgress is not null
+                ? (plan, progress, _) => runToolsWithProgress(plan, progress)
+                : (plan, _, _) => runTools(plan));
         _loadDotNetToolsSpec = loadDotNetToolsSpec ?? throw new ArgumentNullException(nameof(loadDotNetToolsSpec));
         _planDotNetTools = planDotNetTools ?? throw new ArgumentNullException(nameof(planDotNetTools));
-        _runDotNetTools = runDotNetTools ?? throw new ArgumentNullException(nameof(runDotNetTools));
-        _publishGitHubRelease = publishGitHubRelease ?? throw new ArgumentNullException(nameof(publishGitHubRelease));
+        if (runDotNetTools is null)
+            throw new ArgumentNullException(nameof(runDotNetTools));
+        _runDotNetTools = runDotNetToolsWithProgressAndCancellation
+            ?? (runDotNetToolsWithProgress is not null
+                ? (plan, progress, _) => runDotNetToolsWithProgress(plan, progress)
+                : (plan, _, _) => runDotNetTools(plan));
+        if (publishGitHubRelease is null)
+            throw new ArgumentNullException(nameof(publishGitHubRelease));
+        _publishGitHubRelease = publishGitHubReleaseWithCancellation
+            ?? ((publishRequest, _) => publishGitHubRelease(publishRequest));
         _submitWinget = submitWinget ?? (plan => new WingetSubmissionService(logger).Run(plan));
         _archiveAppleApp = archiveAppleApp ?? (request => new AppleAppArchiveService().CreateArchiveAsync(request).GetAwaiter().GetResult());
         _uploadAppleApp = uploadAppleApp ?? (request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult());
@@ -165,6 +192,11 @@ internal sealed partial class PowerForgeReleaseService
         _generateAppleProject = generateAppleProject ?? (app => new AppleProjectGenerationService().Generate(app));
         _delay = delay ?? Thread.Sleep;
         _appleArtifactService = appleArtifactService ?? new AppleReleaseArtifactService();
+        _executeModuleBuild = executeModuleBuild
+            ?? ((moduleRequest, cancellationToken) => new ModuleBuildHostService()
+                .ExecuteBuildAsync(moduleRequest, cancellationToken)
+                .GetAwaiter()
+                .GetResult());
     }
 
     /// <summary>
@@ -177,6 +209,9 @@ internal sealed partial class PowerForgeReleaseService
         if (request is null)
             throw new ArgumentNullException(nameof(request));
 
+        using var deferredModuleStaging = new DeferredModuleStagingDirectory(_logger);
+        request.CancellationToken.ThrowIfCancellationRequested();
+
         if (string.IsNullOrWhiteSpace(request.ConfigPath))
             throw new ArgumentException("ConfigPath is required.", nameof(request));
 
@@ -187,25 +222,32 @@ internal sealed partial class PowerForgeReleaseService
         var selectedToolOutputs = ResolveSelectedToolOutputs(request);
         var selectedTargets = NormalizeStrings(request.Targets);
         var runModule = !explicitAppleAction &&
+                        !request.AppleOnly &&
                         spec.Module is not null &&
                         (!request.PackagesOnly && !request.ToolsOnly || request.ModuleOnly);
         var runPackages = !explicitAppleAction &&
+                          !request.AppleOnly &&
                           spec.Packages is not null &&
                           !request.ModuleOnly &&
                           !request.ToolsOnly;
         var runTools = !explicitAppleAction &&
+                       !request.AppleOnly &&
                        spec.Tools is not null &&
                        !request.ModuleOnly &&
                        !request.PackagesOnly;
-        var runAppleApps = spec.AppleApps is not null && !request.ModuleOnly && !request.PackagesOnly && !request.ToolsOnly;
+        var runAppleApps = spec.AppleApps is not null &&
+                           !request.SkipAppleApps &&
+                           !request.ModuleOnly &&
+                           !request.PackagesOnly &&
+                           !request.ToolsOnly;
         var appleTargetMatches = runAppleApps
             ? ResolveAppleTargetMatches(spec.AppleApps!, selectedTargets)
             : Array.Empty<string>();
         var toolTargetMatches = Array.Empty<string>();
         var runWorkspaceValidation = !explicitAppleAction &&
+                                     !request.AppleOnly &&
                                      spec.WorkspaceValidation is not null &&
                                      !request.SkipWorkspaceValidation;
-        var publishUnifiedGitHub = !explicitAppleAction && ShouldPublishUnifiedGitHub(spec, request);
         DotNetPublishSpec? dotNetSpecForTools = null;
         string? dotNetSourcePathForTools = null;
 
@@ -258,6 +300,8 @@ internal sealed partial class PowerForgeReleaseService
         {
             runPackages = false;
         }
+        var publishUnifiedGitHub = !explicitAppleAction &&
+                                   ShouldPublishUnifiedGitHub(spec, request, runModule);
 
         ValidateVersionCoordinationConfiguration(spec, runModule);
 
@@ -307,6 +351,7 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         var coordinateModuleAndPackageVersions = ShouldCoordinateModuleAndPackageVersions(spec, runModule, runPackages);
+        ModuleBuildHostBuildRequest? deferredModulePublishRequest = null;
         if (coordinateModuleAndPackageVersions)
         {
             var versionFloor = ResolveCoordinatedModuleVersionFloor(spec.Module!, configPath, request);
@@ -358,22 +403,61 @@ internal sealed partial class PowerForgeReleaseService
                 publishUnifiedGitHub);
             result.ModulePlan = module.Plan;
             result.ModuleAssets = module.ArtifactPaths;
+            var deferModulePublishing = ShouldDeferModulePublishing(
+                module.Request,
+                request,
+                runPackages,
+                willRunTools,
+                willRunAppleApps);
+            if (deferModulePublishing)
+            {
+                if (!request.PlanOnly &&
+                    !request.ValidateOnly &&
+                    string.IsNullOrWhiteSpace(module.Request.StagingPath))
+                {
+                    module.Request.StagingPath = deferredModuleStaging.GetOrCreatePath();
+                    module.Plan.StagingPath = module.Request.StagingPath;
+                }
+                module.Request.RequireReusableOutput = module.Request.ScriptPath is not null;
+                deferredModulePublishRequest = module.Request;
+            }
 
             if (!request.PlanOnly && !request.ValidateOnly)
             {
-                var moduleResult = new ModuleBuildHostService().ExecuteBuildAsync(module.Request).GetAwaiter().GetResult();
+                var moduleResult = deferModulePublishing
+                    ? ExecuteModuleRequest(
+                        module.Request,
+                        ConfigurationGateMode.Build,
+                        includeModulePublishing: false,
+                        cancellationToken: request.CancellationToken)
+                    : _executeModuleBuild(module.Request, request.CancellationToken);
                 result.Module = moduleResult;
                 if (!moduleResult.Succeeded)
                 {
+                    var moduleSource = module.Request.ConfigPath ?? module.Request.ScriptPath ?? "module build";
                     request.Progress?.PhaseFailed(
                         PowerForgeReleaseProgressPhase.Module,
-                        BuildModuleFailureMessage(module.Request.ScriptPath, moduleResult));
+                        BuildModuleFailureMessage(moduleSource, moduleResult));
                     result.Success = false;
-                    result.ErrorMessage = BuildModuleFailureMessage(module.Request.ScriptPath, moduleResult);
+                    result.ErrorMessage = BuildModuleFailureMessage(moduleSource, moduleResult);
                     return result;
                 }
 
                 UpdateResolvedModuleVersion(result.ModulePlan, result.ModuleAssets);
+                result.ModuleAssets = ExpandModuleArtifactPaths(
+                    result.ModuleAssets,
+                    result.ModulePlan?.ModuleName,
+                    result.ModulePlan?.ModuleVersion,
+                    result.ModulePlan?.PreReleaseTag);
+                if (result.ModulePlan is not null)
+                    result.ModulePlan.ArtifactPaths = result.ModuleAssets;
+
+                if (result.ModulePlan?.IncludesProjectPackages == true &&
+                    module.Request.ConfigPath is not null)
+                {
+                    result.ModulePackagePlans = new ModulePackageReleaseCheckpointService()
+                        .Capture(configPath, spec);
+                }
             }
             request.Progress?.PhaseCompleted(
                 PowerForgeReleaseProgressPhase.Module,
@@ -395,7 +479,9 @@ internal sealed partial class PowerForgeReleaseService
                 request.SkipBuild,
                 selectedAppleTargets,
                 allowUnresolvedResolvedVersion: true,
-                validateReusableArchives: !request.PlanOnly && !request.ValidateOnly);
+                validateReusableArchives:
+                    (!request.PlanOnly && !request.ValidateOnly) ||
+                    request.CheckpointAppleApps);
         }
 
         if (runPackages && result.Packages is null)
@@ -441,9 +527,11 @@ internal sealed partial class PowerForgeReleaseService
                 appleReleaseVersion,
                 request.SkipBuild,
                 selectedAppleTargets,
-                validateReusableArchives: !request.PlanOnly && !request.ValidateOnly);
+                validateReusableArchives:
+                    (!request.PlanOnly && !request.ValidateOnly) ||
+                    request.CheckpointAppleApps);
             result.AppleAppPlan = applePlan;
-            if (request.PlanOnly || request.ValidateOnly)
+            if (request.PlanOnly || request.ValidateOnly || request.CheckpointAppleApps)
                 ScrubApplePlanCredentials(result.AppleAppPlan);
         }
 
@@ -473,7 +561,12 @@ internal sealed partial class PowerForgeReleaseService
 
                     if (!request.PlanOnly && !request.ValidateOnly)
                     {
-                        var dotNetTools = _runDotNetTools(dotNetPlan);
+                        request.CancellationToken.ThrowIfCancellationRequested();
+                        var toolProgress = request.Progress is IPowerForgeReleaseProgressReporterV2 detailedProgress
+                            ? new DotNetPublishReleaseProgressAdapter(detailedProgress, dotNetPlan)
+                            : null;
+                        var dotNetTools = _runDotNetTools(dotNetPlan, toolProgress, request.CancellationToken);
+                        request.CancellationToken.ThrowIfCancellationRequested();
                         FilterDotNetToolResult(dotNetTools, selectedToolOutputs);
                         result.DotNetTools = dotNetTools;
                         if (!dotNetTools.Succeeded)
@@ -487,7 +580,13 @@ internal sealed partial class PowerForgeReleaseService
                         var publishToolGitHub = request.PublishToolGitHub ?? spec.Tools!.GitHub.Publish;
                         if (publishToolGitHub)
                         {
-                            var releases = PublishDotNetToolGitHubReleases(spec, configDirectory, dotNetPlan, dotNetTools, sharedReleaseVersion);
+                            var releases = PublishDotNetToolGitHubReleases(
+                                spec,
+                                configDirectory,
+                                dotNetPlan,
+                                dotNetTools,
+                                sharedReleaseVersion,
+                                request.CancellationToken);
                             result.ToolGitHubReleases = releases;
                             var failures = releases.Where(entry => !entry.Success).ToArray();
                             if (failures.Length > 0)
@@ -514,7 +613,12 @@ internal sealed partial class PowerForgeReleaseService
 
                     if (!request.PlanOnly && !request.ValidateOnly)
                     {
-                        var tools = _runTools(toolPlan);
+                        request.CancellationToken.ThrowIfCancellationRequested();
+                        var tools = _runTools(
+                            toolPlan,
+                            request.Progress as IPowerForgeReleaseProgressReporterV2,
+                            request.CancellationToken);
+                        request.CancellationToken.ThrowIfCancellationRequested();
                         result.Tools = tools;
                         if (!tools.Success)
                         {
@@ -527,7 +631,11 @@ internal sealed partial class PowerForgeReleaseService
                         var publishToolGitHub = request.PublishToolGitHub ?? spec.Tools!.GitHub.Publish;
                         if (publishToolGitHub)
                         {
-                            var releases = PublishLegacyToolGitHubReleases(spec, configDirectory, tools);
+                            var releases = PublishLegacyToolGitHubReleases(
+                                spec,
+                                configDirectory,
+                                tools,
+                                request.CancellationToken);
                             result.ToolGitHubReleases = releases;
                             var failures = releases.Where(entry => !entry.Success).ToArray();
                             if (failures.Length > 0)
@@ -581,13 +689,19 @@ internal sealed partial class PowerForgeReleaseService
         }
         if (applePlan is not null)
         {
-            if (!request.PlanOnly && !request.ValidateOnly)
+            if (!request.PlanOnly &&
+                !request.ValidateOnly &&
+                (!request.CheckpointAppleApps || applePlan.Archive))
             {
                 var cleanup = new PowerForgeAppleReleaseCleanupReceipt();
                 PowerForgeAppleAppReleaseResult[] appleResults;
                 try
                 {
-                    if (applePlan.Action == PowerForgeAppleReleaseAction.Cleanup)
+                    if (request.CheckpointAppleApps)
+                    {
+                        appleResults = RunAppleArchiveCheckpoint(applePlan, out cleanup);
+                    }
+                    else if (applePlan.Action == PowerForgeAppleReleaseAction.Cleanup)
                     {
                         cleanup = _appleArtifactService.RemoveStaleArtifacts(applePlan);
                         appleResults = applePlan.Apps
@@ -618,8 +732,9 @@ internal sealed partial class PowerForgeReleaseService
                         .ToArray();
                 }
                 result.AppleApps = appleResults;
-                if (applePlan.Action != PowerForgeAppleReleaseAction.Configured ||
-                    appleResults.Any(static app => !app.Success))
+                if (!request.CheckpointAppleApps &&
+                    (applePlan.Action != PowerForgeAppleReleaseAction.Configured ||
+                     appleResults.Any(static app => !app.Success)))
                     result.AppleReceipt = CompleteAppleReleaseReceipt(applePlan, appleResults, cleanup);
 
                 var failure = appleResults.FirstOrDefault(entry => !entry.Success);
@@ -632,18 +747,63 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
 
+        if (deferredModulePublishRequest is not null &&
+            !request.PlanOnly &&
+            !request.ValidateOnly)
+        {
+            request.Progress?.PhaseStarted(
+                PowerForgeReleaseProgressPhase.Module,
+                1,
+                "Publishing the checkpointed PowerShell module after prerequisite lanes");
+            var modulePublication = ExecuteModuleRequest(
+                deferredModulePublishRequest,
+                ConfigurationGateMode.Publish,
+                includeModulePublishing: true,
+                noDotnetBuild: true,
+                skipInstall: true,
+                includeProjectPackages: false,
+                reuseStaging: deferredModulePublishRequest.ConfigPath is not null,
+                cancellationToken: request.CancellationToken);
+            result.ModulePublication = modulePublication;
+            if (!modulePublication.Succeeded)
+            {
+                var moduleSource = deferredModulePublishRequest.ConfigPath
+                    ?? deferredModulePublishRequest.ScriptPath
+                    ?? "module publish";
+                request.Progress?.PhaseFailed(
+                    PowerForgeReleaseProgressPhase.Module,
+                    BuildModuleFailureMessage(moduleSource, modulePublication));
+                result.Success = false;
+                result.ErrorMessage = BuildModuleFailureMessage(
+                    moduleSource,
+                    modulePublication);
+                return result;
+            }
+
+            request.Progress?.PhaseCompleted(
+                PowerForgeReleaseProgressPhase.Module,
+                "Module publication complete");
+        }
+
         if (!request.PlanOnly && !request.ValidateOnly && !explicitAppleAction)
         {
             PopulateReleaseOutputs(spec, request, configDirectory, result, sharedReleaseVersion);
+            result.ToolGitHubReleasePlans = BuildToolGitHubReleasePlans(spec, result);
             GenerateWingetOutputs(spec, request, configDirectory, result);
             IncludeWingetOutputsInReleaseAssets(result);
+            RewriteReleaseSummaryFiles(result);
             if (publishUnifiedGitHub)
             {
                 request.Progress?.PhaseStarted(
                     PowerForgeReleaseProgressPhase.GitHub,
                     result.ReleaseAssets.Length,
                     $"Uploading {result.ReleaseAssets.Length} release asset(s)");
-                var unifiedGitHubRelease = PublishUnifiedGitHubRelease(spec, configDirectory, result, sharedReleaseVersion);
+                var unifiedGitHubRelease = PublishUnifiedGitHubRelease(
+                    spec,
+                    configDirectory,
+                    result,
+                    sharedReleaseVersion,
+                    request.CancellationToken);
                 result.UnifiedGitHubRelease = unifiedGitHubRelease;
                 if (!unifiedGitHubRelease.Success)
                 {
@@ -657,10 +817,138 @@ internal sealed partial class PowerForgeReleaseService
                     unifiedGitHubRelease.ReleaseUrl ?? "GitHub release published");
             }
             SubmitWingetOutputs(spec, request, configDirectory, result);
-            RewriteReleaseSummaryFiles(result);
         }
 
         return result;
+    }
+
+    internal static PowerForgeReleaseSpec LoadConfiguration(string configPath)
+    {
+        if (string.IsNullOrWhiteSpace(configPath))
+            throw new ArgumentException("ConfigPath is required.", nameof(configPath));
+
+        var fullPath = Path.GetFullPath(configPath.Trim().Trim('"'));
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException($"Unified release config was not found: {fullPath}", fullPath);
+
+        var spec = JsonSerializer.Deserialize<PowerForgeReleaseSpec>(
+            File.ReadAllText(fullPath),
+            CreateJsonOptions());
+        return spec ?? throw new InvalidOperationException($"Unable to deserialize unified release config: {fullPath}");
+    }
+
+    internal PowerForgeReleaseResult PublishBuiltReleaseOutputs(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        PowerForgeReleaseResult builtResult)
+    {
+        if (spec is null)
+            throw new ArgumentNullException(nameof(spec));
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (builtResult is null)
+            throw new ArgumentNullException(nameof(builtResult));
+        if (string.IsNullOrWhiteSpace(request.ConfigPath))
+            throw new ArgumentException("ConfigPath is required.", nameof(request));
+
+        request.CancellationToken.ThrowIfCancellationRequested();
+
+        var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
+        var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
+        var sharedReleaseVersion = request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, builtResult);
+
+        if (spec.AppleApps is not null)
+        {
+            request.CancellationToken.ThrowIfCancellationRequested();
+            var appleResult = Execute(
+                spec,
+                new PowerForgeReleaseRequest {
+                    ConfigPath = configPath,
+                    AppleOnly = true,
+                    AppleAction = request.AppleAction,
+                    AppleActionConfirmed = request.AppleActionConfirmed,
+                    AppleResume = request.AppleResume,
+                    AppleWaitForProcessing = request.AppleWaitForProcessing,
+                    AppleProcessingTimeoutSeconds = request.AppleProcessingTimeoutSeconds,
+                    ApplePollIntervalSeconds = request.ApplePollIntervalSeconds,
+                    Configuration = request.Configuration,
+                    ModuleRunMode = ConfigurationGateMode.Publish,
+                    PublishProjectGitHub = false,
+                    PublishToolGitHub = false,
+                    SubmitWinget = false,
+                    ResolvedReleaseVersion = sharedReleaseVersion,
+                    CancellationToken = request.CancellationToken
+                });
+            builtResult.AppleAppPlan = appleResult.AppleAppPlan;
+            builtResult.AppleApps = appleResult.AppleApps;
+            builtResult.AppleReceipt = appleResult.AppleReceipt;
+            if (!appleResult.Success)
+            {
+                builtResult.Success = false;
+                builtResult.ErrorMessage = appleResult.ErrorMessage ?? "Apple application release failed.";
+                return builtResult;
+            }
+        }
+
+        if (spec.Tools is not null && (request.PublishToolGitHub ?? spec.Tools.GitHub.Publish))
+        {
+            request.CancellationToken.ThrowIfCancellationRequested();
+            if (builtResult.DotNetToolPlan is not null && builtResult.DotNetTools is not null)
+            {
+                builtResult.ToolGitHubReleases = PublishDotNetToolGitHubReleases(
+                    spec,
+                    configDirectory,
+                    builtResult.DotNetToolPlan,
+                    builtResult.DotNetTools,
+                    sharedReleaseVersion,
+                    request.CancellationToken);
+            }
+            else if (builtResult.Tools is not null)
+            {
+                builtResult.ToolGitHubReleases = PublishLegacyToolGitHubReleases(
+                    spec,
+                    configDirectory,
+                    builtResult.Tools,
+                    request.CancellationToken);
+            }
+
+            var toolFailure = builtResult.ToolGitHubReleases.FirstOrDefault(static release => !release.Success);
+            if (toolFailure is not null)
+            {
+                builtResult.Success = false;
+                builtResult.ErrorMessage = toolFailure.ErrorMessage ?? "Tool GitHub release publishing failed.";
+                return builtResult;
+            }
+        }
+
+        var moduleSelected = spec.Module is not null && !request.PackagesOnly && !request.ToolsOnly;
+        if (ShouldPublishUnifiedGitHub(spec, request, moduleSelected))
+        {
+            request.CancellationToken.ThrowIfCancellationRequested();
+            var unified = PublishUnifiedGitHubRelease(
+                spec,
+                configDirectory,
+                builtResult,
+                sharedReleaseVersion,
+                request.CancellationToken);
+            builtResult.UnifiedGitHubRelease = unified;
+            if (!unified.Success)
+            {
+                builtResult.Success = false;
+                builtResult.ErrorMessage = unified.ErrorMessage ?? "Unified GitHub release publishing failed.";
+                return builtResult;
+            }
+        }
+
+        request.CancellationToken.ThrowIfCancellationRequested();
+        SubmitWingetOutputs(spec, request, configDirectory, builtResult);
+        request.CancellationToken.ThrowIfCancellationRequested();
+        if (!builtResult.Success)
+            return builtResult;
+
+        builtResult.Success = true;
+        builtResult.ErrorMessage = null;
+        return builtResult;
     }
 
     private static TResult WithRequestTargets<TResult>(PowerForgeReleaseRequest request, string[] targets, Func<TResult> action)
@@ -846,57 +1134,100 @@ internal sealed partial class PowerForgeReleaseService
         var repositoryRoot = Path.GetFullPath(Path.IsPathRooted(options.RepositoryRoot)
             ? options.RepositoryRoot!
             : Path.Combine(configDirectory, string.IsNullOrWhiteSpace(options.RepositoryRoot) ? "." : options.RepositoryRoot!));
-        var scriptPath = Path.GetFullPath(Path.IsPathRooted(options.ScriptPath)
-            ? options.ScriptPath!
-            : Path.Combine(repositoryRoot, string.IsNullOrWhiteSpace(options.ScriptPath) ? Path.Combine("Module", "Build", "Build-Module.ps1") : options.ScriptPath!));
-        var modulePath = string.IsNullOrWhiteSpace(options.ModulePath)
+        var hasConfigPath = !string.IsNullOrWhiteSpace(options.ConfigPath);
+        var hasScriptPath = !string.IsNullOrWhiteSpace(options.ScriptPath);
+        if (hasConfigPath && hasScriptPath)
+            throw new InvalidOperationException("Module.ConfigPath and Module.ScriptPath are mutually exclusive.");
+
+        var configPath = hasConfigPath
+            ? Path.GetFullPath(Path.IsPathRooted(options.ConfigPath)
+                ? options.ConfigPath!
+                : Path.Combine(repositoryRoot, options.ConfigPath!))
+            : null;
+        var scriptPath = hasConfigPath
+            ? null
+            : Path.GetFullPath(Path.IsPathRooted(options.ScriptPath)
+                ? options.ScriptPath!
+                : Path.Combine(repositoryRoot, string.IsNullOrWhiteSpace(options.ScriptPath) ? Path.Combine("Module", "Build", "Build-Module.ps1") : options.ScriptPath!));
+        var effectiveConfiguration = configurationOverride ?? "Release";
+        // JSON-backed module builds need an explicit modern host selection. Legacy
+        // script entry points historically left Framework unset so they could run
+        // under Windows PowerShell or older compatible PowerShell Core hosts.
+        var effectiveModuleFramework = request.ModuleFramework
+            ?? options.Framework
+            ?? (hasConfigPath ? "auto" : null);
+        var moduleImportFramework = string.Equals(effectiveModuleFramework, "auto", StringComparison.OrdinalIgnoreCase)
+            ? "net8.0"
+            : effectiveModuleFramework ?? "net8.0";
+        var requestedModulePath = request.ModuleHostPath ?? options.ModulePath;
+        var configuredModulePath = ExpandModulePath(requestedModulePath, effectiveConfiguration, moduleImportFramework);
+        var modulePath = string.IsNullOrWhiteSpace(requestedModulePath)
             ? "PSPublishModule"
-            : Path.IsPathRooted(options.ModulePath)
-                ? options.ModulePath!
-                : Path.Combine(repositoryRoot, options.ModulePath!);
+            : Path.IsPathRooted(configuredModulePath)
+                ? configuredModulePath
+                : Path.Combine(repositoryRoot, configuredModulePath);
         var manifestPath = string.IsNullOrWhiteSpace(options.ManifestPath)
             ? null
             : Path.GetFullPath(Path.IsPathRooted(options.ManifestPath)
                 ? options.ManifestPath!
                 : Path.Combine(repositoryRoot, options.ManifestPath!));
 
-        if (!File.Exists(scriptPath))
+        if (configPath is not null && !File.Exists(configPath))
+            throw new FileNotFoundException($"Module build config was not found: {configPath}", configPath);
+        var moduleConfig = configPath is null
+            ? null
+            : new ModulePipelineConfigurationService().Load(configPath);
+        if (scriptPath is not null && !File.Exists(scriptPath))
             throw new FileNotFoundException($"Module build script was not found: {scriptPath}", scriptPath);
+        if (!request.PlanOnly &&
+            !request.ValidateOnly &&
+            !string.IsNullOrWhiteSpace(requestedModulePath) &&
+            !File.Exists(modulePath))
+            throw new FileNotFoundException($"Configured module assembly was not found: {modulePath}", modulePath);
         if (!string.IsNullOrWhiteSpace(manifestPath) && !File.Exists(manifestPath))
             throw new FileNotFoundException($"Module manifest was not found: {manifestPath}", manifestPath);
 
         var artifactPaths = (options.ArtifactPaths ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Select(path => Path.GetFullPath(Path.IsPathRooted(path)
-                ? path
-                : Path.Combine(repositoryRoot, path)))
+            .Select(path => PathTokenProtection.GetFullPath(repositoryRoot, path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var timeoutSeconds = request.ModuleTimeoutSeconds ?? options.TimeoutSeconds;
         if (timeoutSeconds <= 0)
             throw new InvalidOperationException("Module TimeoutSeconds must be greater than zero.");
         var includeProjectPackages = options.IncludesPackages && !request.ModuleOnly;
+        var noDotnetBuildOverride = request.ModuleNoDotnetBuild ?? options.NoDotnetBuild;
+        var signModuleOverride = request.ModuleSignModule ?? options.SignModule;
+        var moduleName = string.IsNullOrWhiteSpace(options.ModuleName)
+            ? moduleConfig?.Spec.Build.Name
+            : options.ModuleName;
 
         var buildRequest = new ModuleBuildHostBuildRequest
         {
             RepositoryRoot = repositoryRoot,
+            ConfigPath = configPath,
             ScriptPath = scriptPath,
             ModulePath = modulePath,
             Configuration = configurationOverride,
-            Framework = request.ModuleFramework ?? options.Framework,
+            Framework = effectiveModuleFramework,
             RunMode = ResolveModuleRunMode(options, request, packagePublishingRequested),
             PowerForgeReleaseStage = true,
             UnifiedGitHubRelease = publishUnifiedGitHub,
-            NoDotnetBuild = request.ModuleNoDotnetBuild ?? options.NoDotnetBuild ?? false,
+            NoDotnetBuild = noDotnetBuildOverride ?? false,
+            NoDotnetBuildWasSpecified = noDotnetBuildOverride.HasValue,
             ModuleVersion = string.IsNullOrWhiteSpace(request.ResolvedReleaseVersion)
                 ? request.ModuleVersion ?? options.ModuleVersion
                 : PackageVersionUtility.GetNumericVersion(request.ResolvedReleaseVersion!),
             PreReleaseTag = string.IsNullOrWhiteSpace(request.ResolvedReleaseVersion)
                 ? request.ModulePreReleaseTag ?? options.PreReleaseTag
-                : NullIfEmpty(PackageVersionUtility.GetPrereleaseVersion(request.ResolvedReleaseVersion!)),
+                : PackageVersionUtility.GetPrereleaseVersion(request.ResolvedReleaseVersion!) ?? string.Empty,
+            StagingPath = request.ModuleStagingPath,
             NoSign = request.ModuleNoSign ?? options.NoSign ?? false,
-            SignModule = request.ModuleSignModule ?? options.SignModule ?? false,
+            SkipInstall = request.ModuleSkipInstall ?? false,
+            SignModule = signModuleOverride ?? false,
+            SignModuleWasSpecified = signModuleOverride.HasValue,
             IncludeProjectPackages = includeProjectPackages,
+            IncludeModulePublishing = request.ModuleIncludePublishing ?? true,
             Timeout = TimeSpan.FromSeconds(timeoutSeconds),
             CertificateThumbprint = request.ModuleCertificateThumbprint,
             SignIncludeBinaries = request.ModuleSignIncludeBinaries,
@@ -908,10 +1239,13 @@ internal sealed partial class PowerForgeReleaseService
             FailOnNewDiagnostics = request.ModuleFailOnNewDiagnostics,
             FailOnDiagnosticsSeverity = request.ModuleFailOnDiagnosticsSeverity
         };
+        buildRequest.Progress = request.Progress as IPowerForgeReleaseProgressReporterV2;
 
         var plan = new PowerForgeModuleReleasePlanSummary
         {
+            ModuleName = moduleName,
             RepositoryRoot = repositoryRoot,
+            ConfigPath = configPath,
             ScriptPath = scriptPath,
             ModulePath = modulePath,
             ManifestPath = manifestPath,
@@ -923,8 +1257,10 @@ internal sealed partial class PowerForgeReleaseService
             TimeoutSeconds = timeoutSeconds,
             NoDotnetBuild = buildRequest.NoDotnetBuild,
             ModuleVersion = buildRequest.ModuleVersion,
-            PreReleaseTag = buildRequest.PreReleaseTag,
+            PreReleaseTag = NullIfEmpty(buildRequest.PreReleaseTag ?? string.Empty),
+            StagingPath = buildRequest.StagingPath,
             NoSign = buildRequest.NoSign,
+            SkipInstall = buildRequest.SkipInstall,
             SignModule = buildRequest.SignModule,
             PowerForgeReleaseStage = buildRequest.PowerForgeReleaseStage,
             UnifiedGitHubRelease = buildRequest.UnifiedGitHubRelease,
@@ -932,6 +1268,43 @@ internal sealed partial class PowerForgeReleaseService
         };
 
         return (buildRequest, plan, artifactPaths);
+    }
+
+    private static string ExpandModulePath(string? path, string configuration, string framework)
+        => string.IsNullOrWhiteSpace(path)
+            ? string.Empty
+            : ReplaceModulePathToken(
+                ReplaceModulePathToken(path!, "{Configuration}", configuration),
+                "{Framework}",
+                framework);
+
+    private static string ReplaceModulePathToken(string path, string token, string value)
+        => System.Text.RegularExpressions.Regex.Replace(
+            path,
+            System.Text.RegularExpressions.Regex.Escape(token),
+            _ => value,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    internal static string[] ExpandModuleArtifactPaths(
+        IEnumerable<string>? artifactPaths,
+        string? moduleName,
+        string? moduleVersion,
+        string? preReleaseTag)
+    {
+        if (string.IsNullOrWhiteSpace(moduleName) ||
+            string.IsNullOrWhiteSpace(NormalizeReleaseVersion(moduleVersion)))
+        {
+            return (artifactPaths ?? Array.Empty<string>()).ToArray();
+        }
+
+        return (artifactPaths ?? Array.Empty<string>())
+            .Select(path => ModulePathTokenFormatter.ReplacePathTokens(
+                path,
+                moduleName!,
+                moduleVersion!,
+                preReleaseTag))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static ConfigurationGateMode ResolveModuleRunMode(
@@ -1625,6 +1998,36 @@ internal sealed partial class PowerForgeReleaseService
         return plan.Apps.Select(app => resultsByApp[app]).ToArray();
     }
 
+    private PowerForgeAppleAppReleaseResult[] RunAppleArchiveCheckpoint(
+        PowerForgeAppleReleasePlan plan,
+        out PowerForgeAppleReleaseCleanupReceipt cleanup)
+    {
+        var checkpointPlan = new PowerForgeAppleReleasePlan
+        {
+            ProjectRoot = plan.ProjectRoot,
+            Configuration = plan.Configuration,
+            Action = PowerForgeAppleReleaseAction.Archive,
+            Automation = new PowerForgeAppleReleaseAutomationOptions(),
+            ReceiptPath = plan.ReceiptPath,
+            Archive = true,
+            Upload = false,
+            XcodeBuildExecutable = plan.XcodeBuildExecutable,
+            AllowProvisioningUpdates = plan.AllowProvisioningUpdates,
+            ManageAppVersionAndBuildNumber = plan.ManageAppVersionAndBuildNumber,
+            UploadSymbols = plan.UploadSymbols,
+            GenerateAppStoreInformation = plan.GenerateAppStoreInformation,
+            SigningStyle = plan.SigningStyle,
+            AppStoreConnectApiKeyPath = plan.AppStoreConnectApiKeyPath,
+            AppStoreConnectApiKeyId = plan.AppStoreConnectApiKeyId,
+            AppStoreConnectApiIssuerId = plan.AppStoreConnectApiIssuerId,
+            Apps = plan.Apps
+        };
+        var results = RunAppleRelease(checkpointPlan, out cleanup);
+        if (results.All(static app => app.Success))
+            plan.Archive = false;
+        return results;
+    }
+
     private static PowerForgeAppleAppReleaseResult[] CompleteAppleExecutionFailure(
         PowerForgeAppleReleasePlan plan,
         Dictionary<PowerForgeAppleAppReleaseTargetPlan, PowerForgeAppleAppReleaseResult> resultsByApp,
@@ -2230,13 +2633,32 @@ internal sealed partial class PowerForgeReleaseService
         }
     }
 
-    private static bool ShouldPublishUnifiedGitHub(PowerForgeReleaseSpec spec, PowerForgeReleaseRequest request)
+    internal static bool ShouldPublishUnifiedGitHub(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        bool moduleSelected)
     {
+        if (request.ModuleRunMode.HasValue &&
+            request.ModuleRunMode.Value != ConfigurationGateMode.Publish)
+        {
+            return false;
+        }
+
         if (request.ToolsOnly && request.PublishToolGitHub == true)
             return false;
 
         if (request.PackagesOnly && request.PublishProjectGitHub == true)
             return false;
+
+        if (moduleSelected && spec.Module is not null)
+        {
+            var packagePublishingRequested =
+                !request.ModuleOnly &&
+                ((request.PublishNuget ?? spec.Packages?.PublishNuget) == true ||
+                 (request.PublishProjectGitHub ?? spec.Packages?.PublishGitHub) == true);
+            if (ResolveModuleRunMode(spec.Module!, request, packagePublishingRequested) != ConfigurationGateMode.Publish)
+                return false;
+        }
 
         return spec.GitHub is not null && (request.PublishProjectGitHub ?? spec.GitHub.Publish);
     }
@@ -2283,7 +2705,12 @@ internal sealed partial class PowerForgeReleaseService
                 throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' is missing ShortDescription.");
 
             var installerEntries = package.Installers
-                .Select(installer => ResolveWingetInstallerEntry(installer, winget, package, result.ReleaseAssetEntries, result.ToolGitHubReleases))
+                .Select(installer => ResolveWingetInstallerEntry(
+                    installer,
+                    winget,
+                    package,
+                    result.ReleaseAssetEntries,
+                    result.ToolGitHubReleases.Concat(result.ToolGitHubReleasePlans).ToArray()))
                 .ToArray();
             if (installerEntries.Length == 0)
                 throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' did not resolve any installers.");
@@ -2407,7 +2834,8 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeReleaseSpec spec,
         string configDirectory,
         PowerForgeReleaseResult result,
-        string? sharedReleaseVersion)
+        string? sharedReleaseVersion,
+        CancellationToken cancellationToken)
     {
         var gitHub = spec.GitHub ?? throw new InvalidOperationException("Unified GitHub release options were not configured.");
         var version = ResolveUnifiedReleaseVersion(gitHub, result, sharedReleaseVersion);
@@ -2424,16 +2852,52 @@ internal sealed partial class PowerForgeReleaseService
         if (resolved.Error is not null)
             return resolved.Error;
 
-        var assets = result.ReleaseAssets
-            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+        var expectedAssets = result.ReleaseAssets
             .Concat(new[]
             {
                 result.ReleaseManifestPath,
                 result.ReleaseChecksumsPath
-            }.Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
+            })
+            .Where(path => !string.IsNullOrWhiteSpace(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(path => path!)
             .ToArray();
+        var missingAssets = expectedAssets
+            .Where(static path => !File.Exists(path))
+            .ToArray();
+        if (missingAssets.Length > 0)
+        {
+            return new PowerForgeUnifiedGitHubReleaseResult
+            {
+                Owner = resolved.Owner ?? string.Empty,
+                Repository = resolved.Repository ?? string.Empty,
+                Version = version!,
+                Success = false,
+                ErrorMessage = "Checkpointed unified GitHub release assets are missing: " +
+                               string.Join(", ", missingAssets)
+            };
+        }
+
+        var duplicateAssetNames = expectedAssets
+            .GroupBy(static path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+            .Where(static group => group.Count() > 1)
+            .ToArray();
+        if (duplicateAssetNames.Length > 0)
+        {
+            var collisions = duplicateAssetNames
+                .Select(group => $"{group.Key}: {string.Join(", ", group)}");
+            return new PowerForgeUnifiedGitHubReleaseResult
+            {
+                Owner = resolved.Owner ?? string.Empty,
+                Repository = resolved.Repository ?? string.Empty,
+                Version = version!,
+                Success = false,
+                ErrorMessage = "Unified GitHub release assets must have unique file names: " +
+                               string.Join("; ", collisions)
+            };
+        }
+
+        var assets = expectedAssets;
         if (assets.Length == 0)
         {
             return new PowerForgeUnifiedGitHubReleaseResult
@@ -2457,19 +2921,21 @@ internal sealed partial class PowerForgeReleaseService
 
         try
         {
-            var publishResult = _publishGitHubRelease(new GitHubReleasePublishRequest
-            {
-                Owner = resolved.Owner!,
-                Repository = resolved.Repository!,
-                Token = resolved.Token!,
-                TagName = tagName,
-                ReleaseName = releaseName,
-                GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
-                IsPreRelease = gitHub.IsPreRelease,
-                ReuseExistingReleaseOnConflict = true,
-                ReplaceExistingAssets = gitHub.ReplaceExistingAssets,
-                AssetFilePaths = assets
-            });
+            var publishResult = _publishGitHubRelease(
+                new GitHubReleasePublishRequest
+                {
+                    Owner = resolved.Owner!,
+                    Repository = resolved.Repository!,
+                    Token = resolved.Token!,
+                    TagName = tagName,
+                    ReleaseName = releaseName,
+                    GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
+                    IsPreRelease = gitHub.IsPreRelease,
+                    ReuseExistingReleaseOnConflict = true,
+                    ReplaceExistingAssets = gitHub.ReplaceExistingAssets,
+                    AssetFilePaths = assets
+                },
+                cancellationToken);
 
             return new PowerForgeUnifiedGitHubReleaseResult
             {
@@ -2486,6 +2952,10 @@ internal sealed partial class PowerForgeReleaseService
                 SkippedExistingAssets = publishResult.SkippedExistingAssets?.ToArray() ?? Array.Empty<string>(),
                 ReplacedExistingAssets = publishResult.ReplacedExistingAssets?.ToArray() ?? Array.Empty<string>()
             };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -2506,7 +2976,8 @@ internal sealed partial class PowerForgeReleaseService
     private PowerForgeToolGitHubReleaseResult[] PublishLegacyToolGitHubReleases(
         PowerForgeReleaseSpec spec,
         string configDirectory,
-        PowerForgeToolReleaseResult result)
+        PowerForgeToolReleaseResult result,
+        CancellationToken cancellationToken)
     {
         var gitHub = spec.Tools?.GitHub ?? new PowerForgeToolReleaseGitHubOptions();
         var resolved = ResolveGitHubConfiguration(spec, gitHub, configDirectory);
@@ -2558,7 +3029,8 @@ internal sealed partial class PowerForgeReleaseService
                 gitHub,
                 group.Key.Target,
                 group.Key.Version,
-                assets));
+                assets,
+                cancellationToken));
         }
 
         return results.ToArray();
@@ -2569,7 +3041,8 @@ internal sealed partial class PowerForgeReleaseService
         string configDirectory,
         DotNetPublishPlan plan,
         DotNetPublishResult result,
-        string? sharedReleaseVersion)
+        string? sharedReleaseVersion,
+        CancellationToken cancellationToken)
     {
         var gitHub = spec.Tools?.GitHub ?? new PowerForgeToolReleaseGitHubOptions();
         var resolved = ResolveGitHubConfiguration(spec, gitHub, configDirectory);
@@ -2653,7 +3126,8 @@ internal sealed partial class PowerForgeReleaseService
                 gitHub,
                 target.Name,
                 version!,
-                uniqueAssets));
+                uniqueAssets,
+                cancellationToken));
         }
 
         return releases.ToArray();
@@ -2666,7 +3140,8 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeToolReleaseGitHubOptions gitHub,
         string target,
         string version,
-        string[] assets)
+        string[] assets,
+        CancellationToken cancellationToken)
     {
         var tagTemplate = string.IsNullOrWhiteSpace(gitHub.TagTemplate)
             ? "{Target}-v{Version}"
@@ -2680,19 +3155,21 @@ internal sealed partial class PowerForgeReleaseService
 
         try
         {
-            var publishResult = _publishGitHubRelease(new GitHubReleasePublishRequest
-            {
-                Owner = owner,
-                Repository = repository,
-                Token = token,
-                TagName = tagName,
-                ReleaseName = releaseName,
-                GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
-                IsPreRelease = gitHub.IsPreRelease,
-                ReuseExistingReleaseOnConflict = true,
-                ReplaceExistingAssets = gitHub.ReplaceExistingAssets,
-                AssetFilePaths = assets
-            });
+            var publishResult = _publishGitHubRelease(
+                new GitHubReleasePublishRequest
+                {
+                    Owner = owner,
+                    Repository = repository,
+                    Token = token,
+                    TagName = tagName,
+                    ReleaseName = releaseName,
+                    GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
+                    IsPreRelease = gitHub.IsPreRelease,
+                    ReuseExistingReleaseOnConflict = true,
+                    ReplaceExistingAssets = gitHub.ReplaceExistingAssets,
+                    AssetFilePaths = assets
+                },
+                cancellationToken);
 
             return new PowerForgeToolGitHubReleaseResult
             {
@@ -2710,6 +3187,10 @@ internal sealed partial class PowerForgeReleaseService
                 SkippedExistingAssets = publishResult.SkippedExistingAssets?.ToArray() ?? Array.Empty<string>(),
                 ReplacedExistingAssets = publishResult.ReplacedExistingAssets?.ToArray() ?? Array.Empty<string>()
             };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -2733,13 +3214,8 @@ internal sealed partial class PowerForgeReleaseService
         if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
             return sharedReleaseVersion;
 
-        if (!string.IsNullOrWhiteSpace(target.ProjectPath)
-            && File.Exists(target.ProjectPath)
-            && CsprojVersionEditor.TryGetVersion(target.ProjectPath, out var version)
-            && !string.IsNullOrWhiteSpace(version))
-        {
-            return version;
-        }
+        if (!string.IsNullOrWhiteSpace(target.Version))
+            return target.Version;
 
         var msiVersion = (result.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
             .Where(entry => string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase))
@@ -3790,14 +4266,9 @@ internal sealed partial class PowerForgeReleaseService
         if (target is null)
             return null;
 
-        var version = !string.IsNullOrWhiteSpace(target.ProjectPath)
-            && File.Exists(target.ProjectPath)
-            && CsprojVersionEditor.TryGetVersion(target.ProjectPath, out var resolvedVersion)
-            && !string.IsNullOrWhiteSpace(resolvedVersion)
-            ? resolvedVersion
-            : null;
-
-        return version;
+        return string.IsNullOrWhiteSpace(target.Version)
+            ? null
+            : target.Version;
     }
 
     private static object? BuildPackageManifestSection(ProjectBuildHostExecutionResult? packages)
@@ -4252,6 +4723,11 @@ internal sealed partial class PowerForgeReleaseService
             packages.CertificateStore = request.PackageSignStore!.Trim();
         if (!string.IsNullOrWhiteSpace(request.PackageSignTimestampUrl))
             packages.TimeStampServer = request.PackageSignTimestampUrl!.Trim();
+        if (request.EnableSigning == false)
+        {
+            packages.SignAssemblies = false;
+            packages.SignPackages = false;
+        }
     }
 
     private static void ApplyToolRequestOverrides(PowerForgeToolReleaseSpec tools, PowerForgeReleaseRequest request, string? configurationOverride)
@@ -4296,7 +4772,7 @@ internal sealed partial class PowerForgeReleaseService
 
     private static bool HasSigningOverrides(PowerForgeReleaseRequest request)
     {
-        return request.EnableSigning == true
+        return request.EnableSigning.HasValue
             || !string.IsNullOrWhiteSpace(request.SignProfile)
             || HasExplicitSigningValueOverrides(request);
     }

@@ -112,12 +112,12 @@ function Write-CommandMetadata {
 
 $helpPath = Find-HelpFile
 if (-not $helpPath -and -not $SkipBuild) {
-    & (Join-Path $moduleRoot 'Build\Build-Module.ps1')
+    & (Join-Path $repoRoot 'Build\Build-Project.ps1') -ModuleOnly -RunMode Documentation
     $helpPath = Find-HelpFile
 }
 
 if (-not $helpPath) {
-    throw "Unable to find $moduleName external help. Run .\Module\Build\Build-Module.ps1 first."
+    throw "Unable to find $moduleName external help. Run .\Build\Build-Project.ps1 -ModuleOnly -RunMode Documentation first."
 }
 
 Test-PlaceholderContent -Path $helpPath

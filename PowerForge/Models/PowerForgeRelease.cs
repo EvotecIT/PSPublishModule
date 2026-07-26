@@ -36,6 +36,7 @@ internal sealed class PowerForgeReleaseRequest
 {
     internal string? ResolvedReleaseVersion { get; set; }
     internal IPowerForgeReleaseProgressReporter? Progress { get; set; }
+    internal CancellationToken CancellationToken { get; set; }
 
     public string ConfigPath { get; set; } = string.Empty;
 
@@ -49,6 +50,15 @@ internal sealed class PowerForgeReleaseRequest
 
     public bool ToolsOnly { get; set; }
 
+    public bool AppleOnly { get; set; }
+
+    /// <summary>
+    /// Prevents configured Apple application lanes from running while other unified release lanes execute.
+    /// </summary>
+    public bool SkipAppleApps { get; set; }
+
+    internal bool CheckpointAppleApps { get; set; }
+
     public bool? PublishNuget { get; set; }
 
     public bool? PublishProjectGitHub { get; set; }
@@ -59,6 +69,8 @@ internal sealed class PowerForgeReleaseRequest
 
     public string? ModuleFramework { get; set; }
 
+    public string? ModuleHostPath { get; set; }
+
     public ConfigurationGateMode? ModuleRunMode { get; set; }
 
     public bool? ModuleNoDotnetBuild { get; set; }
@@ -67,9 +79,15 @@ internal sealed class PowerForgeReleaseRequest
 
     public string? ModulePreReleaseTag { get; set; }
 
+    internal string? ModuleStagingPath { get; set; }
+
     public bool? ModuleNoSign { get; set; }
 
+    public bool? ModuleSkipInstall { get; set; }
+
     public bool? ModuleSignModule { get; set; }
+
+    internal bool? ModuleIncludePublishing { get; set; }
 
     public int? ModuleTimeoutSeconds { get; set; }
 
@@ -225,7 +243,12 @@ internal sealed class PowerForgeReleaseResult
 
     public ModuleBuildHostExecutionResult? Module { get; set; }
 
+    public ModuleBuildHostExecutionResult? ModulePublication { get; set; }
+
     public string[] ModuleAssets { get; set; } = Array.Empty<string>();
+
+    public PowerForgeModulePackageReleaseCheckpoint[] ModulePackagePlans { get; set; } =
+        Array.Empty<PowerForgeModulePackageReleaseCheckpoint>();
 
     public ProjectBuildHostExecutionResult? Packages { get; set; }
 
@@ -248,6 +271,8 @@ internal sealed class PowerForgeReleaseResult
     public WorkspaceValidationResult? WorkspaceValidation { get; set; }
 
     public PowerForgeToolGitHubReleaseResult[] ToolGitHubReleases { get; set; } = Array.Empty<PowerForgeToolGitHubReleaseResult>();
+
+    public PowerForgeToolGitHubReleaseResult[] ToolGitHubReleasePlans { get; set; } = Array.Empty<PowerForgeToolGitHubReleaseResult>();
 
     public string[] ReleaseAssets { get; set; } = Array.Empty<string>();
 
@@ -347,11 +372,11 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public PowerForgeAppleReleaseAutomationOptions Automation { get; set; } = new();
 
-    internal string? AppStoreConnectApiKeyPath { get; set; }
+    public string? AppStoreConnectApiKeyPath { get; set; }
 
-    internal string? AppStoreConnectApiKeyId { get; set; }
+    public string? AppStoreConnectApiKeyId { get; set; }
 
-    internal string? AppStoreConnectApiIssuerId { get; set; }
+    public string? AppStoreConnectApiIssuerId { get; set; }
 
     public string? ScreenshotConfigPath { get; set; }
 
@@ -830,6 +855,10 @@ internal sealed class PowerForgeModuleReleaseOptions
 {
     public string? RepositoryRoot { get; set; }
 
+    public string? ModuleName { get; set; }
+
+    public string? ConfigPath { get; set; }
+
     public string? ScriptPath { get; set; }
 
     public string? ModulePath { get; set; }
@@ -861,9 +890,13 @@ internal sealed class PowerForgeModuleReleaseOptions
 
 internal sealed class PowerForgeModuleReleasePlanSummary
 {
+    public string? ModuleName { get; set; }
+
     public string RepositoryRoot { get; set; } = string.Empty;
 
-    public string ScriptPath { get; set; } = string.Empty;
+    public string? ConfigPath { get; set; }
+
+    public string? ScriptPath { get; set; }
 
     public string ModulePath { get; set; } = string.Empty;
 
@@ -887,7 +920,11 @@ internal sealed class PowerForgeModuleReleasePlanSummary
 
     public string? PreReleaseTag { get; set; }
 
+    public string? StagingPath { get; set; }
+
     public bool NoSign { get; set; }
+
+    public bool SkipInstall { get; set; }
 
     public bool SignModule { get; set; }
 

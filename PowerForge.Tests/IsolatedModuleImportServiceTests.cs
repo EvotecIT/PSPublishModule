@@ -3,6 +3,7 @@ using System.IO;
 
 namespace PowerForge.Tests;
 
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed class IsolatedModuleImportServiceTests
 {
     [Fact]

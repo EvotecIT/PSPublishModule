@@ -10,6 +10,61 @@ namespace PowerForge.Tests;
 public sealed class ModulePipelineExportAssemblyInferenceTests
 {
     [Fact]
+    public void Plan_SkipDotNetBuild_OverridesConfiguredProjectAndBinaryRequirements()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "repo"));
+            var csprojPath = Path.Combine(projectRoot.FullName, "SampleModule.csproj");
+            File.WriteAllText(csprojPath, "<Project />");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "SampleModule",
+                    SourcePath = projectRoot.FullName,
+                    CsprojPath = csprojPath,
+                    Version = "1.0.0",
+                    Frameworks = ["net8.0"],
+                    ExportAssemblies = ["SampleModule.dll"],
+                    SkipDotNetBuild = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments =
+                [
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            SyncNETProjectVersion = true,
+                            ResolveBinaryConflicts = new ResolveBinaryConflictsConfiguration
+                            {
+                                ProjectName = "SampleModule"
+                            }
+                        }
+                    }
+                ]
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.True(string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath));
+            Assert.True(plan.BuildSpec.SkipDotNetBuild);
+            Assert.Null(plan.ResolvedCsprojPath);
+            Assert.False(plan.SyncNETProjectVersion);
+            Assert.Equal(
+                new[] { "SyncNETProjectVersion", "NETFramework", "NETBinaryModule", "ResolveBinaryConflictsName" },
+                plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Plan_InferExportAssembly_FromLegacyProjectName_WhenNotExplicitlyProvided()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -47,6 +102,52 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
         finally
         {
             try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void BuildToStaging_SkipDotNetBuild_AcceptsExtensionlessInferredExportAssembly()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "SampleModule";
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+            WriteMinimalBinaryModule(projectRoot.FullName, moduleName);
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0",
+                    SkipDotNetBuild = true,
+                    ExcludeDirectories = ["Lib"],
+                    ExportAssemblies = Array.Empty<string>()
+                },
+                Segments =
+                [
+                    new ConfigurationBuildLibrariesSegment
+                    {
+                        BuildLibraries = new BuildLibrariesConfiguration
+                        {
+                            Enable = true,
+                            ProjectName = moduleName
+                        }
+                    }
+                ],
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            Assert.Equal([moduleName], plan.BuildSpec.ExportAssemblies);
+            var result = ModuleBuildPipelineFactory.Create(new NullLogger()).BuildToStaging(plan.BuildSpec);
+
+            Assert.True(File.Exists(Path.Combine(result.StagingPath, "Lib", "Core", moduleName + ".dll")));
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { }
         }
     }
 
@@ -853,6 +954,75 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
         finally
         {
             try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void BuildToStaging_SkipDotNetBuild_PreservesExistingLibPayloadEvenWhenNormallyExcluded()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            var source = Path.Combine(tempRoot.FullName, "src");
+            var staging = Path.Combine(tempRoot.FullName, "staging");
+            WriteMinimalBinaryModule(source, moduleName);
+            var markerPath = Path.Combine(source, "Lib", "Core", "existing-payload.txt");
+            File.WriteAllText(markerPath, "existing");
+
+            var result = ModuleBuildPipelineFactory.Create(new NullLogger()).BuildToStaging(new ModuleBuildSpec
+            {
+                Name = moduleName,
+                SourcePath = source,
+                StagingPath = staging,
+                Version = "1.0.0",
+                SkipDotNetBuild = true,
+                ExcludeDirectories = ["Lib"],
+                Frameworks = ["net8.0"],
+                ExportAssemblies = [moduleName],
+                CsprojRequiredReasons = ["BuildLibraries.ProjectName"],
+                DisableBinaryCmdletScan = true
+            });
+
+            Assert.Equal("existing", File.ReadAllText(Path.Combine(result.StagingPath, "Lib", "Core", "existing-payload.txt")));
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void BuildToStaging_SkipDotNetBuild_FailsWhenConfiguredBinaryPayloadIsAbsent()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            var source = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+            var staging = Path.Combine(tempRoot.FullName, "staging");
+            File.WriteAllText(Path.Combine(source.FullName, moduleName + ".psm1"), string.Empty);
+            File.WriteAllText(
+                Path.Combine(source.FullName, moduleName + ".psd1"),
+                $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '1.0.0' }}");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                ModuleBuildPipelineFactory.Create(new NullLogger()).BuildToStaging(new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = source.FullName,
+                    StagingPath = staging,
+                    Version = "1.0.0",
+                    SkipDotNetBuild = true,
+                    ExportAssemblies = [moduleName + ".dll"],
+                    CsprojRequiredReasons = ["CsprojPath"]
+                }));
+
+            Assert.Contains("no existing Lib/*.dll payload", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { }
         }
     }
 

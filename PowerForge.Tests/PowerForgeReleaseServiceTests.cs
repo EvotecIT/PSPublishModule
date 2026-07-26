@@ -6,6 +6,41 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void ModuleReleasePlan_LegacyScriptWithoutFramework_PreservesHostFallback()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var buildScript = Path.Combine(root, "Build", "Build-Module.ps1");
+            Directory.CreateDirectory(Path.GetDirectoryName(buildScript)!);
+            File.WriteAllText(buildScript, "# legacy module build");
+
+            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = ".",
+                        ScriptPath = "Build/Build-Module.ps1"
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success);
+            Assert.NotNull(result.ModulePlan);
+            Assert.Null(result.ModulePlan!.Framework);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void ToolReleasePlan_AppliesOverridesAcrossSelectedTarget()
     {
         var root = CreateSandbox();
@@ -3863,6 +3898,50 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_DisabledSigningSuppressesPackageAssemblyAndNuGetSigning()
+    {
+        ProjectBuildConfiguration? capturedPackages = null;
+
+        var service = new PowerForgeReleaseService(
+            new NullLogger(),
+            executePackages: (_, config, _) =>
+            {
+                capturedPackages = config;
+                return new ProjectBuildHostExecutionResult {
+                    Success = true,
+                    ConfigPath = "release.json",
+                    PlanOutputPath = "plan.json",
+                    Result = new ProjectBuildResult()
+                };
+            },
+            planTools: (_, _, _) => throw new InvalidOperationException("Tools should not run."),
+            runTools: _ => throw new InvalidOperationException("Tools should not run."),
+            publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+        var result = service.Execute(
+            new PowerForgeReleaseSpec {
+                Packages = new ProjectBuildConfiguration {
+                    RootPath = ".",
+                    Configuration = "Release",
+                    CertificateThumbprint = "ABC123",
+                    SignAssemblies = true,
+                    SignPackages = true
+                }
+            },
+            new PowerForgeReleaseRequest {
+                ConfigPath = Path.Combine(Path.GetTempPath(), "release.json"),
+                PackagesOnly = true,
+                PlanOnly = true,
+                EnableSigning = false
+            });
+
+        Assert.True(result.Success);
+        Assert.NotNull(capturedPackages);
+        Assert.False(capturedPackages!.SignAssemblies);
+        Assert.False(capturedPackages.SignPackages);
+    }
+
+    [Fact]
     public void Execute_KeepSymbolsAndSigningOverrides_ApplyToDotNetTargetsAndInstallers()
     {
         var root = CreateSandbox();
@@ -4797,6 +4876,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         new DotNetPublishTargetPlan
                         {
                             Name = "PowerForgeWeb",
+                            Version = "1.2.3",
                             ProjectPath = projectPath,
                             Publish = new DotNetPublishPublishOptions
                             {
@@ -5252,6 +5332,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         new DotNetPublishTargetPlan
                         {
                             Name = "IntelligenceX.Chat.App",
+                            Version = "1.0.0",
                             ProjectPath = chatProject,
                             Publish = new DotNetPublishPublishOptions
                             {
@@ -5379,6 +5460,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         new DotNetPublishTargetPlan
                         {
                             Name = "IntelligenceX.Tray",
+                            Version = "1.0.0",
                             ProjectPath = trayProject,
                             Publish = new DotNetPublishPublishOptions
                             {
@@ -5637,6 +5719,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         new DotNetPublishTargetPlan
                         {
                             Name = "IntelligenceX.Tray",
+                            Version = "1.0.0",
                             ProjectPath = trayProject,
                             Publish = new DotNetPublishPublishOptions
                             {
@@ -5746,7 +5829,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_Winget_UsesPublishedToolGitHubReleaseWhenUrlTemplateIsMissing()
+    public void Execute_Winget_UsesPlannedToolGitHubReleaseWhenPublicationIsDeferred()
     {
         var root = CreateSandbox();
         var trayX64 = Path.Combine(root, "tray-x64.zip");
@@ -5778,6 +5861,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         new DotNetPublishTargetPlan
                         {
                             Name = "IntelligenceX.Tray",
+                            Version = "1.0.0",
                             ProjectPath = trayProject,
                             Publish = new DotNetPublishPublishOptions
                             {
@@ -5816,13 +5900,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                         }
                     }
                 },
-                publishGitHubRelease: _ => new GitHubReleasePublishResult
-                {
-                    Succeeded = true,
-                    ReleaseCreationSucceeded = true,
-                    HtmlUrl = "https://github.com/EvotecIT/IntelligenceX/releases/tag/IntelligenceX.Tray+v1.0.0",
-                    UploadUrl = "https://uploads.github.com/repos/EvotecIT/IntelligenceX/releases/1/assets{?name,label}"
-                });
+                publishGitHubRelease: _ =>
+                    throw new InvalidOperationException("GitHub publication must remain deferred."));
 
             var stageRoot = Path.Combine(root, "upload-ready");
             var result = service.Execute(
@@ -5882,10 +5961,13 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "release.json"),
-                    ToolsOnly = true
+                    ToolsOnly = true,
+                    PublishToolGitHub = false
                 });
 
             Assert.True(result.Success);
+            Assert.Empty(result.ToolGitHubReleases);
+            Assert.Single(result.ToolGitHubReleasePlans);
             var manifestPath = Assert.Single(result.WingetManifestPaths);
             var yaml = File.ReadAllText(manifestPath);
             Assert.Contains("https://github.com/EvotecIT/IntelligenceX/releases/download/IntelligenceX.Tray%2Bv1.0.0/IntelligenceX.Tray-1.0.0-win-x64-portable.zip", yaml, StringComparison.Ordinal);
@@ -6968,7 +7050,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 psi.ArgumentList.Add("/c");
             psi.ArgumentList.Add(tempScript);
 
-            var result = method!.Invoke(null, new object?[] { psi });
+            var result = method!.Invoke(null, new object?[] { psi, CancellationToken.None });
             Assert.NotNull(result);
 
             var exitCode = (int)result.GetType().GetProperty("ExitCode")!.GetValue(result)!;

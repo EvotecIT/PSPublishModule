@@ -115,10 +115,22 @@ internal sealed partial class PowerForgeReleaseService
             PublishNuget = suppressPublishing ? false : request.PublishNuget,
             PublishGitHub = suppressPublishing || publishUnifiedGitHub ? false : request.PublishProjectGitHub,
             ReleaseVersionFloor = releaseVersionFloor,
-            ReleaseVersionFloorProject = releaseVersionFloorProject
+            ReleaseVersionFloorProject = releaseVersionFloorProject,
+            CancellationToken = request.CancellationToken
         };
+        if (request.Progress is IPowerForgeReleaseProgressReporterV2 detailedProgress)
+        {
+            packageRequest.Progress = new ProjectBuildReleaseProgressAdapter(
+                detailedProgress,
+                forcePlanOnly
+                    ? PowerForgeReleaseProgressPhase.Versioning
+                    : PowerForgeReleaseProgressPhase.Packages);
+        }
 
-        return _executePackages(packageRequest, packages, configPath);
+        request.CancellationToken.ThrowIfCancellationRequested();
+        var result = _executePackages(packageRequest, packages, configPath);
+        request.CancellationToken.ThrowIfCancellationRequested();
+        return result;
     }
 
     private static string ResolveCoordinatedPackageVersion(

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PowerForgeStudio.Domain.Catalog;
+using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Signing;
 using PowerForgeStudio.Orchestrator.Queue;
@@ -11,7 +12,7 @@ public sealed class PowerForgeStudioSmokeHarnessTests
 {
     private static readonly SemaphoreSlim SmokeEnvironmentLock = new(1, 1);
 
-    [Fact(Skip = "Live smoke harness is opt-in; use Build/Smoke-ReleaseOpsStudio.ps1 with explicit environment flags.")]
+    [EnvironmentFact("POWERFORGE_RUN_PRODUCT_SMOKE")]
     public async Task LocalSmokePath_ExercisesBuildAndRetryStages()
     {
         var repositoryRoot = ResolveRepositoryRoot();
@@ -99,15 +100,16 @@ public sealed class PowerForgeStudioSmokeHarnessTests
                     Succeeded: true,
                     Summary: $"Smoke signing simulation captured {signingManifest.Count} artifact(s).",
                     SourceCheckpointStateJson: buildCheckpointJson,
-                    Receipts: signingManifest.Select(artifact => new ReleaseSigningReceipt(
-                        RootPath: repositoryRoot,
-                        RepositoryName: repositoryIdentity.RepositoryName,
-                        AdapterKind: artifact.AdapterKind,
-                        ArtifactPath: artifact.ArtifactPath,
-                        ArtifactKind: artifact.ArtifactKind,
-                        Status: ReleaseSigningReceiptStatus.Signed,
-                        Summary: "Smoke path treats captured build artifacts as signed inputs for publish gating.",
-                        SignedAtUtc: DateTimeOffset.UtcNow)).ToList());
+                    Receipts: signingManifest.Select(artifact =>
+                        ReleaseSigningArtifactIntegrity.Capture(new ReleaseSigningReceipt(
+                            RootPath: repositoryRoot,
+                            RepositoryName: repositoryIdentity.RepositoryName,
+                            AdapterKind: artifact.AdapterKind,
+                            ArtifactPath: artifact.ArtifactPath,
+                            ArtifactKind: artifact.ArtifactKind,
+                            Status: ReleaseSigningReceiptStatus.Signed,
+                            Summary: "Smoke path treats captured build artifacts as signed inputs for publish gating.",
+                            SignedAtUtc: DateTimeOffset.UtcNow))).ToList());
             }
 
             var publishQueueItem = CreateQueueItem(
@@ -122,7 +124,10 @@ public sealed class PowerForgeStudioSmokeHarnessTests
             var publishResult = await publishService.ExecuteAsync(publishQueueItem);
             Assert.False(publishResult.Succeeded);
             Assert.NotEmpty(publishResult.Receipts);
-            Assert.Contains("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", publishResult.Summary, StringComparison.OrdinalIgnoreCase);
+            var publishDescription = DescribePublishResult(publishResult);
+            Assert.True(
+                publishDescription.Contains("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", StringComparison.OrdinalIgnoreCase),
+                publishDescription);
 
             var publishFailedSession = CreateSession(publishQueueItem);
             var publishFailureTransition = queueRunner.FailPublish(publishFailedSession, repositoryRoot, publishResult);
@@ -266,6 +271,13 @@ public sealed class PowerForgeStudioSmokeHarnessTests
         var receiptDetails = signingResult.Receipts.Select(receipt =>
             $"{receipt.AdapterKind}:{receipt.ArtifactKind}:{receipt.Status}:{receipt.Summary}:{receipt.ArtifactPath}");
         return $"Signing summary: {signingResult.Summary}{Environment.NewLine}{string.Join(Environment.NewLine, receiptDetails)}";
+    }
+
+    private static string DescribePublishResult(ReleasePublishExecutionResult publishResult)
+    {
+        var receiptDetails = publishResult.Receipts.Select(receipt =>
+            $"{receipt.AdapterKind}:{receipt.TargetKind}:{receipt.Status}:{receipt.Summary}:{receipt.Destination}");
+        return $"Publish summary: {publishResult.Summary}{Environment.NewLine}{string.Join(Environment.NewLine, receiptDetails)}";
     }
 
     private sealed class EnvironmentScope : IDisposable
