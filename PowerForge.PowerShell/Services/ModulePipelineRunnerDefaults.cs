@@ -18,6 +18,14 @@ internal static class ModulePipelineRunnerDefaults
         bool prerelease,
         bool verifyRepositoryAvailability);
 
+    internal delegate string ModuleGitHubVersionAvailabilityResolver(
+        string expectedVersion,
+        string candidateVersion,
+        PublishConfiguration publish,
+        string projectRoot,
+        string moduleName,
+        string? preRelease);
+
     internal static ModulePipelineRunnerServices Create(
         ILogger logger,
         IPowerShellRunner? powerShellRunner,
@@ -28,7 +36,8 @@ internal static class ModulePipelineRunnerDefaults
         IScriptFunctionExportDetector? scriptFunctionExportDetector,
         ModulePackageBuildExecutor? packageBuildExecutor = null,
         ModuleGitHubReleasePublisher? gitHubReleasePublisher = null,
-        ModuleVersionStepResolver? moduleVersionStepResolver = null)
+        ModuleVersionStepResolver? moduleVersionStepResolver = null,
+        ModuleGitHubVersionAvailabilityResolver? gitHubVersionAvailabilityResolver = null)
     {
         if (logger is null)
             throw new ArgumentNullException(nameof(logger));
@@ -59,7 +68,28 @@ internal static class ModulePipelineRunnerDefaults
                     moduleName,
                     localPsd1Path: localPsd1Path,
                     prerelease: prerelease,
-                    verifyRepositoryAvailability: verifyRepositoryAvailability)));
+                    verifyRepositoryAvailability: verifyRepositoryAvailability)),
+            gitHubVersionAvailabilityResolver ?? ((expectedVersion, candidateVersion, publish, projectRoot, moduleName, preRelease) =>
+            {
+                var owner = publish.UserName?.Trim();
+                if (string.IsNullOrWhiteSpace(owner))
+                    throw new InvalidOperationException("UserName is required for GitHub release version planning.");
+                var repository = string.IsNullOrWhiteSpace(publish.RepositoryName)
+                    ? moduleName
+                    : publish.RepositoryName!.Trim();
+                var token = ModulePublisher.ResolvePublishApiKey(publish, projectRoot);
+                if (string.IsNullOrWhiteSpace(token))
+                    throw new InvalidOperationException("API key (token) is required for GitHub release version planning.");
+
+                return new GitHubReleaseVersionAvailabilityService(logger).EnsureAvailable(
+                    expectedVersion,
+                    candidateVersion,
+                    owner!,
+                    repository,
+                    token,
+                    version => ModulePublisher.GetGitHubTag(publish, moduleName, version, preRelease),
+                    publish.ReuseExistingRelease);
+            }));
     }
 }
 
@@ -74,7 +104,8 @@ internal sealed class ModulePipelineRunnerServices
         IScriptFunctionExportDetector scriptFunctionExportDetector,
         ModulePipelineRunnerDefaults.ModulePackageBuildExecutor packageBuildExecutor,
         ModulePipelineRunnerDefaults.ModuleGitHubReleasePublisher gitHubReleasePublisher,
-        ModulePipelineRunnerDefaults.ModuleVersionStepResolver moduleVersionStepResolver)
+        ModulePipelineRunnerDefaults.ModuleVersionStepResolver moduleVersionStepResolver,
+        ModulePipelineRunnerDefaults.ModuleGitHubVersionAvailabilityResolver gitHubVersionAvailabilityResolver)
     {
         PowerShellRunner = powerShellRunner ?? throw new ArgumentNullException(nameof(powerShellRunner));
         ModuleDependencyMetadataProvider = moduleDependencyMetadataProvider ?? throw new ArgumentNullException(nameof(moduleDependencyMetadataProvider));
@@ -85,6 +116,7 @@ internal sealed class ModulePipelineRunnerServices
         PackageBuildExecutor = packageBuildExecutor ?? throw new ArgumentNullException(nameof(packageBuildExecutor));
         GitHubReleasePublisher = gitHubReleasePublisher ?? throw new ArgumentNullException(nameof(gitHubReleasePublisher));
         ModuleVersionStepResolver = moduleVersionStepResolver ?? throw new ArgumentNullException(nameof(moduleVersionStepResolver));
+        GitHubVersionAvailabilityResolver = gitHubVersionAvailabilityResolver ?? throw new ArgumentNullException(nameof(gitHubVersionAvailabilityResolver));
     }
 
     internal IPowerShellRunner PowerShellRunner { get; }
@@ -96,4 +128,5 @@ internal sealed class ModulePipelineRunnerServices
     internal ModulePipelineRunnerDefaults.ModulePackageBuildExecutor PackageBuildExecutor { get; }
     internal ModulePipelineRunnerDefaults.ModuleGitHubReleasePublisher GitHubReleasePublisher { get; }
     internal ModulePipelineRunnerDefaults.ModuleVersionStepResolver ModuleVersionStepResolver { get; }
+    internal ModulePipelineRunnerDefaults.ModuleGitHubVersionAvailabilityResolver GitHubVersionAvailabilityResolver { get; }
 }

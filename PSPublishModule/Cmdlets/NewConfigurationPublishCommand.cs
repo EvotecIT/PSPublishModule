@@ -269,6 +269,16 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "ApiFromFile")]
     public SwitchParameter GenerateReleaseNotes { get; set; }
 
+    /// <summary>Explicitly reuse an existing GitHub release when its tag is already occupied.</summary>
+    [Parameter(ParameterSetName = "ApiKey")]
+    [Parameter(ParameterSetName = "ApiFromFile")]
+    public SwitchParameter ReuseExistingRelease { get; set; }
+
+    /// <summary>Replace same-name assets when deliberately reusing an existing GitHub release.</summary>
+    [Parameter(ParameterSetName = "ApiKey")]
+    [Parameter(ParameterSetName = "ApiFromFile")]
+    public SwitchParameter ReplaceExistingAssets { get; set; }
+
     /// <summary>Use this PowerShell repository as the source for resolving Auto/Latest dependency versions.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
@@ -427,6 +437,8 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             ID = ID,
             DoNotMarkAsPreRelease = DoNotMarkAsPreRelease.IsPresent,
             GenerateReleaseNotes = GenerateReleaseNotes.IsPresent,
+            ReuseExistingRelease = ReuseExistingRelease.IsPresent,
+            ReplaceExistingAssets = ReplaceExistingAssets.IsPresent,
             UseAsDependencyVersionSource = UseAsDependencyVersionSource.IsPresent,
             PublishRequiredModules = PublishRequiredModules.IsPresent,
             RequiredModuleSourceRepository = requiredModuleSourceRepository,

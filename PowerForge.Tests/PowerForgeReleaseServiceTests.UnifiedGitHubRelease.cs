@@ -539,6 +539,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal(
                 new[] { zipPath, manifestPath, checksumsPath }.OrderBy(static path => path),
                 Assert.Single(publishCalls).AssetFilePaths.OrderBy(static path => path));
+            Assert.False(Assert.Single(publishCalls).ReuseExistingReleaseOnConflict);
+            Assert.False(Assert.Single(publishCalls).ReplaceExistingAssets);
             Assert.Equal("approved manifest", File.ReadAllText(manifestPath));
             Assert.Equal("approved checksums", File.ReadAllText(checksumsPath));
         }

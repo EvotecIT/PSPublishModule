@@ -230,13 +230,18 @@ Example unified GitHub release publishing from staged assets:
 "GitHub": {
   "Publish": true,
   "TagTemplate": "v{Version}",
-  "ReleaseNameTemplate": "{Repository} {Version}"
+  "ReleaseNameTemplate": "{Repository} {Version}",
+  "ReuseExistingRelease": false,
+  "ReplaceExistingAssets": false
 }
 ```
 
 - use `--publish-project-github` (or set `GitHub.Publish: true`) to upload the unified staged release as one repo release
 - when top-level `GitHub` is active, package-host GitHub publishing is suppressed and the staged release assets are uploaded instead
 - uploaded assets include staged `NuGet`, `Portable`, `Installer`, `Tool`, metadata files, top-level `release-manifest.json` / `SHA256SUMS.txt`, and any generated Winget manifests
+- publish-mode auto-version patterns reserve a version that is free in the module/package repository and in the configured GitHub tag/release namespace; build and plan modes stay offline
+- normal unified releases do not silently reuse an occupied GitHub tag; set `ReuseExistingRelease: true` only for a deliberate recovery run, and combine it with `ReplaceExistingAssets: true` only when same-named assets should be replaced
+- interactive PowerForge hosts show the active asset, transferred bytes, total bytes, and final created/reused/uploaded/skipped/replaced counts
 
 - Plan or build preview executables only:
 

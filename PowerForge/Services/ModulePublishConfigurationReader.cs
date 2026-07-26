@@ -77,6 +77,8 @@ public sealed class ModulePublishConfigurationReader
             OverwriteTagName = configuration.OverwriteTagName,
             DoNotMarkAsPreRelease = configuration.DoNotMarkAsPreRelease,
             GenerateReleaseNotes = configuration.GenerateReleaseNotes,
+            ReuseExistingRelease = configuration.ReuseExistingRelease,
+            ReplaceExistingAssets = configuration.ReplaceExistingAssets,
             Verbose = configuration.Verbose
         };
     }

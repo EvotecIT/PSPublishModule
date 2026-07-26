@@ -56,7 +56,7 @@ internal static class ModulePipelineProgressProtocol
         Console.WriteLine(Prefix + payload);
     }
 
-    private sealed class ProtocolReporter : IModulePipelineProgressReporterV2
+    private sealed class ProtocolReporter : IModulePipelineProgressReporterV3
     {
         private readonly IReadOnlyDictionary<string, PowerForgeReleaseProgressItem> _items;
 
@@ -89,6 +89,16 @@ internal static class ModulePipelineProgressProtocol
 
         public void StepSkipped(ModulePipelineStep step)
             => Update(step, PowerForgeReleaseProgressItemState.Skipped);
+
+        public void StepProgress(ModulePipelineStep step, double value, double maximum, string? detail = null)
+        {
+            if (step is null || !_items.TryGetValue(step.Key, out var item))
+                return;
+
+            item.ProgressValue = Math.Max(0, value);
+            item.ProgressMaximum = Math.Max(0, maximum);
+            Update(step, PowerForgeReleaseProgressItemState.Started, detail);
+        }
 
         private void Update(
             ModulePipelineStep step,

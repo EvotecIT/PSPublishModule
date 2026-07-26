@@ -113,9 +113,13 @@
         "TokenEnvName": { "type": [ "string", "null" ] },
         "GenerateReleaseNotes": { "type": "boolean" },
         "IsPreRelease": { "type": "boolean" },
+        "ReuseExistingRelease": {
+          "type": "boolean",
+          "description": "Explicit recovery mode. When true, a release with the same tag may be reused. Auto-versioned normal releases should leave this false so an occupied GitHub tag selects a new version."
+        },
         "ReplaceExistingAssets": {
           "type": "boolean",
-          "description": "When true and an existing release is reused, delete same-named assets before uploading replacements."
+          "description": "When ReuseExistingRelease is true, delete same-named assets before uploading replacements."
         },
         "TagTemplate": { "type": [ "string", "null" ] },
         "ReleaseNameTemplate": { "type": [ "string", "null" ] }

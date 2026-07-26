@@ -630,6 +630,8 @@ internal sealed class PowerForgeReleaseGitHubOptions
 
     public bool IsPreRelease { get; set; }
 
+    public bool ReuseExistingRelease { get; set; }
+
     public bool ReplaceExistingAssets { get; set; }
 
     public string? TagTemplate { get; set; }
@@ -1030,4 +1032,6 @@ internal sealed class PowerForgeUnifiedGitHubReleaseResult
     public string[] SkippedExistingAssets { get; set; } = Array.Empty<string>();
 
     public string[] ReplacedExistingAssets { get; set; } = Array.Empty<string>();
+
+    public string[] UploadedAssets { get; set; } = Array.Empty<string>();
 }

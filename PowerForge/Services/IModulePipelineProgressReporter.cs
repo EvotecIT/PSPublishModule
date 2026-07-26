@@ -25,3 +25,12 @@ public interface IModulePipelineProgressReporterV2 : IModulePipelineProgressRepo
     /// <summary>Called when a step is skipped (not executed).</summary>
     void StepSkipped(ModulePipelineStep step);
 }
+
+/// <summary>
+/// Optional extension for hosts that can render determinate progress within a running step.
+/// </summary>
+public interface IModulePipelineProgressReporterV3 : IModulePipelineProgressReporterV2
+{
+    /// <summary>Updates the current and maximum values for a running step.</summary>
+    void StepProgress(ModulePipelineStep step, double value, double maximum, string? detail = null);
+}

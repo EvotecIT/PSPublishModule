@@ -47,7 +47,7 @@ public sealed class GitHubReleasePublishRequest
     public bool IsPreRelease { get; set; }
 
     /// <summary>True to reuse an existing release when GitHub reports a tag conflict.</summary>
-    public bool ReuseExistingReleaseOnConflict { get; set; } = true;
+    public bool ReuseExistingReleaseOnConflict { get; set; }
 
     /// <summary>
     /// When true, a tag-conflict release may be reused only when its identifier matches
@@ -71,4 +71,7 @@ public sealed class GitHubReleasePublishRequest
 
     /// <summary>Asset file paths to upload.</summary>
     public IReadOnlyList<string> AssetFilePaths { get; set; } = System.Array.Empty<string>();
+
+    /// <summary>Optional structured reporter for release asset upload progress.</summary>
+    public IGitHubReleaseProgressReporter? Progress { get; set; }
 }

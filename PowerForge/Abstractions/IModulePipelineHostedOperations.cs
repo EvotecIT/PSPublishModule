@@ -36,7 +36,8 @@ internal interface IModulePipelineHostedOperations
         IReadOnlyList<ArtefactBuildResult> artefactResults,
         bool includeScriptFolders,
         Action? remotePublishAttempted,
-        Action? remoteSideEffectObserved);
+        Action? remoteSideEffectObserved,
+        IGitHubReleaseProgressReporter? gitHubProgress);
 
     ModulePipelineActionResult RunAction(
         ModulePipelineActionConfiguration action,

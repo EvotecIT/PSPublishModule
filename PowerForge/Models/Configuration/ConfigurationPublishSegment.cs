@@ -63,6 +63,12 @@ public sealed class PublishConfiguration
     /// <summary>When true, asks GitHub to generate release notes automatically.</summary>
     public bool GenerateReleaseNotes { get; set; }
 
+    /// <summary>Explicitly reuse an existing GitHub release when its tag is already occupied.</summary>
+    public bool ReuseExistingRelease { get; set; }
+
+    /// <summary>Replace same-name assets when deliberately reusing an existing GitHub release.</summary>
+    public bool ReplaceExistingAssets { get; set; }
+
     /// <summary>Use this PowerShell repository as the source for resolving Auto/Latest dependency versions.</summary>
     public bool UseAsDependencyVersionSource { get; set; }
 

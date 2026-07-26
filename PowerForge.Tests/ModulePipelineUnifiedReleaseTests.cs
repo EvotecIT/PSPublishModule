@@ -139,6 +139,9 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.Equal("v1.2.3", gitHubRequest.TagName);
             Assert.False(gitHubRequest.IsPreRelease);
             Assert.True(gitHubRequest.GenerateReleaseNotes);
+            Assert.False(gitHubRequest.ReuseExistingReleaseOnConflict);
+            Assert.False(gitHubRequest.ReplaceExistingAssets);
+            Assert.NotNull(gitHubRequest.Progress);
             Assert.Equal("1.2.3", result.Plan.ResolvedVersion);
             Assert.Null(result.Plan.PreRelease);
             Assert.Equal("1.2.3", result.Plan.BuildSpec.Version);
@@ -1443,7 +1446,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             IReadOnlyList<ArtefactBuildResult> artefactResults,
             bool includeScriptFolders,
             Action? remotePublishAttempted,
-            Action? remoteSideEffectObserved)
+            Action? remoteSideEffectObserved,
+            IGitHubReleaseProgressReporter? gitHubProgress)
         {
             ModulePublishPreflightAction?.Invoke(publish, plan);
             ModulePublishRemoteSideEffectAction?.Invoke(remoteSideEffectObserved);

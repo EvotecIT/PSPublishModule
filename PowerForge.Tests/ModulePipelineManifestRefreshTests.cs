@@ -614,7 +614,8 @@ public sealed class ModulePipelineManifestRefreshTests
             IReadOnlyList<ArtefactBuildResult> artefactResults,
             bool includeScriptFolders,
             Action? remotePublishAttempted,
-            Action? remoteSideEffectObserved)
+            Action? remoteSideEffectObserved,
+            IGitHubReleaseProgressReporter? gitHubProgress)
             => throw new InvalidOperationException("Not used in this test.");
 
         public void ValidateModuleImports(

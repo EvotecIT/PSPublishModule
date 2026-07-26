@@ -59,6 +59,7 @@ public sealed partial class GitHubReleasePublisher
         var expectedReleaseBodyMarker = request.ExpectedReleaseBodyMarker;
         var expectedTagCommitSha = request.ExpectedTagCommitSha;
         var replaceExistingAssets = request.ReplaceExistingAssets;
+        var progress = request.Progress;
 
         if (string.IsNullOrWhiteSpace(owner)) throw new ArgumentException("Owner is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(repo)) throw new ArgumentException("Repository is required.", nameof(request));
@@ -74,6 +75,16 @@ public sealed partial class GitHubReleasePublisher
         {
             if (!File.Exists(assetPath))
                 throw new FileNotFoundException($"GitHub asset not found: {assetPath}");
+        }
+
+        for (var index = 0; index < assets.Length; index++)
+        {
+            ReportAssetProgress(
+                progress,
+                assets[index],
+                index,
+                assets.Length,
+                GitHubReleaseAssetProgressState.Planned);
         }
 
         var releaseWatch = Stopwatch.StartNew();
@@ -123,6 +134,8 @@ public sealed partial class GitHubReleasePublisher
                 expectedTagCommitSha,
                 replaceExistingAssets,
                 result.ReplacedExistingAssets,
+                result.UploadedAssets,
+                progress,
                 cancellationToken));
             assetUploadWatch.Stop();
             var uploaded = assets.Length - result.SkippedExistingAssets.Count;
@@ -282,6 +295,8 @@ public sealed partial class GitHubReleasePublisher
         string? expectedTagCommitSha,
         bool replaceExistingAssets,
         List<string> replacedExistingAssets,
+        List<string> uploadedAssets,
+        IGitHubReleaseProgressReporter? progress,
         CancellationToken cancellationToken)
     {
         ValidateReleaseBeforeAssetMutation(
@@ -300,23 +315,51 @@ public sealed partial class GitHubReleasePublisher
             ? CreateReplaceableAssetNameSet(ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId, cancellationToken))
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var assetPath in assets)
+        for (var index = 0; index < assets.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var assetPath = assets[index];
             var fileName = Path.GetFileName(assetPath) ?? assetPath;
+            var assetSize = new FileInfo(assetPath).Length;
 
             if (replaceExistingAssets &&
-                TryReserveExistingAssetNameForReplacement(replaceableAssetNames, fileName) &&
-                DeleteExistingAssetByName(owner, repo, token, apiBaseUrl, releaseId, fileName, cancellationToken))
+                TryReserveExistingAssetNameForReplacement(replaceableAssetNames, fileName))
             {
-                replacedExistingAssets.Add(fileName);
+                ReportAssetProgress(
+                    progress,
+                    assetPath,
+                    index,
+                    assets.Length,
+                    GitHubReleaseAssetProgressState.Replacing,
+                    totalBytes: assetSize);
+                if (DeleteExistingAssetByName(owner, repo, token, apiBaseUrl, releaseId, fileName, cancellationToken))
+                    replacedExistingAssets.Add(fileName);
             }
 
-            var assetSize = new FileInfo(assetPath).Length;
             _logger.Info($"Uploading GitHub release asset: {fileName} ({DotNetRepositoryReleaseService.FormatBytes(assetSize)})");
+            ReportAssetProgress(
+                progress,
+                assetPath,
+                index,
+                assets.Length,
+                GitHubReleaseAssetProgressState.Uploading,
+                totalBytes: assetSize);
 
             var assetWatch = Stopwatch.StartNew();
-            var resp = UploadAsset(uploadUrl, assetPath, fileName, token, cancellationToken);
+            var resp = UploadAsset(
+                uploadUrl,
+                assetPath,
+                fileName,
+                token,
+                (transferred, total) => ReportAssetProgress(
+                    progress,
+                    assetPath,
+                    index,
+                    assets.Length,
+                    GitHubReleaseAssetProgressState.Uploading,
+                    transferred,
+                    total),
+                cancellationToken);
             var respText = resp.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
             if (!resp.IsSuccessStatusCode && replaceExistingAssets &&
                 (int)resp.StatusCode == 422 &&
@@ -326,7 +369,20 @@ public sealed partial class GitHubReleasePublisher
             {
                 replacedExistingAssets.Add(fileName);
                 resp.Dispose();
-                resp = UploadAsset(uploadUrl, assetPath, fileName, token, cancellationToken);
+                resp = UploadAsset(
+                    uploadUrl,
+                    assetPath,
+                    fileName,
+                    token,
+                    (transferred, total) => ReportAssetProgress(
+                        progress,
+                        assetPath,
+                        index,
+                        assets.Length,
+                        GitHubReleaseAssetProgressState.Uploading,
+                        transferred,
+                        total),
+                    cancellationToken);
                 respText = resp.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
             }
 
@@ -340,14 +396,39 @@ public sealed partial class GitHubReleasePublisher
                         assetWatch.Stop();
                         _logger.Info($"GitHub release asset '{fileName}' already exists; skipping upload after {DotNetRepositoryReleaseService.FormatDuration(assetWatch.Elapsed)}.");
                         skippedAssets.Add(fileName);
+                        ReportAssetProgress(
+                            progress,
+                            assetPath,
+                            index,
+                            assets.Length,
+                            GitHubReleaseAssetProgressState.Skipped,
+                            totalBytes: assetSize,
+                            detail: "Already exists");
                         continue;
                     }
 
+                    ReportAssetProgress(
+                        progress,
+                        assetPath,
+                        index,
+                        assets.Length,
+                        GitHubReleaseAssetProgressState.Failed,
+                        totalBytes: assetSize,
+                        detail: TrimForMessage(respText));
                     throw new InvalidOperationException($"GitHub asset upload failed for '{fileName}' ({(int)resp.StatusCode} {resp.ReasonPhrase}). {TrimForMessage(respText)}");
                 }
             }
 
             assetWatch.Stop();
+            uploadedAssets.Add(fileName);
+            ReportAssetProgress(
+                progress,
+                assetPath,
+                index,
+                assets.Length,
+                GitHubReleaseAssetProgressState.Uploaded,
+                assetSize,
+                assetSize);
             _logger.Success($"Uploaded GitHub release asset: {fileName} in {DotNetRepositoryReleaseService.FormatDuration(assetWatch.Elapsed)} ({DotNetRepositoryReleaseService.FormatBytes(assetSize)}).");
         }
 
@@ -392,18 +473,51 @@ public sealed partial class GitHubReleasePublisher
         string assetPath,
         string fileName,
         string token,
+        Action<long, long>? reportProgress,
         CancellationToken cancellationToken)
     {
         var target = new Uri(uploadUrl + "?name=" + Uri.EscapeDataString(fileName));
 
-        using var fs = File.OpenRead(assetPath);
-        using var content = new StreamContent(fs);
+        using var content = new GitHubReleaseProgressFileContent(assetPath, reportProgress);
         content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
         using var req = new HttpRequestMessage(HttpMethod.Post, target) { Content = content };
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         return SharedClient.SendAsync(req, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
+    }
+
+    private static void ReportAssetProgress(
+        IGitHubReleaseProgressReporter? progress,
+        string assetPath,
+        int zeroBasedPosition,
+        int totalAssets,
+        GitHubReleaseAssetProgressState state,
+        long bytesTransferred = 0,
+        long totalBytes = 0,
+        string? detail = null)
+    {
+        if (progress is null)
+            return;
+
+        try
+        {
+            progress.Report(new GitHubReleaseAssetProgress
+            {
+                FilePath = assetPath,
+                FileName = Path.GetFileName(assetPath) ?? assetPath,
+                Position = zeroBasedPosition + 1,
+                TotalAssets = totalAssets,
+                State = state,
+                BytesTransferred = bytesTransferred,
+                TotalBytes = totalBytes,
+                Detail = detail
+            });
+        }
+        catch
+        {
+            // Progress is best effort and must never change release correctness.
+        }
     }
 
     private bool DeleteExistingAssetByName(
