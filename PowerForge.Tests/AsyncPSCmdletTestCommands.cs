@@ -132,6 +132,115 @@ public sealed class TestAsyncInformationTagsCommand : AsyncPSCmdlet
     }
 }
 
+[Cmdlet(VerbsDiagnostic.Test, "AsyncSynchronousError")]
+public sealed class TestAsyncSynchronousErrorCommand : AsyncPSCmdlet
+{
+    private static int _reachedAfterError;
+
+    public static bool ReachedAfterError => Volatile.Read(ref _reachedAfterError) != 0;
+
+    public static void Reset()
+        => Volatile.Write(ref _reachedAfterError, 0);
+
+    protected override Task ProcessRecordAsync()
+    {
+        WriteError(new ErrorRecord(
+            new InvalidOperationException("stopping error"),
+            "AsyncSynchronousError",
+            ErrorCategory.InvalidOperation,
+            targetObject: null));
+        Volatile.Write(ref _reachedAfterError, 1);
+        return Task.CompletedTask;
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncSynchronousEnumeration")]
+public sealed class TestAsyncSynchronousEnumerationCommand : AsyncPSCmdlet
+{
+    protected override Task ProcessRecordAsync()
+    {
+        var values = new[] { 1, 2 };
+        WriteObject(values, enumerateCollection: true);
+        values[0] = 9;
+        return Task.CompletedTask;
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncSynchronousFailure")]
+public sealed class TestAsyncSynchronousFailureCommand : AsyncPSCmdlet
+{
+    protected override Task ProcessRecordAsync()
+    {
+        Task.Run(() => WriteWarning("before-failure")).GetAwaiter().GetResult();
+        throw new InvalidOperationException("synchronous hook failure");
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncNullInformationTags")]
+public sealed class TestAsyncNullInformationTagsCommand : AsyncPSCmdlet
+{
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        WriteInformation("untagged", tags: null);
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncStaleInteraction", SupportsShouldProcess = true)]
+public sealed class TestAsyncStaleInteractionCommand : AsyncPSCmdlet
+{
+    private static readonly ManualResetEventSlim SecondRecordStarted = new();
+    private static readonly ManualResetEventSlim StaleInteractionFinished = new();
+    private static int _recordNumber;
+
+    [Parameter(Mandatory = true, ValueFromPipeline = true)]
+    public string InputObject { get; set; } = string.Empty;
+
+    public static Exception? StaleInteractionException { get; private set; }
+
+    public static void Reset()
+    {
+        SecondRecordStarted.Reset();
+        StaleInteractionFinished.Reset();
+        Volatile.Write(ref _recordNumber, 0);
+        StaleInteractionException = null;
+    }
+
+    protected override async Task ProcessRecordAsync()
+    {
+        if (Interlocked.Increment(ref _recordNumber) == 1)
+        {
+            _ = Task.Run(() =>
+            {
+                Assert.True(
+                    SecondRecordStarted.Wait(TimeSpan.FromSeconds(5)),
+                    "The second lifecycle did not start in time.");
+                try
+                {
+                    _ = ShouldProcess("stale-target");
+                }
+                catch (Exception exception)
+                {
+                    StaleInteractionException = exception;
+                }
+                finally
+                {
+                    StaleInteractionFinished.Set();
+                }
+            });
+            return;
+        }
+
+        SecondRecordStarted.Set();
+        await Task.Run(() =>
+        {
+            Assert.True(
+                StaleInteractionFinished.Wait(TimeSpan.FromSeconds(5)),
+                "The stale interaction did not finish in time.");
+        });
+    }
+}
+
 [Cmdlet(VerbsDiagnostic.Test, "AsyncCancellation")]
 public sealed class TestAsyncCancellationCommand : AsyncPSCmdlet
 {

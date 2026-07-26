@@ -148,6 +148,121 @@ public sealed class AsyncPSCmdletTests
     }
 
     [Fact]
+    public void AsyncPSCmdlet_applies_stopping_preferences_before_the_hook_continues()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncSynchronousError",
+            typeof(TestAsyncSynchronousErrorCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell
+            .AddCommand("Test-AsyncSynchronousError")
+            .AddParameter("ErrorAction", ActionPreference.Stop);
+        TestAsyncSynchronousErrorCommand.Reset();
+
+        _ = Assert.ThrowsAny<RuntimeException>(() => powerShell.Invoke());
+
+        Assert.False(TestAsyncSynchronousErrorCommand.ReachedAfterError);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_enumerates_pipeline_thread_collections_before_the_hook_mutates_them()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncSynchronousEnumeration",
+            typeof(TestAsyncSynchronousEnumerationCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncSynchronousEnumeration");
+
+        var result = powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors, string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
+        Assert.Collection(
+            result,
+            item => Assert.Equal(1, item.BaseObject),
+            item => Assert.Equal(2, item.BaseObject));
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_drains_worker_records_before_a_synchronous_hook_failure()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncSynchronousFailure",
+            typeof(TestAsyncSynchronousFailureCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncSynchronousFailure");
+
+        _ = Assert.ThrowsAny<RuntimeException>(() => powerShell.Invoke());
+
+        var warning = Assert.Single(powerShell.Streams.Warning);
+        Assert.Equal("before-failure", warning.Message);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_preserves_null_information_tags_after_await()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncNullInformationTags",
+            typeof(TestAsyncNullInformationTagsCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncNullInformationTags");
+
+        powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors, string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
+        var record = Assert.Single(powerShell.Streams.Information);
+        Assert.Equal("untagged", record.MessageData);
+        Assert.Empty(record.Tags);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_rejects_interactions_from_an_older_record_lifecycle()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncStaleInteraction",
+            typeof(TestAsyncStaleInteractionCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell
+            .AddCommand("Test-AsyncStaleInteraction")
+            .AddParameter("Confirm", false);
+        TestAsyncStaleInteractionCommand.Reset();
+
+        powerShell.Invoke(new[] { "first", "second" });
+
+        Assert.False(powerShell.HadErrors, string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
+        Assert.IsType<InvalidOperationException>(TestAsyncStaleInteractionCommand.StaleInteractionException);
+    }
+
+    [Fact]
     public void AsyncPSCmdlet_translates_cancellation_to_a_pipeline_stop()
     {
         var sessionState = InitialSessionState.CreateDefault();
