@@ -2,7 +2,7 @@
 
 This document defines the compatibility target for the managed C# module engine. It is not a promise to clone every historical behavior from PowerShellGet or PSResourceGet. The goal is a clean managed implementation that covers the common module lifecycle workflows and keeps escape hatches where provider support is incomplete.
 
-For the broader plan to reach PSResourceGet-shaped parity across modules, scripts, repository management, resource files, and packaging behaviors, see [PSResourceGet Parity Plan](PSPublishModule.PSResourceGetParity.md). This document remains the module-specific compatibility contract.
+For the command-by-command stable PSResourceGet 1.2.0 comparison, including intentional differences and non-module gaps, see [PSResourceGet Parity](PSPublishModule.PSResourceGetParity.md). Final security, benchmark, and packaged-artifact evidence is tracked in [Managed Module Release Readiness](PSPublishModule.ManagedModules.ReleaseReadiness.md). This document remains the module-specific compatibility contract.
 
 Baseline references:
 
@@ -22,18 +22,21 @@ Baseline references:
 | `Install-Module` | `Install-ManagedModule` | Supported | Installs side-by-side versions into CurrentUser, AllUsers, or a custom module root. |
 | `Update-Module` | `Update-ManagedModule` | Supported | Plans updates from installed inventory, receipt evidence, and repository metadata. |
 | `Publish-Module` | `Publish-ManagedModule` | Supported | Packs and publishes modules to local folder or NuGet v3-compatible feeds. |
-| `Find-PSResource` | `Find-ManagedModule` | Partial | Module packages are supported. Script/resource-kind specific behavior is out of scope for the managed module engine. |
-| `Save-PSResource` | `Save-ManagedModule`, `Save-ManagedScript` | Partial | Module packages and script packages are supported. Other non-module resource kinds remain compatibility-path work. |
-| `Install-PSResource` | `Install-ManagedModule`, `Install-ManagedScript` | Partial | Module packages, script packages, version ranges, prerelease, repository priority, scope, and required-resource batch installs are supported. |
-| `Update-PSResource` | `Update-ManagedModule` | Partial | Module update workflows are supported. Non-module resources remain compatibility-path work. |
-| `Publish-PSResource` | `Publish-ManagedModule` | Partial | Module package publishing is supported. Script/resource publishing remains compatibility-path work. |
+| `Find-PSResource` | `Find-ManagedModule` | Supported for modules | Supports module name/wildcard, version expression, tag, prerelease, all-version, type, and dependency search. Package-content command and DSC-resource search are explicit gaps. |
+| `Get-InstalledPSResource` | `Get-ManagedModule` | Supported for modules | Returns typed installed rows by name, version, prerelease, scope, or explicit module path. |
+| `Save-PSResource` | `Save-ManagedModule` | Supported for modules | Supports typed find input, current-directory default, unpacked or nupkg output, PSGet XML metadata, dependencies, and version policy. |
+| `Install-PSResource` | `Install-ManagedModule` | Supported for modules | Supports typed find input, version ranges, prerelease, scope, required-resource batches, dependency closure, and safety policy. |
+| `Update-PSResource` | `Update-ManagedModule` | Supported for modules | Supports named and installed-estate update workflows with version, scope, dependency, and safety policy. |
+| `Uninstall-PSResource` | `Uninstall-ManagedModule` | Supported for modules | Supports typed installed input, version ranges, scope/path selection, dependency safety, loaded-module safety, planning, `WhatIf`, and confirmation. |
+| `Publish-PSResource` | `Publish-ManagedModule` | Supported for modules | Packs module folders or publishes existing nupkg files. Microsoft Artifact Registry `ModulePrefix` transport remains an explicit gap. |
+| `Compress-PSResource` | `Compress-ManagedResource` | Supported for modules | Creates a module nupkg without publishing. Script compression remains an explicit non-module gap. |
 
 ## Public Surface Decisions
 
 - `Get-ManagedModule` is the PowerShell-native installed inventory surface. Use `-AsInventory` when an advanced ModuleState inventory object is needed for planning or support bundles.
 - `Repair-ManagedModule` is the day-to-day stale/drift/family/source maintenance surface. Use `-Plan` for preview. ModuleState remains the internal planning engine, not a compatibility promise for unreleased public cmdlet names.
-- `Register-ManagedModuleRepository` is not planned now. Use `Set-ManagedModuleRepository`, `Get-ManagedModuleRepository`, `Initialize-ManagedModuleRepository`, and `Remove-ManagedModuleRepository` for repository profiles, onboarding, readiness checks, export/import, and bootstrap packages. Managed commands can also use direct `-Repository` values.
-- There are no separate private install/update wrappers. The reusable path is `Find-ManagedModule`, `Save-ManagedModule`, `Install-ManagedModule`, `Update-ManagedModule`, `Repair-ManagedModule`, and `Publish-ManagedModule`.
+- `Register-ManagedModuleRepository`, `Get-ManagedModuleRepository`, `Set-ManagedModuleRepository`, `Reset-ManagedModuleRepository`, `Import-ManagedModuleRepository`, and `Unregister-ManagedModuleRepository` own the managed profile lifecycle. `Initialize-ManagedModuleRepository` remains the readiness/bootstrap workflow. Managed lifecycle commands can also use direct `-Repository` values.
+- There are no separate private install/update wrappers. The reusable module path is `Find-ManagedModule`, `Get-ManagedModule`, `Save-ManagedModule`, `Install-ManagedModule`, `Update-ManagedModule`, `Uninstall-ManagedModule`, `Repair-ManagedModule`, and `Publish-ManagedModule`.
 - Public and private command aliases are allowed only when they point to the same managed command implementation. New command families need a distinct operator purpose.
 
 ## Switching Examples
@@ -45,6 +48,7 @@ The managed commands keep the common module lifecycle shape familiar while movin
 ```powershell
 Find-ManagedModule -Name Company.Tools -Repository 'https://packages.company.test/nuget/v3/index.json'
 Find-ManagedModule -Name Company.* -ProfileName CompanyModules -AllVersions
+Find-ManagedModule -Name Company.Tools -Version '[1.2.0,2.0.0)' -ProfileName CompanyModules
 ```
 
 ### Benchmark Repository Metadata
@@ -58,6 +62,8 @@ Find-ManagedModule -Name Company.* -ProfileName CompanyModules -AllVersions
 ```powershell
 Save-ManagedModule -Name Company.Tools -Path C:\OfflineModules -Repository PSGallery
 Save-ManagedModule -Name Company.Tools -RequiredVersion 1.2.0 -Path C:\OfflineModules -ProfileName CompanyModules
+Find-ManagedModule -Name Company.Tools -Version 1.2.0 -ProfileName CompanyModules |
+    Save-ManagedModule -Path C:\OfflineModules -IncludeXml
 ```
 
 ### Install
@@ -65,6 +71,8 @@ Save-ManagedModule -Name Company.Tools -RequiredVersion 1.2.0 -Path C:\OfflineMo
 ```powershell
 Install-ManagedModule -Name Company.Tools -Scope CurrentUser -Repository PSGallery
 Install-ManagedModule -Name Company.Tools -RequiredVersion 1.2.0 -ProfileName CompanyModules -AcceptLicense
+Find-ManagedModule -Name Company.Tools -Version 1.2.0 -ProfileName CompanyModules |
+    Install-ManagedModule -Scope CurrentUser
 Install-ManagedModule -RequiredResource @{
     'Company.Tools' = @{
         Version = '1.2.0'
@@ -89,6 +97,8 @@ Update-ManagedModule -Name Company.Tools -Repository PSGallery
 Update-ManagedModule -Name Company.Tools -VersionPolicy '>=1.2.0 <2.0.0' -ProfileName CompanyModules
 ```
 
+When `-ExpectedPackageSha256` is used with pipeline names, the command buffers the complete pipeline and requires exactly one distinct package target before starting any update. A multi-target hash request fails atomically rather than updating an early pipeline item first.
+
 ### Repair
 
 ```powershell
@@ -97,11 +107,21 @@ Repair-ManagedModule -Family Graph -Repository PSGallery -Plan -ShowSummary
 Repair-ManagedModule -MaintenanceReceiptPath .\module-maintenance.json -Repository CompanyModules -Plan
 Repair-ManagedModule -Name Company.Tools,Company.Web -InstallMissing -Latest -Repository PSGallery -Plan -ShowSummary
 Repair-ManagedModule -RequiredResourceFile .\required-resources.psd1 -Latest -Repository PSGallery -Plan -ShowSummary
+Repair-ManagedModule -ModulePath $ps5Root,$ps7Root -Latest -Cleanup OldVersions -Repository PSGallery -Plan
+Repair-ManagedModule -UserProfilePath C:\Users\Alice,C:\Users\Service.PowerShell -Name Company.* -Latest -Repository CompanyModules -Plan
 ```
 
 Repair plans include manifest dependency health. An installed module whose own version is otherwise fine can still receive an install-repair action when its manifest `RequiredModules` are missing or outside the declared version policy. External runtime dependencies declared through `PrivateData.PSData.ExternalModuleDependencies` are not treated as managed install dependencies.
 
 Use `-InstallMissing` with literal `-Name` values when a named baseline should also seed modules that are not installed yet. Required-resource repair is the richer form for repeatable baselines with per-module options; it treats the resource map as desired module state. Missing modules are planned as managed installs, installed modules can be updated when `-Latest` or a version policy requires it, and cleanup remains explicit through `-Cleanup OldVersions`.
+
+Repair preserves physical estate identity across module root, PowerShell edition, scope, and local user profile. Use `-UserProfilePath` for explicit profile homes or `-IncludeAllUserProfiles` for existing standard roots below the local profile container. A Unix root session retains `/root` and scans `/home` instead of treating filesystem root as the profile container. Use explicit `-ModulePath` for redirected, service-account, mounted, or otherwise nonstandard server roots. Inaccessible optional `PSModulePath`, discovered profile, and discovered module-root entries are warnings; inaccessible explicitly requested roots remain blocking errors. `-ModuleRoot` narrows selection and delivery to one physical target. A single explicit profile supplies its platform-standard current-edition CurrentUser root for missing-module delivery even when the module root has not been created yet, but it never redirects a command-level or per-resource `AllUsers` request into that profile. Other missing modules are applicable only when `-ModuleRoot` is explicit or exactly one scanned root is eligible; ambiguous or scope-incompatible destinations block apply.
+
+Supplied `-Inventory` and `-InventoryPath` artifacts remain useful as baseline evidence, but they do not hide an explicit destination: `-ModuleRoot`, `-UserProfilePath`, and maintenance-receipt roots are scanned and merged into the working inventory, then retained for post-apply convergence checks. A successful live scan replaces artifact rows and diagnostics for that root, including when the root is now empty. A receipt-only root may be created by delivery and is visible to the final convergence scan. A no-action apply also performs a live convergence scan instead of declaring success from artifact evidence alone.
+
+`-Cleanup OldVersions` is executable, not plan-only. Delivery completes first, repair inventories the same estate again, and cleanup is replanned from that current state so a newly installed latest version can make its former fallback eligible for removal in the same run. An explicit `-Force` still reinstalls a satisfied selected version before that refreshed cleanup. Cleanup does not mutate any path when the refreshed plan contains errors. Every removal names one exact installed directory, and the complete selected batch is planned, confirmed, and dependency-preflighted before deletion begins. Selected dependents are removed before their selected dependencies, so mutually related stale versions do not become action-order dependent. The managed uninstall engine merges current-runspace loaded-module evidence even when `-IncludeLoaded` was omitted; global targets validate each scanned same-edition profile with only that profile's visible roots rather than pooling unrelated users, unknown-edition custom roots are included conservatively, and profile targets validate that profile plus AllUsers roots. Anonymous roots inherited together from the current process's `PSModulePath` form one dependency-visibility context; unattributed roots supplied explicitly remain separate conservative contexts. A dependency root that was available during planning must remain enumerable through destructive preflight or cleanup fails closed without mutation. Exact-path, `ShouldProcess`, `WhatIf`, and confirmation safety remain active. Declined actions are reported as skipped and cannot produce `ExecutionSucceeded` or `Converged`. Repair stops cleanup after an operational failure, inventories the same roots one final time, and returns `ExecutionSucceeded`, `Converged`, and post-apply inventory, plan, and test evidence.
+
+Repair operates on the local machine/session. This makes the same command suitable for workstations, build agents, service accounts, and servers with multiple PowerShell editions or user profiles, but it is not remote fleet orchestration. Use PowerShell remoting or the existing configuration-management system to invoke the local contract on each server.
 
 ### Installed Inventory
 
@@ -110,11 +130,22 @@ Get-ManagedModule -Name Microsoft.Graph.* -IncludeLoaded -ShowSummary
 Get-ManagedModule -Path C:\OfflineModules -AsInventory
 ```
 
+Typed installed rows retain structured edition, scope, profile, and availability provenance for the roots scanned with their inventory. Piping exact rows to `Uninstall-ManagedModule` therefore validates each applicable visibility context without letting another user's or edition's copy satisfy an unrelated dependent. Roots successfully scanned by inventory must remain available through planning and destructive preflight. Multiple piped rows are collected into one cross-root dependency preflight and removed in dependent-first order.
+
+### Uninstall
+
+```powershell
+Get-ManagedModule -Name Company.Tools -Version 1.2.0 |
+    Uninstall-ManagedModule -WhatIf
+Uninstall-ManagedModule -Name Company.Tools -Version '[1.0.0,2.0.0)' -Plan
+```
+
 ### Publish
 
 ```powershell
 Publish-ManagedModule -Path C:\Source\Company.Tools -Repository C:\Packages
 Publish-ManagedModule -Path C:\Source\Company.Tools -ProfileName CompanyModules -ApiKeyFilePath C:\Secrets\company-feed-key.txt
+Publish-ManagedModule -NupkgPath C:\Packages\Company.Tools.1.2.0.nupkg -ProfileName CompanyModules -ApiKeyFilePath C:\Secrets\company-feed-key.txt
 ```
 
 ### Managed Repository Profiles
@@ -122,7 +153,7 @@ Publish-ManagedModule -Path C:\Source\Company.Tools -ProfileName CompanyModules 
 Managed repository profiles are first-class inputs to the lifecycle commands:
 
 ```powershell
-Set-ManagedModuleRepository -Name CompanyModules -Provider NuGet -RepositoryUri 'https://packages.company.test/nuget/v3/index.json'
+Register-ManagedModuleRepository -Name CompanyModules -Uri 'https://packages.company.test/nuget/v3/index.json' -Trusted
 Initialize-ManagedModuleRepository -ProfileName CompanyModules -InstallPrerequisites
 Install-ManagedModule -ProfileName CompanyModules -Name Company.Tools
 Update-ManagedModule  -ProfileName CompanyModules -Name Company.Tools
@@ -155,10 +186,13 @@ Repair-ManagedModule -Inventory $inventory -Latest -Repository PSGallery -ShowSu
 | Credentials | Supported | `-Credential`, credential user/secret/file inputs where exposed |
 | Proxy | Supported | `-Proxy`, `-ProxyCredential` on managed repository cmdlets |
 | Version selection | Supported | `-RequiredVersion`, `-Version`, `-MinimumVersion`, `-MaximumVersion`, `-VersionPolicy` |
+| Typed pipeline input | Supported | `Find-ManagedModule` output to install/save; `Get-ManagedModule` output to uninstall |
 | Prerelease | Supported | `-Prerelease`, `-AllowPrerelease` alias where useful |
 | Scope | Supported | CurrentUser, AllUsers, Custom module root |
 | Dependency handling | Supported | Dependency closure, skip dependency check, package dependency mirroring during managed publish |
 | Required resource batch install and repair | Supported for module resources | `-RequiredResource`, `-RequiredResourceFile`, and PSResourceGet-style nested hashtable values with `Name`, `Version`, `Repository`, `AcceptLicense`, `Prerelease`, `Scope`, `Quiet`, `Reinstall`, `TrustRepository`, `AllowClobber`, `NoClobber`, and `SkipDependencyCheck` keys |
+| Save compatibility formats | Supported | current-directory default, `-AsNupkg`, and `-IncludeXml` for unpacked module saves |
+| Existing package publish | Supported | `Publish-ManagedModule -NupkgPath` publishes without repacking |
 | Trust/integrity | Supported | Trusted repository requirement, allowed author policy, expected package SHA256 |
 | WhatIf/Confirm | Supported | Mutating cmdlets use PowerShell `ShouldProcess` |
 | Summaries | Supported | Spectre.Console summaries remain host-side; result objects are still pipeline-friendly |
@@ -177,9 +211,9 @@ PSResourceGet operator spellings are accepted where they map to the same managed
 
 ## PSResourceGet Resource-Kind Scope
 
-The managed engine started as a module lifecycle engine. It supports module packages for find, save, install, update, publish, and estate repair. Script packages now have first-class save/install support through the managed script resource surface. It does not currently claim support for the remaining PSResourceGet resource kinds or provider bootstrap behaviors. Those gaps are tracked by the broader [PSResourceGet Parity Plan](PSPublishModule.PSResourceGetParity.md), which keeps script/resource support isolated from the module hot path:
+The managed engine started as a module lifecycle engine. It supports module find, installed inventory, save, install, update, uninstall, publish, compression, and estate repair. Script packages now have first-class save/install support through the managed script resource surface. It does not currently claim support for the remaining PSResourceGet resource kinds or provider bootstrap behaviors. Those gaps are tracked by [PSResourceGet Parity](PSPublishModule.PSResourceGetParity.md), which keeps script/resource support isolated from the module hot path:
 
-- script find/update/publish/uninstall workflows
+- script find/update/publish/uninstall/compress workflows
 - DSC resources as a separate resource-kind search/install surface
 - command-name search across package contents
 - role capability search
@@ -195,10 +229,11 @@ This checklist is the guardrail for replacing common PowerShellGet and PSResourc
 - [x] `Install-ManagedModule` resolves repository-selected latest versions for broad requests before treating a local install as satisfying the operation, matching PSResourceGet-style latest-first expectations without giving up exact-version no-op speed.
 - [x] `Install-ManagedModule` repairs missing or unsatisfied manifest dependencies when the selected installed version is already present and broken, without requiring `-Force`.
 - [x] `Update-ManagedModule` supports named updates and no-name estate updates from selected module roots, matching the common `Update-Module` operator habit.
-- [x] `Save-ManagedModule` supports dependency closure, explicit path, version policies, license acceptance, forced replacement, and import-validation benchmark proof.
-- [x] `Find-ManagedModule` supports repository/profile lookup, wildcard module names, all versions, prerelease inclusion, and fast latest-version lookup.
-- [x] `Publish-ManagedModule` supports module package publishing with API key or credential paths through the managed publisher.
-- [x] PSResourceGet-style semantic version ranges are supported through `-VersionPolicy`.
+- [x] `Save-ManagedModule` supports typed find input, dependency closure, current-directory or explicit path, version policies, `-AsNupkg`, `-IncludeXml`, license acceptance, forced replacement, and import-validation benchmark proof.
+- [x] `Find-ManagedModule` supports repository/profile lookup, wildcard module names, exact/wildcard/range `-Version`, all versions, tags, prerelease inclusion, dependency expansion, and fast latest-version lookup.
+- [x] `Get-ManagedModule` typed rows pipe to `Uninstall-ManagedModule` for exact installed-path removal with dependency and loaded-module safety.
+- [x] `Publish-ManagedModule` supports module-folder packing and existing `-NupkgPath` publishing with API key or credential paths through the managed publisher.
+- [x] PSResourceGet-style semantic version ranges are supported by find/uninstall `-Version` and install/save/update version-policy inputs.
 - [x] PSResourceGet-style `-TrustRepository` behavior maps to trusted repository profiles and `-RequireTrustedRepository` policy instead of hidden prompts.
 - [x] Public `-Proxy` and `-ProxyCredential` parameters are exposed on managed find/install/save/update/publish repository cmdlets and flow into the managed repository client.
 - [x] `Install-ManagedModule` supports PSResourceGet-style module batch installs through `-RequiredResource` and `-RequiredResourceFile`, including nested resource option hashtables and version range strings.
@@ -207,14 +242,13 @@ This checklist is the guardrail for replacing common PowerShellGet and PSResourc
 - [x] Define exact public semantics for `-AllowClobber` versus PSResourceGet `-NoClobber`, including exported command conflicts in the selected target root.
 - [x] Define exact public semantics for `-AcceptLicense`, including dependency packages and unattended estate updates.
 - [x] Define exact public semantics for `-SkipPublisherCheck` compatibility. Managed install/update currently uses trust, author, source, package hash, and optional Authenticode policies instead of cloning PowerShellGet's publisher-check switch; no public switch is exposed until true publisher-check semantics exist.
-- [ ] Complete managed Authenticode/catalog validation parity with PSResourceGet `-AuthenticodeCheck`, including explicit catalog policy evidence and timestamped short-lived certificate chains.
-- [x] Add initial managed `-AuthenticodeCheck` support for install/save/update on Windows using native WinTrust validation of extracted signable files before promotion.
+- [x] Match stable PSResourceGet 1.2.0 `-AuthenticodeCheck` behavior for install/save/update on Windows by validating extracted signable files, including signed `.cat` files, with native WinTrust before promotion.
 - [x] Expose semantically equivalent migration aliases such as `-RequiredVersion`, `-AllowPrerelease`, `-Source`, `-RepositoryUri`, `-Path`, `-DestinationPath`, `-SkipDependenciesCheck`, `-ModulePath`, and `-NuGetApiKey` where they map cleanly to managed cmdlet behavior.
 - [x] Decide whether to add explicit `-TrustRepository` and `-SkipPublisherCheck` compatibility parameters. They are not aliases because repository trust and publisher checks are different safety concepts in the managed engine; use `-RequireTrustedRepository` and `-AuthenticodeCheck`/integrity policies instead.
 - [x] Document unsupported non-module resource use cases explicitly: remaining script lifecycle gaps, DSC resources as resource kinds, role capability search, command-name search, and provider-specific bootstrap behavior.
 - [x] Add initial managed script resource save/install support with PSScriptInfo validation and local-feed proof.
 - [x] Add repair/maintenance benchmark lanes for stale versions, source drift, scope drift, and family coherence.
-- [x] Add repair/maintenance benchmark lanes for loaded-module safety and cleanup planning, with command-level plan tests that prove loaded-module findings and cleanup actions remain visible without mutation.
+- [x] Add repair/maintenance coverage for current-runspace loaded-module safety, exact-path cleanup execution, post-delivery cleanup replanning, cross-root dependency blocking, stale-estate revalidation, artifact-plus-destination inventory, multiple editions/profiles/physical roots, and post-apply convergence.
 - [x] Add install/save/update no-op and force benchmark lanes so existing-target behavior is measured across managed, PowerShellGet, PSResourceGet, and the install-only speed gate where an equivalent operation exists.
 
 ## Model Contracts
@@ -264,7 +298,7 @@ Cmdlets should map parameters into these models and write result objects. They s
 - `-Force` is not required for dependency repair. If the repository-selected installed version is present but its managed manifest dependencies are missing or unsatisfied, install repairs those dependencies while leaving the healthy root module in place.
 - `Update-ManagedModule -Force` reinstalls the selected target version when the selected target is already the installed version.
 - `Update-ManagedModule -Force` does not silently downgrade a newer installed version to an older selected version. Downgrade behavior needs a separate explicit policy so stale-version repair and operator mistakes do not collapse into the same switch.
-- `Repair-ManagedModule -Force` marks prepared managed/private install, update, and save delivery commands as forced. In `-Plan` mode this is visible on the prepared command object and command arguments, but no mutation occurs.
+- `Repair-ManagedModule -Force` marks managed/private install, update, and save delivery as forced. In `-Plan` mode this is visible on the action and prepared command evidence, but no mutation occurs.
 - `Repair-ManagedModule` can plan a non-forced install repair for an installed module whose manifest dependency graph is broken. The repair action targets the installed root module version so the managed installer can restore the dependency closure without replacing the healthy root module unless `-Force` is supplied.
 - `-Force` does not imply destructive old-version cleanup. Cleanup remains a separate maintenance/repair decision.
 - `Publish-ManagedModule -Force` bypasses managed preflight duplicate/version guards where the target repository supports replacement or accepts the pushed package. It does not guarantee that a remote feed will overwrite an existing package.
@@ -273,7 +307,7 @@ Cmdlets should map parameters into these models and write result objects. They s
 
 Managed install, save, and update are no-clobber by default. Before a staged package is promoted, the managed engine reads manifest-declared `FunctionsToExport`, `CmdletsToExport`, and `AliasesToExport` values and checks them against other installed modules in the selected target root. If another module exports the same function, cmdlet, or alias, the operation fails before writing the final module version.
 
-`-AllowClobber` is the explicit opt-in that permits those exported command conflicts. This maps to the PSResourceGet `-NoClobber` safety idea by making no-clobber the default in the managed engine, rather than adding a separate `-NoClobber` switch whose absence could imply less safe behavior.
+`-AllowClobber` is the explicit opt-in that permits those exported command conflicts. `-NoClobber` is also accepted for PSResourceGet migration and makes the default policy explicit; specifying both switches is rejected.
 
 Same-name modules are skipped during conflict checks so side-by-side versions and exact-version reinstalls do not self-conflict. Wildcard exports such as `FunctionsToExport = '*'` are not treated as concrete conflicts because they cannot be reliably enumerated from the manifest alone. The check is target-root based; cross-scope conflicts remain a repair/maintenance policy concern rather than an install-time block across every module path on the machine.
 
@@ -289,9 +323,9 @@ Plan operations do not accept licenses or write license receipts. They only desc
 
 `-AuthenticodeCheck` is an explicit opt-in on managed install, save, and update. When supplied, the managed engine extracts the package to a staging directory and validates signable files with native Windows WinTrust before dependency delivery and before the staged module is promoted to the target root. Unsigned or invalid signable files block the operation before the final module version is written.
 
-The initial managed gate covers common signable module artifacts such as `.ps1`, `.psm1`, `.psd1`, `.ps1xml`, `.pssc`, `.psrc`, `.dll`, `.exe`, and `.cat`. Dependency installs inherit the same check. Plan output records that Authenticode validation would be required, but plan mode does not download or validate signatures.
+The initial managed gate covers common signable module artifacts such as `.ps1`, `.psm1`, `.psd1`, `.ps1xml`, `.pssc`, `.psrc`, `.mof`, `.dll`, `.exe`, and `.cat`. Dependency installs inherit the same check. Plan output records that Authenticode validation would be required, but plan mode does not download or validate signatures.
 
-This check is currently Windows-only. Calling it on non-Windows hosts fails clearly instead of silently skipping the safety check. Full PSResourceGet parity still needs catalog-specific evidence and timestamp/short-lived-certificate behavior documented with live signed fixtures.
+This check is currently Windows-only. Calling it on non-Windows hosts fails closed instead of warning and continuing without validation, which is an intentional managed safety difference. The stable PSResourceGet 1.2.0 implementation also validates the Authenticode status of each selected file, including `.cat` files; it does not validate catalog contents through `Test-FileCatalog`. The managed behavior therefore meets the stable module-parity baseline. Deeper catalog-content policy and additional timestamp or short-lived-certificate fixtures remain useful security hardening, but they are not missing PSResourceGet 1.2.0 module functionality.
 
 ## Transition Gates
 
@@ -299,7 +333,7 @@ Compatibility transport stays available as a temporary fallback. The managed eng
 
 The managed path can be treated as the default for supported module workflows after all of these are true:
 
-- Managed install/save/update/publish passes local-folder and public-feed proof on Windows PowerShell 5.1 and PowerShell 7+.
+- Managed find/inventory/save/install/update/uninstall/publish/compress passes the applicable local-folder, installed-root, and public-feed proof on Windows PowerShell 5.1 and PowerShell 7+.
 - Benchmarks cover cold cache, warm cache, heavy extraction, dependency closure, no-op update, private feed metadata, and publish comparison.
 - Common PowerShellGet and PSResourceGet module workflows have documented managed equivalents.
 - `Repair-ManagedModule` maintains the same estate through managed transport with receipts and inspectable repair plans.

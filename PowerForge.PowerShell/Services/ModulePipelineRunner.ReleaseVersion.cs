@@ -5,16 +5,108 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
+    private static void ValidateSynchronizedModuleVersionConfiguration(
+        ConfigurationReleaseSegment? releaseSegment,
+        IReadOnlyList<ConfigurationProjectBuildSegment> projectBuilds,
+        IReadOnlyList<ConfigurationPackageBuildSegment> packageBuilds,
+        ConfigurationGateMode? gateMode)
+    {
+        var release = releaseSegment?.Configuration;
+        if (release?.SynchronizeModuleVersion != true)
+        {
+            return;
+        }
+
+        if (release.VersionSource != ReleaseVersionSource.ProjectBuild &&
+            release.VersionSource != ReleaseVersionSource.PackageBuild)
+        {
+            throw new InvalidOperationException(
+                "SynchronizeModuleVersion requires Release VersionSource ProjectBuild or PackageBuild.");
+        }
+
+        var sourceLanes = release.VersionSource == ReleaseVersionSource.ProjectBuild
+            ? projectBuilds.Select(static segment => new SynchronizedReleaseLane(
+                segment.Configuration.Enabled,
+                segment.Configuration.BuildBeforeModule,
+                segment.Configuration.UseAsReleaseVersionSource)).ToArray()
+            : packageBuilds.Select(static segment => new SynchronizedReleaseLane(
+                segment.Configuration.Enabled,
+                segment.Configuration.BuildBeforeModule,
+                segment.Configuration.UseAsReleaseVersionSource)).ToArray();
+        var explicitLanes = sourceLanes.Where(static lane => lane.UseAsReleaseVersionSource).ToArray();
+        if (explicitLanes.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"SynchronizeModuleVersion requires a {release.VersionSource} lane marked with UseAsReleaseVersionSource.");
+        }
+
+        var activeExplicitLanes = explicitLanes
+            .Where(lane => IsSynchronizedReleaseLaneActive(gateMode, lane.Enabled))
+            .ToArray();
+        if (activeExplicitLanes.Length > 1)
+        {
+            throw new InvalidOperationException(
+                "SynchronizeModuleVersion requires exactly one active release source lane marked with UseAsReleaseVersionSource.");
+        }
+        if (activeExplicitLanes.Any(lane =>
+                !ShouldRunPackageBuildBeforeModule(releaseSegment, lane.BuildBeforeModule)))
+        {
+            throw new InvalidOperationException(
+                "SynchronizeModuleVersion requires every selected release source lane to run before the module build. Set BuildBeforeModule or configure Release BuildOrder accordingly.");
+        }
+
+        if (string.IsNullOrWhiteSpace(release.PrimaryProject))
+        {
+            throw new InvalidOperationException(
+                "SynchronizeModuleVersion requires Release PrimaryProject so the module version can be coordinated with one explicit package project.");
+        }
+
+        if (ShouldSynchronizeModuleVersionForRun(releaseSegment, gateMode) &&
+            activeExplicitLanes.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "SynchronizeModuleVersion requires an enabled release source lane when no Build or Publish gate is active.");
+        }
+    }
+
+    private static bool IsSynchronizedReleaseLaneActive(
+        ConfigurationGateMode? gateMode,
+        bool enabled)
+        => gateMode switch
+        {
+            ConfigurationGateMode.Build or ConfigurationGateMode.Publish => true,
+            ConfigurationGateMode.Manifest or ConfigurationGateMode.Documentation => false,
+            _ => enabled
+        };
+
+    private static bool ShouldSynchronizeModuleVersionForRun(
+        ConfigurationReleaseSegment? release,
+        ConfigurationGateMode? gateMode)
+        => release?.Configuration?.SynchronizeModuleVersion == true &&
+           gateMode is not ConfigurationGateMode.Manifest and not ConfigurationGateMode.Documentation;
+
+    private static string ResolveProvisionalSynchronizedModuleVersion(string expectedVersion)
+    {
+        if (Version.TryParse(expectedVersion, out _))
+        {
+            return expectedVersion;
+        }
+
+        return VersionPatternStepper.Step(expectedVersion, currentVersion: null);
+    }
+
     private void RegisterReleaseVersionCandidate(
         ModulePipelineRunState state,
         ReleaseVersionSource source,
         string label,
+        string checkpointKey,
         bool explicitSource,
         ProjectBuildHostExecutionResult result)
     {
         state.ReleaseVersionCandidates.Add(new ReleaseVersionCandidate(
             source,
             string.IsNullOrWhiteSpace(label) ? source.ToString() : label.Trim(),
+            checkpointKey,
             explicitSource,
             result));
     }
@@ -69,10 +161,67 @@ public sealed partial class ModulePipelineRunner
         _ = ResolveRequestedPackageReleaseVersion(plan, state);
     }
 
+    private void SynchronizeModuleVersionFromReleaseSource(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state)
+    {
+        var releaseSegment = plan.Release;
+        if (!ShouldSynchronizeModuleVersionForRun(releaseSegment, plan.GateMode))
+        {
+            return;
+        }
+        var release = releaseSegment!.Configuration;
+
+        if (release.VersionSource != ReleaseVersionSource.ProjectBuild &&
+            release.VersionSource != ReleaseVersionSource.PackageBuild)
+        {
+            throw new InvalidOperationException(
+                "SynchronizeModuleVersion requires Release VersionSource ProjectBuild or PackageBuild.");
+        }
+
+        var releaseVersion = ResolveCandidateVersion(
+            state.ReleaseVersionCandidates,
+            release.VersionSource,
+            release.PrimaryProject,
+            explicitOnly: true,
+            required: true)!;
+
+        if (releaseVersion.IndexOf('+') >= 0)
+        {
+            throw new InvalidOperationException(
+                $"Release version '{releaseVersion}' contains build metadata, which cannot be represented by a PowerShell module version.");
+        }
+
+        if (!PackageVersionUtility.TryNormalizeExact(releaseVersion, out var normalizedVersion))
+        {
+            throw new InvalidOperationException(
+                $"Release version '{releaseVersion}' is not a valid exact package version and cannot be used as the module version.");
+        }
+
+        plan.ResolvedVersion = PackageVersionUtility.GetNumericVersion(normalizedVersion);
+        var preRelease = PackageVersionUtility.GetPrereleaseVersion(normalizedVersion);
+        plan.PreRelease = string.IsNullOrWhiteSpace(preRelease) ? null : preRelease;
+        plan.BuildSpec.Version = plan.ResolvedVersion;
+
+        ValidateDeliveryPathConflicts(
+            plan.ProjectRoot,
+            plan.ModuleName,
+            plan.ResolvedVersion,
+            plan.PreRelease,
+            plan.BuildSpec.ExcludeDirectories,
+            plan.Delivery,
+            plan.Artefacts);
+
+        _logger.Info(
+            $"Module version synchronized to release source '{release.VersionSource}': {normalizedVersion}.");
+    }
+
     private static string ResolveManualReleaseVersion(ReleaseConfiguration release)
     {
         if (string.IsNullOrWhiteSpace(release.Version))
+        {
             throw new InvalidOperationException("Release VersionSource Manual requires Version.");
+        }
 
         return release.Version!.Trim();
     }
@@ -182,6 +331,23 @@ public sealed partial class ModulePipelineRunner
         var explicitText = explicitOnly ? " marked with UseAsReleaseVersionSource" : string.Empty;
 
         return $"Release version source '{sourceText}'{primaryText}{explicitText} did not produce a resolved version.";
+    }
+
+    private readonly struct SynchronizedReleaseLane
+    {
+        public SynchronizedReleaseLane(
+            bool enabled,
+            bool buildBeforeModule,
+            bool useAsReleaseVersionSource)
+        {
+            Enabled = enabled;
+            BuildBeforeModule = buildBeforeModule;
+            UseAsReleaseVersionSource = useAsReleaseVersionSource;
+        }
+
+        public bool Enabled { get; }
+        public bool BuildBeforeModule { get; }
+        public bool UseAsReleaseVersionSource { get; }
     }
 
 }

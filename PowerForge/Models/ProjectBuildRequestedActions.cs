@@ -5,6 +5,8 @@ namespace PowerForge;
 /// </summary>
 internal sealed class ProjectBuildRequestedActions
 {
+    public string? ReleaseVersionFloor { get; set; }
+    public string? ReleaseVersionFloorProject { get; set; }
     public bool? PlanOnly { get; set; }
     public bool? UpdateVersions { get; set; }
     public bool? Build { get; set; }

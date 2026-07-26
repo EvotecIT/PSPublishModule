@@ -211,21 +211,9 @@ internal static partial class ModuleBootstrapperGenerator
         foreach (var ignored in ignoredLibraryFileNames)
             excluded.Add(ignored);
 
-        var exportFirst = new HashSet<string>(exportAssemblyFileNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
-        foreach (var name in exportAssemblyFileNames ?? Array.Empty<string>())
-        {
-            if (string.IsNullOrWhiteSpace(name)) continue;
-            if (excluded.Contains(name)) continue;
-            if (!dllFiles.Contains(name, StringComparer.OrdinalIgnoreCase)) continue;
+        var exportLast = new HashSet<string>(exportAssemblyFileNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        foreach (var name in OrderManagedLibrariesForDesktopPreload(dir, dllFiles, excluded, exportLast))
             list.Add(RelativeLibPath(folderName, name));
-        }
-
-        foreach (var name in dllFiles.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
-        {
-            if (excluded.Contains(name)) continue;
-            if (exportFirst.Contains(name)) continue;
-            list.Add(RelativeLibPath(folderName, name));
-        }
 
         return list;
 
@@ -287,6 +275,7 @@ internal static partial class ModuleBootstrapperGenerator
                     ["ModuleName"] = EscapePsSingleQuoted(moduleName),
                     ["LoaderAssemblyName"] = EscapePsSingleQuoted(loaderIdentity?.AssemblyName ?? string.Empty),
                     ["LoaderTypeName"] = loaderIdentity?.TypeName ?? string.Empty,
+                    ["DesktopAssemblyResolverBlock"] = BuildDesktopAssemblyResolverBlock(),
                     ["RuntimeHandlerBlock"] = handleRuntimes ? BuildRuntimeHandlerBlock() : string.Empty,
                     ["TypeAcceleratorBlock"] = BuildTypeAcceleratorBlock(
                         assemblyTypeAcceleratorMode,
@@ -297,7 +286,7 @@ internal static partial class ModuleBootstrapperGenerator
                             assemblyTypeAcceleratorMode,
                             assemblyTypeAccelerators,
                             assemblyTypeAcceleratorAssemblies,
-                            "[IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder)",
+                            "[IO.Path]::Combine($LibRoot, $LibFolder)",
                             ignoreLibrariesOnLoad).TrimEnd(),
                         4)
                 })
@@ -334,12 +323,20 @@ internal static partial class ModuleBootstrapperGenerator
             ? RenderModuleBootstrapperTemplate(
                 "ScriptLoader",
                 "Scripts/ModuleBootstrapper/ScriptLoader.Template.ps1",
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["ModuleRootExpression"] = includeBinaryLoader
+                        ? "$PowerForgeModuleRoot"
+                        : "$PSScriptRoot"
+                })
             : string.Empty;
 
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["ModuleName"] = moduleName,
+            ["ModuleRootCaptureBlock"] = includeBinaryLoader
+                ? "$PowerForgeModuleRoot = $PSScriptRoot"
+                : string.Empty,
             ["BinaryLoaderBlock"] = binaryLoaderBlock,
             ["ScriptLoaderBlock"] = scriptLoaderBlock,
             ["ExportBlock"] = ModuleConditionalExportBlockBuilder.BuildExportBlock(
@@ -648,17 +645,28 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
 
         var resolvedPath = _resolver?.ResolveAssemblyToPath(assemblyName);
         if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+        {{
+            // A package can place a compile-time facade beside the module and the real
+            // implementation under runtimes/<rid>/lib. Replace only that adjacent
+            // facade; preserve every non-adjacent path selected by the dependency resolver.
+            var runtimePath = IsAdjacentAssemblyPath(resolvedPath, assemblyName.Name)
+                ? ResolvePackagedRuntimeAssembly(assemblyName.Name)
+                : null;
+            if (!string.IsNullOrWhiteSpace(runtimePath) && File.Exists(runtimePath))
+                return LoadFromAssemblyPath(runtimePath);
+
             return LoadFromAssemblyPath(resolvedPath);
+        }}
 
         resolvedPath = _manifestResolver?.ResolveAssemblyToPath(assemblyName);
         if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
             return LoadFromAssemblyPath(resolvedPath);
 
-        resolvedPath = ResolvePackagedRuntimeAssembly(assemblyName.Name);
-        if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
-            return LoadFromAssemblyPath(resolvedPath);
-
         var assemblyPath = Path.Combine(_assemblyDirectory, assemblyName.Name + "".dll"");
+        var packagedRuntimePath = ResolvePackagedRuntimeAssembly(assemblyName.Name);
+        if (!string.IsNullOrWhiteSpace(packagedRuntimePath) && File.Exists(packagedRuntimePath))
+            return LoadFromAssemblyPath(packagedRuntimePath);
+
         return File.Exists(assemblyPath) ? LoadFromAssemblyPath(assemblyPath) : null;
     }}
 
@@ -948,6 +956,18 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         return null;
     }}
 
+    private bool IsAdjacentAssemblyPath(string resolvedPath, string assemblyName)
+    {{
+        if (string.IsNullOrWhiteSpace(resolvedPath) || string.IsNullOrWhiteSpace(assemblyName))
+            return false;
+
+        var adjacentPath = Path.Combine(_assemblyDirectory, assemblyName + "".dll"");
+        return string.Equals(
+            Path.GetFullPath(resolvedPath),
+            Path.GetFullPath(adjacentPath),
+            StringComparison.OrdinalIgnoreCase);
+    }}
+
     private IntPtr LoadPackagedNativeLibrary(string unmanagedDllName)
     {{
         if (string.IsNullOrWhiteSpace(unmanagedDllName))
@@ -1130,6 +1150,14 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
                        "}",
                        string.Empty
                    });
+    }
+
+    private static string BuildDesktopAssemblyResolverBlock()
+    {
+        return RenderModuleBootstrapperTemplate(
+            "DesktopAssemblyResolver",
+            "Scripts/ModuleBootstrapper/DesktopAssemblyResolver.Template.ps1",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
     }
 
     internal static string BuildTypeAcceleratorBlock(

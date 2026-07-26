@@ -95,6 +95,65 @@ public sealed class ModulePipelineExecutionSessionTests
         }
     }
 
+    [Fact]
+    public void GitHubProgressAdapter_ReportsDeterminateAggregateBytesOnPublishStep()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var reporter = new RecordingProgressReporter();
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(CreateSpec(root.FullName, moduleName));
+            var session = ModulePipelineExecutionSession.Create(plan, reporter);
+            var publish = Assert.Single(
+                plan.Publishes,
+                static segment => segment.Configuration.Destination == PublishDestination.GitHub);
+            var step = session.GetPublishStep(publish);
+            var adapter = new ModulePipelineGitHubReleaseProgressAdapter(session, step);
+
+            adapter.Report(new GitHubReleaseAssetProgress
+            {
+                FilePath = Path.Combine(root.FullName, "one.zip"),
+                FileName = "one.zip",
+                Position = 1,
+                TotalAssets = 2,
+                State = GitHubReleaseAssetProgressState.Planned,
+                TotalBytes = 100
+            });
+            adapter.Report(new GitHubReleaseAssetProgress
+            {
+                FilePath = Path.Combine(root.FullName, "two.zip"),
+                FileName = "two.zip",
+                Position = 2,
+                TotalAssets = 2,
+                State = GitHubReleaseAssetProgressState.Planned,
+                TotalBytes = 300
+            });
+            adapter.Report(new GitHubReleaseAssetProgress
+            {
+                FilePath = Path.Combine(root.FullName, "one.zip"),
+                FileName = "one.zip",
+                Position = 1,
+                TotalAssets = 2,
+                State = GitHubReleaseAssetProgressState.Uploading,
+                BytesTransferred = 50,
+                TotalBytes = 100
+            });
+
+            var update = reporter.Progress[reporter.Progress.Count - 1];
+            Assert.Equal(step!.Key, update.Key);
+            Assert.Equal(50, update.Value);
+            Assert.Equal(400, update.Maximum);
+            Assert.Contains("1/2 one.zip", update.Detail, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     private static ModulePipelineSpec CreateSpec(string rootPath, string moduleName)
     {
         return new ModulePipelineSpec
@@ -233,12 +292,13 @@ public sealed class ModulePipelineExecutionSessionTests
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
     }
 
-    private sealed class RecordingProgressReporter : IModulePipelineProgressReporterV2
+    private sealed class RecordingProgressReporter : IModulePipelineProgressReporterV3
     {
         public List<string> Started { get; } = new();
         public List<string> Completed { get; } = new();
         public List<string> Failed { get; } = new();
         public List<string> Skipped { get; } = new();
+        public List<(string Key, double Value, double Maximum, string? Detail)> Progress { get; } = new();
 
         public void StepStarting(ModulePipelineStep step)
         {
@@ -258,6 +318,11 @@ public sealed class ModulePipelineExecutionSessionTests
         public void StepSkipped(ModulePipelineStep step)
         {
             Skipped.Add(step.Key);
+        }
+
+        public void StepProgress(ModulePipelineStep step, double value, double maximum, string? detail = null)
+        {
+            Progress.Add((step.Key, value, maximum, detail));
         }
     }
 }

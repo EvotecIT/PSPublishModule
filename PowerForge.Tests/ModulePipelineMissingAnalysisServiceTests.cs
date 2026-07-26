@@ -231,7 +231,10 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
             ModulePipelinePlan plan,
             ModuleBuildResult buildResult,
             IReadOnlyList<ArtefactBuildResult> artefactResults,
-            bool includeScriptFolders)
+            bool includeScriptFolders,
+            Action? remotePublishAttempted,
+            Action? remoteSideEffectObserved,
+            IGitHubReleaseProgressReporter? gitHubProgress)
             => throw new InvalidOperationException("Not used in this test.");
 
         public void ValidateModuleImports(

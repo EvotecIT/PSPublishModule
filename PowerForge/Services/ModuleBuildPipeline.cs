@@ -72,9 +72,10 @@ public sealed class ModuleBuildPipeline
             manifestPath: Path.Combine(source, $"{spec.Name}.psd1"),
             fallbackVersion: "1.0.0");
 
-        var staging = string.IsNullOrWhiteSpace(spec.StagingPath)
+        var hasExplicitStagingPath = !string.IsNullOrWhiteSpace(spec.StagingPath);
+        var staging = !hasExplicitStagingPath
             ? Path.Combine(Path.GetTempPath(), "PowerForge", "build", $"{spec.Name}_{Guid.NewGuid():N}")
-            : Path.GetFullPath(spec.StagingPath);
+            : Path.GetFullPath(spec.StagingPath!);
 
         // Persist resolved staging path on the spec. This enables best-effort cleanup even when staging fails mid-copy.
         // (Important for callers that want to always clean up generated staging directories on failure.)
@@ -82,6 +83,28 @@ public sealed class ModuleBuildPipeline
 
         if (IsChildPath(staging, source))
             throw new InvalidOperationException($"Staging path must not be under SourcePath. SourcePath='{source}', StagingPath='{staging}'.");
+
+        if (spec.ReuseStaging)
+        {
+            if (!spec.SkipDotNetBuild)
+                throw new InvalidOperationException("ReuseStaging requires SkipDotNetBuild so the checkpointed binary payload cannot be rebuilt.");
+            if (!hasExplicitStagingPath)
+                throw new InvalidOperationException("ReuseStaging requires an explicit StagingPath.");
+            if (!Directory.Exists(staging) || !Directory.EnumerateFileSystemEntries(staging).Any())
+                throw new InvalidOperationException($"Reusable staging directory is missing or empty: {staging}");
+
+            var stagedManifestPath = Path.Combine(staging, $"{spec.Name}.psd1");
+            if (!File.Exists(stagedManifestPath))
+                throw new FileNotFoundException($"Reusable staging manifest was not found: {stagedManifestPath}", stagedManifestPath);
+
+            spec.Version = ResolveModuleVersionFromManifestIfAuto(
+                version: spec.Version,
+                manifestPath: stagedManifestPath,
+                fallbackVersion: "1.0.0");
+            ValidateExistingBinaryPayloadForNoBuild(spec, staging);
+            _logger.Info($"Reusing staged module '{spec.Name}' from '{staging}'");
+            return new StagingResult(source, staging, 0, 0);
+        }
 
         if (Directory.Exists(staging) && Directory.EnumerateFileSystemEntries(staging).Any())
             throw new InvalidOperationException($"Staging directory already exists and is not empty: {staging}");
@@ -91,6 +114,8 @@ public sealed class ModuleBuildPipeline
         var excluded = new HashSet<string>((spec.ExcludeDirectories ?? Array.Empty<string>())
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .Select(s => s.Trim()), StringComparer.OrdinalIgnoreCase);
+        if (spec.SkipDotNetBuild)
+            excluded.Remove("Lib");
 
         var excludedFiles = new HashSet<string>((spec.ExcludeFiles ?? Array.Empty<string>())
             .Where(s => !string.IsNullOrWhiteSpace(s))
@@ -98,6 +123,7 @@ public sealed class ModuleBuildPipeline
 
         _logger.Info($"Staging module '{spec.Name}' from '{source}' to '{staging}'");
         CopyDirectoryFiltered(source, staging, excluded, excludedFiles);
+        ValidateExistingBinaryPayloadForNoBuild(spec, staging);
         CleanReplaceSingleFileStagedBinaryPayload(spec, staging);
         var normalization = NormalizeMixedPowerShellLineEndings(staging, excluded, excludedFiles);
 
@@ -106,6 +132,39 @@ public sealed class ModuleBuildPipeline
             staging,
             normalization.Converted,
             normalization.Errors);
+    }
+
+    private static void ValidateExistingBinaryPayloadForNoBuild(ModuleBuildSpec spec, string stagingPath)
+    {
+        if (!spec.SkipDotNetBuild || spec.CsprojRequiredReasons is not { Length: > 0 })
+            return;
+
+        var libPath = Path.Combine(stagingPath, "Lib");
+        var dlls = Directory.Exists(libPath)
+            ? Directory.GetFiles(libPath, "*.dll", SearchOption.AllDirectories)
+            : Array.Empty<string>();
+        if (dlls.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"SkipDotNetBuild was requested for binary module '{spec.Name}', but the source module has no existing Lib/*.dll payload to reuse.");
+        }
+
+        var availableNames = new HashSet<string>(
+            dlls.Select(Path.GetFileName).OfType<string>(),
+            StringComparer.OrdinalIgnoreCase);
+        var missingExports = (spec.ExportAssemblies ?? Array.Empty<string>())
+            .Where(static assembly => !string.IsNullOrWhiteSpace(assembly))
+            .Select(Path.GetFileName)
+            .OfType<string>()
+            .Select(static name => name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? name : name + ".dll")
+            .Where(name => !availableNames.Contains(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (missingExports.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"SkipDotNetBuild was requested for binary module '{spec.Name}', but the existing Lib payload is missing: {string.Join(", ", missingExports)}.");
+        }
     }
 
     internal ModuleBuildResult BuildInStaging(ModuleBuildSpec spec, string stagingPath)
@@ -154,7 +213,9 @@ public sealed class ModuleBuildPipeline
             UseAssemblyLoadContext = useAssemblyLoadContext,
             ExcludeLibraryFilter = spec.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = spec.DoNotCopyLibrariesRecursively,
-            CsprojRequiredReasons = spec.RefreshManifestOnly ? Array.Empty<string>() : spec.CsprojRequiredReasons ?? Array.Empty<string>(),
+            CsprojRequiredReasons = spec.RefreshManifestOnly || spec.SkipDotNetBuild
+                ? Array.Empty<string>()
+                : spec.CsprojRequiredReasons ?? Array.Empty<string>(),
             EmitBinaryConflictOwnerNotes = false,
         };
         _ = builder.BuildInPlace(buildOptions);
@@ -322,6 +383,7 @@ public sealed class ModuleBuildPipeline
 
     private static bool ShouldCleanReplaceSingleFileBinaryPayload(ModuleBuildSpec spec)
         => !spec.RefreshManifestOnly &&
+           !spec.SkipDotNetBuild &&
            spec.DevelopmentBinariesMode != ModuleDevelopmentBinaryMode.Off &&
            spec.DevelopmentSourceBootstrapperMode == ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile &&
            !string.IsNullOrWhiteSpace(ResolveDevelopmentBinaryRoot(spec));

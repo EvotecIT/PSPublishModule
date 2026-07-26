@@ -67,7 +67,7 @@ jobs:
           default-branch: ${{ inputs.default_branch }}
           increment: ${{ inputs.increment }}
           github-token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
-          powerforge-version: 1.0.4
+          powerforge-version: 1.0.8
 
   build:
     needs: prepare
@@ -101,7 +101,7 @@ jobs:
           repository-root: ${{ github.workspace }}/source
           release-version: ${{ needs.prepare.outputs.version }}
           release-commit: ${{ needs.prepare.outputs.release-commit }}
-          powerforge-version: 1.0.4
+          powerforge-version: 1.0.8
 
       - name: Transfer the single release asset to the publish job
         if: steps.build.outputs.required-asset != ''
@@ -144,4 +144,4 @@ jobs:
           required-asset: ${{ needs.build.outputs.required-asset }}
           asset-path: ${{ needs.build.outputs.required-asset != '' && format('{0}/powerforge-homeassistant-release-asset/{1}', runner.temp, needs.build.outputs.required-asset) || '' }}
           github-token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
-          powerforge-version: 1.0.4
+          powerforge-version: 1.0.8

@@ -36,6 +36,46 @@ public class WebLlmsGeneratorTests
     }
 
     [Fact]
+    public void Generate_AggregatesMultipleApiCatalogsWithTheirPublishedRoutes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-multi-api-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var wordIndex = WriteApiIndex(root, "word", "OfficeIMO.Word", 274);
+            var excelIndex = WriteApiIndex(root, "excel", "OfficeIMO.Excel", 63);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "OfficeIMO",
+                PackageId = "OfficeIMO.Word",
+                ApiIndexPaths = new[] { wordIndex, excelIndex }
+            });
+
+            Assert.Equal(2, result.ApiCatalogCount);
+            Assert.Equal(337, result.ApiTypeCount);
+
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("- API catalogs: 2", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("[OfficeIMO.Word API index](/api/word/index.json)", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("[OfficeIMO.Excel API search](/api/excel/search.json)", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("[API index](/api/index.json)", llmsTxt, StringComparison.Ordinal);
+
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.Contains("\"apiCatalogs\"", llmsJson, StringComparison.Ordinal);
+            Assert.Contains("\"index\": \"/api/word/index.json\"", llmsJson, StringComparison.Ordinal);
+            Assert.Contains("\"type\": \"/api/excel/types/{slug}.json\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"api\":", llmsJson, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Generate_UsesProjectDescription_WhenOverviewIsNotProvided()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-project-description-" + Guid.NewGuid().ToString("N"));
@@ -149,5 +189,25 @@ public class WebLlmsGeneratorTests
         {
             // Ignore cleanup failures in tests.
         }
+    }
+
+    private static string WriteApiIndex(string root, string slug, string assemblyName, int typeCount)
+    {
+        var directory = Path.Combine(root, "api", slug);
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "index.json");
+        File.WriteAllText(path,
+            $$"""
+            {
+              "title": "{{assemblyName}} API Reference",
+              "assembly": {
+                "assemblyName": "{{assemblyName}}",
+                "assemblyVersion": "1.0.0.0"
+              },
+              "typeCount": {{typeCount}},
+              "types": []
+            }
+            """);
+        return path;
     }
 }

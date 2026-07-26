@@ -200,7 +200,7 @@ public sealed class ModulePublisherRequiredModulesTests
             PublishUri = "https://packages.example.test/nuget/v2/package"
         };
 
-        var repository = Assert.IsType<ManagedModuleRepository>(method!.Invoke(null, new object?[] { "Company", config }));
+        var repository = Assert.IsType<ManagedModuleRepository>(method!.Invoke(null, new object?[] { "Company", config, null }));
 
         Assert.Equal("Company", repository.Name);
         Assert.Equal("https://packages.example.test/nuget/v2/package", repository.Source);
@@ -219,7 +219,7 @@ public sealed class ModulePublisherRequiredModulesTests
             PublishUri = "https://packages.example.test/nuget/v2/package"
         };
 
-        var repository = Assert.IsType<ManagedModuleRepository>(method!.Invoke(null, new object?[] { "Company", config }));
+        var repository = Assert.IsType<ManagedModuleRepository>(method!.Invoke(null, new object?[] { "Company", config, null }));
 
         Assert.Equal("Company", repository.Name);
         Assert.Equal("https://packages.example.test/nuget/v3/index.json", repository.Source);

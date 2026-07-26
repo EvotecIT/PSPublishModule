@@ -39,7 +39,13 @@ public sealed partial class ModulePipelineRunner
         public Dictionary<object, ProjectBuildHostExecutionResult> PackageBuildResultsBySegment { get; } = new();
         public List<ExternalAssetPreparationResult> ExternalAssetResults { get; } = new();
         public List<ReleaseVersionCandidate> ReleaseVersionCandidates { get; } = new();
+        public string? CoordinatedVersionFloor { get; set; }
         public ModuleReleaseCoordinationResult? ReleaseCoordinationResult { get; set; }
+        public SynchronizedReleaseCheckpoint? SynchronizedReleaseCheckpoint { get; set; }
+        public string? SynchronizedReleaseCheckpointPath { get; set; }
+        public System.IO.FileStream? SynchronizedReleaseCheckpointLock { get; set; }
+        public bool IsResumingSynchronizedRelease { get; set; }
+        public int PlannedSynchronizedOperationCount { get; set; }
         public List<ModulePipelineActionResult> ActionResults { get; } = new();
         public List<XcodeProjectVersionUpdateResult> XcodeProjectVersionResults { get; } = new();
         public List<AppleAppReleasePreparationResult> AppleAppResults { get; } = new();
@@ -61,17 +67,20 @@ public sealed partial class ModulePipelineRunner
         public ReleaseVersionCandidate(
             ReleaseVersionSource source,
             string label,
+            string checkpointKey,
             bool explicitSource,
             ProjectBuildHostExecutionResult result)
         {
             Source = source;
             Label = label;
+            CheckpointKey = checkpointKey;
             ExplicitSource = explicitSource;
             Result = result ?? throw new ArgumentNullException(nameof(result));
         }
 
         public ReleaseVersionSource Source { get; }
         public string Label { get; }
+        public string CheckpointKey { get; }
         public bool ExplicitSource { get; }
         public ProjectBuildHostExecutionResult Result { get; }
     }

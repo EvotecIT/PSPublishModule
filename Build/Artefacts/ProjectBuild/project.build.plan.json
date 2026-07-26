@@ -1,0 +1,89 @@
+{
+  "Success": true,
+  "ResolvedVersion": "3.0.78",
+  "ResolvedVersionsByProject": {
+    "PowerForge.Web.Cli": "3.0.78",
+    "PowerForge.Web": "3.0.78",
+    "PowerForge.PowerShell": "3.0.78",
+    "PowerForge.Cli": "3.0.78",
+    "PowerForge.Blazor": "3.0.78",
+    "PowerForge": "3.0.78"
+  },
+  "Projects": [
+    {
+      "ProjectName": "PowerForge.Web.Cli",
+      "CsprojPath": "C:\\Support\\GitHub\\PSPublishModule\\PowerForge.Web.Cli\\PowerForge.Web.Cli.csproj",
+      "PackageId": "PowerForge.Web.Build",
+      "IsPackable": true,
+      "OldVersion": "3.0.77",
+      "NewVersion": "3.0.78",
+      "Packages": [
+        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.Web.Build.3.0.78.nupkg"
+      ],
+      "SymbolPackages": []
+    },
+    {
+      "ProjectName": "PowerForge.Web",
+      "CsprojPath": "C:\\Support\\GitHub\\PSPublishModule\\PowerForge.Web\\PowerForge.Web.csproj",
+      "PackageId": "PowerForge.Web",
+      "IsPackable": true,
+      "OldVersion": "3.0.77",
+      "NewVersion": "3.0.78",
+      "Packages": [
+        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.Web.3.0.78.nupkg"
+      ],
+      "SymbolPackages": []
+    },
+    {
+      "ProjectName": "PowerForge.PowerShell",
+      "CsprojPath": "C:\\Support\\GitHub\\PSPublishModule\\PowerForge.PowerShell\\PowerForge.PowerShell.csproj",
+      "PackageId": "PowerForge.PowerShell",
+      "IsPackable": true,
+      "OldVersion": "3.0.77",
+      "NewVersion": "3.0.78",
+      "Packages": [
+        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.PowerShell.3.0.78.nupkg"
+      ],
+      "SymbolPackages": []
+    },
+    {
+      "ProjectName": "PowerForge.Cli",
+      "CsprojPath": "C:\\Support\\GitHub\\PSPublishModule\\PowerForge.Cli\\PowerForge.Cli.csproj",
+      "PackageId": "PowerForge.Build",
+      "IsPackable": true,
+      "OldVersion": "3.0.77",
+      "NewVersion": "3.0.78",
+      "Packages": [
+        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.Build.3.0.78.nupkg"
+      ],
+      "SymbolPackages": []
+    },
+    {
+      "ProjectName": "PowerForge.Blazor",
+      "CsprojPath": "C:\\Support\\GitHub\\PSPublishModule\\PowerForge.Blazor\\PowerForge.Blazor.csproj",
+      "PackageId": "PowerForge.Blazor",
+      "IsPackable": true,
+      "OldVersion": "3.0.77",
+      "NewVersion": "3.0.78",
+      "Packages": [
+        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.Blazor.3.0.78.nupkg"
+      ],
+      "SymbolPackages": []
+    },
+    {
+      "ProjectName": "PowerForge",
+      "CsprojPath": "C:\\Support\\GitHub\\PSPublishModule\\PowerForge\\PowerForge.csproj",
+      "PackageId": "PowerForge",
+      "IsPackable": true,
+      "OldVersion": "3.0.77",
+      "NewVersion": "3.0.78",
+      "Packages": [
+        "C:\\Support\\GitHub\\PSPublishModule\\Artefacts\\ProjectBuild\\packages\\PowerForge.3.0.78.nupkg"
+      ],
+      "SymbolPackages": []
+    }
+  ],
+  "PublishedPackages": [],
+  "SkippedDuplicatePackages": [],
+  "FailedPackages": []
+}

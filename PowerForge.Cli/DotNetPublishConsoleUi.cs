@@ -3,8 +3,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using PowerForge;
+using PowerForge.ConsoleShared;
 using Spectre.Console;
-using Spectre.Console.Rendering;
 
 namespace PowerForge.Cli;
 
@@ -47,12 +47,15 @@ internal static class DotNetPublishConsoleUi
 
         DotNetPublishResult? result = null;
         var steps = plan.Steps ?? Array.Empty<DotNetPublishStep>();
-        AnsiConsole.Progress()
-            .AutoRefresh(true)
-            .AutoClear(false)
-            .HideCompleted(false)
-            .Columns(BuildColumns(includeBar, includeElapsed, barWidth, iconLookup, startLookup, doneLookup))
-            .Start(ctx =>
+        SpectreProgressDisplay.Run(
+            SpectreBuildProgressColumns.CreateDetailed(
+                includeBar,
+                includeElapsed,
+                barWidth,
+                iconLookup,
+                startLookup,
+                doneLookup),
+            ctx =>
             {
                 var tasksByKey = new Dictionary<string, ProgressTask>(StringComparer.OrdinalIgnoreCase);
                 var labelsByKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -261,40 +264,6 @@ internal static class DotNetPublishConsoleUi
         AnsiConsole.WriteLine();
     }
 
-    private static ProgressColumn[] BuildColumns(
-        bool includeBar,
-        bool includeElapsed,
-        int barWidth,
-        ConcurrentDictionary<ProgressTask, string> iconLookup,
-        ConcurrentDictionary<ProgressTask, DateTimeOffset> startLookup,
-        ConcurrentDictionary<ProgressTask, TimeSpan> doneLookup)
-    {
-        var columns = new List<ProgressColumn>
-        {
-            new StepIconColumn(iconLookup),
-            new IconAndDescriptionColumn(string.Empty),
-        };
-
-        if (includeBar)
-        {
-            columns.Add(new ProgressBarColumn
-            {
-                Width = barWidth,
-                CompletedStyle = new Style(Color.Green),
-                FinishedStyle = new Style(Color.Green),
-                IndeterminateStyle = new Style(Color.Grey)
-            });
-        }
-
-        columns.Add(new PercentageColumn());
-
-        if (includeElapsed)
-            columns.Add(new FixedElapsedColumn(startLookup, doneLookup));
-
-        columns.Add(new SpinnerColumn());
-        return columns.ToArray();
-    }
-
     private static string BuildLabel(DotNetPublishStep step, int ord, int total, int digits, DotNetPublishPlan plan)
     {
         var prefix = ord.ToString().PadLeft(digits, '0') + "/" + total.ToString().PadLeft(digits, '0');
@@ -492,61 +461,4 @@ internal static class DotNetPublishConsoleUi
         }
     }
 
-    private sealed class StepIconColumn : ProgressColumn
-    {
-        private readonly ConcurrentDictionary<ProgressTask, string> _icons;
-
-        public StepIconColumn(ConcurrentDictionary<ProgressTask, string> icons) => _icons = icons;
-
-        public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
-        {
-            var icon = _icons.TryGetValue(task, out var s) && !string.IsNullOrWhiteSpace(s) ? s : string.Empty;
-            var content = new Markup(icon);
-            return new Panel(content)
-            {
-                Border = BoxBorder.None,
-                Padding = new Padding(0, 0, 0, 0),
-                Width = 2
-            };
-        }
-    }
-
-    private sealed class IconAndDescriptionColumn : ProgressColumn
-    {
-        private readonly string _icon;
-
-        public IconAndDescriptionColumn(string icon = "•") => _icon = icon;
-
-        public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
-        {
-            var desc = task.Description ?? string.Empty;
-            var prefix = string.IsNullOrWhiteSpace(_icon) ? string.Empty : _icon + " ";
-            var t = new Text(prefix + desc);
-            try { t.Overflow = Overflow.Ellipsis; } catch { }
-            return t;
-        }
-    }
-
-    private sealed class FixedElapsedColumn : ProgressColumn
-    {
-        private readonly ConcurrentDictionary<ProgressTask, DateTimeOffset> _start;
-        private readonly ConcurrentDictionary<ProgressTask, TimeSpan> _done;
-
-        public FixedElapsedColumn(ConcurrentDictionary<ProgressTask, DateTimeOffset> start, ConcurrentDictionary<ProgressTask, TimeSpan> done)
-        {
-            _start = start;
-            _done = done;
-        }
-
-        public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
-        {
-            if (_done.TryGetValue(task, out var e)) return new Markup($"[blue]{e:mm\\:ss}[/]");
-            if (_start.TryGetValue(task, out var s))
-            {
-                var e2 = DateTimeOffset.Now - s;
-                return new Markup($"[blue]{e2:mm\\:ss}[/]");
-            }
-            return new Markup("[blue]00:00[/]");
-        }
-    }
 }

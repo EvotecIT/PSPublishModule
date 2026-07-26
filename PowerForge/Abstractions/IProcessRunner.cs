@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 
 namespace PowerForge;
 
@@ -25,6 +26,41 @@ public sealed class ProcessRunRequest
         IReadOnlyDictionary<string, string?>? environmentVariables = null,
         bool captureOutput = true,
         bool captureError = true)
+        : this(
+            fileName,
+            workingDirectory,
+            arguments,
+            timeout,
+            environmentVariables,
+            captureOutput,
+            captureError,
+            outputLineReceived: null,
+            errorLineReceived: null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a streaming process request while retaining captured output.
+    /// </summary>
+    /// <param name="fileName">Executable name or path.</param>
+    /// <param name="workingDirectory">Working directory for the process.</param>
+    /// <param name="arguments">Structured arguments passed to the process.</param>
+    /// <param name="timeout">Maximum runtime before the process is terminated.</param>
+    /// <param name="environmentVariables">Optional environment variable overrides.</param>
+    /// <param name="captureOutput">When true, capture standard output.</param>
+    /// <param name="captureError">When true, capture standard error.</param>
+    /// <param name="outputLineReceived">Optional callback for each captured standard-output line.</param>
+    /// <param name="errorLineReceived">Optional callback for each captured standard-error line.</param>
+    public ProcessRunRequest(
+        string fileName,
+        string workingDirectory,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        bool captureOutput,
+        bool captureError,
+        Action<string>? outputLineReceived,
+        Action<string>? errorLineReceived)
     {
         FileName = fileName;
         WorkingDirectory = workingDirectory;
@@ -33,6 +69,8 @@ public sealed class ProcessRunRequest
         EnvironmentVariables = environmentVariables;
         CaptureOutput = captureOutput;
         CaptureError = captureError;
+        OutputLineReceived = outputLineReceived;
+        ErrorLineReceived = errorLineReceived;
     }
 
     /// <summary>
@@ -69,6 +107,12 @@ public sealed class ProcessRunRequest
     /// Gets a value indicating whether standard error should be captured.
     /// </summary>
     public bool CaptureError { get; }
+
+    /// <summary>Optional callback invoked for each captured standard-output line.</summary>
+    public Action<string>? OutputLineReceived { get; }
+
+    /// <summary>Optional callback invoked for each captured standard-error line.</summary>
+    public Action<string>? ErrorLineReceived { get; }
 }
 
 /// <summary>
@@ -182,10 +226,10 @@ public sealed class ProcessRunner : IProcessRunner
         }
 
         var stdoutTask = request.CaptureOutput
-            ? process.StandardOutput.ReadToEndAsync()
+            ? ReadOutputAsync(process.StandardOutput, request.OutputLineReceived)
             : Task.FromResult(string.Empty);
         var stderrTask = request.CaptureError
-            ? process.StandardError.ReadToEndAsync()
+            ? ReadOutputAsync(process.StandardError, request.ErrorLineReceived)
             : Task.FromResult(string.Empty);
         var timedOut = false;
 
@@ -222,6 +266,24 @@ public sealed class ProcessRunner : IProcessRunner
 
         var exitCode = timedOut ? 124 : SafeGetExitCode(process);
         return new ProcessRunResult(exitCode, stdout, stderr, process.StartInfo.FileName ?? request.FileName, stopwatch.Elapsed, timedOut);
+    }
+
+    private static async Task<string> ReadOutputAsync(
+        StreamReader reader,
+        Action<string>? lineReceived)
+    {
+        if (lineReceived is null)
+            return await reader.ReadToEndAsync().ConfigureAwait(false);
+
+        var output = new StringBuilder();
+        string? line;
+        while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) is not null)
+        {
+            output.AppendLine(line);
+            try { lineReceived(line); } catch { }
+        }
+
+        return output.ToString();
     }
 
     private static ProcessStartInfo BuildStartInfo(ProcessRunRequest request)

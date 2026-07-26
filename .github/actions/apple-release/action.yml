@@ -1,0 +1,110 @@
+name: PowerForge Apple release action
+description: Run one planned or confirmed Apple release transition with compact receipts.
+
+inputs:
+  action:
+    description: Explicit PowerForge Apple action.
+    required: true
+  config-path:
+    description: Release configuration path.
+    required: false
+    default: powerforge.release.json
+  tool-manifest-path:
+    description: Checked-in PowerForge tool manifest path.
+    required: false
+    default: .powerforge/powerforge.tool.json
+  marketing-version:
+    description: Marketing version required by Version.
+    required: false
+    default: ""
+  target:
+    description: Optional comma-separated recovery target selection.
+    required: false
+    default: ""
+  plan-only:
+    description: Run without mutation and write the plan receipt.
+    required: false
+    default: "true"
+  confirm:
+    description: Pass the explicit Apple mutation confirmation flag.
+    required: false
+    default: "false"
+  issuer-id:
+    description: App Store Connect issuer id supplied from a protected secret.
+    required: true
+  key-id:
+    description: App Store Connect API key id supplied from a protected secret.
+    required: true
+  private-key:
+    description: App Store Connect private key content supplied from a protected secret.
+    required: true
+
+outputs:
+  action:
+    description: Action reported by PowerForge.
+    value: ${{ steps.release.outputs.action }}
+  receipt-path:
+    description: Actual or plan receipt path.
+    value: ${{ steps.release.outputs.receipt-path }}
+  version-source-path:
+    description: Version source changed by Version, when applicable.
+    value: ${{ steps.release.outputs.version-source-path }}
+  marketing-version:
+    description: Resolved marketing version.
+    value: ${{ steps.release.outputs.marketing-version }}
+  build-number:
+    description: Resolved build number.
+    value: ${{ steps.release.outputs.build-number }}
+  ready-for-submission:
+    description: Aggregate readiness when checked.
+    value: ${{ steps.release.outputs.ready-for-submission }}
+  next-actions:
+    description: Compact JSON array of recommended next actions.
+    value: ${{ steps.release.outputs.next-actions }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup pinned PowerForge
+      id: setup
+      shell: pwsh
+      env:
+        MANIFEST_PATH: ${{ inputs.tool-manifest-path }}
+      run: |
+        & '${{ github.action_path }}/../setup-powerforge/Install-PinnedPowerForge.ps1' -ManifestPath $env:MANIFEST_PATH
+
+    - name: Write the temporary App Store Connect key
+      id: credential
+      shell: pwsh
+      env:
+        PRIVATE_KEY: ${{ inputs.private-key }}
+      run: |
+        $path = Join-Path $env:RUNNER_TEMP "AuthKey_PowerForge_$PID.p8"
+        [System.IO.File]::WriteAllText($path, $env:PRIVATE_KEY, [System.Text.UTF8Encoding]::new($false))
+        if (-not $IsWindows) { & chmod 600 $path }
+        "path=$path" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+    - name: Run Apple release transition
+      id: release
+      shell: pwsh
+      env:
+        INPUT_ACTION: ${{ inputs.action }}
+        INPUT_CONFIG_PATH: ${{ inputs.config-path }}
+        INPUT_MARKETING_VERSION: ${{ inputs.marketing-version }}
+        INPUT_TARGET: ${{ inputs.target }}
+        INPUT_PLAN_ONLY: ${{ inputs.plan-only }}
+        INPUT_CONFIRM: ${{ inputs.confirm }}
+        POWERFORGE_TOOL_PATH: ${{ steps.setup.outputs.tool-path }}
+        POWERFORGE_VERSION: ${{ steps.setup.outputs.version }}
+        APP_STORE_CONNECT_ISSUER_ID: ${{ inputs.issuer-id }}
+        APP_STORE_CONNECT_KEY_ID: ${{ inputs.key-id }}
+        APP_STORE_CONNECT_PRIVATE_KEY_PATH: ${{ steps.credential.outputs.path }}
+      run: >-
+        & '${{ github.action_path }}/Invoke-PowerForgeAppleRelease.ps1'
+
+    - name: Remove the temporary App Store Connect key
+      if: always() && steps.credential.outputs.path != ''
+      shell: pwsh
+      env:
+        PRIVATE_KEY_PATH: ${{ steps.credential.outputs.path }}
+      run: Remove-Item -LiteralPath $env:PRIVATE_KEY_PATH -Force -ErrorAction SilentlyContinue

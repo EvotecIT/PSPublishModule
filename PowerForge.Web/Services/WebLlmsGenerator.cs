@@ -14,6 +14,8 @@ public sealed class WebLlmsOptions
     public string? ProjectFile { get; set; }
     /// <summary>Optional API index path.</summary>
     public string? ApiIndexPath { get; set; }
+    /// <summary>Optional API index paths for sites that publish more than one API catalog.</summary>
+    public string[] ApiIndexPaths { get; set; } = Array.Empty<string>();
     /// <summary>Base URL for API docs.</summary>
     public string ApiBase { get; set; } = "/api";
     /// <summary>Optional project name override.</summary>
@@ -59,10 +61,10 @@ public static class WebLlmsGenerator
         var packageId = options.PackageId ?? projectInfo.PackageId ?? name;
         var version = options.Version ?? projectInfo.Version ?? "unknown";
 
-        var apiIndexPath = options.ApiIndexPath;
-        if (string.IsNullOrWhiteSpace(apiIndexPath))
-            apiIndexPath = Path.Combine(siteRoot, "api", "index.json");
-        var typeCount = ReadApiTypeCount(apiIndexPath);
+        var apiCatalogs = ResolveApiCatalogs(options, siteRoot);
+        int? typeCount = apiCatalogs.Any(catalog => catalog.TypeCount.HasValue)
+            ? apiCatalogs.Sum(catalog => catalog.TypeCount ?? 0)
+            : null;
 
         var llmsTxtPath = Path.Combine(siteRoot, "llms.txt");
         var llmsJsonPath = Path.Combine(siteRoot, "llms.json");
@@ -70,11 +72,9 @@ public static class WebLlmsGenerator
 
         var quickstart = ResolveQuickstart(options.QuickstartPath, name);
         var overview = ResolveOverview(options, projectInfo, siteRoot, name);
-        var apiBase = string.IsNullOrWhiteSpace(options.ApiBase) ? "/api" : options.ApiBase;
-
-        WriteLlmsTxt(llmsTxtPath, name, packageId, version, typeCount, apiBase, overview, quickstart);
-        WriteLlmsJson(llmsJsonPath, name, packageId, version, apiBase, quickstart);
-        WriteLlmsFull(llmsFullPath, name, packageId, version, typeCount, apiBase, overview, quickstart, options);
+        WriteLlmsTxt(llmsTxtPath, name, packageId, version, typeCount, apiCatalogs, overview, quickstart);
+        WriteLlmsJson(llmsJsonPath, name, packageId, version, typeCount, apiCatalogs, quickstart);
+        WriteLlmsFull(llmsFullPath, name, packageId, version, typeCount, apiCatalogs, overview, quickstart, options);
 
         return new WebLlmsResult
         {
@@ -84,7 +84,8 @@ public static class WebLlmsGenerator
             Name = name,
             PackageId = packageId,
             Version = version,
-            ApiTypeCount = typeCount
+            ApiTypeCount = typeCount,
+            ApiCatalogCount = apiCatalogs.Count
         };
     }
 
@@ -121,23 +122,83 @@ public static class WebLlmsGenerator
         return $"{name} documentation site and API reference.";
     }
 
-    private static int? ReadApiTypeCount(string? apiIndexPath)
+    private static List<ApiCatalogInfo> ResolveApiCatalogs(WebLlmsOptions options, string siteRoot)
     {
-        if (string.IsNullOrWhiteSpace(apiIndexPath)) return null;
-        var full = Path.GetFullPath(apiIndexPath);
-        if (!File.Exists(full)) return null;
+        var configuredPaths = new List<string>();
+        if (!string.IsNullOrWhiteSpace(options.ApiIndexPath))
+            configuredPaths.Add(options.ApiIndexPath);
+        configuredPaths.AddRange(options.ApiIndexPaths.Where(path => !string.IsNullOrWhiteSpace(path)));
+
+        if (configuredPaths.Count == 0)
+            configuredPaths.Add(Path.Combine(siteRoot, "api", "index.json"));
+
+        var fullPaths = configuredPaths
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var multipleCatalogs = fullPaths.Length > 1;
+        var catalogs = new List<ApiCatalogInfo>(fullPaths.Length);
+        foreach (var fullPath in fullPaths)
+        {
+            var apiBase = multipleCatalogs
+                ? InferApiBase(siteRoot, fullPath)
+                : NormalizeApiBase(options.ApiBase);
+            catalogs.Add(ReadApiCatalog(fullPath, apiBase));
+        }
+
+        return catalogs;
+    }
+
+    private static ApiCatalogInfo ReadApiCatalog(string fullPath, string apiBase)
+    {
+        var catalog = new ApiCatalogInfo
+        {
+            IndexPath = fullPath,
+            ApiBase = apiBase,
+            Name = Path.GetFileName(Path.GetDirectoryName(fullPath)) ?? "API"
+        };
+        if (!File.Exists(fullPath)) return catalog;
+
         try
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(full));
+            using var doc = JsonDocument.Parse(File.ReadAllText(fullPath));
             if (doc.RootElement.TryGetProperty("typeCount", out var count) && count.TryGetInt32(out var value))
-                return value;
+                catalog.TypeCount = value;
+            if (doc.RootElement.TryGetProperty("assembly", out var assembly) &&
+                assembly.ValueKind == JsonValueKind.Object)
+            {
+                var assemblyName = ReadString(assembly, "assemblyName");
+                if (!string.IsNullOrWhiteSpace(assemblyName))
+                    catalog.Name = assemblyName;
+            }
+            else
+            {
+                var title = ReadString(doc.RootElement, "title");
+                if (!string.IsNullOrWhiteSpace(title))
+                    catalog.Name = Regex.Replace(title, @"\s+(API|Cmdlet)\s+Reference$", string.Empty, RegexOptions.IgnoreCase);
+            }
         }
         catch
         {
-            return null;
+            // Keep the catalog link even when optional metadata cannot be read.
         }
 
-        return null;
+        return catalog;
+    }
+
+    private static string InferApiBase(string siteRoot, string apiIndexPath)
+    {
+        var directory = Path.GetDirectoryName(apiIndexPath) ?? siteRoot;
+        var relative = Path.GetRelativePath(siteRoot, directory).Replace('\\', '/').Trim('/');
+        if (string.IsNullOrWhiteSpace(relative) || relative.StartsWith("..", StringComparison.Ordinal))
+            return "/api";
+        return "/" + relative;
+    }
+
+    private static string NormalizeApiBase(string? apiBase)
+    {
+        var normalized = string.IsNullOrWhiteSpace(apiBase) ? "/api" : apiBase.Trim();
+        return normalized.Length > 1 ? normalized.TrimEnd('/') : normalized;
     }
 
     private static string MatchValue(string content, string name)
@@ -253,11 +314,10 @@ public static class WebLlmsGenerator
         string packageId,
         string version,
         int? typeCount,
-        string apiBase,
+        IReadOnlyList<ApiCatalogInfo> apiCatalogs,
         string overview,
         string[] quickstart)
     {
-        var normalizedApiBase = apiBase.TrimEnd('/');
         var lines = new List<string>
         {
             $"# {name}",
@@ -269,6 +329,7 @@ public static class WebLlmsGenerator
             $"- Package: {packageId}"
         };
         if (typeCount.HasValue) lines.Add($"- API types: {typeCount.Value}");
+        if (apiCatalogs.Count > 1) lines.Add($"- API catalogs: {apiCatalogs.Count}");
         lines.Add(string.Empty);
         lines.Add("## Install");
         lines.Add($"- dotnet add package {packageId}");
@@ -279,9 +340,7 @@ public static class WebLlmsGenerator
         lines.Add("```");
         lines.Add(string.Empty);
         lines.Add("## Machine-friendly API data");
-        lines.Add($"- [API index]({normalizedApiBase}/index.json): Type and package metadata.");
-        lines.Add($"- [API search]({normalizedApiBase}/search.json): Searchable API data.");
-        lines.Add($"- [API type template]({normalizedApiBase}/types/{{slug}}.json): Per-type API details.");
+        AppendApiResourceLinks(lines, apiCatalogs);
         lines.Add(string.Empty);
         lines.Add("Slug rule: lower-case, dots/symbols -> dashes.");
 
@@ -293,7 +352,8 @@ public static class WebLlmsGenerator
         string name,
         string packageId,
         string version,
-        string apiBase,
+        int? typeCount,
+        IReadOnlyList<ApiCatalogInfo> apiCatalogs,
         string[] quickstart)
     {
         var payload = new Dictionary<string, object?>
@@ -303,14 +363,17 @@ public static class WebLlmsGenerator
             ["package"] = packageId,
             ["install"] = new[] { $"dotnet add package {packageId}" },
             ["quickstart"] = quickstart.Where(l => l != null).ToArray(),
-            ["api"] = new Dictionary<string, object?>
-            {
-                ["index"] = $"{apiBase.TrimEnd('/')}/index.json",
-                ["search"] = $"{apiBase.TrimEnd('/')}/search.json",
-                ["type"] = $"{apiBase.TrimEnd('/')}/types/{{slug}}.json",
-                ["slugRule"] = "lower-case, dots/symbols -> dashes"
-            }
+            ["apiTypeCount"] = typeCount
         };
+        if (apiCatalogs.Count == 1)
+            payload["api"] = CreateApiResourcePayload(apiCatalogs[0]);
+        else
+            payload["apiCatalogs"] = apiCatalogs.Select(catalog => new Dictionary<string, object?>
+            {
+                ["name"] = catalog.Name,
+                ["typeCount"] = catalog.TypeCount,
+                ["resources"] = CreateApiResourcePayload(catalog)
+            }).ToArray();
 
         var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(path, json, Encoding.UTF8);
@@ -322,7 +385,7 @@ public static class WebLlmsGenerator
         string packageId,
         string version,
         int? typeCount,
-        string apiBase,
+        IReadOnlyList<ApiCatalogInfo> apiCatalogs,
         string overview,
         string[] quickstart,
         WebLlmsOptions options)
@@ -337,6 +400,7 @@ public static class WebLlmsGenerator
             $"- Version: {version}"
         };
         if (typeCount.HasValue) lines.Add($"- API types: {typeCount.Value}");
+        if (apiCatalogs.Count > 1) lines.Add($"- API catalogs: {apiCatalogs.Count}");
         if (!string.IsNullOrWhiteSpace(options.License)) lines.Add($"- License: {options.License}");
         if (!string.IsNullOrWhiteSpace(options.Targets)) lines.Add($"- Targets: {options.Targets}");
 
@@ -352,11 +416,9 @@ public static class WebLlmsGenerator
         lines.Add("```");
         lines.Add(string.Empty);
         lines.Add("## API Resources");
-        lines.Add($"- [API index]({apiBase.TrimEnd('/')}/index.json): Type and package metadata.");
-        lines.Add($"- [API search]({apiBase.TrimEnd('/')}/search.json): Searchable API data.");
-        lines.Add($"- [API type template]({apiBase.TrimEnd('/')}/types/{{slug}}.json): Per-type API details.");
+        AppendApiResourceLinks(lines, apiCatalogs);
 
-        AppendApiDetails(lines, options, apiBase);
+        AppendApiDetails(lines, options, apiCatalogs);
 
         if (!string.IsNullOrWhiteSpace(options.ExtraContentPath))
         {
@@ -371,34 +433,59 @@ public static class WebLlmsGenerator
         File.WriteAllText(path, string.Join(Environment.NewLine, lines), Encoding.UTF8);
     }
 
-    private static void AppendApiDetails(List<string> lines, WebLlmsOptions options, string apiBase)
+    private static void AppendApiResourceLinks(List<string> lines, IReadOnlyList<ApiCatalogInfo> apiCatalogs)
+    {
+        foreach (var catalog in apiCatalogs)
+        {
+            var label = apiCatalogs.Count > 1 ? $"{catalog.Name} " : string.Empty;
+            lines.Add($"- [{label}API index]({catalog.ApiBase}/index.json): Type and package metadata.");
+            lines.Add($"- [{label}API search]({catalog.ApiBase}/search.json): Searchable API data.");
+            lines.Add($"- [{label}API type template]({catalog.ApiBase}/types/{{slug}}.json): Per-type API details.");
+        }
+    }
+
+    private static Dictionary<string, object?> CreateApiResourcePayload(ApiCatalogInfo catalog)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["index"] = $"{catalog.ApiBase}/index.json",
+            ["search"] = $"{catalog.ApiBase}/search.json",
+            ["type"] = $"{catalog.ApiBase}/types/{{slug}}.json",
+            ["slugRule"] = "lower-case, dots/symbols -> dashes"
+        };
+    }
+
+    private static void AppendApiDetails(List<string> lines, WebLlmsOptions options, IReadOnlyList<ApiCatalogInfo> apiCatalogs)
     {
         if (options.ApiDetailLevel == WebApiDetailLevel.None)
             return;
 
-        var indexPath = options.ApiIndexPath;
-        if (string.IsNullOrWhiteSpace(indexPath))
-            indexPath = Path.Combine(options.SiteRoot, "api", "index.json");
-        var fullIndexPath = Path.GetFullPath(indexPath);
-        if (!File.Exists(fullIndexPath))
+        var catalogEntries = apiCatalogs
+            .Select(catalog => (Catalog: catalog, Entries: ReadApiIndex(catalog.IndexPath)))
+            .Where(item => item.Entries.Count > 0)
+            .ToArray();
+        if (catalogEntries.Length == 0)
             return;
 
-        var entries = ReadApiIndex(fullIndexPath);
-        if (entries.Count == 0)
-            return;
-
-        var maxTypes = options.ApiMaxTypes <= 0 ? entries.Count : Math.Min(options.ApiMaxTypes, entries.Count);
+        var remainingTypes = options.ApiMaxTypes <= 0 ? int.MaxValue : options.ApiMaxTypes;
         var maxMembers = options.ApiMaxMembers <= 0 ? int.MaxValue : options.ApiMaxMembers;
-        var typesDir = Path.Combine(Path.GetDirectoryName(fullIndexPath) ?? ".", "types");
+        var selectedEntries = new List<(ApiCatalogInfo Catalog, ApiIndexEntry Entry)>();
 
         lines.Add(string.Empty);
         lines.Add("## API Summary");
-
-        for (var i = 0; i < maxTypes; i++)
+        foreach (var (catalog, entries) in catalogEntries)
         {
-            var entry = entries[i];
-            var summary = string.IsNullOrWhiteSpace(entry.Summary) ? string.Empty : $" — {entry.Summary}";
-            lines.Add($"- {entry.FullName}{summary}");
+            if (remainingTypes <= 0) break;
+            if (catalogEntries.Length > 1)
+                lines.Add($"### {catalog.Name}");
+            foreach (var entry in entries.Take(remainingTypes))
+            {
+                var summary = string.IsNullOrWhiteSpace(entry.Summary) ? string.Empty : $" — {entry.Summary}";
+                lines.Add($"- {entry.FullName}{summary}");
+                selectedEntries.Add((catalog, entry));
+                remainingTypes--;
+                if (remainingTypes <= 0) break;
+            }
         }
 
         if (options.ApiDetailLevel != WebApiDetailLevel.Full)
@@ -406,9 +493,10 @@ public static class WebLlmsGenerator
 
         lines.Add(string.Empty);
         lines.Add("## API Members");
-        foreach (var entry in entries.Take(maxTypes))
+        foreach (var (catalog, entry) in selectedEntries)
         {
             if (maxMembers <= 0) break;
+            var typesDir = Path.Combine(Path.GetDirectoryName(catalog.IndexPath) ?? ".", "types");
             var typePath = Path.Combine(typesDir, $"{entry.Slug}.json");
             if (!File.Exists(typePath)) continue;
 
@@ -523,6 +611,14 @@ public static class WebLlmsGenerator
         public string Summary { get; set; } = string.Empty;
         public string Kind { get; set; } = string.Empty;
         public string Slug { get; set; } = string.Empty;
+    }
+
+    private sealed class ApiCatalogInfo
+    {
+        public string IndexPath { get; set; } = string.Empty;
+        public string ApiBase { get; set; } = "/api";
+        public string Name { get; set; } = "API";
+        public int? TypeCount { get; set; }
     }
 
     private sealed class ApiTypeDetail

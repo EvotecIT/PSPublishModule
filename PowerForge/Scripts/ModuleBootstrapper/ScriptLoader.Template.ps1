@@ -1,8 +1,8 @@
 ﻿# Get public and private function definition files.
-$Public  = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Public', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
-$Private = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Private', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
-$Classes = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Classes', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
-$Enums   = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Enums', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
+$Public  = @(Get-ChildItem -Path ([IO.Path]::Combine({{ModuleRootExpression}}, 'Public', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
+$Private = @(Get-ChildItem -Path ([IO.Path]::Combine({{ModuleRootExpression}}, 'Private', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
+$Classes = @(Get-ChildItem -Path ([IO.Path]::Combine({{ModuleRootExpression}}, 'Classes', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
+$Enums   = @(Get-ChildItem -Path ([IO.Path]::Combine({{ModuleRootExpression}}, 'Enums', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
 
 $FoundErrors = @(
     # Dot source the files (Classes/Enums first).
@@ -17,7 +17,7 @@ $FoundErrors = @(
 )
 
 if ($FoundErrors.Count -gt 0) {
-    $ModuleName = (Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, '*.psd1'))).BaseName
+    $ModuleName = (Get-ChildItem -Path ([IO.Path]::Combine({{ModuleRootExpression}}, '*.psd1'))).BaseName
     Write-Warning "Importing module $ModuleName failed. Fix errors before continuing."
     break
 }

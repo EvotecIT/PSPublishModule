@@ -111,6 +111,53 @@ public class WebSiteStructuredDataProfilesTests
     }
 
     [Fact]
+    public void Build_DoesNotEmitProductSchema_ForProductPresentationMetadata()
+    {
+        var root = CreateTempRoot("pf-web-structured-product-presentation-");
+        try
+        {
+            WritePage(root, "index.md",
+                """
+                ---
+                title: CasaRay
+                slug: index
+                description: A private Apple-native home companion.
+                meta.product_presentation:
+                  category: Smart home
+                  tagline: Calm control for your complete home.
+                  platforms:
+                    - iPhone
+                    - iPad
+                meta.software.name: CasaRay
+                meta.software.application_category: UtilitiesApplication
+                meta.software.operating_system: iPhone, iPad
+                meta.software.download_url: https://apps.example.test/casaray
+                ---
+
+                Product presentation details.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.StructuredData = new StructuredDataSpec
+            {
+                Enabled = true,
+                Breadcrumbs = false,
+                Product = true,
+                SoftwareApplication = true
+            };
+
+            var html = BuildAndRead(root, spec, "index.html");
+            Assert.DoesNotContain("\"@type\":\"Product\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"@type\":\"SoftwareApplication\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"downloadUrl\":\"https://apps.example.test/casaray\"", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
     public void Build_PrefersNewsArticleStructuredData_ForNewsCollection_WhenEnabled()
     {
         var root = CreateTempRoot("pf-web-structured-news-");

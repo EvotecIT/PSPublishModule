@@ -8,10 +8,10 @@ namespace PowerForge;
 /// <summary>
 /// Builds downloadable runtime-specific tool executables from a typed configuration.
 /// </summary>
-internal sealed class PowerForgeToolReleaseService
+internal sealed partial class PowerForgeToolReleaseService
 {
     private readonly ILogger _logger;
-    private readonly Func<ProcessStartInfo, ProcessExecutionResult> _runProcess;
+    private readonly Func<ProcessStartInfo, CancellationToken, ProcessExecutionResult> _runProcess;
 
     /// <summary>
     /// Creates a new tool release service.
@@ -24,6 +24,13 @@ internal sealed class PowerForgeToolReleaseService
     internal PowerForgeToolReleaseService(
         ILogger logger,
         Func<ProcessStartInfo, ProcessExecutionResult> runProcess)
+        : this(logger, (startInfo, _) => runProcess(startInfo))
+    {
+    }
+
+    internal PowerForgeToolReleaseService(
+        ILogger logger,
+        Func<ProcessStartInfo, CancellationToken, ProcessExecutionResult> runProcess)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _runProcess = runProcess ?? throw new ArgumentNullException(nameof(runProcess));
@@ -73,8 +80,17 @@ internal sealed class PowerForgeToolReleaseService
             if (!File.Exists(projectPath))
                 throw new FileNotFoundException($"Tool release project not found for target '{name}': {projectPath}", projectPath);
 
-            if (!CsprojVersionEditor.TryGetVersion(projectPath, out var version) || string.IsNullOrWhiteSpace(version))
-                throw new InvalidOperationException($"Unable to resolve Version/VersionPrefix from '{projectPath}'.");
+            string version;
+            if (!string.IsNullOrWhiteSpace(request?.ResolvedReleaseVersion))
+            {
+                version = request!.ResolvedReleaseVersion!.Trim();
+            }
+            else
+            {
+                if (!CsprojVersionEditor.TryGetVersion(projectPath, out var projectVersion) || string.IsNullOrWhiteSpace(projectVersion))
+                    throw new InvalidOperationException($"Unable to resolve Version/VersionPrefix from '{projectPath}'.");
+                version = projectVersion!;
+            }
 
             var outputName = string.IsNullOrWhiteSpace(target.OutputName) ? name : target.OutputName.Trim();
             var commandAlias = string.IsNullOrWhiteSpace(target.CommandAlias) ? null : target.CommandAlias!.Trim();
@@ -108,6 +124,12 @@ internal sealed class PowerForgeToolReleaseService
                     continue;
 
                 msbuildProperties[kv.Key.Trim()] = kv.Value ?? string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(request?.ResolvedReleaseVersion))
+            {
+                foreach (var entry in BuildVersionProperties(version!))
+                    msbuildProperties[entry.Key] = entry.Value;
             }
 
             var combinations = new List<PowerForgeToolReleaseCombinationPlan>();
@@ -181,25 +203,69 @@ internal sealed class PowerForgeToolReleaseService
         };
     }
 
+    private static Dictionary<string, string> BuildVersionProperties(string version)
+    {
+        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Version"] = version,
+            ["PackageVersion"] = version,
+            ["InformationalVersion"] = version
+        };
+
+        var numericVersion = PackageVersionUtility.GetNumericVersion(version);
+        if (!string.IsNullOrWhiteSpace(numericVersion))
+        {
+            properties["VersionPrefix"] = numericVersion;
+            properties["AssemblyVersion"] = numericVersion;
+            properties["FileVersion"] = numericVersion;
+        }
+
+        return properties;
+    }
+
     /// <summary>
     /// Executes the planned tool releases.
     /// </summary>
-    public PowerForgeToolReleaseResult Run(PowerForgeToolReleasePlan plan)
+    public PowerForgeToolReleaseResult Run(
+        PowerForgeToolReleasePlan plan,
+        IPowerForgeReleaseProgressReporterV2? progress = null,
+        CancellationToken cancellationToken = default)
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
 
         var artefacts = new List<PowerForgeToolReleaseArtifactResult>();
         var manifests = new List<string>();
+        var progressItems = CreateProgressItems(plan);
+        progress?.ItemsPlanned(PowerForgeReleaseProgressPhase.Tools, progressItems.Values.ToArray());
 
         try
         {
-            foreach (var target in plan.Targets ?? Array.Empty<PowerForgeToolReleaseTargetPlan>())
+            var targets = plan.Targets ?? Array.Empty<PowerForgeToolReleaseTargetPlan>();
+            for (var targetIndex = 0; targetIndex < targets.Length; targetIndex++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+                var target = targets[targetIndex];
                 var targetArtefacts = new List<PowerForgeToolReleaseArtifactResult>();
                 foreach (var combination in target.Combinations ?? Array.Empty<PowerForgeToolReleaseCombinationPlan>())
                 {
-                    targetArtefacts.Add(PublishOne(plan, target, combination));
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var progressKey = BuildProgressKey(target, combination, targetIndex);
+                    progressItems.TryGetValue(progressKey, out var progressItem);
+                    if (progressItem is not null)
+                        progress?.ItemUpdated(progressItem, PowerForgeReleaseProgressItemState.Started);
+                    try
+                    {
+                        targetArtefacts.Add(PublishOne(plan, target, combination, cancellationToken));
+                        if (progressItem is not null)
+                            progress?.ItemUpdated(progressItem, PowerForgeReleaseProgressItemState.Completed);
+                    }
+                    catch (Exception ex)
+                    {
+                        if (progressItem is not null)
+                            progress?.ItemUpdated(progressItem, PowerForgeReleaseProgressItemState.Failed, ex.Message);
+                        throw;
+                    }
                 }
 
                 artefacts.AddRange(targetArtefacts);
@@ -212,6 +278,10 @@ internal sealed class PowerForgeToolReleaseService
                 Artefacts = artefacts.ToArray(),
                 ManifestPaths = manifests.ToArray()
             };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -229,10 +299,37 @@ internal sealed class PowerForgeToolReleaseService
         }
     }
 
+    private static IReadOnlyDictionary<string, PowerForgeReleaseProgressItem> CreateProgressItems(
+        PowerForgeToolReleasePlan plan)
+    {
+        var combinations = (plan.Targets ?? Array.Empty<PowerForgeToolReleaseTargetPlan>())
+            .SelectMany((target, targetIndex) => (target.Combinations ?? Array.Empty<PowerForgeToolReleaseCombinationPlan>())
+                .Select(combination => (Target: target, Combination: combination, TargetIndex: targetIndex)))
+            .ToArray();
+        return combinations
+            .Select((entry, index) => new PowerForgeReleaseProgressItem
+            {
+                Phase = PowerForgeReleaseProgressPhase.Tools,
+                Key = BuildProgressKey(entry.Target, entry.Combination, entry.TargetIndex),
+                Title = $"Publish {entry.Target.Name} ({entry.Combination.Framework}, {entry.Combination.Runtime}, {entry.Combination.Flavor})",
+                Kind = "ToolPublish",
+                Position = index + 1,
+                Total = combinations.Length
+            })
+            .ToDictionary(item => item.Key, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string BuildProgressKey(
+        PowerForgeToolReleaseTargetPlan target,
+        PowerForgeToolReleaseCombinationPlan combination,
+        int targetIndex)
+        => $"tool:{targetIndex}:{target.Name}:{combination.Framework}:{combination.Runtime}:{combination.Flavor}";
+
     private PowerForgeToolReleaseArtifactResult PublishOne(
         PowerForgeToolReleasePlan plan,
         PowerForgeToolReleaseTargetPlan target,
-        PowerForgeToolReleaseCombinationPlan combination)
+        PowerForgeToolReleaseCombinationPlan combination,
+        CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(target.ArtifactRootPath);
 
@@ -251,7 +348,7 @@ internal sealed class PowerForgeToolReleaseService
                 ClearDirectory(combination.OutputPath);
 
             Directory.CreateDirectory(publishDir);
-            ExecutePublish(plan, target, combination, publishDir);
+            ExecutePublish(plan, target, combination, publishDir, cancellationToken);
             ApplyCleanup(publishDir, target);
             var executablePath = RenameMainExecutable(target, publishDir, combination.Runtime);
 
@@ -282,6 +379,14 @@ internal sealed class PowerForgeToolReleaseService
                 if (File.Exists(combination.ZipPath!))
                     File.Delete(combination.ZipPath!);
                 ZipFile.CreateFromDirectory(combination.OutputPath, combination.ZipPath!);
+                ApplyArchiveExecutablePermissions(
+                    combination.Runtime,
+                    combination.OutputPath,
+                    combination.ZipPath!,
+                    finalExecutablePath,
+                    string.Equals(aliasPath, finalExecutablePath, StringComparison.OrdinalIgnoreCase)
+                        ? null
+                        : aliasPath);
                 zipPath = combination.ZipPath;
             }
 
@@ -318,11 +423,30 @@ internal sealed class PowerForgeToolReleaseService
         }
     }
 
+    internal static void ApplyArchiveExecutablePermissions(
+        string runtime,
+        string outputRoot,
+        string archivePath,
+        params string?[] executablePaths)
+    {
+        if (runtime.StartsWith("win-", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var entryNames = executablePaths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => FrameworkCompatibility.GetRelativePath(outputRoot, path!).Replace('\\', '/'))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        ZipArchiveUnixPermissionPatcher.ApplyExecutablePermissions(archivePath, entryNames);
+    }
+
     private void ExecutePublish(
         PowerForgeToolReleasePlan plan,
         PowerForgeToolReleaseTargetPlan target,
         PowerForgeToolReleaseCombinationPlan combination,
-        string publishDir)
+        string publishDir,
+        CancellationToken cancellationToken)
     {
         var projectName = Path.GetFileNameWithoutExtension(target.ProjectPath) ?? target.Name;
         _logger.Info($"Publishing {target.Name} {target.Version} ({combination.Framework}, {combination.Runtime}, {combination.Flavor})");
@@ -365,6 +489,8 @@ internal sealed class PowerForgeToolReleaseService
         args.Add("/p:CopyDocumentationFiles=false");
         args.Add("/p:ExcludeSymbolsFromSingleFile=true");
         args.Add("/p:ErrorOnDuplicatePublishOutputFiles=false");
+        args.Add("/p:RestoreLockedMode=false");
+        args.Add("/p:NuGetLockFilePath=obj/PowerForge.ToolRelease.packages.lock.json");
         args.Add("/p:UseAppHost=true");
         args.Add($"/p:PublishDir={Quote(publishDir)}");
 
@@ -373,7 +499,8 @@ internal sealed class PowerForgeToolReleaseService
 
         psi.Arguments = string.Join(" ", args);
 
-        var processResult = _runProcess(psi);
+        var processResult = _runProcess(psi, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         if (processResult.ExitCode != 0)
         {
             throw new InvalidOperationException(
@@ -450,7 +577,7 @@ internal sealed class PowerForgeToolReleaseService
         => flavor switch
         {
             PowerForgeToolReleaseFlavor.SingleContained => (true, true, true, true),
-            PowerForgeToolReleaseFlavor.SingleFx => (false, true, true, false),
+            PowerForgeToolReleaseFlavor.SingleFx => (false, true, false, false),
             PowerForgeToolReleaseFlavor.Portable => (true, false, false, false),
             PowerForgeToolReleaseFlavor.Fx => (false, false, false, false),
             _ => throw new ArgumentOutOfRangeException(nameof(flavor), flavor, "Unsupported tool release flavor.")
@@ -599,32 +726,6 @@ internal sealed class PowerForgeToolReleaseService
         return (files.Length, total);
     }
 
-    private static ProcessExecutionResult RunProcess(ProcessStartInfo startInfo)
-    {
-        using var process = Process.Start(startInfo);
-        if (process is null)
-            return new ProcessExecutionResult(1, string.Empty, "Failed to start process.");
-
-        var stdOutTask = process.StandardOutput.ReadToEndAsync();
-        var stdErrTask = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
-        return new ProcessExecutionResult(
-            process.ExitCode,
-            stdOutTask.GetAwaiter().GetResult(),
-            stdErrTask.GetAwaiter().GetResult());
-    }
-
-    private static string TrimForMessage(string? stdErr, string? stdOut)
-    {
-        var combined = string.Join(
-            Environment.NewLine,
-            new[] { stdErr?.Trim(), stdOut?.Trim() }.Where(text => !string.IsNullOrWhiteSpace(text)));
-        if (combined.Length <= 3000)
-            return combined;
-
-        return combined.Substring(0, 3000) + "...";
-    }
-
     private static string Quote(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -635,19 +736,4 @@ internal sealed class PowerForgeToolReleaseService
             : value;
     }
 
-    internal struct ProcessExecutionResult
-    {
-        public ProcessExecutionResult(int exitCode, string stdOut, string stdErr)
-        {
-            ExitCode = exitCode;
-            StdOut = stdOut ?? string.Empty;
-            StdErr = stdErr ?? string.Empty;
-        }
-
-        public int ExitCode { get; }
-
-        public string StdOut { get; }
-
-        public string StdErr { get; }
-    }
 }

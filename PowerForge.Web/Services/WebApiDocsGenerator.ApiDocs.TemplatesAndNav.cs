@@ -264,11 +264,20 @@ public static partial class WebApiDocsGenerator
         if (root.TryGetProperty("footer", out var footerProp) && footerProp.ValueKind == JsonValueKind.Object)
         {
             if (footerProp.TryGetProperty("product", out var productProp) && productProp.ValueKind == JsonValueKind.Array)
+            {
                 nav.FooterProduct = ParseNavItems(productProp);
+                nav.FooterMenus["footer-product"] = nav.FooterProduct;
+            }
             if (footerProp.TryGetProperty("resources", out var resourcesProp) && resourcesProp.ValueKind == JsonValueKind.Array)
+            {
                 nav.FooterResources = ParseNavItems(resourcesProp);
+                nav.FooterMenus["footer-resources"] = nav.FooterResources;
+            }
             if (footerProp.TryGetProperty("company", out var companyProp) && companyProp.ValueKind == JsonValueKind.Array)
+            {
                 nav.FooterCompany = ParseNavItems(companyProp);
+                nav.FooterMenus["footer-company"] = nav.FooterCompany;
+            }
         }
 
         if (root.TryGetProperty("actions", out var actionsProp) && actionsProp.ValueKind == JsonValueKind.Array)
@@ -401,6 +410,12 @@ public static partial class WebApiDocsGenerator
     {
         if (nav is null || menuMap is null || menuMap.Count == 0)
             return;
+
+        foreach (var footer in menuMap.Where(kvp =>
+                     kvp.Key.StartsWith("footer", StringComparison.OrdinalIgnoreCase)))
+        {
+            nav.FooterMenus[footer.Key] = footer.Value;
+        }
 
         if (menuMap.TryGetValue("footer-product", out var footerProduct) && footerProduct.Count > 0)
             nav.FooterProduct = footerProduct;
@@ -808,6 +823,9 @@ public static partial class WebApiDocsGenerator
         {
             var name = kvp.Key ?? string.Empty;
             var items = kvp.Value ?? new List<NavItem>();
+            if (name.StartsWith("footer", StringComparison.OrdinalIgnoreCase))
+                nav.FooterMenus[name] = items;
+
             if (name.Equals("footer-product", StringComparison.OrdinalIgnoreCase))
                 nav.FooterProduct = items;
             else if (name.Equals("footer-resources", StringComparison.OrdinalIgnoreCase))

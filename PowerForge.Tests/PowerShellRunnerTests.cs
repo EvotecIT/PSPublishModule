@@ -103,6 +103,106 @@ public sealed class PowerShellRunnerTests
         }
     }
 
+    [Fact]
+    public void Run_CompatibleRequest_RejectsIncompatibleExecutableOverride()
+    {
+        var executablePath = CreateStubExecutablePath();
+        var requests = new List<ProcessRunRequest>();
+        var processRunner = new StubProcessRunner(request => {
+            requests.Add(request);
+            return new ProcessRunResult(0, "Core|7", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+        });
+        var runner = new PowerShellRunner(processRunner);
+
+        var result = runner.Run(PowerShellRunRequest.ForCompatibleCommand(
+            commandText: "Get-ChildItem",
+            timeout: TimeSpan.FromMinutes(1),
+            requiredRuntimeMajor: 8,
+            executableOverride: executablePath));
+
+        Assert.Equal(127, result.ExitCode);
+        Assert.Empty(result.Executable);
+        Assert.Contains("requires PowerShell Core running on .NET 8 or later", result.StdErr, StringComparison.Ordinal);
+        Assert.Single(requests);
+        Assert.Contains("$PSVersionTable.PSEdition", requests[0].Arguments[^1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Run_CompatibleRequest_DoesNotFallBackToWindowsPowerShell()
+    {
+        using var directory = new TemporaryDirectory();
+        var executableName = Path.DirectorySeparatorChar == '\\' ? "powershell.exe" : "powershell";
+        File.WriteAllText(Path.Combine(directory.Path, executableName), string.Empty);
+
+        var originalPath = Environment.GetEnvironmentVariable("PATH");
+        try
+        {
+            Environment.SetEnvironmentVariable("PATH", directory.Path);
+            var processRunner = new StubProcessRunner(request =>
+                throw new InvalidOperationException($"Unexpected process invocation: {request.FileName}"));
+            var runner = new PowerShellRunner(processRunner);
+
+            var result = runner.Run(PowerShellRunRequest.ForCompatibleCommand(
+                commandText: "Get-ChildItem",
+                timeout: TimeSpan.FromMinutes(1),
+                requiredRuntimeMajor: 8));
+
+            Assert.Equal(127, result.ExitCode);
+            Assert.Empty(result.Executable);
+            Assert.Contains("No compatible pwsh executable was found", result.StdErr, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", originalPath);
+        }
+    }
+
+    [Fact]
+    public void Run_CompatibleRequest_SkipsOlderRuntimeAndUsesCompatiblePwsh()
+    {
+        using var directory = new TemporaryDirectory();
+        var firstDirectory = Directory.CreateDirectory(Path.Combine(directory.Path, "pwsh-8"));
+        var secondDirectory = Directory.CreateDirectory(Path.Combine(directory.Path, "pwsh-10"));
+        var executableName = Path.DirectorySeparatorChar == '\\' ? "pwsh.exe" : "pwsh";
+        var firstExecutable = Path.Combine(firstDirectory.FullName, executableName);
+        var secondExecutable = Path.Combine(secondDirectory.FullName, executableName);
+        File.WriteAllText(firstExecutable, string.Empty);
+        File.WriteAllText(secondExecutable, string.Empty);
+
+        var originalPath = Environment.GetEnvironmentVariable("PATH");
+        try
+        {
+            Environment.SetEnvironmentVariable("PATH", string.Join(Path.PathSeparator, firstDirectory.FullName, secondDirectory.FullName));
+            var requests = new List<ProcessRunRequest>();
+            var processRunner = new StubProcessRunner(request => {
+                requests.Add(request);
+                var isProbe = request.Arguments[^1].Contains("$PSVersionTable.PSEdition", StringComparison.Ordinal);
+                var output = isProbe
+                    ? (string.Equals(request.FileName, firstExecutable, StringComparison.OrdinalIgnoreCase) ? "Core|8" : "Core|10")
+                    : "ok";
+                return new ProcessRunResult(0, output, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+            });
+            var runner = new PowerShellRunner(processRunner);
+
+            var result = runner.Run(PowerShellRunRequest.ForCompatibleCommand(
+                commandText: "Get-ChildItem",
+                timeout: TimeSpan.FromMinutes(1),
+                requiredRuntimeMajor: 10));
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Equal(secondExecutable, result.Executable);
+            Assert.Collection(
+                requests,
+                request => Assert.Equal(firstExecutable, request.FileName),
+                request => Assert.Equal(secondExecutable, request.FileName),
+                request => Assert.Equal(secondExecutable, request.FileName));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", originalPath);
+        }
+    }
+
     private static string CreateStubExecutablePath()
     {
         var path = Path.Combine(Path.GetTempPath(), "powerforge-pwsh-stub.exe");

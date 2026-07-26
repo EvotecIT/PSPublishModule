@@ -3,9 +3,9 @@ namespace PowerForge.Tests;
 public sealed class ModuleStateVersionPolicyTests
 {
     [Fact]
-    public void Parse_ExactVersionRequiresSameNormalizedVersion()
+    public void Parse_PlainVersionRequiresSameNormalizedVersion()
     {
-        var policy = ModuleStateVersionPolicy.Parse("=2.38");
+        var policy = ModuleStateVersionPolicy.Parse("2.38");
 
         Assert.True(policy.IsSatisfiedBy("2.38.0"));
         Assert.False(policy.IsSatisfiedBy("2.39.0"));
@@ -19,6 +19,23 @@ public sealed class ModuleStateVersionPolicyTests
         Assert.True(policy.IsSatisfiedBy("2.36.0"));
         Assert.True(policy.IsSatisfiedBy("2.38.1"));
         Assert.False(policy.IsSatisfiedBy("2.39.0"));
+    }
+
+    [Fact]
+    public void Parse_RepeatedComparatorBoundsUseTheirIntersection()
+    {
+        var policy = ModuleStateVersionPolicy.Parse(">=2.0.0 >=1.0.0 <=4.0.0 <3.0.0");
+
+        Assert.False(policy.IsSatisfiedBy("1.5.0"));
+        Assert.True(policy.IsSatisfiedBy("2.0.0"));
+        Assert.True(policy.IsSatisfiedBy("2.9.0"));
+        Assert.False(policy.IsSatisfiedBy("3.0.0"));
+    }
+
+    [Fact]
+    public void Parse_ContradictoryComparatorBoundsAreRejected()
+    {
+        Assert.Throws<ArgumentException>(() => ModuleStateVersionPolicy.Parse(">=2.0.0 <2.0.0"));
     }
 
     [Fact]

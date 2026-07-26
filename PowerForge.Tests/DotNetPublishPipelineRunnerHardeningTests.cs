@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -513,7 +514,8 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
                 Path.Combine(Environment.SystemDirectory, "cmd.exe"),
                 Environment.CurrentDirectory,
                 new[] { "/c", "ping", "127.0.0.1", "-n", "6" },
-                TimeSpan.FromSeconds(1)
+                TimeSpan.FromSeconds(1),
+                CancellationToken.None
             });
 
         Assert.NotNull(raw);
@@ -525,6 +527,35 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
         Assert.True(timedOut);
         Assert.Equal(-1, exitCode);
         Assert.Contains("timed out", stderr, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RunProcessWithTimeout_CancellationKillsLongRunningProcess()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "RunProcessWithTimeout",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+        var stopwatch = Stopwatch.StartNew();
+
+        var exception = Assert.Throws<TargetInvocationException>(() => method!.Invoke(
+            null,
+            new object[]
+            {
+                Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                Environment.CurrentDirectory,
+                new[] { "/c", "ping", "127.0.0.1", "-n", "30" },
+                TimeSpan.FromSeconds(20),
+                cancellation.Token
+            }));
+
+        stopwatch.Stop();
+        Assert.IsAssignableFrom<OperationCanceledException>(exception.InnerException);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5), stopwatch.Elapsed.ToString());
     }
 
     [Fact]

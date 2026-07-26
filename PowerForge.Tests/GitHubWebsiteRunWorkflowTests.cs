@@ -60,6 +60,43 @@ public sealed class GitHubWebsiteRunWorkflowTests
     }
 
     [Fact]
+    public void WebsiteRunWorkflow_ShouldInstallRequestedDotNetWorkloads()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-run.yml");
+
+        Assert.True(File.Exists(workflowPath), $"Website workflow not found: {workflowPath}");
+
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        Assert.Contains("dotnet_workloads:", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("if: ${{ inputs.dotnet_workloads != '' }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("DOTNET_WORKLOADS: ${{ inputs.dotnet_workloads }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("dotnet workload install @workloads --skip-manifest-update", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("Invalid .NET workload identifier", workflowYaml, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("powerforge-website-ci.yml", 1)]
+    [InlineData("powerforge-website-deploy.yml", 2)]
+    [InlineData("powerforge-website-maintenance.yml", 1)]
+    public void WebsiteWorkflows_ShouldForwardRequestedDotNetWorkloads(string workflowFileName, int expectedForwardCount)
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", workflowFileName);
+
+        Assert.True(File.Exists(workflowPath), $"Website workflow not found: {workflowPath}");
+
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        Assert.Contains("dotnet_workloads:", workflowYaml, StringComparison.Ordinal);
+        Assert.Equal(
+            expectedForwardCount,
+            workflowYaml.Split('\n').Count(static line =>
+                line.Trim().Equals("dotnet_workloads: ${{ inputs.dotnet_workloads }}", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void WebsiteRunWorkflow_ShouldResolveOptionalCallerSourceRefToExactProvenance()
     {
         var repoRoot = FindRepoRoot();

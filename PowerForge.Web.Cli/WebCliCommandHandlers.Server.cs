@@ -142,10 +142,8 @@ internal static partial class WebCliCommandHandlers
         var dryRun = HasOption(subArgs, "--dry-run");
         var skipFiles = HasOption(subArgs, "--skip-files");
         var skipEncrypted = HasOption(subArgs, "--skip-encrypted");
-        var encryptRemote = HasOption(subArgs, "--encrypt-remote") || HasOption(subArgs, "--remote-encryption");
         var failOnFailure = HasOption(subArgs, "--fail-on-failure");
         var sshCommand = TryGetOptionValue(subArgs, "--ssh") ?? "ssh";
-        var ageCommand = TryGetOptionValue(subArgs, "--age") ?? "age";
         var target = BuildServerSshTarget(manifest.Target);
 
         var outputRoot = ResolveCaptureOutputPath(outPathArg, manifest);
@@ -170,13 +168,24 @@ internal static partial class WebCliCommandHandlers
         }
         else
         {
-            foreach (var command in commandList.Where(static command => !command.Sensitive))
+            using var captureLock = AcquireRemoteOperationLocks(
+                sshCommand,
+                target,
+                manifest.OperationLocks ?? Array.Empty<string>(),
+                waitSecondsPerLock: 900);
+            for (var commandIndex = 0; commandIndex < commandList.Length; commandIndex++)
             {
+                var command = commandList[commandIndex];
+                if (command.Sensitive)
+                    continue;
+                captureLock?.EnsureHeld($"before capture command '{command.Id}'");
                 var result = CaptureRemoteCommand(
                     sshCommand,
                     target,
                     command,
-                    Path.Combine(outputRoot, "commands"));
+                    Path.Combine(outputRoot, "commands"),
+                    commandIndex);
+                captureLock?.EnsureHeld($"after capture command '{command.Id}'");
                 commandResults.Add(result);
                 if (!result.Success && command.Required)
                     warnings.Add($"Required capture command '{result.Id}' failed with exit code {result.ExitCode}.");
@@ -184,7 +193,9 @@ internal static partial class WebCliCommandHandlers
 
             if (!skipFiles && plainFiles.Length > 0 && plainArchivePath is not null)
             {
+                captureLock?.EnsureHeld("before plain archive capture");
                 var archiveResult = CaptureRemoteTarArchive(sshCommand, target, plainFiles, plainArchivePath);
+                captureLock?.EnsureHeld("after plain archive capture");
                 if (!archiveResult.Success)
                 {
                     warnings.Add($"Plain file archive failed with exit code {archiveResult.ExitCode}.");
@@ -209,20 +220,14 @@ internal static partial class WebCliCommandHandlers
                 else
                 {
                     encryptedArchivePath = Path.Combine(outputRoot, "encrypted-secrets.tar.gz.age");
-                    var encryptedResult = encryptRemote
-                        ? CaptureRemoteEncryptedTarArchive(
-                            sshCommand,
-                            target,
-                            encryptedFiles,
-                            encryptedArchivePath,
-                            recipient)
-                        : CaptureEncryptedRemoteTarArchive(
-                            sshCommand,
-                            ageCommand,
-                            target,
-                            encryptedFiles,
-                            encryptedArchivePath,
-                            recipient);
+                    captureLock?.EnsureHeld("before encrypted archive capture");
+                    var encryptedResult = CaptureRemoteEncryptedTarArchive(
+                        sshCommand,
+                        target,
+                        encryptedFiles,
+                        encryptedArchivePath,
+                        recipient);
+                    captureLock?.EnsureHeld("after encrypted archive capture");
                     if (!encryptedResult.Success)
                     {
                         warnings.Add($"Encrypted capture failed with exit code {encryptedResult.ExitCode}.");
@@ -303,29 +308,57 @@ internal static partial class WebCliCommandHandlers
 
         foreach (var repository in manifest.Repositories ?? Array.Empty<PowerForgeServerRepository>())
         {
-            var commandId = repository.RefCaptureCommandId;
-            if (string.IsNullOrWhiteSpace(commandId))
+            var commandIds = GetRepositoryRefCaptureCommandIds(repository);
+            if (commandIds.Length == 0)
                 continue;
 
             // A dynamic ref must never fall back to a stale source-manifest value.
             repository.Ref = null;
-            var result = commandResults.SingleOrDefault(candidate =>
-                string.Equals(candidate.Id, commandId, StringComparison.Ordinal));
-            if (result is null || !result.Success || string.IsNullOrWhiteSpace(result.StdoutPath) || !File.Exists(result.StdoutPath))
+            var revisions = new List<string>(commandIds.Length);
+            var captureFailed = false;
+            foreach (var commandId in commandIds)
             {
-                warnings.Add($"Repository '{repository.Role}' revision capture is missing or failed for command '{commandId}'.");
+                var result = commandResults.SingleOrDefault(candidate =>
+                    string.Equals(candidate.Id, commandId, StringComparison.Ordinal));
+                if (result is null || !result.Success || string.IsNullOrWhiteSpace(result.StdoutPath) || !File.Exists(result.StdoutPath))
+                {
+                    warnings.Add($"Repository '{repository.Role}' revision capture is missing or failed for command '{commandId}'.");
+                    captureFailed = true;
+                    continue;
+                }
+
+                var revision = File.ReadAllText(result.StdoutPath).Trim().ToLowerInvariant();
+                if (!PowerForge.Web.WebEngineLockFile.IsCommitSha(revision))
+                {
+                    warnings.Add($"Repository '{repository.Role}' revision capture is not an exact commit for command '{commandId}'.");
+                    captureFailed = true;
+                    continue;
+                }
+
+                revisions.Add(revision);
+            }
+
+            if (captureFailed)
+                continue;
+
+            var distinctRevisions = revisions.Distinct(StringComparer.Ordinal).ToArray();
+            if (distinctRevisions.Length != 1)
+            {
+                warnings.Add($"Repository '{repository.Role}' revision captures disagree across commands '{string.Join("', '", commandIds)}'.");
                 continue;
             }
 
-            var revision = File.ReadAllText(result.StdoutPath).Trim().ToLowerInvariant();
-            if (!PowerForge.Web.WebEngineLockFile.IsCommitSha(revision))
-            {
-                warnings.Add($"Repository '{repository.Role}' revision capture is not an exact commit for command '{commandId}'.");
-                continue;
-            }
-
-            repository.Ref = revision;
+            repository.Ref = distinctRevisions[0];
         }
+    }
+
+    private static string[] GetRepositoryRefCaptureCommandIds(PowerForgeServerRepository repository)
+    {
+        if (repository.RefCaptureCommandIds is { Length: > 0 })
+            return repository.RefCaptureCommandIds;
+        return string.IsNullOrWhiteSpace(repository.RefCaptureCommandId)
+            ? Array.Empty<string>()
+            : [repository.RefCaptureCommandId];
     }
 
     private static (PowerForgeServerRecoveryManifest? Manifest, string? ManifestPath, int ExitCode) LoadServerRecoveryManifest(
@@ -395,9 +428,10 @@ internal static partial class WebCliCommandHandlers
         string sshCommand,
         string target,
         PowerForgeServerNamedCommand command,
-        string commandOutputDirectory)
+        string commandOutputDirectory,
+        int commandIndex)
     {
-        var id = SanitizeFileName(string.IsNullOrWhiteSpace(command.Id) ? "command" : command.Id);
+        var id = BuildCaptureCommandOutputStem(commandIndex, command.Id);
         var stdoutPath = Path.Combine(commandOutputDirectory, $"{id}.out.txt");
         var stderrPath = Path.Combine(commandOutputDirectory, $"{id}.err.txt");
         var execution = RunProcessCaptureText(sshCommand, BuildSshArguments(target, command.Command ?? string.Empty));
@@ -416,6 +450,16 @@ internal static partial class WebCliCommandHandlers
         };
     }
 
+    internal static string BuildCaptureCommandOutputStem(int commandIndex, string? commandId)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(commandIndex);
+        var id = SanitizeFileName(string.IsNullOrWhiteSpace(commandId) ? "command" : commandId);
+        const int maximumReadableIdLength = 80;
+        if (id.Length > maximumReadableIdLength)
+            id = id[..maximumReadableIdLength];
+        return $"{commandIndex:D4}-{id}";
+    }
+
     private static ProcessResult CaptureRemoteTarArchive(
         string sshCommand,
         string target,
@@ -424,67 +468,6 @@ internal static partial class WebCliCommandHandlers
     {
         var script = BuildRemoteTarScript(files);
         return RunProcessCaptureBinary(sshCommand, BuildSshArguments(target, script), outputPath);
-    }
-
-    private static ProcessResult CaptureEncryptedRemoteTarArchive(
-        string sshCommand,
-        string ageCommand,
-        string target,
-        PowerForgeServerManagedFile[] files,
-        string outputPath,
-        string recipient)
-    {
-        var script = BuildRemoteTarScript(files);
-        using var ssh = CreateProcess(sshCommand, BuildSshArguments(target, script));
-        using var age = CreateProcess(ageCommand, new[] { "-r", recipient, "-o", outputPath });
-        ssh.StartInfo.RedirectStandardOutput = true;
-        ssh.StartInfo.RedirectStandardError = true;
-        age.StartInfo.RedirectStandardInput = true;
-        age.StartInfo.RedirectStandardError = true;
-
-        if (!ssh.Start())
-            throw new InvalidOperationException("Failed to start ssh.");
-        if (!age.Start())
-            throw new InvalidOperationException("Failed to start age.");
-
-        var copyTask = CopyAndCloseAsync(ssh.StandardOutput.BaseStream, age.StandardInput.BaseStream);
-        var sshErrTask = ssh.StandardError.ReadToEndAsync();
-        var ageErrTask = age.StandardError.ReadToEndAsync();
-
-        ssh.WaitForExit();
-        string? copyError = null;
-        try
-        {
-            copyTask.GetAwaiter().GetResult();
-        }
-        catch (Exception ex)
-        {
-            copyError = ex.GetBaseException().Message;
-        }
-        age.WaitForExit();
-
-        var stderr = string.Concat(
-            sshErrTask.GetAwaiter().GetResult(),
-            ageErrTask.GetAwaiter().GetResult(),
-            string.IsNullOrWhiteSpace(copyError) ? string.Empty : $"{Environment.NewLine}stream copy failed: {copyError}");
-        return new ProcessResult
-        {
-            ExitCode = copyError is null ? (ssh.ExitCode == 0 ? age.ExitCode : ssh.ExitCode) : 1,
-            Stdout = string.Empty,
-            Stderr = stderr
-        };
-    }
-
-    private static async Task CopyAndCloseAsync(Stream input, Stream output)
-    {
-        try
-        {
-            await input.CopyToAsync(output);
-        }
-        finally
-        {
-            output.Close();
-        }
     }
 
     private static ProcessResult CaptureRemoteEncryptedTarArchive(
@@ -500,7 +483,7 @@ internal static partial class WebCliCommandHandlers
 
     internal static string BuildRemoteTarScript(PowerForgeServerManagedFile[] files)
     {
-        var captureFiles = GetRemoteCaptureFiles(files, allowWildcards: true);
+        var captureFiles = GetRemoteCaptureFiles(files, allowWildcards: false);
 
         var script = new StringBuilder("set -e; sudo -n tar -czf - ");
         if (!captureFiles.Any(static file => file.Required))
@@ -532,16 +515,25 @@ internal static partial class WebCliCommandHandlers
 
         static string Raw(string value) => value;
         Func<string, string> format = quoteArguments ? ShellQuote : Raw;
+        var requiredFiles = captureFiles.Where(static file => file.Required).ToArray();
+        var optionalFiles = captureFiles.Where(static file => !file.Required).ToArray();
         var arguments = new List<string>
         {
             "/usr/local/sbin/powerforge-server-encrypted-capture",
             "--recipient",
             format(recipient)
         };
-        if (!captureFiles.Any(static file => file.Required))
+        if (requiredFiles.Length == 0)
             arguments.Add("--ignore-failed-read");
         arguments.Add("--");
-        arguments.AddRange(captureFiles.Select(file => format(file.Target)));
+        arguments.AddRange(requiredFiles.Length == 0
+            ? optionalFiles.Select(file => format(file.Target))
+            : requiredFiles.Select(file => format(file.Target)));
+        if (requiredFiles.Length > 0 && optionalFiles.Length > 0)
+        {
+            arguments.Add("--optional");
+            arguments.AddRange(optionalFiles.Select(file => format(file.Target)));
+        }
         return string.Join(' ', arguments);
     }
 

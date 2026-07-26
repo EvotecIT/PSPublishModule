@@ -18,12 +18,21 @@ internal static partial class ServerScaffoldTemplateStore
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
         var rendered = reader.ReadToEnd();
 
-        foreach (var (token, value) in replacements)
-            rendered = rendered.Replace(token, value, StringComparison.Ordinal);
+        var staged = new (string Marker, string Value)[replacements.Length];
+        for (var index = 0; index < replacements.Length; index++)
+        {
+            var (token, value) = replacements[index];
+            var marker = $"\u001e{index}\u001f";
+            rendered = rendered.Replace(token, marker, StringComparison.Ordinal);
+            staged[index] = (marker, value);
+        }
 
         var unresolved = ScaffoldTokenRegex().Matches(rendered).Select(static match => match.Value).Distinct(StringComparer.Ordinal).ToArray();
         if (unresolved.Length > 0)
             throw new InvalidOperationException($"Server scaffold template '{templateName}' has unresolved tokens: {string.Join(", ", unresolved)}");
+
+        foreach (var (marker, value) in staged)
+            rendered = rendered.Replace(marker, value, StringComparison.Ordinal);
 
         return rendered;
     }

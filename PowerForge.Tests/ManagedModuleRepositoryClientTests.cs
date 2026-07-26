@@ -1079,6 +1079,26 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task PublishPackageAsync_skips_copy_when_force_source_aliases_destination()
+    {
+        using var source = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        var packagePath = Path.Combine(source.Path, "Company.Tools.1.0.0.nupkg");
+        var destinationPath = Path.Combine(destination.Path, Path.GetFileName(packagePath));
+        File.WriteAllBytes(packagePath, TestPackageFactory.CreateBytes("Company.Tools", "1.0.0"));
+        TestFileLink.CreateHardLink(destinationPath, packagePath);
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger());
+        var repository = new ManagedModuleRepository("Local", destination.Path);
+
+        var result = await repositoryClient.PublishPackageAsync(repository, packagePath, force: true);
+
+        Assert.True(result.Published);
+        Assert.False(result.Duplicate);
+        Assert.Equal(destinationPath, result.PublishSource);
+        Assert.Equal(File.ReadAllBytes(packagePath), File.ReadAllBytes(destinationPath));
+    }
+
+    [Fact]
     public async Task PublishPackageAsync_classifies_remote_conflict_as_duplicate()
     {
         using var temp = new TemporaryDirectory();

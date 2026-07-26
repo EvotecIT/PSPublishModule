@@ -13,11 +13,18 @@ internal static partial class WebCliCommandHandlers
             errors.Add("target must declare sshAlias or host.");
 
         ValidateHostAndPackages(manifest, errors);
+        ValidateOperationLocks(manifest, errors);
+        ValidateSystemdActivation(manifest.Systemd, errors);
+        ValidateNamedCommandText(manifest.Bootstrap?.Commands, "bootstrap.commands", errors);
+        ValidateNamedCommandText(manifest.Capture?.Commands, "capture.commands", errors);
+        ValidateNamedCommandText(manifest.Deploy?.Commands, "deploy.commands", errors);
+        ValidateNamedCommandText(manifest.Verify?.Commands, "verify.commands", errors);
 
         var plainFiles = manifest.Capture?.PlainFiles ?? Array.Empty<PowerForgeServerManagedFile>();
         var encryptedFiles = manifest.Capture?.EncryptedFiles ?? Array.Empty<PowerForgeServerManagedFile>();
         var plainPaths = ValidateCaptureEntries(plainFiles, "capture.plainFiles", sensitive: false, errors);
         var encryptedPaths = ValidateCaptureEntries(encryptedFiles, "capture.encryptedFiles", sensitive: true, errors);
+        ValidateLetsEncryptCapturePaths(plainPaths, encryptedPaths, errors);
         var retention = manifest.BackupTarget?.Retention;
         if (retention?.KeepDays is not null)
             errors.Add("backupTarget.retention.keepDays is not implemented; use keepLatestInTree for current-tree retention.");
@@ -92,6 +99,11 @@ internal static partial class WebCliCommandHandlers
             if (!string.IsNullOrWhiteSpace(path.Validation) &&
                 !string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
                 errors.Add($"Managed path '{path.Id}' has unsupported validation '{path.Validation}'.");
+            if (string.Equals(normalizedPath, "/etc/sudoers", StringComparison.Ordinal))
+                errors.Add($"Managed path '{path.Id}' must not replace /etc/sudoers.");
+            else if (IsSudoersPolicyTarget(normalizedPath) &&
+                     !string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
+                errors.Add($"Managed path '{path.Id}' below /etc/sudoers.d must declare validation 'sudoers'.");
             if (string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
             {
                 if (string.IsNullOrWhiteSpace(path.Source))
@@ -105,10 +117,19 @@ internal static partial class WebCliCommandHandlers
             }
         }
 
-        ValidateRepositoryManagedFiles(
-            (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
-                .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>()),
-            "apache.files",
+        ValidateApacheManagedFiles(
+            manifest.Apache?.Sites,
+            "apache.sites",
+            "/etc/apache2/sites-available/",
+            repositoryRoots,
+            managedPaths,
+            managedTargets,
+            sourceManagedPaths,
+            errors);
+        ValidateApacheManagedFiles(
+            manifest.Apache?.Conf,
+            "apache.conf",
+            "/etc/apache2/conf-available/",
             repositoryRoots,
             managedPaths,
             managedTargets,
@@ -158,6 +179,30 @@ internal static partial class WebCliCommandHandlers
             if (secretPath is not null)
                 secretPaths.Add((secret.Id, secretPath));
 
+            var repositoryRoot = secretPath is null
+                ? null
+                : repositoryRoots
+                    .Where(root => PathContains(root, secretPath))
+                    .OrderByDescending(static root => root.Length)
+                    .FirstOrDefault();
+            if (repositoryRoot is not null)
+            {
+                if (string.Equals(repositoryRoot, secretPath, StringComparison.Ordinal))
+                    errors.Add($"Secret '{secret.Id}' must not replace declared repository root '{repositoryRoot}'.");
+                else if (!secret.RestoreAfterRepositories)
+                    errors.Add($"Secret '{secret.Id}' at '{secretPath}' is inside repository '{repositoryRoot}' and must set restoreAfterRepositories=true.");
+                if (!string.Equals(secret.Capture, "encrypted", StringComparison.OrdinalIgnoreCase))
+                    errors.Add($"Repository-overlapping secret '{secret.Id}' must use capture 'encrypted'.");
+                if (!string.Equals(secret.RestoreMode, "file", StringComparison.OrdinalIgnoreCase))
+                    errors.Add($"Repository-overlapping secret '{secret.Id}' must use restoreMode 'file'.");
+                if (string.IsNullOrWhiteSpace(secret.Owner) || string.IsNullOrWhiteSpace(secret.Group) || string.IsNullOrWhiteSpace(secret.Mode))
+                    errors.Add($"Repository-overlapping secret '{secret.Id}' must declare owner, group, and mode for deterministic post-clone installation.");
+            }
+            else if (secret.RestoreAfterRepositories)
+            {
+                errors.Add($"Secret '{secret.Id}' sets restoreAfterRepositories=true but is not inside a declared repository path.");
+            }
+
             if (string.Equals(secret.Capture, "exclude", StringComparison.OrdinalIgnoreCase))
             {
                 if (secretPath is not null && plainPaths.Any(path => CapturePathsMayOverlap(secretPath, path)))
@@ -178,8 +223,28 @@ internal static partial class WebCliCommandHandlers
 
             if (!encryptedPaths.Any(path => PathContains(path, secretPath)))
                 errors.Add($"Encrypted secret '{secret.Id}' at '{secretPath}' is not covered by capture.encryptedFiles.");
+            if (secret.RestoreAfterRepositories && !encryptedPaths.Contains(secretPath, StringComparer.Ordinal))
+                errors.Add($"Deferred repository secret '{secret.Id}' at '{secretPath}' must have one exact capture.encryptedFiles entry.");
             if (plainPaths.Any(path => CapturePathsMayOverlap(secretPath, path)))
                 errors.Add($"Encrypted secret '{secret.Id}' at '{secretPath}' overlaps capture.plainFiles.");
+        }
+
+        var deferredSecretPaths = new HashSet<string>(
+            (manifest.Secrets ?? Array.Empty<PowerForgeServerSecret>())
+                .Where(static secret => secret.RestoreAfterRepositories &&
+                                        string.Equals(secret.Capture, "encrypted", StringComparison.OrdinalIgnoreCase) &&
+                                        !string.IsNullOrWhiteSpace(secret.Path))
+                .Select(static secret => secret.Path!.TrimEnd('/')),
+            StringComparer.Ordinal);
+        foreach (var repositoryRoot in repositoryRoots)
+        {
+            foreach (var plainPath in plainPaths.Where(path => CapturePathsMayOverlap(repositoryRoot, path)))
+                errors.Add($"Plain capture path '{plainPath}' overlaps repository '{repositoryRoot}'; repository content must be restored from its pinned source.");
+            foreach (var encryptedPath in encryptedPaths.Where(path =>
+                         CapturePathsMayOverlap(repositoryRoot, path) && !deferredSecretPaths.Contains(path)))
+            {
+                errors.Add($"Encrypted capture path '{encryptedPath}' overlaps repository '{repositoryRoot}' without an exact deferred secret contract.");
+            }
         }
 
         for (var leftIndex = 0; leftIndex < encryptedPaths.Length; leftIndex++)
@@ -228,6 +293,8 @@ internal static partial class WebCliCommandHandlers
                         errors.Add($"{id}.target must not end with '/'.");
                     if (observedTarget is not null && observedTarget.IndexOfAny(['*', '?', '[']) >= 0)
                         errors.Add($"{id}.target must use an exact path.");
+                    if (IsSudoersPolicyTarget(observedTarget))
+                        errors.Add($"{id}.target must not manage /etc/sudoers or files below /etc/sudoers.d.");
                     if (observedTarget is not null && !managedPaths.Add(observedTarget))
                         errors.Add($"Managed path '{observedTarget}' is duplicated.");
                     if (observedTarget is not null)
@@ -246,6 +313,8 @@ internal static partial class WebCliCommandHandlers
                 errors.Add($"{id}.source must use an exact path.");
             if (target is not null && target.IndexOfAny(['*', '?', '[']) >= 0)
                 errors.Add($"{id}.target must use an exact path.");
+            if (IsSudoersPolicyTarget(target))
+                errors.Add($"{id}.target must not manage /etc/sudoers or files below /etc/sudoers.d.");
             if (source is not null && target is not null)
             {
                 if (string.Equals(source, target, StringComparison.Ordinal))
@@ -261,6 +330,45 @@ internal static partial class WebCliCommandHandlers
             }
             index++;
         }
+    }
+
+    private static void ValidateApacheManagedFiles(
+        IEnumerable<PowerForgeServerApacheFile>? files,
+        string section,
+        string targetRoot,
+        IReadOnlyCollection<string> repositoryRoots,
+        ISet<string> managedPaths,
+        ICollection<(string Id, string Path, string Kind)> managedTargets,
+        ICollection<(string Id, string Source, string Target)> sourceManagedPaths,
+        ICollection<string> errors)
+    {
+        var entries = (files ?? Array.Empty<PowerForgeServerApacheFile>()).ToArray();
+        for (var index = 0; index < entries.Length; index++)
+        {
+            var target = entries[index].Target;
+            if (string.IsNullOrWhiteSpace(target) ||
+                !target.StartsWith(targetRoot, StringComparison.Ordinal) ||
+                !target.EndsWith(".conf", StringComparison.Ordinal) ||
+                target[targetRoot.Length..].Contains('/', StringComparison.Ordinal) ||
+                System.Text.Encoding.UTF8.GetByteCount(Path.GetFileName(target)) > 255)
+            {
+                errors.Add($"{section}[{index}].target must be an exact .conf file with a filename of at most 255 bytes directly below '{targetRoot.TrimEnd('/')}'.");
+            }
+        }
+
+        ValidateRepositoryManagedFiles(
+            entries.Select(static file => new PowerForgeServerManagedFile
+            {
+                Source = file.Source,
+                Target = file.Target,
+                Required = file.Required
+            }),
+            section,
+            repositoryRoots,
+            managedPaths,
+            managedTargets,
+            sourceManagedPaths,
+            errors);
     }
 
     private static void ValidateManagedTargetHierarchy(
@@ -388,20 +496,51 @@ internal static partial class WebCliCommandHandlers
                     errors.Add($"{field}.bootstrapRequiredFiles must include sshKnownHostsFile '{knownHosts}'.");
             }
 
+            var refCaptureCommandIds = new List<(string Field, string Id)>();
             if (!string.IsNullOrWhiteSpace(repository.RefCaptureCommandId))
             {
-                var commandId = repository.RefCaptureCommandId;
+                refCaptureCommandIds.Add(($"{field}.refCaptureCommandId", repository.RefCaptureCommandId));
+            }
+
+            if (repository.RefCaptureCommandIds is not null)
+            {
+                if (repository.RefCaptureCommandIds.Length is < 2 or > 16)
+                    errors.Add($"{field}.refCaptureCommandIds must contain between 2 and 16 command identifiers.");
+                if (!string.IsNullOrWhiteSpace(repository.RefCaptureCommandId))
+                    errors.Add($"{field} must not declare both refCaptureCommandId and refCaptureCommandIds.");
+
+                var seenRefCaptureCommandIds = new HashSet<string>(StringComparer.Ordinal);
+                for (var commandIndex = 0; commandIndex < repository.RefCaptureCommandIds.Length; commandIndex++)
+                {
+                    var commandId = repository.RefCaptureCommandIds[commandIndex];
+                    var commandField = $"{field}.refCaptureCommandIds[{commandIndex}]";
+                    if (string.IsNullOrWhiteSpace(commandId) || !IsSafeIdentifier(commandId))
+                    {
+                        errors.Add($"{commandField} contains unsupported characters.");
+                        continue;
+                    }
+                    if (!seenRefCaptureCommandIds.Add(commandId))
+                    {
+                        errors.Add($"{commandField} duplicates capture command '{commandId}'.");
+                        continue;
+                    }
+                    refCaptureCommandIds.Add((commandField, commandId));
+                }
+            }
+
+            foreach (var (commandField, commandId) in refCaptureCommandIds)
+            {
                 if (!IsSafeIdentifier(commandId))
                 {
-                    errors.Add($"{field}.refCaptureCommandId contains unsupported characters.");
+                    errors.Add($"{commandField} contains unsupported characters.");
                 }
                 else if (!captureCommandsById.TryGetValue(commandId, out var commands) || commands.Length != 1)
                 {
-                    errors.Add($"{field}.refCaptureCommandId must identify exactly one capture command.");
+                    errors.Add($"{commandField} must identify exactly one capture command.");
                 }
                 else if (!commands[0].Required || commands[0].Sensitive)
                 {
-                    errors.Add($"{field}.refCaptureCommandId must identify a required, non-sensitive capture command.");
+                    errors.Add($"{commandField} must identify a required, non-sensitive capture command.");
                 }
             }
 
@@ -492,8 +631,8 @@ internal static partial class WebCliCommandHandlers
                 paths.Add(path);
                 if (!seenPaths.Add(path))
                     errors.Add($"{section}[{index}] duplicates capture path '{path}'.");
-                if (sensitive && path.IndexOfAny(['*', '?', '[']) >= 0)
-                    errors.Add($"{section}[{index}] must use an exact path so restore can enforce an archive allowlist.");
+                if (path.IndexOfAny(['*', '?', '[']) >= 0)
+                    errors.Add($"{section}[{index}] must use an exact path so capture and restore share one archive allowlist.");
             }
             if (entry.Sensitive is null)
             {
@@ -590,6 +729,11 @@ internal static partial class WebCliCommandHandlers
                !name.Contains('/', StringComparison.Ordinal) &&
                name.All(static character => IsAsciiLetterOrDigit(character) || character is '_' or '-');
     }
+
+    private static bool IsSudoersPolicyTarget(string? path)
+        => string.Equals(path, "/etc/sudoers", StringComparison.Ordinal) ||
+           string.Equals(path, "/etc/sudoers.d", StringComparison.Ordinal) ||
+           (path?.StartsWith("/etc/sudoers.d/", StringComparison.Ordinal) ?? false);
 
     private static bool IsValidUnixIdentity(string? value)
     {

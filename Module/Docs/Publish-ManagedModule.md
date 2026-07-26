@@ -9,20 +9,35 @@ schema: 2.0.0
 Publishes a PowerShell module package through the managed C# module engine.
 
 ## SYNTAX
-### __AllParameterSets
+### PathParameterSet (Default)
 ```powershell
 Publish-ManagedModule [-Path] <string> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-OutputDirectory <string>] [-ManifestPath <string>] [-Name <string>] [-Version <string>] [-Authors <string>] [-Description <string>] [-ProjectUrl <string>] [-Tags <string[]>] [-Credential <pscredential>] [-ApiKey <string>] [-ApiKeyFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-SkipDependenciesCheck] [-SkipModuleManifestValidate] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
+### NupkgPathParameterSet
+```powershell
+Publish-ManagedModule [[-Repository] <string>] -NupkgPath <string> [-RepositoryName <string>] [-ProfileName <string>] [-OutputDirectory <string>] [-Credential <pscredential>] [-ApiKey <string>] [-ApiKeyFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-SkipDependenciesCheck] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
 ## DESCRIPTION
-This managed publish surface creates a NuGet package from a module folder and publishes it to a local folder feed
-or NuGet-compatible package publish endpoint.
+This command provides the module-publish functionality of Publish-PSResource. It can create a NuGet
+package from a module folder or publish an existing .nupkg file to a local folder feed or NuGet-compatible
+package publish endpoint.
+
+Microsoft Artifact Registry module prefixes are not applied because the managed repository client does not yet
+expose a container-registry transport.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
 Publish-ManagedModule -Path C:\Source\Company.Tools -Repository C:\Packages
+```
+
+
+### EXAMPLE 2
+```powershell
+Publish-ManagedModule -NupkgPath C:\Packages\Company.Tools.1.2.0.nupkg -Repository CompanyFeed
 ```
 
 
@@ -33,7 +48,7 @@ API key used by NuGet-compatible package publish endpoints.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet, NupkgPathParameterSet
 Aliases: NuGetApiKey
 Possible values:
 
@@ -49,7 +64,7 @@ Optional path to a file containing the API key.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet, NupkgPathParameterSet
 Aliases: ApiKeyPath, NuGetApiKeyPath
 Possible values:
 
@@ -65,7 +80,7 @@ Optional authors override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet
 Aliases: None
 Possible values:
 
@@ -81,7 +96,7 @@ Optional repository credential.
 
 ```yaml
 Type: PSCredential
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet, NupkgPathParameterSet
 Aliases: None
 Possible values:
 
@@ -97,7 +112,7 @@ Optional description override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet
 Aliases: None
 Possible values:
 
@@ -113,7 +128,7 @@ Overwrite an existing package.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet, NupkgPathParameterSet
 Aliases: None
 Possible values:
 
@@ -129,7 +144,7 @@ Optional explicit module manifest path.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet
 Aliases: None
 Possible values:
 
@@ -145,7 +160,7 @@ Optional package id override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet
 Aliases: None
 Possible values:
 
@@ -156,12 +171,28 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -OutputDirectory
-Output directory used when Repository is omitted.
+### -NupkgPath
+Existing .nupkg file to publish without repacking a module folder.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NupkgPathParameterSet
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -OutputDirectory
+Directory that receives the created or supplied package; it is also the local target when Repository is omitted.
+
+```yaml
+Type: String
+Parameter Sets: PathParameterSet, NupkgPathParameterSet
 Aliases: DestinationPath, OutputPath
 Possible values:
 
@@ -177,7 +208,7 @@ Module folder to package.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet
 Aliases: ModulePath
 Possible values:
 
@@ -193,7 +224,7 @@ Saved module repository profile to use instead of Repository or OutputDirectory.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet, NupkgPathParameterSet
 Aliases: None
 Possible values:
 
@@ -209,7 +240,7 @@ Optional project URL override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet
 Aliases: None
 Possible values:
 
@@ -225,7 +256,7 @@ Optional HTTP proxy used for repository requests.
 
 ```yaml
 Type: Uri
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet, NupkgPathParameterSet
 Aliases: None
 Possible values:
 
@@ -241,7 +272,7 @@ Optional proxy credential used with Proxy.
 
 ```yaml
 Type: PSCredential
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet, NupkgPathParameterSet
 Aliases: None
 Possible values:
 
@@ -257,7 +288,7 @@ Repository URL, NuGet v3 service index, publish endpoint, or local folder feed.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet, NupkgPathParameterSet
 Aliases: RepositoryPath, RepositoryUri, Source
 Possible values:
 
@@ -273,7 +304,7 @@ Friendly repository name used in output.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet, NupkgPathParameterSet
 Aliases: None
 Possible values:
 
@@ -289,7 +320,7 @@ Write a compact Spectre.Console summary for the publish result.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet, NupkgPathParameterSet
 Aliases: None
 Possible values:
 
@@ -305,7 +336,7 @@ Skip checking RequiredModules against the target repository.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet, NupkgPathParameterSet
 Aliases: None
 Possible values:
 
@@ -321,7 +352,7 @@ Skip managed manifest metadata validation before packaging.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet
 Aliases: None
 Possible values:
 
@@ -337,7 +368,7 @@ Optional package tags override.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet
 Aliases: None
 Possible values:
 
@@ -353,7 +384,7 @@ Optional package version override.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: PathParameterSet
 Aliases: None
 Possible values:
 

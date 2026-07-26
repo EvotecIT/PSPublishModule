@@ -30,4 +30,7 @@ public sealed class GitHubReleasePublishResult
 
     /// <summary>Assets deleted from an existing release before uploading replacements.</summary>
     public List<string> ReplacedExistingAssets { get; } = new();
+
+    /// <summary>Assets uploaded successfully during this operation.</summary>
+    public List<string> UploadedAssets { get; } = new();
 }

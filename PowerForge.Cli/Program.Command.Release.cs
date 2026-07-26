@@ -1,13 +1,19 @@
 using PowerForge;
 using PowerForge.Cli;
+using PowerForge.ConsoleShared;
+using System.Diagnostics;
 using System.Text.Json;
 
 internal static partial class Program
 {
     private const string ReleaseUsage =
-        "Usage: powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--module-only] [--tools-only] [--configuration <Release|Debug>] [--module-no-dotnet-build] [--module-version <version>] [--module-prerelease-tag <tag>] [--module-no-sign] [--module-sign] [--skip-workspace-validation] [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>] [--publish-nuget] [--publish-project-github] [--publish-tool-github] [--submit-winget] [--skip-winget-submit] [--winget-submit-mode <Manifest|Update>] [--winget-tool-path <path>] [--winget-token-env <name>] [--winget-token-file <path>] [--winget-pr-title <text>] [--winget-open-browser] [--winget-replace [version]] [--winget-allow-interactive-auth] [--winget-timeout-seconds <seconds>] [--skip-restore] [--skip-build] [--output-root <path>] [--stage-root <path>] [--manifest-json <path>] [--allow-output-outside-project-root] [--allow-manifest-outside-project-root] [--checksums-path <path>] [--skip-release-checksums] [--keep-symbols] [--sign] [--sign-profile <name>] [--sign-tool-path <path>] [--sign-thumbprint <sha1>] [--sign-subject-name <name>] [--sign-on-missing-tool <Warn|Fail|Skip>] [--sign-on-failure <Warn|Fail|Skip>] [--sign-timeout-seconds <seconds>] [--sign-timestamp-url <url>] [--sign-description <text>] [--sign-url <url>] [--sign-csp <name>] [--sign-key-container <name>] [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>] [--installer-property <Name=Value>] [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <...>] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]";
+        "Usage: powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--module-only] [--tools-only] [--apple-action <Configured|Status|Version|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|Advance|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>] [--apple-version <marketing-version>] [--confirm-apple-action] [--apple-resume|--no-apple-resume] [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>] [--summary] [--configuration <Release|Debug>] [--module-framework <auto|net10.0|net8.0>] [--module-run-mode <Manifest|Documentation|Build|Publish>] [--module-timeout-seconds <seconds>] [--module-no-dotnet-build] [--module-version <version>] [--module-prerelease-tag <tag>] [--module-no-sign] [--module-sign] [--module-certificate-thumbprint <sha1>] [--module-sign-include-binaries|--module-no-sign-include-binaries] [--module-sign-include-internals|--module-no-sign-include-internals] [--module-sign-include-exe|--module-no-sign-include-exe] [--module-diagnostics-baseline <path>] [--module-diagnostics-baseline-generate|--module-no-diagnostics-baseline-generate] [--module-diagnostics-baseline-update|--module-no-diagnostics-baseline-update] [--module-fail-on-new-diagnostics|--module-no-fail-on-new-diagnostics] [--module-fail-on-diagnostics-severity <Warning|Error>] [--skip-workspace-validation] [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>] [--publish-nuget] [--publish-project-github] [--publish-tool-github] [--submit-winget] [--skip-winget-submit] [--winget-submit-mode <Manifest|Update>] [--winget-tool-path <path>] [--winget-token-env <name>] [--winget-token-file <path>] [--winget-pr-title <text>] [--winget-open-browser] [--winget-replace [version]] [--winget-allow-interactive-auth] [--winget-timeout-seconds <seconds>] [--skip-restore] [--skip-build] [--output-root <path>] [--stage-root <path>] [--manifest-json <path>] [--allow-output-outside-project-root] [--allow-manifest-outside-project-root] [--checksums-path <path>] [--skip-release-checksums] [--keep-symbols] [--sign] [--sign-profile <name>] [--sign-tool-path <path>] [--sign-thumbprint <sha1>] [--sign-subject-name <name>] [--sign-on-missing-tool <Warn|Fail|Skip>] [--sign-on-failure <Warn|Fail|Skip>] [--sign-timeout-seconds <seconds>] [--sign-timestamp-url <url>] [--sign-description <text>] [--sign-url <url>] [--sign-csp <name>] [--sign-key-container <name>] [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>] [--installer-property <Name=Value>] [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <...>] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]";
 
-    private static int CommandRelease(string[] filteredArgs, CliOptions cli, ILogger logger)
+    private static int CommandRelease(
+        string[] filteredArgs,
+        CliOptions cli,
+        ILogger logger,
+        string commandName = "release")
     {
         var argv = filteredArgs.Skip(1).ToArray();
         var outputJson = IsJsonOutput(argv);
@@ -18,7 +24,7 @@ internal static partial class Program
                 WriteJson(new CliJsonEnvelope
                 {
                     SchemaVersion = OutputSchemaVersion,
-                    Command = "release",
+                    Command = commandName,
                     Success = true,
                     ExitCode = 0,
                     Result = JsonSerializer.SerializeToElement(new { usage = ReleaseUsage })
@@ -41,7 +47,7 @@ internal static partial class Program
         var scopedCount = (packagesOnly ? 1 : 0) + (moduleOnly ? 1 : 0) + (toolsOnly ? 1 : 0);
         if (scopedCount > 1)
         {
-            return WriteReleaseError(outputJson, "release", 2, "Use at most one of --packages-only, --module-only, or --tools-only.", logger);
+            return WriteReleaseError(outputJson, commandName, 2, "Use at most one of --packages-only, --module-only, or --tools-only.", logger);
         }
 
         var configPath = TryGetOptionValue(argv, "--config");
@@ -55,7 +61,7 @@ internal static partial class Program
                 WriteJson(new CliJsonEnvelope
                 {
                     SchemaVersion = OutputSchemaVersion,
-                    Command = "release",
+                    Command = commandName,
                     Success = false,
                     ExitCode = 2,
                     Error = "Missing --config and no default release config found."
@@ -69,38 +75,73 @@ internal static partial class Program
 
         try
         {
-            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
             var loaded = LoadPowerForgeReleaseSpecWithPath(configPath);
             var spec = loaded.Value;
             var fullConfigPath = loaded.FullPath;
 
             var request = BuildReleaseRequestFromArgs(argv, fullConfigPath, planOnly, validateOnly, packagesOnly, moduleOnly, toolsOnly);
+            var interactive = !request.AppleSummaryOnly && PipelineConsoleUi.ShouldUseInteractiveView(outputJson, cli);
+            BufferedLogger? interactiveBuffer = null;
+            var (cmdLogger, logBuffer) = interactive
+                ? (interactiveBuffer = new BufferedLogger { IsVerbose = cli.Verbose }, interactiveBuffer)
+                : CreateCommandLogger(outputJson, cli, logger);
 
-            var service = new PowerForgeReleaseService(cmdLogger);
-            var result = RunWithStatus(outputJson, cli, "Running unified release workflow", () => service.Execute(spec, request));
+            var service = new PowerForgeReleaseService(
+                cmdLogger,
+                DotNetAssemblySigningCallbackFactory.Create(cmdLogger),
+                DotNetAssemblySigningCallbackFactory.CreatePreflight(cmdLogger));
+            var watch = Stopwatch.StartNew();
+            var result = interactive
+                ? SpectrePowerForgeReleaseConsoleUi.RunInteractive(
+                    spec,
+                    request,
+                    progress =>
+                    {
+                        request.Progress = progress;
+                        return service.Execute(spec, request);
+                    })
+                : RunWithStatus(outputJson, cli, "Running unified release workflow", () => service.Execute(spec, request));
+            watch.Stop();
             var exitCode = result.Success ? 0 : 1;
 
             if (outputJson)
             {
+                var compactResult = request.AppleSummaryOnly
+                    ? CreateAppleSummaryElement(result, request)
+                    : CliJson.SerializeToElement(result, CliJson.Context.PowerForgeReleaseResult);
                 WriteJson(new CliJsonEnvelope
                 {
                     SchemaVersion = OutputSchemaVersion,
-                    Command = "release",
+                    Command = commandName,
                     Success = result.Success,
                     ExitCode = exitCode,
                     Error = result.ErrorMessage,
                     Config = "release",
                     ConfigPath = fullConfigPath,
-                    Spec = CliJson.SerializeToElement(spec, CliJson.Context.PowerForgeReleaseSpec),
-                    Result = CliJson.SerializeToElement(result, CliJson.Context.PowerForgeReleaseResult),
-                    Logs = LogsToJsonElement(logBuffer)
+                    Spec = request.AppleSummaryOnly ? null : CliJson.SerializeToElement(spec, CliJson.Context.PowerForgeReleaseSpec),
+                    Result = compactResult,
+                    Logs = request.AppleSummaryOnly ? null : LogsToJsonElement(logBuffer)
                 });
+                return exitCode;
+            }
+
+            if (interactive)
+            {
+                SpectrePowerForgeReleaseConsoleUi.WriteSummary(result, watch.Elapsed);
+                if (!result.Success && interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0 && !cli.Quiet)
+                    WriteLogTail(interactiveBuffer, logger);
                 return exitCode;
             }
 
             if (!result.Success)
             {
                 cmdLogger.Error(result.ErrorMessage ?? "Release workflow failed.");
+                return exitCode;
+            }
+
+            if (request.AppleSummaryOnly && result.AppleReceipt is not null)
+            {
+                WriteAppleReceiptSummary(cmdLogger, result.AppleReceipt);
                 return exitCode;
             }
 
@@ -119,7 +160,9 @@ internal static partial class Program
                 cmdLogger.Success($"Module: {(planOnly || validateOnly ? "planned" : "completed")} ({moduleAssetCount} asset path(s)).");
                 if (result.ModulePlan is not null)
                 {
-                    cmdLogger.Info($"Module script: {result.ModulePlan.ScriptPath}");
+                    var moduleSource = result.ModulePlan.ConfigPath ?? result.ModulePlan.ScriptPath;
+                    if (!string.IsNullOrWhiteSpace(moduleSource))
+                        cmdLogger.Info($"Module config: {moduleSource}");
                     if (!string.IsNullOrWhiteSpace(result.ModulePlan.ModuleVersion))
                         cmdLogger.Info($"Module version override: {result.ModulePlan.ModuleVersion}");
                     if (!string.IsNullOrWhiteSpace(result.ModulePlan.PreReleaseTag))
@@ -239,7 +282,7 @@ internal static partial class Program
         }
         catch (Exception ex)
         {
-            return WriteReleaseError(outputJson, "release", 1, ex.Message, logger);
+            return WriteReleaseError(outputJson, commandName, 1, ex.Message, logger);
         }
     }
 
@@ -260,6 +303,25 @@ internal static partial class Program
 
         logger.Error(message);
         return exitCode;
+    }
+
+    private static void WriteAppleReceiptSummary(ILogger logger, PowerForgeAppleReleaseReceipt receipt)
+    {
+        logger.Success($"Apple {receipt.Action}: {(receipt.Success ? "complete" : "failed")}");
+        foreach (var target in receipt.Targets)
+        {
+            logger.Info(
+                $" -> {target.Name} {target.Platform} {target.Version} ({target.Build}): " +
+                $"build={target.BuildProcessingState ?? "not found"}, " +
+                $"distribution={target.DistributionState ?? "not found"}, " +
+                $"testflight={target.TestFlightExternalState ?? target.TestFlightInternalState ?? "not available"}");
+        }
+        if (receipt.Cleanup.RemovedPaths.Length > 0)
+            logger.Info($"Cleanup: {receipt.Cleanup.RemovedPaths.Length} path(s), {receipt.Cleanup.ReclaimedBytes} byte(s) reclaimed.");
+        if (!string.IsNullOrWhiteSpace(receipt.ReceiptPath))
+            logger.Info($"Receipt: {receipt.ReceiptPath}");
+        foreach (var action in receipt.NextActions.Take(5))
+            logger.Info($"Next: {action}");
     }
 
     internal static PowerForgeReleaseRequest BuildReleaseRequestFromArgs(
@@ -296,6 +358,16 @@ internal static partial class Program
         request.PackagesOnly = packagesOnly;
         request.ModuleOnly = moduleOnly;
         request.ToolsOnly = request.ToolsOnly || toolsOnly;
+        request.AppleAction = ParseAppleReleaseAction(TryGetOptionValue(argv, "--apple-action"));
+        request.AppleMarketingVersion = ChooseString(request.AppleMarketingVersion, TryGetOptionValue(argv, "--apple-version"));
+        request.AppleActionConfirmed = argv.Any(a => a.Equals("--confirm-apple-action", StringComparison.OrdinalIgnoreCase));
+        request.AppleResume = ResolveBooleanOverride(argv, "--apple-resume", "--no-apple-resume", request.AppleResume);
+        request.AppleWaitForProcessing = ResolveBooleanOverride(argv, "--apple-wait", "--no-apple-wait", request.AppleWaitForProcessing);
+        request.AppleSummaryOnly = argv.Any(a => a.Equals("--summary", StringComparison.OrdinalIgnoreCase));
+        if (TryParsePositiveInt(TryGetOptionValue(argv, "--apple-timeout-seconds"), out var appleTimeoutSeconds))
+            request.AppleProcessingTimeoutSeconds = appleTimeoutSeconds;
+        if (TryParsePositiveInt(TryGetOptionValue(argv, "--apple-poll-seconds"), out var applePollSeconds))
+            request.ApplePollIntervalSeconds = applePollSeconds;
 
         request.SkipWorkspaceValidation = request.SkipWorkspaceValidation || argv.Any(a => a.Equals("--skip-workspace-validation", StringComparison.OrdinalIgnoreCase));
         request.SkipRestore = request.SkipRestore || argv.Any(a => a.Equals("--skip-restore", StringComparison.OrdinalIgnoreCase));
@@ -309,10 +381,22 @@ internal static partial class Program
         request.ModuleNoDotnetBuild = ChooseBool(request.ModuleNoDotnetBuild, argv.Any(a => a.Equals("--module-no-dotnet-build", StringComparison.OrdinalIgnoreCase)) ? true : null);
         request.ModuleNoSign = ChooseBool(request.ModuleNoSign, argv.Any(a => a.Equals("--module-no-sign", StringComparison.OrdinalIgnoreCase)) ? true : null);
         request.ModuleSignModule = ChooseBool(request.ModuleSignModule, argv.Any(a => a.Equals("--module-sign", StringComparison.OrdinalIgnoreCase)) ? true : null);
+        request.ModuleSignIncludeBinaries = ResolveBooleanOverride(argv, "--module-sign-include-binaries", "--module-no-sign-include-binaries", request.ModuleSignIncludeBinaries);
+        request.ModuleSignIncludeInternals = ResolveBooleanOverride(argv, "--module-sign-include-internals", "--module-no-sign-include-internals", request.ModuleSignIncludeInternals);
+        request.ModuleSignIncludeExe = ResolveBooleanOverride(argv, "--module-sign-include-exe", "--module-no-sign-include-exe", request.ModuleSignIncludeExe);
+        request.ModuleGenerateDiagnosticsBaseline = ResolveBooleanOverride(argv, "--module-diagnostics-baseline-generate", "--module-no-diagnostics-baseline-generate", request.ModuleGenerateDiagnosticsBaseline);
+        request.ModuleUpdateDiagnosticsBaseline = ResolveBooleanOverride(argv, "--module-diagnostics-baseline-update", "--module-no-diagnostics-baseline-update", request.ModuleUpdateDiagnosticsBaseline);
+        request.ModuleFailOnNewDiagnostics = ResolveBooleanOverride(argv, "--module-fail-on-new-diagnostics", "--module-no-fail-on-new-diagnostics", request.ModuleFailOnNewDiagnostics);
         request.KeepSymbols = ChooseBool(request.KeepSymbols, argv.Any(a => a.Equals("--keep-symbols", StringComparison.OrdinalIgnoreCase)) ? true : null);
         request.EnableSigning = ChooseBool(request.EnableSigning, argv.Any(a => a.Equals("--sign", StringComparison.OrdinalIgnoreCase)) ? true : null);
 
         request.Configuration = ChooseString(request.Configuration, TryGetOptionValue(argv, "--configuration"));
+        var moduleFramework = TryGetOptionValue(argv, "--module-framework");
+        if (!string.IsNullOrWhiteSpace(moduleFramework))
+            request.ModuleFramework = ParseModuleFramework(moduleFramework);
+        var moduleRunMode = TryGetOptionValue(argv, "--module-run-mode");
+        if (!string.IsNullOrWhiteSpace(moduleRunMode))
+            request.ModuleRunMode = ParseConfigurationGateMode(moduleRunMode);
         request.WorkspaceConfigPath = ChooseString(request.WorkspaceConfigPath, TryGetOptionValue(argv, "--workspace-config"));
         request.WorkspaceProfile = ChooseString(request.WorkspaceProfile, TryGetOptionValue(argv, "--workspace-profile"));
         request.WorkspaceTestimoXRoot = ChooseString(request.WorkspaceTestimoXRoot, TryGetOptionValue(argv, "--workspace-testimox-root"));
@@ -320,6 +404,17 @@ internal static partial class Program
         request.StageRoot = ChooseString(request.StageRoot, TryGetOptionValue(argv, "--stage-root"));
         request.ModuleVersion = ChooseString(request.ModuleVersion, TryGetOptionValue(argv, "--module-version"));
         request.ModulePreReleaseTag = ChooseString(request.ModulePreReleaseTag, TryGetOptionValue(argv, "--module-prerelease-tag"));
+        request.ModuleCertificateThumbprint = ChooseString(request.ModuleCertificateThumbprint, TryGetOptionValue(argv, "--module-certificate-thumbprint"));
+        request.ModuleDiagnosticsBaselinePath = ChooseString(request.ModuleDiagnosticsBaselinePath, TryGetOptionValue(argv, "--module-diagnostics-baseline"));
+        request.ModuleFailOnDiagnosticsSeverity = ChooseString(request.ModuleFailOnDiagnosticsSeverity, TryGetOptionValue(argv, "--module-fail-on-diagnostics-severity"));
+        if (!string.IsNullOrWhiteSpace(request.ModuleFailOnDiagnosticsSeverity) &&
+            !request.ModuleFailOnDiagnosticsSeverity.Equals("Warning", StringComparison.OrdinalIgnoreCase) &&
+            !request.ModuleFailOnDiagnosticsSeverity.Equals("Error", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("Invalid value for --module-fail-on-diagnostics-severity. Expected Warning or Error.");
+        }
+        if (TryParsePositiveInt(TryGetOptionValue(argv, "--module-timeout-seconds"), out var moduleTimeoutSeconds))
+            request.ModuleTimeoutSeconds = moduleTimeoutSeconds;
         request.ManifestJsonPath = ChooseString(request.ManifestJsonPath, TryGetOptionValue(argv, "--manifest-json"));
         request.ChecksumsPath = ChooseString(request.ChecksumsPath, TryGetOptionValue(argv, "--checksums-path"));
         request.SignProfile = ChooseString(request.SignProfile, TryGetOptionValue(argv, "--sign-profile"));
@@ -388,6 +483,132 @@ internal static partial class Program
             request.InstallerMsBuildProperties = installerProperties;
 
         return request;
+    }
+
+    private static PowerForgeAppleReleaseAction ParseAppleReleaseAction(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return PowerForgeAppleReleaseAction.Configured;
+        if (Enum.TryParse<PowerForgeAppleReleaseAction>(value, ignoreCase: true, out var action)
+            && Enum.IsDefined(typeof(PowerForgeAppleReleaseAction), action))
+            return action;
+        throw new ArgumentException($"Unknown Apple release action '{value}'.");
+    }
+
+    private static ConfigurationGateMode ParseConfigurationGateMode(string value)
+    {
+        if (Enum.TryParse<ConfigurationGateMode>(value, ignoreCase: true, out var mode) &&
+            Enum.IsDefined(typeof(ConfigurationGateMode), mode))
+        {
+            return mode;
+        }
+
+        throw new ArgumentException($"Unknown module run mode '{value}'.");
+    }
+
+    private static string ParseModuleFramework(string value)
+    {
+        if (value.Equals("auto", StringComparison.OrdinalIgnoreCase))
+            return "auto";
+        if (value.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
+            return "net10.0";
+        if (value.Equals("net8.0", StringComparison.OrdinalIgnoreCase))
+            return "net8.0";
+
+        throw new ArgumentException($"Unknown module framework '{value}'.");
+    }
+
+    private static JsonElement CreateAppleSummaryElement(
+        PowerForgeReleaseResult result,
+        PowerForgeReleaseRequest request)
+    {
+        if (result.AppleReceipt is not null && !request.PlanOnly)
+            return CliJson.SerializeToElement(result.AppleReceipt, CliJson.Context.PowerForgeAppleReleaseReceipt);
+        if (result.AppleAppPlan is null)
+            return CliJson.SerializeToElement(result, CliJson.Context.PowerForgeReleaseResult);
+
+        var plan = result.AppleAppPlan;
+        var enabledSteps = new List<string>();
+        AddEnabledStep(enabledSteps, plan.Archive, "archive");
+        AddEnabledStep(enabledSteps, plan.Upload, "upload");
+        AddEnabledStep(enabledSteps, plan.PrepareDistribution, "prepareDistribution");
+        AddEnabledStep(enabledSteps, plan.SelectBuildForDistribution, "selectBuild");
+        AddEnabledStep(enabledSteps, plan.SyncMetadata, "syncMetadata");
+        AddEnabledStep(enabledSteps, plan.SyncAppInfo, "syncAppInfo");
+        AddEnabledStep(enabledSteps, plan.SyncScreenshots, "syncScreenshots");
+        AddEnabledStep(enabledSteps, plan.CheckReleaseReadiness, "checkReadiness");
+        AddEnabledStep(enabledSteps, plan.DistributeTestFlight, "testFlight");
+        AddEnabledStep(enabledSteps, plan.SubmitTestFlightBetaReview, "submitTestFlightReview");
+        AddEnabledStep(enabledSteps, plan.SubmitForReview, "submitAppReview");
+        AddEnabledStep(enabledSteps, plan.ReleaseApprovedVersion, "release");
+        if (plan.Action == PowerForgeAppleReleaseAction.Status)
+            enabledSteps.Add("status");
+        if (plan.Action == PowerForgeAppleReleaseAction.Version)
+            enabledSteps.Add("version");
+        if (plan.Action == PowerForgeAppleReleaseAction.Advance)
+            enabledSteps.Add("stopBeforeReview");
+        if (plan.Action == PowerForgeAppleReleaseAction.Cleanup)
+            enabledSteps.Add("cleanup");
+
+        var summary = new AppleReleaseCliPlanSummary
+        {
+            Action = plan.Action,
+            PlanOnly = request.PlanOnly,
+            ValidateOnly = request.ValidateOnly,
+            ReceiptPath = Path.GetRelativePath(
+                plan.ProjectRoot,
+                request.PlanOnly ? plan.PlanReceiptPath : plan.ReceiptPath).Replace('\\', '/'),
+            Resume = plan.Automation.Resume,
+            WaitForProcessing = plan.Automation.WaitForProcessing,
+            ProcessingTimeoutSeconds = plan.Automation.ProcessingTimeoutSeconds,
+            PollIntervalSeconds = plan.Automation.PollIntervalSeconds,
+            EnabledSteps = enabledSteps.ToArray(),
+            RequiresConfirmation = RequiresAppleActionConfirmation(plan),
+            Targets = plan.Apps.Select(app => new AppleReleaseCliTargetSummary
+            {
+                Name = app.Name,
+                Platform = app.Platform,
+                BundleId = app.BundleId,
+                AppId = app.AppStoreConnectAppId,
+                Scheme = app.Scheme,
+                MarketingVersion = result.AppleReceipt?.Versioning?.MarketingVersion ?? app.MarketingVersion,
+                BuildNumber = result.AppleReceipt?.Versioning?.BuildNumber ?? app.BuildNumber,
+                GenerateProjectIfMissing = app.GenerateProjectIfMissing
+            }).ToArray()
+        };
+        return CliJson.SerializeToElement(summary, CliJson.Context.AppleReleaseCliPlanSummary);
+    }
+
+    private static void AddEnabledStep(List<string> steps, bool enabled, string name)
+    {
+        if (enabled)
+            steps.Add(name);
+    }
+
+    private static bool RequiresAppleActionConfirmation(PowerForgeAppleReleasePlan plan)
+        => (plan.Action == PowerForgeAppleReleaseAction.Configured &&
+            (plan.SubmitTestFlightBetaReview ||
+             plan.SubmitForReview ||
+             plan.ReleaseApprovedVersion ||
+             (plan.SyncScreenshots && plan.ReplaceScreenshots))) ||
+           plan.Action == PowerForgeAppleReleaseAction.SubmitTestFlightReview ||
+           plan.Action == PowerForgeAppleReleaseAction.Advance ||
+           plan.Action == PowerForgeAppleReleaseAction.Version ||
+           plan.Action == PowerForgeAppleReleaseAction.SubmitAppReview ||
+           plan.Action == PowerForgeAppleReleaseAction.Release ||
+           (plan.Action == PowerForgeAppleReleaseAction.Screenshots && plan.ReplaceScreenshots);
+
+    private static bool? ResolveBooleanOverride(
+        string[] argv,
+        string enabledOption,
+        string disabledOption,
+        bool? current)
+    {
+        var enabled = argv.Any(value => value.Equals(enabledOption, StringComparison.OrdinalIgnoreCase));
+        var disabled = argv.Any(value => value.Equals(disabledOption, StringComparison.OrdinalIgnoreCase));
+        if (enabled && disabled)
+            throw new ArgumentException($"Use only one of {enabledOption} or {disabledOption}.");
+        return enabled ? true : disabled ? false : current;
     }
 
     private static bool? ResolveWingetSubmitOverride(string[] argv)

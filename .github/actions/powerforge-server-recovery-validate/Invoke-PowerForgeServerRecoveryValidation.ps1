@@ -105,6 +105,10 @@ function Write-ActionWarning {
 if ($env:RUNNER_OS -ne 'Linux') {
     throw 'PowerForge server recovery validation requires a Linux runner so generated scripts can be checked with Bash and ShellCheck.'
 }
+$visudoPath = '/usr/sbin/visudo'
+if (-not (Test-Path -LiteralPath $visudoPath -PathType Leaf)) {
+    throw "PowerForge server recovery validation requires visudo at $visudoPath."
+}
 if ($env:POWERFORGE_FAIL_ON_WARNINGS -notin @('true', 'false')) {
     throw 'fail-on-warnings must be true or false.'
 }
@@ -113,6 +117,10 @@ if ($env:POWERFORGE_ENGINE_REF -notmatch '^[a-fA-F0-9]{40}$') {
 }
 if ($env:POWERFORGE_ENGINE_REPOSITORY -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
     throw 'The action repository must resolve to an owner/repository name.'
+}
+if ($env:POWERFORGE_CAPTURE_USER -cnotmatch '^[a-z_][a-z0-9_-]{0,31}$' -or
+    $env:POWERFORGE_CAPTURE_USER -ceq 'root') {
+    throw 'capture-user must be a valid non-root Linux account name.'
 }
 
 $workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([IO.Path]::DirectorySeparatorChar)
@@ -141,16 +149,6 @@ try {
     $bootstrapRoot = Join-Path $validationRoot 'bootstrap'
     $restoreRoot = Join-Path $validationRoot 'restore-secrets'
 
-    $project = Join-Path $engineRoot 'PowerForge.Web.Cli/PowerForge.Web.Cli.csproj'
-    $build = Invoke-ProcessCapture -FileName 'dotnet' -Arguments @(
-        'build', $project, '-c', 'Release', '-f', 'net10.0', '--nologo', '--artifacts-path', $artifactsRoot
-    )
-    Assert-ProcessSucceeded -Result $build -Operation 'Building the pinned PowerForge recovery CLI'
-    $cli = Join-Path $artifactsRoot 'bin/PowerForge.Web.Cli/release/PowerForge.Web.Cli.dll'
-    if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
-        throw "PowerForge recovery CLI was not produced: $cli"
-    }
-
     $manifestJson = Get-Content -LiteralPath $manifestPath -Raw
     $schemaPath = Join-Path $engineRoot 'Schemas/powerforge.web.serverrecovery.schema.json'
     try {
@@ -165,6 +163,24 @@ try {
     $expectedSchemaUrl = "https://raw.githubusercontent.com/$($env:POWERFORGE_ENGINE_REPOSITORY)/$($env:POWERFORGE_ENGINE_REF)/Schemas/powerforge.web.serverrecovery.schema.json"
     if (-not [string]::Equals([string]$manifest.'$schema', $expectedSchemaUrl, [StringComparison]::Ordinal)) {
         throw 'The recovery manifest schema URL must match the exact repository and commit pinned by this action.'
+    }
+    $managedSourceCount = & "$PSScriptRoot/Assert-PowerForgeServerRecoverySources.ps1" `
+        -Manifest $manifest `
+        -Workspace $workspace `
+        -EngineRoot $engineRoot `
+        -CallerRepository $env:GITHUB_REPOSITORY `
+        -EngineRepository $env:POWERFORGE_ENGINE_REPOSITORY `
+        -CaptureUser $env:POWERFORGE_CAPTURE_USER `
+        -VisudoPath $visudoPath
+
+    $project = Join-Path $engineRoot 'PowerForge.Web.Cli/PowerForge.Web.Cli.csproj'
+    $build = Invoke-ProcessCapture -FileName 'dotnet' -Arguments @(
+        'build', $project, '-c', 'Release', '-f', 'net10.0', '--nologo', '--artifacts-path', $artifactsRoot
+    )
+    Assert-ProcessSucceeded -Result $build -Operation 'Building the pinned PowerForge recovery CLI'
+    $cli = Join-Path $artifactsRoot 'bin/PowerForge.Web.Cli/release/PowerForge.Web.Cli.dll'
+    if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
+        throw "PowerForge recovery CLI was not produced: $cli"
     }
     $bootstrap = Invoke-PowerForgeJson -CliPath $cli -Operation 'Generating the bootstrap plan' -Arguments @(
         'server', 'bootstrap-plan', '--manifest', $manifestPath, '--out', $bootstrapRoot, '--output', 'json'
@@ -209,13 +225,6 @@ try {
     }
 
     $bootstrapStepCount = @($bootstrap.result.steps).Count
-    $managedSourceCount = @(
-        @($manifest.paths)
-        @($manifest.apache.sites)
-        @($manifest.apache.conf)
-        @($manifest.systemd.services)
-        @($manifest.systemd.timers)
-    ).Where({ -not [string]::IsNullOrWhiteSpace([string]$_.source) }).Count
     Write-ActionOutput -Name 'bootstrap-step-count' -Value ([string]$bootstrapStepCount)
     Write-ActionOutput -Name 'managed-source-count' -Value ([string]$managedSourceCount)
     Write-ActionOutput -Name 'secret-count' -Value ([string]$secretCount)
@@ -226,11 +235,11 @@ try {
 ## PowerForge server recovery validation
 
 - Bootstrap steps: $bootstrapStepCount
-- Managed repository sources: $managedSourceCount
+- Verified managed repository sources: $managedSourceCount
 - Declared secrets: $secretCount
 - Generation warnings: $($warnings.Count)
 
-Generated shell plans were parsed by Bash and checked by ShellCheck. No generated command was executed.
+Managed source files and hardened encrypted-capture authorization were checked before generated shell plans were parsed by Bash and ShellCheck. No generated command was executed.
 "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
     }
 } finally {

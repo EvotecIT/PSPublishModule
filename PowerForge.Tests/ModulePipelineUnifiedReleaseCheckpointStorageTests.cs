@@ -1,0 +1,142 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using Xunit;
+
+namespace PowerForge.Tests;
+
+public sealed partial class ModulePipelineUnifiedReleaseTests
+{
+    [Fact]
+    public void ResolveCheckpointStateRoot_UsesUserLocalStorageOutsideNonGitProject()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var stateRoot = ModulePipelineRunner.ResolveSynchronizedReleaseStateRoot(root.FullName);
+            var aliasStateRoot = ModulePipelineRunner.ResolveSynchronizedReleaseStateRoot(
+                root.FullName + Path.DirectorySeparatorChar);
+            var projectPrefix = Path.GetFullPath(root.FullName)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+            Assert.False(stateRoot.StartsWith(projectPrefix, StringComparison.OrdinalIgnoreCase));
+            Assert.Contains("PowerForge", stateRoot, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("coordinated-release-projects", stateRoot, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(stateRoot, aliasStateRoot);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ResolveCheckpointPath_ScopesSameModuleNameByProjectRootInsideRepository()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(repositoryRoot.FullName, ".git"));
+            var firstRoot = Path.Combine(repositoryRoot.FullName, "src", "First");
+            var secondRoot = Path.Combine(repositoryRoot.FullName, "src", "Second");
+            const string moduleName = "TestModule";
+            WriteMinimalModule(firstRoot, moduleName, "2.0.10");
+            WriteMinimalModule(secondRoot, moduleName, "2.0.10");
+            Directory.Delete(Path.Combine(firstRoot, ".git"), recursive: true);
+            Directory.Delete(Path.Combine(secondRoot, ".git"), recursive: true);
+            WriteSynchronizedProjectBuildConfig(firstRoot, "project.build.json", moduleName, publishNuGet: false);
+            WriteSynchronizedProjectBuildConfig(secondRoot, "project.build.json", moduleName, publishNuGet: false);
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var firstPlan = runner.Plan(CreateGalleryReleaseSpec(
+                firstRoot,
+                Path.Combine(repositoryRoot.FullName, "staging", "First"),
+                moduleName));
+            var secondPlan = runner.Plan(CreateGalleryReleaseSpec(
+                secondRoot,
+                Path.Combine(repositoryRoot.FullName, "staging", "Second"),
+                moduleName));
+
+            var firstPath = ModulePipelineRunner.ResolveSynchronizedReleaseCheckpointPath(firstPlan);
+            var secondPath = ModulePipelineRunner.ResolveSynchronizedReleaseCheckpointPath(secondPlan);
+
+            Assert.Equal(Path.GetDirectoryName(firstPath), Path.GetDirectoryName(secondPath));
+            Assert.NotEqual(firstPath, secondPath, ModuleStatePathIdentity.Comparer);
+            Assert.StartsWith($"{moduleName}-", Path.GetFileName(firstPath), StringComparison.OrdinalIgnoreCase);
+            Assert.StartsWith($"{moduleName}-", Path.GetFileName(secondPath), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { repositoryRoot.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Run_RejectsConcurrentCoordinatedReleaseForSameModuleAsync()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var firstStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        var secondStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        using var enteredPackageBuild = new ManualResetEventSlim(false);
+        using var releasePackageBuild = new ManualResetEventSlim(false);
+        Task<ModulePipelineResult>? firstRun = null;
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "2.0.10");
+            WriteSynchronizedProjectBuildConfig(root.FullName, "project.build.json", moduleName, publishNuGet: false);
+
+            var firstRunner = CreateRunner(
+                new FakeHostedOperations(new List<string>()),
+                (request, configuration, configPath) =>
+                {
+                    enteredPackageBuild.Set();
+                    if (!releasePackageBuild.Wait(TimeSpan.FromSeconds(10)))
+                        throw new TimeoutException("Timed out waiting to complete the first package build.");
+                    return CreateProjectBuildResult(
+                        root.FullName,
+                        moduleName,
+                        "2.0.11",
+                        Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                        request,
+                        configPath,
+                        includePackage: false);
+                });
+            firstRun = Task.Run(() => firstRunner.Run(
+                CreateGalleryReleaseSpec(root.FullName, firstStagingPath, moduleName)));
+            Assert.True(enteredPackageBuild.Wait(TimeSpan.FromSeconds(10)));
+
+            var secondExecutorCalls = 0;
+            var secondRunner = CreateRunner(
+                new FakeHostedOperations(new List<string>()),
+                (request, configuration, configPath) =>
+                {
+                    secondExecutorCalls++;
+                    return CreateProjectBuildResult(
+                        root.FullName,
+                        moduleName,
+                        "2.0.11",
+                        Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                        request,
+                        configPath,
+                        includePackage: false);
+                });
+            var exception = Assert.Throws<InvalidOperationException>(() => secondRunner.Run(
+                CreateGalleryReleaseSpec(root.FullName, secondStagingPath, moduleName)));
+
+            Assert.Contains("already active", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, secondExecutorCalls);
+        }
+        finally
+        {
+            releasePackageBuild.Set();
+            if (firstRun is not null)
+                await firstRun;
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(firstStagingPath)) Directory.Delete(firstStagingPath, recursive: true); } catch { }
+            try { if (Directory.Exists(secondStagingPath)) Directory.Delete(secondStagingPath, recursive: true); } catch { }
+        }
+    }
+}

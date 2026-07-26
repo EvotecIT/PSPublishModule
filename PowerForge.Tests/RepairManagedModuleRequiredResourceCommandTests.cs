@@ -368,10 +368,11 @@ public sealed class RepairManagedModuleRequiredResourceCommandTests
     }
 
     [Fact]
-    public void RepairManagedModule_RequiredResourceTrailingWildcardVersionUsesRangePolicy()
+    public void RepairManagedModule_RequiredResourceTrailingWildcardPreservesPSResourceGetLowerBoundSemantics()
     {
         using var feed = new TemporaryDirectory();
         using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "2.0.0");
         var requiredResource = new Hashtable(StringComparer.OrdinalIgnoreCase)
         {
             ["Company.Tools"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
@@ -391,11 +392,9 @@ public sealed class RepairManagedModuleRequiredResourceCommandTests
 
         AssertNoPowerShellErrors(ps);
         var action = Assert.Single(result.Plan.Actions);
-        Assert.Equal("Install", action.Kind);
-        Assert.Equal("[1.0.0,2.0.0)", action.VersionPolicy);
-        var command = Assert.Single(result.Apply.Commands);
-        Assert.Contains("-VersionPolicy", command.Arguments);
-        Assert.Contains("[1.0.0,2.0.0)", command.Arguments);
+        Assert.Equal("NoAction", action.Kind);
+        Assert.Equal("[1.0.0,)", action.VersionPolicy);
+        Assert.Empty(result.Apply.Commands);
     }
 
     [Fact]

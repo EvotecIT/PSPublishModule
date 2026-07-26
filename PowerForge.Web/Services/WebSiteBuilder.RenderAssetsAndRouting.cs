@@ -1313,13 +1313,7 @@ public static partial class WebSiteBuilder
     }
 
     private static bool GlobMatch(string pattern, string value)
-    {
-        if (string.IsNullOrWhiteSpace(pattern)) return false;
-        var regex = "^" + Regex.Escape(pattern)
-            .Replace("\\*\\*", ".*")
-            .Replace("\\*", "[^/]*") + "$";
-        return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
-    }
+        => WebGlobMatcher.IsMatch(pattern, value);
 
     private static string BuildRoute(string baseOutput, string slug, TrailingSlashMode slashMode)
     {

@@ -9,14 +9,21 @@ schema: 2.0.0
 Saves modules from a managed repository to an explicit module root.
 
 ## SYNTAX
-### __AllParameterSets
+### NameParameterSet (Default)
 ```powershell
-Save-ManagedModule [-Name] <string[]> [-Path] <string> [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-PackageCacheDirectory <string>] [-AsNupkg] [-DependencyConcurrency <int>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-AllowClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-Plan] [-BundleMetadataPath <string>] [-ShowSummary] [-Quiet] [-WhatIf] [-Confirm] [<CommonParameters>]
+Save-ManagedModule [-Name] <string[]> [[-Path] <string>] [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-PackageCacheDirectory <string>] [-AsNupkg] [-IncludeXml] [-DependencyConcurrency <int>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-AllowClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-Plan] [-BundleMetadataPath <string>] [-ShowSummary] [-Quiet] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
+### InputObjectParameterSet
+```powershell
+Save-ManagedModule [-InputObject] <ManagedModuleVersionInfo[]> [[-Path] <string>] [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-PackageCacheDirectory <string>] [-AsNupkg] [-IncludeXml] [-DependencyConcurrency <int>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-AllowClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-Plan] [-BundleMetadataPath <string>] [-ShowSummary] [-Quiet] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-This command uses the same managed C# repository and archive engine as Install-ManagedModule, but requires
-an explicit destination root instead of installing into the default PowerShell module paths.
+This command provides the module-save functionality of Save-PSResource through the same managed C#
+repository and archive engine as Install-ManagedModule. It accepts names or typed
+Find-ManagedModule output, saves unpacked modules or .nupkg files, and defaults to the current filesystem
+location when Path is omitted.
 
 ## EXAMPLES
 
@@ -32,6 +39,18 @@ Save-ManagedModule -Name Company.Tools -RequiredVersion 1.2.0 -Repository C:\Pac
 ```
 
 
+### EXAMPLE 3
+```powershell
+Find-ManagedModule -Name Company.Tools -Version 1.2.0 -ProfileName CompanyModules | Save-ManagedModule -Path C:\OfflineModules -IncludeXml
+```
+
+
+### EXAMPLE 4
+```powershell
+Save-ManagedModule -Name Company.Tools -Version 1.2.0 -AsNupkg
+```
+
+
 ## PARAMETERS
 
 ### -AcceptLicense
@@ -39,7 +58,7 @@ Accept package licenses when packages declare license acceptance is required.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -55,7 +74,7 @@ Allow command exports to overlap with other modules in the destination root.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -71,7 +90,7 @@ Allowed package author values from package metadata.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: RequiredAuthor, TrustedAuthor
 Possible values:
 
@@ -87,7 +106,7 @@ Save the selected packages as .nupkg files instead of unpacked module folders.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -103,7 +122,7 @@ Validate Authenticode signatures for signable package files before saving.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -119,7 +138,7 @@ Optional path for offline bundle metadata written after successful saves.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: MetadataPath, OfflineBundleMetadataPath
 Possible values:
 
@@ -135,7 +154,7 @@ Optional repository credential.
 
 ```yaml
 Type: PSCredential
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -151,7 +170,7 @@ Optional repository credential secret.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: Password, Token
 Possible values:
 
@@ -167,7 +186,7 @@ Optional path to a file containing the repository credential secret.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: CredentialPath, TokenPath
 Possible values:
 
@@ -183,7 +202,7 @@ Optional repository credential username.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: UserName
 Possible values:
 
@@ -199,7 +218,7 @@ Maximum number of dependency branches to save concurrently. Omit to use the mana
 
 ```yaml
 Type: Int32
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -215,7 +234,7 @@ Expected SHA256 hash of the root package before it is extracted and saved.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: PackageSha256, Sha256
 Possible values:
 
@@ -231,7 +250,7 @@ Overwrite an existing saved version.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -242,12 +261,44 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -IncludeXml
+Write PowerShellGet-compatible PSGetModuleInfo.xml metadata beside each saved unpacked module.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: NameParameterSet, InputObjectParameterSet
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -InputObject
+Module versions returned by Find-ManagedModule to save.
+
+```yaml
+Type: ManagedModuleVersionInfo[]
+Parameter Sets: InputObjectParameterSet
+Aliases: ParentResource
+Possible values:
+
+Required: True
+Position: 0
+Default value: None
+Accept pipeline input: True (ByValue, ByPropertyName)
+Accept wildcard characters: True
+```
+
 ### -MaximumVersion
 Maximum package version to save when Version is omitted.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: None
 Possible values:
 
@@ -263,7 +314,7 @@ Minimum package version to save when Version is omitted.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: None
 Possible values:
 
@@ -279,7 +330,7 @@ Module names to save.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: ModuleName
 Possible values:
 
@@ -295,7 +346,7 @@ Optional package cache directory.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -307,15 +358,15 @@ Accept wildcard characters: True
 ```
 
 ### -Path
-Destination module root.
+Destination module root. Defaults to the current filesystem location.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: DestinationPath, ModuleRoot
 Possible values:
 
-Required: True
+Required: False
 Position: 1
 Default value: None
 Accept pipeline input: False
@@ -327,7 +378,7 @@ Return an inspectable save plan without writing files.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -343,7 +394,7 @@ Include prerelease versions when resolving the latest version.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: AllowPrerelease
 Possible values:
 
@@ -359,7 +410,7 @@ Saved repository profile name.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -375,7 +426,7 @@ Optional HTTP proxy used for repository requests.
 
 ```yaml
 Type: Uri
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -391,7 +442,7 @@ Optional proxy credential used with Proxy.
 
 ```yaml
 Type: PSCredential
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -407,7 +458,7 @@ Suppress optional host summaries and progress-style output without changing pipe
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -423,7 +474,7 @@ Repository URL, NuGet v3 service index, flat-container URL, or local folder feed
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: Source, RepositoryUri
 Possible values:
 
@@ -439,7 +490,7 @@ Friendly repository name used in output.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -455,7 +506,7 @@ Require the selected repository profile to be marked trusted.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -471,7 +522,7 @@ Write a compact Spectre.Console summary for each plan or result.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -487,7 +538,7 @@ Skip installing dependencies declared by the package.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: SkipDependenciesCheck
 Possible values:
 
@@ -503,7 +554,7 @@ Optional typed repository/package trust policy.
 
 ```yaml
 Type: ManagedModuleTrustPolicy
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, InputObjectParameterSet
 Aliases: None
 Possible values:
 
@@ -519,7 +570,7 @@ Exact package version to save. When omitted, the latest repository version is us
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: RequiredVersion
 Possible values:
 
@@ -535,7 +586,7 @@ NuGet-style version range policy used when Version is omitted.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: None
 Possible values:
 
@@ -551,7 +602,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-- `System.String[]`
+- `System.String[]
+PowerForge.ManagedModuleVersionInfo[]`
 
 ## OUTPUTS
 

@@ -6,7 +6,7 @@ internal sealed class ProjectBuildWorkflowService
 {
     private readonly ILogger _logger;
     private readonly ProjectBuildSupportService _support;
-    private readonly Func<DotNetRepositoryReleaseSpec, Action<DotNetReleaseBuildAssemblySigningRequest>?, Action<DotNetReleaseBuildAssemblySigningPreflightRequest>?, DotNetRepositoryReleaseResult> _executeRelease;
+    private readonly Func<DotNetRepositoryReleaseSpec, Action<DotNetReleaseBuildAssemblySigningRequest>?, Action<DotNetReleaseBuildAssemblySigningPreflightRequest>?, IProjectBuildProgressReporter?, CancellationToken, DotNetRepositoryReleaseResult> _executeRelease;
     private readonly Func<ProjectBuildGitHubPublishRequest, ProjectBuildGitHubPublishSummary> _publishGitHub;
     private readonly Func<ProjectBuildConfiguration, DotNetRepositoryReleaseResult, string, string?> _validateGitHubPreflight;
     private readonly Action<DotNetReleaseBuildAssemblySigningRequest>? _signAssemblies;
@@ -23,8 +23,8 @@ internal sealed class ProjectBuildWorkflowService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _support = new ProjectBuildSupportService(_logger);
         _executeRelease = executeRelease is null
-            ? (spec, signing, preflight) => new DotNetRepositoryReleaseService(_logger).Execute(spec, signing, preflight)
-            : (spec, _, _) => executeRelease(spec);
+            ? (spec, signing, preflight, progress, cancellationToken) => new DotNetRepositoryReleaseService(_logger).Execute(spec, signing, preflight, progress, cancellationToken)
+            : (spec, _, _, _, _) => executeRelease(spec);
         _publishGitHub = publishGitHub ?? (request => new ProjectBuildGitHubPublisher(_logger).Publish(request));
         _validateGitHubPreflight = validateGitHubPreflight ?? ((config, plan, token) =>
             new ProjectBuildGitHubPreflightService(_logger).Validate(config, plan, token));
@@ -36,7 +36,11 @@ internal sealed class ProjectBuildWorkflowService
         ProjectBuildConfiguration config,
         string configDir,
         ProjectBuildPreparedContext preparation,
-        bool executeBuild)
+        bool executeBuild,
+        Action? remotePublishAttempted = null,
+        bool coordinatedReleaseCheckpointActive = false,
+        IProjectBuildProgressReporter? progress = null,
+        CancellationToken cancellationToken = default)
     {
         if (config is null)
             throw new ArgumentNullException(nameof(config));
@@ -47,13 +51,24 @@ internal sealed class ProjectBuildWorkflowService
 
         var spec = preparation.Spec ?? throw new ArgumentException("Prepared spec is required.", nameof(preparation));
         spec.WhatIf = true;
+        progress?.PhaseStarted(ProjectBuildProgressPhase.Plan, 1, "Discovering projects and resolving versions");
         var planWatch = Stopwatch.StartNew();
-        var plan = _executeRelease(spec, _signAssemblies, _validateAssemblySigning);
+        cancellationToken.ThrowIfCancellationRequested();
+        var plan = _executeRelease(spec, _signAssemblies, _validateAssemblySigning, null, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         planWatch.Stop();
         if (plan.Success)
+        {
             _logger.Success($"Project build plan prepared in {DotNetRepositoryReleaseService.FormatDuration(planWatch.Elapsed)}.");
+            progress?.PhaseCompleted(
+                ProjectBuildProgressPhase.Plan,
+                $"{plan.Projects.Count} project(s), {plan.Projects.Count(project => project.IsPackable)} packable, {DotNetRepositoryReleaseService.FormatDuration(planWatch.Elapsed)}");
+        }
         else
+        {
             _logger.Warn($"Project build plan failed after {DotNetRepositoryReleaseService.FormatDuration(planWatch.Elapsed)}.");
+            progress?.PhaseFailed(ProjectBuildProgressPhase.Plan, plan.ErrorMessage);
+        }
 
         var preflightErrors = new List<string>();
         if (!plan.Success)
@@ -88,7 +103,14 @@ internal sealed class ProjectBuildWorkflowService
             preflightErrors.Add(preflightError!);
 
         var gitHubToken = preparation.PublishGitHub ? preparation.GitHubToken : null;
-        if (preparation.PublishGitHub && string.IsNullOrWhiteSpace(preflightError))
+        if (preparation.PublishGitHub && coordinatedReleaseCheckpointActive)
+        {
+            var retrySafetyError = ProjectBuildGitHubRetrySafety.Validate(config, plan);
+            if (!string.IsNullOrWhiteSpace(retrySafetyError))
+                preflightErrors.Add(retrySafetyError!);
+        }
+
+        if (preparation.PublishGitHub && preflightErrors.Count == 0)
         {
             var gitHubPreflightError = _validateGitHubPreflight(config, plan, gitHubToken!);
             if (!string.IsNullOrWhiteSpace(gitHubPreflightError))
@@ -110,8 +132,11 @@ internal sealed class ProjectBuildWorkflowService
         _support.TryWritePlan(plan, preparation.PlanOutputPath);
 
         spec.WhatIf = false;
+        spec.RemotePublishAttempted = remotePublishAttempted;
         var releaseWatch = Stopwatch.StartNew();
-        var release = _executeRelease(spec, _signAssemblies, _validateAssemblySigning);
+        cancellationToken.ThrowIfCancellationRequested();
+        var release = _executeRelease(spec, _signAssemblies, _validateAssemblySigning, progress, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         releaseWatch.Stop();
         if (release is not null && release.Success)
             _logger.Success($"Project build release execution completed in {DotNetRepositoryReleaseService.FormatDuration(releaseWatch.Elapsed)}.");
@@ -151,6 +176,8 @@ internal sealed class ProjectBuildWorkflowService
         }
 
         var gitHubWatch = Stopwatch.StartNew();
+        progress?.PhaseStarted(ProjectBuildProgressPhase.GitHubPublish, 1, "Publishing GitHub release");
+        remotePublishAttempted?.Invoke();
         var publishSummary = _publishGitHub(new ProjectBuildGitHubPublishRequest
         {
             Owner = config.GitHubUsername!,
@@ -170,9 +197,17 @@ internal sealed class ProjectBuildWorkflowService
         });
         gitHubWatch.Stop();
         if (publishSummary.Success)
+        {
             _logger.Success($"GitHub publish completed in {DotNetRepositoryReleaseService.FormatDuration(gitHubWatch.Elapsed)}.");
+            progress?.PhaseCompleted(
+                ProjectBuildProgressPhase.GitHubPublish,
+                $"{publishSummary.Results.Count} release result(s), {DotNetRepositoryReleaseService.FormatDuration(gitHubWatch.Elapsed)}");
+        }
         else
+        {
             _logger.Warn($"GitHub publish failed after {DotNetRepositoryReleaseService.FormatDuration(gitHubWatch.Elapsed)}.");
+            progress?.PhaseFailed(ProjectBuildProgressPhase.GitHubPublish, publishSummary.ErrorMessage);
+        }
 
         result.GitHub.AddRange(publishSummary.Results);
         result.Success = publishSummary.Success;

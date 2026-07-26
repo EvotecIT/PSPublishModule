@@ -34,6 +34,10 @@ internal sealed class PowerForgeReleaseSpec
 /// </summary>
 internal sealed class PowerForgeReleaseRequest
 {
+    internal string? ResolvedReleaseVersion { get; set; }
+    internal IPowerForgeReleaseProgressReporter? Progress { get; set; }
+    internal CancellationToken CancellationToken { get; set; }
+
     public string ConfigPath { get; set; } = string.Empty;
 
     public bool PlanOnly { get; set; }
@@ -46,6 +50,15 @@ internal sealed class PowerForgeReleaseRequest
 
     public bool ToolsOnly { get; set; }
 
+    public bool AppleOnly { get; set; }
+
+    /// <summary>
+    /// Prevents configured Apple application lanes from running while other unified release lanes execute.
+    /// </summary>
+    public bool SkipAppleApps { get; set; }
+
+    internal bool CheckpointAppleApps { get; set; }
+
     public bool? PublishNuget { get; set; }
 
     public bool? PublishProjectGitHub { get; set; }
@@ -54,15 +67,47 @@ internal sealed class PowerForgeReleaseRequest
 
     public string? Configuration { get; set; }
 
+    public string? ModuleFramework { get; set; }
+
+    public string? ModuleHostPath { get; set; }
+
+    public ConfigurationGateMode? ModuleRunMode { get; set; }
+
     public bool? ModuleNoDotnetBuild { get; set; }
 
     public string? ModuleVersion { get; set; }
 
     public string? ModulePreReleaseTag { get; set; }
 
+    internal string? ModuleStagingPath { get; set; }
+
     public bool? ModuleNoSign { get; set; }
 
+    public bool? ModuleSkipInstall { get; set; }
+
     public bool? ModuleSignModule { get; set; }
+
+    internal bool? ModuleIncludePublishing { get; set; }
+
+    public int? ModuleTimeoutSeconds { get; set; }
+
+    public string? ModuleCertificateThumbprint { get; set; }
+
+    public bool? ModuleSignIncludeBinaries { get; set; }
+
+    public bool? ModuleSignIncludeInternals { get; set; }
+
+    public bool? ModuleSignIncludeExe { get; set; }
+
+    public string? ModuleDiagnosticsBaselinePath { get; set; }
+
+    public bool? ModuleGenerateDiagnosticsBaseline { get; set; }
+
+    public bool? ModuleUpdateDiagnosticsBaseline { get; set; }
+
+    public bool? ModuleFailOnNewDiagnostics { get; set; }
+
+    public string? ModuleFailOnDiagnosticsSeverity { get; set; }
 
     public bool SkipRestore { get; set; }
 
@@ -167,6 +212,22 @@ internal sealed class PowerForgeReleaseRequest
     public PowerForgeReleaseToolOutputKind[] ToolOutputs { get; set; } = Array.Empty<PowerForgeReleaseToolOutputKind>();
 
     public PowerForgeReleaseToolOutputKind[] SkipToolOutputs { get; set; } = Array.Empty<PowerForgeReleaseToolOutputKind>();
+
+    public PowerForgeAppleReleaseAction AppleAction { get; set; } = PowerForgeAppleReleaseAction.Configured;
+
+    public string? AppleMarketingVersion { get; set; }
+
+    public bool AppleActionConfirmed { get; set; }
+
+    public bool? AppleResume { get; set; }
+
+    public bool? AppleWaitForProcessing { get; set; }
+
+    public int? AppleProcessingTimeoutSeconds { get; set; }
+
+    public int? ApplePollIntervalSeconds { get; set; }
+
+    public bool AppleSummaryOnly { get; set; }
 }
 
 /// <summary>
@@ -184,7 +245,12 @@ internal sealed class PowerForgeReleaseResult
 
     public ModuleBuildHostExecutionResult? Module { get; set; }
 
+    public ModuleBuildHostExecutionResult? ModulePublication { get; set; }
+
     public string[] ModuleAssets { get; set; } = Array.Empty<string>();
+
+    public PowerForgeModulePackageReleaseCheckpoint[] ModulePackagePlans { get; set; } =
+        Array.Empty<PowerForgeModulePackageReleaseCheckpoint>();
 
     public ProjectBuildHostExecutionResult? Packages { get; set; }
 
@@ -200,11 +266,15 @@ internal sealed class PowerForgeReleaseResult
 
     public PowerForgeAppleAppReleaseResult[] AppleApps { get; set; } = Array.Empty<PowerForgeAppleAppReleaseResult>();
 
+    public PowerForgeAppleReleaseReceipt? AppleReceipt { get; set; }
+
     public WorkspaceValidationPlan? WorkspaceValidationPlan { get; set; }
 
     public WorkspaceValidationResult? WorkspaceValidation { get; set; }
 
     public PowerForgeToolGitHubReleaseResult[] ToolGitHubReleases { get; set; } = Array.Empty<PowerForgeToolGitHubReleaseResult>();
+
+    public PowerForgeToolGitHubReleaseResult[] ToolGitHubReleasePlans { get; set; } = Array.Empty<PowerForgeToolGitHubReleaseResult>();
 
     public string[] ReleaseAssets { get; set; } = Array.Empty<string>();
 
@@ -302,11 +372,13 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public string? SigningStyle { get; set; }
 
-    internal string? AppStoreConnectApiKeyPath { get; set; }
+    public PowerForgeAppleReleaseAutomationOptions Automation { get; set; } = new();
 
-    internal string? AppStoreConnectApiKeyId { get; set; }
+    public string? AppStoreConnectApiKeyPath { get; set; }
 
-    internal string? AppStoreConnectApiIssuerId { get; set; }
+    public string? AppStoreConnectApiKeyId { get; set; }
+
+    public string? AppStoreConnectApiIssuerId { get; set; }
 
     public string? ScreenshotConfigPath { get; set; }
 
@@ -372,6 +444,20 @@ internal sealed class PowerForgeAppleReleasePlan
     public string ProjectRoot { get; set; } = string.Empty;
 
     public string Configuration { get; set; } = "Release";
+
+    public PowerForgeAppleReleaseAction Action { get; set; }
+
+    public PowerForgeAppleReleaseAutomationOptions Automation { get; set; } = new();
+
+    public string ReceiptPath { get; set; } = string.Empty;
+
+    public string PlanReceiptPath { get; set; } = string.Empty;
+
+    public string LockPath { get; set; } = string.Empty;
+
+    public string? VersionSourcePath { get; set; }
+
+    public string? RequestedMarketingVersion { get; set; }
 
     public bool Archive { get; set; }
 
@@ -462,6 +548,8 @@ internal sealed class PowerForgeAppleAppReleaseTargetPlan
 
     public ApplePlatform Platform { get; set; }
 
+    public AppleArchiveVariant ArchiveVariant { get; set; }
+
     public string? AppStoreConnectAppId { get; set; }
 
     public string ProjectPath { get; set; } = string.Empty;
@@ -489,6 +577,14 @@ internal sealed class PowerForgeAppleAppReleaseTargetPlan
     public string? BuildNumber { get; set; }
 
     public AppleBuildNumberPolicy BuildNumberPolicy { get; set; } = AppleBuildNumberPolicy.KeepExisting;
+
+    public bool GenerateProjectIfMissing { get; set; }
+
+    public bool RegenerateProject { get; set; }
+
+    public string XcodeGenExecutable { get; set; } = "xcodegen";
+
+    public int ProjectGenerationTimeoutSeconds { get; set; } = 120;
 }
 
 internal sealed class PowerForgeAppleAppReleaseResult
@@ -511,6 +607,14 @@ internal sealed class PowerForgeAppleAppReleaseResult
 
     public AppStoreConnectVersionReleaseResult? VersionRelease { get; set; }
 
+    public AppStoreConnectReleaseStateResult? RemoteState { get; set; }
+
+    public bool ResumedExistingBuild { get; set; }
+
+    public bool ProjectGenerated { get; set; }
+
+    public string[] SkippedSteps { get; set; } = Array.Empty<string>();
+
     public bool Success { get; set; }
 
     public string? ErrorMessage { get; set; }
@@ -519,6 +623,8 @@ internal sealed class PowerForgeAppleAppReleaseResult
 internal sealed class PowerForgeReleaseGitHubOptions
 {
     public bool Publish { get; set; }
+
+    public PowerForgeReleaseVersionSource VersionSource { get; set; } = PowerForgeReleaseVersionSource.Auto;
 
     public string? Owner { get; set; }
 
@@ -534,11 +640,21 @@ internal sealed class PowerForgeReleaseGitHubOptions
 
     public bool IsPreRelease { get; set; }
 
+    public bool ReuseExistingRelease { get; set; }
+
     public bool ReplaceExistingAssets { get; set; }
 
     public string? TagTemplate { get; set; }
 
     public string? ReleaseNameTemplate { get; set; }
+}
+
+internal enum PowerForgeReleaseVersionSource
+{
+    Auto,
+    Module,
+    Packages,
+    Assets
 }
 
 internal sealed class PowerForgeReleaseWingetOptions
@@ -751,9 +867,23 @@ internal sealed class PowerForgeModuleReleaseOptions
 {
     public string? RepositoryRoot { get; set; }
 
+    public string? ModuleName { get; set; }
+
+    public string? ConfigPath { get; set; }
+
     public string? ScriptPath { get; set; }
 
     public string? ModulePath { get; set; }
+
+    public string? ManifestPath { get; set; }
+
+    public bool IncludesPackages { get; set; }
+
+    public bool SynchronizeVersionWithPackages { get; set; }
+
+    public string? VersionPrimaryProject { get; set; }
+
+    public string? Framework { get; set; }
 
     public bool? NoDotnetBuild { get; set; }
 
@@ -765,18 +895,36 @@ internal sealed class PowerForgeModuleReleaseOptions
 
     public bool? SignModule { get; set; }
 
+    public int TimeoutSeconds { get; set; } = 7200;
+
     public string[] ArtifactPaths { get; set; } = Array.Empty<string>();
 }
 
 internal sealed class PowerForgeModuleReleasePlanSummary
 {
+    public string? ModuleName { get; set; }
+
     public string RepositoryRoot { get; set; } = string.Empty;
 
-    public string ScriptPath { get; set; } = string.Empty;
+    public string? ConfigPath { get; set; }
+
+    public string? ScriptPath { get; set; }
 
     public string ModulePath { get; set; } = string.Empty;
 
+    public string? ManifestPath { get; set; }
+
     public string? Configuration { get; set; }
+
+    public string? Framework { get; set; }
+
+    public ConfigurationGateMode RunMode { get; set; } = ConfigurationGateMode.Build;
+
+    public bool IncludesPackages { get; set; }
+
+    public bool IncludesProjectPackages { get; set; }
+
+    public int TimeoutSeconds { get; set; }
 
     public bool NoDotnetBuild { get; set; }
 
@@ -784,9 +932,17 @@ internal sealed class PowerForgeModuleReleasePlanSummary
 
     public string? PreReleaseTag { get; set; }
 
+    public string? StagingPath { get; set; }
+
     public bool NoSign { get; set; }
 
+    public bool SkipInstall { get; set; }
+
     public bool SignModule { get; set; }
+
+    public bool PowerForgeReleaseStage { get; set; }
+
+    public bool UnifiedGitHubRelease { get; set; }
 
     public string[] ArtifactPaths { get; set; } = Array.Empty<string>();
 }
@@ -886,4 +1042,6 @@ internal sealed class PowerForgeUnifiedGitHubReleaseResult
     public string[] SkippedExistingAssets { get; set; } = Array.Empty<string>();
 
     public string[] ReplacedExistingAssets { get; set; } = Array.Empty<string>();
+
+    public string[] UploadedAssets { get; set; } = Array.Empty<string>();
 }

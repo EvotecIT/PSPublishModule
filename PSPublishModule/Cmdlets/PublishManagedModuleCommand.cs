@@ -9,23 +9,40 @@ namespace PSPublishModule;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This managed publish surface creates a NuGet package from a module folder and publishes it to a local folder feed
-/// or NuGet-compatible package publish endpoint.
+/// This command provides the module-publish functionality of <c>Publish-PSResource</c>. It can create a NuGet
+/// package from a module folder or publish an existing .nupkg file to a local folder feed or NuGet-compatible
+/// package publish endpoint.
+/// </para>
+/// <para>
+/// Microsoft Artifact Registry module prefixes are not applied because the managed repository client does not yet
+/// expose a container-registry transport.
 /// </para>
 /// </remarks>
 /// <example>
 /// <summary>Publish a module to a local folder feed</summary>
 /// <code>Publish-ManagedModule -Path C:\Source\Company.Tools -Repository C:\Packages</code>
 /// </example>
-[Cmdlet(VerbsData.Publish, "ManagedModule", SupportsShouldProcess = true)]
+/// <example>
+/// <summary>Publish an existing package without repacking it</summary>
+/// <code>Publish-ManagedModule -NupkgPath C:\Packages\Company.Tools.1.2.0.nupkg -Repository CompanyFeed</code>
+/// </example>
+[Cmdlet(VerbsData.Publish, "ManagedModule", SupportsShouldProcess = true, DefaultParameterSetName = PathParameterSet)]
 [OutputType(typeof(ManagedModulePublishResult))]
 public sealed class PublishManagedModuleCommand : PSCmdlet
 {
+    private const string PathParameterSet = "PathParameterSet";
+    private const string NupkgPathParameterSet = "NupkgPathParameterSet";
+
     /// <summary>Module folder to package.</summary>
-    [Parameter(Mandatory = true, Position = 0)]
+    [Parameter(Mandatory = true, Position = 0, ParameterSetName = PathParameterSet)]
     [Alias("ModulePath")]
     [ValidateNotNullOrEmpty]
-    public string Path { get; set; } = string.Empty;
+    public string? Path { get; set; }
+
+    /// <summary>Existing .nupkg file to publish without repacking a module folder.</summary>
+    [Parameter(Mandatory = true, ParameterSetName = NupkgPathParameterSet)]
+    [ValidateNotNullOrEmpty]
+    public string? NupkgPath { get; set; }
 
     /// <summary>Repository URL, NuGet v3 service index, publish endpoint, or local folder feed.</summary>
     [Parameter(Position = 1)]
@@ -43,41 +60,41 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string? ProfileName { get; set; }
 
-    /// <summary>Output directory used when Repository is omitted.</summary>
+    /// <summary>Directory that receives the created or supplied package; it is also the local target when Repository is omitted.</summary>
     [Parameter]
     [Alias("DestinationPath", "OutputPath")]
     [ValidateNotNullOrEmpty]
     public string? OutputDirectory { get; set; }
 
     /// <summary>Optional explicit module manifest path.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = PathParameterSet)]
     [ValidateNotNullOrEmpty]
     public string? ManifestPath { get; set; }
 
     /// <summary>Optional package id override.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = PathParameterSet)]
     [ValidateNotNullOrEmpty]
     public string? Name { get; set; }
 
     /// <summary>Optional package version override.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = PathParameterSet)]
     [ValidateNotNullOrEmpty]
     public string? Version { get; set; }
 
     /// <summary>Optional authors override.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = PathParameterSet)]
     public string? Authors { get; set; }
 
     /// <summary>Optional description override.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = PathParameterSet)]
     public string? Description { get; set; }
 
     /// <summary>Optional project URL override.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = PathParameterSet)]
     public string? ProjectUrl { get; set; }
 
     /// <summary>Optional package tags override.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = PathParameterSet)]
     public string[]? Tags { get; set; }
 
     /// <summary>Optional repository credential.</summary>
@@ -112,7 +129,7 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
     public SwitchParameter SkipDependenciesCheck { get; set; }
 
     /// <summary>Skip managed manifest metadata validation before packaging.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = PathParameterSet)]
     public SwitchParameter SkipModuleManifestValidate { get; set; }
 
     /// <summary>Write a compact Spectre.Console summary for the publish result.</summary>
@@ -122,7 +139,8 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
     /// <summary>Creates and publishes the package to the selected destination.</summary>
     protected override void ProcessRecord()
     {
-        var modulePath = ManagedModuleCommandSupport.ResolveProviderPath(this, Path)!;
+        var modulePath = ManagedModuleCommandSupport.ResolveProviderPath(this, Path);
+        var packagePath = ManagedModuleCommandSupport.ResolveProviderPath(this, NupkgPath);
         var manifestPath = ManagedModuleCommandSupport.ResolveProviderPath(this, ManifestPath);
         var repository = ResolveRepository();
         var publishRepository = ResolvePublishRepository();
@@ -132,13 +150,15 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var repositoryClient = ManagedModuleCommandSupport.CreateRepositoryClient(this, logger, Proxy, ProxyCredential);
 
-        if (!ShouldProcess(modulePath, $"Publish managed module package to '{publishRepository.Source}'"))
+        var sourcePath = packagePath ?? modulePath!;
+        if (!ShouldProcess(sourcePath, $"Publish managed module package to '{publishRepository.Source}'"))
             return;
 
         var result = new ManagedModulePublishService(logger, repositoryClient).PublishAsync(
                 new ManagedModulePublishRequest
                 {
-                    ModulePath = modulePath,
+                    ModulePath = modulePath ?? string.Empty,
+                    PackagePath = packagePath,
                     ManifestPath = manifestPath,
                     Name = Name,
                     Version = Version,

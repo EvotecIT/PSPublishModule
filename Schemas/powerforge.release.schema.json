@@ -11,18 +11,73 @@
       "additionalProperties": false,
       "properties": {
         "RepositoryRoot": { "type": [ "string", "null" ] },
+        "ModuleName": {
+          "type": [ "string", "null" ],
+          "description": "Module name used to expand module artifact path tokens. JSON-first scaffolding reads this from Build.Name."
+        },
+        "ConfigPath": {
+          "type": [ "string", "null" ],
+          "description": "Module pipeline JSON configuration. Relative paths are resolved from RepositoryRoot. Mutually exclusive with ScriptPath."
+        },
         "ScriptPath": { "type": [ "string", "null" ] },
         "ModulePath": { "type": [ "string", "null" ] },
+        "ManifestPath": {
+          "type": [ "string", "null" ],
+          "description": "Module manifest used to resolve the final module version after the module build completes. Relative paths are resolved from RepositoryRoot."
+        },
+        "IncludesPackages": {
+          "type": "boolean",
+          "description": "When true, the module pipeline owns the configured Packages lane and the outer release skips running that lane a second time."
+        },
+        "SynchronizeVersionWithPackages": {
+          "type": "boolean",
+          "description": "When true, the package lane runs first with the next module version as a floor. The resolved package version is then applied to the module and tool lanes. Cannot be combined with IncludesPackages."
+        },
+        "VersionPrimaryProject": {
+          "type": [ "string", "null" ],
+          "description": "Package project whose resolved version becomes the shared module and tool release version when SynchronizeVersionWithPackages is enabled."
+        },
+        "Framework": {
+          "type": [ "string", "null" ],
+          "enum": [ "auto", "net10.0", "net8.0", null ],
+          "default": "auto",
+          "description": "PowerShell module target framework and child-host requirement. Omitted or auto selects a compatible PowerShell 7 host; set an explicit framework only when the module requires it."
+        },
         "NoDotnetBuild": { "type": [ "boolean", "null" ] },
         "ModuleVersion": { "type": [ "string", "null" ] },
         "PreReleaseTag": { "type": [ "string", "null" ] },
         "NoSign": { "type": [ "boolean", "null" ] },
         "SignModule": { "type": [ "boolean", "null" ] },
+        "TimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum runtime for the out-of-process module build/publish lane. Defaults to 7200 seconds."
+        },
         "ArtifactPaths": {
           "type": "array",
           "items": { "type": "string" }
         }
-      }
+      },
+      "allOf": [
+        {
+          "not": {
+            "allOf": [
+              {
+                "required": [ "ConfigPath" ],
+                "properties": {
+                  "ConfigPath": { "type": "string", "pattern": "\\S" }
+                }
+              },
+              {
+                "required": [ "ScriptPath" ],
+                "properties": {
+                  "ScriptPath": { "type": "string", "pattern": "\\S" }
+                }
+              }
+            ]
+          }
+        }
+      ]
     },
     "Packages": { "$ref": "project.build.schema.json" },
     "WorkspaceValidation": {
@@ -46,6 +101,11 @@
       "additionalProperties": false,
       "properties": {
         "Publish": { "type": "boolean" },
+        "VersionSource": {
+          "type": "string",
+          "enum": [ "Auto", "Module", "Packages", "Assets" ],
+          "description": "Selects the version used by the unified GitHub release. Auto prefers the package release, then the resolved module version, then a single asset version."
+        },
         "Owner": { "type": [ "string", "null" ] },
         "Repository": { "type": [ "string", "null" ] },
         "Token": { "type": [ "string", "null" ] },
@@ -53,9 +113,13 @@
         "TokenEnvName": { "type": [ "string", "null" ] },
         "GenerateReleaseNotes": { "type": "boolean" },
         "IsPreRelease": { "type": "boolean" },
+        "ReuseExistingRelease": {
+          "type": "boolean",
+          "description": "Explicit recovery mode. When true, a release with the same tag may be reused. Auto-versioned normal releases should leave this false so an occupied GitHub tag selects a new version."
+        },
         "ReplaceExistingAssets": {
           "type": "boolean",
-          "description": "When true and an existing release is reused, delete same-named assets before uploading replacements."
+          "description": "When ReuseExistingRelease is true, delete same-named assets before uploading replacements."
         },
         "TagTemplate": { "type": [ "string", "null" ] },
         "ReleaseNameTemplate": { "type": [ "string", "null" ] }
@@ -261,6 +325,25 @@
         "UploadSymbols": { "type": "boolean" },
         "GenerateAppStoreInformation": { "type": "boolean" },
         "SigningStyle": { "type": [ "string", "null" ] },
+        "Automation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "WriteReceipt": { "type": "boolean" },
+            "ReceiptPath": { "type": "string" },
+            "PlanReceiptPath": { "type": "string" },
+            "LockPath": { "type": "string" },
+            "VersionSourcePath": { "type": [ "string", "null" ] },
+            "Resume": { "type": "boolean" },
+            "WaitForProcessing": { "type": "boolean" },
+            "ProcessingTimeoutSeconds": { "type": "integer", "minimum": 1 },
+            "PollIntervalSeconds": { "type": "integer", "minimum": 1 },
+            "MinimumFreeSpaceGB": { "type": "number", "minimum": 0 },
+            "CleanupBeforeArchive": { "type": "boolean" },
+            "CleanupAfterProcessing": { "type": "boolean" },
+            "ArtifactRetentionDays": { "type": "integer", "minimum": 0 }
+          }
+        },
         "AppStoreConnectApiKeyPath": { "type": [ "string", "null" ] },
         "AppStoreConnectApiKeyId": { "type": [ "string", "null" ] },
         "AppStoreConnectApiIssuerId": { "type": [ "string", "null" ] },

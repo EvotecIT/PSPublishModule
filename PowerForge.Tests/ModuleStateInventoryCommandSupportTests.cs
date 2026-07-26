@@ -168,6 +168,59 @@ public sealed class ModuleStateInventoryCommandSupportTests
     }
 
     [Fact]
+    public void ToCoreInventory_TreatsLegacyModulePathsAsAvailableUnlessDiagnosticsProveOtherwise()
+    {
+        const string availableRoot = @"C:\AvailableModules";
+        const string missingRoot = @"C:\MissingModules";
+        var result = new ModuleStateInventoryResult
+        {
+            Source = "LegacyArtifact",
+            ModulePaths = new[] { availableRoot, missingRoot },
+            Diagnostics = new[]
+            {
+                new ModuleStateInventoryDiagnosticResult
+                {
+                    Severity = "Error",
+                    Code = "ModuleState.InventoryPathMissing",
+                    Message = "The path was unavailable during collection.",
+                    Path = missingRoot
+                }
+            }
+        };
+
+        var inventory = ModuleStateInventoryResultMapper.ToCoreInventory(result);
+
+        Assert.True(Assert.Single(inventory.ModulePaths, path => ModuleStatePathIdentity.Equals(path.Path, availableRoot)).WasAvailable);
+        Assert.False(Assert.Single(inventory.ModulePaths, path => ModuleStatePathIdentity.Equals(path.Path, missingRoot)).WasAvailable);
+    }
+
+    [Fact]
+    public void InventoryMapping_PreservesDependencyVisibilityGroup()
+    {
+        const string moduleRoot = @"C:\VisibleModules";
+        var coreInventory = new ModuleStateInventory(
+            Array.Empty<ModuleStateInstalledModule>(),
+            new[]
+            {
+                new ModuleStateModulePath(
+                    moduleRoot,
+                    wasAvailable: true,
+                    dependencyVisibilityGroup: ModuleStateInventoryCommandSupport.CurrentProcessModulePathVisibilityGroup)
+            },
+            Array.Empty<ModuleStateInventoryDiagnostic>());
+
+        var result = ModuleStateInventoryResultMapper.ToCmdletResult(coreInventory, "ModulePath", new[] { moduleRoot });
+        var roundTripped = ModuleStateInventoryResultMapper.ToCoreInventory(result);
+
+        Assert.Equal(
+            ModuleStateInventoryCommandSupport.CurrentProcessModulePathVisibilityGroup,
+            Assert.Single(result.ScannedPaths).DependencyVisibilityGroup);
+        Assert.Equal(
+            ModuleStateInventoryCommandSupport.CurrentProcessModulePathVisibilityGroup,
+            Assert.Single(roundTripped.ModulePaths).DependencyVisibilityGroup);
+    }
+
+    [Fact]
     public void ResolveLoadedModuleVersion_AppendsPrereleaseLabel()
     {
         var item = new PSObject();
@@ -177,6 +230,148 @@ public sealed class ModuleStateInventoryCommandSupportTests
         var version = ModuleStateInventoryCommandSupport.ResolveLoadedModuleVersion(item);
 
         Assert.Equal("1.2.0-preview1", version);
+    }
+
+    [Fact]
+    public void MergeWithModulePathEntries_recomputes_effective_candidate_from_merged_root_order()
+    {
+        using var workspace = new TemporaryDirectory();
+        var preferredRoot = Path.Combine(workspace.Path, "preferred");
+        var supplementalRoot = Path.Combine(workspace.Path, "supplemental");
+        var preferredPath = CreateInstalledModule(preferredRoot, "Company.Tools", "1.0.0");
+        CreateInstalledModule(supplementalRoot, "Company.Tools", "2.0.0");
+        var inventory = new ModuleStateInventoryResult
+        {
+            Source = "Artifact",
+            ModulePaths = new[] { preferredRoot },
+            ScannedPaths = new[]
+            {
+                new ModuleStateInventoryPathResult
+                {
+                    Path = preferredRoot,
+                    PowerShellEdition = "Core",
+                    Scope = "CurrentUser",
+                    IsRequired = true
+                }
+            },
+            InstalledModules = new[]
+            {
+                new ModuleStateInstalledModuleResult
+                {
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    Path = preferredPath,
+                    ModuleRoot = preferredRoot,
+                    PowerShellEdition = "Core",
+                    Scope = "CurrentUser",
+                    IsEffectiveImportCandidate = true
+                }
+            }
+        };
+
+        var merged = ModuleStateInventoryCommandSupport.MergeWithModulePathEntries(
+            inventory,
+            new[] { new ModuleStateModulePath(supplementalRoot, "Core", "CurrentUser") });
+
+        var winner = Assert.Single(merged.InstalledModules, static module => module.IsEffectiveImportCandidate);
+        Assert.Equal("1.0.0", winner.Version);
+        Assert.Equal(preferredRoot, winner.ModuleRoot);
+        Assert.Equal(2, merged.InstalledModules.Length);
+    }
+
+    [Fact]
+    public void MergeWithModulePathEntries_ReplacesStaleArtifactEvidenceForAvailableRoot()
+    {
+        using var workspace = new TemporaryDirectory();
+        var moduleRoot = Path.Combine(workspace.Path, "modules");
+        Directory.CreateDirectory(moduleRoot);
+        var stalePath = Path.Combine(moduleRoot, "Company.Stale", "1.0.0");
+        var inventory = new ModuleStateInventoryResult
+        {
+            Source = "Artifact",
+            ModulePaths = new[] { moduleRoot },
+            ScannedPaths = new[] { new ModuleStateInventoryPathResult { Path = moduleRoot, IsRequired = true, WasAvailable = true } },
+            InstalledModules = new[]
+            {
+                new ModuleStateInstalledModuleResult
+                {
+                    Name = "Company.Stale",
+                    Version = "1.0.0",
+                    Path = stalePath,
+                    ModuleRoot = moduleRoot
+                }
+            },
+            Diagnostics = new[]
+            {
+                new ModuleStateInventoryDiagnosticResult
+                {
+                    Severity = "Error",
+                    Code = "ModuleState.StaleArtifact",
+                    Message = "Stale artifact evidence.",
+                    Path = stalePath
+                }
+            }
+        };
+
+        var merged = ModuleStateInventoryCommandSupport.MergeWithModulePathEntries(
+            inventory,
+            new[] { new ModuleStateModulePath(moduleRoot, isRequired: true) });
+
+        Assert.Empty(merged.InstalledModules);
+        Assert.DoesNotContain(merged.Diagnostics, static diagnostic => diagnostic.Code == "ModuleState.StaleArtifact");
+        var scannedRoot = Assert.Single(merged.ScannedPaths);
+        Assert.True(scannedRoot.WasAvailable);
+        Assert.True(scannedRoot.IsRequired);
+    }
+
+    [Fact]
+    public void MergeWithModulePathEntries_UsesCurrentUnavailableStateForSupplementalRoot()
+    {
+        using var workspace = new TemporaryDirectory();
+        var moduleRoot = Path.Combine(workspace.Path, "missing-modules");
+        var stalePath = Path.Combine(moduleRoot, "Company.Stale", "1.0.0");
+        var inventory = new ModuleStateInventoryResult
+        {
+            Source = "Artifact",
+            ModulePaths = new[] { moduleRoot },
+            ScannedPaths = new[]
+            {
+                new ModuleStateInventoryPathResult
+                {
+                    Path = moduleRoot,
+                    IsRequired = true,
+                    WasAvailable = true
+                }
+            },
+            InstalledModules = new[]
+            {
+                new ModuleStateInstalledModuleResult
+                {
+                    Name = "Company.Stale",
+                    Version = "1.0.0",
+                    Path = stalePath,
+                    ModuleRoot = moduleRoot
+                }
+            }
+        };
+
+        var merged = ModuleStateInventoryCommandSupport.MergeWithModulePathEntries(
+            inventory,
+            new[] { new ModuleStateModulePath(moduleRoot, isRequired: true) });
+
+        var scannedRoot = Assert.Single(merged.ScannedPaths);
+        Assert.False(scannedRoot.WasAvailable);
+        Assert.True(scannedRoot.IsRequired);
+        Assert.Single(merged.InstalledModules);
+        Assert.Contains(merged.Diagnostics, static diagnostic => diagnostic.Code == "ModuleState.InventoryPathMissing");
+    }
+
+    private static string CreateInstalledModule(string root, string name, string version)
+    {
+        var path = Path.Combine(root, name, version);
+        Directory.CreateDirectory(path);
+        File.WriteAllText(Path.Combine(path, name + ".psd1"), "@{ ModuleVersion = '" + version + "' }");
+        return path;
     }
 
     private static string? InvokeInferScope(string path)

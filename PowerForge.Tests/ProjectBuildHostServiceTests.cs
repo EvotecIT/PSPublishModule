@@ -121,6 +121,55 @@ public sealed class ProjectBuildHostServiceTests
         Assert.Single(result.Result.Release.Projects[0].Packages);
     }
 
+    [Fact]
+    public void Execute_UsesPackagesSectionFromUnifiedReleaseConfig()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var buildDirectory = scope.CreateDirectory(Path.Combine("Repo", "Build"));
+        var configPath = Path.Combine(buildDirectory, "release.json");
+        File.WriteAllText(
+            configPath,
+            """
+            {
+              "Module": {
+                "RepositoryRoot": "..",
+                "ConfigPath": "powerforge.json"
+              },
+              "Packages": {
+                "RootPath": "..",
+                "Build": true,
+                "PublishNuget": false
+              }
+            }
+            """);
+
+        DotNetRepositoryReleaseSpec? captured = null;
+        var service = new ProjectBuildHostService(
+            new NullLogger(),
+            executeRelease: spec =>
+            {
+                captured = spec;
+                return new DotNetRepositoryReleaseResult { Success = true };
+            },
+            publishGitHub: null,
+            validateGitHubPreflight: null);
+
+        var result = service.Execute(new ProjectBuildHostRequest
+        {
+            ConfigPath = configPath,
+            ExecuteBuild = true,
+            Build = true,
+            PublishNuget = false,
+            PublishGitHub = false,
+            UpdateVersions = false
+        });
+
+        Assert.True(result.Success);
+        Assert.NotNull(captured);
+        Assert.True(captured!.Pack);
+        Assert.Equal(Path.Combine(scope.RootPath, "Repo"), result.RootPath);
+    }
+
     private sealed class TemporaryDirectoryScope : IDisposable
     {
         public TemporaryDirectoryScope()

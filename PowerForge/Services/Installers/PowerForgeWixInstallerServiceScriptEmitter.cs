@@ -269,16 +269,23 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         PowerForgeInstallerServiceComponent service,
         string backupPath)
     {
-        string serviceName = EscapeCmdSetValue(service.ServiceName);
-        string backup = EscapeCmdSetValue(backupPath);
-        string command = "$svc=$env:PF_SERVICE; $backup=$env:PF_BACKUP; $key=Join-Path 'Registry::HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services' $svc; $p=(Get-ItemProperty -LiteralPath $key -Name ImagePath -ErrorAction SilentlyContinue).ImagePath; if ($null -ne $p) { [System.IO.File]::WriteAllText($backup, [string]$p) } elseif (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Force }";
-        return "\"[%ComSpec]\" /c set \"PF_SERVICE=" +
-               serviceName +
-               "\" && set \"PF_BACKUP=" +
-               backup +
-               "\" && powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command \"" +
-               EscapeCommandDoubleQuoted(command) +
-               "\"";
+        string serviceName = EscapePowerShellSingleQuoted(service.ServiceName);
+        string backup = EscapePowerShellSingleQuoted(backupPath);
+        string command = "$b='" + backup +
+                         "';$p=(gwmi win32_service|? Name -eq '" + serviceName +
+                         "').PathName;if($p){[IO.File]::WriteAllText($b,$p)}" +
+                         "else{[IO.File]::Delete($b)}";
+        string result = "powershell.exe -nop -c \"" +
+                        EscapeCommandDoubleQuoted(command) +
+                        "\"";
+        if (result.Length > 255)
+        {
+            throw new InvalidOperationException(
+                $"Service '{service.ServiceName}' backup command is {result.Length} characters; " +
+                "WiX CustomAction.Target supports at most 255. Shorten ServiceName or ScriptInstall.BackupPath.");
+        }
+
+        return result;
     }
 
     private static string BuildStopCommand(
@@ -336,9 +343,6 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
 
     private static string EscapePowerShellSingleQuoted(string value)
         => (value ?? string.Empty).Replace("'", "''");
-
-    private static string EscapeCmdSetValue(string value)
-        => (value ?? string.Empty).Replace("\"", string.Empty);
 
     private static string CombineConditions(params string[] conditions)
     {

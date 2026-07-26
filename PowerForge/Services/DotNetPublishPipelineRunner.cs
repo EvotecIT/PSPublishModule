@@ -11,10 +11,21 @@ namespace PowerForge;
 public sealed partial class DotNetPublishPipelineRunner
 {
     private readonly ILogger _logger;
+    private readonly IProcessRunner _processRunner;
+    private readonly AsyncLocal<CancellationToken> _cancellationToken = new();
 
     /// <summary>
     /// Creates a new instance using the provided logger.
     /// </summary>
-    public DotNetPublishPipelineRunner(ILogger logger) => _logger = logger;
+    public DotNetPublishPipelineRunner(ILogger logger)
+        : this(logger, new ProcessRunner())
+    {
+    }
+
+    internal DotNetPublishPipelineRunner(ILogger logger, IProcessRunner processRunner)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
+    }
 
 }

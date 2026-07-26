@@ -11,9 +11,16 @@ internal static partial class WebCliCommandHandlers
         var repositoryPath = $"/srv/powerforge/sources/{options.SiteId}";
         var enginePath = "/srv/powerforge/engine";
         var siteRoot = $"/var/www/{options.SiteId}/site";
+        var websiteRoot = NormalizeScaffoldWebsiteRoot(options.WebsiteRoot);
+        var websiteRepositoryRoot = websiteRoot == "."
+            ? repositoryPath
+            : $"{repositoryPath}/{websiteRoot}";
         var domainFile = options.Domain.Replace('.', '-');
         var siteEnvironment = $"/etc/powerforge/sites/{options.Domain}.env";
         var repositoryKey = $"/etc/powerforge/repository-ssh/{options.SiteId}_ed25519";
+        var acmeAccountPath = string.IsNullOrWhiteSpace(options.AcmeAccountId)
+            ? null
+            : $"/etc/letsencrypt/accounts/acme-v02.api.letsencrypt.org/directory/{options.AcmeAccountId}";
         var repositoryUrl = options.PrivateRepository
             ? $"git@github.com:{options.Repository}.git"
             : $"https://github.com/{options.Repository}.git";
@@ -27,9 +34,9 @@ internal static partial class WebCliCommandHandlers
             new() { Id = "deployment-user-home", Path = $"/home/{deploymentUser}", Kind = "directory", Owner = deploymentUser, Group = deploymentUser, Mode = "750" },
             new() { Id = "deployment-user-ssh", Path = $"/home/{deploymentUser}/.ssh", Kind = "directory", Owner = deploymentUser, Group = deploymentUser, Mode = "700" },
             new() { Id = "deployment-user-authorized-keys", Path = $"/home/{deploymentUser}/.ssh/authorized_keys", Source = $"{repositoryPath}/deploy/linux/powerforge-{options.SiteId}-authorized_keys", Kind = "file", Owner = deploymentUser, Group = deploymentUser, Mode = "600" },
-            new() { Id = "backup-user-home", Path = $"/var/lib/{backupUser}", Kind = "directory", Owner = backupUser, Group = backupUser, Mode = "700" },
-            new() { Id = "backup-user-ssh", Path = $"/var/lib/{backupUser}/.ssh", Kind = "directory", Owner = backupUser, Group = backupUser, Mode = "700" },
-            new() { Id = "backup-user-authorized-keys", Path = $"/var/lib/{backupUser}/.ssh/authorized_keys", Source = $"{repositoryPath}/deploy/linux/powerforge-{options.SiteId}-backup-authorized_keys", Kind = "file", Owner = backupUser, Group = backupUser, Mode = "600" },
+            new() { Id = "backup-user-home", Path = $"/var/lib/{backupUser}", Kind = "directory", Owner = "root", Group = "root", Mode = "755" },
+            new() { Id = "backup-user-ssh", Path = $"/var/lib/{backupUser}/.ssh", Kind = "directory", Owner = "root", Group = "root", Mode = "755" },
+            new() { Id = "backup-user-authorized-keys", Path = $"/var/lib/{backupUser}/.ssh/authorized_keys", Source = $"{repositoryPath}/deploy/linux/powerforge-{options.SiteId}-backup-authorized_keys", Kind = "file", Owner = "root", Group = "root", Mode = "644" },
             new() { Id = "static-deploy-runtime", Path = "/usr/local/sbin/powerforge-site-deploy", Source = $"{enginePath}/Deployment/Linux/powerforge-site-deploy.sh", Kind = "file", Owner = "root", Group = "root", Mode = "755" },
             new() { Id = "static-reconcile-runtime", Path = "/usr/local/sbin/powerforge-site-reconcile", Source = $"{enginePath}/Deployment/Linux/powerforge-site-reconcile.sh", Kind = "file", Owner = "root", Group = "root", Mode = "755" },
             new() { Id = "encrypted-capture-runtime", Path = "/usr/local/sbin/powerforge-server-encrypted-capture", Source = $"{enginePath}/Deployment/Linux/powerforge-server-encrypted-capture.sh", Kind = "file", Owner = "root", Group = "root", Mode = "755" },
@@ -66,7 +73,6 @@ internal static partial class WebCliCommandHandlers
 
         var encryptedFiles = new List<PowerForgeServerManagedFile>
         {
-            RequiredSecretFile("/etc/letsencrypt/accounts"),
             RequiredSecretFile($"/etc/letsencrypt/archive/{options.Domain}"),
             RequiredSecretFile($"/etc/letsencrypt/live/{options.Domain}")
         };
@@ -80,17 +86,26 @@ internal static partial class WebCliCommandHandlers
                 RequiredDuringBootstrap = false,
                 Capture = "encrypted",
                 RestoreMode = "directory"
-            },
-            new()
+            }
+        };
+        var certificateSecretRefs = new List<string> { $"letsencrypt-{options.SiteId}-private-keys" };
+        if (acmeAccountPath is not null)
+        {
+            encryptedFiles.Add(RequiredSecretFile(acmeAccountPath));
+            secrets.Add(new PowerForgeServerSecret
             {
-                Id = "letsencrypt-acme-account",
-                Path = "/etc/letsencrypt/accounts",
+                Id = $"letsencrypt-{options.SiteId}-acme-account",
+                Path = acmeAccountPath,
                 RequiredFor = ["certificate-renewal"],
                 RequiredDuringBootstrap = false,
                 Capture = "encrypted",
-                RestoreMode = "directory"
-            }
-        };
+                RestoreMode = "directory",
+                Owner = "root",
+                Group = "root",
+                Mode = "700"
+            });
+            certificateSecretRefs.Add($"letsencrypt-{options.SiteId}-acme-account");
+        }
         if (options.PrivateRepository)
         {
             encryptedFiles.Add(RequiredSecretFile(repositoryKey));
@@ -126,6 +141,22 @@ internal static partial class WebCliCommandHandlers
         var repositoryVerification = options.PrivateRepository
             ? $"sudo -n env {BuildRepositoryGitPrefix(applicationRepository).TrimEnd()} git ls-remote {ShellQuote(repositoryUrl)} HEAD >/dev/null"
             : $"git ls-remote https://github.com/{options.Repository}.git HEAD >/dev/null";
+        var verifyCommands = new List<PowerForgeServerNamedCommand>
+        {
+            Command("apache-config", "sudo -n apachectl configtest", required: true),
+            Command("static-deployment-reconciler", "test -x /usr/local/sbin/powerforge-site-reconcile && systemctl is-enabled --quiet -- powerforge-site-reconcile.timer && systemctl is-active --quiet -- powerforge-site-reconcile.timer", required: true),
+            Command("deployment-account", $"id -u {deploymentUser} >/dev/null && sudo -n grep -q '^restrict ' /home/{deploymentUser}/.ssh/authorized_keys && sudo -n visudo -cf /etc/sudoers.d/{deploymentUser}", required: true),
+            Command("backup-account", $"id -u {backupUser} >/dev/null && sudo -n grep -q '^restrict ' /var/lib/{backupUser}/.ssh/authorized_keys && sudo -n visudo -cf /etc/sudoers.d/{backupUser}", required: true),
+            Command("repository-identity", repositoryVerification, required: true),
+            Command("static-provenance", $"test -s {siteRoot}/current/_powerforge/deployment.json", required: true)
+        };
+        if (acmeAccountPath is not null)
+        {
+            verifyCommands.Add(Command(
+                $"certbot-{options.SiteId}-dry-run",
+                $"sudo -n certbot renew --dry-run --cert-name {options.Domain} --non-interactive --agree-tos --no-random-sleep-on-renew",
+                required: true));
+        }
 
         return new PowerForgeServerRecoveryManifest
         {
@@ -142,6 +173,7 @@ internal static partial class WebCliCommandHandlers
                 Os = "ubuntu-24.04",
                 Architecture = "x64"
             },
+            OperationLocks = [$"/var/lock/powerforge-site-{options.SiteId}.lock"],
             Repositories =
             [
                 applicationRepository,
@@ -164,8 +196,8 @@ internal static partial class WebCliCommandHandlers
                 Modules = ["headers", "rewrite", "ssl"],
                 Sites =
                 [
-                    new PowerForgeServerManagedFile { Source = $"{repositoryPath}/{options.WebsiteRoot}/deploy/apache.conf", Target = $"/etc/apache2/sites-available/{domainFile}.conf", Required = true },
-                    new PowerForgeServerManagedFile { Source = $"{repositoryPath}/{options.WebsiteRoot}/deploy/apache-ssl.conf", Target = $"/etc/apache2/sites-available/{domainFile}-le-ssl.conf", Required = true }
+                    new PowerForgeServerApacheFile { Source = $"{websiteRepositoryRoot}/deploy/apache.conf", Target = $"/etc/apache2/sites-available/{domainFile}.conf", Required = true, Enabled = true },
+                    new PowerForgeServerApacheFile { Source = $"{websiteRepositoryRoot}/deploy/apache-ssl.conf", Target = $"/etc/apache2/sites-available/{domainFile}-le-ssl.conf", Required = true }
                 ],
                 ValidateCommand = "sudo -n apachectl configtest"
             },
@@ -178,14 +210,16 @@ internal static partial class WebCliCommandHandlers
                     Domains = options.IncludeWwwAlias ? [options.Domain, $"www.{options.Domain}"] : [options.Domain],
                     Authenticator = "apache",
                     RenewalConfigPath = $"/etc/letsencrypt/renewal/{options.Domain}.conf",
-                    DryRunCommand = $"certbot renew --dry-run --cert-name {options.Domain} --non-interactive --agree-tos --no-random-sleep-on-renew",
-                    SecretRefs = [$"letsencrypt-{options.SiteId}-private-keys"]
+                    DryRunCommand = acmeAccountPath is null
+                        ? null
+                        : $"certbot renew --dry-run --cert-name {options.Domain} --non-interactive --agree-tos --no-random-sleep-on-renew",
+                    SecretRefs = certificateSecretRefs.ToArray()
                 }
             ],
             Systemd = new PowerForgeServerSystemd
             {
                 Services = [new PowerForgeServerSystemdUnit { Name = "powerforge-site-reconcile.service", Source = $"{enginePath}/Deployment/Linux/systemd/powerforge-site-reconcile.service", Target = "/etc/systemd/system/powerforge-site-reconcile.service", Required = true }],
-                Timers = [new PowerForgeServerSystemdUnit { Name = "powerforge-site-reconcile.timer", Source = $"{enginePath}/Deployment/Linux/systemd/powerforge-site-reconcile.timer", Target = "/etc/systemd/system/powerforge-site-reconcile.timer", Enabled = true, Required = true }]
+                Timers = [new PowerForgeServerSystemdUnit { Name = "powerforge-site-reconcile.timer", Source = $"{enginePath}/Deployment/Linux/systemd/powerforge-site-reconcile.timer", Target = "/etc/systemd/system/powerforge-site-reconcile.timer", Enabled = true, Activation = PowerForgeServerSystemdActivation.BeforeDeploy, ExpectedState = PowerForgeServerSystemdState.Active, Required = true }]
             },
             Secrets = secrets.ToArray(),
             Capture = new PowerForgeServerCapture
@@ -200,29 +234,18 @@ internal static partial class WebCliCommandHandlers
                     Command("release-link", $"readlink -f {siteRoot}/current", required: true),
                     Command("static-source-ref", $"jq -er '.sourceSha | select(type == \"string\" and test(\"^([0-9a-fA-F]{{40}}|[0-9a-fA-F]{{64}})$\"))' {siteRoot}/current/_powerforge/deployment.json", required: true)
                 ],
-                Exclude = [$"{siteRoot}/releases", $"{repositoryPath}/{options.WebsiteRoot}/_site", $"{repositoryPath}/{options.WebsiteRoot}/_reports", $"{repositoryPath}/{options.WebsiteRoot}/_temp"]
+                Exclude = [$"{siteRoot}/releases", $"{websiteRepositoryRoot}/_site", $"{websiteRepositoryRoot}/_reports", $"{websiteRepositoryRoot}/_temp"]
             },
-            Deploy = new PowerForgeServerCommandGroup
+            Deploy = new PowerForgeServerDeploy
             {
                 Commands =
                 [
-                    Command("reload-systemd", "sudo -n systemctl daemon-reload", required: true),
-                    Command("enable-static-deployment-reconciler", "sudo -n systemctl enable --now powerforge-site-reconcile.timer", required: true),
                     Command("enable-apache-sites", $"sudo -n /usr/local/sbin/powerforge-apache-site-enable --http-site {domainFile}.conf --https-site {domainFile}-le-ssl.conf --certificate-name {options.Domain}", required: true)
                 ]
             },
             Verify = new PowerForgeServerVerify
             {
-                Commands =
-                [
-                    Command("apache-config", "sudo -n apachectl configtest", required: true),
-                    Command("static-deployment-reconciler", "test -x /usr/local/sbin/powerforge-site-reconcile && systemctl is-enabled --quiet powerforge-site-reconcile.timer && systemctl is-active --quiet powerforge-site-reconcile.timer", required: true),
-                    Command("deployment-account", $"id -u {deploymentUser} >/dev/null && sudo -n grep -q '^restrict ' /home/{deploymentUser}/.ssh/authorized_keys && sudo -n visudo -cf /etc/sudoers.d/{deploymentUser}", required: true),
-                    Command("backup-account", $"id -u {backupUser} >/dev/null && sudo -n grep -q '^restrict ' /var/lib/{backupUser}/.ssh/authorized_keys && sudo -n visudo -cf /etc/sudoers.d/{backupUser}", required: true),
-                    Command("repository-identity", repositoryVerification, required: true),
-                    Command("static-provenance", $"test -s {siteRoot}/current/_powerforge/deployment.json", required: true),
-                    Command($"certbot-{options.SiteId}-dry-run", $"sudo -n certbot renew --dry-run --cert-name {options.Domain} --non-interactive --agree-tos --no-random-sleep-on-renew", required: true)
-                ],
+                Commands = verifyCommands.ToArray(),
                 Urls = [new PowerForgeServerVerifyUrl { Url = $"https://{options.Domain}/", ExpectedStatus = 200, Via = options.CloudflareEnabled ? "cloudflare" : "public" }]
             },
             BackupTarget = new PowerForgeServerBackupTarget
@@ -239,6 +262,9 @@ internal static partial class WebCliCommandHandlers
             Notes =
             [
                 "Generated website output and timestamped releases are rebuildable and intentionally excluded from backup state.",
+                acmeAccountPath is null
+                    ? "ACME account state is not captured yet; rerun scaffold with --acme-account-id after first certificate issuance to enable renewal-state backup and dry-run verification."
+                    : "The exact Certbot ACME account directory is encrypted and renewal dry-run verification is enabled.",
                 "Deployment and encrypted recovery capture use separate restricted SSH accounts and protected-environment private keys.",
                 options.CloudflareEnabled ? "Cloudflare wiring is declarative; provision a dedicated per-site token outside the repository." : "Cloudflare integration is intentionally disabled until dedicated per-site credentials are provisioned."
             ]
@@ -255,21 +281,45 @@ internal static partial class WebCliCommandHandlers
         => new() { Id = id, Command = command, Required = required };
 
     private static string BuildScaffoldWebsiteWorkflow(PowerForgeServerScaffoldOptions options)
-        => ServerScaffoldTemplateStore.Render(
+    {
+        var websiteRoot = NormalizeScaffoldWebsiteRoot(options.WebsiteRoot);
+        return ServerScaffoldTemplateStore.Render(
             "website-deploy.yml",
             ("__BRANCH__", options.Branch),
-            ("__WEBSITE_ROOT__", options.WebsiteRoot),
+            ("__WEBSITE_ROOT__", websiteRoot),
+            ("__WEBSITE_WATCH_PATH__", BuildScaffoldWebsitePath(options, "**")),
             ("__ENGINE_REF__", options.EngineRef),
             ("__DOMAIN__", options.Domain),
             ("__SMOKE_PATHS__", options.SmokePaths),
             ("__CLOUDFLARE_INPUT__", options.CloudflareEnabled ? $"      deployment_cloudflare_zone: {options.Domain}" : string.Empty),
             ("__CLOUDFLARE_SECRET__", options.CloudflareEnabled ? "      deployment_cloudflare_api_token: ${{ secrets.DEPLOYMENT_CLOUDFLARE_API_TOKEN }}" : string.Empty));
+    }
 
     private static string BuildScaffoldBackupWorkflow(PowerForgeServerScaffoldOptions options)
         => ServerScaffoldTemplateStore.Render(
             "server-backup.yml",
             ("__SITE_ID__", options.SiteId),
             ("__ENGINE_REF__", options.EngineRef));
+
+    private static string BuildScaffoldRecoveryValidationWorkflow(PowerForgeServerScaffoldOptions options)
+        => ServerScaffoldTemplateStore.Render(
+            "server-recovery-ci.yml",
+            ("__SITE_ID__", options.SiteId),
+            ("__RECOVERY_WATCH_PATHS__", BuildScaffoldRecoveryWatchPaths(options)),
+            ("__ENGINE_REF__", options.EngineRef));
+
+    private static string BuildScaffoldRecoveryWatchPaths(PowerForgeServerScaffoldOptions options)
+    {
+        var paths = NormalizeRecoveryWatchPaths(
+        [
+            "deploy/linux/**",
+            BuildScaffoldWebsitePath(options, "deploy/**"),
+            ".github/workflows/server-backup.yml",
+            ".github/workflows/server-recovery-ci.yml",
+            .. options.RecoveryWatchPaths
+        ]);
+        return string.Join('\n', paths.Select(static path => $"      - \"{path}\""));
+    }
 
     private static string BuildScaffoldSiteEnvironment(PowerForgeServerScaffoldOptions options)
         => ServerScaffoldTemplateStore.Render(

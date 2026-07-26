@@ -11,10 +11,16 @@ For DotNet publish usage and command conventions, see:
 - `Module/en-US/<ModuleName>-help.xml` is generated external help output.
 - Treat both as build artifacts that can be overwritten by the documentation gate in `Invoke-ModuleBuild` / `Build-Module.ps1`.
 
-In this repo, module build uses:
+In this repo, `powerforge.json` declares the equivalent documentation segment:
 
-```powershell
-New-ConfigurationDocumentation -Enable -PathReadme 'Docs\Readme.md' -Path 'Docs' -AboutTopicsSourcePath 'Help\About'
+```json
+{
+  "Type": "Documentation",
+  "Configuration": {
+    "PathReadme": "Docs/Readme.md",
+    "Path": "Docs"
+  }
+}
 ```
 
 Because documentation generation is enabled, PowerForge cleans stale generated docs and syncs new output back to `Module/Docs`. Manual edits in `Module/Docs` are not durable.
@@ -22,7 +28,7 @@ Because documentation generation is enabled, PowerForge cleans stale generated d
 For docs-only refreshes, use the documentation run mode instead of a full build:
 
 ```powershell
-.\Module\Build\Build-Module.ps1 -RunMode Documentation -NoInteractive -NoExitCode -NoSign
+.\Build\Build-Project.ps1 -ModuleOnly -RunMode Documentation
 ```
 
 This regenerates command Markdown and external help without validation, tests, signing, artefacts, publishing, or install phases. The build also verifies parity between exported commands, generated command Markdown pages, and MAML command entries.

@@ -60,7 +60,12 @@
     <Compile Include="..\PowerForge.ConsoleShared\SpectrePipelineSummaryWriter.cs" Link="PowerForge.ConsoleShared\SpectrePipelineSummaryWriter.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\PipelinePublishSummary.cs" Link="PowerForge.ConsoleShared\PipelinePublishSummary.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreConsoleLogger.cs" Link="PowerForge.ConsoleShared\SpectreConsoleLogger.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectreBuildProgressColumns.cs" Link="PowerForge.ConsoleShared\SpectreBuildProgressColumns.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressDisplay.cs" Link="PowerForge.ConsoleShared\SpectreProgressDisplay.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreModulePipelineConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreModulePipelineConsoleUi.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectreProjectBuildConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreProjectBuildConsoleUi.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectreProjectBuildSummaryWriter.cs" Link="PowerForge.ConsoleShared\SpectreProjectBuildSummaryWriter.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectrePowerForgeReleaseConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectrePowerForgeReleaseConsoleUi.cs" />
   </ItemGroup>
 
 </Project>

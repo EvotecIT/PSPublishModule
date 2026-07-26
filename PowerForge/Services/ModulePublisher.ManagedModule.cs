@@ -5,7 +5,7 @@ namespace PowerForge;
 /// </content>
 public sealed partial class ModulePublisher
 {
-    internal static bool ShouldUseManagedModuleForAuto(PublishConfiguration publish)
+    internal static bool ShouldUseManagedModuleForAuto(PublishConfiguration publish, string? baseDirectory = null)
     {
         if (publish is null)
             throw new ArgumentNullException(nameof(publish));
@@ -22,7 +22,7 @@ public sealed partial class ModulePublisher
         try
         {
             var support = ManagedModuleProviderSupportEvaluator.Evaluate(
-                CreateManagedPublishRepository(repositoryName, repository));
+                CreateManagedPublishRepository(repositoryName, repository, baseDirectory));
             return support.Level == ManagedModuleProviderSupportLevel.Supported;
         }
         catch (InvalidOperationException)
@@ -42,20 +42,22 @@ public sealed partial class ModulePublisher
         RepositoryCredential? publishCredential,
         string versionText,
         string temporaryPackagePath,
-        bool skipDependenciesCheck)
+        bool skipDependenciesCheck,
+        Action? remotePublishAttempted)
     {
         var managedResult = new ManagedModulePublishService(_logger).PublishAsync(
                 new ManagedModulePublishRequest
                 {
                     ModulePath = modulePath,
-                    Repository = CreateManagedReadRepository(repositoryName, repoConfig),
-                    PublishRepository = CreateManagedPublishRepository(repositoryName, repoConfig),
+                    Repository = CreateManagedReadRepository(repositoryName, repoConfig, plan.ProjectRoot),
+                    PublishRepository = CreateManagedPublishRepository(repositoryName, repoConfig, plan.ProjectRoot),
                     OutputDirectory = temporaryPackagePath,
                     Credential = readCredential,
                     PublishCredential = publishCredential,
                     SkipDependenciesCheck = skipDependenciesCheck,
                     SkipModuleManifestValidate = false,
-                    Force = publish.Force
+                    Force = publish.Force,
+                    RemotePublishAttempted = remotePublishAttempted
                 })
             .GetAwaiter()
             .GetResult();
@@ -68,13 +70,14 @@ public sealed partial class ModulePublisher
 
     private static ManagedModuleRepository CreateManagedPublishRepository(
         string repositoryName,
-        PublishRepositoryConfiguration? repoConfig)
+        PublishRepositoryConfiguration? repoConfig,
+        string? baseDirectory)
     {
         var source = FirstNonEmpty(repoConfig?.PublishUri, repoConfig?.Uri, repoConfig?.SourceUri);
         if (string.IsNullOrWhiteSpace(source))
             source = ResolveDefaultManagedRepositorySource(repositoryName);
         else
-            source = NormalizeManagedRepositorySource(source!);
+            source = NormalizeManagedRepositorySource(source!, baseDirectory);
 
         return new ManagedModuleRepository(
             repositoryName,
@@ -85,13 +88,14 @@ public sealed partial class ModulePublisher
 
     private static ManagedModuleRepository CreateManagedReadRepository(
         string repositoryName,
-        PublishRepositoryConfiguration? repoConfig)
+        PublishRepositoryConfiguration? repoConfig,
+        string? baseDirectory)
     {
         var source = FirstNonEmpty(repoConfig?.Uri, repoConfig?.SourceUri, repoConfig?.PublishUri);
         if (string.IsNullOrWhiteSpace(source))
             source = ResolveDefaultManagedRepositorySource(repositoryName);
         else
-            source = NormalizeManagedRepositorySource(source!);
+            source = NormalizeManagedRepositorySource(source!, baseDirectory);
 
         return new ManagedModuleRepository(
             repositoryName,
@@ -109,12 +113,13 @@ public sealed partial class ModulePublisher
             $"Managed module publishing requires a repository Uri, SourceUri, or PublishUri for repository '{repositoryName}'.");
     }
 
-    internal static string NormalizeManagedRepositorySource(string source)
+    internal static string NormalizeManagedRepositorySource(string source, string? baseDirectory = null)
     {
         var normalized = source.Trim().TrimEnd('/');
-        return normalized.Equals(ManagedModuleCatalogDefaults.PowerShellGalleryV3, StringComparison.OrdinalIgnoreCase)
+        normalized = normalized.Equals(ManagedModuleCatalogDefaults.PowerShellGalleryV3, StringComparison.OrdinalIgnoreCase)
             ? ManagedModuleCatalogDefaults.PowerShellGalleryV2
             : normalized;
+        return ManagedModuleRepositoryPathResolver.NormalizeSource(normalized, baseDirectory);
     }
 
     private static RepositoryCredential? ResolveManagedReadCredential(PublishRepositoryConfiguration? repoConfig)
@@ -143,18 +148,20 @@ public sealed partial class ModulePublisher
     private static string? FirstNonEmpty(params string?[] values)
         => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim();
 
-    private void EnsureManagedVersionIsGreaterThanRepository(
+    private bool EnsureManagedVersionIsGreaterThanRepository(
         ManagedModuleRepository repository,
         string moduleName,
         string moduleVersion,
         string? preRelease,
-        RepositoryCredential? credential)
+        RepositoryCredential? credential,
+        bool allowExistingExactVersion = false)
     {
         var publishVersionText = FormatSemVer(moduleVersion, preRelease);
         if (!TryParseSemVer(publishVersionText, out var publishVersion))
             throw new InvalidOperationException($"Could not parse module version for publish: '{publishVersionText}'.");
 
         SemVer? current = null;
+        var exactVersionExists = false;
         try
         {
             var versions = new ManagedModuleRepositoryClient(_logger)
@@ -167,6 +174,8 @@ public sealed partial class ModulePublisher
                 if (!TryParseSemVer(version.Version, out var parsed))
                     continue;
 
+                if (parsed.CompareTo(publishVersion) == 0)
+                    exactVersionExists = true;
                 if (current is null || parsed.CompareTo(current.Value) > 0)
                     current = parsed;
             }
@@ -174,7 +183,7 @@ public sealed partial class ModulePublisher
         catch (Exception ex) when (IsRepositoryPackageNotFound(moduleName, ex))
         {
             _logger.Verbose($"No existing repository version was found for {moduleName} on '{repository.Name}'. Treating this as a first publish.");
-            return;
+            return false;
         }
         catch (Exception ex)
         {
@@ -182,9 +191,15 @@ public sealed partial class ModulePublisher
         }
 
         if (current is null)
-            return;
+            return false;
 
-        if (publishVersion.CompareTo(current.Value) <= 0)
+        if (allowExistingExactVersion && exactVersionExists)
+            return true;
+
+        var comparison = publishVersion.CompareTo(current.Value);
+        if (comparison <= 0)
             throw new InvalidOperationException($"Module version '{publishVersionText}' is not greater than repository version '{FormatSemVer(current.Value.Version.ToString(), current.Value.PreRelease)}' for '{moduleName}'. Use -Force to publish anyway.");
+
+        return false;
     }
 }

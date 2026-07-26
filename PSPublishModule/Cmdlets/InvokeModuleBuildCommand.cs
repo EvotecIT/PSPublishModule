@@ -83,6 +83,7 @@ namespace PSPublishModule;
 /// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "ModuleBuild", DefaultParameterSetName = ParameterSetModern)]
 [Alias("New-PrepareModule", "Build-Module", "Invoke-ModuleBuilder")]
+[OutputType(typeof(ModulePipelineResult))]
 public sealed partial class InvokeModuleBuildCommand : PSCmdlet
 {
     private const string ParameterSetModern = "Modern";
@@ -126,6 +127,73 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetConfig)]
     [Alias("ConfigurationGateMode")]
     public ConfigurationGateMode? RunMode { get; set; }
+
+    /// <summary>Overrides the module version declared by a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public string? ModuleVersion { get; set; }
+
+    /// <summary>Overrides the prerelease tag declared by a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public string? PreReleaseTag { get; set; }
+
+    /// <summary>Overrides the .NET build configuration declared by a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    [ValidateSet("Release", "Debug")]
+    public string? BuildConfiguration { get; set; }
+
+    /// <summary>Overrides the .NET framework declared by a JSON configuration. Auto preserves the configured framework matrix.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    [ValidateSet("auto", "net10.0", "net8.0", "net472")]
+    public string? BuildFramework { get; set; }
+
+    /// <summary>Skips the configured .NET project build and reuses the existing module binary payload.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter NoDotnetBuild { get; set; }
+
+    /// <summary>Disables module signing declared by a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter NoSign { get; set; }
+
+    /// <summary>Enables module signing declared by a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter SignModule { get; set; }
+
+    /// <summary>
+    /// Controls whether project/package segments declared by a JSON configuration are included.
+    /// Unified release orchestration disables them when the outer package lane owns publication.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public bool IncludeProjectPackages { get; set; } = true;
+
+    /// <summary>
+    /// Controls whether module repository and GitHub publish segments declared by a JSON configuration are included.
+    /// Parent release hosts disable them when publishing signed checkpointed module artifacts directly.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public bool IncludeModulePublishing { get; set; } = true;
+
+    /// <summary>
+    /// Indicates that a parent unified release owns GitHub publication and suppresses
+    /// GitHub publish segments declared by the JSON module configuration.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter PowerForgeUnifiedGitHubRelease { get; set; }
+
+    /// <summary>Overrides the signing certificate thumbprint declared by a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public string? CertificateThumbprint { get; set; }
+
+    /// <summary>Overrides whether binary files are signed for a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public bool? SignIncludeBinaries { get; set; }
+
+    /// <summary>Overrides whether internal files are signed for a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public bool? SignIncludeInternals { get; set; }
+
+    /// <summary>Overrides whether executable files are signed for a JSON configuration.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public bool? SignIncludeExe { get; set; }
 
     /// <summary>
     /// Folder name containing functions to export. Default: <c>Public</c>.
@@ -248,9 +316,26 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetConfig)]
     public SwitchParameter NoInteractive { get; set; }
 
+    /// <summary>Suppresses host rendering and log output. Intended for callers that request structured results.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter Quiet { get; set; }
+
+    /// <summary>Writes the completed module pipeline result to the PowerShell success stream.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter PassThru { get; set; }
+
     /// <summary>Staging directory for the PowerForge pipeline. When omitted, a temporary folder is generated.</summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
     public string? StagingPath { get; set; }
+
+    /// <summary>Reuses an existing staged module output for an internal deferred publication pass.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig, DontShow = true)]
+    public SwitchParameter ReuseStaging { get; set; }
 
     /// <summary>Optional path to a .NET project (.csproj) to publish into the module.</summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
@@ -267,6 +352,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
 
     /// <summary>Skips installing the module after build.</summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
     public SwitchParameter SkipInstall { get; set; }
 
     /// <summary>Installation strategy used when installing the module.</summary>
@@ -390,7 +476,9 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         {
             // best effort only
         }
-        ILogger logger = new SpectreConsoleLogger { IsVerbose = isVerbose };
+        ILogger logger = Quiet.IsPresent
+            ? new NullLogger { IsVerbose = isVerbose }
+            : new SpectreConsoleLogger { IsVerbose = isVerbose };
         var preparation = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
         {
             ParameterSetName = ParameterSetName,
@@ -399,8 +487,26 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             ConfigPath = ConfigPath,
             ModuleName = ModuleName,
             RunMode = RunMode,
+            ModuleVersion = ModuleVersion,
+            PreReleaseTag = PreReleaseTag,
+            BuildConfiguration = BuildConfiguration,
+            BuildFramework = BuildFramework,
+            NoDotnetBuild = NoDotnetBuild.IsPresent,
+            NoDotnetBuildWasBound = boundParameters?.ContainsKey(nameof(NoDotnetBuild)) == true,
+            NoSign = NoSign.IsPresent,
+            NoSignWasBound = boundParameters?.ContainsKey(nameof(NoSign)) == true,
+            SignModule = SignModule.IsPresent,
+            SignModuleWasBound = boundParameters?.ContainsKey(nameof(SignModule)) == true,
+            IncludeProjectPackages = IncludeProjectPackages,
+            IncludeModulePublishing = IncludeModulePublishing,
+            UnifiedGitHubRelease = PowerForgeUnifiedGitHubRelease.IsPresent,
+            CertificateThumbprint = CertificateThumbprint,
+            SignIncludeBinaries = SignIncludeBinaries,
+            SignIncludeInternals = SignIncludeInternals,
+            SignIncludeExe = SignIncludeExe,
             InputPath = Path,
             StagingPath = StagingPath,
+            ReuseStaging = ReuseStaging.IsPresent,
             CsprojPath = CsprojPath,
             DotNetConfiguration = DotNetConfiguration,
             DotNetFramework = DotNetFramework,
@@ -421,10 +527,15 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             ExcludeDirectories = ExcludeDirectories ?? Array.Empty<string>(),
             ExcludeFiles = ExcludeFiles ?? Array.Empty<string>(),
             DiagnosticsBaselinePath = DiagnosticsBaselinePath,
+            DiagnosticsBaselinePathWasBound = boundParameters?.ContainsKey(nameof(DiagnosticsBaselinePath)) == true,
             GenerateDiagnosticsBaseline = GenerateDiagnosticsBaseline.IsPresent,
+            GenerateDiagnosticsBaselineWasBound = boundParameters?.ContainsKey(nameof(GenerateDiagnosticsBaseline)) == true,
             UpdateDiagnosticsBaseline = UpdateDiagnosticsBaseline.IsPresent,
+            UpdateDiagnosticsBaselineWasBound = boundParameters?.ContainsKey(nameof(UpdateDiagnosticsBaseline)) == true,
             FailOnNewDiagnostics = FailOnNewDiagnostics.IsPresent,
+            FailOnNewDiagnosticsWasBound = boundParameters?.ContainsKey(nameof(FailOnNewDiagnostics)) == true,
             FailOnDiagnosticsSeverity = FailOnDiagnosticsSeverity,
+            FailOnDiagnosticsSeverityWasBound = boundParameters?.ContainsKey(nameof(FailOnDiagnosticsSeverity)) == true,
             DiagnosticsBinaryConflictSearchRoot = DiagnosticsBinaryConflictSearchRoot,
             JsonOnly = JsonOnly.IsPresent,
             JsonPath = JsonPath,
@@ -460,7 +571,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         }
         else
         {
-            var interactive = !NoInteractive.IsPresent &&
+            var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&
                 SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
 
             workflow = new ModuleBuildWorkflowService(
@@ -470,7 +581,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                     spec: spec,
                     plan: plan,
                     configLabel: configLabel),
-                writeSummary: SpectrePipelineConsoleUi.WriteSummary)
+                writeSummary: Quiet.IsPresent ? null : SpectrePipelineConsoleUi.WriteSummary)
                 .Execute(preparation, interactive, preparation.ConfigLabel);
         }
 #pragma warning restore CA1031
@@ -502,6 +613,9 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             logger.Success(outcome.CompletionMessage);
         else
             logger.Error(outcome.CompletionMessage);
+
+        if (PassThru.IsPresent && workflow?.Result is not null)
+            WriteObject(workflow.Result);
 
         if (outcome.ShouldSetExitCode)
             Host.SetShouldExit(outcome.ExitCode);

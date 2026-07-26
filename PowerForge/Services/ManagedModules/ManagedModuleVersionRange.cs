@@ -52,7 +52,6 @@ internal sealed class ManagedModuleVersionRange
             return Any;
 
         var trimmed = value!.Trim();
-        var allowsPrerelease = ManagedModuleVersionComparer.IsPrerelease(trimmed);
         if (trimmed.StartsWith("=", StringComparison.Ordinal))
         {
             var exact = Normalize(trimmed.Substring(1));
@@ -61,22 +60,41 @@ internal sealed class ManagedModuleVersionRange
                 : new ManagedModuleVersionRange(null, false, null, false, exact, ManagedModuleVersionComparer.IsPrerelease(exact!));
         }
 
-        if (TryParseComparatorRange(trimmed, allowsPrerelease, out var comparatorRange))
+        if (TryParseComparatorRange(trimmed, out var comparatorRange))
             return comparatorRange;
 
         if (!HasRangeDelimiters(trimmed))
-            return new ManagedModuleVersionRange(trimmed, includeMinimum: true, null, false, null, allowsPrerelease);
+            return new ManagedModuleVersionRange(
+                trimmed,
+                includeMinimum: true,
+                null,
+                false,
+                null,
+                ManagedModuleVersionComparer.IsPrerelease(trimmed));
 
         var includeMinimum = trimmed.StartsWith("[", StringComparison.Ordinal);
         var includeMaximum = trimmed.EndsWith("]", StringComparison.Ordinal);
         var body = trimmed.Trim('[', ']', '(', ')').Trim();
         if (!body.Contains(",", StringComparison.Ordinal))
-            return new ManagedModuleVersionRange(null, false, null, false, body, allowsPrerelease);
+            return new ManagedModuleVersionRange(
+                null,
+                false,
+                null,
+                false,
+                body,
+                ManagedModuleVersionComparer.IsPrerelease(body));
 
         var parts = body.Split(new[] { ',' }, 2);
         var minimum = Normalize(parts[0]);
         var maximum = parts.Length > 1 ? Normalize(parts[1]) : null;
-        return new ManagedModuleVersionRange(minimum, includeMinimum, maximum, includeMaximum, null, allowsPrerelease);
+        return new ManagedModuleVersionRange(
+            minimum,
+            includeMinimum,
+            maximum,
+            includeMaximum,
+            null,
+            ManagedModuleVersionComparer.IsPrerelease(minimum ?? string.Empty) ||
+            ManagedModuleVersionComparer.IsPrerelease(maximum ?? string.Empty));
     }
 
     public bool IsSatisfiedBy(string version)
@@ -123,13 +141,13 @@ internal sealed class ManagedModuleVersionRange
 
     private static bool TryParseComparatorRange(
         string value,
-        bool allowsPrerelease,
         out ManagedModuleVersionRange range)
     {
         var minimumVersion = default(string);
         var maximumVersion = default(string);
         var includeMinimum = false;
         var includeMaximum = false;
+        var allowsPrerelease = false;
         var parsedAny = false;
 
         foreach (var rawToken in value.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries))
@@ -137,32 +155,52 @@ internal sealed class ManagedModuleVersionRange
             var token = rawToken.Trim();
             if (token.StartsWith(">=", StringComparison.Ordinal))
             {
-                minimumVersion = Normalize(token.Substring(2));
-                includeMinimum = true;
+                var candidateVersion = Normalize(token.Substring(2));
+                allowsPrerelease |= ManagedModuleVersionComparer.IsPrerelease(candidateVersion ?? string.Empty);
+                ApplyMinimum(
+                    ref minimumVersion,
+                    ref includeMinimum,
+                    candidateVersion,
+                    includeCandidate: true);
                 parsedAny = true;
                 continue;
             }
 
             if (token.StartsWith(">", StringComparison.Ordinal))
             {
-                minimumVersion = Normalize(token.Substring(1));
-                includeMinimum = false;
+                var candidateVersion = Normalize(token.Substring(1));
+                allowsPrerelease |= ManagedModuleVersionComparer.IsPrerelease(candidateVersion ?? string.Empty);
+                ApplyMinimum(
+                    ref minimumVersion,
+                    ref includeMinimum,
+                    candidateVersion,
+                    includeCandidate: false);
                 parsedAny = true;
                 continue;
             }
 
             if (token.StartsWith("<=", StringComparison.Ordinal))
             {
-                maximumVersion = Normalize(token.Substring(2));
-                includeMaximum = true;
+                var candidateVersion = Normalize(token.Substring(2));
+                allowsPrerelease |= ManagedModuleVersionComparer.IsPrerelease(candidateVersion ?? string.Empty);
+                ApplyMaximum(
+                    ref maximumVersion,
+                    ref includeMaximum,
+                    candidateVersion,
+                    includeCandidate: true);
                 parsedAny = true;
                 continue;
             }
 
             if (token.StartsWith("<", StringComparison.Ordinal))
             {
-                maximumVersion = Normalize(token.Substring(1));
-                includeMaximum = false;
+                var candidateVersion = Normalize(token.Substring(1));
+                allowsPrerelease |= ManagedModuleVersionComparer.IsPrerelease(candidateVersion ?? string.Empty);
+                ApplyMaximum(
+                    ref maximumVersion,
+                    ref includeMaximum,
+                    candidateVersion,
+                    includeCandidate: false);
                 parsedAny = true;
                 continue;
             }
@@ -180,8 +218,68 @@ internal sealed class ManagedModuleVersionRange
             return false;
         }
 
-        range = new ManagedModuleVersionRange(minimumVersion, includeMinimum, maximumVersion, includeMaximum, null, allowsPrerelease);
+        range = new ManagedModuleVersionRange(
+            minimumVersion,
+            includeMinimum,
+            maximumVersion,
+            includeMaximum,
+            null,
+            allowsPrerelease);
         return true;
+    }
+
+    private static void ApplyMinimum(
+        ref string? currentVersion,
+        ref bool includeCurrent,
+        string? candidateVersion,
+        bool includeCandidate)
+    {
+        if (candidateVersion is null)
+            return;
+        if (currentVersion is null)
+        {
+            currentVersion = candidateVersion;
+            includeCurrent = includeCandidate;
+            return;
+        }
+
+        var comparison = ManagedModuleVersionComparer.Instance.Compare(candidateVersion, currentVersion);
+        if (comparison > 0)
+        {
+            currentVersion = candidateVersion;
+            includeCurrent = includeCandidate;
+        }
+        else if (comparison == 0)
+        {
+            includeCurrent = includeCurrent && includeCandidate;
+        }
+    }
+
+    private static void ApplyMaximum(
+        ref string? currentVersion,
+        ref bool includeCurrent,
+        string? candidateVersion,
+        bool includeCandidate)
+    {
+        if (candidateVersion is null)
+            return;
+        if (currentVersion is null)
+        {
+            currentVersion = candidateVersion;
+            includeCurrent = includeCandidate;
+            return;
+        }
+
+        var comparison = ManagedModuleVersionComparer.Instance.Compare(candidateVersion, currentVersion);
+        if (comparison < 0)
+        {
+            currentVersion = candidateVersion;
+            includeCurrent = includeCandidate;
+        }
+        else if (comparison == 0)
+        {
+            includeCurrent = includeCurrent && includeCandidate;
+        }
     }
 
     private static string? Normalize(string? value)

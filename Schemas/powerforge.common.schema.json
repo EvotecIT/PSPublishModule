@@ -107,6 +107,10 @@
       "type": "string",
       "enum": ["iOS", "iPadOS", "macOS", "tvOS", "watchOS", "visionOS"]
     },
+    "AppleArchiveVariant": {
+      "type": "string",
+      "enum": ["Default", "MacCatalyst"]
+    },
     "AppleBuildNumberPolicy": {
       "type": "string",
       "enum": ["Explicit", "KeepExisting", "IncrementExisting"]

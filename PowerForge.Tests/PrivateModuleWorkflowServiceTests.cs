@@ -259,6 +259,7 @@ public sealed class PrivateModuleWorkflowServiceTests
             (_, _) => false);
 
         Assert.False(result.OperationPerformed);
+        Assert.True(result.OperationSkipped);
         Assert.Equal(ModuleStateDeliveryTransport.Auto, result.RequestedTransport);
         Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, result.EffectiveTransport);
         Assert.Contains("Generic NuGet private feed", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
@@ -331,6 +332,7 @@ public sealed class PrivateModuleWorkflowServiceTests
             (_, _) => false);
 
         Assert.False(result.OperationPerformed);
+        Assert.True(result.OperationSkipped);
         Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, result.RequestedTransport);
         Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, result.EffectiveTransport);
         Assert.Contains("JFrog", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
@@ -366,6 +368,7 @@ public sealed class PrivateModuleWorkflowServiceTests
             (_, _) => false);
 
         Assert.False(result.OperationPerformed);
+        Assert.True(result.OperationSkipped);
         Assert.Equal("Company", result.RepositoryName);
         Assert.Empty(result.DependencyResults);
         Assert.False(executorCalled);
@@ -430,6 +433,7 @@ public sealed class PrivateModuleWorkflowServiceTests
             (_, _) => false);
 
         Assert.False(result.OperationPerformed);
+        Assert.True(result.OperationSkipped);
         Assert.Equal("Company", result.RepositoryName);
         Assert.Empty(result.DependencyResults);
         Assert.False(executorCalled);

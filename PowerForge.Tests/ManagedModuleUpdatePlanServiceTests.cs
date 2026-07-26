@@ -370,6 +370,31 @@ public sealed class ManagedModuleUpdatePlanServiceTests
     }
 
     [Fact]
+    public async Task PlanUpdateAsync_uses_platform_source_semantics_for_case_only_path_difference()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(installedPath);
+        var caseVariant = ToggleCase(feed.Path);
+        WriteReceipt(installedPath, "Local", caseVariant);
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.SourcePolicy = new ManagedModuleSourcePolicy();
+
+        var plan = await service.PlanUpdateAsync(request);
+
+        Assert.Equal(
+            ManagedModuleRepositorySourceComparer.Equals(caseVariant, feed.Path),
+            plan.SourcePolicySatisfied);
+    }
+
+    [Fact]
     public async Task PlanUpdateAsync_blocks_source_repair_when_installed_version_is_newer_than_target()
     {
         using var feed = new TemporaryDirectory();
@@ -404,6 +429,11 @@ public sealed class ManagedModuleUpdatePlanServiceTests
             Scope = ManagedModuleInstallScope.Custom,
             ModuleRoot = moduleRoot
         };
+
+    private static string ToggleCase(string value)
+        => new(value.Select(character => char.IsLetter(character)
+            ? char.IsUpper(character) ? char.ToLowerInvariant(character) : char.ToUpperInvariant(character)
+            : character).ToArray());
 
     private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version)
         => CreateModuleFiles("Company.Tools", version);

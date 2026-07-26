@@ -1194,7 +1194,7 @@ internal static partial class WebPipelineRunner
         };
     }
 
-    private static (int ExitCode, string Output, string Error) RunGitCommand(
+    internal static (int ExitCode, string Output, string Error) RunGitCommand(
         string workingDirectory,
         IReadOnlyList<string> args,
         string? authHeader,
@@ -1265,6 +1265,9 @@ internal static partial class WebPipelineRunner
 
             throw new InvalidOperationException($"git-sync timed out after {timeoutSeconds}s.");
         }
+
+        // Timed waits do not drain asynchronous output handlers before returning.
+        process.WaitForExit();
 
         return (process.ExitCode, stdout.ToString().Trim(), stderr.ToString().Trim());
     }

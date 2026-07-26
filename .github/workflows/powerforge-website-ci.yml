@@ -25,6 +25,11 @@ on:
         required: false
         type: string
         default: "10.0.x"
+      dotnet_workloads:
+        description: Optional comma, semicolon, or whitespace-separated .NET workloads to install before running the website pipeline.
+        required: false
+        type: string
+        default: ""
       report_artifact_name:
         required: false
         type: string
@@ -98,6 +103,7 @@ jobs:
       runner_labels_json: ${{ inputs.runner_labels_json }}
       timeout_minutes: ${{ inputs.timeout_minutes }}
       dotnet_version: ${{ inputs.dotnet_version }}
+      dotnet_workloads: ${{ inputs.dotnet_workloads }}
       report_artifact_name: ${{ inputs.report_artifact_name }}
       powerforge_lock_path: ${{ inputs.powerforge_lock_path }}
       powerforge_repository: ${{ inputs.powerforge_repository }}

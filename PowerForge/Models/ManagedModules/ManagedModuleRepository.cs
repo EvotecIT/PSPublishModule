@@ -81,7 +81,7 @@ public sealed class ManagedModuleRepository
         if (Path.IsPathRooted(source) || source.StartsWith(".", StringComparison.Ordinal))
             return ManagedModuleRepositoryKind.LocalFolder;
 
-        if (source.IndexOfAny(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }) >= 0)
+        if (source.IndexOfAny(new[] { '/', '\\' }) >= 0)
             return ManagedModuleRepositoryKind.LocalFolder;
 
         return ManagedModuleRepositoryKind.NuGetV3;

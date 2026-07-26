@@ -4,7 +4,7 @@ using System.Text;
 namespace PowerForge;
 
 /// <summary>
-/// Shared host service for invoking repository <c>Build-Module.ps1</c> scripts.
+/// Shared host service for invoking repository module builds from JSON configuration or legacy scripts.
 /// </summary>
 public sealed class ModuleBuildHostService
 {
@@ -35,7 +35,14 @@ public sealed class ModuleBuildHostService
         ValidateRequiredPath(request.OutputPath, nameof(request.OutputPath));
 
         var script = BuildExportScript(request.RepositoryRoot, request.ScriptPath, request.OutputPath, request.ModulePath);
-        return RunCommandAsync(request.RepositoryRoot, script, cancellationToken);
+        return RunCommandAsync(
+            request.RepositoryRoot,
+            script,
+            TimeSpan.FromMinutes(15),
+            preferPwsh: !FrameworkCompatibility.IsWindows(),
+            requiredRuntimeMajor: 0,
+            progress: null,
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>
@@ -45,36 +52,177 @@ public sealed class ModuleBuildHostService
     {
         FrameworkCompatibility.NotNull(request, nameof(request));
         ValidateRequiredPath(request.RepositoryRoot, nameof(request.RepositoryRoot));
-        ValidateRequiredPath(request.ScriptPath, nameof(request.ScriptPath));
         ValidateRequiredPath(request.ModulePath, nameof(request.ModulePath));
 
-        var script = BuildBuildScript(request.RepositoryRoot, request.ScriptPath, request.ModulePath, request);
-        return RunCommandAsync(request.RepositoryRoot, script, cancellationToken);
+        var hasConfigPath = !string.IsNullOrWhiteSpace(request.ConfigPath);
+        var hasScriptPath = !string.IsNullOrWhiteSpace(request.ScriptPath);
+        if (hasConfigPath == hasScriptPath)
+            throw new ArgumentException("Exactly one of ConfigPath or ScriptPath is required.", nameof(request));
+
+        var script = hasConfigPath
+            ? BuildConfigScript(request.RepositoryRoot, request.ConfigPath!, request.ModulePath, request)
+            : BuildBuildScript(request.RepositoryRoot, request.ScriptPath!, request.ModulePath, request);
+        var timeout = request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(2) : request.Timeout;
+        var hostRequirements = ResolveHostRequirements(request.Framework);
+        return RunCommandAsync(
+            request.RepositoryRoot,
+            script,
+            timeout,
+            preferPwsh: hostRequirements.PreferPwsh,
+            requiredRuntimeMajor: hostRequirements.RequiredRuntimeMajor,
+            progress: request.Progress,
+            cancellationToken: cancellationToken);
     }
 
-    private async Task<ModuleBuildHostExecutionResult> RunCommandAsync(string workingDirectory, string script, CancellationToken cancellationToken)
+    private async Task<ModuleBuildHostExecutionResult> RunCommandAsync(
+        string workingDirectory,
+        string script,
+        TimeSpan timeout,
+        bool preferPwsh,
+        int requiredRuntimeMajor,
+        IPowerForgeReleaseProgressReporterV2? progress,
+        CancellationToken cancellationToken)
     {
         var startedAt = Stopwatch.StartNew();
-        var result = await Task.Run(() => _powerShellRunner.Run(PowerShellRunRequest.ForCommand(
-            commandText: script,
-            timeout: TimeSpan.FromMinutes(15),
-            preferPwsh: !FrameworkCompatibility.IsWindows(),
-            workingDirectory: workingDirectory,
-            executableOverride: Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE"))), cancellationToken).ConfigureAwait(false);
+        var executableOverride = Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE");
+        var environment = progress is null
+            ? null
+            : new Dictionary<string, string?>
+            {
+                [ModulePipelineProgressProtocol.EnvironmentVariable] = "1"
+            };
+        string? progressFailure = null;
+        Action<string>? outputLineReceived = progress is null
+            ? null
+            : line =>
+            {
+                var failure = ForwardProgress(line, progress);
+                if (!string.IsNullOrWhiteSpace(failure))
+                    progressFailure = failure;
+            };
+        var runRequest = requiredRuntimeMajor > 0
+            ? PowerShellRunRequest.ForCompatibleCommand(
+                commandText: script,
+                timeout: timeout,
+                requiredRuntimeMajor: requiredRuntimeMajor,
+                workingDirectory: workingDirectory,
+                environmentVariables: environment,
+                executableOverride: executableOverride,
+                captureOutput: true,
+                captureError: true,
+                outputLineReceived: outputLineReceived,
+                errorLineReceived: null)
+            : PowerShellRunRequest.ForCommand(
+                commandText: script,
+                timeout: timeout,
+                preferPwsh: preferPwsh,
+                workingDirectory: workingDirectory,
+                environmentVariables: environment,
+                executableOverride: executableOverride,
+                captureOutput: true,
+                captureError: true,
+                outputLineReceived: outputLineReceived,
+                errorLineReceived: null);
+        var result = _powerShellRunner is ICancellablePowerShellRunner cancellableRunner
+            ? await cancellableRunner.RunAsync(runRequest, cancellationToken).ConfigureAwait(false)
+            : await Task.Run(() => _powerShellRunner.Run(runRequest), cancellationToken).ConfigureAwait(false);
         startedAt.Stop();
 
         return new ModuleBuildHostExecutionResult {
             ExitCode = result.ExitCode,
             Duration = startedAt.Elapsed,
-            StandardOutput = result.StdOut,
+            StandardOutput = progress is null ? result.StdOut : StripProgressLines(result.StdOut),
             StandardError = result.StdErr,
+            FailureMessage = progressFailure,
             Executable = result.Executable
         };
     }
 
+    private static string StripProgressLines(string output)
+    {
+        if (string.IsNullOrEmpty(output))
+            return output;
+
+        var lines = output
+            .Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)
+            .Where(line => !ModulePipelineProgressProtocol.IsProtocolLine(line));
+        return string.Join(Environment.NewLine, lines).TrimEnd('\r', '\n');
+    }
+
+    private static string? ForwardProgress(
+        string line,
+        IPowerForgeReleaseProgressReporterV2 progress)
+    {
+        if (!ModulePipelineProgressProtocol.TryParse(line, out var message) || message is null)
+            return null;
+
+        if (message.Items is { Length: > 0 })
+            progress.ItemsPlanned(PowerForgeReleaseProgressPhase.Module, message.Items);
+
+        if (message.Item is not null && message.State.HasValue)
+            progress.ItemUpdated(message.Item, message.State.Value, message.Detail);
+
+        return message.State == PowerForgeReleaseProgressItemState.Failed
+            ? message.Detail
+            : null;
+    }
+
+    private static PowerShellHostRequirements ResolveHostRequirements(string? framework)
+    {
+        var defaultPreference = !FrameworkCompatibility.IsWindows();
+
+        if (string.IsNullOrWhiteSpace(framework))
+            return new PowerShellHostRequirements(defaultPreference, 0);
+
+        var targetFramework = framework!.Trim();
+        if (string.Equals(targetFramework, "auto", StringComparison.OrdinalIgnoreCase))
+            return new PowerShellHostRequirements(preferPwsh: true, requiredRuntimeMajor: 8);
+
+        if (targetFramework.StartsWith("netcoreapp", StringComparison.OrdinalIgnoreCase))
+        {
+            var coreVersionText = targetFramework.Substring("netcoreapp".Length);
+            return Version.TryParse(coreVersionText, out var coreVersion)
+                ? new PowerShellHostRequirements(preferPwsh: true, requiredRuntimeMajor: coreVersion.Major)
+                : new PowerShellHostRequirements(preferPwsh: true, requiredRuntimeMajor: 0);
+        }
+
+        if (!targetFramework.StartsWith("net", StringComparison.OrdinalIgnoreCase))
+            return new PowerShellHostRequirements(defaultPreference, 0);
+
+        var versionText = targetFramework.Substring(3);
+        var platformSeparator = versionText.IndexOf('-');
+        if (platformSeparator >= 0)
+            versionText = versionText.Substring(0, platformSeparator);
+
+        // Compact TFMs such as net472 target .NET Framework. Modern .NET TFMs
+        // use a dotted version (net8.0, net10.0) and require pwsh on Windows.
+        // This also prevents self-release from preloading an installed net472
+        // PSPublishModule assembly that cannot be unloaded before the local build.
+        if (versionText.IndexOf('.') >= 0
+            && Version.TryParse(versionText, out var version)
+            && version.Major >= 5)
+        {
+            return new PowerShellHostRequirements(preferPwsh: true, requiredRuntimeMajor: version.Major);
+        }
+
+        return new PowerShellHostRequirements(defaultPreference, 0);
+    }
+
+    private sealed class PowerShellHostRequirements
+    {
+        public PowerShellHostRequirements(bool preferPwsh, int requiredRuntimeMajor)
+        {
+            PreferPwsh = preferPwsh;
+            RequiredRuntimeMajor = requiredRuntimeMajor;
+        }
+
+        public bool PreferPwsh { get; }
+        public int RequiredRuntimeMajor { get; }
+    }
+
     private static string BuildExportScript(string repositoryRoot, string scriptPath, string outputPath, string modulePath)
     {
-        var moduleRoot = Directory.GetParent(Path.GetDirectoryName(scriptPath)!)?.FullName ?? repositoryRoot;
+        var moduleRoot = ResolveModuleRoot(repositoryRoot, scriptPath);
         return string.Join(Environment.NewLine, new[] {
             "$ErrorActionPreference = 'Stop'",
             $"Set-Location -LiteralPath {QuoteLiteral(moduleRoot)}",
@@ -159,7 +307,7 @@ public sealed class ModuleBuildHostService
 
     private static string BuildBuildScript(string repositoryRoot, string scriptPath, string modulePath, ModuleBuildHostBuildRequest request)
     {
-        var moduleRoot = Directory.GetParent(Path.GetDirectoryName(scriptPath)!)?.FullName ?? repositoryRoot;
+        var moduleRoot = ResolveModuleRoot(repositoryRoot, scriptPath);
         var invocation = BuildScriptInvocation(scriptPath, request);
         return string.Join(Environment.NewLine, new[] {
             "$ErrorActionPreference = 'Stop'",
@@ -167,6 +315,93 @@ public sealed class ModuleBuildHostService
             BuildModuleImportClause(modulePath),
             invocation
         });
+    }
+
+    private static string BuildConfigScript(string repositoryRoot, string configPath, string modulePath, ModuleBuildHostBuildRequest request)
+    {
+        var invocation = BuildConfigInvocation(configPath, request);
+        return string.Join(Environment.NewLine, new[] {
+            "$ErrorActionPreference = 'Stop'",
+            $"Set-Location -LiteralPath {QuoteLiteral(repositoryRoot)}",
+            BuildModuleImportClause(modulePath),
+            invocation
+        });
+    }
+
+    private static string BuildConfigInvocation(string configPath, ModuleBuildHostBuildRequest request)
+    {
+        var arguments = new List<string>
+        {
+            "$moduleBuildCommand = Get-Command -Name Invoke-ModuleBuild -CommandType Cmdlet -Module PSPublishModule -ErrorAction Stop",
+            $"$moduleBuildArguments = @{{ ConfigPath = {QuoteLiteral(configPath)}; ExitCode = $true }}"
+        };
+
+        AddDirectStringArgument(arguments, "BuildConfiguration", request.Configuration);
+        AddDirectStringArgument(arguments, "BuildFramework", request.Framework);
+        if (request.RunMode.HasValue)
+            AddDirectStringArgument(arguments, "RunMode", request.RunMode.Value.ToString());
+        AddDirectStringArgument(arguments, "ModuleVersion", request.ModuleVersion);
+        if (request.PreReleaseTag is not null)
+            AddDirectStringArgument(arguments, "PreReleaseTag", request.PreReleaseTag);
+        AddDirectStringArgument(arguments, "StagingPath", request.StagingPath);
+        if (request.ReuseStaging)
+            arguments.Add("$moduleBuildArguments['ReuseStaging'] = $true");
+        AddDirectBooleanArgument(
+            arguments,
+            "NoDotnetBuild",
+            request.NoDotnetBuild
+                ? true
+                : request.NoDotnetBuildWasSpecified
+                    ? false
+                    : null);
+        if (request.NoSign)
+            arguments.Add("$moduleBuildArguments['NoSign'] = $true");
+        else
+            AddDirectBooleanArgument(
+                arguments,
+                "SignModule",
+                request.SignModule
+                    ? true
+                    : request.SignModuleWasSpecified
+                        ? false
+                        : null);
+        if (!request.IncludeProjectPackages)
+            arguments.Add("$moduleBuildArguments['IncludeProjectPackages'] = $false");
+        if (!request.IncludeModulePublishing)
+            arguments.Add("$moduleBuildArguments['IncludeModulePublishing'] = $false");
+        if (request.SkipInstall)
+            arguments.Add("$moduleBuildArguments['SkipInstall'] = $true");
+        if (request.UnifiedGitHubRelease)
+            arguments.Add("$moduleBuildArguments['PowerForgeUnifiedGitHubRelease'] = $true");
+
+        AddDirectStringArgument(arguments, "CertificateThumbprint", request.CertificateThumbprint);
+        AddDirectBooleanArgument(arguments, "SignIncludeBinaries", request.SignIncludeBinaries);
+        AddDirectBooleanArgument(arguments, "SignIncludeInternals", request.SignIncludeInternals);
+        AddDirectBooleanArgument(arguments, "SignIncludeExe", request.SignIncludeExe);
+        AddDirectStringArgument(arguments, "DiagnosticsBaselinePath", request.DiagnosticsBaselinePath);
+        AddDirectBooleanArgument(arguments, "GenerateDiagnosticsBaseline", request.GenerateDiagnosticsBaseline);
+        AddDirectBooleanArgument(arguments, "UpdateDiagnosticsBaseline", request.UpdateDiagnosticsBaseline);
+        AddDirectBooleanArgument(arguments, "FailOnNewDiagnostics", request.FailOnNewDiagnostics);
+        AddDirectStringArgument(arguments, "FailOnDiagnosticsSeverity", request.FailOnDiagnosticsSeverity);
+        arguments.Add("& $moduleBuildCommand @moduleBuildArguments");
+
+        return string.Join(Environment.NewLine, arguments);
+    }
+
+    private static void AddDirectStringArgument(List<string> arguments, string parameterName, string? value)
+    {
+        if (value is null)
+            return;
+
+        arguments.Add($"$moduleBuildArguments['{parameterName}'] = {QuoteLiteral(value)}");
+    }
+
+    private static void AddDirectBooleanArgument(List<string> arguments, string parameterName, bool? value)
+    {
+        if (!value.HasValue)
+            return;
+
+        arguments.Add($"$moduleBuildArguments['{parameterName}'] = ${value.Value.ToString().ToLowerInvariant()}");
     }
 
     private static string BuildScriptInvocation(string scriptPath, ModuleBuildHostBuildRequest request)
@@ -178,9 +413,35 @@ public sealed class ModuleBuildHostService
             "$buildScriptArguments = @{}"
         };
 
+        if (request.RequireReusableOutput)
+        {
+            arguments.Add("if (-not $buildScriptCommand.Parameters.ContainsKey('NoDotnetBuild') -or -not $buildScriptCommand.Parameters.ContainsKey('StagingPath')) { throw 'Deferred module publication requires the legacy build script to expose NoDotnetBuild and StagingPath parameters.' }");
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Configuration))
         {
             arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('Configuration')) {{ $buildScriptArguments['Configuration'] = {QuoteLiteral(request.Configuration!)} }}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Framework))
+        {
+            arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('Framework')) {{ $buildScriptArguments['Framework'] = {QuoteLiteral(request.Framework!)} }}");
+        }
+
+        if (request.RunMode.HasValue)
+        {
+            var runMode = request.RunMode.Value.ToString();
+            arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('RunMode')) {{ $buildScriptArguments['RunMode'] = {QuoteLiteral(runMode)} }} elseif ($buildScriptCommand.Parameters.ContainsKey('ConfigurationGateMode')) {{ $buildScriptArguments['ConfigurationGateMode'] = {QuoteLiteral(runMode)} }}");
+        }
+
+        if (request.PowerForgeReleaseStage)
+        {
+            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('PowerForgeReleaseStage')) { $buildScriptArguments['PowerForgeReleaseStage'] = $true }");
+        }
+
+        if (request.UnifiedGitHubRelease)
+        {
+            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('PowerForgeUnifiedGitHubRelease')) { $buildScriptArguments['PowerForgeUnifiedGitHubRelease'] = $true }");
         }
 
         if (request.NoDotnetBuild)
@@ -198,6 +459,11 @@ public sealed class ModuleBuildHostService
             arguments.Add($"$buildScriptArguments['PreReleaseTag'] = {QuoteLiteral(request.PreReleaseTag!)}");
         }
 
+        if (!string.IsNullOrWhiteSpace(request.StagingPath))
+        {
+            arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('StagingPath')) {{ $buildScriptArguments['StagingPath'] = {QuoteLiteral(request.StagingPath!)} }}");
+        }
+
         if (request.NoSign)
             arguments.Add("$buildScriptArguments['NoSign'] = $true");
 
@@ -206,15 +472,61 @@ public sealed class ModuleBuildHostService
             arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('SignModule')) { $buildScriptArguments['SignModule'] = $true }");
         }
 
+        arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('IncludeProjectPackages')) {{ $buildScriptArguments['IncludeProjectPackages'] = ${request.IncludeProjectPackages.ToString().ToLowerInvariant()} }}");
+        arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('IncludeModulePublishing')) {{ $buildScriptArguments['IncludeModulePublishing'] = ${request.IncludeModulePublishing.ToString().ToLowerInvariant()} }}");
+
+        AddOptionalStringArgument(arguments, "CertificateThumbprint", request.CertificateThumbprint);
+        AddOptionalSwitchArgument(arguments, "SignIncludeBinaries", request.SignIncludeBinaries);
+        AddOptionalSwitchArgument(arguments, "SignIncludeInternals", request.SignIncludeInternals);
+        AddOptionalSwitchArgument(arguments, "SignIncludeExe", request.SignIncludeExe);
+        AddOptionalStringArgument(arguments, "DiagnosticsBaselinePath", request.DiagnosticsBaselinePath);
+        AddOptionalSwitchArgument(arguments, "GenerateDiagnosticsBaseline", request.GenerateDiagnosticsBaseline);
+        AddOptionalSwitchArgument(arguments, "UpdateDiagnosticsBaseline", request.UpdateDiagnosticsBaseline);
+        AddOptionalSwitchArgument(arguments, "FailOnNewDiagnostics", request.FailOnNewDiagnostics);
+        AddOptionalStringArgument(arguments, "FailOnDiagnosticsSeverity", request.FailOnDiagnosticsSeverity);
+
         arguments.Add(". $buildScriptPath @buildScriptArguments");
 
         return string.Join(Environment.NewLine, arguments);
     }
 
+    private static void AddOptionalStringArgument(List<string> arguments, string parameterName, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        arguments.Add(
+            $"if ($buildScriptCommand.Parameters.ContainsKey('{parameterName}')) {{ $buildScriptArguments['{parameterName}'] = {QuoteLiteral(value!)} }}");
+    }
+
+    private static void AddOptionalSwitchArgument(List<string> arguments, string parameterName, bool? value)
+    {
+        if (!value.HasValue)
+            return;
+
+        arguments.Add(
+            $"if ($buildScriptCommand.Parameters.ContainsKey('{parameterName}')) {{ $buildScriptArguments['{parameterName}'] = ${value.Value.ToString().ToLowerInvariant()} }}");
+    }
+
     private static string BuildModuleImportClause(string modulePath)
         => File.Exists(modulePath)
-            ? $"try {{ Import-Module {QuoteLiteral(modulePath)} -Force -ErrorAction Stop }} catch {{ Import-Module PSPublishModule -Force -ErrorAction Stop }}"
+            ? $"Import-Module {QuoteLiteral(modulePath)} -Force -ErrorAction Stop"
             : "Import-Module PSPublishModule -Force -ErrorAction Stop";
+
+    private static string ResolveModuleRoot(string repositoryRoot, string scriptPath)
+    {
+        var scriptDirectory = Path.GetDirectoryName(scriptPath);
+        if (!string.IsNullOrWhiteSpace(scriptDirectory))
+            return Directory.GetParent(scriptDirectory)?.FullName ?? repositoryRoot;
+
+        var scriptSeparator = Math.Max(scriptPath.LastIndexOf('/'), scriptPath.LastIndexOf('\\'));
+        if (scriptSeparator <= 0)
+            return repositoryRoot;
+
+        var foreignScriptDirectory = scriptPath.Substring(0, scriptSeparator);
+        var parentSeparator = Math.Max(foreignScriptDirectory.LastIndexOf('/'), foreignScriptDirectory.LastIndexOf('\\'));
+        return parentSeparator > 0 ? foreignScriptDirectory.Substring(0, parentSeparator) : repositoryRoot;
+    }
 
     private static string QuoteLiteral(string value)
         => $"'{(value ?? string.Empty).Replace("'", "''")}'";

@@ -118,6 +118,7 @@ public sealed class NuGetPackagePublishServiceTests
             File.WriteAllText(oldPackagePath, "old");
 
             var pushed = new List<string>();
+            var remotePublishAttempts = 0;
             var suppressCompanionSymbols = new List<bool>();
             var service = new NuGetPackagePublishService(
                 new NullLogger(),
@@ -136,9 +137,11 @@ public sealed class NuGetPackagePublishServiceTests
                 "key",
                 "https://api.nuget.org/v3/index.json",
                 skipDuplicate: true,
-                suppressCompanionSymbols: true);
+                suppressCompanionSymbols: true,
+                remotePublishAttempted: () => remotePublishAttempts++);
 
             Assert.True(result.Success);
+            Assert.Equal(1, remotePublishAttempts);
             Assert.Equal(new[] { packagePath }, pushed);
             Assert.Equal(new[] { true }, suppressCompanionSymbols);
             Assert.Contains(packagePath, result.PublishedItems, StringComparer.OrdinalIgnoreCase);
@@ -148,6 +151,38 @@ public sealed class NuGetPackagePublishServiceTests
         {
             try { root.Delete(recursive: true); } catch { }
         }
+    }
+
+    [Fact]
+    public void ExecutePackages_DoesNotRecordRemoteAttemptForMissingPackage()
+    {
+        var missingPackage = Path.Combine(
+            Path.GetTempPath(),
+            "pf-nuget-publish-missing-" + Guid.NewGuid().ToString("N"),
+            "Sample.1.0.0.nupkg");
+        var remotePublishAttempts = 0;
+        var pushCalls = 0;
+        var service = new NuGetPackagePublishService(
+            new NullLogger(),
+            _ =>
+            {
+                pushCalls++;
+                return new DotNetRepositoryReleaseService.PackagePushResult
+                {
+                    Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Published
+                };
+            });
+
+        var result = service.ExecutePackages(
+            new[] { missingPackage },
+            "key",
+            "https://api.nuget.org/v3/index.json",
+            skipDuplicate: true,
+            remotePublishAttempted: () => remotePublishAttempts++);
+
+        Assert.False(result.Success);
+        Assert.Equal(0, remotePublishAttempts);
+        Assert.Equal(0, pushCalls);
     }
 
     [Fact]

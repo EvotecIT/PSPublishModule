@@ -19,33 +19,48 @@ internal sealed class ModuleStateFamilyCoherenceAnalyzer
             if (policy.CoherenceRule != ModuleStateFamilyCoherenceRule.SameVersion)
                 continue;
 
-            var installedFamilyModules = inventory.InstalledModules
+            var installedFamilyEstates = inventory.InstalledModules
                 .Where(module => policy.Matches(module.Name))
-                .GroupBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
-                .Select(static group => SelectInstalledModule(group))
-                .Where(static module => module is not null)
-                .Cast<ModuleStateInstalledModule>()
-                .ToArray();
+                .GroupBy(
+                    static module => ModuleStatePathIdentity.CreateEstateKey(
+                        module.PowerShellEdition,
+                        module.Scope,
+                        ModuleStatePathIdentity.ResolveModuleRoot(module),
+                        module.ProfileName),
+                    StringComparer.Ordinal);
 
-            if (installedFamilyModules.Length <= 1)
-                continue;
+            foreach (var estate in installedFamilyEstates)
+            {
+                var installedFamilyModules = estate
+                    .GroupBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(static group => SelectInstalledModule(group))
+                    .Where(static module => module is not null)
+                    .Cast<ModuleStateInstalledModule>()
+                    .ToArray();
+                if (installedFamilyModules.Length <= 1)
+                    continue;
 
-            var versions = installedFamilyModules
-                .Select(static module => ModuleStateVersion.NormalizeOrOriginal(module.Version))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(static version => version, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+                var versions = installedFamilyModules
+                    .Select(static module => ModuleStateVersion.NormalizeOrOriginal(module.Version))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(static version => version, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                if (versions.Length <= 1)
+                    continue;
 
-            if (versions.Length <= 1)
-                continue;
-
-            findings.Add(new ModuleStateConflictFinding(
-                ModuleStateConflictSeverity.Error,
-                "ModuleState.FamilyVersionMismatch",
-                $"Module family '{policy.Name}' has installed modules from {versions.Length} versions: {string.Join(", ", versions)}.",
-                policy.Name,
-                installedFamilyModules.Select(static module => module.Name).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray(),
-                versions));
+                var placement = installedFamilyModules[0];
+                findings.Add(new ModuleStateConflictFinding(
+                    ModuleStateConflictSeverity.Error,
+                    "ModuleState.FamilyVersionMismatch",
+                    $"Module family '{policy.Name}' has installed modules from {versions.Length} versions in module root '{ModuleStatePathIdentity.ResolveModuleRoot(placement) ?? "<unknown>"}': {string.Join(", ", versions)}.",
+                    policy.Name,
+                    installedFamilyModules.Select(static module => module.Name).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray(),
+                    versions,
+                    placement.Scope,
+                    path: ModuleStatePathIdentity.ResolveModuleRoot(placement),
+                    powerShellEdition: placement.PowerShellEdition,
+                    profileName: placement.ProfileName));
+            }
         }
 
         return findings.ToArray();

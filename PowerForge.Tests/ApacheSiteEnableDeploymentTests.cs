@@ -13,7 +13,7 @@ public sealed class ApacheSiteEnableDeploymentTests
         Assert.True(httpEnable >= 0, "Expected the HTTP site to be enabled.");
         Assert.True(certificateGuard > httpEnable, "Expected certificate validation after HTTP enablement.");
         Assert.True(httpsEnable > certificateGuard, "Expected HTTPS enablement after certificate validation.");
-        Assert.Contains("exit 3", script, StringComparison.Ordinal);
+        Assert.Contains("exit 0", script, StringComparison.Ordinal);
         Assert.Contains("HTTP site enabled; obtain or restore certificate", script, StringComparison.Ordinal);
     }
 

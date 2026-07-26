@@ -40,6 +40,52 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void OptimizeDetailed_DoesNotHashSharedAssetsForPartialHtmlScope()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-partial-hash-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "docs"));
+            var firstPage = Path.Combine(root, "index.html");
+            var secondPage = Path.Combine(root, "docs", "index.html");
+            const string html = "<link rel=\"stylesheet\" href=\"/app.css\"><script src=\"/site.js\"></script>";
+            File.WriteAllText(firstPage, html);
+            File.WriteAllText(secondPage, html);
+            File.WriteAllText(Path.Combine(root, "app.css"), "body { color: red; }");
+            File.WriteAllText(Path.Combine(root, "site.js"), "console.log('ok');");
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                MaxHtmlFiles = 1,
+                AssetPolicy = new AssetPolicySpec
+                {
+                    Hashing = new AssetHashSpec
+                    {
+                        Enabled = true,
+                        Extensions = new[] { ".css", ".js" }
+                    }
+                }
+            });
+
+            Assert.Equal(2, result.HtmlFileCount);
+            Assert.Equal(1, result.HtmlSelectedFileCount);
+            Assert.Equal(0, result.HashedAssetCount);
+            Assert.True(File.Exists(Path.Combine(root, "app.css")));
+            Assert.True(File.Exists(Path.Combine(root, "site.js")));
+            Assert.Equal(html, File.ReadAllText(firstPage));
+            Assert.Equal(html, File.ReadAllText(secondPage));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void OptimizeDetailed_PreservesQuotedJsonLdScriptType()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-jsonld-quote-" + Guid.NewGuid().ToString("N"));

@@ -98,7 +98,7 @@ fi
 
 if [[ "$certificate_available" == 0 ]]; then
   echo "powerforge-apache-site-enable: HTTP site enabled; obtain or restore certificate $certificate_name before enabling HTTPS" >&2
-  exit 3
+  exit 0
 fi
 
 if ! a2ensite "$https_site" >/dev/null; then

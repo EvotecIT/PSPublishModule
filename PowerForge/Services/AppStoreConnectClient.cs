@@ -30,7 +30,7 @@ public sealed partial class AppStoreConnectClient : IDisposable
     {
         _credential = credential ?? throw new ArgumentNullException(nameof(credential));
         _tokenGenerator = tokenGenerator ?? new AppStoreConnectJwtTokenGenerator();
-        _httpClient = httpClient ?? new HttpClient { BaseAddress = DefaultBaseUri };
+        _httpClient = httpClient ?? CreateDefaultHttpClient();
         _disposeClient = httpClient is null;
         if (_httpClient.BaseAddress is null)
             _httpClient.BaseAddress = DefaultBaseUri;
@@ -631,18 +631,29 @@ public sealed partial class AppStoreConnectClient : IDisposable
         ApplePlatform? platform,
         CancellationToken cancellationToken)
     {
-        using var doc = await GetJsonAsync(relativeUrl, cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("App Store Connect API request returned no response body.");
-        if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
-            return Array.Empty<AppStoreConnectBuildInfo>();
-
-        var preReleaseVersions = ReadIncludedPreReleaseVersions(doc.RootElement);
         var list = new List<AppStoreConnectBuildInfo>();
-        foreach (var item in data.EnumerateArray())
+        var visitedPages = new HashSet<string>(StringComparer.Ordinal);
+        string? nextPage = relativeUrl;
+        while (nextPage is not null)
         {
-            var build = ParseBuild(item, preReleaseVersions);
-            if (BuildMatches(build, marketingVersion, platform))
-                list.Add(build);
+            var currentPage = nextPage;
+            if (!visitedPages.Add(currentPage))
+                throw new InvalidOperationException($"App Store Connect API returned a repeated pagination link: {currentPage}");
+
+            using var doc = await GetJsonAsync(currentPage, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("App Store Connect API request returned no response body.");
+            if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
+            {
+                var preReleaseVersions = ReadIncludedPreReleaseVersions(doc.RootElement);
+                foreach (var item in data.EnumerateArray())
+                {
+                    var build = ParseBuild(item, preReleaseVersions);
+                    if (BuildMatches(build, marketingVersion, platform))
+                        list.Add(build);
+                }
+            }
+
+            nextPage = GetNextPageLink(doc.RootElement);
         }
 
         return list.ToArray();
@@ -650,19 +661,14 @@ public sealed partial class AppStoreConnectClient : IDisposable
 
     private async Task<JsonDocument?> GetJsonAsync(string relativeUrl, CancellationToken cancellationToken, bool returnNullOnNotFound = false)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, relativeUrl);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _tokenGenerator.CreateToken(_credential));
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        var response = await SendGetWithTransientRetryAsync(relativeUrl, cancellationToken).ConfigureAwait(false);
         if (returnNullOnNotFound && response.StatusCode == HttpStatusCode.NotFound)
             return null;
 
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"App Store Connect API request failed ({(int)response.StatusCode} {response.ReasonPhrase}): {content}");
+            throw new InvalidOperationException($"App Store Connect API request failed ({(int)response.StatusCode} {response.ReasonPhrase}): {response.Content}");
 
-        return JsonDocument.Parse(content);
+        return JsonDocument.Parse(response.Content);
     }
 
     private async Task<JsonDocument?> SendJsonAsync(HttpMethod method, string relativeUrl, object body, CancellationToken cancellationToken)
@@ -995,7 +1001,9 @@ public sealed partial class AppStoreConnectClient : IDisposable
             ApplePlatform.iPadOS => "IOS",
             ApplePlatform.macOS => "MAC_OS",
             ApplePlatform.tvOS => "TV_OS",
-            ApplePlatform.watchOS => "WATCH_OS",
+            // App Store Connect classifies watch-only and companion Watch apps under IOS.
+            // watchOS remains a distinct Xcode archive destination, not a Platform API value.
+            ApplePlatform.watchOS => "IOS",
             ApplePlatform.visionOS => "VISION_OS",
             _ => platform.ToString().ToUpperInvariant()
         };

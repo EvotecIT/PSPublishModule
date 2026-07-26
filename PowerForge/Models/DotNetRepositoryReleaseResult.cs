@@ -20,7 +20,7 @@ public sealed class DotNetRepositoryReleaseResult
     public Dictionary<string, string> ResolvedVersionsByProject { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Project-level results.</summary>
-    public List<DotNetRepositoryProjectResult> Projects { get; } = new();
+    public List<DotNetRepositoryProjectResult> Projects { get; set; } = new();
 
     /// <summary>Packages pushed to the feed (if publishing).</summary>
     public List<string> PublishedPackages { get; } = new();
@@ -59,10 +59,10 @@ public sealed class DotNetRepositoryProjectResult
     public string? NewVersion { get; set; }
 
     /// <summary>Packages produced for this project.</summary>
-    public List<string> Packages { get; } = new();
+    public List<string> Packages { get; set; } = new();
 
     /// <summary>Portable symbol packages produced for this project.</summary>
-    public List<string> SymbolPackages { get; } = new();
+    public List<string> SymbolPackages { get; set; } = new();
 
     /// <summary>Release zip path (if created).</summary>
     public string? ReleaseZipPath { get; set; }

@@ -42,8 +42,25 @@ internal sealed partial class PowerForgeReleaseService
             .FirstOrDefault(group => group.Count() > 1);
         if (duplicateLocale is not null)
             throw new InvalidOperationException($"Multiple App Information metadata configs match Apple app '{app.Name}' and locale '{duplicateLocale.Key}'.");
+        foreach (var candidate in matches)
+            ValidateAppleAppInfoMetadataPreflight(candidate);
 
         return matches.Select(static candidate => candidate.Spec).ToArray();
+    }
+
+    private static void ValidateAppleAppInfoMetadataPreflight(
+        (AppStoreConnectAppInfoMetadataSpec Spec, string ConfigPath) configured)
+    {
+        if (string.IsNullOrWhiteSpace(configured.Spec.Locale))
+        {
+            throw new InvalidOperationException(
+                $"App Information metadata config must declare Locale: {configured.ConfigPath}");
+        }
+        if (configured.Spec.Metadata is null)
+        {
+            throw new InvalidOperationException(
+                $"App Information metadata config must declare a Metadata object: {configured.ConfigPath}");
+        }
     }
 
     private static Dictionary<string, AppStoreConnectAppInfoMetadataSpec[]> IndexAppInfoSpecsByAppId(

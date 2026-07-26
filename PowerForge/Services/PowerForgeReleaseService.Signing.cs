@@ -1,0 +1,476 @@
+using System.IO.Compression;
+
+namespace PowerForge;
+
+internal sealed partial class PowerForgeReleaseService
+{
+    /// <summary>
+    /// Rebuilds tool, module, and package archives from output directories that were signed after the unified build,
+    /// refreshes staged copies, and rewrites release summary files whose hashes changed.
+    /// </summary>
+    internal static IReadOnlyList<string> RefreshBuiltArchivesAfterSigning(
+        PowerForgeReleaseResult result,
+        IReadOnlyCollection<string> signedOutputDirectories,
+        IReadOnlyCollection<string>? signedFiles = null)
+    {
+        if (result is null)
+            throw new ArgumentNullException(nameof(result));
+        if (signedOutputDirectories is null)
+            throw new ArgumentNullException(nameof(signedOutputDirectories));
+
+        var signedDirectories = signedOutputDirectories
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var signedFilePaths = (signedFiles ?? [])
+            .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Select(Path.GetFullPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (signedDirectories.Count == 0 && signedFilePaths.Count == 0)
+            return [];
+
+        var archives = (result.Tools?.Artefacts ?? [])
+            .Select(static artifact => (
+                OutputDirectory: artifact.OutputPath,
+                artifact.ZipPath,
+                Runtime: artifact.Runtime,
+                ExecutablePath: (string?)artifact.ExecutablePath,
+                AliasPath: artifact.CommandAliasPath,
+                IsLegacy: true))
+            .Concat((result.DotNetTools?.Artefacts ?? [])
+                .Select(static artifact => (
+                    OutputDirectory: artifact.OutputDir,
+                    artifact.ZipPath,
+                    Runtime: string.Empty,
+                    ExecutablePath: (string?)null,
+                    AliasPath: (string?)null,
+                    IsLegacy: false)))
+            .Where(static artifact =>
+                !string.IsNullOrWhiteSpace(artifact.OutputDirectory) &&
+                !string.IsNullOrWhiteSpace(artifact.ZipPath))
+            .Select(static artifact => (
+                OutputDirectory: Path.GetFullPath(artifact.OutputDirectory),
+                ZipPath: Path.GetFullPath(artifact.ZipPath!),
+                artifact.Runtime,
+                artifact.ExecutablePath,
+                artifact.AliasPath,
+                artifact.IsLegacy))
+            .Where(artifact => signedDirectories.Contains(artifact.OutputDirectory))
+            .GroupBy(static artifact => artifact.ZipPath, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .ToArray();
+
+        var refreshed = new List<string>(archives.Length);
+        foreach (var archive in archives)
+        {
+            if (!Directory.Exists(archive.OutputDirectory))
+                throw new DirectoryNotFoundException($"Signed tool output directory was not found: {archive.OutputDirectory}");
+
+            RecreateArchive(archive.OutputDirectory, archive.ZipPath);
+            if (archive.IsLegacy)
+            {
+                PowerForgeToolReleaseService.ApplyArchiveExecutablePermissions(
+                    archive.Runtime,
+                    archive.OutputDirectory,
+                    archive.ZipPath,
+                    archive.ExecutablePath,
+                    archive.AliasPath);
+            }
+            refreshed.Add(archive.ZipPath);
+            refreshed.AddRange(RefreshStagedCopies(result, archive.ZipPath));
+        }
+
+        refreshed.AddRange(RefreshModuleArchives(result, signedDirectories));
+        refreshed.AddRange(RefreshPackageArchives(result, signedDirectories));
+        foreach (var signedFile in signedFilePaths)
+        {
+            refreshed.AddRange(RefreshStagedCopies(result, signedFile));
+        }
+
+        if (refreshed.Count > 0)
+            RewriteReleaseSummaryFiles(result);
+
+        return refreshed
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<string> RefreshModuleArchives(
+        PowerForgeReleaseResult result,
+        ISet<string> signedDirectories)
+    {
+        var archivePaths = result.ReleaseAssetEntries
+            .Where(static entry => entry.Category == PowerForgeReleaseAssetCategory.Module)
+            .Select(static entry => entry.Path)
+            .Concat((result.ModuleAssets ?? [])
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .SelectMany(static path => File.Exists(path)
+                    ? new[] { path }
+                    : Directory.Exists(path)
+                        ? Directory.EnumerateFiles(path, "*.zip", SearchOption.TopDirectoryOnly)
+                        : Array.Empty<string>()))
+            .Where(static path =>
+                !string.IsNullOrWhiteSpace(path) &&
+                path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+                File.Exists(path))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var refreshed = new List<string>();
+        foreach (var archivePath in archivePaths)
+        {
+            var sourceDirectory = ResolveModuleArchiveSource(archivePath, signedDirectories);
+            if (sourceDirectory is null)
+            {
+                throw new InvalidOperationException(
+                    $"Signed module output matching archive '{archivePath}' was not found. The unsigned archive cannot be published.");
+            }
+
+            RecreateArchiveFromExistingEntries(sourceDirectory, archivePath);
+            refreshed.Add(archivePath);
+            refreshed.AddRange(RefreshStagedCopies(result, archivePath));
+        }
+
+        return refreshed;
+    }
+
+    private static IReadOnlyList<string> RefreshPackageArchives(
+        PowerForgeReleaseResult result,
+        ISet<string> signedDirectories)
+    {
+        var archivePaths = result.ReleaseAssetEntries
+            .Where(static entry =>
+                entry.Category == PowerForgeReleaseAssetCategory.Package &&
+                entry.Path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+                File.Exists(entry.Path))
+            .Select(static entry => Path.GetFullPath(entry.Path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var refreshed = new List<string>();
+        foreach (var archivePath in archivePaths)
+        {
+            var sourceDirectory = ResolvePackageArchiveSource(archivePath, signedDirectories);
+            if (sourceDirectory is null)
+            {
+                throw new InvalidOperationException(
+                    $"Signed package output matching archive '{archivePath}' was not found. The unsigned archive cannot be published.");
+            }
+
+            RecreateArchiveFromExistingEntries(sourceDirectory, archivePath);
+            refreshed.Add(archivePath);
+            refreshed.AddRange(RefreshStagedCopies(result, archivePath));
+        }
+
+        return refreshed;
+    }
+
+    private static string? ResolvePackageArchiveSource(
+        string archivePath,
+        IEnumerable<string> signedDirectories)
+    {
+        string[] archiveEntries;
+        using (var archive = ZipFile.OpenRead(archivePath))
+        {
+            archiveEntries = archive.Entries
+                .Where(static entry => !string.IsNullOrWhiteSpace(entry.Name))
+                .Select(static entry => entry.FullName.Replace('/', Path.DirectorySeparatorChar))
+                .ToArray();
+        }
+
+        if (archiveEntries.Length == 0)
+            return null;
+
+        foreach (var signedDirectory in signedDirectories.Where(Directory.Exists))
+        {
+            var candidates = new[] { signedDirectory }
+                .Concat(Directory.EnumerateDirectories(signedDirectory, "*", SearchOption.AllDirectories));
+            foreach (var candidate in candidates)
+            {
+                if (archiveEntries.All(entry => File.Exists(Path.Combine(candidate, entry))))
+                    return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static void RecreateArchiveFromExistingEntries(string sourceDirectory, string archivePath)
+    {
+        var entries = new List<(string FullName, DateTimeOffset LastWriteTime, bool IsDirectory)>();
+        using (var existing = ZipFile.OpenRead(archivePath))
+        {
+            entries.AddRange(existing.Entries.Select(static entry => (
+                entry.FullName,
+                entry.LastWriteTime,
+                IsDirectory: string.IsNullOrWhiteSpace(entry.Name))));
+        }
+
+        var temporaryArchive = Path.Combine(
+            Path.GetTempPath(),
+            $"powerforge-signed-module-{Guid.NewGuid():N}.zip");
+        try
+        {
+            using (var archive = ZipFile.Open(temporaryArchive, ZipArchiveMode.Create))
+            {
+                foreach (var entry in entries)
+                {
+                    var rebuilt = archive.CreateEntry(
+                        entry.FullName,
+                        entry.IsDirectory ? CompressionLevel.NoCompression : CompressionLevel.Optimal);
+                    rebuilt.LastWriteTime = entry.LastWriteTime;
+                    if (entry.IsDirectory)
+                        continue;
+
+                    var sourcePath = Path.Combine(
+                        sourceDirectory,
+                        entry.FullName.Replace('/', Path.DirectorySeparatorChar));
+                    using var source = File.OpenRead(sourcePath);
+                    using var destination = rebuilt.Open();
+                    source.CopyTo(destination);
+                }
+            }
+
+            File.Copy(temporaryArchive, archivePath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryArchive))
+                File.Delete(temporaryArchive);
+        }
+    }
+
+    private static string? ResolveModuleArchiveSource(
+        string archivePath,
+        ISet<string> signedDirectories)
+    {
+        string[] archiveEntries;
+        using (var archive = ZipFile.OpenRead(archivePath))
+        {
+            archiveEntries = archive.Entries
+                .Where(static entry => !string.IsNullOrWhiteSpace(entry.Name))
+                .Select(static entry => entry.FullName.Replace('\\', '/'))
+                .ToArray();
+        }
+
+        var manifestEntries = archiveEntries
+            .Where(static entry => entry.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static entry => entry.Count(character => character == '/'))
+            .ThenBy(static entry => entry, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (manifestEntries.Length == 0)
+            return null;
+        var archiveManifestVersions = ReadArchiveManifestVersions(archivePath, manifestEntries);
+
+        foreach (var signedDirectory in signedDirectories.Where(Directory.Exists))
+        {
+            foreach (var manifestPath in Directory.EnumerateFiles(signedDirectory, "*.psd1", SearchOption.AllDirectories))
+            {
+                var candidateIdentity = ReadModuleManifestVersionIdentity(File.ReadAllText(manifestPath));
+                if (candidateIdentity is null)
+                    continue;
+
+                foreach (var manifestEntry in manifestEntries)
+                {
+                    if (!archiveManifestVersions.TryGetValue(manifestEntry, out var archiveVersion) ||
+                        !ModuleVersionsMatch(archiveVersion, candidateIdentity))
+                    {
+                        continue;
+                    }
+
+                    var sourceRoot = ResolveArchiveRootFromManifest(manifestPath, manifestEntry);
+                    if (sourceRoot is null || !Directory.Exists(sourceRoot))
+                        continue;
+                    if (archiveEntries.All(entry => File.Exists(Path.Combine(
+                            sourceRoot,
+                            entry.Replace('/', Path.DirectorySeparatorChar)))))
+                    {
+                        return sourceRoot;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyDictionary<string, ModuleManifestVersionIdentity> ReadArchiveManifestVersions(
+        string archivePath,
+        IReadOnlyCollection<string> manifestEntries)
+    {
+        var versions = new Dictionary<string, ModuleManifestVersionIdentity>(StringComparer.OrdinalIgnoreCase);
+        using var archive = ZipFile.OpenRead(archivePath);
+        foreach (var manifestEntry in manifestEntries)
+        {
+            var entry = archive.GetEntry(manifestEntry);
+            if (entry is null)
+                continue;
+
+            using var reader = new StreamReader(entry.Open());
+            var manifestText = reader.ReadToEnd();
+            var identity = ReadModuleManifestVersionIdentity(manifestText);
+            if (identity is not null)
+                versions[manifestEntry] = identity;
+        }
+
+        return versions;
+    }
+
+    private static ModuleManifestVersionIdentity? ReadModuleManifestVersionIdentity(string manifestText)
+    {
+        if (!ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(
+                manifestText,
+                "ModuleVersion",
+                out var version) ||
+            string.IsNullOrWhiteSpace(version))
+        {
+            return null;
+        }
+
+        string? preRelease = null;
+        try
+        {
+            if (ModuleManifestTextParser.TryGetPsDataStringValue(
+                    manifestText,
+                    "Prerelease",
+                    out var psDataPrerelease) &&
+                !string.IsNullOrWhiteSpace(psDataPrerelease))
+            {
+                preRelease = psDataPrerelease;
+            }
+        }
+        catch
+        {
+            // Best effort: invalid optional PSData must not hide the numeric version.
+        }
+
+        if (preRelease is null &&
+            ModuleManifestTextParser.TryGetQuotedStringValue(
+                manifestText,
+                "Prerelease",
+                out var manifestPrerelease) &&
+            !string.IsNullOrWhiteSpace(manifestPrerelease))
+        {
+            preRelease = manifestPrerelease;
+        }
+
+        return new ModuleManifestVersionIdentity(
+            version!,
+            NormalizeModulePreRelease(preRelease));
+    }
+
+    private static bool ModuleVersionsMatch(
+        ModuleManifestVersionIdentity archiveVersion,
+        ModuleManifestVersionIdentity candidateVersion)
+    {
+        var numericVersionsMatch = Version.TryParse(archiveVersion.Version, out var parsedArchive) &&
+                                   Version.TryParse(candidateVersion.Version, out var parsedCandidate)
+            ? parsedArchive.Equals(parsedCandidate)
+            : string.Equals(
+                archiveVersion.Version,
+                candidateVersion.Version,
+                StringComparison.OrdinalIgnoreCase);
+
+        return numericVersionsMatch &&
+               string.Equals(
+                   archiveVersion.PreRelease,
+                   candidateVersion.PreRelease,
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeModulePreRelease(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value!.Trim().TrimStart('-');
+
+    private sealed class ModuleManifestVersionIdentity
+    {
+        internal ModuleManifestVersionIdentity(string version, string preRelease)
+        {
+            Version = version;
+            PreRelease = preRelease;
+        }
+
+        internal string Version { get; }
+
+        internal string PreRelease { get; }
+    }
+
+    private static string? ResolveArchiveRootFromManifest(string manifestPath, string manifestEntry)
+    {
+        if (!string.Equals(
+                Path.GetFileName(manifestPath),
+                Path.GetFileName(manifestEntry),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var directory = new DirectoryInfo(Path.GetDirectoryName(manifestPath)!);
+        var entryDirectories = manifestEntry
+            .Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries)
+            .Length - 1;
+        for (var index = 0; index < entryDirectories; index++)
+        {
+            directory = directory.Parent;
+            if (directory is null)
+                return null;
+        }
+
+        var expectedManifest = Path.Combine(
+            directory.FullName,
+            manifestEntry.Replace('/', Path.DirectorySeparatorChar));
+        return string.Equals(
+            Path.GetFullPath(expectedManifest),
+            Path.GetFullPath(manifestPath),
+            StringComparison.OrdinalIgnoreCase)
+            ? directory.FullName
+            : null;
+    }
+
+    private static void RecreateArchive(string sourceDirectory, string archivePath)
+    {
+        var archiveDirectory = Path.GetDirectoryName(archivePath)
+            ?? throw new InvalidOperationException($"Archive path has no parent directory: {archivePath}");
+        Directory.CreateDirectory(archiveDirectory);
+
+        var temporaryArchive = Path.Combine(
+            Path.GetTempPath(),
+            $"powerforge-signed-{Guid.NewGuid():N}.zip");
+        try
+        {
+            ZipFile.CreateFromDirectory(
+                sourceDirectory,
+                temporaryArchive,
+                CompressionLevel.Optimal,
+                includeBaseDirectory: false);
+            File.Copy(temporaryArchive, archivePath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryArchive))
+                File.Delete(temporaryArchive);
+        }
+    }
+
+    private static IReadOnlyList<string> RefreshStagedCopies(PowerForgeReleaseResult result, string sourcePath)
+    {
+        var refreshed = new List<string>();
+        foreach (var entry in result.ReleaseAssetEntries.Where(entry =>
+                     !string.IsNullOrWhiteSpace(entry.Path) &&
+                     string.Equals(Path.GetFullPath(entry.Path), sourcePath, StringComparison.OrdinalIgnoreCase) &&
+                     !string.IsNullOrWhiteSpace(entry.StagedPath)))
+        {
+            var stagedPath = Path.GetFullPath(entry.StagedPath!);
+            if (string.Equals(stagedPath, sourcePath, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            Directory.CreateDirectory(Path.GetDirectoryName(stagedPath)!);
+            File.Copy(sourcePath, stagedPath, overwrite: true);
+            refreshed.Add(stagedPath);
+        }
+
+        return refreshed;
+    }
+}

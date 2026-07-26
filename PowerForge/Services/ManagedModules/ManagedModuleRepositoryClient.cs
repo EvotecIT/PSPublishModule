@@ -558,7 +558,7 @@ public sealed partial class ManagedModuleRepositoryClient
         string packageId,
         bool includePrerelease)
     {
-        var root = ResolveLocalFolder(repository.Source);
+        var root = ManagedModuleRepositoryPathResolver.ResolveLocalFolder(repository.Source);
         if (!Directory.Exists(root))
             throw CreateLocalRepositoryException(repository, "VersionQuery", $"Local repository folder was not found: {root}");
 
@@ -608,7 +608,7 @@ public sealed partial class ManagedModuleRepositoryClient
         int take,
         int skip)
     {
-        var root = ResolveLocalFolder(repository.Source);
+        var root = ManagedModuleRepositoryPathResolver.ResolveLocalFolder(repository.Source);
         if (!Directory.Exists(root))
             throw CreateLocalRepositoryException(repository, "Search", $"Local repository folder was not found: {root}");
 
@@ -861,8 +861,19 @@ public sealed partial class ManagedModuleRepositoryClient
         string destinationDirectory,
         CancellationToken cancellationToken)
     {
-        var match = GetLocalVersions(repository, packageId, includePrerelease: true)
-            .FirstOrDefault(item => item.Version.Equals(version, StringComparison.OrdinalIgnoreCase));
+        var matches = GetLocalVersions(repository, packageId, includePrerelease: true)
+            .Where(item => ManagedModuleVersionComparer.Instance.Compare(item.Version, version) == 0)
+            .ToArray();
+        if (matches.Length > 1)
+        {
+            throw CreateLocalRepositoryException(
+                repository,
+                "Download",
+                $"Local repository '{repository.Name}' contains multiple package files for " +
+                $"'{packageId}' version '{version}': {string.Join(", ", matches.Select(static item => item.PackageSource))}");
+        }
+
+        var match = matches.SingleOrDefault();
         if (match?.PackageSource is null)
             throw CreateLocalRepositoryException(repository, "Download", $"Package '{packageId}' version '{version}' was not found in local repository '{repository.Name}'.");
 
@@ -1435,14 +1446,6 @@ public sealed partial class ManagedModuleRepositoryClient
         using var sha256 = SHA256.Create();
         var hash = sha256.ComputeHash(stream);
         return string.Concat(hash.Select(static value => value.ToString("x2")));
-    }
-
-    private static string ResolveLocalFolder(string source)
-    {
-        if (Uri.TryCreate(source, UriKind.Absolute, out var uri) && uri.IsFile)
-            return uri.LocalPath;
-
-        return Path.GetFullPath(source.Trim().Trim('"'));
     }
 
     private static string EnsureTrailingSlash(string value)

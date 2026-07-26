@@ -1,0 +1,63 @@
+name: PowerForge Cloudflare DNS Record
+description: Idempotently create or update a proxied Cloudflare DNS record from a caller-owned protected environment.
+
+inputs:
+  api-token:
+    description: Protected Cloudflare API token with Zone > DNS > Edit and Zone > Zone > Read permissions for the target zone.
+    required: true
+  zone-name:
+    description: Authoritative Cloudflare zone name, for example evotec.xyz.
+    required: true
+  record-name:
+    description: Fully qualified DNS record name, for example control.evotec.xyz.
+    required: true
+  record-content:
+    description: IPv4, IPv6, or canonical target value for the record.
+    required: true
+  record-type:
+    description: Supported DNS record type (A, AAAA, or CNAME).
+    required: false
+    default: A
+  proxied:
+    description: Whether Cloudflare should proxy the record.
+    required: false
+    default: "true"
+  ttl:
+    description: DNS TTL in seconds; use 1 for automatic, which is required for proxied records.
+    required: false
+    default: "1"
+  comment:
+    description: Optional Cloudflare record comment managed by PowerForge.
+    required: false
+    default: Managed by PowerForge
+  dry-run:
+    description: Report whether the record would change without writing it.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Reject pull request DNS changes
+      if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'merge_group' }}
+      shell: pwsh
+      run: throw 'PowerForge protected Cloudflare DNS changes cannot run from pull request events.'
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+      with:
+        global-json-file: ${{ github.action_path }}/../../../global.json
+
+    - name: Reconcile Cloudflare DNS record
+      shell: pwsh
+      env:
+        POWERFORGE_CLOUDFLARE_API_TOKEN: ${{ inputs.api-token }}
+        POWERFORGE_CLOUDFLARE_DNS_COMMENT: ${{ inputs.comment }}
+        POWERFORGE_CLOUDFLARE_DNS_CONTENT: ${{ inputs.record-content }}
+        POWERFORGE_CLOUDFLARE_DNS_DRY_RUN: ${{ inputs.dry-run }}
+        POWERFORGE_CLOUDFLARE_DNS_NAME: ${{ inputs.record-name }}
+        POWERFORGE_CLOUDFLARE_DNS_PROXIED: ${{ inputs.proxied }}
+        POWERFORGE_CLOUDFLARE_DNS_TTL: ${{ inputs.ttl }}
+        POWERFORGE_CLOUDFLARE_DNS_TYPE: ${{ inputs.record-type }}
+        POWERFORGE_CLOUDFLARE_ZONE_NAME: ${{ inputs.zone-name }}
+      run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeCloudflareDnsRecord.ps1"'

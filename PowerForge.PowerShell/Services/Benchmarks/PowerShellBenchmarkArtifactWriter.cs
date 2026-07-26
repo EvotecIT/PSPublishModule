@@ -67,6 +67,11 @@ internal static class PowerShellBenchmarkArtifactWriter
     /// <param name="result">Run result.</param>
     public static void UpdateReadmeBlocks(PowerShellBenchmarkSuite suite, BenchmarkRunResult result)
     {
+        if (result.Samples.Any(sample => sample.Status == BenchmarkSampleStatus.Failed))
+        {
+            return;
+        }
+
         var updater = new BenchmarkDocumentUpdater();
         var renderer = new BenchmarkMarkdownRenderer();
         foreach (var block in suite.ReadmeBlocks)

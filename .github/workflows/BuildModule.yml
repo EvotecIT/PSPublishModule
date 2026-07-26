@@ -117,7 +117,7 @@ jobs:
       - name: Build PSPublishModule
         shell: pwsh
         timeout-minutes: 15
-        run: .\Build\Build-Module.ps1
+        run: .\Build\Build-Project.ps1 -ModuleOnly
 
       - name: Run live Azure Artifacts validation
         shell: pwsh
@@ -231,7 +231,7 @@ jobs:
       - name: Build Module
         shell: pwsh
         timeout-minutes: 10
-        run: .\Build\Build-Module.ps1
+        run: .\Build\Build-Project.ps1 -ModuleOnly
 
       - name: Test with Windows PowerShell 5.1
         shell: pwsh
@@ -244,6 +244,56 @@ jobs:
         shell: pwsh
         timeout-minutes: 10
         run: .\PSPublishModule.Tests.ps1
+  ProductBuildSmoke:
+    runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","windows"]' || '["windows-latest"]') }}
+    timeout-minutes: 60
+    env:
+      DbaClientXRoot: ${{ github.workspace }}\_dependencies\DbaClientX
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check out the shared DbaClientX source
+        uses: actions/checkout@v4
+        with:
+          repository: EvotecIT/DbaClientX
+          path: _dependencies/DbaClientX
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: ${{ runner.os }}-product-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-product-nuget-
+            ${{ runner.os }}-nuget-
+
+      - name: Restore core product graph
+        shell: pwsh
+        run: dotnet restore .\PSPublishModule.Core.slnf --force-evaluate
+
+      - name: Build core product graph
+        shell: pwsh
+        run: dotnet build .\PSPublishModule.Core.slnf -c Release --no-restore --nologo
+
+      - name: Run core release contracts
+        shell: pwsh
+        timeout-minutes: 5
+        run: >
+          dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
+          -c Release --no-restore --no-build --nologo
+          --filter 'FullyQualifiedName~DotNetPublishPipelineRunnerCancellationTests|FullyQualifiedName~GitHubReleasePublisherTests|FullyQualifiedName~RepositoryPublisherTests'
+
+      - name: Run no-publish core product build smoke
+        shell: pwsh
+        timeout-minutes: 30
+        run: .\Build\Test-ProductBuild.ps1 -Runtime win-x64
   LinuxBuild:
     # The type of runner that the job will run on
     # Prefer private/self-hosted runners for private repos to reduce hosted spend.
@@ -270,7 +320,7 @@ jobs:
       - name: Build Module
         shell: pwsh
         timeout-minutes: 10
-        run: .\Build\Build-Module.ps1
+        run: .\Build\Build-Project.ps1 -ModuleOnly
 
       - name: Test Linux website deployment state machine
         shell: bash
@@ -310,7 +360,7 @@ jobs:
       - name: Build Module
         shell: pwsh
         timeout-minutes: 10
-        run: .\Build\Build-Module.ps1
+        run: .\Build\Build-Project.ps1 -ModuleOnly
 
       - name: Test with Pester
         shell: pwsh

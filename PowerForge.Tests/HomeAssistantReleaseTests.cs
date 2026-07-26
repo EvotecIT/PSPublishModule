@@ -48,16 +48,16 @@ public sealed class HomeAssistantReleaseTests {
     }
 
     [Fact]
-    public void ReleaseNotes_RecordTheExactTagCommit() {
+    public void ReleaseMetadata_RecordsProvenanceWithoutVisiblePlaceholder() {
         const string releaseCommit = "cccccccccccccccccccccccccccccccccccccccc";
-        var notes = HomeAssistantReleasePolicy.BuildReleaseNotes(
-            new HomeAssistantPullRequest { Number = 42, Title = "Fix telemetry", HtmlUrl = "https://github.example/pull/42" },
+        var notes = HomeAssistantReleasePolicy.BuildReleaseMetadata(
             HomeAssistantReleasePolicy.BuildMarker(42, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
             releaseCommit,
             requiredAsset: null);
 
         Assert.Equal(releaseCommit, HomeAssistantReleasePolicy.ReadReleaseCommit(notes));
         Assert.Null(HomeAssistantReleasePolicy.ReadRequiredAsset(notes));
+        Assert.DoesNotContain("Release triggered by", notes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -616,8 +616,7 @@ public sealed class HomeAssistantReleaseTests {
         var release = new HomeAssistantGitHubRelease {
             Id = 123,
             TagName = "v0.2.7",
-            Body = HomeAssistantReleasePolicy.BuildReleaseNotes(
-                new HomeAssistantPullRequest { Number = 42, Title = "Fix", HtmlUrl = "https://github.example/pull/42" },
+            Body = HomeAssistantReleasePolicy.BuildReleaseMetadata(
                 marker,
                 releaseCommit,
                 "example.zip"),
@@ -659,6 +658,9 @@ public sealed class HomeAssistantReleaseTests {
         Assert.Equal(123, publisher.CapturedRequest.ExpectedExistingReleaseId);
         Assert.Equal(marker, publisher.CapturedRequest.ExpectedReleaseBodyMarker);
         Assert.Equal(releaseCommit, publisher.CapturedRequest.ExpectedTagCommitSha);
+        Assert.True(publisher.CapturedRequest.GenerateReleaseNotes);
+        Assert.Contains(marker, publisher.CapturedRequest.ReleaseNotes, StringComparison.Ordinal);
+        Assert.DoesNotContain("Release triggered by", publisher.CapturedRequest.ReleaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]

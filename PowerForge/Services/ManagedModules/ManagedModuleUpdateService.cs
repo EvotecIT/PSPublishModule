@@ -666,22 +666,10 @@ public sealed class ManagedModuleUpdateService
             return SourcePolicyEvaluation.Failed($"Receipt repository name '{receipt.RepositoryName}' does not match requested repository '{request.Repository.Name}'.", receipt);
 
         if (request.SourcePolicy.RequireRepositorySourceMatch &&
-            !NormalizeRepositorySource(receipt.RepositorySource).Equals(NormalizeRepositorySource(request.Repository.Source), StringComparison.OrdinalIgnoreCase))
+            !ManagedModuleRepositorySourceComparer.Equals(receipt.RepositorySource, request.Repository.Source))
             return SourcePolicyEvaluation.Failed("Receipt repository source does not match the requested repository source.", receipt);
 
         return SourcePolicyEvaluation.Satisfied(receipt);
-    }
-
-    private static string NormalizeRepositorySource(string? source)
-    {
-        if (string.IsNullOrWhiteSpace(source))
-            return string.Empty;
-
-        var trimmed = source!.Trim().Trim('"');
-        if (Path.IsPathRooted(trimmed))
-            return Path.GetFullPath(trimmed).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        return trimmed.TrimEnd('/', '\\');
     }
 
     private static ManagedModuleFamilyUpdatePlanAction ResolveFamilyPlanAction(

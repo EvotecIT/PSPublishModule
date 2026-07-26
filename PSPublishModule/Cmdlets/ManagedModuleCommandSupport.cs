@@ -49,6 +49,48 @@ internal static class ManagedModuleCommandSupport
             profile.Trusted);
     }
 
+    internal static ManagedModuleRepository CreateRepository(PSCmdlet cmdlet, ManagedModuleVersionInfo resource)
+    {
+        if (resource is null)
+            throw new ArgumentNullException(nameof(resource));
+        if (string.IsNullOrWhiteSpace(resource.RepositorySource))
+            throw new InvalidOperationException("InputObject repository source is required.");
+
+        if (!string.IsNullOrWhiteSpace(resource.RepositoryProfileName))
+        {
+            return CreateRepository(
+                cmdlet,
+                resource.RepositoryName,
+                resource.RepositorySource,
+                resource.RepositoryProfileName,
+                repositoryWasBound: false);
+        }
+
+        if (!string.IsNullOrWhiteSpace(resource.RepositoryName))
+        {
+            try
+            {
+                var registered = CreateRepository(cmdlet, DefaultRepositoryName, resource.RepositoryName);
+                if (SourcesEqual(registered.Source, resource.RepositorySource))
+                    return registered;
+            }
+            catch (InvalidOperationException)
+            {
+                // Direct repository results do not require a registered repository.
+            }
+        }
+
+        var source = ResolveRepositorySource(cmdlet, resource.RepositorySource);
+        var name = string.IsNullOrWhiteSpace(resource.RepositoryName)
+            ? ResolveRepositoryName(DefaultRepositoryName, source)
+            : resource.RepositoryName.Trim();
+        return new ManagedModuleRepository(
+            name,
+            source,
+            ManagedModuleRepositoryKind.Auto,
+            IsBuiltInDefaultRepository(name, source));
+    }
+
     internal static ManagedModuleRepository CreateScriptRepository(
         PSCmdlet cmdlet,
         string repositoryName,
@@ -288,36 +330,7 @@ internal static class ManagedModuleCommandSupport
     }
 
     private static bool SourcesEqual(string expected, string? actual)
-    {
-        if (string.IsNullOrWhiteSpace(actual))
-            return false;
-
-        return string.Equals(
-            NormalizeSourceForComparison(expected),
-            NormalizeSourceForComparison(actual!),
-            StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string NormalizeSourceForComparison(string source)
-    {
-        var trimmed = source.Trim().Trim('"');
-        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
-            trimmed = uri.IsFile ? uri.LocalPath : trimmed.TrimEnd('/');
-
-        if (Path.IsPathRooted(trimmed) || LooksLikeLocalPath(trimmed))
-        {
-            try
-            {
-                return Path.GetFullPath(trimmed).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            }
-            catch
-            {
-                return trimmed.TrimEnd('/', '\\');
-            }
-        }
-
-        return trimmed.TrimEnd('/', '\\');
-    }
+        => ManagedModuleRepositorySourceComparer.Equals(expected, actual);
 
     private static string ResolveRepositorySource(
         PSCmdlet cmdlet,

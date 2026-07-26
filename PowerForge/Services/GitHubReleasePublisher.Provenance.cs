@@ -2,6 +2,7 @@ using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.Serialization;
+using System.Threading;
 
 namespace PowerForge;
 
@@ -14,13 +15,14 @@ public sealed partial class GitHubReleasePublisher {
         long releaseId,
         string tagName,
         string? expectedReleaseBodyMarker,
-        string? expectedTagCommitSha) {
+        string? expectedTagCommitSha,
+        CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(expectedReleaseBodyMarker) && string.IsNullOrWhiteSpace(expectedTagCommitSha)) return;
 
-        var currentRelease = GetReleaseByTag(owner, repo, token, apiBaseUrl, tagName, reusedExistingRelease: true);
+        var currentRelease = GetReleaseByTag(owner, repo, token, apiBaseUrl, tagName, reusedExistingRelease: true, cancellationToken);
         var currentTagCommitSha = string.IsNullOrWhiteSpace(expectedTagCommitSha)
             ? null
-            : GetTagCommitSha(owner, repo, token, apiBaseUrl, tagName);
+            : GetTagCommitSha(owner, repo, token, apiBaseUrl, tagName, cancellationToken);
         ValidateExpectedReleaseState(
             tagName,
             releaseId,
@@ -58,12 +60,12 @@ public sealed partial class GitHubReleasePublisher {
         }
     }
 
-    private static string? GetTagCommitSha(string owner, string repo, string token, string apiBaseUrl, string tagName) {
-        var reference = GetGitObject(token, apiBaseUrl, $"/repos/{owner}/{repo}/git/ref/tags/{Uri.EscapeDataString(tagName)}");
+    private static string? GetTagCommitSha(string owner, string repo, string token, string apiBaseUrl, string tagName, CancellationToken cancellationToken) {
+        var reference = GetGitObject(token, apiBaseUrl, $"/repos/{owner}/{repo}/git/ref/tags/{Uri.EscapeDataString(tagName)}", cancellationToken);
         var sha = reference.Sha;
         var type = reference.Type;
         for (var depth = 0; string.Equals(type, "tag", StringComparison.OrdinalIgnoreCase) && depth < 10; depth++) {
-            var annotated = GetGitObject(token, apiBaseUrl, $"/repos/{owner}/{repo}/git/tags/{sha}");
+            var annotated = GetGitObject(token, apiBaseUrl, $"/repos/{owner}/{repo}/git/tags/{sha}", cancellationToken);
             sha = annotated.Sha;
             type = annotated.Type;
         }
@@ -73,11 +75,11 @@ public sealed partial class GitHubReleasePublisher {
         return string.IsNullOrWhiteSpace(sha) ? null : sha;
     }
 
-    private static GitHubGitObjectResponse GetGitObject(string token, string apiBaseUrl, string path) {
+    private static GitHubGitObjectResponse GetGitObject(string token, string apiBaseUrl, string path, CancellationToken cancellationToken) {
         var uri = BuildApiUri(apiBaseUrl, path);
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        var response = SharedClient.SendAsync(request).ConfigureAwait(false).GetAwaiter().GetResult();
+        var response = SharedClient.SendAsync(request, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
         var responseText = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
         using (response) {
             if (!response.IsSuccessStatusCode)

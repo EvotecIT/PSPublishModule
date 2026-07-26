@@ -35,7 +35,11 @@ public sealed class AppStoreConnectScreenshotSyncService
         if (string.IsNullOrWhiteSpace(spec.AppId))
             throw new ArgumentException("Spec.AppId is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(spec.VersionString) && string.IsNullOrWhiteSpace(spec.VersionId))
-            throw new ArgumentException("Spec.VersionString or Spec.VersionId is required.", nameof(request));
+            throw new ArgumentException(
+                spec.UseReleaseVersion
+                    ? "Spec.UseReleaseVersion must be resolved by the unified Apple release workflow before screenshot sync."
+                    : "Spec.VersionString or Spec.VersionId is required.",
+                nameof(request));
         if (string.IsNullOrWhiteSpace(spec.Locale))
             throw new ArgumentException("Spec.Locale is required.", nameof(request));
         if (spec.ScreenshotSets.Length == 0)
@@ -48,6 +52,17 @@ public sealed class AppStoreConnectScreenshotSyncService
             .ToArray();
         if (duplicateDisplayTypes.Length > 0)
             throw new ArgumentException($"Duplicate screenshot display type mapping: {string.Join(", ", duplicateDisplayTypes)}", nameof(request));
+
+        var validation = new AppStoreConnectScreenshotSyncConfigValidator()
+            .Validate(spec, request.BaseDirectory);
+        if (!validation.IsValid)
+        {
+            var messages = validation.Messages
+                .Concat(validation.ScreenshotSets.SelectMany(static set => set.Messages))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            throw new InvalidOperationException(
+                $"Screenshot preflight failed: {string.Join(" ", messages)}");
+        }
 
         var preflightedSets = spec.ScreenshotSets
             .Select(setSpec => PreflightScreenshotSet(request.BaseDirectory, setSpec))
@@ -89,11 +104,12 @@ public sealed class AppStoreConnectScreenshotSyncService
             if (set is not null)
                 existingScreenshots = await _client.GetScreenshotsAsync(set.Id, limit: 200, cancellationToken).ConfigureAwait(false);
 
-            if (!request.ReplaceExisting && existingScreenshots.Length + preflightedSet.Files.Length > AppleScreenshotSetLimit)
+            var missingFiles = FindMissingFiles(preflightedSet.Files, existingScreenshots);
+            if (!request.ReplaceExisting && existingScreenshots.Length + missingFiles.Length > AppleScreenshotSetLimit)
             {
                 throw new InvalidOperationException(
                     $"Screenshot display type '{preflightedSet.ScreenshotDisplayType}' already has {existingScreenshots.Length} screenshots; " +
-                    $"uploading {preflightedSet.Files.Length} more would exceed Apple's {AppleScreenshotSetLimit} screenshots per set limit.");
+                    $"uploading {missingFiles.Length} missing screenshots would exceed Apple's {AppleScreenshotSetLimit} screenshots per set limit.");
             }
 
             plannedSets.Add(new PlannedScreenshotSet(preflightedSet, set, existingScreenshots));
@@ -111,17 +127,33 @@ public sealed class AppStoreConnectScreenshotSyncService
             }
 
             var deletedCount = 0;
+            var filesToUpload = FindMissingFiles(plannedSet.Preflighted.Files, plannedSet.ExistingScreenshots);
             if (request.ReplaceExisting)
             {
-                foreach (var screenshot in plannedSet.ExistingScreenshots)
+                var retainedIds = new HashSet<string>(StringComparer.Ordinal);
+                var prefixLength = 0;
+                while (prefixLength < plannedSet.Preflighted.Files.Length &&
+                       prefixLength < plannedSet.ExistingScreenshots.Length)
+                {
+                    var expected = ComputeSourceChecksum(plannedSet.Preflighted.Files[prefixLength]);
+                    var existing = plannedSet.ExistingScreenshots[prefixLength];
+                    if (!string.Equals(expected, existing.SourceFileChecksum, StringComparison.OrdinalIgnoreCase))
+                        break;
+                    retainedIds.Add(existing.Id);
+                    prefixLength++;
+                }
+
+                foreach (var screenshot in plannedSet.ExistingScreenshots.Where(screenshot => !retainedIds.Contains(screenshot.Id)))
                 {
                     await _client.DeleteScreenshotAsync(screenshot.Id, cancellationToken).ConfigureAwait(false);
                     deletedCount++;
                 }
+
+                filesToUpload = plannedSet.Preflighted.Files.Skip(prefixLength).ToArray();
             }
 
             var uploaded = new List<AppStoreConnectScreenshotUploadResult>();
-            foreach (var file in plannedSet.Preflighted.Files)
+            foreach (var file in filesToUpload)
                 uploaded.Add(await _client.UploadScreenshotAsync(set.Id, file, cancellationToken).ConfigureAwait(false));
 
             results.Add(new AppStoreConnectScreenshotSetSyncResult
@@ -140,6 +172,37 @@ public sealed class AppStoreConnectScreenshotSyncService
             Localization = localization,
             ScreenshotSets = results.ToArray()
         };
+    }
+
+    private static string ComputeSourceChecksum(string filePath)
+    {
+        using var stream = File.OpenRead(filePath);
+        using var md5 = System.Security.Cryptography.MD5.Create();
+        return BitConverter.ToString(md5.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static string[] FindMissingFiles(
+        IEnumerable<string> files,
+        IEnumerable<AppStoreConnectScreenshotInfo> existingScreenshots)
+    {
+        var available = existingScreenshots
+            .Where(static screenshot => !string.IsNullOrWhiteSpace(screenshot.SourceFileChecksum))
+            .GroupBy(static screenshot => screenshot.SourceFileChecksum!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                static group => group.Key,
+                static group => group.Count(),
+                StringComparer.OrdinalIgnoreCase);
+        var missing = new List<string>();
+        foreach (var file in files)
+        {
+            var checksum = ComputeSourceChecksum(file);
+            if (available.TryGetValue(checksum, out var count) && count > 0)
+                available[checksum] = count - 1;
+            else
+                missing.Add(file);
+        }
+
+        return missing.ToArray();
     }
 
     private static string ResolvePath(string baseDirectory, string path)

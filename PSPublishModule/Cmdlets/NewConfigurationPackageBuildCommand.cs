@@ -426,8 +426,23 @@ public sealed class NewConfigurationReleaseCommand : PSCmdlet
     /// <summary>Explicit release version used when <see cref="VersionSource"/> is <see cref="ReleaseVersionSource.Manual"/>.</summary>
     [Parameter] public string? Version { get; set; }
 
-    /// <summary>Primary package/project used when the version source is package/project build.</summary>
+    /// <summary>
+    /// Primary package/project used when the version source is a package/project build.
+    /// Required by <c>SynchronizeModuleVersion</c> to identify the package coordinated with module history.
+    /// </summary>
     [Parameter] public string? PrimaryProject { get; set; }
+
+    /// <summary>
+    /// Coordinates the module and selected primary package on one version.
+    /// The next available module version becomes a floor for the primary package; a higher numeric package version still wins.
+    /// At the same numeric version, a stable X-pattern candidate does not erase the configured module prerelease;
+    /// explicit prerelease versions retain normal semantic-version ordering.
+    /// <c>PrimaryProject</c> is required, and exactly one selected lane must run before the module and use
+    /// <c>UseAsReleaseVersionSource</c>. Package groups using <c>AlignPackageVersions</c> are raised together.
+    /// Publish runs persist a credential-free checkpoint so a partial release resumes the exact versions
+    /// and skips destinations that already completed.
+    /// </summary>
+    [Parameter] public SwitchParameter SynchronizeModuleVersion { get; set; }
 
     /// <summary>Preferred build order for high-level release lanes.</summary>
     [Parameter] public string[]? BuildOrder { get; set; }
@@ -446,6 +461,7 @@ public sealed class NewConfigurationReleaseCommand : PSCmdlet
                 VersionSource = VersionSource,
                 Version = Normalize(Version),
                 PrimaryProject = Normalize(PrimaryProject),
+                SynchronizeModuleVersion = SynchronizeModuleVersion.IsPresent,
                 BuildOrder = BuildOrder,
                 PublishOrder = PublishOrder
             }

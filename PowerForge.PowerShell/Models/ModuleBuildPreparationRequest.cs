@@ -11,8 +11,26 @@ internal sealed class ModuleBuildPreparationRequest
     public string? ConfigPath { get; set; }
     public string? ModuleName { get; set; }
     public ConfigurationGateMode? RunMode { get; set; }
+    public string? ModuleVersion { get; set; }
+    public string? PreReleaseTag { get; set; }
+    public string? BuildConfiguration { get; set; }
+    public string? BuildFramework { get; set; }
+    public bool NoDotnetBuild { get; set; }
+    public bool NoDotnetBuildWasBound { get; set; }
+    public bool NoSign { get; set; }
+    public bool NoSignWasBound { get; set; }
+    public bool SignModule { get; set; }
+    public bool SignModuleWasBound { get; set; }
+    public bool IncludeProjectPackages { get; set; } = true;
+    public bool IncludeModulePublishing { get; set; } = true;
+    public bool UnifiedGitHubRelease { get; set; }
+    public string? CertificateThumbprint { get; set; }
+    public bool? SignIncludeBinaries { get; set; }
+    public bool? SignIncludeInternals { get; set; }
+    public bool? SignIncludeExe { get; set; }
     public string? InputPath { get; set; }
     public string? StagingPath { get; set; }
+    public bool ReuseStaging { get; set; }
     public string? CsprojPath { get; set; }
     public string DotNetConfiguration { get; set; } = "Release";
     public string[] DotNetFramework { get; set; } = Array.Empty<string>();
@@ -33,10 +51,15 @@ internal sealed class ModuleBuildPreparationRequest
     public string[] ExcludeDirectories { get; set; } = Array.Empty<string>();
     public string[] ExcludeFiles { get; set; } = Array.Empty<string>();
     public string? DiagnosticsBaselinePath { get; set; }
+    public bool DiagnosticsBaselinePathWasBound { get; set; }
     public bool GenerateDiagnosticsBaseline { get; set; }
+    public bool GenerateDiagnosticsBaselineWasBound { get; set; }
     public bool UpdateDiagnosticsBaseline { get; set; }
+    public bool UpdateDiagnosticsBaselineWasBound { get; set; }
     public bool FailOnNewDiagnostics { get; set; }
+    public bool FailOnNewDiagnosticsWasBound { get; set; }
     public BuildDiagnosticSeverity? FailOnDiagnosticsSeverity { get; set; }
+    public bool FailOnDiagnosticsSeverityWasBound { get; set; }
     public string[]? DiagnosticsBinaryConflictSearchRoot { get; set; }
     public bool JsonOnly { get; set; }
     public string? JsonPath { get; set; }

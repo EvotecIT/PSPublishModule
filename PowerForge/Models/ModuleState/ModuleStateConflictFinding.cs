@@ -10,7 +10,10 @@ internal sealed class ModuleStateConflictFinding
         string[] moduleNames,
         string[] versions,
         string? scope = null,
-        string? sourceRepository = null)
+        string? sourceRepository = null,
+        string? path = null,
+        string? powerShellEdition = null,
+        string? profileName = null)
     {
         Severity = severity;
         Code = code;
@@ -20,6 +23,9 @@ internal sealed class ModuleStateConflictFinding
         Versions = versions;
         Scope = string.IsNullOrWhiteSpace(scope) ? null : scope!.Trim();
         SourceRepository = string.IsNullOrWhiteSpace(sourceRepository) ? null : sourceRepository!.Trim();
+        Path = string.IsNullOrWhiteSpace(path) ? null : path!.Trim();
+        PowerShellEdition = string.IsNullOrWhiteSpace(powerShellEdition) ? null : powerShellEdition!.Trim();
+        ProfileName = string.IsNullOrWhiteSpace(profileName) ? null : profileName!.Trim();
     }
 
     internal ModuleStateConflictSeverity Severity { get; }
@@ -37,6 +43,12 @@ internal sealed class ModuleStateConflictFinding
     internal string? Scope { get; }
 
     internal string? SourceRepository { get; }
+
+    internal string? Path { get; }
+
+    internal string? PowerShellEdition { get; }
+
+    internal string? ProfileName { get; }
 }
 
 internal enum ModuleStateConflictSeverity

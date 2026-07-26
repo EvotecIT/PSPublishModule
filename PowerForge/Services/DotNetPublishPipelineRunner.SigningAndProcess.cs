@@ -113,7 +113,12 @@ public sealed partial class DotNetPublishPipelineRunner
 
             args.Add(file);
             var timeout = TimeSpan.FromSeconds(Math.Max(1, sign.TimeoutSeconds));
-            var res = RunProcessWithTimeout(signToolPath, runDir, args, timeout);
+            var res = RunProcessWithTimeout(
+                signToolPath,
+                runDir,
+                args,
+                timeout,
+                _cancellationToken.Value);
             if (res.ExitCode != 0)
             {
                 var details = TailLines(res.StdErr, maxLines: 10, maxChars: 2000) ?? string.Empty;
@@ -282,7 +287,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyList<string> args,
         IReadOnlyDictionary<string, string?>? environmentVariables = null)
     {
-        var result = RunProcess("dotnet", workingDir, args, environmentVariables);
+        var result = RunCancellableProcess("dotnet", workingDir, args, environmentVariables);
         if (result.ExitCode != 0)
         {
             var stderr = (result.StdErr ?? string.Empty).TrimEnd();
@@ -311,6 +316,26 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
+    private (int ExitCode, string StdOut, string StdErr) RunCancellableProcess(
+        string fileName,
+        string workingDir,
+        IReadOnlyList<string> args,
+        IReadOnlyDictionary<string, string?>? environmentVariables)
+    {
+        var result = _processRunner.RunAsync(
+                new ProcessRunRequest(
+                    fileName,
+                    string.IsNullOrWhiteSpace(workingDir) ? Environment.CurrentDirectory : workingDir,
+                    args,
+                    Timeout.InfiniteTimeSpan,
+                    environmentVariables),
+                _cancellationToken.Value)
+            .GetAwaiter()
+            .GetResult();
+        _cancellationToken.Value.ThrowIfCancellationRequested();
+        return (result.ExitCode, result.StdOut, result.StdErr);
+    }
+
     private static (int ExitCode, string StdOut, string StdErr) RunProcess(
         string fileName,
         string workingDir,
@@ -325,16 +350,25 @@ public sealed partial class DotNetPublishPipelineRunner
         string fileName,
         string workingDir,
         IReadOnlyList<string> args,
-        TimeSpan timeout)
-        => RunProcessCore(fileName, workingDir, args, timeout, environmentVariables: null);
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+        => RunProcessCore(
+            fileName,
+            workingDir,
+            args,
+            timeout,
+            environmentVariables: null,
+            cancellationToken);
 
     private static (int ExitCode, string StdOut, string StdErr, bool TimedOut) RunProcessCore(
         string fileName,
         string workingDir,
         IReadOnlyList<string> args,
         TimeSpan? timeout,
-        IReadOnlyDictionary<string, string?>? environmentVariables)
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
@@ -367,6 +401,9 @@ public sealed partial class DotNetPublishPipelineRunner
 #endif
 
         using var p = Process.Start(psi)!;
+        using var cancellationRegistration = cancellationToken.Register(
+            static state => TryKillProcessTree((Process)state!),
+            p);
         if (timeout.HasValue && timeout.Value > TimeSpan.Zero && timeout.Value != Timeout.InfiniteTimeSpan)
         {
             var stdoutBuilder = new StringBuilder();
@@ -404,12 +441,14 @@ public sealed partial class DotNetPublishPipelineRunner
             p.WaitForExit();
             stdoutDone.Wait(TimeSpan.FromSeconds(5));
             stderrDone.Wait(TimeSpan.FromSeconds(5));
+            cancellationToken.ThrowIfCancellationRequested();
             return (p.ExitCode, stdoutBuilder.ToString(), stderrBuilder.ToString(), false);
         }
 
         var stdout = p.StandardOutput.ReadToEnd();
         var stderr = p.StandardError.ReadToEnd();
         p.WaitForExit();
+        cancellationToken.ThrowIfCancellationRequested();
         return (p.ExitCode, stdout, stderr, false);
     }
 

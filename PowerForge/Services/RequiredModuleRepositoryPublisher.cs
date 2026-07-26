@@ -32,7 +32,8 @@ internal sealed class RequiredModuleRepositoryPublisher
         PublishRepositoryConfiguration? targetRepository,
         RepositoryCredential? sourceCredential,
         RepositoryCredential? targetCredential,
-        ISet<string>? mirroredPackages = null)
+        ISet<string>? mirroredPackages = null,
+        Action? remoteSideEffectObserved = null)
     {
         if (requiredModule is null) throw new ArgumentNullException(nameof(requiredModule));
         if (string.IsNullOrWhiteSpace(requiredModule.ModuleName)) throw new ArgumentException("Required module name is required.", nameof(requiredModule));
@@ -113,7 +114,8 @@ internal sealed class RequiredModuleRepositoryPublisher
                         Repository = targetRepository,
                         DestinationPath = null,
                         SkipDependenciesCheck = true,
-                        SkipModuleManifestValidate = false
+                        SkipModuleManifestValidate = false,
+                        RemotePublishAttempted = remoteSideEffectObserved
                     });
                 mirroredPackages?.Add(packageKey);
             }

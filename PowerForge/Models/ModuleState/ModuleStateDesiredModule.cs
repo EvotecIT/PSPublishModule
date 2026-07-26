@@ -18,7 +18,10 @@ internal sealed class ModuleStateDesiredModule
         bool acceptLicense = false,
         bool allowClobber = false,
         bool skipDependencyCheck = false,
-        string? targetRepositorySource = null)
+        string? targetRepositorySource = null,
+        string? moduleRoot = null,
+        string? powerShellEdition = null,
+        string? profileName = null)
     {
         Name = string.IsNullOrWhiteSpace(name)
             ? throw new ArgumentException("Desired module name is required.", nameof(name))
@@ -38,6 +41,9 @@ internal sealed class ModuleStateDesiredModule
         AllowClobber = allowClobber;
         SkipDependencyCheck = skipDependencyCheck;
         TargetRepositorySource = string.IsNullOrWhiteSpace(targetRepositorySource) ? null : targetRepositorySource!.Trim();
+        ModuleRoot = NormalizeOptional(moduleRoot);
+        PowerShellEdition = NormalizeOptional(powerShellEdition);
+        ProfileName = NormalizeOptional(profileName);
     }
 
     internal string Name { get; }
@@ -63,4 +69,13 @@ internal sealed class ModuleStateDesiredModule
     internal bool SkipDependencyCheck { get; }
 
     internal string? TargetRepositorySource { get; }
+
+    internal string? ModuleRoot { get; }
+
+    internal string? PowerShellEdition { get; }
+
+    internal string? ProfileName { get; }
+
+    private static string? NormalizeOptional(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
 }

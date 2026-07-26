@@ -170,7 +170,7 @@ public sealed partial class ManagedModuleRepositoryClient
         };
     }
 
-    private static ManagedModulePackagePublishResult PublishLocalPackage(
+    private ManagedModulePackagePublishResult PublishLocalPackage(
         ManagedModuleRepository repository,
         string packagePath,
         bool force)
@@ -179,9 +179,28 @@ public sealed partial class ManagedModuleRepositoryClient
         if (!File.Exists(package))
             throw new FileNotFoundException($"Package file was not found: {package}", package);
 
-        var destinationDirectory = ResolveLocalFolder(repository.Source);
+        var destinationDirectory = ManagedModuleRepositoryPathResolver.ResolveLocalFolder(repository.Source);
         Directory.CreateDirectory(destinationDirectory);
-        var destinationPath = Path.Combine(destinationDirectory, Path.GetFileName(package));
+        var packageMetadata = _packageReader.ReadMetadata(package);
+        var safePackageId = ManagedModulePackageIdentity.RequireSafeId(packageMetadata.Id, nameof(packageMetadata.Id));
+        if (!PackageVersionUtility.TryNormalizeExact(packageMetadata.Version, out var normalizedVersion))
+            throw new InvalidOperationException($"Package '{package}' has an invalid version '{packageMetadata.Version}'.");
+        var safeVersion = ManagedModulePackageIdentity.RequireSafeVersion(normalizedVersion, nameof(packageMetadata.Version));
+        var canonicalDestinationPath = Path.Combine(destinationDirectory, $"{safePackageId}.{safeVersion}.nupkg");
+        var identityMatches = FindLocalPackageIdentityMatches(
+            destinationDirectory,
+            packageMetadata.Id,
+            normalizedVersion);
+        if (identityMatches.Length > 1)
+        {
+            throw new InvalidOperationException(
+                $"Local repository '{repository.Name}' contains multiple package files for " +
+                $"'{packageMetadata.Id}' version '{packageMetadata.Version}': {string.Join(", ", identityMatches)}");
+        }
+
+        var destinationPath = identityMatches.Length == 1
+            ? identityMatches[0]
+            : canonicalDestinationPath;
         if (File.Exists(destinationPath) && !force)
         {
             return new ManagedModulePackagePublishResult
@@ -194,8 +213,14 @@ public sealed partial class ManagedModuleRepositoryClient
             };
         }
 
-        if (!string.Equals(package, destinationPath, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(
+                package,
+                destinationPath,
+                FrameworkCompatibility.GetPathStringComparison(destinationDirectory)) &&
+            !ManagedModuleFileComparer.HaveSameContents(package, destinationPath))
+        {
             File.Copy(package, destinationPath, overwrite: true);
+        }
 
         return new ManagedModulePackagePublishResult
         {
@@ -203,6 +228,32 @@ public sealed partial class ManagedModuleRepositoryClient
             PublishSource = destinationPath,
             Published = true
         };
+    }
+
+    private string[] FindLocalPackageIdentityMatches(
+        string destinationDirectory,
+        string packageId,
+        string version)
+    {
+        var matches = new List<string>();
+        foreach (var candidate in Directory.EnumerateFiles(destinationDirectory, "*.nupkg", SearchOption.AllDirectories))
+        {
+            try
+            {
+                var metadata = _packageReader.ReadMetadata(candidate);
+                if (metadata.Id.Equals(packageId, StringComparison.OrdinalIgnoreCase) &&
+                    ManagedModuleVersionComparer.Instance.Compare(metadata.Version, version) == 0)
+                {
+                    matches.Add(candidate);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Verbose($"Managed module local feed skipped '{candidate}' while checking publish identity: {ex.Message}");
+            }
+        }
+
+        return matches.ToArray();
     }
 
     private static bool IsPackagePublishResource(JsonElement resource)

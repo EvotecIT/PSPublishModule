@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using PowerForge;
+using PowerForge.ConsoleShared;
 using System.Management.Automation;
 using Spectre.Console;
 
@@ -74,8 +75,9 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         }
 
         var interactive = SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+        BufferedLogger? interactiveBuffer = null;
         ILogger logger = interactive
-            ? new SpectreConsoleLogger { IsVerbose = isVerbose }
+            ? interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }
             : new CmdletLogger(this, isVerbose);
         var support = new ProjectBuildSupportService(logger);
 
@@ -106,13 +108,54 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         }
 
         var executeBuild = !preparation.PlanOnly && ShouldProcess(preparation.RootPath, "Build project repository");
-        var workflow = new ProjectBuildWorkflowService(
+        var workflowService = new ProjectBuildWorkflowService(
             logger,
             signAssemblies: DotNetAssemblySigningCallbackFactory.Create(logger),
-            validateAssemblySigning: DotNetAssemblySigningCallbackFactory.CreatePreflight(logger))
-            .Execute(config, configDir, preparation, executeBuild);
-        if (interactive && workflow.GitHubPublishSummary is { PerProject: false } publishSummary)
-            WriteGitHubSummary(false, publishSummary.SummaryTag, publishSummary.SummaryReleaseUrl, publishSummary.SummaryAssetsCount, workflow.Result.GitHub);
+            validateAssemblySigning: DotNetAssemblySigningCallbackFactory.CreatePreflight(logger));
+        ProjectBuildWorkflowResult workflow;
+        if (interactive)
+        {
+            workflow = SpectreProjectBuildConsoleUi.RunInteractive(
+                new ProjectBuildConsolePlan
+                {
+                    ConfigPath = configFullPath,
+                    RootPath = preparation.RootPath,
+                    StagingPath = preparation.StagingPath,
+                    OutputPath = preparation.OutputPath,
+                    PlanOutputPath = preparation.PlanOutputPath,
+                    PlanOnly = preparation.PlanOnly || !executeBuild,
+                    UpdateVersions = preparation.UpdateVersions,
+                    Build = preparation.Build,
+                    SignPackages = preparation.Build &&
+                        preparation.Spec.SignPackages &&
+                        !string.IsNullOrWhiteSpace(preparation.Spec.CertificateThumbprint),
+                    PublishNuGet = preparation.PublishNuget,
+                    PublishGitHub = preparation.PublishGitHub
+                },
+                progress => workflowService.Execute(config, configDir, preparation, executeBuild, progress: progress));
+
+            var summary = new DotNetRepositoryReleaseSummaryService().CreateSummary(workflow.Result.Release ?? new DotNetRepositoryReleaseResult
+            {
+                Success = workflow.Result.Success,
+                ErrorMessage = workflow.Result.ErrorMessage
+            });
+            var display = new DotNetRepositoryReleaseDisplayService().CreateDisplay(summary, isPlan: preparation.PlanOnly || !executeBuild);
+            SpectreProjectBuildSummaryWriter.Write(display);
+
+            if (!workflow.Result.Success && interactiveBuffer?.Entries.Count > 0)
+            {
+                new BufferedLogSupportService().WriteTail(
+                    interactiveBuffer.Entries,
+                    new SpectreConsoleLogger { IsVerbose = isVerbose });
+            }
+
+            if (workflow.GitHubPublishSummary is { PerProject: false } publishSummary)
+                WriteGitHubSummary(false, publishSummary.SummaryTag, publishSummary.SummaryReleaseUrl, publishSummary.SummaryAssetsCount, workflow.Result.GitHub);
+        }
+        else
+        {
+            workflow = workflowService.Execute(config, configDir, preparation, executeBuild);
+        }
 
         WriteObject(workflow.Result);
     }

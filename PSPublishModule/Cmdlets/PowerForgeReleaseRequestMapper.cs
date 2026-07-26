@@ -23,11 +23,26 @@ internal static class PowerForgeReleaseRequestMapper
         request.PublishNuget = ChooseBool(request.PublishNuget, options.PublishNuget);
         request.PublishProjectGitHub = ChooseBool(request.PublishProjectGitHub, options.PublishProjectGitHub);
         request.PublishToolGitHub = ChooseBool(request.PublishToolGitHub, options.PublishToolGitHub);
+        request.ModuleFramework = ChooseString(request.ModuleFramework, options.ModuleFramework);
+        request.ModuleRunMode = options.ModuleRunMode ?? request.ModuleRunMode;
         request.ModuleNoDotnetBuild = ChooseBool(request.ModuleNoDotnetBuild, options.ModuleNoDotnetBuild);
         request.ModuleNoSign = ChooseBool(request.ModuleNoSign, options.ModuleNoSign);
+        request.ModuleSkipInstall = ChooseBool(request.ModuleSkipInstall, options.ModuleSkipInstall);
         request.ModuleSignModule = ChooseBool(request.ModuleSignModule, options.ModuleSignModule);
+        request.ModuleTimeoutSeconds = options.ModuleTimeoutSeconds ?? request.ModuleTimeoutSeconds;
+        request.ModuleCertificateThumbprint = ChooseString(request.ModuleCertificateThumbprint, options.ModuleCertificateThumbprint);
+        request.ModuleSignIncludeBinaries = ChooseBool(request.ModuleSignIncludeBinaries, options.ModuleSignIncludeBinaries);
+        request.ModuleSignIncludeInternals = ChooseBool(request.ModuleSignIncludeInternals, options.ModuleSignIncludeInternals);
+        request.ModuleSignIncludeExe = ChooseBool(request.ModuleSignIncludeExe, options.ModuleSignIncludeExe);
+        request.ModuleDiagnosticsBaselinePath = ChooseString(request.ModuleDiagnosticsBaselinePath, options.ModuleDiagnosticsBaselinePath);
+        request.ModuleGenerateDiagnosticsBaseline = ChooseBool(request.ModuleGenerateDiagnosticsBaseline, options.ModuleGenerateDiagnosticsBaseline);
+        request.ModuleUpdateDiagnosticsBaseline = ChooseBool(request.ModuleUpdateDiagnosticsBaseline, options.ModuleUpdateDiagnosticsBaseline);
+        request.ModuleFailOnNewDiagnostics = ChooseBool(request.ModuleFailOnNewDiagnostics, options.ModuleFailOnNewDiagnostics);
+        request.ModuleFailOnDiagnosticsSeverity = ChooseString(request.ModuleFailOnDiagnosticsSeverity, options.ModuleFailOnDiagnosticsSeverity);
         request.KeepSymbols = ChooseBool(request.KeepSymbols, options.KeepSymbols);
         request.EnableSigning = ChooseBool(request.EnableSigning, options.EnableSigning);
+        request.AppleResume = ChooseBool(request.AppleResume, options.AppleResume);
+        request.AppleWaitForProcessing = ChooseBool(request.AppleWaitForProcessing, options.AppleWaitForProcessing);
 
         request.SkipWorkspaceValidation = request.SkipWorkspaceValidation || options.SkipWorkspaceValidation;
         request.SkipRestore = request.SkipRestore || options.SkipRestore;
@@ -57,6 +72,11 @@ internal static class PowerForgeReleaseRequestMapper
         request.PackageSignThumbprint = ChooseString(request.PackageSignThumbprint, options.PackageSignThumbprint);
         request.PackageSignStore = ChooseString(request.PackageSignStore, options.PackageSignStore);
         request.PackageSignTimestampUrl = ChooseString(request.PackageSignTimestampUrl, options.PackageSignTimestampUrl);
+        request.AppleAction = options.AppleAction;
+        request.AppleActionConfirmed = options.AppleActionConfirmed;
+        request.AppleProcessingTimeoutSeconds = options.AppleProcessingTimeoutSeconds ?? request.AppleProcessingTimeoutSeconds;
+        request.ApplePollIntervalSeconds = options.ApplePollIntervalSeconds ?? request.ApplePollIntervalSeconds;
+        request.AppleSummaryOnly = options.AppleSummaryOnly;
         request.SubmitWinget = ChooseBool(request.SubmitWinget, options.SubmitWinget);
         request.WingetSubmitToolPath = ChooseString(request.WingetSubmitToolPath, options.WingetSubmitToolPath);
         request.WingetSubmitTokenFilePath = ChooseString(request.WingetSubmitTokenFilePath, options.WingetSubmitTokenFilePath);
@@ -116,11 +136,24 @@ internal static class PowerForgeReleaseRequestMapper
             PublishProjectGitHub = source.PublishProjectGitHub,
             PublishToolGitHub = source.PublishToolGitHub,
             Configuration = source.Configuration,
+            ModuleFramework = source.ModuleFramework,
+            ModuleRunMode = source.ModuleRunMode,
             ModuleNoDotnetBuild = source.ModuleNoDotnetBuild,
             ModuleVersion = source.ModuleVersion,
             ModulePreReleaseTag = source.ModulePreReleaseTag,
             ModuleNoSign = source.ModuleNoSign,
+            ModuleSkipInstall = source.ModuleSkipInstall,
             ModuleSignModule = source.ModuleSignModule,
+            ModuleTimeoutSeconds = source.ModuleTimeoutSeconds,
+            ModuleCertificateThumbprint = source.ModuleCertificateThumbprint,
+            ModuleSignIncludeBinaries = source.ModuleSignIncludeBinaries,
+            ModuleSignIncludeInternals = source.ModuleSignIncludeInternals,
+            ModuleSignIncludeExe = source.ModuleSignIncludeExe,
+            ModuleDiagnosticsBaselinePath = source.ModuleDiagnosticsBaselinePath,
+            ModuleGenerateDiagnosticsBaseline = source.ModuleGenerateDiagnosticsBaseline,
+            ModuleUpdateDiagnosticsBaseline = source.ModuleUpdateDiagnosticsBaseline,
+            ModuleFailOnNewDiagnostics = source.ModuleFailOnNewDiagnostics,
+            ModuleFailOnDiagnosticsSeverity = source.ModuleFailOnDiagnosticsSeverity,
             SkipRestore = source.SkipRestore,
             SkipBuild = source.SkipBuild,
             SkipWorkspaceValidation = source.SkipWorkspaceValidation,
@@ -171,7 +204,14 @@ internal static class PowerForgeReleaseRequestMapper
             Styles = source.Styles.ToArray(),
             Flavors = source.Flavors.ToArray(),
             ToolOutputs = source.ToolOutputs.ToArray(),
-            SkipToolOutputs = source.SkipToolOutputs.ToArray()
+            SkipToolOutputs = source.SkipToolOutputs.ToArray(),
+            AppleAction = source.AppleAction,
+            AppleActionConfirmed = source.AppleActionConfirmed,
+            AppleResume = source.AppleResume,
+            AppleWaitForProcessing = source.AppleWaitForProcessing,
+            AppleProcessingTimeoutSeconds = source.AppleProcessingTimeoutSeconds,
+            ApplePollIntervalSeconds = source.ApplePollIntervalSeconds,
+            AppleSummaryOnly = source.AppleSummaryOnly
         };
     }
 

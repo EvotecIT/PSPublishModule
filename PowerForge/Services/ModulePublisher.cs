@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
 
 namespace PowerForge;
 
@@ -62,6 +63,27 @@ public sealed partial class ModulePublisher
         ModuleBuildResult buildResult,
         IReadOnlyList<ArtefactBuildResult> artefactResults,
         bool includeScriptFolders = true)
+        => Publish(
+            publish,
+            plan,
+            buildResult,
+            artefactResults,
+            includeScriptFolders,
+            remotePublishAttempted: null,
+            remoteSideEffectObserved: null,
+            CancellationToken.None,
+            gitHubProgress: null);
+
+    internal ModulePublishResult Publish(
+        PublishConfiguration publish,
+        ModulePipelinePlan plan,
+        ModuleBuildResult buildResult,
+        IReadOnlyList<ArtefactBuildResult> artefactResults,
+        bool includeScriptFolders,
+        Action? remotePublishAttempted,
+        Action? remoteSideEffectObserved,
+        CancellationToken cancellationToken = default,
+        IGitHubReleaseProgressReporter? gitHubProgress = null)
     {
         if (publish is null) throw new ArgumentNullException(nameof(publish));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
@@ -87,10 +109,134 @@ public sealed partial class ModulePublisher
 
         return publish.Destination switch
         {
-            PublishDestination.PowerShellGallery => PublishToRepository(publish, plan, buildResult, includeScriptFolders),
-            PublishDestination.GitHub => PublishToGitHub(publish, plan, artefactResults),
+            PublishDestination.PowerShellGallery => PublishToRepository(
+                publish,
+                plan,
+                buildResult,
+                includeScriptFolders,
+                remotePublishAttempted,
+                remoteSideEffectObserved,
+                cancellationToken),
+            PublishDestination.GitHub => PublishToGitHub(
+                publish,
+                plan,
+                artefactResults,
+                remotePublishAttempted,
+                gitHubProgress),
             _ => throw new NotSupportedException($"Unsupported publish destination: {publish.Destination}")
         };
+    }
+
+    internal ModulePublishVersionPreflightResult ValidateVersionForPublish(
+        PublishConfiguration publish,
+        ModulePipelinePlan plan,
+        bool allowExistingExactVersion = false)
+    {
+        if (publish is null)
+        {
+            throw new ArgumentNullException(nameof(publish));
+        }
+        if (plan is null)
+        {
+            throw new ArgumentNullException(nameof(plan));
+        }
+        if (!publish.Enabled ||
+            publish.Destination != PublishDestination.PowerShellGallery ||
+            publish.Force && !allowExistingExactVersion)
+        {
+            return ModulePublishVersionPreflightResult.Available;
+        }
+
+        var (repositoryName, repoConfig) = ResolveRepository(publish);
+        repoConfig = NormalizeRepositoryPaths(repoConfig, plan.ProjectRoot);
+        var useManagedModule = publish.Tool == PublishTool.ManagedModule ||
+                               publish.Tool == PublishTool.Auto && ShouldUseManagedModuleForAuto(publish, plan.ProjectRoot);
+        if (useManagedModule)
+        {
+            var alreadyPublished = EnsureManagedVersionIsGreaterThanRepository(
+                CreateManagedReadRepository(repositoryName, repoConfig, plan.ProjectRoot),
+                plan.ModuleName,
+                plan.ResolvedVersion,
+                plan.PreRelease,
+                ResolveManagedReadCredential(repoConfig),
+                allowExistingExactVersion);
+            return alreadyPublished
+                ? ModulePublishVersionPreflightResult.AlreadyPublished
+                : ModulePublishVersionPreflightResult.Available;
+        }
+
+        if (publish.Tool == PublishTool.Auto)
+        {
+            try
+            {
+                return ValidateVersionForPublishWithTool(
+                    PublishTool.PSResourceGet,
+                    plan,
+                    repositoryName,
+                    repoConfig,
+                    allowExistingExactVersion);
+            }
+            catch (PowerShellToolNotAvailableException)
+            {
+                return ValidateVersionForPublishWithTool(
+                    PublishTool.PowerShellGet,
+                    plan,
+                    repositoryName,
+                    repoConfig,
+                    allowExistingExactVersion);
+            }
+        }
+
+        return ValidateVersionForPublishWithTool(
+            publish.Tool,
+            plan,
+            repositoryName,
+            repoConfig,
+            allowExistingExactVersion);
+    }
+
+    private ModulePublishVersionPreflightResult ValidateVersionForPublishWithTool(
+        PublishTool tool,
+        ModulePipelinePlan plan,
+        string repositoryName,
+        PublishRepositoryConfiguration? repoConfig,
+        bool allowExistingExactVersion)
+    {
+        var repositoryCreated = false;
+        var readCredential = _repositoryPublisher.ResolveCredentialForRepository(repoConfig);
+        try
+        {
+            if (repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
+            {
+                repositoryCreated = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
+            }
+
+            var alreadyPublished = EnsureVersionIsGreaterThanRepository(
+                tool,
+                plan.ModuleName,
+                plan.ResolvedVersion,
+                plan.PreRelease,
+                repositoryName,
+                readCredential,
+                allowExistingExactVersion);
+            return alreadyPublished
+                ? ModulePublishVersionPreflightResult.AlreadyPublished
+                : ModulePublishVersionPreflightResult.Available;
+        }
+        finally
+        {
+            if (repositoryCreated && repoConfig is { UnregisterAfterUse: true })
+            {
+                try
+                {
+                    UnregisterRepository(tool, repositoryName);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn($"Failed to unregister repository '{repositoryName}' after version preflight: {ex.Message}");
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -135,6 +281,8 @@ public sealed partial class ModulePublisher
             OverwriteTagName = publish.OverwriteTagName,
             DoNotMarkAsPreRelease = publish.DoNotMarkAsPreRelease,
             GenerateReleaseNotes = publish.GenerateReleaseNotes,
+            ReuseExistingRelease = publish.ReuseExistingRelease,
+            ReplaceExistingAssets = publish.ReplaceExistingAssets,
             UseAsDependencyVersionSource = publish.UseAsDependencyVersionSource,
             PublishRequiredModules = publish.PublishRequiredModules,
             RequiredModuleSourceRepository = publish.RequiredModuleSourceRepository,
@@ -173,9 +321,17 @@ public sealed partial class ModulePublisher
         return value.Trim();
     }
 
-    private ModulePublishResult PublishToRepository(PublishConfiguration publish, ModulePipelinePlan plan, ModuleBuildResult buildResult, bool includeScriptFolders)
+    private ModulePublishResult PublishToRepository(
+        PublishConfiguration publish,
+        ModulePipelinePlan plan,
+        ModuleBuildResult buildResult,
+        bool includeScriptFolders,
+        Action? remotePublishAttempted,
+        Action? remoteSideEffectObserved,
+        CancellationToken cancellationToken)
     {
         var (repositoryName, repoConfig) = ResolveRepository(publish);
+        repoConfig = NormalizeRepositoryPaths(repoConfig, plan.ProjectRoot);
         var isPsGallery = string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase);
 
         var credential = repoConfig?.Credential;
@@ -188,9 +344,9 @@ public sealed partial class ModulePublisher
             throw new InvalidOperationException("Publish API key is required for repository publishing to PSGallery.");
 
         var useManagedModule = publish.Tool == PublishTool.ManagedModule ||
-                               publish.Tool == PublishTool.Auto && ShouldUseManagedModuleForAuto(publish);
+                               publish.Tool == PublishTool.Auto && ShouldUseManagedModuleForAuto(publish, plan.ProjectRoot);
         var managedRepository = useManagedModule
-            ? CreateManagedPublishRepository(repositoryName, repoConfig)
+            ? CreateManagedPublishRepository(repositoryName, repoConfig, plan.ProjectRoot)
             : null;
         var managedLocalFolder = managedRepository?.Kind == ManagedModuleRepositoryKind.LocalFolder;
 
@@ -209,20 +365,23 @@ public sealed partial class ModulePublisher
                     buildResult,
                     repositoryName,
                     repoConfig,
-                    includeScriptFolders);
+                    includeScriptFolders,
+                    remotePublishAttempted,
+                    remoteSideEffectObserved,
+                    cancellationToken);
             }
 
             try
             {
-                return PublishToRepositoryWithTool(PublishTool.PSResourceGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders);
+                return PublishToRepositoryWithTool(PublishTool.PSResourceGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved, cancellationToken);
             }
             catch (PowerShellToolNotAvailableException)
             {
-                return PublishToRepositoryWithTool(PublishTool.PowerShellGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders);
+                return PublishToRepositoryWithTool(PublishTool.PowerShellGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved, cancellationToken);
             }
         }
 
-        return PublishToRepositoryWithTool(tool, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders);
+        return PublishToRepositoryWithTool(tool, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved, cancellationToken);
     }
 
     private ModulePublishResult PublishToRepositoryWithTool(
@@ -232,7 +391,10 @@ public sealed partial class ModulePublisher
         ModuleBuildResult buildResult,
         string repositoryName,
         PublishRepositoryConfiguration? repoConfig,
-        bool includeScriptFolders)
+        bool includeScriptFolders,
+        Action? remotePublishAttempted,
+        Action? remoteSideEffectObserved,
+        CancellationToken cancellationToken)
     {
         if (publish.PublishRequiredModules && tool == PublishTool.PowerShellGet)
         {
@@ -256,6 +418,7 @@ public sealed partial class ModulePublisher
 
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             temporaryPublishPath = PrepareModulePackageForRepositoryPublish(
                 stagingPath: buildResult.StagingPath,
                 moduleName: plan.ModuleName,
@@ -274,7 +437,7 @@ public sealed partial class ModulePublisher
                 if (tool == PublishTool.ManagedModule)
                 {
                     EnsureManagedVersionIsGreaterThanRepository(
-                        CreateManagedReadRepository(repositoryName, repoConfig),
+                        CreateManagedReadRepository(repositoryName, repoConfig, plan.ProjectRoot),
                         plan.ModuleName,
                         plan.ResolvedVersion,
                         plan.PreRelease,
@@ -294,11 +457,12 @@ public sealed partial class ModulePublisher
             {
                 _managedRequiredModuleRepositoryValidator.Validate(
                     publish,
-                    CreateManagedReadRepository(repositoryName, repoConfig),
+                    CreateManagedReadRepository(repositoryName, repoConfig, plan.ProjectRoot),
                     readCredential,
                     publishCredential,
                     plan,
-                    buildResult);
+                    buildResult,
+                    remoteSideEffectObserved);
 
                 temporaryPackagePath = Path.Combine(Path.GetTempPath(), "PowerForge", "managed-publish", Guid.NewGuid().ToString("N"));
                 PublishToRepositoryWithManagedModule(
@@ -311,7 +475,8 @@ public sealed partial class ModulePublisher
                     publishCredential,
                     versionText,
                     temporaryPackagePath,
-                    skipDependenciesCheck: true);
+                    skipDependenciesCheck: true,
+                    remotePublishAttempted: remotePublishAttempted);
                 CleanupTemporaryPublishPath(temporaryPublishPath);
                 temporaryPublishPath = null;
                 return CreateRepositoryPublishResult(repositoryName, versionText, tool);
@@ -325,7 +490,8 @@ public sealed partial class ModulePublisher
                     readCredential,
                     repositoryForPublish,
                     plan,
-                    buildResult);
+                    buildResult,
+                    remoteSideEffectObserved);
             }
 
             _repositoryPublisher.Publish(
@@ -339,7 +505,9 @@ public sealed partial class ModulePublisher
                     Repository = repositoryForPublish,
                     DestinationPath = null,
                     SkipDependenciesCheck = tool != PublishTool.PowerShellGet,
-                    SkipModuleManifestValidate = false
+                    SkipModuleManifestValidate = false,
+                    RemotePublishAttempted = remotePublishAttempted,
+                    CancellationToken = cancellationToken
                 });
 
             _logger.Info($"Published {plan.ModuleName} {versionText} to repository '{repositoryName}' using {tool}.");
@@ -551,37 +719,56 @@ public sealed partial class ModulePublisher
         return "Any version";
     }
 
-    internal void EnsureVersionIsGreaterThanRepository(
+    internal bool EnsureVersionIsGreaterThanRepository(
         PublishTool tool,
         string moduleName,
         string moduleVersion,
         string? preRelease,
         string repositoryName,
-        RepositoryCredential? credential)
+        RepositoryCredential? credential,
+        bool allowExistingExactVersion = false)
     {
         var publishVersionText = FormatSemVer(moduleVersion, preRelease);
         if (!TryParseSemVer(publishVersionText, out var publishVersion))
             throw new InvalidOperationException($"Could not parse module version for publish: '{publishVersionText}'.");
 
-        SemVer? current = null;
+        RepositoryVersionState state;
         try
         {
-            current = TryGetLatestRepositoryVersion(tool, moduleName, repositoryName, credential);
+            state = GetRepositoryVersionState(
+                tool,
+                moduleName,
+                repositoryName,
+                credential,
+                publishVersion,
+                publishVersionText,
+                checkExactVersion: allowExistingExactVersion);
+        }
+        catch (PowerShellToolNotAvailableException)
+        {
+            throw;
         }
         catch (Exception ex) when (IsRepositoryPackageNotFound(moduleName, ex))
         {
             _logger.Verbose($"No existing repository version was found for {moduleName} on '{repositoryName}'. Treating this as a first publish.");
-            return;
+            return false;
         }
         catch (Exception ex)
         {
             throw new InvalidOperationException($"Failed to query repository version for {moduleName} on '{repositoryName}'. Use -Force to publish without version check. {ex.Message}");
         }
 
-        if (current is null) return;
+        if (state.Latest is null)
+            return false;
 
-        if (publishVersion.CompareTo(current.Value) <= 0)
-            throw new InvalidOperationException($"Module version '{publishVersionText}' is not greater than repository version '{FormatSemVer(current.Value.Version.ToString(), current.Value.PreRelease)}' for '{moduleName}'. Use -Force to publish anyway.");
+        if (allowExistingExactVersion && state.ExactVersionExists)
+            return true;
+
+        var comparison = publishVersion.CompareTo(state.Latest.Value);
+        if (comparison <= 0)
+            throw new InvalidOperationException($"Module version '{publishVersionText}' is not greater than repository version '{FormatSemVer(state.Latest.Value.Version.ToString(), state.Latest.Value.PreRelease)}' for '{moduleName}'. Use -Force to publish anyway.");
+
+        return false;
     }
 
     internal static bool IsRepositoryPackageNotFound(string moduleName, Exception exception)
@@ -610,61 +797,6 @@ public sealed partial class ModulePublisher
                 message.IndexOf("no match was found", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 message.IndexOf("no packages found", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 message.IndexOf("no results", StringComparison.OrdinalIgnoreCase) >= 0);
-    }
-
-    private SemVer? TryGetLatestRepositoryVersion(PublishTool tool, string moduleName, string repositoryName, RepositoryCredential? credential)
-    {
-        SemVer? latest = null;
-
-        if (string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                foreach (var version in _powerShellGalleryFeed.GetVersions(moduleName, includePrerelease: true, timeout: TimeSpan.FromMinutes(2)))
-                {
-                    if (!TryParseSemVer(version.VersionText, out var parsed))
-                        continue;
-
-                    if (latest is null || parsed.CompareTo(latest.Value) > 0)
-                        latest = parsed;
-                }
-
-                if (latest is not null)
-                    return latest;
-            }
-            catch (Exception ex)
-            {
-                _logger.Warn($"Failed to query the raw PowerShell Gallery feed for '{moduleName}'. Falling back to {tool}. {ex.Message}");
-            }
-        }
-
-        var versions = tool == PublishTool.PowerShellGet
-            ? _powerShellGet.Find(
-                    new PowerShellGetFindOptions(
-                        names: new[] { moduleName },
-                        prerelease: true,
-                        repositories: new[] { repositoryName },
-                        credential: credential),
-                    timeout: TimeSpan.FromMinutes(2))
-                .Where(r => string.Equals(r.Name, moduleName, StringComparison.OrdinalIgnoreCase))
-                .Select(GetRepositoryVersionText)
-            : _psResourceGet.Find(
-                    new PSResourceFindOptions(
-                        names: new[] { moduleName },
-                        version: null,
-                        prerelease: true,
-                        repositories: new[] { repositoryName },
-                        credential: credential),
-                    timeout: TimeSpan.FromMinutes(2))
-                .Where(r => string.Equals(r.Name, moduleName, StringComparison.OrdinalIgnoreCase))
-                .Select(GetRepositoryVersionText);
-
-        foreach (var v in versions)
-        {
-            if (!TryParseSemVer(v, out var parsed)) continue;
-            if (latest is null || parsed.CompareTo(latest.Value) > 0) latest = parsed;
-        }
-        return latest;
     }
 
     internal static string GetRepositoryVersionText(PSResourceInfo resource)
@@ -756,6 +888,31 @@ public sealed partial class ModulePublisher
             CredentialProvider = credential is null ? CloneCredentialProvider(repo.CredentialProvider) : null
         };
 
+    private static PublishRepositoryConfiguration? NormalizeRepositoryPaths(
+        PublishRepositoryConfiguration? repository,
+        string projectRoot)
+        => repository is null
+            ? null
+            : new PublishRepositoryConfiguration
+            {
+                Name = repository.Name,
+                Uri = NormalizeRepositoryPath(repository.Uri, projectRoot),
+                SourceUri = NormalizeRepositoryPath(repository.SourceUri, projectRoot),
+                PublishUri = NormalizeRepositoryPath(repository.PublishUri, projectRoot),
+                Trusted = repository.Trusted,
+                Priority = repository.Priority,
+                ApiVersion = repository.ApiVersion,
+                EnsureRegistered = repository.EnsureRegistered,
+                UnregisterAfterUse = repository.UnregisterAfterUse,
+                Credential = repository.Credential,
+                CredentialProvider = CloneCredentialProvider(repository.CredentialProvider)
+            };
+
+    private static string? NormalizeRepositoryPath(string? source, string projectRoot)
+        => string.IsNullOrWhiteSpace(source)
+            ? source
+            : ManagedModuleRepositoryPathResolver.NormalizeSource(source!, projectRoot);
+
     private static RepositoryCredentialProviderConfiguration? CloneCredentialProvider(RepositoryCredentialProviderConfiguration? provider)
         => provider is null
             ? null
@@ -781,7 +938,12 @@ public sealed partial class ModulePublisher
         return (name, repoConfig);
     }
 
-    private ModulePublishResult PublishToGitHub(PublishConfiguration publish, ModulePipelinePlan plan, IReadOnlyList<ArtefactBuildResult> artefactResults)
+    private ModulePublishResult PublishToGitHub(
+        PublishConfiguration publish,
+        ModulePipelinePlan plan,
+        IReadOnlyList<ArtefactBuildResult> artefactResults,
+        Action? remotePublishAttempted,
+        IGitHubReleaseProgressReporter? gitHubProgress)
     {
         if (string.IsNullOrWhiteSpace(publish.UserName))
             throw new InvalidOperationException("UserName is required for GitHub publishing.");
@@ -797,20 +959,27 @@ public sealed partial class ModulePublisher
 
         var selected = SelectPackedArtefacts(artefactResults, publish.ID);
         var assets = selected.Select(a => a.OutputPath).ToArray();
+        var missingAsset = assets.FirstOrDefault(static asset => string.IsNullOrWhiteSpace(asset) || !File.Exists(asset));
+        if (missingAsset is not null)
+            throw new FileNotFoundException($"GitHub release asset was not found: {missingAsset}", missingAsset);
 
         _logger.Info($"Publishing GitHub release {owner}/{repo} tag '{tag}' with {assets.Length} asset(s)");
-        var created = _gitHub.PublishRelease(
-            owner: owner,
-            repo: repo,
-            token: publish.ApiKey,
-            tagName: tag,
-            releaseName: tag,
-            releaseNotes: null,
-            commitish: null,
-            generateReleaseNotes: publish.GenerateReleaseNotes,
-            isDraft: false,
-            isPreRelease: isPreRelease,
-            assetFilePaths: assets);
+        remotePublishAttempted?.Invoke();
+        var created = _gitHub.PublishRelease(new GitHubReleasePublishRequest
+        {
+            Owner = owner,
+            Repository = repo,
+            Token = publish.ApiKey,
+            TagName = tag,
+            ReleaseName = tag,
+            GenerateReleaseNotes = publish.GenerateReleaseNotes,
+            IsDraft = false,
+            IsPreRelease = isPreRelease,
+            ReuseExistingReleaseOnConflict = publish.ReuseExistingRelease,
+            ReplaceExistingAssets = publish.ReuseExistingRelease && publish.ReplaceExistingAssets,
+            AssetFilePaths = assets,
+            Progress = gitHubProgress
+        });
 
         var releaseUrl = string.IsNullOrWhiteSpace(created.HtmlUrl)
             ? $"https://github.com/{owner}/{repo}/releases/tag/{tag}"

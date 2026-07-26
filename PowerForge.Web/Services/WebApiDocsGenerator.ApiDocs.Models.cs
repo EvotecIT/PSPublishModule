@@ -84,6 +84,7 @@ public static partial class WebApiDocsGenerator
         public string? ValueSummary { get; set; }
         public bool IsConstructor { get; set; }
         public bool IsExtension { get; set; }
+        internal string? DocumentationSignature { get; set; }
         public List<string> Attributes { get; } = new();
         public List<ApiTypeParameterModel> TypeParameters { get; } = new();
         public List<ApiExampleModel> Examples { get; } = new();
@@ -664,6 +665,7 @@ public static partial class WebApiDocsGenerator
         public List<NavItem> FooterProduct { get; set; } = new();
         public List<NavItem> FooterResources { get; set; } = new();
         public List<NavItem> FooterCompany { get; set; } = new();
+        public Dictionary<string, List<NavItem>> FooterMenus { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     private readonly record struct ApiSocialProfile(

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Management.Automation;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using PowerForge;
 
@@ -106,10 +107,7 @@ public sealed class SubmitAppStoreConnectVersionForReviewCommand : AsyncPSCmdlet
 
         var resolvedPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(ScreenshotConfigPath);
         var json = File.ReadAllText(resolvedPath);
-        var spec = JsonSerializer.Deserialize<AppStoreConnectScreenshotSyncSpec>(json, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        }) ?? throw new InvalidOperationException($"Unable to deserialize screenshot sync config: {resolvedPath}");
+        var spec = DeserializeScreenshotSpec(json, resolvedPath);
 
         var specAppId = string.IsNullOrWhiteSpace(spec.AppId) ? null : spec.AppId!.Trim();
         var specVersionString = string.IsNullOrWhiteSpace(spec.VersionString) ? null : spec.VersionString!.Trim();
@@ -128,4 +126,11 @@ public sealed class SubmitAppStoreConnectVersionForReviewCommand : AsyncPSCmdlet
 
         return spec;
     }
+
+    internal static AppStoreConnectScreenshotSyncSpec DeserializeScreenshotSpec(string json, string sourcePath)
+        => JsonSerializer.Deserialize<AppStoreConnectScreenshotSyncSpec>(json, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            Converters = { new JsonStringEnumConverter() }
+        }) ?? throw new InvalidOperationException($"Unable to deserialize screenshot sync config: {sourcePath}");
 }

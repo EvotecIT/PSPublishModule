@@ -116,7 +116,8 @@ internal sealed class NuGetPackagePublishService
         string source,
         bool skipDuplicate,
         bool publishFailFast = true,
-        bool suppressCompanionSymbols = false)
+        bool suppressCompanionSymbols = false,
+        Action? remotePublishAttempted = null)
     {
         if (packages is null)
             throw new ArgumentNullException(nameof(packages));
@@ -170,6 +171,7 @@ internal sealed class NuGetPackagePublishService
                 continue;
             }
 
+            remotePublishAttempted?.Invoke();
             var pushResult = _pushPackage(new DotNetNuGetPushRequest(
                     package,
                     apiKey,

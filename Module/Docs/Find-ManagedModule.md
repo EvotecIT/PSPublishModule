@@ -11,11 +11,16 @@ Finds module versions from a managed module repository.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Find-ManagedModule [-Name] <string[]> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-AllVersions] [-First <int>] [-Tag <string[]>] [-ResourceType <string[]>] [-IncludeDependencies] [-Prerelease] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [<CommonParameters>]
+Find-ManagedModule [[-Name] <string[]>] [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-AllVersions] [-First <int>] [-Tag <string[]>] [-ResourceType <string[]>] [-IncludeDependencies] [-Prerelease] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-This command queries NuGet v3 or local-folder repositories through the managed C# repository client.
+This command is the module-package equivalent of Find-PSResource. It queries NuGet-compatible or
+local-folder repositories through the managed C# repository client and returns typed module version objects
+that can be piped to Install-ManagedModule or Save-ManagedModule.
+
+Name, exact/range version, prerelease, tag, and dependency searches are supported for module packages.
+Command-name and DSC-resource-name searches inspect package contents and remain outside this fast metadata path.
 
 ## EXAMPLES
 
@@ -34,6 +39,12 @@ Find-ManagedModule -Name Company.* -Repository C:\Packages
 ### EXAMPLE 3
 ```powershell
 Find-ManagedModule -Name Company.Tools -Repository C:\Packages -AllVersions -AllowPrerelease
+```
+
+
+### EXAMPLE 4
+```powershell
+Find-ManagedModule -Name Company.Tools -Version '[1.2.0,2.0.0)' -ProfileName CompanyModules | Save-ManagedModule -Path C:\OfflineModules
 ```
 
 
@@ -152,7 +163,7 @@ Accept wildcard characters: True
 ```
 
 ### -Name
-Module names to find.
+Module names or wildcard patterns to find. When omitted, all module package names are considered.
 
 ```yaml
 Type: String[]
@@ -160,10 +171,10 @@ Parameter Sets: __AllParameterSets
 Aliases: ModuleName
 Possible values:
 
-Required: True
+Required: False
 Position: 0
 Default value: None
-Accept pipeline input: True (ByPropertyName)
+Accept pipeline input: True (ByValue, ByPropertyName)
 Accept wildcard characters: True
 ```
 
@@ -286,6 +297,22 @@ Filter results by package tag metadata.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: Tags
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Version
+Exact version, wildcard version, or NuGet-style version range to return.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
 Possible values:
 
 Required: False

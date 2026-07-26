@@ -21,7 +21,10 @@ internal sealed class ModuleStatePlanAction
         bool acceptLicense = false,
         bool allowClobber = false,
         bool skipDependencyCheck = false,
-        string? targetRepositorySource = null)
+        string? targetRepositorySource = null,
+        string? targetModuleRoot = null,
+        string? targetPowerShellEdition = null,
+        string? targetProfileName = null)
     {
         Kind = kind;
         ModuleName = moduleName;
@@ -42,6 +45,9 @@ internal sealed class ModuleStatePlanAction
         AllowClobber = allowClobber;
         SkipDependencyCheck = skipDependencyCheck;
         TargetRepositorySource = string.IsNullOrWhiteSpace(targetRepositorySource) ? null : targetRepositorySource!.Trim();
+        TargetModuleRoot = string.IsNullOrWhiteSpace(targetModuleRoot) ? null : targetModuleRoot!.Trim();
+        TargetPowerShellEdition = string.IsNullOrWhiteSpace(targetPowerShellEdition) ? null : targetPowerShellEdition!.Trim();
+        TargetProfileName = string.IsNullOrWhiteSpace(targetProfileName) ? null : targetProfileName!.Trim();
     }
 
     internal ModuleStatePlanActionKind Kind { get; }
@@ -81,6 +87,12 @@ internal sealed class ModuleStatePlanAction
     internal bool SkipDependencyCheck { get; }
 
     internal string? TargetRepositorySource { get; }
+
+    internal string? TargetModuleRoot { get; }
+
+    internal string? TargetPowerShellEdition { get; }
+
+    internal string? TargetProfileName { get; }
 }
 
 internal enum ModuleStatePlanActionKind

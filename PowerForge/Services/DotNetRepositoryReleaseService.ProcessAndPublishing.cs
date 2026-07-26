@@ -445,9 +445,26 @@ public sealed partial class DotNetRepositoryReleaseService
         stdErr = string.Empty;
         stdOut = string.Empty;
         duration = TimeSpan.Zero;
+        var cancellationToken = ActiveCancellationToken.Value;
+        cancellationToken.ThrowIfCancellationRequested();
 
         using var p = Process.Start(psi);
         if (p is null) return 1;
+        using var cancellationRegistration = cancellationToken.Register(() =>
+        {
+            try
+            {
+#if NET472
+                p.Kill();
+#else
+                p.Kill(entireProcessTree: true);
+#endif
+            }
+            catch
+            {
+                // The process may have exited between cancellation and the callback.
+            }
+        });
 
         var stdoutTask = p.StandardOutput.ReadToEndAsync();
         var stderrTask = p.StandardError.ReadToEndAsync();
@@ -456,6 +473,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
         while (!p.WaitForExit(1000))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (stopwatch.Elapsed < nextProgress)
                 continue;
 
@@ -466,6 +484,7 @@ public sealed partial class DotNetRepositoryReleaseService
         // On .NET Framework, WaitForExit(int) returning true does not guarantee async
         // output callbacks have completed; the no-arg overload does.
         p.WaitForExit();
+        cancellationToken.ThrowIfCancellationRequested();
         stdOut = stdoutTask.GetAwaiter().GetResult();
         stdErr = stderrTask.GetAwaiter().GetResult();
         stopwatch.Stop();

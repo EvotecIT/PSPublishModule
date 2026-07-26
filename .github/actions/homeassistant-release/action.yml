@@ -52,7 +52,7 @@ inputs:
   powerforge-version:
     description: Exact PowerForge.Build tool version used by the action.
     required: false
-    default: "1.0.4"
+    default: "1.0.8"
 
 outputs:
   action:

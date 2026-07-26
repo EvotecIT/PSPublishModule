@@ -89,6 +89,9 @@ public sealed class DotNetPublishTargetPlan
     /// <summary>Resolved project path (*.csproj).</summary>
     public string ProjectPath { get; set; } = string.Empty;
 
+    /// <summary>Project version captured while the publish plan was created.</summary>
+    public string? Version { get; set; }
+
     /// <summary>Resolved publish options.</summary>
     public DotNetPublishPublishOptions Publish { get; set; } = new();
 
@@ -202,6 +205,24 @@ public sealed class DotNetPublishMsiVersionPlan
 
     /// <summary>Resolved monotonic state path when configured.</summary>
     public string? StatePath { get; set; }
+
+    /// <summary>Resolved monotonic version authority.</summary>
+    public DotNetPublishMsiVersionAuthorityKind Authority { get; set; }
+
+    /// <summary>Resolved stable authority key for shared Git-tag reservations.</summary>
+    public string? AuthorityKey { get; set; }
+
+    /// <summary>Resolved Git remote for shared Git-tag reservations.</summary>
+    public string? GitRemote { get; set; }
+
+    /// <summary>Resolved Git tag namespace for shared reservations.</summary>
+    public string? GitTagPrefix { get; set; }
+
+    /// <summary>Project root containing the Git worktree used for shared reservations.</summary>
+    public string? AuthorityWorkingDirectory { get; set; }
+
+    /// <summary>Whether this resolved version may be reused for an explicit non-release overwrite.</summary>
+    public bool AllowOutputOverwrite { get; set; }
 }
 
 /// <summary>

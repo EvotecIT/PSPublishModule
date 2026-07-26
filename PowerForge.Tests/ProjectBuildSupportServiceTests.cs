@@ -70,6 +70,41 @@ public sealed class ProjectBuildSupportServiceTests
     }
 
     [Fact]
+    public void LoadConfig_reads_packages_from_unified_release_configuration()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-release-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var configPath = Path.Combine(root.FullName, "release.json");
+            File.WriteAllText(configPath, """
+{
+  "SchemaVersion": 1,
+  "Module": {
+    "IncludesPackages": true
+  },
+  "Packages": {
+    "PublishNuget": false,
+    "ExpectedVersion": "1.2.X",
+    "GitHubRepositoryName": "PSPublishModule"
+  }
+}
+""");
+
+            var service = new ProjectBuildSupportService(new NullLogger());
+            var config = service.LoadConfig(configPath);
+
+            Assert.False(config.PublishNuget);
+            Assert.Equal("1.2.X", config.ExpectedVersion);
+            Assert.Equal("PSPublishModule", config.GitHubRepositoryName);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void ResolveSecret_prefers_file_then_environment_then_inline()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-secret-" + Guid.NewGuid().ToString("N")));

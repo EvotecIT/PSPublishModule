@@ -52,6 +52,11 @@ on:
         required: false
         type: string
         default: "10.0.x"
+      dotnet_workloads:
+        description: Optional comma, semicolon, or whitespace-separated .NET workloads to install before running the website pipeline.
+        required: false
+        type: string
+        default: ""
       report_artifact_name:
         required: false
         type: string
@@ -213,6 +218,34 @@ jobs:
         uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
         with:
           dotnet-version: ${{ inputs.dotnet_version }}
+
+      - name: Install requested .NET workloads
+        if: ${{ inputs.dotnet_workloads != '' }}
+        shell: pwsh
+        env:
+          DOTNET_WORKLOADS: ${{ inputs.dotnet_workloads }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $workloads = @(
+            $env:DOTNET_WORKLOADS -split '[,;\s]+' |
+              Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+              Select-Object -Unique
+          )
+
+          if ($workloads.Count -eq 0) {
+            throw 'dotnet_workloads did not contain a workload identifier.'
+          }
+
+          foreach ($workload in $workloads) {
+            if ($workload -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') {
+              throw "Invalid .NET workload identifier '$workload'."
+            }
+          }
+
+          dotnet workload install @workloads --skip-manifest-update
+          if ($LASTEXITCODE -ne 0) {
+            throw "dotnet workload install failed with exit code $LASTEXITCODE."
+          }
 
       - name: Cache NuGet packages
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4

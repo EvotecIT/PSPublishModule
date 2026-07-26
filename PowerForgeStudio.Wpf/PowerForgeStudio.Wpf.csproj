@@ -24,7 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="OfficeIMO.MarkdownRenderer.Wpf" Version="0.1.0"
+    <PackageReference Include="OfficeIMO.MarkdownRenderer.Wpf" Version="0.1.37"
                       Condition="!Exists('$(OfficeImoMarkdownRendererWpfProject)')" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.*" />
   </ItemGroup>

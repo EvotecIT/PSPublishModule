@@ -1,5 +1,6 @@
 using System.Security;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -42,7 +43,7 @@ public sealed class AppleAppArchiveService
 
         var archivePath = ResolveArchivePath(request);
         var destination = string.IsNullOrWhiteSpace(request.Destination)
-            ? GetGenericDestination(request.Platform)
+            ? GetGenericDestination(request.Platform, request.ArchiveVariant)
             : request.Destination!.Trim();
         Directory.CreateDirectory(Path.GetDirectoryName(archivePath)!);
 
@@ -142,13 +143,55 @@ public sealed class AppleAppArchiveService
                 request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout),
             cancellationToken).ConfigureAwait(false);
 
+        var diagnostics = ResolveUploadDiagnostics(result);
+
         return new AppleAppArchiveUploadResult
         {
             ArchivePath = archivePath,
             ExportPath = exportPath,
             ExportOptionsPlistPath = plistPath,
+            DistributionLogPath = diagnostics.DistributionLogPath,
+            BuildUploadId = diagnostics.BuildUploadId,
             ProcessResult = result
         };
+    }
+
+    private static AppleUploadDiagnostics ResolveUploadDiagnostics(ProcessRunResult result)
+    {
+        var output = string.Join(Environment.NewLine, result.StdOut, result.StdErr);
+        var match = Regex.Match(
+            output,
+            "Created bundle at path \\\"(?<path>[^\\\"]+\\.xcdistributionlogs)\\\"",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        if (!match.Success)
+            return new AppleUploadDiagnostics(null, null);
+
+        var logPath = Path.GetFullPath(match.Groups["path"].Value);
+        var contentDeliveryLog = Path.Combine(logPath, "ContentDelivery.log");
+        if (!File.Exists(contentDeliveryLog))
+            return new AppleUploadDiagnostics(logPath, null);
+
+        var deliveryMatches = Regex.Matches(
+            File.ReadAllText(contentDeliveryLog),
+            "Delivery UUID:\\s*(?<id>[0-9a-fA-F-]{36})",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        var buildUploadId = deliveryMatches.Count == 0
+            ? null
+            : deliveryMatches[deliveryMatches.Count - 1].Groups["id"].Value;
+        return new AppleUploadDiagnostics(logPath, buildUploadId);
+    }
+
+    private readonly struct AppleUploadDiagnostics
+    {
+        internal AppleUploadDiagnostics(string? distributionLogPath, string? buildUploadId)
+        {
+            DistributionLogPath = distributionLogPath;
+            BuildUploadId = buildUploadId;
+        }
+
+        internal string? DistributionLogPath { get; }
+
+        internal string? BuildUploadId { get; }
     }
 
     private static void AddAppStoreConnectAuthenticationArguments(
@@ -187,7 +230,28 @@ public sealed class AppleAppArchiveService
     /// <param name="platform">Apple platform.</param>
     /// <returns>xcodebuild destination string.</returns>
     public static string GetGenericDestination(ApplePlatform platform)
-        => platform switch
+        => GetGenericDestination(platform, AppleArchiveVariant.Default);
+
+    /// <summary>
+    /// Resolves the generic xcodebuild destination for an Apple platform and archive variant.
+    /// </summary>
+    /// <param name="platform">Apple platform.</param>
+    /// <param name="archiveVariant">Optional archive destination variant.</param>
+    /// <returns>xcodebuild destination string.</returns>
+    public static string GetGenericDestination(ApplePlatform platform, AppleArchiveVariant archiveVariant)
+    {
+        if (archiveVariant == AppleArchiveVariant.MacCatalyst)
+        {
+            if (platform != ApplePlatform.macOS)
+                throw new ArgumentException("MacCatalyst archive targets must use Platform macOS for App Store Connect.", nameof(platform));
+
+            return "generic/platform=macOS,variant=Mac Catalyst";
+        }
+
+        if (archiveVariant != AppleArchiveVariant.Default)
+            throw new ArgumentOutOfRangeException(nameof(archiveVariant), archiveVariant, "Unsupported Apple archive variant.");
+
+        return platform switch
         {
             ApplePlatform.iOS => "generic/platform=iOS",
             ApplePlatform.iPadOS => "generic/platform=iOS",
@@ -197,6 +261,7 @@ public sealed class AppleAppArchiveService
             ApplePlatform.visionOS => "generic/platform=visionOS",
             _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, "Unsupported Apple platform.")
         };
+    }
 
     private static string ResolveArchivePath(AppleAppArchiveRequest request)
     {

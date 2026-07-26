@@ -397,6 +397,7 @@ public static partial class WebApiDocsGenerator
             : string.Empty;
         var outputPath = Path.GetFullPath(options.OutputPath);
         Directory.CreateDirectory(outputPath);
+        var previousTypeSlugs = ReadExistingApiTypeSlugs(outputPath);
 
         var warnings = new List<string>();
         if (options.Type == ApiDocsType.CSharp && !File.Exists(xmlPath))
@@ -405,13 +406,18 @@ public static partial class WebApiDocsGenerator
             warnings.Add($"PowerShell help not found: {helpPath}");
 
         Assembly? assembly = null;
-        if (options.Type == ApiDocsType.CSharp && !string.IsNullOrWhiteSpace(options.AssemblyPath) && File.Exists(options.AssemblyPath))
+        if (options.Type == ApiDocsType.CSharp && !string.IsNullOrWhiteSpace(options.AssemblyPath))
         {
-            assembly = TryLoadAssembly(Path.GetFullPath(options.AssemblyPath), warnings);
-        }
-        else if (options.Type == ApiDocsType.CSharp && !string.IsNullOrWhiteSpace(options.AssemblyPath))
-        {
-            warnings.Add($"Assembly not found: {options.AssemblyPath}");
+            var requestedAssemblyPath = Path.GetFullPath(options.AssemblyPath);
+            if (!File.Exists(requestedAssemblyPath))
+                throw new FileNotFoundException(
+                    $"Configured API documentation assembly was not found: {requestedAssemblyPath}",
+                    requestedAssemblyPath);
+
+            assembly = TryLoadAssembly(requestedAssemblyPath, warnings);
+            if (assembly is null)
+                throw new InvalidOperationException(
+                    $"Configured API documentation assembly could not be inspected: {requestedAssemblyPath}");
         }
 
         var apiDoc = options.Type == ApiDocsType.PowerShell
@@ -434,6 +440,7 @@ public static partial class WebApiDocsGenerator
         if (options.Type == ApiDocsType.CSharp && assembly is not null)
         {
             EnrichFromAssembly(apiDoc, assembly, options, warnings);
+            RestrictToPublicAssemblySurface(apiDoc, assembly);
         }
         var assemblyName = apiDoc.AssemblyName;
         var assemblyVersion = apiDoc.AssemblyVersion;
@@ -459,6 +466,7 @@ public static partial class WebApiDocsGenerator
             .Where(t => ShouldIncludeType(t, options))
             .OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        RemoveStaleApiTypeArtifacts(outputPath, previousTypeSlugs, types);
         var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
         var typeAliasMap = BuildTypeAliasMap(types, typeDisplayNames);
         var typeUsageMap = BuildTypeUsageMap(types);
@@ -674,7 +682,9 @@ public static partial class WebApiDocsGenerator
                     ["displayName"] = p.DisplayName,
                     ["summary"] = p.Summary,
                     ["kind"] = p.Kind,
-                    ["signature"] = p.Signature,
+                    ["signature"] = string.IsNullOrWhiteSpace(p.Signature)
+                        ? BuildSignature(p, "Properties")
+                        : p.Signature,
                     ["returnType"] = p.ReturnType,
                     ["declaringType"] = p.DeclaringType,
                     ["source"] = BuildSourceJson(p.Source),
@@ -692,7 +702,19 @@ public static partial class WebApiDocsGenerator
                         ["type"] = ex.Type,
                         ["summary"] = ex.Summary
                     }).ToList(),
-                    ["seeAlso"] = p.SeeAlso
+                    ["seeAlso"] = p.SeeAlso,
+                    ["parameters"] = p.Parameters.Select(parameter => new Dictionary<string, object?>
+                    {
+                        ["name"] = parameter.Name,
+                        ["type"] = parameter.Type,
+                        ["summary"] = parameter.Summary,
+                        ["aliases"] = parameter.Aliases,
+                        ["possibleValues"] = parameter.PossibleValues,
+                        ["isOptional"] = parameter.IsOptional,
+                        ["defaultValue"] = parameter.DefaultValue,
+                        ["position"] = parameter.Position,
+                        ["pipelineInput"] = parameter.PipelineInput
+                    }).ToList()
                 }).ToList(),
                 ["fields"] = type.Fields.Select(f => new Dictionary<string, object?>
                 {

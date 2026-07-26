@@ -480,12 +480,23 @@ public sealed class ModuleBuilder
 
             var xmlFileName = Path.ChangeExtension(fileName, ".xml");
             var xmlSource = TryResolveXmlDocPath(publishDir, xmlFileName);
-            if (string.IsNullOrWhiteSpace(xmlSource) || !File.Exists(xmlSource)) continue;
+            if (!string.IsNullOrWhiteSpace(xmlSource) && File.Exists(xmlSource))
+            {
+                var xmlDest = Path.Combine(targetDir, xmlFileName);
+                Directory.CreateDirectory(Path.GetDirectoryName(xmlDest)!);
+                File.Copy(xmlSource, xmlDest, overwrite: true);
+                copied++;
+            }
 
-            var xmlDest = Path.Combine(targetDir, xmlFileName);
-            Directory.CreateDirectory(Path.GetDirectoryName(xmlDest)!);
-            File.Copy(xmlSource, xmlDest, overwrite: true);
-            copied++;
+            var helpFileName = fileName + "-Help.xml";
+            var helpSource = TryResolveXmlDocPath(publishDir, helpFileName);
+            if (!string.IsNullOrWhiteSpace(helpSource) && File.Exists(helpSource))
+            {
+                var helpDest = Path.Combine(targetDir, helpFileName);
+                Directory.CreateDirectory(Path.GetDirectoryName(helpDest)!);
+                File.Copy(helpSource, helpDest, overwrite: true);
+                copied++;
+            }
         }
 
         copied += CopyReferencedTopLevelAssemblies(publishDir, targetDir, options);
@@ -1034,6 +1045,7 @@ public sealed class ModuleBuilder
         }
         catch { /* ignore */ }
 
+        if (depsPath is null) return null;
         if (string.IsNullOrWhiteSpace(depsPath) || !File.Exists(depsPath)) return null;
 
         try
@@ -1046,7 +1058,7 @@ public sealed class ModuleBuilder
             if (!root.TryGetProperty("targets", out var targets) || targets.ValueKind != JsonValueKind.Object)
                 return plan;
 
-            var appAssemblyName = Path.GetFileNameWithoutExtension(depsPath);
+            var appAssemblyName = GetDepsApplicationAssemblyName(depsPath);
             var excluded = ComputeExcludedLibraries(targets, appAssemblyName, options.ExcludeLibraryFilters);
 
             foreach (var target in targets.EnumerateObject())
@@ -1081,6 +1093,15 @@ public sealed class ModuleBuilder
             _logger.Warn($"Failed to parse deps.json for {tfm} ({depsPath}): {ex.Message}. Falling back to copying top-level binaries.");
             return null;
         }
+    }
+
+    private static string GetDepsApplicationAssemblyName(string depsPath)
+    {
+        var fileName = Path.GetFileName(depsPath);
+        const string suffix = ".deps.json";
+        return fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+            ? fileName.Substring(0, fileName.Length - suffix.Length)
+            : Path.GetFileNameWithoutExtension(fileName);
     }
 
     private static bool IsPowerShellRuntimeLibraryId(string id)

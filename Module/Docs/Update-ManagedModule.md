@@ -15,8 +15,10 @@ Update-ManagedModule [[-Name] <string[]>] [[-Repository] <string>] [-RepositoryN
 ```
 
 ## DESCRIPTION
-This command inspects the selected module root and updates only when the repository contains a newer selected
-version, or installs the target when the selected scope has no copy.
+This command provides the module-update functionality of Update-PSResource. It inspects the selected module
+root and updates only when the repository contains a newer selected version, or installs a named target when the
+selected scope has no copy. When Name is omitted, all installed modules in the selected roots are considered.
+Hash-constrained pipeline input is buffered and validated as one package target before any update starts.
 
 ## EXAMPLES
 
@@ -29,6 +31,12 @@ Update-ManagedModule -Name Company.Tools
 ### EXAMPLE 2
 ```powershell
 Update-ManagedModule -Name Company.Tools -Repository C:\Packages -Path C:\Modules
+```
+
+
+### EXAMPLE 3
+```powershell
+Update-ManagedModule -Scope CurrentUser -Plan
 ```
 
 
@@ -83,7 +91,7 @@ Accept wildcard characters: True
 ```
 
 ### -AllowLoadedModuleUpdate
-Allow updating even when matching loaded module evidence is supplied.
+Allow updating even when a matching module is loaded in the current session or supplied as evidence.
 
 ```yaml
 Type: SwitchParameter
@@ -291,7 +299,7 @@ Accept wildcard characters: True
 ```
 
 ### -LoadedModule
-Loaded module evidence used to block risky in-session updates.
+Additional loaded module evidence used with modules detected automatically in the current PowerShell session.
 
 ```yaml
 Type: ManagedModuleLoadedModule[]
@@ -366,7 +374,7 @@ Possible values:
 Required: False
 Position: 0
 Default value: None
-Accept pipeline input: True (ByPropertyName)
+Accept pipeline input: True (ByValue, ByPropertyName)
 Accept wildcard characters: True
 ```
 

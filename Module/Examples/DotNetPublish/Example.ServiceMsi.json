@@ -109,6 +109,9 @@
         "FloorDateUtc": "2026-01-01",
         "Monotonic": true,
         "StatePath": "Artifacts/DotNetPublish/InstallerState/{installer}.version.json",
+        "Authority": "GitTags",
+        "AuthorityKey": "my-service",
+        "GitRemote": "origin",
         "PropertyName": "ProductVersion",
         "PatchCap": 65535
       },

@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PowerForge;
+using PowerForge.ConsoleShared;
 
 namespace PSPublishModule;
 
@@ -28,7 +30,7 @@ namespace PSPublishModule;
 /// <code>Invoke-PowerForgeRelease -ConfigPath '.\Build\release.json' -ToolsOnly -PublishToolGitHub -ExitCode</code>
 /// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "PowerForgeRelease", SupportsShouldProcess = true, DefaultParameterSetName = ParameterSetConfig)]
-[OutputType(typeof(PowerForgeReleaseResult))]
+[OutputType(typeof(PowerForgeReleaseResult), typeof(PowerForgeAppleReleaseReceipt))]
 public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
 {
     private const string ParameterSetConfig = "Config";
@@ -102,6 +104,20 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     public string? Configuration { get; set; }
 
     /// <summary>
+    /// Target framework used by the native module-release lane.
+    /// </summary>
+    [Parameter]
+    [ValidateSet("auto", "net10.0", "net8.0")]
+    public string? ModuleFramework { get; set; }
+
+    /// <summary>
+    /// Module pipeline gate used by the native module-release lane.
+    /// </summary>
+    [Parameter]
+    [ValidateSet("Manifest", "Documentation", "Build", "Publish")]
+    public ConfigurationGateMode? ModuleRunMode { get; set; }
+
+    /// <summary>
     /// Skips the dotnet build step inside the native module-release lane.
     /// </summary>
     [Parameter]
@@ -126,10 +142,58 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     public SwitchParameter ModuleNoSign { get; set; }
 
     /// <summary>
+    /// Skips installation after the native module-release lane completes.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter ModuleSkipInstall { get; set; }
+
+    /// <summary>
     /// Enables signing for the native module-release lane.
     /// </summary>
     [Parameter]
     public SwitchParameter ModuleSignModule { get; set; }
+
+    /// <summary>Maximum runtime in seconds for the native module-release lane.</summary>
+    [Parameter]
+    [ValidateRange(1, int.MaxValue)]
+    public int? ModuleTimeoutSeconds { get; set; }
+
+    /// <summary>Optional signing certificate thumbprint for the native module-release lane.</summary>
+    [Parameter]
+    public string? ModuleCertificateThumbprint { get; set; }
+
+    /// <summary>Controls whether the native module-release lane signs binaries.</summary>
+    [Parameter]
+    public bool ModuleSignIncludeBinaries { get; set; }
+
+    /// <summary>Controls whether the native module-release lane signs internal files.</summary>
+    [Parameter]
+    public bool ModuleSignIncludeInternals { get; set; }
+
+    /// <summary>Controls whether the native module-release lane signs executables.</summary>
+    [Parameter]
+    public bool ModuleSignIncludeExe { get; set; }
+
+    /// <summary>Optional diagnostics baseline path for the native module-release lane.</summary>
+    [Parameter]
+    public string? ModuleDiagnosticsBaselinePath { get; set; }
+
+    /// <summary>Controls diagnostics baseline generation in the native module-release lane.</summary>
+    [Parameter]
+    public bool ModuleGenerateDiagnosticsBaseline { get; set; }
+
+    /// <summary>Controls diagnostics baseline updates in the native module-release lane.</summary>
+    [Parameter]
+    public bool ModuleUpdateDiagnosticsBaseline { get; set; }
+
+    /// <summary>Controls failure on new diagnostics in the native module-release lane.</summary>
+    [Parameter]
+    public bool ModuleFailOnNewDiagnostics { get; set; }
+
+    /// <summary>Optional diagnostics severity threshold for the native module-release lane.</summary>
+    [Parameter]
+    [ValidateSet("Warning", "Error")]
+    public string? ModuleFailOnDiagnosticsSeverity { get; set; }
 
     /// <summary>
     /// Skips workspace validation defined by the release config.
@@ -179,6 +243,48 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     [Parameter]
     [Alias("Targets")]
     public string[]? Target { get; set; }
+
+    /// <summary>
+    /// Selects one explicit Apple release operation. Configured preserves legacy JSON action flags.
+    /// </summary>
+    [Parameter]
+    public PowerForgeAppleReleaseAction AppleAction { get; set; } = PowerForgeAppleReleaseAction.Configured;
+
+    /// <summary>
+    /// Explicitly confirms a risky Apple screenshot replacement, review submission, or public release action.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter ConfirmAppleAction { get; set; }
+
+    /// <summary>Forces exact remote-build reuse on this run.</summary>
+    [Parameter]
+    public SwitchParameter AppleResume { get; set; }
+
+    /// <summary>Disables exact remote-build reuse on this run.</summary>
+    [Parameter]
+    public SwitchParameter NoAppleResume { get; set; }
+
+    /// <summary>Waits for App Store Connect build processing on this run.</summary>
+    [Parameter]
+    public SwitchParameter AppleWaitForProcessing { get; set; }
+
+    /// <summary>Returns after upload instead of waiting for build processing.</summary>
+    [Parameter]
+    public SwitchParameter NoAppleWaitForProcessing { get; set; }
+
+    /// <summary>Maximum App Store Connect processing wait in seconds.</summary>
+    [Parameter]
+    [ValidateRange(1, int.MaxValue)]
+    public int? AppleProcessingTimeoutSeconds { get; set; }
+
+    /// <summary>App Store Connect processing poll interval in seconds.</summary>
+    [Parameter]
+    [ValidateRange(1, int.MaxValue)]
+    public int? ApplePollIntervalSeconds { get; set; }
+
+    /// <summary>Requests compact Apple receipt-oriented output from compatible hosts.</summary>
+    [Parameter]
+    public SwitchParameter AppleSummary { get; set; }
 
     /// <summary>
     /// Optional runtime filter.
@@ -374,6 +480,10 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     [Parameter]
     public SwitchParameter ExitCode { get; set; }
 
+    /// <summary>Disables the interactive Spectre renderer while preserving structured pipeline output.</summary>
+    [Parameter]
+    public SwitchParameter NoInteractive { get; set; }
+
     /// <summary>
     /// Executes the unified release workflow.
     /// </summary>
@@ -381,7 +491,6 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     {
         var boundParameters = MyInvocation?.BoundParameters;
         var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
-        var logger = new CmdletLogger(this, isVerbose);
         var exitCodeMode = ExitCode.IsPresent;
 
         try
@@ -420,13 +529,45 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             }
 
             var request = BuildRequest(configFullPath, requestDefaults, boundParameters);
-
-            var result = new PowerForgeReleaseService(
+            ConsoleEncoding.EnsureUtf8();
+            var interactive = !NoInteractive.IsPresent && SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+            BufferedLogger? interactiveBuffer = null;
+            ILogger logger = interactive
+                ? interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }
+                : new CmdletLogger(this, isVerbose);
+            var service = new PowerForgeReleaseService(
                 logger,
                 DotNetAssemblySigningCallbackFactory.Create(logger),
-                DotNetAssemblySigningCallbackFactory.CreatePreflight(logger))
-                .Execute(spec, request);
-            WriteObject(result);
+                DotNetAssemblySigningCallbackFactory.CreatePreflight(logger));
+            var watch = Stopwatch.StartNew();
+            PowerForgeReleaseResult result;
+            if (interactive)
+            {
+                result = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
+                    spec,
+                    request,
+                    progress =>
+                    {
+                        request.Progress = progress;
+                        return service.Execute(spec, request);
+                    });
+                watch.Stop();
+                SpectrePowerForgeReleaseConsoleUi.WriteSummary(result, watch.Elapsed);
+                if (!result.Success && interactiveBuffer?.Entries.Count > 0)
+                {
+                    new BufferedLogSupportService().WriteTail(
+                        interactiveBuffer.Entries,
+                        new SpectreConsoleLogger { IsVerbose = isVerbose });
+                }
+            }
+            else
+            {
+                result = service.Execute(spec, request);
+                watch.Stop();
+            }
+            WriteObject(AppleSummary.IsPresent && result.AppleReceipt is not null
+                ? result.AppleReceipt
+                : result);
 
             if (!result.Success)
                 throw new InvalidOperationException(result.ErrorMessage ?? "Unified release workflow failed.");
@@ -615,9 +756,22 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             WingetSubmitReplaceVersion = NormalizeNullable(WingetReplaceVersion),
             WingetSubmitAllowInteractiveAuthentication = ResolveRequestedFlag(boundParameters, nameof(WingetAllowInteractiveAuthentication)),
             WingetSubmitTimeoutSeconds = WingetTimeoutSeconds,
+            ModuleFramework = NormalizeNullable(ModuleFramework),
+            ModuleRunMode = ModuleRunMode,
             ModuleNoDotnetBuild = ResolveRequestedFlag(boundParameters, nameof(ModuleNoDotnetBuild)),
             ModuleNoSign = ResolveRequestedFlag(boundParameters, nameof(ModuleNoSign)),
+            ModuleSkipInstall = ResolveRequestedFlag(boundParameters, nameof(ModuleSkipInstall)),
             ModuleSignModule = ResolveRequestedFlag(boundParameters, nameof(ModuleSignModule)),
+            ModuleTimeoutSeconds = ModuleTimeoutSeconds,
+            ModuleCertificateThumbprint = NormalizeNullable(ModuleCertificateThumbprint),
+            ModuleSignIncludeBinaries = ResolveRequestedFlag(boundParameters, nameof(ModuleSignIncludeBinaries)),
+            ModuleSignIncludeInternals = ResolveRequestedFlag(boundParameters, nameof(ModuleSignIncludeInternals)),
+            ModuleSignIncludeExe = ResolveRequestedFlag(boundParameters, nameof(ModuleSignIncludeExe)),
+            ModuleDiagnosticsBaselinePath = NormalizeNullable(ModuleDiagnosticsBaselinePath),
+            ModuleGenerateDiagnosticsBaseline = ResolveRequestedFlag(boundParameters, nameof(ModuleGenerateDiagnosticsBaseline)),
+            ModuleUpdateDiagnosticsBaseline = ResolveRequestedFlag(boundParameters, nameof(ModuleUpdateDiagnosticsBaseline)),
+            ModuleFailOnNewDiagnostics = ResolveRequestedFlag(boundParameters, nameof(ModuleFailOnNewDiagnostics)),
+            ModuleFailOnDiagnosticsSeverity = NormalizeNullable(ModuleFailOnDiagnosticsSeverity),
             SkipWorkspaceValidation = SkipWorkspaceValidation.IsPresent,
             SkipRestore = SkipRestore.IsPresent,
             SkipBuild = SkipBuild.IsPresent,
@@ -648,7 +802,20 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             SignKeyContainer = NormalizeNullable(SignKeyContainer),
             PackageSignThumbprint = NormalizeNullable(PackageSignThumbprint),
             PackageSignStore = NormalizeNullable(PackageSignStore),
-            PackageSignTimestampUrl = NormalizeNullable(PackageSignTimestampUrl)
+            PackageSignTimestampUrl = NormalizeNullable(PackageSignTimestampUrl),
+            AppleAction = AppleAction,
+            AppleActionConfirmed = ConfirmAppleAction.IsPresent,
+            AppleResume = ResolveMutuallyExclusiveFlag(
+                boundParameters,
+                nameof(AppleResume),
+                nameof(NoAppleResume)),
+            AppleWaitForProcessing = ResolveMutuallyExclusiveFlag(
+                boundParameters,
+                nameof(AppleWaitForProcessing),
+                nameof(NoAppleWaitForProcessing)),
+            AppleProcessingTimeoutSeconds = AppleProcessingTimeoutSeconds,
+            ApplePollIntervalSeconds = ApplePollIntervalSeconds,
+            AppleSummaryOnly = AppleSummary.IsPresent
         };
 
         if (boundParameters?.ContainsKey(nameof(WorkspaceEnableFeature)) == true)
@@ -673,6 +840,18 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             options.InstallerMsBuildProperties = ParseKeyValuePairs(InstallerProperty);
 
         return options;
+    }
+
+    private static bool? ResolveMutuallyExclusiveFlag(
+        IDictionary<string, object>? boundParameters,
+        string enabledName,
+        string disabledName)
+    {
+        var enabled = boundParameters?.ContainsKey(enabledName) == true;
+        var disabled = boundParameters?.ContainsKey(disabledName) == true;
+        if (enabled && disabled)
+            throw new PSArgumentException($"Use only one of -{enabledName} or -{disabledName}.");
+        return enabled ? true : disabled ? false : null;
     }
 
     private static PowerForgeToolReleaseFlavor[] ParseFlavors(string[]? values)

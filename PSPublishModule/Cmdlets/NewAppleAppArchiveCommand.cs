@@ -35,6 +35,10 @@ public sealed class NewAppleAppArchiveCommand : PSCmdlet
     [Parameter]
     public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
 
+    /// <summary>Optional archive destination variant, such as Mac Catalyst.</summary>
+    [Parameter]
+    public AppleArchiveVariant ArchiveVariant { get; set; } = AppleArchiveVariant.Default;
+
     /// <summary>Explicit xcodebuild destination.</summary>
     [Parameter]
     public string? Destination { get; set; }
@@ -77,6 +81,7 @@ public sealed class NewAppleAppArchiveCommand : PSCmdlet
             Scheme = Scheme,
             Configuration = Configuration,
             Platform = Platform,
+            ArchiveVariant = ArchiveVariant,
             Destination = Destination,
             ArchivePath = ArchivePath is null ? null : SessionState.Path.GetUnresolvedProviderPathFromPSPath(ArchivePath),
             ArchiveRoot = ArchiveRoot is null ? null : SessionState.Path.GetUnresolvedProviderPathFromPSPath(ArchiveRoot),

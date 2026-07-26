@@ -198,6 +198,82 @@ public class WebApiDocsGeneratorContractTests
     }
 
     [Fact]
+    public void GenerateDocsHtml_AllowsNavigationTokensInOnlyOneCustomFragment()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-nav-split-fragments-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var siteJsonPath = Path.Combine(root, "site.json");
+        File.WriteAllText(siteJsonPath,
+            """
+            {
+              "Name": "TestSite",
+              "Navigation": {
+                "Menus": [
+                  { "Name": "main", "Items": [ { "Title": "Docs", "Url": "/docs/" } ] }
+                ]
+              }
+            }
+            """);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var headerPath = Path.Combine(root, "api-header.html");
+        var footerPath = Path.Combine(root, "api-footer.html");
+        File.WriteAllText(headerPath, "<header>{{NAV_LINKS}}{{NAV_ACTIONS}}</header>");
+        File.WriteAllText(footerPath, "<footer>Footer</footer>");
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            NavJsonPath = siteJsonPath,
+            HeaderHtmlPath = headerPath,
+            FooterHtmlPath = footerPath
+        };
+        options.TemplateTokens["NAV_LINKS"] = "<a href=\"/provided/\">Provided</a>";
+        options.TemplateTokens["NAV_ACTIONS"] = string.Empty;
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("nav injection may be empty", StringComparison.OrdinalIgnoreCase));
+
+            var html = File.ReadAllText(Path.Combine(outputPath, "index.html"));
+            Assert.Contains("href=\"/docs/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<footer>Footer</footer>", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
     public void GenerateDocsHtml_WarnsWhenNavTokensPresentButNavJsonPathNotSet()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-nav-required-" + Guid.NewGuid().ToString("N"));
@@ -600,11 +676,31 @@ public class WebApiDocsGeneratorContractTests
                   ],
                   "actions": [
                     { "text": "Install", "href": "https://example.test/install", "external": true }
-                  ]
+                  ],
+                  "footer": {
+                    "footer-products": [
+                      { "text": "Word", "href": "/products/word/" }
+                    ],
+                    "footer-docs": [
+                      { "text": "Getting Started", "href": "/docs/getting-started/" }
+                    ],
+                    "footer-resources": [
+                      { "text": "Benchmarks", "href": "/benchmarks/" }
+                    ],
+                    "footer-community": [
+                      { "text": "GitHub", "href": "https://example.test/repository", "external": true }
+                    ]
+                  }
                 }
               }
             }
             """);
+
+        var headerPath = Path.Combine(root, "api-header.html");
+        File.WriteAllText(headerPath, "<header>{{NAV_LINKS}}{{NAV_ACTIONS}}</header>");
+        var footerPath = Path.Combine(root, "api-footer.html");
+        File.WriteAllText(footerPath,
+            "<footer><ul>{{FOOTER_PRODUCTS_LIST_ITEMS}}</ul><ul>{{FOOTER_DOCS_LIST_ITEMS}}</ul><ul>{{FOOTER_RESOURCES_LIST_ITEMS}}</ul><ul>{{FOOTER_COMMUNITY_LIST_ITEMS}}</ul></footer>");
 
         var xmlPath = Path.Combine(root, "test.xml");
         File.WriteAllText(xmlPath,
@@ -628,7 +724,9 @@ public class WebApiDocsGeneratorContractTests
             Template = "docs",
             BaseUrl = "/api",
             NavJsonPath = navJsonPath,
-            NavContextPath = "/api/"
+            NavContextPath = "/api/",
+            HeaderHtmlPath = headerPath,
+            FooterHtmlPath = footerPath
         };
 
         try
@@ -643,6 +741,13 @@ public class WebApiDocsGeneratorContractTests
             Assert.Contains("href=\"/api/\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"/docs/\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"https://example.test/install\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/products/word/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/docs/getting-started/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/benchmarks/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"https://example.test/repository\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<li><a href=\"/products/word/\">Word</a></li>", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<li><a href=\"/docs/getting-started/\">Getting Started</a></li>", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("{{FOOTER_", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(">Home<", html, StringComparison.OrdinalIgnoreCase);
         }
         finally

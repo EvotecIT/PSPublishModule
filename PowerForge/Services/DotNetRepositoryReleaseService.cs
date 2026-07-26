@@ -6,6 +6,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -25,6 +26,7 @@ public sealed partial class DotNetRepositoryReleaseService
     private readonly NuGetPackageVersionResolver _resolver;
     private readonly PackageSigningHandler _signPackages;
     private readonly Func<string, CertificateStoreLocation, string?> _getCertificateSha256;
+    private static readonly AsyncLocal<CancellationToken> ActiveCancellationToken = new();
     private static readonly string[] DefaultExcludeDirectories =
     {
         ".git", ".vs", ".idea", "bin", "obj", "node_modules", "packages",

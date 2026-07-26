@@ -18,9 +18,14 @@ internal sealed class ModuleStateConflictAnalyzer
         var desired = (desiredModules ?? Array.Empty<ModuleStateDesiredModule>()).ToArray();
         foreach (var desiredModule in desired)
         {
+            var targetRoot = desiredModule.TargetPath ?? desiredModule.ModuleRoot;
             var installedModules = inventory.InstalledModules
                 .Where(module => string.Equals(module.Name, desiredModule.Name, StringComparison.OrdinalIgnoreCase))
-                .Where(module => string.IsNullOrWhiteSpace(desiredModule.TargetPath) || IsUnderTargetPath(module.Path, desiredModule.TargetPath!))
+                .Where(module => string.IsNullOrWhiteSpace(targetRoot) || ModuleStatePathIdentity.IsSameOrChild(module.Path, targetRoot))
+                .Where(module => string.IsNullOrWhiteSpace(desiredModule.PowerShellEdition) ||
+                                 string.Equals(module.PowerShellEdition, desiredModule.PowerShellEdition, StringComparison.OrdinalIgnoreCase))
+                .Where(module => string.IsNullOrWhiteSpace(desiredModule.ProfileName) ||
+                                 string.Equals(module.ProfileName, desiredModule.ProfileName, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
             var policy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy, desiredModule.IncludePrerelease);
 
@@ -358,22 +363,6 @@ internal sealed class ModuleStateConflictAnalyzer
             .ThenByDescending(static module => module.IsLoaded)
             .FirstOrDefault();
     }
-
-    private static bool IsUnderTargetPath(string? modulePath, string targetPath)
-    {
-        if (string.IsNullOrWhiteSpace(modulePath))
-            return false;
-
-        var normalizedModulePath = NormalizePath(modulePath!);
-        var normalizedTargetPath = NormalizePath(targetPath);
-        return string.Equals(normalizedModulePath, normalizedTargetPath, StringComparison.OrdinalIgnoreCase) ||
-               normalizedModulePath.StartsWith(normalizedTargetPath + "/", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string NormalizePath(string path)
-        => path.Trim()
-            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
-            .Replace('\\', '/');
 
     private static string NormalizeScope(string? scope)
         => string.IsNullOrWhiteSpace(scope) ? "<unknown>" : scope!.Trim();

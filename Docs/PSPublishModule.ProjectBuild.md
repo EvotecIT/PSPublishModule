@@ -4,7 +4,8 @@ This document describes the JSON configuration consumed by `Invoke-ProjectBuild`
 For the unified repo-level entrypoint that combines package and downloadable tool releases in one file,
 see `Build/release.json` and `powerforge release`.
 For module-plus-NuGet repository releases such as PSParseHTML, where one run should publish packages,
-the PowerShell module, and one GitHub asset set, see `Docs/PSPublishModule.UnifiedModuleProjectRelease.md`.
+the PowerShell module, and one GitHub asset set, see
+[Unified Module And Project Releases](PSPublishModule.UnifiedModuleProjectRelease.md).
 For a PowerShell-first authoring layer proposal that keeps the same engine but avoids raw CLI argument shaping,
 see `Docs/PSPublishModule.ProjectBuild.DslProposal.md`.
 
@@ -78,7 +79,6 @@ Unified release entrypoint
 - Scaffolder: `New-PowerForgeReleaseConfig -ProjectRoot . -PassThru`
 - PowerShell cmdlet: `Invoke-PowerForgeRelease -ConfigPath .\Build\release.json`
 - Wrapper: `Build/Build-Project.ps1`
-- Transitional top-level wrapper: `Build/Build-Release.ps1`
 - Preview tool wrapper: `Build/Build-ToolsPreview.ps1`
 - CLI: `powerforge release --config .\Build\release.json`
 - Packages continue to use `project.build.json` / `Invoke-ProjectBuild`.
@@ -93,16 +93,23 @@ Unified release entrypoint
   - uses stable `-preview` tags per tool/version so reruns can reuse the same release and resume missing asset uploads
   - keeps the existing local `TokenFilePath` pattern from `Build/release.json`; replace that path if you run the preview flow from another machine or CI environment
 - Module release can now be declared directly in `release.json` through the top-level `Module` section.
-  In this repo that section shells out to `Module/Build/Build-Module.ps1` and stages the declared artefact folders.
-- `Build/Build-Release.ps1` still supports bridge mode for repos that have not adopted a native `Module` section yet,
-  but it automatically defers to `release.json` when `Module` is present.
-- When native `Module` mode is active, the same day-to-day overrides from `Build/Build-Release.ps1` can still flow into
-  the module script:
-  - `-NoDotnetBuild`
+  In this repo that section points to the module pipeline in `powerforge.json` and stages the declared artefact folders.
+- Repositories that need one version across NuGet packages, a PowerShell module, and executable outputs can set
+  `Module.SynchronizeVersionWithPackages: true` and identify `Module.VersionPrimaryProject`.
+  Keep `Module.IncludesPackages: false` so the package lane has one owner. The package plan receives the module's
+  next version as a floor, resolves the configured primary package project, and then passes that shared version to
+  the module and executable lanes. During a real release this first pass is plan-only; NuGet execution is deferred
+  until the module and executable builds succeed. Use `Packages.AlignPackageVersions: true` when all package projects
+  must share the version.
+- Interactive PowerShell and CLI runs render the same phase plan, live elapsed time, and final release summary.
+  Redirected, verbose, quiet, no-color, and JSON runs keep line-oriented or structured output for CI and agents.
+- `Build/Build-Project.ps1` is the single PSPublishModule self-build entry point. It builds and imports the local
+  cmdlet assembly, then forwards the release request to the shared engine.
+- Common module overrides remain available on the entry point:
   - `-ModuleVersion <version>`
-  - `-PreReleaseTag <tag>`
-  - `-NoSign`
-  - `-SignModule`
+  - `-ModulePreReleaseTag <tag>`
+  - `-ModuleNoSign`
+  - `-ModuleSignModule`
 - Unified release can also declare a reusable workspace preflight via `WorkspaceValidation`
   backed by `workspace.validation.json` and `powerforge workspace validate`.
 - Common release-time overrides:
@@ -137,7 +144,7 @@ New-PowerForgeReleaseConfig -ProjectRoot . -PassThru
 ```
 
 - The generated `release.json` now includes:
-  - a native `Module` section pointing at `Module/Build/Build-Module.ps1`
+  - a native `Module` section pointing at either a module `ConfigPath` or a legacy `ScriptPath`
   - default module artefact roots for `Packed`, `PackedWithModules`, and `Unpacked`
   - the existing package/tool sections when matching source configs are present
 - The `Module` section can optionally carry module-specific defaults too:
@@ -223,13 +230,18 @@ Example unified GitHub release publishing from staged assets:
 "GitHub": {
   "Publish": true,
   "TagTemplate": "v{Version}",
-  "ReleaseNameTemplate": "{Repository} {Version}"
+  "ReleaseNameTemplate": "{Repository} {Version}",
+  "ReuseExistingRelease": false,
+  "ReplaceExistingAssets": false
 }
 ```
 
 - use `--publish-project-github` (or set `GitHub.Publish: true`) to upload the unified staged release as one repo release
 - when top-level `GitHub` is active, package-host GitHub publishing is suppressed and the staged release assets are uploaded instead
 - uploaded assets include staged `NuGet`, `Portable`, `Installer`, `Tool`, metadata files, top-level `release-manifest.json` / `SHA256SUMS.txt`, and any generated Winget manifests
+- publish-mode auto-version patterns reserve a version that is free in the module/package repository and in the configured GitHub tag/release namespace; build and plan modes stay offline
+- normal unified releases do not silently reuse an occupied GitHub tag; set `ReuseExistingRelease: true` only for a deliberate recovery run, and combine it with `ReplaceExistingAssets: true` only when same-named assets should be replaced
+- interactive PowerForge hosts show the active asset, transferred bytes, total bytes, and final created/reused/uploaded/skipped/replaced counts
 
 - Plan or build preview executables only:
 
@@ -319,7 +331,8 @@ Versioning
 - `VersionTracks.<Name>.AnchorPackageId`: optional explicit package identity when it differs from the project name.
 - `VersionTracks.<Name>.Projects`: sibling projects that should be stamped to the same resolved version. `AnchorProject` is included automatically.
 - When `AnchorPackageId` is used, also set `AnchorProject` so the anchor project itself is stamped automatically.
-- `AlignPackageVersions`: when true, projects using the same X-pattern are stepped from the highest current package version found for any project in that group. For example, if one `2.0.X` package is at `2.0.5` and another is new, both plan `2.0.6`. Exact-version overrides remain exact.
+- `AlignPackageVersions`: defaults to false. When true, ordinary projects using the same X-pattern are stepped from the highest current package version found for any project in that group. For example, if one `2.0.X` package is at `2.0.5` and another is new, both plan `2.0.6`. Ordinary exact-version overrides outside a version track remain exact. `VersionTracks` already coordinate their members when alignment is false and remain explicit, separate group boundaries when it is true. This does not assign one universal version to every project. See [Unified Module And Project Releases](PSPublishModule.UnifiedModuleProjectRelease.md) for complete aligned, non-aligned, and version-track behavior.
+- In a module pipeline with `Release.SynchronizeModuleVersion`, the next available module version is also a floor for `Release.PrimaryProject`. If that project belongs to an aligned X-pattern group, the whole group is raised to the floor. A higher numeric NuGet-derived package candidate still wins. At the same numeric version, a stable X-pattern candidate does not erase the configured module prerelease; explicit prerelease versions retain normal semantic-version ordering. The module and primary package patterns must describe the same version line.
 - When no expected version is provided for a project, the existing csproj version is used.
 - When both `VersionTracks` and `ExpectedVersionMap` are present, the explicit map wins for matching projects.
 - `UpdateVersions`: when false, csproj files are not updated.

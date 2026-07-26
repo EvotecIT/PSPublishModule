@@ -83,11 +83,11 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
     public bool IsPreRelease { get; set; }
 
     /// <summary>
-    /// When true (default), a 422 tag conflict reuses the existing release.
-    /// When false, the cmdlet fails on existing tags.
+    /// When true, a 422 tag conflict deliberately reuses the existing release.
+    /// The default is false so normal publishing cannot mutate an older release.
     /// </summary>
     [Parameter]
-    public bool ReuseExistingReleaseOnConflict { get; set; } = true;
+    public bool ReuseExistingReleaseOnConflict { get; set; }
 
     /// <summary>Creates the release and uploads assets.</summary>
     protected override void ProcessRecord()

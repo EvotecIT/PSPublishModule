@@ -7,7 +7,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class DotNetPublishPipelineRunnerStorePackageTests
+public sealed partial class DotNetPublishPipelineRunnerStorePackageTests
 {
     [Fact]
     public void Plan_AddsStorePackageStep_WhenPackagingProjectPathConfigured()

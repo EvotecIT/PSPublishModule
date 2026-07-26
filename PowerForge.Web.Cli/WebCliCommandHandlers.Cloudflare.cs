@@ -27,6 +27,19 @@ internal static partial class WebCliCommandHandlers
         if (verb.Equals("verify", StringComparison.OrdinalIgnoreCase))
             return HandleCloudflareVerify(subArgs, outputJson, logger, outputSchemaVersion);
 
+        if (verb.Equals("dns-record", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("dns", StringComparison.OrdinalIgnoreCase))
+        {
+            if (subArgs.Length > 0 && !subArgs[0].StartsWith("-", StringComparison.Ordinal))
+            {
+                if (!subArgs[0].Equals("apply", StringComparison.OrdinalIgnoreCase))
+                    return Fail($"Unknown cloudflare dns-record verb '{subArgs[0]}'. Supported: apply.", outputJson, logger, "web.cloudflare.dns-record");
+                subArgs = subArgs.Skip(1).ToArray();
+            }
+
+            return HandleCloudflareDnsRecord(subArgs, outputJson, logger, outputSchemaVersion);
+        }
+
         if (verb.Equals("cache-policy", StringComparison.OrdinalIgnoreCase) ||
             verb.Equals("policy", StringComparison.OrdinalIgnoreCase) ||
             verb.Equals("rules", StringComparison.OrdinalIgnoreCase))
@@ -41,7 +54,143 @@ internal static partial class WebCliCommandHandlers
             return HandleCloudflareCachePolicy(subArgs, outputJson, logger, outputSchemaVersion);
         }
 
-        return Fail($"Unknown cloudflare verb '{verb}'. Supported: purge, verify, cache-policy.", outputJson, logger, "web.cloudflare");
+        return Fail($"Unknown cloudflare verb '{verb}'. Supported: purge, verify, cache-policy, dns-record.", outputJson, logger, "web.cloudflare");
+    }
+
+    private static int HandleCloudflareDnsRecord(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
+    {
+        const string command = "web.cloudflare.dns-record.apply";
+        if (!TryValidateCloudflareDnsRecordArguments(subArgs, out var argumentError))
+            return Fail(argumentError, outputJson, logger, command);
+
+        var zoneName = TryGetOptionValue(subArgs, "--zone-name") ??
+                       TryGetOptionValue(subArgs, "--zoneName") ??
+                       TryGetOptionValue(subArgs, "--zone");
+        if (string.IsNullOrWhiteSpace(zoneName))
+            return Fail("Missing required --zone-name.", outputJson, logger, command);
+
+        var recordName = TryGetOptionValue(subArgs, "--record-name") ??
+                         TryGetOptionValue(subArgs, "--recordName") ??
+                         TryGetOptionValue(subArgs, "--name");
+        if (string.IsNullOrWhiteSpace(recordName))
+            return Fail("Missing required --record-name.", outputJson, logger, command);
+
+        var recordContent = TryGetOptionValue(subArgs, "--record-content") ??
+                            TryGetOptionValue(subArgs, "--recordContent") ??
+                            TryGetOptionValue(subArgs, "--content");
+        if (string.IsNullOrWhiteSpace(recordContent))
+            return Fail("Missing required --record-content.", outputJson, logger, command);
+
+        var token = TryGetOptionValue(subArgs, "--token") ??
+                    TryGetOptionValue(subArgs, "--api-token") ??
+                    TryGetOptionValue(subArgs, "--apiToken");
+        var tokenEnv = TryGetOptionValue(subArgs, "--token-env") ??
+                       TryGetOptionValue(subArgs, "--api-token-env") ??
+                       TryGetOptionValue(subArgs, "--apiTokenEnv") ??
+                       "CLOUDFLARE_API_TOKEN";
+        if (string.IsNullOrWhiteSpace(token))
+            token = Environment.GetEnvironmentVariable(tokenEnv);
+        if (string.IsNullOrWhiteSpace(token))
+            return Fail($"Missing Cloudflare API token. Provide --token or set env var '{tokenEnv}'.", outputJson, logger, command);
+
+        var recordType = TryGetOptionValue(subArgs, "--record-type") ??
+                         TryGetOptionValue(subArgs, "--recordType") ??
+                         TryGetOptionValue(subArgs, "--type") ??
+                         "A";
+        var proxiedValue = TryGetOptionValue(subArgs, "--proxied") ?? "true";
+        if (!bool.TryParse(proxiedValue, out var proxied))
+            return Fail("--proxied must be true or false.", outputJson, logger, command);
+
+        var ttlValue = TryGetOptionValue(subArgs, "--ttl") ?? "1";
+        if (!int.TryParse(ttlValue, out var ttl))
+            return Fail("--ttl must be an integer.", outputJson, logger, command);
+
+        var comment = TryGetOptionValue(subArgs, "--comment");
+        var dryRun = HasOption(subArgs, "--dry-run") || HasOption(subArgs, "--dryRun");
+        var result = CloudflareDnsRecordManager.Apply(
+            zoneName,
+            token,
+            recordType,
+            recordName,
+            recordContent,
+            proxied,
+            ttl,
+            comment,
+            dryRun,
+            logger);
+
+        if (outputJson)
+        {
+            var element = JsonSerializer.SerializeToElement(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["zoneId"] = result.ZoneId,
+                ["recordId"] = result.RecordId,
+                ["recordType"] = result.RecordType,
+                ["recordName"] = result.RecordName,
+                ["recordContent"] = result.RecordContent,
+                ["proxied"] = result.Proxied,
+                ["ttl"] = result.Ttl,
+                ["dryRun"] = result.DryRun,
+                ["changesRequired"] = result.ChangesRequired,
+                ["changed"] = result.Changed,
+                ["action"] = result.Action,
+                ["message"] = result.Message
+            }, WebCliJson.Options);
+
+            WebCliJsonWriter.Write(new WebCliJsonEnvelope
+            {
+                SchemaVersion = outputSchemaVersion,
+                Command = command,
+                Success = result.Success,
+                ExitCode = result.Success ? 0 : 1,
+                Result = element,
+                Error = result.Success ? null : result.Message
+            });
+            return result.Success ? 0 : 1;
+        }
+
+        if (result.Success) logger.Success(result.Message);
+        else logger.Error(result.Message);
+        return result.Success ? 0 : 1;
+    }
+
+    private static bool TryValidateCloudflareDnsRecordArguments(string[] args, out string error)
+    {
+        var valueOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "--zone-name", "--zoneName", "--zone",
+            "--record-name", "--recordName", "--name",
+            "--record-content", "--recordContent", "--content",
+            "--token", "--api-token", "--apiToken",
+            "--token-env", "--api-token-env", "--apiTokenEnv",
+            "--record-type", "--recordType", "--type",
+            "--proxied", "--ttl", "--comment", "--output"
+        };
+        var flagOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "--dry-run", "--dryRun", "--output-json", "--json"
+        };
+
+        for (var index = 0; index < args.Length; index++)
+        {
+            var argument = args[index];
+            if (flagOptions.Contains(argument))
+                continue;
+            if (!valueOptions.Contains(argument))
+            {
+                error = $"Unknown cloudflare dns-record argument '{argument}'.";
+                return false;
+            }
+            if (index + 1 >= args.Length || args[index + 1].StartsWith("--", StringComparison.Ordinal))
+            {
+                error = $"Missing value for cloudflare dns-record option '{argument}'.";
+                return false;
+            }
+            index++;
+        }
+
+        error = string.Empty;
+        return true;
     }
 
     private static int HandleCloudflareCachePolicy(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)

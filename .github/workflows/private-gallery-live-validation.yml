@@ -78,7 +78,7 @@ jobs:
       - name: Build PSPublishModule
         shell: pwsh
         timeout-minutes: 15
-        run: .\Build\Build-Module.ps1
+        run: .\Build\Build-Project.ps1 -ModuleOnly
 
       - name: Run live Azure Artifacts validation
         shell: pwsh

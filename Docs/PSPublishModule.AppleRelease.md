@@ -80,6 +80,9 @@ Publish-AppleAppArchive `
 `New-AppleAppArchive` derives the generic destination from `-Platform` unless
 `-Destination` is supplied. `iPadOS` intentionally maps to `generic/platform=iOS`
 because Xcode archives universal iOS/iPadOS apps through the iOS destination.
+For a Catalyst archive, use `-Platform macOS -ArchiveVariant MacCatalyst`;
+PowerForge emits `generic/platform=macOS,variant=Mac Catalyst` while preserving
+the macOS App Store Connect platform.
 
 `Publish-AppleAppArchive` writes a temporary export options plist and passes it to
 `xcodebuild -exportArchive` using:
@@ -104,10 +107,10 @@ Set-AppStoreConnectVersionBuild -IssuerId $issuerId -KeyId $keyId -PrivateKeyPat
 
 ## Unified Release Flow
 
-Apple app archive/upload targets can also live in the same `powerforge.release.json`
-used for modules, NuGet packages, downloadable tools, Winget manifests, and GitHub
-release assets. This is the preferred shape for apps such as Tactra or BayManager
-that need one release file to describe iPhone, iPad, macOS, and store-delivery lanes.
+Apple targets live in the same `powerforge.release.json` used for the rest of a
+PowerForge release. Keep action flags disabled in the committed file and select one
+named action per run. This prevents a status check or metadata update from accidentally
+submitting a version.
 
 ```json
 {
@@ -119,12 +122,34 @@ that need one release file to describe iPhone, iPad, macOS, and store-delivery l
     "ArchiveRoot": "Artifacts/Apple/Archives",
     "ExportRoot": "Artifacts/Apple/Exports",
     "TeamId": "8ZPGZ79T7J",
+    "Archive": false,
     "Upload": false,
-    "PrepareDistribution": true,
-    "SelectBuildForDistribution": true,
-    "SyncAppInfo": true,
+    "PrepareDistribution": false,
+    "SyncMetadata": false,
+    "SyncAppInfo": false,
+    "SyncScreenshots": false,
+    "ReplaceScreenshots": true,
+    "CheckReleaseReadiness": false,
+    "DistributeTestFlight": false,
+    "SubmitTestFlightBetaReview": false,
+    "SubmitForReview": false,
+    "ReleaseApprovedVersion": false,
+    "Automation": {
+      "WriteReceipt": true,
+      "ReceiptPath": "build/powerforge/apple/release-receipt.json",
+      "PlanReceiptPath": "build/powerforge/apple/release-plan.json",
+      "LockPath": "build/powerforge/apple/release.lock",
+      "VersionSourcePath": "project.yml",
+      "Resume": true,
+      "WaitForProcessing": true,
+      "ProcessingTimeoutSeconds": 1800,
+      "PollIntervalSeconds": 20,
+      "MinimumFreeSpaceGB": 20,
+      "CleanupBeforeArchive": true,
+      "CleanupAfterProcessing": true,
+      "ArtifactRetentionDays": 7
+    },
     "AppInfoConfigPath": "build/appstore-metadata/app-info.json",
-    "SyncScreenshots": true,
     "ScreenshotConfigPaths": [
       "build/appstore-screenshots/ios.json",
       "build/appstore-screenshots/macos.json"
@@ -134,68 +159,182 @@ that need one release file to describe iPhone, iPad, macOS, and store-delivery l
     "AppStoreConnectApiIssuerId": "00000000-0000-0000-0000-000000000000",
     "Apps": [
       {
-        "Name": "Tactra iPhone",
-        "BundleId": "com.evotecit.tactra",
+        "Name": "Example iOS and iPadOS",
+        "BundleId": "com.example.product",
         "AppStoreConnectAppId": "1234567890",
         "Platform": "iOS",
-        "ProjectPath": "Tactra.xcodeproj",
-        "Scheme": "Tactra"
+        "ProjectPath": "Product.xcodeproj",
+        "Scheme": "Product"
       },
       {
-        "Name": "Tactra iPad",
-        "BundleId": "com.evotecit.tactra",
-        "AppStoreConnectAppId": "1234567890",
-        "Platform": "iPadOS",
-        "ProjectPath": "Tactra.xcodeproj",
-        "Scheme": "Tactra"
-      },
-      {
-        "Name": "Tactra Mac",
-        "BundleId": "com.evotecit.tactra.mac",
+        "Name": "Example Mac Catalyst",
+        "BundleId": "com.example.product",
         "AppStoreConnectAppId": "1234567890",
         "Platform": "macOS",
-        "ProjectPath": "Tactra.xcodeproj",
-        "Scheme": "TactraMac"
+        "ArchiveVariant": "MacCatalyst",
+        "ProjectPath": "Product.xcodeproj",
+        "Scheme": "Product"
       }
     ]
   }
 }
 ```
 
-Plan first:
+Start with a remote-read-only status receipt:
 
-```powershell
-Invoke-PowerForgeRelease -ConfigPath '.\powerforge.release.json' -Plan
+```text
+powerforge apple-release Status --config powerforge.release.json --summary --output json
 ```
 
-Archive without uploading:
+Use the same entry point for each transition:
 
-```powershell
-Invoke-PowerForgeRelease -ConfigPath '.\powerforge.release.json'
+| Action | Result |
+| --- | --- |
+| `Status` | Reads the exact configured version/build and recommends the next action; it may generate an explicitly configured missing Xcode project locally. |
+| `Version` | Updates the configured XcodeGen version source and chooses one build number above both local state and every configured App Store Connect platform. |
+| `Archive` | Creates signed archives without uploading. |
+| `Upload` | Archives, uploads, waits for processing, and resumes an exact remote build when possible. |
+| `UploadExisting` | Uploads existing archives and uses the same resume/wait behavior. |
+| `Prepare` | Creates/updates versions, metadata, app information, build selection, and readiness. |
+| `Screenshots` | Validates and syncs configured screenshot sets as a separate, deliberate transition. |
+| `TestFlight` | Assigns the processed build to configured groups and testers. |
+| `Advance` | Resumes versioning, archive, upload, preparation, metadata, screenshots, readiness, and configured TestFlight distribution, then stops before any review or public-release action. |
+| `SubmitTestFlightReview` | Submits external TestFlight distribution for Beta App Review. |
+| `SubmitAppReview` | Submits a ready App Store version for App Review. |
+| `Release` | Publishes a version waiting for developer release. |
+| `Cleanup` | Removes stale files only from configured archive/export roots. |
+
+Plan a mutating action before running it:
+
+```text
+powerforge apple-release Upload --config powerforge.release.json --plan
+powerforge apple-release Upload --config powerforge.release.json --summary --output json
 ```
 
-Upload to App Store Connect by setting `AppleApps.Upload` to `true`, or by keeping a
-separate release config for the store lane. The unified flow reuses the same archive
-and `xcodebuild -exportArchive` helpers as `New-AppleAppArchive` and
-`Publish-AppleAppArchive`; it does not duplicate signing or upload behavior.
-`-ToolsOnly` intentionally runs downloadable tool targets only and skips `AppleApps`.
+For a routine release, set the new marketing version once and let PowerForge choose
+the next remote-safe build number:
+
+```text
+powerforge apple-release Version --config powerforge.release.json --apple-version 1.6.0 --plan
+powerforge apple-release Version --config powerforge.release.json --apple-version 1.6.0 --confirm-apple-action --summary --output json
+powerforge apple-release Advance --config powerforge.release.json --plan
+powerforge apple-release Advance --config powerforge.release.json --confirm-apple-action --summary --output json
+```
+
+`Advance` is intentionally safe to resume. It acquires the configured operation lock,
+uses a separate plan receipt, checks the exact version/build remotely, and stops before
+`SubmitTestFlightReview`, `SubmitAppReview`, or `Release`.
+
+## Reusable GitHub workflows
+
+Commit one tool lock in each Apple app repository so CI downloads an exact standalone
+PowerForge release asset and verifies it before execution:
+
+```json
+{
+  "$schema": "https://schemas.evotec.xyz/powerforge.tool.schema.json",
+  "schemaVersion": 1,
+  "repository": "EvotecIT/PSPublishModule",
+  "version": "3.0.80",
+  "assets": {
+    "osx-arm64": {
+      "sha256": "<64-character release asset digest>"
+    }
+  }
+}
+```
+
+The reusable workflow boundary mirrors the human approval boundary:
+
+- `powerforge-apple-version-pr.yml` runs `Version`, stages only the configured
+  version source, and opens a release-ready pull request. It never merges it.
+- `powerforge-apple-advance.yml` runs a plan and confirmed resumable `Advance` from
+  an exact merged commit. It stops before every review and public-release action.
+- `powerforge-apple-approval.yml` accepts only `SubmitTestFlightReview`,
+  `SubmitAppReview`, or `Release` and runs inside a protected GitHub environment.
+
+Callers must pass 40-character commit SHAs for `powerforge_ref` and release
+`source_ref`; the workflows reject branches and tags and verify both checked-out
+commits. Pass App Store Connect credentials through GitHub secrets. The composite
+action writes the private key to a permission-restricted temporary file and removes
+it after every plan or action. All three workflows share one repository-scoped
+concurrency group, so version selection, draft mutation, review submission, and
+release cannot overlap.
+
+The workflows upload the exact configured plan and actual receipt paths and fail if
+a required receipt is absent. Successful logs contain only the short step summary,
+while failure logs retain the PowerForge error envelope. A partially completed
+version workflow reuses an identical remote release branch and creates or returns its
+open pull request; it refuses to overwrite different remote content.
+
+An iOS/iPadOS app, a companion Watch app, and CarPlay remain one iOS archive lane.
+Add another workflow target only for a separately archived store platform, such as
+Mac Catalyst or an independently distributed Watch app.
+
+`SubmitTestFlightReview`, `SubmitAppReview`, and `Release` require
+`--confirm-apple-action`. `Screenshots` also requires confirmation when
+`ReplaceScreenshots=true`. The PowerShell surface uses the same actions:
+
+```powershell
+Invoke-PowerForgeRelease `
+    -ConfigPath '.\powerforge.release.json' `
+    -AppleAction SubmitAppReview `
+    -ConfirmAppleAction
+```
+
+The receipt is the handoff between people, CI, and agents. It records the target,
+version/build, processing and review states, selected-build state, performed/skipped
+steps, bounded cleanup, and policy-aware next actions. `readinessChecked=false` means
+the read-only status action did not query metadata or screenshot readiness; run
+`Prepare` or `Screenshots` for those checks. The persisted receipt uses its configured
+project-relative path and never contains API credentials. A rerun with `Resume=true`
+checks the exact remote version/build before rebuilding or uploading.
+
+Metadata and screenshot maps can set `UseReleaseVersion=true` instead of committing a
+new App Store version id for every release. PowerForge resolves the editable version
+for the current release and refuses to bind the map to a different version.
+
+Projects generated by XcodeGen can set `GenerateProjectIfMissing` on a target. PowerForge
+then runs `xcodegen generate` from the directory containing `project.yml` before
+resolving the local version/build for any action, including `Status`. This keeps
+project-generation logic out of consumer scripts while preserving remote read-only
+status behavior.
+
+For screenshot-enabled releases, run `Prepare` once after upload to create the
+Distribution draft, run the separately reviewed `Screenshots` action, then run
+`Prepare` again as the final readiness gate.
+
+## Apple target modeling
+
+Configure store targets by archive and App Store Connect platform, not by every device
+that can run the product:
+
+- A universal iOS archive covers both iPhone and iPad. Do not add a second iPad target
+  merely because the app has iPad screenshots.
+- Mac Catalyst is a macOS App Store Connect target with
+  `ArchiveVariant=MacCatalyst`.
+- A companion Watch app shipped inside the iOS archive stays with that iOS target.
+  An independently archived Watch app can use a `watchOS` archive target, but
+  PowerForge maps it to Apple's `IOS` App Store Connect platform because Apple does
+  not expose a separate `WATCH_OS` store-platform value.
+- CarPlay is an iOS capability and entitlement, not a separate App Store platform.
+  Its scenes and entitlement checks belong in the iOS build and validation lane.
+
+All configured store targets share the marketing version chosen by `Version`. The
+build-number resolver checks every configured remote platform before assigning the
+next number, so retries do not reuse a build already uploaded by another lane.
 
 ## Current Boundary
 
-These helpers automate signed binary archive/upload, App Store version preparation,
-processed build selection, version metadata, app-level App Information, and screenshot
-sync. `AppleApps.PrepareDistribution`
-creates the App Store version when needed, finds the matching uploaded build by
-marketing version/build number/platform, and attaches it once App Store Connect reports
-the build as `VALID`. `AppleApps.SyncAppInfo` updates localized app-level fields such as
-the name, subtitle, and privacy policy URL from `AppInfoConfigPath` or
-`AppInfoConfigPaths`. `AppleApps.SyncScreenshots` runs the same screenshot sync engine
-from the unified release flow for matching screenshot config files.
+PowerForge owns archive/upload, bounded build processing waits, Distribution
+preparation, metadata and screenshot sync, build selection, TestFlight distribution,
+review submission, approved-version release, status receipts, and local artifact
+cleanup. Apple still owns processing and review decisions. Pricing and phased-release
+configuration remain explicit App Store Connect operations.
 
-Pricing, phased release controls, and final approved-version release decisions remain
-explicit App Store Connect operations. Keep `SubmitForReview` and
-`ReleaseApprovedVersion` disabled in committed consumer configuration until the release
-run is intentionally performing those actions.
+Keep every mutating action flag disabled in committed consumer configuration. Named
+actions override those flags for one run, and the three review/release transitions stay
+behind explicit confirmation.
 
 ## App Information Metadata
 

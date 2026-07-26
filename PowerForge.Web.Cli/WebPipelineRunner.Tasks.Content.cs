@@ -1645,11 +1645,19 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException("llms requires siteRoot.");
 
         var apiLevelText = GetString(step, "apiLevel") ?? GetString(step, "api-level");
+        var apiIndexPaths = (GetArrayOfStrings(step, "apiIndexes") ??
+                             GetArrayOfStrings(step, "api-indexes") ??
+                             Array.Empty<string>())
+            .Select(path => ResolvePath(baseDir, path))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path!)
+            .ToArray();
         var res = WebLlmsGenerator.Generate(new WebLlmsOptions
         {
             SiteRoot = siteRoot,
             ProjectFile = ResolvePath(baseDir, GetString(step, "project")),
             ApiIndexPath = ResolvePath(baseDir, GetString(step, "apiIndex") ?? GetString(step, "api-index")),
+            ApiIndexPaths = apiIndexPaths,
             ApiBase = GetString(step, "apiBase") ?? "/api",
             Name = GetString(step, "name"),
             PackageId = GetString(step, "package") ?? GetString(step, "packageId"),

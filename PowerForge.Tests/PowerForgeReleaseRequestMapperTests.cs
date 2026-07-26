@@ -69,4 +69,80 @@ public sealed class PowerForgeReleaseRequestMapperTests
         Assert.Equal(new[] { "chat" }, defaults.WorkspaceEnableFeatures);
         Assert.Equal("Original", defaults.InstallerMsBuildProperties["ProductName"]);
     }
+
+    [Fact]
+    public void Build_MapsCompactAppleActionOverrides()
+    {
+        var request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
+            "/repo/powerforge.release.json",
+            defaults: null,
+            new PSPublishModule.PowerForgeReleaseInvocationOptions
+            {
+                AppleAction = PowerForgeAppleReleaseAction.Upload,
+                AppleActionConfirmed = true,
+                AppleResume = false,
+                AppleWaitForProcessing = true,
+                AppleProcessingTimeoutSeconds = 900,
+                ApplePollIntervalSeconds = 15,
+                AppleSummaryOnly = true
+            });
+
+        Assert.Equal(PowerForgeAppleReleaseAction.Upload, request.AppleAction);
+        Assert.True(request.AppleActionConfirmed);
+        Assert.False(request.AppleResume);
+        Assert.True(request.AppleWaitForProcessing);
+        Assert.Equal(900, request.AppleProcessingTimeoutSeconds);
+        Assert.Equal(15, request.ApplePollIntervalSeconds);
+        Assert.True(request.AppleSummaryOnly);
+    }
+
+    [Fact]
+    public void Build_MapsModuleRunMode()
+    {
+        var request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
+            "/repo/powerforge.release.json",
+            defaults: null,
+            new PSPublishModule.PowerForgeReleaseInvocationOptions
+            {
+                ModuleFramework = "net10.0",
+                ModuleRunMode = ConfigurationGateMode.Publish
+            });
+
+        Assert.Equal("net10.0", request.ModuleFramework);
+        Assert.Equal(ConfigurationGateMode.Publish, request.ModuleRunMode);
+    }
+
+    [Fact]
+    public void Build_MapsModuleReleaseOverrides()
+    {
+        var request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
+            "/repo/powerforge.release.json",
+            defaults: null,
+            new PSPublishModule.PowerForgeReleaseInvocationOptions
+            {
+                ModuleTimeoutSeconds = 10800,
+                ModuleCertificateThumbprint = "ABC123",
+                ModuleSkipInstall = true,
+                ModuleSignIncludeBinaries = true,
+                ModuleSignIncludeInternals = false,
+                ModuleSignIncludeExe = true,
+                ModuleDiagnosticsBaselinePath = ".powerforge/diagnostics.json",
+                ModuleGenerateDiagnosticsBaseline = false,
+                ModuleUpdateDiagnosticsBaseline = true,
+                ModuleFailOnNewDiagnostics = true,
+                ModuleFailOnDiagnosticsSeverity = "Error"
+            });
+
+        Assert.Equal(10800, request.ModuleTimeoutSeconds);
+        Assert.Equal("ABC123", request.ModuleCertificateThumbprint);
+        Assert.True(request.ModuleSkipInstall);
+        Assert.True(request.ModuleSignIncludeBinaries);
+        Assert.False(request.ModuleSignIncludeInternals);
+        Assert.True(request.ModuleSignIncludeExe);
+        Assert.Equal(".powerforge/diagnostics.json", request.ModuleDiagnosticsBaselinePath);
+        Assert.False(request.ModuleGenerateDiagnosticsBaseline);
+        Assert.True(request.ModuleUpdateDiagnosticsBaseline);
+        Assert.True(request.ModuleFailOnNewDiagnostics);
+        Assert.Equal("Error", request.ModuleFailOnDiagnosticsSeverity);
+    }
 }

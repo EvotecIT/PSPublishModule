@@ -9,38 +9,7 @@ internal static class VersionPatternStepper
 {
     internal static string Step(string expectedVersion, Version? currentVersion)
     {
-        if (string.IsNullOrWhiteSpace(expectedVersion))
-            throw new ArgumentException("ExpectedVersion is required.", nameof(expectedVersion));
-
-        var parts = expectedVersion.Split('.');
-        var segs = new string?[4];
-        for (int i = 0; i < 4; i++)
-            segs[i] = i < parts.Length ? parts[i] : null;
-
-        var stepIndex = -1;
-        for (int i = 0; i < segs.Length; i++)
-        {
-            if (string.Equals(segs[i], "X", StringComparison.OrdinalIgnoreCase))
-            {
-                stepIndex = i;
-                break;
-            }
-        }
-
-        if (stepIndex < 0)
-            throw new ArgumentException("ExpectedVersion must contain an 'X' placeholder (or be an exact version).", nameof(expectedVersion));
-
-        var prepared = new int?[4];
-        for (int i = 0; i < segs.Length; i++)
-        {
-            var s = segs[i];
-            if (string.IsNullOrWhiteSpace(s)) { prepared[i] = null; continue; }
-            if (i == stepIndex) { prepared[i] = null; continue; }
-
-            if (!int.TryParse(s, out var v))
-                throw new ArgumentException($"ExpectedVersion segment '{s}' is not a number.", nameof(expectedVersion));
-            prepared[i] = v;
-        }
+        var (prepared, stepIndex) = ParsePattern(expectedVersion);
 
         var baseline = currentVersion ?? new Version(0, 0, 0, 0);
         if (currentVersion is not null && CompareFixedPrefix(prepared, currentVersion, stepIndex) < 0)
@@ -69,6 +38,98 @@ internal static class VersionPatternStepper
         }
 
         return candidate.ToString();
+    }
+
+    internal static bool CanRepresent(string expectedVersion, string exactVersion)
+    {
+        var (prepared, stepIndex) = ParsePattern(expectedVersion);
+        if (!PackageVersionUtility.TryNormalizeExact(exactVersion, out var normalizedVersion))
+            return false;
+
+        var candidate = Version.Parse(PackageVersionUtility.GetNumericVersion(normalizedVersion));
+        for (var index = 0; index < prepared.Length; index++)
+        {
+            if (index == stepIndex)
+            {
+                continue;
+            }
+
+            var actual = GetPart(candidate, index);
+            if (actual < 0)
+            {
+                actual = 0;
+            }
+            if (prepared[index].HasValue)
+            {
+                if (prepared[index]!.Value != actual)
+                {
+                    return false;
+                }
+            }
+            else if (actual != 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static (int?[] Prepared, int StepIndex) ParsePattern(string expectedVersion)
+    {
+        if (string.IsNullOrWhiteSpace(expectedVersion))
+        {
+            throw new ArgumentException("ExpectedVersion is required.", nameof(expectedVersion));
+        }
+
+        var parts = expectedVersion.Split('.');
+        if (parts.Length > 4)
+        {
+            throw new ArgumentException("ExpectedVersion cannot contain more than four numeric segments.", nameof(expectedVersion));
+        }
+
+        var segments = new string?[4];
+        for (var index = 0; index < segments.Length; index++)
+            segments[index] = index < parts.Length ? parts[index] : null;
+
+        var stepIndex = -1;
+        for (var index = 0; index < segments.Length; index++)
+        {
+            if (!string.Equals(segments[index], "X", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (stepIndex >= 0)
+            {
+                throw new ArgumentException("ExpectedVersion can contain only one 'X' placeholder.", nameof(expectedVersion));
+            }
+            stepIndex = index;
+        }
+
+        if (stepIndex < 0)
+        {
+            throw new ArgumentException("ExpectedVersion must contain an 'X' placeholder (or be an exact version).", nameof(expectedVersion));
+        }
+
+        var prepared = new int?[4];
+        for (var index = 0; index < segments.Length; index++)
+        {
+            var segment = segments[index];
+            if (string.IsNullOrWhiteSpace(segment) || index == stepIndex)
+            {
+                prepared[index] = null;
+                continue;
+            }
+
+            if (!int.TryParse(segment, out var value))
+            {
+                throw new ArgumentException($"ExpectedVersion segment '{segment}' is not a number.", nameof(expectedVersion));
+            }
+            prepared[index] = value;
+        }
+
+        return (prepared, stepIndex);
     }
 
     private static int CompareFixedPrefix(int?[] prepared, Version currentVersion, int stepIndex)

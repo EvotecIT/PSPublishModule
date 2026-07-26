@@ -3,7 +3,7 @@ $LibraryName = '{{LibraryName}}'
 $Library = "$LibraryName.dll"
 $Class = "$LibraryName.Initialize"
 
-$LibRoot = [IO.Path]::Combine($PSScriptRoot, 'Lib')
+$LibRoot = [IO.Path]::Combine($PowerForgeModuleRoot, 'Lib')
 $AssemblyFolders = Get-ChildItem -LiteralPath $LibRoot -Directory -ErrorAction SilentlyContinue
 
 $Default = $false
@@ -50,13 +50,26 @@ if ($PSEdition -eq 'Core') {
     $LibFolder = $FrameworkNet
 }
 
-{{RuntimeHandlerBlock}}$PowerForgeDesktopBinaryLoaded = $false
+{{DesktopAssemblyResolverBlock}}{{RuntimeHandlerBlock}}if ($PSEdition -ne 'Core') {
+    $LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, '{{ModuleName}}.Libraries.ps1')
+    if (Test-Path -LiteralPath $LibrariesScript) {
+        try {
+            . $LibrariesScript
+        } catch {
+            if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
+                & $UnregisterPowerForgeDesktopAssemblyResolver
+            }
+            throw
+        }
+    }
+}
+$PowerForgeDesktopBinaryLoaded = $false
 try {
     $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
-    $ModuleAssemblyPath = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder, $Library)
+    $ModuleAssemblyPath = [IO.Path]::Combine($LibRoot, $LibFolder, $Library)
 
     if ($PSEdition -eq 'Core') {
-        $LoaderAssemblyPath = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder, '{{LoaderAssemblyName}}.dll')
+        $LoaderAssemblyPath = [IO.Path]::Combine($LibRoot, $LibFolder, '{{LoaderAssemblyName}}.dll')
         if (-not ('{{LoaderTypeName}}' -as [type])) {
             Add-Type -Path $LoaderAssemblyPath -ErrorAction Stop
         }
@@ -118,6 +131,9 @@ try {
     }
 } catch {
     if ($ErrorActionPreference -eq 'Stop') {
+        if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
+            & $UnregisterPowerForgeDesktopAssemblyResolver
+        }
         throw
     } else {
         Write-Warning -Message "Importing module $Library failed. Fix errors before continuing. Error: $($_.Exception.Message)"
@@ -125,12 +141,11 @@ try {
 }
 
 if ($PSEdition -ne 'Core' -and $PowerForgeDesktopBinaryLoaded) {
-    # Core loads dependencies through the module-scoped AssemblyLoadContext above. Dot-sourcing the libraries script
-    # there would load dependency DLLs into the default context and undo the isolation this template exists to provide.
-    $LibrariesScript = [IO.Path]::Combine($PSScriptRoot, '{{ModuleName}}.Libraries.ps1')
-    if (Test-Path -LiteralPath $LibrariesScript) {
-        . $LibrariesScript
-    }
-
 {{DesktopTypeAcceleratorBlock}}
+}
+if ($PSEdition -ne 'Core' -and $null -ne $PowerForgeDesktopAssemblyResolverState) {
+    $PowerForgeDesktopAssemblyResolverState.BootstrapActive = $false
+    if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
+        & $UnregisterPowerForgeDesktopAssemblyResolver
+    }
 }

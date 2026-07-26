@@ -94,6 +94,21 @@ internal static partial class WebCliCommandHandlers
                 plannedCommands: plannedCommands);
         }
 
+        var operationLocks = manifest.OperationLocks ?? Array.Empty<string>();
+        var systemdUnits = (manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
+            .Concat(manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
+            .ToArray();
+        foreach (var operationLock in operationLocks)
+        {
+            AddStep(steps, ref order, "locking", $"Prepare shared operation lock {operationLock}",
+                BuildOperationLockInstallCommand(operationLock), plannedCommands: plannedCommands);
+        }
+        if (operationLocks.Length > 0)
+        {
+            AddStep(steps, ref order, "locking", "Acquire shared operation locks for bootstrap",
+                BuildBootstrapOperationLockAcquireCommand(operationLocks), plannedCommands: plannedCommands);
+        }
+
         if (manifest.Packages?.Apt?.Length > 0)
         {
             AddStep(steps, ref order, "packages", "Install apt prerequisites",
@@ -170,9 +185,10 @@ internal static partial class WebCliCommandHandlers
                     $"{checks} || {{ echo {message} >&2; exit 3; }}",
                     plannedCommands: plannedCommands);
             }
-            if (!string.IsNullOrWhiteSpace(repository.RefCaptureCommandId) && string.IsNullOrWhiteSpace(repository.Ref))
+            var refCaptureCommandIds = GetRepositoryRefCaptureCommandIds(repository);
+            if (refCaptureCommandIds.Length > 0 && string.IsNullOrWhiteSpace(repository.Ref))
             {
-                var message = ShellQuote($"Use the captured recovery manifest containing repository ref from command {repository.RefCaptureCommandId}.");
+                var message = ShellQuote($"Use the captured recovery manifest containing repository ref from command(s) {string.Join(", ", refCaptureCommandIds)}.");
                 AddStep(steps, ref order, "repositories", $"Verify {repository.Role} captured revision",
                     $"echo {message} >&2; exit 3",
                     plannedCommands: plannedCommands);
@@ -200,6 +216,34 @@ internal static partial class WebCliCommandHandlers
             }
         }
 
+        var deferredSecrets = (manifest.Secrets ?? Array.Empty<PowerForgeServerSecret>())
+            .Where(static secret => secret.RestoreAfterRepositories && !string.IsNullOrWhiteSpace(secret.Path))
+            .ToArray();
+        var secretStagingRoot = BuildRestoreSecretsStagingRoot(manifest.Name);
+        foreach (var secret in deferredSecrets)
+        {
+            var repositoryRoot = (manifest.Repositories ?? Array.Empty<PowerForgeServerRepository>())
+                .Select(static repository => repository.Path?.TrimEnd('/'))
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Cast<string>()
+                .Where(root => PathStrictlyContains(root, secret.Path!))
+                .OrderByDescending(static root => root.Length)
+                .First();
+            AddStep(steps, ref order, "secrets", $"Install staged secret {secret.Id}",
+                BuildDeferredSecretInstallCommand(secret, secretStagingRoot, repositoryRoot),
+                plannedCommands: plannedCommands);
+        }
+        if (deferredSecrets.Length > 0)
+        {
+            AddStep(steps, ref order, "secrets", "Remove empty secret staging directory",
+                $"if [ -e {ShellQuote(secretStagingRoot)} ] || [ -L {ShellQuote(secretStagingRoot)} ]; then " +
+                $"test -d {ShellQuote(secretStagingRoot)} && test ! -L {ShellQuote(secretStagingRoot)} && " +
+                $"test \"$(stat -c '%U:%G %a' -- {ShellQuote(secretStagingRoot)})\" = 'root:root 700' && " +
+                $"find {ShellQuote(secretStagingRoot)} -depth -mindepth 1 -type d -empty -delete && " +
+                $"test -z \"$(find {ShellQuote(secretStagingRoot)} -mindepth 1 -print -quit)\" && rmdir -- {ShellQuote(secretStagingRoot)}; fi",
+                plannedCommands: plannedCommands);
+        }
+
         foreach (var path in manifest.Paths ?? Array.Empty<PowerForgeServerPath>())
         {
             if (string.IsNullOrWhiteSpace(path.Source) || string.IsNullOrWhiteSpace(path.Path)) continue;
@@ -212,7 +256,8 @@ internal static partial class WebCliCommandHandlers
 
         foreach (var command in manifest.Bootstrap?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>())
         {
-            if (string.IsNullOrWhiteSpace(command.Command)) continue;
+            if (string.IsNullOrWhiteSpace(command.Command))
+                throw new InvalidOperationException($"Bootstrap command '{command.Id}' must contain a non-whitespace command.");
             AddStep(steps, ref order, "bootstrap", command.Id ?? "bootstrap command", command.Command, command.Sensitive, plannedCommands: plannedCommands);
         }
 
@@ -220,8 +265,8 @@ internal static partial class WebCliCommandHandlers
         if (apacheModules.Length > 0)
             AddStep(steps, ref order, "apache", "Enable Apache modules", "a2enmod " + string.Join(' ', apacheModules.Select(ShellQuote)), plannedCommands: plannedCommands);
 
-        foreach (var file in (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
-                 .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>()))
+        foreach (var file in (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerApacheFile>())
+                 .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerApacheFile>()))
         {
             if (string.IsNullOrWhiteSpace(file.Source) || string.IsNullOrWhiteSpace(file.Target)) continue;
             var repository = FindManagedSourceRepository(manifest.Repositories, file.Source)
@@ -232,8 +277,17 @@ internal static partial class WebCliCommandHandlers
                 plannedCommands: plannedCommands);
         }
 
-        foreach (var unit in (manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
-                 .Concat(manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>()))
+        var apacheActivationFiles = (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerApacheFile>())
+            .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerApacheFile>())
+            .Where(static file => file.Enabled is not null)
+            .ToArray();
+        if (apacheActivationFiles.Length > 0)
+        {
+            AddStep(steps, ref order, "apache", "Activate Apache configuration transactionally",
+                BuildApacheActivationCommand(manifest.Apache!), plannedCommands: plannedCommands);
+        }
+
+        foreach (var unit in systemdUnits)
         {
             if (!string.IsNullOrWhiteSpace(unit.Source) && !string.IsNullOrWhiteSpace(unit.Target))
             {
@@ -250,11 +304,12 @@ internal static partial class WebCliCommandHandlers
         {
             AddStep(steps, ref order, "systemd", "Reload systemd units", "systemctl daemon-reload", plannedCommands: plannedCommands);
 
-            foreach (var unit in (manifest.Systemd.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
-                     .Concat(manifest.Systemd.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
-                     .Where(static unit => unit.Enabled && !string.IsNullOrWhiteSpace(unit.Name)))
+            foreach (var unit in systemdUnits.Where(static unit =>
+                         unit.Enabled &&
+                         string.IsNullOrWhiteSpace(unit.Activation) &&
+                         !string.IsNullOrWhiteSpace(unit.Name)))
             {
-                AddStep(steps, ref order, "systemd", $"Enable {unit.Name}", $"systemctl enable {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
+                AddStep(steps, ref order, "systemd", $"Enable {unit.Name}", $"systemctl enable -- {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
             }
         }
 
@@ -293,14 +348,60 @@ internal static partial class WebCliCommandHandlers
             AddStep(steps, ref order, "secrets", $"Confirm restored secret {secret.Id}", guard, plannedCommands: plannedCommands);
         }
 
-        foreach (var command in manifest.Deploy?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>())
+        AddSystemdActivationSteps(
+            steps,
+            ref order,
+            systemdUnits,
+            PowerForgeServerSystemdActivation.BeforeDeploy,
+            plannedCommands);
+
+        var deployCommands = manifest.Deploy?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>();
+        if (operationLocks.Length > 0 &&
+            string.Equals(manifest.Deploy?.OperationLockOwner, "command", StringComparison.Ordinal))
         {
-            if (string.IsNullOrWhiteSpace(command.Command)) continue;
+            AddStep(steps, ref order, "locking", "Release shared operation locks for command-owned deployment",
+                BuildBootstrapOperationLockReleaseCommand(operationLocks), plannedCommands: plannedCommands);
+        }
+
+        foreach (var command in deployCommands)
+        {
+            if (string.IsNullOrWhiteSpace(command.Command))
+                throw new InvalidOperationException($"Deploy command '{command.Id}' must contain a non-whitespace command.");
             var shell = string.IsNullOrWhiteSpace(command.WorkingDirectory)
                 ? command.Command
                 : $"cd {ShellQuote(command.WorkingDirectory)} && {command.Command}";
-            AddStep(steps, ref order, "deploy", command.Id ?? "deploy command", shell, command.Sensitive, plannedCommands: plannedCommands);
+            AddStep(
+                steps,
+                ref order,
+                "deploy",
+                command.Id ?? "deploy command",
+                shell,
+                command.Sensitive,
+                manual: command.Sensitive && command.Required,
+                plannedCommands: plannedCommands);
         }
+
+        var hasAfterDeployActivation = systemdUnits.Any(static unit =>
+            unit.Enabled &&
+            string.Equals(unit.Activation, PowerForgeServerSystemdActivation.AfterDeploy, StringComparison.Ordinal) &&
+            !string.IsNullOrWhiteSpace(unit.Name));
+        if (hasAfterDeployActivation &&
+            operationLocks.Length > 0 &&
+            string.Equals(manifest.Deploy?.OperationLockOwner, "command", StringComparison.Ordinal))
+        {
+            AddStep(
+                steps,
+                ref order,
+                "locking",
+                "Reacquire shared operation locks after command-owned deployment",
+                BuildBootstrapOperationLockAcquireCommand(operationLocks));
+        }
+        AddSystemdActivationSteps(
+            steps,
+            ref order,
+            systemdUnits,
+            PowerForgeServerSystemdActivation.AfterDeploy,
+            plannedCommands);
 
         AddStep(steps, ref order, "verify", "Run PowerForge server verify", "# Run from an operator workstation: powerforge-web server verify --manifest <manifest> --fail-on-failure", manual: true, plannedCommands: plannedCommands);
         return steps;
@@ -532,8 +633,8 @@ internal static partial class WebCliCommandHandlers
         => manifest.Repositories?.Any(static repository => !string.IsNullOrWhiteSpace(repository.Path)) == true ||
            manifest.Paths?.Any(static path => !string.IsNullOrWhiteSpace(path.Source)) == true ||
            manifest.Paths?.Any(static path => string.Equals(path.Kind, "directory", StringComparison.OrdinalIgnoreCase)) == true ||
-           (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
-               .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>())
+           (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerApacheFile>())
+                .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerApacheFile>())
                .Any(static file => !string.IsNullOrWhiteSpace(file.Source)) ||
            (manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
                .Concat(manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
@@ -580,7 +681,8 @@ internal static partial class WebCliCommandHandlers
         bool manual = false,
         ISet<string>? plannedCommands = null)
     {
-        if (!string.IsNullOrWhiteSpace(command) &&
+        if (!manual &&
+            !string.IsNullOrWhiteSpace(command) &&
             plannedCommands is not null &&
             !command.TrimStart().StartsWith("#", StringComparison.Ordinal) &&
             !plannedCommands.Add(command))
@@ -645,7 +747,7 @@ internal static partial class WebCliCommandHandlers
         File.WriteAllText(path, builder.ToString());
     }
 
-    private static void WriteBootstrapPlanScript(
+    internal static void WriteBootstrapPlanScript(
         string path,
         IReadOnlyList<PowerForgeServerBootstrapPlanStep> steps)
     {

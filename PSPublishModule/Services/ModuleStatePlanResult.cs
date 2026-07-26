@@ -107,6 +107,21 @@ public sealed class ModuleStatePlanActionResult
     public string? TargetPath { get; set; }
 
     /// <summary>
+    /// Gets or sets the physical module root associated with the action.
+    /// </summary>
+    public string? TargetModuleRoot { get; set; }
+
+    /// <summary>
+    /// Gets or sets the PowerShell edition associated with the action target.
+    /// </summary>
+    public string? TargetPowerShellEdition { get; set; }
+
+    /// <summary>
+    /// Gets or sets the local user profile associated with the action target.
+    /// </summary>
+    public string? TargetProfileName { get; set; }
+
+    /// <summary>
     /// Gets or sets the repository targeted by this action when applicable.
     /// </summary>
     public string? TargetRepository { get; set; }
@@ -171,4 +186,19 @@ public sealed class ModuleStateConflictFindingResult
     /// Gets or sets the versions associated with the finding.
     /// </summary>
     public string[] Versions { get; set; } = [];
+
+    /// <summary>Gets or sets the affected installation scope.</summary>
+    public string? Scope { get; set; }
+
+    /// <summary>Gets or sets the affected source repository.</summary>
+    public string? SourceRepository { get; set; }
+
+    /// <summary>Gets or sets the affected physical path.</summary>
+    public string? Path { get; set; }
+
+    /// <summary>Gets or sets the affected PowerShell edition.</summary>
+    public string? PowerShellEdition { get; set; }
+
+    /// <summary>Gets or sets the affected local user profile.</summary>
+    public string? ProfileName { get; set; }
 }

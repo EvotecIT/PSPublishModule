@@ -71,6 +71,41 @@ public sealed class RepositoryPublisherTests
         }
     }
 
+    [Fact]
+    public void Publish_forwards_cancellation_to_the_repository_child_process()
+    {
+        var modulePath = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForgeTests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(modulePath);
+        try
+        {
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+            var runner = new CancellableStubPowerShellRunner();
+            var publisher = new RepositoryPublisher(
+                new NullLogger(),
+                runner,
+                new StubProcessRunner(_ => throw new InvalidOperationException(
+                    "No credential process should run.")));
+
+            Assert.ThrowsAny<OperationCanceledException>(() =>
+                publisher.Publish(new RepositoryPublishRequest
+                {
+                    Path = modulePath,
+                    Tool = PublishTool.PSResourceGet,
+                    CancellationToken = cancellation.Token
+                }));
+
+            Assert.Equal(cancellation.Token, runner.ObservedCancellationToken);
+        }
+        finally
+        {
+            try { Directory.Delete(modulePath, recursive: true); } catch { }
+        }
+    }
+
     private sealed class StubPowerShellRunner : IPowerShellRunner
     {
         private readonly Func<PowerShellRunRequest, PowerShellRunResult> _run;
@@ -104,6 +139,26 @@ public sealed class RepositoryPublisherTests
         {
             Requests.Add(request);
             return Task.FromResult(_run(request));
+        }
+    }
+
+    private sealed class CancellableStubPowerShellRunner :
+        IPowerShellRunner,
+        ICancellablePowerShellRunner
+    {
+        internal CancellationToken ObservedCancellationToken { get; private set; }
+
+        public PowerShellRunResult Run(PowerShellRunRequest request)
+            => throw new InvalidOperationException(
+                "The cancellable runner path should be used.");
+
+        public Task<PowerShellRunResult> RunAsync(
+            PowerShellRunRequest request,
+            CancellationToken cancellationToken)
+        {
+            ObservedCancellationToken = cancellationToken;
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("Cancellation was not observed.");
         }
     }
 }

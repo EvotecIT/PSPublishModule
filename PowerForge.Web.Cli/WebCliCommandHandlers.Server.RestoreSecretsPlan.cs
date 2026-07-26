@@ -32,6 +32,7 @@ internal static partial class WebCliCommandHandlers
             .Where(static path => !string.IsNullOrWhiteSpace(path.Path))
             .GroupBy(static path => path.Path!.TrimEnd('/'), StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.Ordinal);
+        var stagingRoot = BuildRestoreSecretsStagingRoot(manifest.Name);
         var secrets = (manifest.Secrets ?? Array.Empty<PowerForgeServerSecret>())
             .Select(secret =>
             {
@@ -44,9 +45,14 @@ internal static partial class WebCliCommandHandlers
                     Env = secret.Env,
                     RestoreMode = secret.RestoreMode,
                     RequiredFor = secret.RequiredFor is { Length: > 0 } ? string.Join(", ", secret.RequiredFor) : null,
+                    RequiredDuringBootstrap = secret.RequiredDuringBootstrap,
                     Owner = secret.Owner ?? managedPath?.Owner,
                     Group = secret.Group ?? managedPath?.Group,
-                    Mode = secret.Mode ?? managedPath?.Mode
+                    Mode = secret.Mode ?? managedPath?.Mode,
+                    RestoreAfterRepositories = secret.RestoreAfterRepositories,
+                    StagedPath = secret.RestoreAfterRepositories && normalizedPath is not null
+                        ? stagingRoot + normalizedPath
+                        : null
                 };
             })
             .ToArray();
@@ -55,7 +61,7 @@ internal static partial class WebCliCommandHandlers
         var markdownPath = Path.Combine(outputRoot, "restore-secrets-plan.md");
         var scriptPath = Path.Combine(outputRoot, "restore-secrets.sh");
         WriteRestoreSecretsMarkdown(markdownPath, manifest, archivePath, allowedArchivePaths, secrets, warnings);
-        WriteRestoreSecretsScript(scriptPath, archivePath, allowedArchivePaths, secrets);
+        WriteRestoreSecretsScript(scriptPath, archivePath, allowedArchivePaths, secrets, stagingRoot);
 
         var result = new PowerForgeServerRestoreSecretsPlanResult
         {
@@ -66,6 +72,7 @@ internal static partial class WebCliCommandHandlers
             ArchivePath = archivePath,
             Encryption = manifest.BackupTarget?.Encryption,
             RecipientEnv = manifest.BackupTarget?.RecipientEnv,
+            StagingRoot = secrets.Any(static secret => secret.RestoreAfterRepositories) ? stagingRoot : null,
             AllowedArchivePaths = allowedArchivePaths,
             Secrets = secrets,
             Warnings = warnings.ToArray()
@@ -140,7 +147,10 @@ internal static partial class WebCliCommandHandlers
             var ownership = string.IsNullOrWhiteSpace(secret.Owner) && string.IsNullOrWhiteSpace(secret.Group)
                 ? "archive ownership"
                 : $"{secret.Owner ?? string.Empty}:{secret.Group ?? string.Empty}";
-            builder.AppendLine($"- `{secret.Id}` -> `{secret.Path ?? secret.Env ?? "manual"}` ({secret.RestoreMode ?? "file"}; {ownership}; mode {secret.Mode ?? "from archive"})");
+            var restoreTiming = secret.RestoreAfterRepositories
+                ? $"staged at {secret.StagedPath} until pinned repositories are cloned"
+                : "restored immediately";
+            builder.AppendLine($"- `{secret.Id}` -> `{secret.Path ?? secret.Env ?? "manual"}` ({secret.RestoreMode ?? "file"}; {ownership}; mode {secret.Mode ?? "from archive"}; {restoreTiming})");
         }
 
         if (warnings.Count > 0)
@@ -159,14 +169,28 @@ internal static partial class WebCliCommandHandlers
         string path,
         string archivePath,
         IReadOnlyList<string> allowedArchivePaths,
-        IReadOnlyList<PowerForgeServerRestoreSecretEntry> secrets)
-        => File.WriteAllText(path, BuildRestoreSecretsScript(archivePath, allowedArchivePaths, secrets));
+        IReadOnlyList<PowerForgeServerRestoreSecretEntry> secrets,
+        string stagingRoot)
+        => File.WriteAllText(path, BuildRestoreSecretsScript(archivePath, allowedArchivePaths, secrets, stagingRoot));
 
     internal static string BuildRestoreSecretsScript(
         string archivePath,
         IReadOnlyList<string> allowedArchivePaths,
-        IReadOnlyList<PowerForgeServerRestoreSecretEntry> secrets)
+        IReadOnlyList<PowerForgeServerRestoreSecretEntry> secrets,
+        string? stagingRoot = null)
     {
+        var deferredSecrets = secrets
+            .Where(static secret => secret.RestoreAfterRepositories && !string.IsNullOrWhiteSpace(secret.Path))
+            .ToArray();
+        var requiredDeferredSecrets = deferredSecrets
+            .Where(static secret => secret.RequiredDuringBootstrap != false)
+            .ToArray();
+        var optionalDeferredSecrets = deferredSecrets
+            .Where(static secret => secret.RequiredDuringBootstrap == false)
+            .ToArray();
+        if (deferredSecrets.Length > 0 && string.IsNullOrWhiteSpace(stagingRoot))
+            throw new InvalidOperationException("Repository-overlapping secret restore requires a deterministic staging root.");
+
         var builder = new StringBuilder();
         builder.AppendLine("#!/usr/bin/env bash");
         builder.AppendLine("set -Eeuo pipefail");
@@ -192,15 +216,33 @@ internal static partial class WebCliCommandHandlers
         foreach (var allowedPath in allowedArchivePaths)
             builder.AppendLine(allowedPath.TrimStart('/'));
         builder.AppendLine("POWERFORGE_ALLOWED_PATHS");
-        builder.AppendLine("python3 - \"$tmp_dir/secrets.tar.gz\" \"$tmp_dir/allowed-paths\" <<'POWERFORGE_VALIDATE_ARCHIVE'");
+        builder.AppendLine("cat >\"$tmp_dir/deferred-paths\" <<'POWERFORGE_DEFERRED_PATHS'");
+        foreach (var secret in deferredSecrets)
+            builder.AppendLine(secret.Path!.TrimStart('/'));
+        builder.AppendLine("POWERFORGE_DEFERRED_PATHS");
+        builder.AppendLine("cat >\"$tmp_dir/required-deferred-paths\" <<'POWERFORGE_REQUIRED_DEFERRED_PATHS'");
+        foreach (var secret in requiredDeferredSecrets)
+            builder.AppendLine(secret.Path!.TrimStart('/'));
+        builder.AppendLine("POWERFORGE_REQUIRED_DEFERRED_PATHS");
+        builder.AppendLine("cat >\"$tmp_dir/optional-deferred-paths\" <<'POWERFORGE_OPTIONAL_DEFERRED_PATHS'");
+        foreach (var secret in optionalDeferredSecrets)
+            builder.AppendLine(secret.Path!.TrimStart('/'));
+        builder.AppendLine("POWERFORGE_OPTIONAL_DEFERRED_PATHS");
+        builder.AppendLine("python3 - \"$tmp_dir/secrets.tar.gz\" \"$tmp_dir/allowed-paths\" \"$tmp_dir/deferred-paths\" \"$tmp_dir/required-deferred-paths\" \"$tmp_dir/optional-deferred-paths\" \"$tmp_dir/present-optional-deferred-paths\" <<'POWERFORGE_VALIDATE_ARCHIVE'");
         builder.AppendLine("import os");
         builder.AppendLine("import posixpath");
         builder.AppendLine("import sys");
         builder.AppendLine("import tarfile");
         builder.AppendLine();
-        builder.AppendLine("archive_path, allowlist_path = sys.argv[1:3]");
+        builder.AppendLine("archive_path, allowlist_path, deferred_path, required_deferred_path, optional_deferred_path, present_optional_deferred_path = sys.argv[1:7]");
         builder.AppendLine("with open(allowlist_path, encoding='utf-8') as stream:");
         builder.AppendLine("    allowed = tuple(line.strip().strip('/') for line in stream if line.strip())");
+        builder.AppendLine("with open(deferred_path, encoding='utf-8') as stream:");
+        builder.AppendLine("    deferred = frozenset(line.strip().strip('/') for line in stream if line.strip())");
+        builder.AppendLine("with open(required_deferred_path, encoding='utf-8') as stream:");
+        builder.AppendLine("    required_deferred = frozenset(line.strip().strip('/') for line in stream if line.strip())");
+        builder.AppendLine("with open(optional_deferred_path, encoding='utf-8') as stream:");
+        builder.AppendLine("    optional_deferred = frozenset(line.strip().strip('/') for line in stream if line.strip())");
         builder.AppendLine("if not allowed:");
         builder.AppendLine("    raise SystemExit('Encrypted archive allowlist is empty.')");
         builder.AppendLine();
@@ -216,6 +258,7 @@ internal static partial class WebCliCommandHandlers
         builder.AppendLine();
         builder.AppendLine("seen = set()");
         builder.AppendLine("members = []");
+        builder.AppendLine("present_deferred = set()");
         builder.AppendLine("symlink_targets = {}");
         builder.AppendLine("with tarfile.open(archive_path, mode='r:gz') as archive:");
         builder.AppendLine("    for member in archive.getmembers():");
@@ -223,6 +266,8 @@ internal static partial class WebCliCommandHandlers
         builder.AppendLine("        normalized = posixpath.normpath(original)");
         builder.AppendLine("        if original.startswith('/') or normalized in ('', '.', '..') or normalized.startswith('../'):");
         builder.AppendLine("            raise SystemExit(f'Unsafe archive path: {original}')");
+        builder.AppendLine("        if original != normalized:");
+        builder.AppendLine("            raise SystemExit(f'Non-canonical archive path: {original}')");
         builder.AppendLine("        if normalized in seen:");
         builder.AppendLine("            raise SystemExit(f'Duplicate archive path: {original}')");
         builder.AppendLine("        seen.add(normalized)");
@@ -243,6 +288,12 @@ internal static partial class WebCliCommandHandlers
         builder.AppendLine("            raise SystemExit(f'Unsupported archive member type: {original}')");
         builder.AppendLine("        if member.mode & 0o7000:");
         builder.AppendLine("            raise SystemExit(f'Archive member has unsafe special permission bits: {original}')");
+        builder.AppendLine("        if normalized in deferred:");
+        builder.AppendLine("            if not member.isfile():");
+        builder.AppendLine("                raise SystemExit(f'Deferred secret archive member must be a regular file: {original}')");
+        builder.AppendLine("            present_deferred.add(normalized)");
+        builder.AppendLine("        elif any(normalized.startswith(path + '/') for path in deferred):");
+        builder.AppendLine("            raise SystemExit(f'Deferred secret exact file path must not contain descendants: {original}')");
         builder.AppendLine("        members.append((member, normalized))");
         builder.AppendLine();
         builder.AppendLine("for member, normalized in members:");
@@ -251,6 +302,13 @@ internal static partial class WebCliCommandHandlers
         builder.AppendLine("for link, target in symlink_targets.items():");
         builder.AppendLine("    if target == link or target.startswith(link + '/') or any(target == other or target.startswith(other + '/') for other in symlink_targets if other != link):");
         builder.AppendLine("        raise SystemExit(f'Archive symlink chains are not allowed: {link}')");
+        builder.AppendLine("missing_required = sorted(required_deferred - present_deferred)");
+        builder.AppendLine("if missing_required:");
+        builder.AppendLine("    raise SystemExit('Required deferred secret is missing from the archive: ' + ', '.join(missing_required))");
+        builder.AppendLine("present_optional_deferred = optional_deferred & present_deferred");
+        builder.AppendLine("with open(present_optional_deferred_path, mode='wb') as stream:");
+        builder.AppendLine("    for path in sorted(present_optional_deferred):");
+        builder.AppendLine("        stream.write(path.encode('utf-8') + b'\\0')");
         builder.AppendLine("POWERFORGE_VALIDATE_ARCHIVE");
         builder.AppendLine();
         builder.AppendLine("if [ \"${POWERFORGE_RESTORE_SECRETS_CONFIRM:-}\" != \"YES\" ]; then");
@@ -259,7 +317,29 @@ internal static partial class WebCliCommandHandlers
         builder.AppendLine("fi");
         builder.AppendLine("[ \"$(id -u)\" -eq 0 ] || { echo 'Secret restore must run as root.' >&2; exit 3; }");
         builder.AppendLine();
-        builder.AppendLine("tar --no-same-owner --no-same-permissions --no-overwrite-dir --no-acls --no-selinux --no-xattrs -xzf \"$tmp_dir/secrets.tar.gz\" -C /");
+        if (deferredSecrets.Length > 0)
+        {
+            builder.AppendLine($"staging_root={ShellQuote(stagingRoot!)}");
+            builder.AppendLine("if [ ! -e /var/lib/powerforge ] && [ ! -L /var/lib/powerforge ]; then install -d -o root -g root -m 0755 /var/lib/powerforge; fi");
+            builder.AppendLine("if ! { test -d /var/lib/powerforge && test ! -L /var/lib/powerforge && test \"$(stat -c '%U:%G' /var/lib/powerforge)\" = 'root:root' && test -z \"$(find /var/lib/powerforge -maxdepth 0 -perm /022 -print -quit)\"; }; then echo 'Secret staging base is not a root-controlled directory.' >&2; exit 3; fi");
+            builder.AppendLine("if [ ! -e /var/lib/powerforge/restore-secrets ] && [ ! -L /var/lib/powerforge/restore-secrets ]; then install -d -o root -g root -m 0700 /var/lib/powerforge/restore-secrets; fi");
+            builder.AppendLine("if ! { test -d /var/lib/powerforge/restore-secrets && test ! -L /var/lib/powerforge/restore-secrets && test \"$(stat -c '%U:%G %a' /var/lib/powerforge/restore-secrets)\" = 'root:root 700'; }; then echo 'Secret staging parent is not a root-owned mode-700 directory.' >&2; exit 3; fi");
+            builder.AppendLine("if [ -e \"$staging_root\" ] || [ -L \"$staging_root\" ]; then if ! { test -d \"$staging_root\" && test ! -L \"$staging_root\" && test \"$(stat -c '%U:%G %a' \"$staging_root\")\" = 'root:root 700'; }; then echo 'Secret staging root is unsafe.' >&2; exit 3; fi; find \"$staging_root\" -mindepth 1 -delete; else install -d -o root -g root -m 0700 \"$staging_root\"; fi");
+        }
+        var directExtract = new StringBuilder("tar --no-same-owner --no-same-permissions --no-overwrite-dir --no-acls --no-selinux --no-xattrs");
+        foreach (var secret in deferredSecrets)
+            directExtract.Append(" --exclude=").Append(ShellQuote(secret.Path!.TrimStart('/')));
+        directExtract.Append(" -xzf \"$tmp_dir/secrets.tar.gz\" -C /");
+        builder.AppendLine(directExtract.ToString());
+        if (requiredDeferredSecrets.Length > 0)
+        {
+            var stagedExtract = new StringBuilder("tar --no-same-owner --no-same-permissions --no-overwrite-dir --no-acls --no-selinux --no-xattrs --no-recursion -xzf \"$tmp_dir/secrets.tar.gz\" -C \"$staging_root\" --");
+            foreach (var secret in requiredDeferredSecrets)
+                stagedExtract.Append(' ').Append(ShellQuote(secret.Path!.TrimStart('/')));
+            builder.AppendLine(stagedExtract.ToString());
+        }
+        if (optionalDeferredSecrets.Length > 0)
+            builder.AppendLine("if [ -s \"$tmp_dir/present-optional-deferred-paths\" ]; then tar --no-same-owner --no-same-permissions --no-overwrite-dir --no-acls --no-selinux --no-xattrs --no-recursion --null --verbatim-files-from -xzf \"$tmp_dir/secrets.tar.gz\" -C \"$staging_root\" --files-from=\"$tmp_dir/present-optional-deferred-paths\"; fi");
         if (secrets.Any(secret =>
                 string.Equals(secret.RestoreMode, "directory", StringComparison.OrdinalIgnoreCase) &&
                 (!string.IsNullOrWhiteSpace(secret.Owner) ||
@@ -333,6 +413,7 @@ internal static partial class WebCliCommandHandlers
         }
         foreach (var secret in secrets
                      .Where(secret =>
+                         !secret.RestoreAfterRepositories &&
                          !string.IsNullOrWhiteSpace(secret.Path) &&
                          allowedArchivePaths.Any(allowedPath => PathContains(allowedPath, secret.Path!.TrimEnd('/'))))
                      .OrderBy(secret => secret.Path!.TrimEnd('/').Count(static character => character == '/')))
@@ -369,8 +450,18 @@ internal static partial class WebCliCommandHandlers
             if (!string.IsNullOrWhiteSpace(secret.Mode))
                 builder.AppendLine($"if [ -e {pathValue} ]; then chmod {secret.Mode} -- {pathValue}; fi");
         }
+        if (deferredSecrets.Length > 0)
+            builder.AppendLine("echo \"Repository-overlapping secrets staged under $staging_root; run the generated bootstrap plan to install them after clone.\"");
         builder.AppendLine("echo 'Secrets restored. Run server verify next.'");
 
         return builder.ToString().Replace("\r\n", "\n", StringComparison.Ordinal);
+    }
+
+    internal static string BuildRestoreSecretsStagingRoot(string? manifestName)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(
+            Encoding.UTF8.GetBytes(string.IsNullOrWhiteSpace(manifestName) ? "server" : manifestName));
+        var key = Convert.ToHexString(bytes)[..16].ToLowerInvariant();
+        return $"/var/lib/powerforge/restore-secrets/{key}";
     }
 }

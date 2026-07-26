@@ -548,6 +548,32 @@ public sealed partial class ModulePipelineRunner
             }
         }
 
+        if (spec.Build.PreReleaseTag is not null)
+        {
+            preRelease = string.IsNullOrWhiteSpace(spec.Build.PreReleaseTag)
+                ? null
+                : spec.Build.PreReleaseTag.Trim();
+            if (manifestConfiguration is not null)
+                manifestConfiguration.Prerelease = preRelease;
+        }
+
+        ApplyGateModeToPlanInputs(
+            gateMode,
+            ref refreshPsd1Only);
+        var enabledPublishes = ResolveGateFilteredPublishes(gateMode, publishes);
+
+        var synchronizeModuleVersionForRun =
+            !refreshPsd1Only &&
+            ShouldSynchronizeModuleVersionForRun(release, gateMode);
+        if (synchronizeModuleVersionForRun)
+        {
+            ValidateSynchronizedModuleVersionConfiguration(
+                release,
+                projectBuilds,
+                packageBuilds,
+                gateMode);
+        }
+
         expectedVersion ??= spec.Build.Version;
         var psd1 = Path.Combine(projectRoot, $"{moduleName}.psd1");
         if (gateMode == ConfigurationGateMode.Documentation &&
@@ -585,14 +611,39 @@ public sealed partial class ModulePipelineRunner
 
         var expectedVersionResolved = string.IsNullOrWhiteSpace(expectedVersion) ? "1.0.0" : expectedVersion!;
 
-        var localPsd1 = localVersioning ? Path.Combine(projectRoot, $"{moduleName}.psd1") : null;
-        var stepper = new ModuleVersionStepper(_logger);
-        var resolved = stepper.Step(expectedVersionResolved, moduleName, localPsd1Path: localPsd1).Version;
+        string resolved;
+        if (synchronizeModuleVersionForRun)
+        {
+            resolved = ResolveProvisionalSynchronizedModuleVersion(expectedVersionResolved);
+            _logger.Info("Synchronized release version selected: deferring the module repository lookup to the coordinated release-source build.");
+        }
+        else
+        {
+            var localPsd1 = localVersioning ? Path.Combine(projectRoot, $"{moduleName}.psd1") : null;
+            resolved = _moduleVersionStepResolver(
+                expectedVersionResolved,
+                moduleName,
+                localPsd1,
+                prerelease: !string.IsNullOrWhiteSpace(preRelease),
+                verifyRepositoryAvailability: gateMode == ConfigurationGateMode.Publish).Version;
+            if (gateMode == ConfigurationGateMode.Publish &&
+                IsVersionPattern(expectedVersionResolved))
+            {
+                resolved = ResolveGitHubReleaseVersion(
+                    expectedVersionResolved,
+                    resolved,
+                    enabledPublishes,
+                    projectRoot,
+                    moduleName,
+                    preRelease);
+            }
+        }
 
         // Resolve .csproj path: explicit build setting wins, otherwise derive from BuildLibraries NETProjectPath/ProjectName.
-        var csproj = !string.IsNullOrWhiteSpace(spec.Build.CsprojPath)
+        var configuredCsproj = !string.IsNullOrWhiteSpace(spec.Build.CsprojPath)
             ? spec.Build.CsprojPath
             : ModulePipelinePlanningHelpers.TryResolveCsprojPath(projectRoot, moduleName, netProjectPath, netProjectName);
+        var csproj = spec.Build.SkipDotNetBuild ? null : configuredCsproj;
 
         var dotnetConfig = !string.IsNullOrWhiteSpace(dotnetConfigFromSegments)
             ? dotnetConfigFromSegments!
@@ -638,17 +689,13 @@ public sealed partial class ModulePipelineRunner
             spec.Build.DevelopmentBinariesMode);
         var developmentBinariesPath = developmentBinariesPathFromSegments ?? spec.Build.DevelopmentBinariesPath;
 
-        ApplyGateModeToPlanInputs(
-            gateMode,
-            ref refreshPsd1Only);
-
         if (gateMode == ConfigurationGateMode.Documentation && syncNETProjectVersion)
         {
             _logger.Info("Gate mode Documentation enabled: disabling project version sync for this run.");
             syncNETProjectVersion = false;
         }
 
-        var csprojRequiredReasons = refreshPsd1Only
+        var configuredCsprojRequiredReasons = refreshPsd1Only
             ? Array.Empty<string>()
             : BuildMissingCsprojReasonList(
                 spec,
@@ -664,13 +711,20 @@ public sealed partial class ModulePipelineRunner
                 binaryModuleDocumentationRequested == true,
                 developmentBinariesMode,
                 developmentBinariesPath);
+        var csprojRequiredReasons = spec.Build.SkipDotNetBuild &&
+                                    configuredCsprojRequiredReasons.Length == 0 &&
+                                    !string.IsNullOrWhiteSpace(configuredCsproj)
+            ? new[] { "CsprojPath" }
+            : configuredCsprojRequiredReasons;
 
         var buildSpec = new ModuleBuildSpec
         {
             Name = moduleName,
             SourcePath = projectRoot,
             StagingPath = spec.Build.StagingPath,
-            CsprojPath = refreshPsd1Only ? string.Empty : csproj,
+            ReuseStaging = spec.Build.ReuseStaging,
+            CsprojPath = refreshPsd1Only || spec.Build.SkipDotNetBuild ? string.Empty : csproj,
+            SkipDotNetBuild = spec.Build.SkipDotNetBuild,
             Version = resolved,
             Configuration = dotnetConfig,
             Frameworks = frameworks,
@@ -742,7 +796,6 @@ public sealed partial class ModulePipelineRunner
             _logger.Info("ResolveMissingModulesOnline not explicitly set; enabling because module dependencies use Auto/Latest/Guid Auto.");
         }
 
-        var enabledPublishes = ResolveGateFilteredPublishes(gateMode, publishes);
         var dependencyVersionSourceRepository = ResolvePublishDependencyVersionSource(
             ResolveDependencyVersionSourcePublishes(gateMode, publishes));
 
@@ -928,7 +981,7 @@ public sealed partial class ModulePipelineRunner
             .Where(p => p is not null && (!string.IsNullOrWhiteSpace(p.Find) || !string.IsNullOrWhiteSpace(p.Replace)))
             .ToArray();
 
-        return new ModulePipelinePlan(
+        var plan = new ModulePipelinePlan(
             moduleName: moduleName,
             projectRoot: projectRoot,
             expectedVersion: expectedVersionResolved,
@@ -937,7 +990,7 @@ public sealed partial class ModulePipelineRunner
             manifest: manifestConfiguration,
             buildSpec: buildSpec,
             resolvedCsprojPath: csproj,
-            syncNETProjectVersion: syncNETProjectVersion,
+            syncNETProjectVersion: !spec.Build.SkipDotNetBuild && syncNETProjectVersion,
             compatiblePSEditions: compatible,
             requiredModules: requiredModules,
             externalModuleDependencies: externalModules
@@ -1004,6 +1057,8 @@ public sealed partial class ModulePipelineRunner
             stagingWasGenerated: stagingWasGenerated,
             deleteGeneratedStagingAfterRun: deleteAfter,
             embeddedModules: embeddedModules);
+        plan.UseLocalVersioning = localVersioning;
+        return plan;
     }
 
     private void ApplyGateModeToPlanInputs(

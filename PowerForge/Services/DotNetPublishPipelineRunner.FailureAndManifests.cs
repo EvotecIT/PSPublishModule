@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
@@ -312,7 +311,21 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishPlan plan,
         List<DotNetPublishArtefactResult> artefacts,
         List<DotNetPublishStorePackageResult>? storePackages = null,
-        List<DotNetPublishMsiBuildResult>? msiBuilds = null)
+        List<DotNetPublishMsiBuildResult>? msiBuilds = null) =>
+        WriteManifestsWithProvenance(
+            plan,
+            artefacts,
+            storePackages,
+            msiBuilds);
+
+    internal static (string? ManifestJson, string? ManifestText, string? ChecksumsPath) WriteManifestsWithProvenance(
+        DotNetPublishPlan plan,
+        List<DotNetPublishArtefactResult> artefacts,
+        List<DotNetPublishStorePackageResult>? storePackages,
+        List<DotNetPublishMsiBuildResult>? msiBuilds,
+        IEnumerable<string>? cleanTrackedGeneratedPaths = null,
+        IReadOnlyDictionary<string, string>? cleanTrackedGeneratedProvenanceState = null,
+        string? msiReservationOwner = null)
     {
         var orderedArtefacts = (artefacts ?? new List<DotNetPublishArtefactResult>())
             .OrderBy(a => a.Target, StringComparer.OrdinalIgnoreCase)
@@ -335,7 +348,22 @@ public sealed partial class DotNetPublishPipelineRunner
             .ThenBy(a => a.Style.ToString(), StringComparer.OrdinalIgnoreCase)
             .ThenBy(a => a.InstallerId, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var manifestEntries = BuildManifestEntries(plan.ProjectRoot, orderedArtefacts, orderedStorePackages, orderedMsiBuilds);
+        var provenance = ReadSourceProvenance(
+            plan.ProjectRoot,
+            EnumerateGeneratedProvenancePaths(
+                plan,
+                orderedArtefacts,
+                orderedStorePackages,
+                orderedMsiBuilds),
+            cleanTrackedGeneratedPaths,
+            cleanTrackedGeneratedProvenanceState,
+            msiReservationOwner);
+        var manifestEntries = BuildManifestEntries(
+            plan.ProjectRoot,
+            orderedArtefacts,
+            orderedStorePackages,
+            orderedMsiBuilds,
+            provenance);
 
         var jsonPath = plan.Outputs.ManifestJsonPath;
         var txtPath = plan.Outputs.ManifestTextPath;
@@ -465,7 +493,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string projectRoot,
         IReadOnlyList<DotNetPublishArtefactResult> orderedArtefacts,
         IReadOnlyList<DotNetPublishStorePackageResult> orderedStorePackages,
-        IReadOnlyList<DotNetPublishMsiBuildResult> orderedMsiBuilds)
+        IReadOnlyList<DotNetPublishMsiBuildResult> orderedMsiBuilds,
+        SourceProvenance provenance)
     {
         var entries = orderedArtefacts
             .Select(a => new DotNetPublishManifestEntry
@@ -490,7 +519,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 Cleanup = HasCleanup(a.Cleanup) ? a.Cleanup : null,
                 ServicePackage = a.ServicePackage,
                 StateTransfer = a.StateTransfer,
-                SignedFiles = a.SignedFiles > 0 ? a.SignedFiles : null
+                SignedFiles = a.SignedFiles > 0 ? a.SignedFiles : null,
+                SourceRevision = provenance.Revision,
+                SourceDirty = provenance.Dirty
             })
             .ToList();
 
@@ -509,7 +540,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 OutputDir = store.OutputDir,
                 OutputFiles = ToManifestOutputFiles(projectRoot, files),
                 Files = files.Length,
-                TotalBytes = SumFileBytes(files)
+                TotalBytes = SumFileBytes(files),
+                SourceRevision = provenance.Revision,
+                SourceDirty = provenance.Dirty
             });
         }
 
@@ -531,7 +564,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 Files = files.Length,
                 TotalBytes = SumFileBytes(files),
                 SignedFiles = build.SignedFiles is { Length: > 0 } ? build.SignedFiles.Length : null,
-                PackageMetadata = ToManifestPackageMetadata(projectRoot, build.PackageMetadata)
+                PackageMetadata = ToManifestPackageMetadata(projectRoot, build.PackageMetadata),
+                SourceRevision = provenance.Revision,
+                SourceDirty = provenance.Dirty
             });
         }
 
@@ -563,6 +598,8 @@ public sealed partial class DotNetPublishPipelineRunner
         public DotNetPublishStateTransferResult? StateTransfer { get; set; }
         public int? SignedFiles { get; set; }
         public DotNetPublishMsiPackageMetadata[]? PackageMetadata { get; set; }
+        public string? SourceRevision { get; set; }
+        public bool? SourceDirty { get; set; }
     }
 
     private static bool HasCleanup(DotNetPublishCleanupResult? cleanup)

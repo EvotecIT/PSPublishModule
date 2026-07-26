@@ -34,6 +34,10 @@ public sealed class NewConfigurationAppleAppCommand : PSCmdlet
     [Parameter]
     public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
 
+    /// <summary>Optional archive destination variant, such as Mac Catalyst.</summary>
+    [Parameter]
+    public AppleArchiveVariant ArchiveVariant { get; set; } = AppleArchiveVariant.Default;
+
     /// <summary>
     /// Path to a <c>.xcodeproj</c> directory or <c>project.pbxproj</c> file.
     /// Relative paths resolve from the pipeline project root.
@@ -88,6 +92,7 @@ public sealed class NewConfigurationAppleAppCommand : PSCmdlet
                 Name = Name,
                 BundleId = BundleId,
                 Platform = Platform,
+                ArchiveVariant = ArchiveVariant,
                 ProjectPath = ProjectPath,
                 Scheme = Scheme,
                 AppStoreConnectAppId = AppStoreConnectAppId,

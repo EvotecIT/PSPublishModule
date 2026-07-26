@@ -25,12 +25,29 @@ the credential provider prompts once and caches the refreshed session.
 
 ## Maintainer Publish Flow
 
-Add one publish target to the module build configuration. In this repo it lives
-beside the PSGallery and GitHub publish lines in
-`Module/Build/Build-Module.ps1`:
+Add one publish target to the module build configuration. In this repo, module
+publish targets live in `powerforge.json` beside the PSGallery and GitHub segments.
 
-```powershell
-New-ConfigurationPublish -AzureDevOpsOrganization 'evotecpl' -AzureDevOpsProject 'PowerShellGallery' -AzureArtifactsFeed 'PowerShellGalleryFeed' -RepositoryName 'EvotecPowerShellGallery' -Tool PSResourceGet -Enabled:$true
+```json
+{
+  "Type": "GalleryNuget",
+  "Configuration": {
+    "Destination": "PowerShellGallery",
+    "Tool": "PSResourceGet",
+    "ApiKey": "AzureDevOps",
+    "Enabled": true,
+    "RepositoryName": "EvotecPowerShellGallery",
+    "Repository": {
+      "Name": "EvotecPowerShellGallery",
+      "Uri": "https://pkgs.dev.azure.com/evotecpl/PowerShellGallery/_packaging/PowerShellGalleryFeed/nuget/v3/index.json",
+      "SourceUri": "https://pkgs.dev.azure.com/evotecpl/PowerShellGallery/_packaging/PowerShellGalleryFeed/nuget/v2",
+      "PublishUri": "https://pkgs.dev.azure.com/evotecpl/PowerShellGallery/_packaging/PowerShellGalleryFeed/nuget/v2",
+      "Trusted": true,
+      "ApiVersion": "V2",
+      "EnsureRegistered": true
+    }
+  }
+}
 ```
 
 Optional maintainer preflight:
@@ -47,7 +64,7 @@ internally before version checks and publishing.
 Then run the normal build/publish flow:
 
 ```powershell
-.\Build\Build-Module.ps1
+.\Build\Build-Project.ps1 -Publish
 ```
 
 Repeat publishing is the same process. Azure Artifacts will reject the same

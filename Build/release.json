@@ -3,18 +3,27 @@
   "SchemaVersion": 1,
   "Module": {
     "RepositoryRoot": "..",
-    "ScriptPath": "Module/Build/Build-Module.ps1",
+    "ModuleName": "PSPublishModule",
+    "ConfigPath": "powerforge.json",
+    "ModulePath": "PSPublishModule/bin/{Configuration}/{Framework}/PSPublishModule.dll",
+    "ManifestPath": "Module/PSPublishModule.psd1",
     "ArtifactPaths": [
       "Module/Artefacts/Packed",
       "Module/Artefacts/PackedWithModules",
       "Module/Artefacts/Unpacked"
-    ]
+    ],
+    "IncludesPackages": false,
+    "SynchronizeVersionWithPackages": true,
+    "VersionPrimaryProject": "PowerForge",
+    "Framework": "auto",
+    "ModuleVersion": "3.0.X",
+    "TimeoutSeconds": 7200
   },
   "Packages": {
     "RootPath": "..",
     "VersionTracks": {
       "PowerForge": {
-        "ExpectedVersion": "1.0.X",
+        "ExpectedVersion": "3.0.X",
         "AnchorProject": "PowerForge",
         "Projects": [
           "PowerForge.PowerShell",
@@ -25,6 +34,7 @@
         ]
       }
     },
+    "AlignPackageVersions": true,
     "ExpectedVersionMapAsInclude": true,
     "ExpectedVersionMapUseWildcards": false,
     "Configuration": "Release",
@@ -95,5 +105,18 @@
       "TagTemplate": "{Target}-v{Version}",
       "ReleaseNameTemplate": "{Target} {Version}"
     }
+  },
+  "GitHub": {
+    "Publish": true,
+    "VersionSource": "Module",
+    "Owner": "EvotecIT",
+    "Repository": "PSPublishModule",
+    "TokenFilePath": "C:\\Support\\Important\\GithubAPI.txt",
+    "GenerateReleaseNotes": true,
+    "IsPreRelease": false,
+    "ReuseExistingRelease": false,
+    "ReplaceExistingAssets": false,
+    "TagTemplate": "v{Version}",
+    "ReleaseNameTemplate": "PSPublishModule {Version}"
   }
 }

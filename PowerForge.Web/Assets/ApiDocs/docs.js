@@ -56,6 +56,12 @@
     });
   }
 
+  document.addEventListener('keydown', function(event) {
+    if (event.key !== 'Escape' || !sidebar || !sidebar.classList.contains('sidebar-open')) return;
+    setSidebar(false);
+    if (toggle) toggle.focus();
+  });
+
   function initNavDropdowns() {
     var dropdowns = Array.prototype.slice.call(document.querySelectorAll('.nav-dropdown'));
     if (!dropdowns.length) return;

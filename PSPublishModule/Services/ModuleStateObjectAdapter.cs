@@ -57,8 +57,10 @@ internal static class ModuleStateObjectAdapter
         var targetPath =
             GetString(value, "TargetPath") ??
             GetString(value, "Path") ??
-            GetString(value, "ModuleRoot") ??
             GetString(value, "DestinationPath");
+        var moduleRoot = GetString(value, "ModuleRoot");
+        var powerShellEdition = GetString(value, "PowerShellEdition");
+        var profileName = GetString(value, "ProfileName") ?? GetString(value, "UserProfile");
         var expectedPackageSha256 =
             GetString(value, "ExpectedPackageSha256") ??
             GetString(value, "PackageSha256") ??
@@ -76,7 +78,10 @@ internal static class ModuleStateObjectAdapter
             GetBool(value, "AcceptLicense"),
             GetBool(value, "AllowClobber"),
             GetBool(value, "SkipDependencyCheck"),
-            targetRepositorySource);
+            targetRepositorySource,
+            moduleRoot,
+            powerShellEdition,
+            profileName);
     }
 
     private static ModuleStateFamilyPolicy ToFamilyPolicy(object input)

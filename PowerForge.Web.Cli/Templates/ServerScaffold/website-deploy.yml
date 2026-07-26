@@ -4,7 +4,7 @@ on:
   push:
     branches: [__BRANCH__]
     paths:
-      - "__WEBSITE_ROOT__/**"
+      - "__WEBSITE_WATCH_PATH__"
       - "deploy/linux/**"
       - ".github/workflows/website-deploy.yml"
   workflow_dispatch:

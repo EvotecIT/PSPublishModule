@@ -30,7 +30,8 @@ internal sealed class RequiredModuleRepositoryValidator
         RepositoryCredential? credential,
         PublishRepositoryConfiguration? repositoryForPublish,
         ModulePipelinePlan plan,
-        ModuleBuildResult buildResult)
+        ModuleBuildResult buildResult,
+        Action? remoteSideEffectObserved = null)
     {
         if (publish is null) throw new ArgumentNullException(nameof(publish));
         if (string.IsNullOrWhiteSpace(repositoryName)) throw new ArgumentException("Repository name is required.", nameof(repositoryName));
@@ -80,7 +81,8 @@ internal sealed class RequiredModuleRepositoryValidator
                         repositoryForPublish,
                         sourceCredential,
                         credential,
-                        mirroredPackages);
+                        mirroredPackages,
+                        remoteSideEffectObserved);
 
                     versions = FindRequiredModuleVersionsInRepository(
                         repositoryName,
