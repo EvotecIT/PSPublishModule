@@ -43,6 +43,7 @@ public sealed partial class ModulePipelineRunner
     private readonly ModulePipelineRunnerDefaults.ModulePackageBuildExecutor _packageBuildExecutor;
     private readonly ModulePipelineRunnerDefaults.ModuleGitHubReleasePublisher _gitHubReleasePublisher;
     private readonly ModulePipelineRunnerDefaults.ModuleVersionStepResolver _moduleVersionStepResolver;
+    private readonly ModulePipelineRunnerDefaults.ModuleGitHubVersionAvailabilityResolver _gitHubVersionAvailabilityResolver;
 
     private sealed class RequiredModuleDraft
     {
@@ -93,8 +94,9 @@ public sealed partial class ModulePipelineRunner
         IScriptFunctionExportDetector? scriptFunctionExportDetector = null,
         ModulePipelineRunnerDefaults.ModulePackageBuildExecutor? packageBuildExecutor = null,
         ModulePipelineRunnerDefaults.ModuleGitHubReleasePublisher? gitHubReleasePublisher = null,
-        ModulePipelineRunnerDefaults.ModuleVersionStepResolver? moduleVersionStepResolver = null)
-        : this(logger, ModulePipelineRunnerDefaults.Create(logger, powerShellRunner, moduleDependencyMetadataProvider, hostedOperations, manifestMutator, missingFunctionAnalysisService, scriptFunctionExportDetector, packageBuildExecutor, gitHubReleasePublisher, moduleVersionStepResolver))
+        ModulePipelineRunnerDefaults.ModuleVersionStepResolver? moduleVersionStepResolver = null,
+        ModulePipelineRunnerDefaults.ModuleGitHubVersionAvailabilityResolver? gitHubVersionAvailabilityResolver = null)
+        : this(logger, ModulePipelineRunnerDefaults.Create(logger, powerShellRunner, moduleDependencyMetadataProvider, hostedOperations, manifestMutator, missingFunctionAnalysisService, scriptFunctionExportDetector, packageBuildExecutor, gitHubReleasePublisher, moduleVersionStepResolver, gitHubVersionAvailabilityResolver))
     {
     }
 
@@ -113,6 +115,7 @@ public sealed partial class ModulePipelineRunner
         _packageBuildExecutor = services.PackageBuildExecutor;
         _gitHubReleasePublisher = services.GitHubReleasePublisher;
         _moduleVersionStepResolver = services.ModuleVersionStepResolver;
+        _gitHubVersionAvailabilityResolver = services.GitHubVersionAvailabilityResolver;
     }
 
 }

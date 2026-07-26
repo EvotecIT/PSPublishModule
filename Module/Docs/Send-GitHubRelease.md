@@ -199,8 +199,8 @@ Accept wildcard characters: True
 ```
 
 ### -ReuseExistingReleaseOnConflict
-When true (default), a 422 tag conflict reuses the existing release.
-When false, the cmdlet fails on existing tags.
+When true, a 422 tag conflict deliberately reuses the existing release.
+The default is false so normal publishing cannot mutate an older release.
 
 ```yaml
 Type: Boolean

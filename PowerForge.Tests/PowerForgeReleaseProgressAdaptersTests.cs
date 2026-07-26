@@ -65,6 +65,58 @@ public sealed class PowerForgeReleaseProgressAdaptersTests
             release.Updates.Select(update => update.State));
     }
 
+    [Fact]
+    public void GitHubReleaseAdapter_ForwardsAssetBytesAndTerminalState()
+    {
+        var release = new RecordingReleaseProgress();
+        var adapter = new GitHubReleaseProgressAdapter(release);
+        var assetPath = Path.Combine(Path.GetTempPath(), "PowerForge.Build.zip");
+
+        adapter.Report(new GitHubReleaseAssetProgress
+        {
+            FilePath = assetPath,
+            FileName = "PowerForge.Build.zip",
+            Position = 4,
+            TotalAssets = 24,
+            State = GitHubReleaseAssetProgressState.Planned
+        });
+        adapter.Report(new GitHubReleaseAssetProgress
+        {
+            FilePath = assetPath,
+            FileName = "PowerForge.Build.zip",
+            Position = 4,
+            TotalAssets = 24,
+            State = GitHubReleaseAssetProgressState.Uploading,
+            BytesTransferred = 25,
+            TotalBytes = 100
+        });
+        adapter.Report(new GitHubReleaseAssetProgress
+        {
+            FilePath = assetPath,
+            FileName = "PowerForge.Build.zip",
+            Position = 4,
+            TotalAssets = 24,
+            State = GitHubReleaseAssetProgressState.Uploaded,
+            BytesTransferred = 100,
+            TotalBytes = 100
+        });
+
+        var item = Assert.Single(release.Planned);
+        Assert.Equal(PowerForgeReleaseProgressPhase.GitHub, item.Phase);
+        Assert.Equal(4, item.Position);
+        Assert.Equal(24, item.Total);
+        Assert.Equal(100, item.ProgressMaximum);
+        Assert.Equal(100, item.ProgressValue);
+        Assert.Collection(
+            release.Updates,
+            update =>
+            {
+                Assert.Equal(PowerForgeReleaseProgressItemState.Started, update.State);
+                Assert.Contains("/", update.Detail, StringComparison.Ordinal);
+            },
+            update => Assert.Equal(PowerForgeReleaseProgressItemState.Completed, update.State));
+    }
+
     private sealed class RecordingReleaseProgress : IPowerForgeReleaseProgressReporterV2
     {
         public List<PowerForgeReleaseProgressItem> Planned { get; } = new();

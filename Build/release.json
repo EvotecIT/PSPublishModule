@@ -114,7 +114,8 @@
     "TokenFilePath": "C:\\Support\\Important\\GithubAPI.txt",
     "GenerateReleaseNotes": true,
     "IsPreRelease": false,
-    "ReplaceExistingAssets": true,
+    "ReuseExistingRelease": false,
+    "ReplaceExistingAssets": false,
     "TagTemplate": "v{Version}",
     "ReleaseNameTemplate": "PSPublishModule {Version}"
   }

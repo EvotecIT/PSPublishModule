@@ -100,6 +100,11 @@ NuGet package publishing stays in `New-ConfigurationProjectBuild` / `New-Configu
 that is package-lane behavior. PowerShell Gallery and top-level GitHub publishing stay with module/release
 publish configuration.
 
+For direct `Build-Module` GitHub publishing, an X-pattern version also skips occupied GitHub tags/releases during
+publish planning. The publish row switches to determinate byte progress and shows the active asset. Existing releases
+are not reused by default. Use `-ReuseExistingRelease` only for a deliberate recovery run, and add
+`-ReplaceExistingAssets` only when that recovery should replace same-name assets.
+
 ### PowerShell-authored package configuration
 
 For modules where you want the whole release in PowerShell, declare the package config inline. It maps to
@@ -436,7 +441,7 @@ Keep three layers:
 The release runtime executes these phases:
 
 1. Load and validate every section.
-2. Resolve one release version from `VersionTracks`, `ExpectedVersionMap`, explicit module version, or a declared primary package.
+2. Resolve one release version from `VersionTracks`, `ExpectedVersionMap`, explicit module version, or a declared primary package. Publish-mode auto-versioning also skips occupied unified GitHub tags/releases.
 3. Plan packages and module before doing any destructive or publishing work.
 4. If the module needs packages from this same release, build packages to a local staging feed first.
 5. Build the module against either project references or the staged local package feed.
@@ -445,7 +450,7 @@ The release runtime executes these phases:
 8. Publish the module to PSGallery or configured private gallery.
 9. Stage all release assets into one upload-ready folder.
 10. Write `release-manifest.json` and `SHA256SUMS.txt`.
-11. Publish one GitHub release from the staged asset list.
+11. Publish one GitHub release from the staged asset list, with visible per-asset byte progress and an explicit created-versus-recovery result.
 
 This keeps publication fail-fast while avoiding a half-published release where NuGet is updated before the
 module can even be built.

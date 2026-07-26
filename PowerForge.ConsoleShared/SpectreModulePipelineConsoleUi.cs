@@ -350,7 +350,7 @@ internal static class SpectreModulePipelineConsoleUi
         }
     }
 
-    private sealed class SpectrePipelineProgressReporter : IModulePipelineProgressReporterV2
+    private sealed class SpectrePipelineProgressReporter : IModulePipelineProgressReporterV3
     {
         private readonly IReadOnlyDictionary<string, ProgressTask> _tasks;
         private readonly IReadOnlyDictionary<string, string> _labels;
@@ -430,6 +430,27 @@ internal static class SpectreModulePipelineConsoleUi
                 task.Description = $"{label.TrimEnd()} SKIPPED";
 
             try { task.StopTask(); } catch { }
+        }
+
+        public void StepProgress(ModulePipelineStep step, double value, double maximum, string? detail = null)
+        {
+            if (step is null || !_tasks.TryGetValue(step.Key, out var task)) return;
+
+            task.IsIndeterminate = maximum <= 0;
+            if (maximum > 0)
+            {
+                task.MaxValue = maximum;
+                task.Value = Math.Min(Math.Max(0, value), maximum);
+            }
+
+            if (_labels.TryGetValue(step.Key, out var label))
+            {
+                task.Description = string.IsNullOrWhiteSpace(detail)
+                    ? label
+                    : $"{label.TrimEnd()} [grey]— {Markup.Escape(detail!)}[/]";
+            }
+
+            try { task.StartTask(); } catch { }
         }
     }
 

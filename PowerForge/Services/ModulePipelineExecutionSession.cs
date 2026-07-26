@@ -6,6 +6,7 @@ namespace PowerForge;
 internal sealed class ModulePipelineExecutionSession
 {
     private readonly IModulePipelineProgressReporterV2? _reporterV2;
+    private readonly IModulePipelineProgressReporterV3? _reporterV3;
     private readonly HashSet<string> _startedKeys;
     private readonly Dictionary<string, ModulePipelineStep> _stepsByKey;
     private readonly Dictionary<ConfigurationArtefactSegment, ModulePipelineStep> _artefactSteps;
@@ -22,6 +23,7 @@ internal sealed class ModulePipelineExecutionSession
         Steps = steps ?? Array.Empty<ModulePipelineStep>();
         Reporter = reporter ?? NullModulePipelineProgressReporter.Instance;
         _reporterV2 = Reporter as IModulePipelineProgressReporterV2;
+        _reporterV3 = Reporter as IModulePipelineProgressReporterV3;
         _startedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         _stepsByKey = Steps
             .Where(static step => !string.IsNullOrWhiteSpace(step.Key))
@@ -151,6 +153,12 @@ internal sealed class ModulePipelineExecutionSession
     {
         if (step is null) return;
         try { Reporter.StepCompleted(step); } catch { }
+    }
+
+    internal void Progress(ModulePipelineStep? step, double value, double maximum, string? detail = null)
+    {
+        if (step is null || _reporterV3 is null) return;
+        try { _reporterV3.StepProgress(step, value, maximum, detail); } catch { }
     }
 
     internal void Fail(ModulePipelineStep? step, Exception error)

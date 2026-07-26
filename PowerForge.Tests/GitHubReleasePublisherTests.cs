@@ -61,6 +61,69 @@ public sealed class GitHubReleasePublisherTests
     }
 
     [Fact]
+    public async Task PublishRelease_ReportsPlannedAndByteLevelAssetProgress()
+    {
+        var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllBytesAsync(assetPath, new byte[5 * 1024 * 1024]);
+        var progress = new RecordingGitHubProgress();
+        var server = Task.Run(async () =>
+        {
+            var create = await listener.GetContextAsync();
+            var createBody = Encoding.UTF8.GetBytes(
+                $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}","body":"generated"}""");
+            create.Response.StatusCode = 201;
+            create.Response.ContentType = "application/json";
+            create.Response.ContentLength64 = createBody.Length;
+            await create.Response.OutputStream.WriteAsync(createBody);
+            create.Response.Close();
+
+            var upload = await listener.GetContextAsync();
+            await upload.Request.InputStream.CopyToAsync(Stream.Null);
+            upload.Response.StatusCode = 201;
+            upload.Response.Close();
+        });
+
+        try
+        {
+            var result = new GitHubReleasePublisher(new NullLogger()).PublishRelease(
+                new GitHubReleasePublishRequest
+                {
+                    Owner = "EvotecIT",
+                    Repository = "example",
+                    Token = "token",
+                    ApiBaseUrl = apiBaseUrl,
+                    TagName = "v1.2.3",
+                    AssetFilePaths = [assetPath],
+                    Progress = progress
+                });
+
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(result.Succeeded);
+            Assert.Equal(Path.GetFileName(assetPath), Assert.Single(result.UploadedAssets));
+            Assert.Equal(GitHubReleaseAssetProgressState.Planned, progress.Updates[0].State);
+            Assert.Contains(
+                progress.Updates,
+                update => update.State == GitHubReleaseAssetProgressState.Uploading &&
+                          update.BytesTransferred > 0 &&
+                          update.TotalBytes == new FileInfo(assetPath).Length);
+            var completed = progress.Updates[^1];
+            Assert.Equal(GitHubReleaseAssetProgressState.Uploaded, completed.State);
+            Assert.Equal(completed.TotalBytes, completed.BytesTransferred);
+        }
+        finally
+        {
+            listener.Stop();
+            listener.Close();
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
     public void PublishRelease_ThrowsWhenAssetDoesNotExist()
     {
         var publisher = new GitHubReleasePublisher(new NullLogger());
@@ -159,5 +222,13 @@ public sealed class GitHubReleasePublisherTests
         {
             listener.Stop();
         }
+    }
+
+    private sealed class RecordingGitHubProgress : IGitHubReleaseProgressReporter
+    {
+        public List<GitHubReleaseAssetProgress> Updates { get; } = new();
+
+        public void Report(GitHubReleaseAssetProgress progress)
+            => Updates.Add(progress);
     }
 }

@@ -163,4 +163,81 @@ internal sealed partial class PowerForgeReleaseService
 
     private static string? NullIfEmpty(string value)
         => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    private (ProjectBuildHostExecutionResult Packages, string Version) ResolveCoordinatedReleaseVersion(
+        PowerForgeReleaseSpec spec,
+        string configPath,
+        PowerForgeReleaseRequest request,
+        string? configurationOverride,
+        bool publishUnifiedGitHub,
+        string initialVersionFloor)
+    {
+        var versionFloor = initialVersionFloor;
+        const int maximumCoordinationAttempts = 24;
+        for (var attempt = 0; attempt < maximumCoordinationAttempts; attempt++)
+        {
+            var packages = ExecutePackageRelease(
+                spec.Packages!,
+                configPath,
+                request,
+                configurationOverride,
+                publishUnifiedGitHub,
+                versionFloor,
+                spec.Module!.VersionPrimaryProject,
+                forcePlanOnly: true,
+                suppressPublishing: true);
+            if (!packages.Success)
+                return (packages, versionFloor);
+
+            var resolvedVersion = ResolveCoordinatedPackageVersion(spec.Module!, packages, versionFloor);
+            if (!publishUnifiedGitHub)
+                return (packages, resolvedVersion);
+
+            var availableVersion = EnsureUnifiedGitHubVersionAvailable(
+                spec,
+                configPath,
+                request,
+                resolvedVersion);
+            if (string.Equals(availableVersion, resolvedVersion, StringComparison.OrdinalIgnoreCase))
+                return (packages, resolvedVersion);
+
+            versionFloor = availableVersion;
+        }
+
+        throw new InvalidOperationException(
+            $"Unable to coordinate a release version that is available to both package and GitHub destinations after {maximumCoordinationAttempts} attempts.");
+    }
+
+    private string EnsureUnifiedGitHubVersionAvailable(
+        PowerForgeReleaseSpec spec,
+        string releaseConfigPath,
+        PowerForgeReleaseRequest request,
+        string candidateVersion)
+    {
+        var gitHub = spec.GitHub
+            ?? throw new InvalidOperationException("Unified GitHub release options were not configured.");
+        var configDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
+        var resolved = ResolveUnifiedGitHubConfiguration(spec, gitHub, configDirectory);
+        if (resolved.Error is not null)
+            throw new InvalidOperationException(resolved.Error.ErrorMessage);
+
+        var expectedVersion = request.ModuleVersion ?? spec.Module?.ModuleVersion;
+        if (string.IsNullOrWhiteSpace(expectedVersion))
+            return candidateVersion;
+
+        var tagTemplate = string.IsNullOrWhiteSpace(gitHub.TagTemplate)
+            ? "v{Version}"
+            : gitHub.TagTemplate!;
+        var availability = new GitHubReleaseVersionAvailabilityService(
+            _logger,
+            _probeGitHubReleaseVersion);
+        return availability.EnsureAvailable(
+            expectedVersion!,
+            candidateVersion,
+            resolved.Owner!,
+            resolved.Repository!,
+            resolved.Token!,
+            version => ApplyUnifiedGitHubTemplate(tagTemplate, resolved.Repository!, version),
+            gitHub.ReuseExistingRelease);
+    }
 }

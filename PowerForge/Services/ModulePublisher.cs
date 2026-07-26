@@ -71,7 +71,8 @@ public sealed partial class ModulePublisher
             includeScriptFolders,
             remotePublishAttempted: null,
             remoteSideEffectObserved: null,
-            CancellationToken.None);
+            CancellationToken.None,
+            gitHubProgress: null);
 
     internal ModulePublishResult Publish(
         PublishConfiguration publish,
@@ -81,7 +82,8 @@ public sealed partial class ModulePublisher
         bool includeScriptFolders,
         Action? remotePublishAttempted,
         Action? remoteSideEffectObserved,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IGitHubReleaseProgressReporter? gitHubProgress = null)
     {
         if (publish is null) throw new ArgumentNullException(nameof(publish));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
@@ -119,7 +121,8 @@ public sealed partial class ModulePublisher
                 publish,
                 plan,
                 artefactResults,
-                remotePublishAttempted),
+                remotePublishAttempted,
+                gitHubProgress),
             _ => throw new NotSupportedException($"Unsupported publish destination: {publish.Destination}")
         };
     }
@@ -278,6 +281,8 @@ public sealed partial class ModulePublisher
             OverwriteTagName = publish.OverwriteTagName,
             DoNotMarkAsPreRelease = publish.DoNotMarkAsPreRelease,
             GenerateReleaseNotes = publish.GenerateReleaseNotes,
+            ReuseExistingRelease = publish.ReuseExistingRelease,
+            ReplaceExistingAssets = publish.ReplaceExistingAssets,
             UseAsDependencyVersionSource = publish.UseAsDependencyVersionSource,
             PublishRequiredModules = publish.PublishRequiredModules,
             RequiredModuleSourceRepository = publish.RequiredModuleSourceRepository,
@@ -937,7 +942,8 @@ public sealed partial class ModulePublisher
         PublishConfiguration publish,
         ModulePipelinePlan plan,
         IReadOnlyList<ArtefactBuildResult> artefactResults,
-        Action? remotePublishAttempted)
+        Action? remotePublishAttempted,
+        IGitHubReleaseProgressReporter? gitHubProgress)
     {
         if (string.IsNullOrWhiteSpace(publish.UserName))
             throw new InvalidOperationException("UserName is required for GitHub publishing.");
@@ -959,18 +965,21 @@ public sealed partial class ModulePublisher
 
         _logger.Info($"Publishing GitHub release {owner}/{repo} tag '{tag}' with {assets.Length} asset(s)");
         remotePublishAttempted?.Invoke();
-        var created = _gitHub.PublishRelease(
-            owner: owner,
-            repo: repo,
-            token: publish.ApiKey,
-            tagName: tag,
-            releaseName: tag,
-            releaseNotes: null,
-            commitish: null,
-            generateReleaseNotes: publish.GenerateReleaseNotes,
-            isDraft: false,
-            isPreRelease: isPreRelease,
-            assetFilePaths: assets);
+        var created = _gitHub.PublishRelease(new GitHubReleasePublishRequest
+        {
+            Owner = owner,
+            Repository = repo,
+            Token = publish.ApiKey,
+            TagName = tag,
+            ReleaseName = tag,
+            GenerateReleaseNotes = publish.GenerateReleaseNotes,
+            IsDraft = false,
+            IsPreRelease = isPreRelease,
+            ReuseExistingReleaseOnConflict = publish.ReuseExistingRelease,
+            ReplaceExistingAssets = publish.ReuseExistingRelease && publish.ReplaceExistingAssets,
+            AssetFilePaths = assets,
+            Progress = gitHubProgress
+        });
 
         var releaseUrl = string.IsNullOrWhiteSpace(created.HtmlUrl)
             ? $"https://github.com/{owner}/{repo}/releases/tag/{tag}"

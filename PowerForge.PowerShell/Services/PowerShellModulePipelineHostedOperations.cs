@@ -94,7 +94,8 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         IReadOnlyList<ArtefactBuildResult> artefactResults,
         bool includeScriptFolders,
         Action? remotePublishAttempted,
-        Action? remoteSideEffectObserved)
+        Action? remoteSideEffectObserved,
+        IGitHubReleaseProgressReporter? gitHubProgress)
         => new ModulePublisher(_logger, _runner).Publish(
             publish,
             plan,
@@ -102,7 +103,8 @@ internal sealed class PowerShellModulePipelineHostedOperations :
             artefactResults,
             includeScriptFolders,
             remotePublishAttempted,
-            remoteSideEffectObserved);
+            remoteSideEffectObserved,
+            gitHubProgress: gitHubProgress);
 
     public ModulePublishVersionPreflightResult ValidateModulePublishVersion(
         PublishConfiguration publish,

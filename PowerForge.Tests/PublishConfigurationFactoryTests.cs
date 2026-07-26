@@ -5,6 +5,21 @@ namespace PowerForge.Tests;
 public sealed class PublishConfigurationFactoryTests
 {
     [Fact]
+    public void Create_requires_explicit_release_reuse_before_asset_replacement()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiKey",
+            Type = PublishDestination.GitHub,
+            ReplaceExistingAssets = true
+        }));
+
+        Assert.Contains("ReuseExistingRelease", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Create_defers_enabled_publish_api_key_file_until_publish_runtime()
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".txt");

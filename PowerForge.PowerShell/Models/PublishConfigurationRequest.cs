@@ -126,6 +126,12 @@ internal sealed class PublishConfigurationRequest
     /// <summary>Whether GitHub should generate release notes automatically.</summary>
     public bool GenerateReleaseNotes { get; set; }
 
+    /// <summary>Whether an existing GitHub release may be reused as an explicit recovery action.</summary>
+    public bool ReuseExistingRelease { get; set; }
+
+    /// <summary>Whether same-name GitHub assets may be replaced during explicit recovery.</summary>
+    public bool ReplaceExistingAssets { get; set; }
+
     /// <summary>Whether this repository should be used as a dependency-version source.</summary>
     public bool UseAsDependencyVersionSource { get; set; }
 

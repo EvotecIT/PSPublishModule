@@ -560,6 +560,7 @@ public sealed partial class ModulePipelineRunner
         ApplyGateModeToPlanInputs(
             gateMode,
             ref refreshPsd1Only);
+        var enabledPublishes = ResolveGateFilteredPublishes(gateMode, publishes);
 
         var synchronizeModuleVersionForRun =
             !refreshPsd1Only &&
@@ -625,6 +626,17 @@ public sealed partial class ModulePipelineRunner
                 localPsd1,
                 prerelease: !string.IsNullOrWhiteSpace(preRelease),
                 verifyRepositoryAvailability: gateMode == ConfigurationGateMode.Publish).Version;
+            if (gateMode == ConfigurationGateMode.Publish &&
+                IsVersionPattern(expectedVersionResolved))
+            {
+                resolved = ResolveGitHubReleaseVersion(
+                    expectedVersionResolved,
+                    resolved,
+                    enabledPublishes,
+                    projectRoot,
+                    moduleName,
+                    preRelease);
+            }
         }
 
         // Resolve .csproj path: explicit build setting wins, otherwise derive from BuildLibraries NETProjectPath/ProjectName.
@@ -784,7 +796,6 @@ public sealed partial class ModulePipelineRunner
             _logger.Info("ResolveMissingModulesOnline not explicitly set; enabling because module dependencies use Auto/Latest/Guid Auto.");
         }
 
-        var enabledPublishes = ResolveGateFilteredPublishes(gateMode, publishes);
         var dependencyVersionSourceRepository = ResolvePublishDependencyVersionSource(
             ResolveDependencyVersionSourcePublishes(gateMode, publishes));
 

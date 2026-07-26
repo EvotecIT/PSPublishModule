@@ -63,6 +63,12 @@ public sealed class PowerForgeReleaseProgressItem
 
     /// <summary>Total number of items in the owning plan.</summary>
     public int Total { get; set; }
+
+    /// <summary>Current numeric progress for presentation hosts; zero when unavailable.</summary>
+    public double ProgressValue { get; set; }
+
+    /// <summary>Maximum numeric progress for presentation hosts; zero when indeterminate.</summary>
+    public double ProgressMaximum { get; set; }
 }
 
 /// <summary>

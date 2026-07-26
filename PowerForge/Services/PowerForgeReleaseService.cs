@@ -58,6 +58,7 @@ internal sealed partial class PowerForgeReleaseService
     private readonly Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, ISet<PowerForgeReleaseToolOutputKind>, DotNetPublishPlan> _planDotNetTools;
     private readonly Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult> _runDotNetTools;
     private readonly Func<GitHubReleasePublishRequest, CancellationToken, GitHubReleasePublishResult> _publishGitHubRelease;
+    private readonly Func<string, string, string, string, GitHubReleaseVersionOccupancy> _probeGitHubReleaseVersion;
     private readonly Func<PowerForgeWingetSubmissionPlan, PowerForgeWingetSubmissionResult> _submitWinget;
     private readonly Func<AppleAppArchiveRequest, AppleAppArchiveResult> _archiveAppleApp;
     private readonly Func<AppleAppArchiveUploadRequest, AppleAppArchiveUploadResult> _uploadAppleApp;
@@ -160,7 +161,8 @@ internal sealed partial class PowerForgeReleaseService
         Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult>? runDotNetToolsWithProgressAndCancellation = null,
         Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, CancellationToken, PowerForgeToolReleaseResult>? runToolsWithProgressAndCancellation = null,
         Func<ModuleBuildHostBuildRequest, CancellationToken, ModuleBuildHostExecutionResult>? executeModuleBuild = null,
-        Func<GitHubReleasePublishRequest, CancellationToken, GitHubReleasePublishResult>? publishGitHubReleaseWithCancellation = null)
+        Func<GitHubReleasePublishRequest, CancellationToken, GitHubReleasePublishResult>? publishGitHubReleaseWithCancellation = null,
+        Func<string, string, string, string, GitHubReleaseVersionOccupancy>? probeGitHubReleaseVersion = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
@@ -183,6 +185,8 @@ internal sealed partial class PowerForgeReleaseService
             throw new ArgumentNullException(nameof(publishGitHubRelease));
         _publishGitHubRelease = publishGitHubReleaseWithCancellation
             ?? ((publishRequest, _) => publishGitHubRelease(publishRequest));
+        _probeGitHubReleaseVersion = probeGitHubReleaseVersion
+            ?? GitHubReleaseVersionAvailabilityService.Probe;
         _submitWinget = submitWinget ?? (plan => new WingetSubmissionService(logger).Run(plan));
         _archiveAppleApp = archiveAppleApp ?? (request => new AppleAppArchiveService().CreateArchiveAsync(request).GetAwaiter().GetResult());
         _uploadAppleApp = uploadAppleApp ?? (request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult());
@@ -363,26 +367,25 @@ internal sealed partial class PowerForgeReleaseService
                 PowerForgeReleaseProgressPhase.Versioning,
                 CountConfiguredPackageProjects(spec.Packages!),
                 $"Resolving shared version from {spec.Module!.VersionPrimaryProject}");
-            var packages = ExecutePackageRelease(
-                spec.Packages!,
+            var coordination = ResolveCoordinatedReleaseVersion(
+                spec,
                 configPath,
                 request,
                 configurationOverride,
                 publishUnifiedGitHub,
-                versionFloor,
-                spec.Module!.VersionPrimaryProject,
-                forcePlanOnly: true,
-                suppressPublishing: true);
-            result.Packages = packages;
-            if (!packages.Success)
+                versionFloor);
+            result.Packages = coordination.Packages;
+            if (!coordination.Packages.Success)
             {
-                request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.Versioning, packages.ErrorMessage);
+                request.Progress?.PhaseFailed(
+                    PowerForgeReleaseProgressPhase.Versioning,
+                    coordination.Packages.ErrorMessage);
                 result.Success = false;
-                result.ErrorMessage = packages.ErrorMessage ?? "Package release workflow failed.";
+                result.ErrorMessage = coordination.Packages.ErrorMessage ?? "Package release workflow failed.";
                 return result;
             }
 
-            request.ResolvedReleaseVersion = ResolveCoordinatedPackageVersion(spec.Module!, packages, versionFloor);
+            request.ResolvedReleaseVersion = coordination.Version;
             request.Progress?.PhaseCompleted(
                 PowerForgeReleaseProgressPhase.Versioning,
                 $"Shared version {request.ResolvedReleaseVersion}");
@@ -807,6 +810,7 @@ internal sealed partial class PowerForgeReleaseService
                     configDirectory,
                     result,
                     sharedReleaseVersion,
+                    request.Progress,
                     request.CancellationToken);
                 result.UnifiedGitHubRelease = unifiedGitHubRelease;
                 if (!unifiedGitHubRelease.Success)
@@ -934,6 +938,7 @@ internal sealed partial class PowerForgeReleaseService
                 configDirectory,
                 builtResult,
                 sharedReleaseVersion,
+                request.Progress,
                 request.CancellationToken);
             builtResult.UnifiedGitHubRelease = unified;
             if (!unified.Success)
@@ -2839,6 +2844,7 @@ internal sealed partial class PowerForgeReleaseService
         string configDirectory,
         PowerForgeReleaseResult result,
         string? sharedReleaseVersion,
+        IPowerForgeReleaseProgressReporter? progress,
         CancellationToken cancellationToken)
     {
         var gitHub = spec.GitHub ?? throw new InvalidOperationException("Unified GitHub release options were not configured.");
@@ -2935,9 +2941,12 @@ internal sealed partial class PowerForgeReleaseService
                     ReleaseName = releaseName,
                     GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
                     IsPreRelease = gitHub.IsPreRelease,
-                    ReuseExistingReleaseOnConflict = true,
-                    ReplaceExistingAssets = gitHub.ReplaceExistingAssets,
-                    AssetFilePaths = assets
+                    ReuseExistingReleaseOnConflict = gitHub.ReuseExistingRelease,
+                    ReplaceExistingAssets = gitHub.ReuseExistingRelease && gitHub.ReplaceExistingAssets,
+                    AssetFilePaths = assets,
+                    Progress = progress is IPowerForgeReleaseProgressReporterV2 detailedProgress
+                        ? new GitHubReleaseProgressAdapter(detailedProgress)
+                        : null
                 },
                 cancellationToken);
 
@@ -2954,7 +2963,8 @@ internal sealed partial class PowerForgeReleaseService
                 ReusedExistingRelease = publishResult.ReusedExistingRelease,
                 ErrorMessage = publishResult.Succeeded ? null : "Unified GitHub release publish failed.",
                 SkippedExistingAssets = publishResult.SkippedExistingAssets?.ToArray() ?? Array.Empty<string>(),
-                ReplacedExistingAssets = publishResult.ReplacedExistingAssets?.ToArray() ?? Array.Empty<string>()
+                ReplacedExistingAssets = publishResult.ReplacedExistingAssets?.ToArray() ?? Array.Empty<string>(),
+                UploadedAssets = publishResult.UploadedAssets?.ToArray() ?? Array.Empty<string>()
             };
         }
         catch (OperationCanceledException)

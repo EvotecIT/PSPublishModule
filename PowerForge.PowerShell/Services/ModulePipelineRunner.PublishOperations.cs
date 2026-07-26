@@ -231,11 +231,14 @@ public sealed partial class ModulePipelineRunner
         Action remotePublishAttempted)
     {
         var step = session.GetPublishStep(publish);
+        var gitHubProgress = publish.Configuration.Destination == PublishDestination.GitHub
+            ? new ModulePipelineGitHubReleaseProgressAdapter(session, step)
+            : null;
         session.Start(step);
         try
         {
             state.PublishResults.Add(ShouldPublishUnifiedGitHubRelease(plan, publish.Configuration)
-                ? PublishUnifiedGitHubRelease(publish.Configuration, plan, state, remotePublishAttempted)
+                ? PublishUnifiedGitHubRelease(publish.Configuration, plan, state, remotePublishAttempted, gitHubProgress)
                 : _hostedOperations.PublishModule(
                     publish.Configuration,
                     plan,
@@ -243,7 +246,8 @@ public sealed partial class ModulePipelineRunner
                     state.ArtefactResults,
                     includeScriptFolders: !state.PackageWithoutScriptFolders,
                     remotePublishAttempted: remotePublishAttempted,
-                    remoteSideEffectObserved: () => MarkSynchronizedReleaseRemoteSideEffectObserved(state)));
+                    remoteSideEffectObserved: () => MarkSynchronizedReleaseRemoteSideEffectObserved(state),
+                    gitHubProgress: gitHubProgress));
             session.Done(step);
         }
         catch (Exception ex)

@@ -12,6 +12,12 @@ internal sealed class PublishConfigurationFactory
     {
         if (request is null)
             throw new ArgumentNullException(nameof(request));
+        if (request.ReplaceExistingAssets && !request.ReuseExistingRelease)
+        {
+            throw new ArgumentException(
+                "ReplaceExistingAssets requires ReuseExistingRelease because asset replacement is a recovery operation.",
+                nameof(request));
+        }
 
         var isAzureArtifacts = string.Equals(request.ParameterSetName, "AzureArtifacts", StringComparison.Ordinal);
         var destination = isAzureArtifacts ? PublishDestination.PowerShellGallery : request.Type;
@@ -254,6 +260,8 @@ internal sealed class PublishConfigurationFactory
                 OverwriteTagName = request.OverwriteTagName,
                 DoNotMarkAsPreRelease = request.DoNotMarkAsPreRelease,
                 GenerateReleaseNotes = request.GenerateReleaseNotes,
+                ReuseExistingRelease = request.ReuseExistingRelease,
+                ReplaceExistingAssets = request.ReuseExistingRelease && request.ReplaceExistingAssets,
                 UseAsDependencyVersionSource = request.UseAsDependencyVersionSource,
                 PublishRequiredModules = request.PublishRequiredModules,
                 RequiredModuleSourceRepository = string.IsNullOrWhiteSpace(request.RequiredModuleSourceRepository)

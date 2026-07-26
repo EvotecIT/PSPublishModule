@@ -373,6 +373,8 @@
         "OverwriteTagName": { "type": ["string", "null"] },
         "DoNotMarkAsPreRelease": { "type": "boolean" },
         "GenerateReleaseNotes": { "type": "boolean" },
+        "ReuseExistingRelease": { "type": "boolean" },
+        "ReplaceExistingAssets": { "type": "boolean" },
         "Verbose": { "type": "boolean" }
       }
     },

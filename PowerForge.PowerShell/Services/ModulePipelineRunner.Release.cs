@@ -391,7 +391,8 @@ public sealed partial class ModulePipelineRunner
         PublishConfiguration publish,
         ModulePipelinePlan plan,
         ModulePipelineRunState state,
-        Action remotePublishAttempted)
+        Action remotePublishAttempted,
+        IGitHubReleaseProgressReporter? gitHubProgress)
     {
         if (publish is null)
             throw new ArgumentNullException(nameof(publish));
@@ -429,8 +430,10 @@ public sealed partial class ModulePipelineRunner
             GenerateReleaseNotes = publish.GenerateReleaseNotes,
             IsDraft = false,
             IsPreRelease = isPreRelease,
-            ReuseExistingReleaseOnConflict = true,
-            AssetFilePaths = release.AssetPaths
+            ReuseExistingReleaseOnConflict = publish.ReuseExistingRelease,
+            ReplaceExistingAssets = publish.ReuseExistingRelease && publish.ReplaceExistingAssets,
+            AssetFilePaths = release.AssetPaths,
+            Progress = gitHubProgress
         });
 
         release.GitHub = gitHub;

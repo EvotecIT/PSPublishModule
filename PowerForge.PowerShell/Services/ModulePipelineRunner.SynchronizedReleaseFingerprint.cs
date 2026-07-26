@@ -291,6 +291,8 @@ public sealed partial class ModulePipelineRunner
             publish.OverwriteTagName,
             publish.DoNotMarkAsPreRelease.ToString(),
             publish.GenerateReleaseNotes.ToString(),
+            publish.ReuseExistingRelease.ToString(),
+            publish.ReplaceExistingAssets.ToString(),
             publish.UseAsDependencyVersionSource.ToString(),
             publish.PublishRequiredModules.ToString(),
             NormalizeModuleRepositoryFingerprintSource(publish.RequiredModuleSourceRepository, plan.ProjectRoot),
