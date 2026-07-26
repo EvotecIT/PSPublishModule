@@ -291,7 +291,7 @@ public sealed class AsyncPSCmdletTests
     }
 
     [Fact]
-    public void AsyncPSCmdlet_drops_background_stream_writes_during_pipeline_stop()
+    public void AsyncPSCmdlet_propagates_pipeline_stop_to_background_stream_writes()
     {
         var sessionState = InitialSessionState.CreateDefault();
         sessionState.Commands.Add(new SessionStateCmdletEntry(
@@ -313,8 +313,12 @@ public sealed class AsyncPSCmdletTests
 
         powerShell.Stop();
         Assert.Throws<PipelineStoppedException>(() => powerShell.EndInvoke(invocation));
+        Assert.True(
+            TestAsyncCancellationWriteCommand.WriteAttempted.Wait(TimeSpan.FromSeconds(5)),
+            "The background hook did not observe the stop in time.");
 
-        Assert.Null(TestAsyncCancellationWriteCommand.BackgroundWriteException);
+        Assert.IsType<PipelineStoppedException>(
+            TestAsyncCancellationWriteCommand.BackgroundWriteException);
     }
 
     [Fact]
@@ -475,14 +479,14 @@ public sealed class AsyncPSCmdletTests
     }
 
     [Fact]
-    public void AsyncPSCmdlet_dispose_requests_cancellation()
+    public void AsyncPSCmdlet_dispose_without_an_active_hook_does_not_signal_stop()
     {
         using var command = new TestAsyncDisposableCommand();
         var stoppingToken = command.StoppingToken;
 
         command.Dispose();
 
-        Assert.True(stoppingToken.IsCancellationRequested);
+        Assert.False(stoppingToken.IsCancellationRequested);
     }
 
     [Fact]
@@ -515,13 +519,63 @@ public sealed class AsyncPSCmdletTests
         using var registration = stoppingToken.Register(
             static () => throw new InvalidOperationException("cancellation callback failed"));
 
-        Assert.Throws<AggregateException>(command.Dispose);
+        command.InvokeStopProcessing();
+        command.Dispose();
 
+        Assert.True(stoppingToken.IsCancellationRequested);
         var sourceField = typeof(AsyncPSCmdlet).GetField(
             "_cancelSource",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         var source = Assert.IsType<CancellationTokenSource>(sourceField!.GetValue(command));
         Assert.Throws<ObjectDisposedException>(source.Cancel);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_does_not_deadlock_when_a_synchronous_hook_queues_more_than_the_transport_capacity()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncLargeQueuedOutput",
+            typeof(TestAsyncLargeQueuedOutputCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncLargeQueuedOutput");
+
+        powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors);
+        Assert.Equal(2048, powerShell.Streams.Warning.Count);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_restores_the_host_context_around_direct_pipeline_writes()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncDirectContext",
+            typeof(TestAsyncDirectContextCommand),
+            helpFileName: null));
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-ObserveContext",
+            typeof(TestObserveContextCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell
+            .AddCommand("Test-AsyncDirectContext")
+            .AddCommand("Test-ObserveContext");
+
+        var result = powerShell.Invoke();
+
+        Assert.Equal("context-output", Assert.Single(result).BaseObject);
+        Assert.Same(TestAsyncDirectContextCommand.HostContext, TestObserveContextCommand.ObservedContext);
     }
 
     [Fact]
@@ -543,6 +597,9 @@ public sealed class AsyncPSCmdletTests
 
         Assert.False(powerShell.HadErrors);
         Assert.Equal("callback-output", Assert.Single(result).BaseObject);
+        Assert.Equal(
+            "callback-warning",
+            Assert.Single(powerShell.Streams.Warning).Message);
     }
 
     [Fact]
@@ -586,10 +643,9 @@ public sealed class AsyncPSCmdletTests
         var result = powerShell.Invoke();
 
         Assert.Collection(result, item => Assert.Equal("value", item.BaseObject));
-        Assert.Collection(
-            powerShell.Streams.Warning,
-            warning => Assert.Equal("during-enumeration", warning.Message),
-            warning => Assert.Equal("after-enumeration", warning.Message));
+        Assert.Equal(
+            ["after-enumeration", "during-enumeration"],
+            powerShell.Streams.Warning.Select(static warning => warning.Message).Order());
     }
 
     [Fact]

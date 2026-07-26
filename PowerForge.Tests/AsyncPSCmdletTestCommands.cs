@@ -266,15 +266,19 @@ public sealed class TestAsyncCancellationCommand : AsyncPSCmdlet
 public sealed class TestAsyncCancellationWriteCommand : AsyncPSCmdlet
 {
     private static ManualResetEventSlim _started = new();
+    private static ManualResetEventSlim _writeAttempted = new();
 
     public static ManualResetEventSlim Started => _started;
+    public static ManualResetEventSlim WriteAttempted => _writeAttempted;
 
     public static Exception? BackgroundWriteException { get; private set; }
 
     public static void Reset()
     {
         _started.Dispose();
+        _writeAttempted.Dispose();
         _started = new ManualResetEventSlim();
+        _writeAttempted = new ManualResetEventSlim();
         BackgroundWriteException = null;
     }
 
@@ -295,6 +299,10 @@ public sealed class TestAsyncCancellationWriteCommand : AsyncPSCmdlet
             catch (Exception exception)
             {
                 BackgroundWriteException = exception;
+            }
+            finally
+            {
+                _writeAttempted.Set();
             }
         }
     }
@@ -423,6 +431,85 @@ public sealed class TestAsyncLateInteractionCommand : AsyncPSCmdlet
 public sealed class TestAsyncDisposableCommand : AsyncPSCmdlet
 {
     public CancellationToken StoppingToken => CancelToken;
+
+    public void InvokeStopProcessing()
+        => base.StopProcessing();
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncLargeQueuedOutput")]
+public sealed class TestAsyncLargeQueuedOutputCommand : AsyncPSCmdlet
+{
+    protected override Task ProcessRecordAsync()
+    {
+        using var completed = new ManualResetEventSlim();
+        Exception? workerException = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                for (var i = 0; i < 2048; i++)
+                    WriteWarning($"queued-{i}");
+            }
+            catch (Exception exception)
+            {
+                workerException = exception;
+            }
+            finally
+            {
+                completed.Set();
+            }
+        });
+
+        thread.Start();
+        Assert.True(completed.Wait(TimeSpan.FromSeconds(5)), "The producer blocked while filling the pipeline transport.");
+        thread.Join();
+        if (workerException is not null)
+            throw workerException;
+
+        return Task.CompletedTask;
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncDirectContext")]
+public sealed class TestAsyncDirectContextCommand : AsyncPSCmdlet
+{
+    public static SynchronizationContext? HostContext { get; private set; }
+
+    protected override void ProcessRecord()
+    {
+        var previousContext = SynchronizationContext.Current;
+        HostContext = new ForwardingSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(HostContext);
+        try
+        {
+            base.ProcessRecord();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+    }
+
+    protected override Task ProcessRecordAsync()
+    {
+        WriteObject("context-output");
+        return Task.CompletedTask;
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "ObserveContext")]
+public sealed class TestObserveContextCommand : PSCmdlet
+{
+    [Parameter(ValueFromPipeline = true)]
+    public object? InputObject { get; set; }
+
+    public static SynchronizationContext? ObservedContext { get; private set; }
+
+    protected override void ProcessRecord()
+    {
+        ObservedContext = SynchronizationContext.Current;
+        WriteObject(InputObject);
+    }
 }
 
 [Cmdlet(VerbsDiagnostic.Test, "AsyncCapturedCallback")]
@@ -431,11 +518,13 @@ public sealed class TestAsyncCapturedCallbackCommand : AsyncPSCmdlet
     protected override async Task ProcessRecordAsync()
     {
         var writeOutput = CapturePipelineWriter();
+        var streams = CapturePipelineStreams();
         var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         ThreadPool.UnsafeQueueUserWorkItem(
             _ =>
             {
                 writeOutput("callback-output");
+                streams.WriteWarning("callback-warning");
                 completed.TrySetResult(true);
             },
             null);
@@ -481,7 +570,7 @@ public sealed class TestAsyncReentrantPumpCommand : AsyncPSCmdlet
             Assert.True(
                 _command.ShouldProcess(
                     "enumerated-target"));
-            _command.WriteWarning("during-enumeration");
+            Task.Run(() => _command.WriteWarning("during-enumeration")).GetAwaiter().GetResult();
             yield return "value";
         }
 
