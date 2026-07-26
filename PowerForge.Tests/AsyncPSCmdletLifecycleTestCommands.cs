@@ -169,8 +169,66 @@ public sealed class TestAsyncDerivedEndProcessingCommand : AsyncPSCmdlet
 {
     protected override void EndProcessing()
     {
-        WriteObject("derived-end");
+        WriteObject("before-base-end");
         base.EndProcessing();
+        WriteObject("after-base-end");
+        WriteWarning("after-base-warning");
+    }
+}
+
+[Cmdlet(
+    VerbsDiagnostic.Test,
+    "AsyncDirectBarrierTail",
+    SupportsShouldProcess = true)]
+public sealed class TestAsyncDirectBarrierTailCommand : AsyncPSCmdlet
+{
+    private static int _tailEnumerated;
+
+    public static bool TailEnumeratedBeforeInteraction { get; private set; }
+
+    public static void Reset()
+    {
+        Volatile.Write(ref _tailEnumerated, 0);
+        TailEnumeratedBeforeInteraction = false;
+    }
+
+    protected override Task ProcessRecordAsync()
+    {
+        var streams = CapturePipelineStreams();
+        Task.Run(
+                () => streams.WriteObject(
+                    new OuterEnumerable(streams),
+                    enumerateCollection: true))
+            .GetAwaiter()
+            .GetResult();
+
+        _ = ShouldProcess("barrier-target");
+        TailEnumeratedBeforeInteraction = Volatile.Read(ref _tailEnumerated) != 0;
+        return Task.CompletedTask;
+    }
+
+    private sealed class OuterEnumerable(CapturedPipelineStreams streams) : IEnumerable<string>
+    {
+        public IEnumerator<string> GetEnumerator()
+        {
+            streams.WriteObject(new TailEnumerable(), enumerateCollection: true);
+            yield return "outer";
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
+    }
+
+    private sealed class TailEnumerable : IEnumerable<string>
+    {
+        public IEnumerator<string> GetEnumerator()
+        {
+            Volatile.Write(ref _tailEnumerated, 1);
+            yield return "tail";
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
     }
 }
 

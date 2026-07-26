@@ -227,7 +227,7 @@ public sealed partial class AsyncPSCmdletTests
     }
 
     [Fact]
-    public void AsyncPSCmdlet_keeps_derived_EndProcessing_active_until_the_base_call()
+    public void AsyncPSCmdlet_keeps_derived_EndProcessing_active_after_the_base_call()
     {
         var sessionState = InitialSessionState.CreateDefault();
         sessionState.Commands.Add(new SessionStateCmdletEntry(
@@ -243,7 +243,39 @@ public sealed partial class AsyncPSCmdletTests
 
         var result = powerShell.Invoke();
 
-        Assert.Equal("derived-end", Assert.Single(result).BaseObject);
+        Assert.Collection(
+            result,
+            item => Assert.Equal("before-base-end", item.BaseObject),
+            item => Assert.Equal("after-base-end", item.BaseObject));
+        Assert.Equal(
+            "after-base-warning",
+            Assert.Single(powerShell.Streams.Warning).Message);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_drains_causal_tail_records_before_direct_interactions()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncDirectBarrierTail",
+            typeof(TestAsyncDirectBarrierTailCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell
+            .AddCommand("Test-AsyncDirectBarrierTail")
+            .AddParameter("Confirm", false);
+        TestAsyncDirectBarrierTailCommand.Reset();
+
+        var result = powerShell.Invoke();
+
+        Assert.Equal(
+            ["outer", "tail"],
+            result.Select(static item => item.BaseObject));
+        Assert.True(TestAsyncDirectBarrierTailCommand.TailEnumeratedBeforeInteraction);
     }
 
     [Fact]
@@ -482,4 +514,3 @@ public sealed partial class AsyncPSCmdletTests
         Assert.Throws<PipelineStoppedException>(command.InvokeProcessRecord);
     }
 }
-
