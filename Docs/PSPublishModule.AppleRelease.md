@@ -225,6 +225,52 @@ powerforge apple-release Advance --config powerforge.release.json --confirm-appl
 uses a separate plan receipt, checks the exact version/build remotely, and stops before
 `SubmitTestFlightReview`, `SubmitAppReview`, or `Release`.
 
+## Reusable GitHub workflows
+
+Commit one tool lock in each Apple app repository so CI downloads an exact standalone
+PowerForge release asset and verifies it before execution:
+
+```json
+{
+  "$schema": "https://schemas.evotec.xyz/powerforge.tool.schema.json",
+  "schemaVersion": 1,
+  "repository": "EvotecIT/PSPublishModule",
+  "version": "3.0.80",
+  "assets": {
+    "osx-arm64": {
+      "sha256": "<64-character release asset digest>"
+    }
+  }
+}
+```
+
+The reusable workflow boundary mirrors the human approval boundary:
+
+- `powerforge-apple-version-pr.yml` runs `Version`, stages only the configured
+  version source, and opens a release-ready pull request. It never merges it.
+- `powerforge-apple-advance.yml` runs a plan and confirmed resumable `Advance` from
+  an exact merged commit. It stops before every review and public-release action.
+- `powerforge-apple-approval.yml` accepts only `SubmitTestFlightReview`,
+  `SubmitAppReview`, or `Release` and runs inside a protected GitHub environment.
+
+Callers must pass 40-character commit SHAs for `powerforge_ref` and release
+`source_ref`; the workflows reject branches and tags and verify both checked-out
+commits. Pass App Store Connect credentials through GitHub secrets. The composite
+action writes the private key to a permission-restricted temporary file and removes
+it after every plan or action. All three workflows share one repository-scoped
+concurrency group, so version selection, draft mutation, review submission, and
+release cannot overlap.
+
+The workflows upload the exact configured plan and actual receipt paths and fail if
+a required receipt is absent. Successful logs contain only the short step summary,
+while failure logs retain the PowerForge error envelope. A partially completed
+version workflow reuses an identical remote release branch and creates or returns its
+open pull request; it refuses to overwrite different remote content.
+
+An iOS/iPadOS app, a companion Watch app, and CarPlay remain one iOS archive lane.
+Add another workflow target only for a separately archived store platform, such as
+Mac Catalyst or an independently distributed Watch app.
+
 `SubmitTestFlightReview`, `SubmitAppReview`, and `Release` require
 `--confirm-apple-action`. `Screenshots` also requires confirmation when
 `ReplaceScreenshots=true`. The PowerShell surface uses the same actions:

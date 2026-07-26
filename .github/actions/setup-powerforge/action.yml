@@ -1,0 +1,30 @@
+name: Setup pinned PowerForge
+description: Install an exact standalone PowerForge CLI asset after SHA-256 verification.
+
+inputs:
+  manifest-path:
+    description: Path to the checked-in PowerForge tool manifest.
+    required: false
+    default: .powerforge/powerforge.tool.json
+
+outputs:
+  tool-path:
+    description: Absolute path to the verified PowerForge executable.
+    value: ${{ steps.setup.outputs.tool-path }}
+  version:
+    description: Exact installed PowerForge version.
+    value: ${{ steps.setup.outputs.version }}
+  rid:
+    description: Resolved runtime identifier.
+    value: ${{ steps.setup.outputs.rid }}
+
+runs:
+  using: composite
+  steps:
+    - name: Download and verify PowerForge
+      id: setup
+      shell: pwsh
+      env:
+        MANIFEST_PATH: ${{ inputs.manifest-path }}
+      run: |
+        & '${{ github.action_path }}/Install-PinnedPowerForge.ps1' -ManifestPath $env:MANIFEST_PATH

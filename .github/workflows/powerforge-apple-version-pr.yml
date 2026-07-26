@@ -1,0 +1,196 @@
+name: PowerForge Apple Version PR
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: New three-part Apple marketing version.
+        required: true
+        type: string
+      default_branch:
+        description: Branch used as the version PR base.
+        required: false
+        default: main
+        type: string
+      config_path:
+        description: PowerForge release configuration path.
+        required: false
+        default: powerforge.release.json
+        type: string
+      tool_manifest_path:
+        description: Checked-in PowerForge tool manifest path.
+        required: false
+        default: .powerforge/powerforge.tool.json
+        type: string
+      powerforge_ref:
+        description: Exact PSPublishModule commit containing the shared action.
+        required: true
+        type: string
+      runner_labels_json:
+        description: JSON array of trusted runner labels.
+        required: false
+        default: '["self-hosted","macOS","ARM64"]'
+        type: string
+    secrets:
+      app_store_connect_issuer_id:
+        required: true
+      app_store_connect_key_id:
+        required: true
+      app_store_connect_private_key:
+        required: true
+      github-token:
+        required: false
+
+concurrency:
+  group: powerforge-apple-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      pull-request-url: ${{ steps.pull-request.outputs.url }}
+      marketing-version: ${{ steps.version.outputs.marketing-version }}
+      build-number: ${{ steps.version.outputs.build-number }}
+    steps:
+      - name: Require an immutable shared workflow ref
+        shell: pwsh
+        env:
+          POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+        run: |
+          if ($env:POWERFORGE_REF -notmatch '^[0-9A-Fa-f]{40}$') {
+            throw 'powerforge_ref must be an exact 40-character commit SHA.'
+          }
+
+      - name: Checkout the trusted default branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.default_branch }}
+          fetch-depth: 0
+          path: source
+          persist-credentials: false
+
+      - name: Checkout the pinned shared release action
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: EvotecIT/PSPublishModule
+          ref: ${{ inputs.powerforge_ref }}
+          fetch-depth: 1
+          path: powerforge-shared
+          persist-credentials: false
+
+      - name: Verify the shared action commit
+        shell: pwsh
+        env:
+          EXPECTED_REF: ${{ inputs.powerforge_ref }}
+        run: |
+          $actual = (git -C powerforge-shared rev-parse HEAD).Trim()
+          if ($actual -ine $env:EXPECTED_REF) { throw "Expected shared commit '$($env:EXPECTED_REF)', received '$actual'." }
+
+      - name: Plan the version update
+        id: plan
+        uses: ./powerforge-shared/.github/actions/apple-release
+        with:
+          action: Version
+          config-path: ${{ github.workspace }}/source/${{ inputs.config_path }}
+          tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
+          marketing-version: ${{ inputs.version }}
+          plan-only: "true"
+          issuer-id: ${{ secrets.app_store_connect_issuer_id }}
+          key-id: ${{ secrets.app_store_connect_key_id }}
+          private-key: ${{ secrets.app_store_connect_private_key }}
+
+      - name: Apply the version update
+        id: version
+        uses: ./powerforge-shared/.github/actions/apple-release
+        with:
+          action: Version
+          config-path: ${{ github.workspace }}/source/${{ inputs.config_path }}
+          tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
+          marketing-version: ${{ inputs.version }}
+          plan-only: "false"
+          confirm: "true"
+          issuer-id: ${{ secrets.app_store_connect_issuer_id }}
+          key-id: ${{ secrets.app_store_connect_key_id }}
+          private-key: ${{ secrets.app_store_connect_private_key }}
+
+      - name: Create the release version pull request
+        id: pull-request
+        shell: pwsh
+        working-directory: source
+        env:
+          GH_TOKEN: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          MARKETING_VERSION: ${{ steps.version.outputs.marketing-version }}
+          BUILD_NUMBER: ${{ steps.version.outputs.build-number }}
+          VERSION_SOURCE_PATH: ${{ steps.version.outputs.version-source-path }}
+        run: |
+          $sourceRoot = (Resolve-Path -LiteralPath '.').Path
+          $versionSource = (Resolve-Path -LiteralPath $env:VERSION_SOURCE_PATH).Path
+          if (-not $versionSource.StartsWith($sourceRoot + [System.IO.Path]::DirectorySeparatorChar, [StringComparison]::Ordinal)) {
+            throw "Version source '$versionSource' is outside the checked-out repository."
+          }
+
+          $relativeSource = [System.IO.Path]::GetRelativePath($sourceRoot, $versionSource)
+          $trackedChanges = @(git status --short --untracked-files=no)
+          if ($trackedChanges.Count -ne 1 -or $trackedChanges[0].Substring(3) -ne $relativeSource) {
+            throw "Version must change only '$relativeSource'. Tracked changes: $($trackedChanges -join ', ')"
+          }
+          git add -- $relativeSource
+          if (git diff --cached --quiet) {
+            throw 'PowerForge Version did not produce a version-source change.'
+          }
+
+          $branch = "release/apple-$($env:MARKETING_VERSION)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c $branch
+          git commit -m "Prepare Apple release $($env:MARKETING_VERSION)"
+          gh auth setup-git
+
+          $body = @"
+          ## Summary
+
+          - set the Apple marketing version to `$($env:MARKETING_VERSION)`
+          - select remote-safe build `$($env:BUILD_NUMBER)` across configured Apple platforms
+          - keep upload, review, and release as separate guarded workflows
+          "@
+
+          $remoteExists = [bool] (git ls-remote --exit-code --heads origin $branch 2>$null)
+          if ($remoteExists) {
+            git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch"
+            git diff --quiet HEAD "origin/$branch"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Remote branch '$branch' exists with different release content."
+            }
+          } else {
+            git push origin "HEAD:refs/heads/$branch"
+          }
+
+          $url = gh pr list --repo $env:GITHUB_REPOSITORY --base $env:DEFAULT_BRANCH --head $branch --state open --json url --jq '.[0].url'
+          if ([string]::IsNullOrWhiteSpace($url)) {
+            $url = gh pr create --repo $env:GITHUB_REPOSITORY --base $env:DEFAULT_BRANCH --head $branch --title "Prepare Apple release $($env:MARKETING_VERSION)" --body $body
+          }
+          "url=$url" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload compact version plan receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: powerforge-apple-version-${{ inputs.version }}-plan
+          path: ${{ steps.plan.outputs.receipt-path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload compact version action receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: powerforge-apple-version-${{ inputs.version }}-actual
+          path: ${{ steps.version.outputs.receipt-path }}
+          if-no-files-found: error
+          retention-days: 30
