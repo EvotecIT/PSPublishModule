@@ -333,6 +333,10 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetConfig)]
     public string? StagingPath { get; set; }
 
+    /// <summary>Reuses an existing staged module output for an internal deferred publication pass.</summary>
+    [Parameter(ParameterSetName = ParameterSetConfig, DontShow = true)]
+    public SwitchParameter ReuseStaging { get; set; }
+
     /// <summary>Optional path to a .NET project (.csproj) to publish into the module.</summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
     public string? CsprojPath { get; set; }
@@ -502,6 +506,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             SignIncludeExe = SignIncludeExe,
             InputPath = Path,
             StagingPath = StagingPath,
+            ReuseStaging = ReuseStaging.IsPresent,
             CsprojPath = CsprojPath,
             DotNetConfiguration = DotNetConfiguration,
             DotNetFramework = DotNetFramework,

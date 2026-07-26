@@ -30,6 +30,7 @@ internal sealed class ModuleBuildPreparationRequest
     public bool? SignIncludeExe { get; set; }
     public string? InputPath { get; set; }
     public string? StagingPath { get; set; }
+    public bool ReuseStaging { get; set; }
     public string? CsprojPath { get; set; }
     public string DotNetConfiguration { get; set; } = "Release";
     public string[] DotNetFramework { get; set; } = Array.Empty<string>();

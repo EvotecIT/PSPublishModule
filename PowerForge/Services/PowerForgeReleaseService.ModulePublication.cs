@@ -25,6 +25,7 @@ internal sealed partial class PowerForgeReleaseService
         bool? noDotnetBuild = null,
         bool? skipInstall = null,
         bool? includeProjectPackages = null,
+        bool? reuseStaging = null,
         CancellationToken cancellationToken = default)
     {
         var originalRunMode = request.RunMode;
@@ -33,6 +34,7 @@ internal sealed partial class PowerForgeReleaseService
         var originalNoDotnetBuildWasSpecified = request.NoDotnetBuildWasSpecified;
         var originalSkipInstall = request.SkipInstall;
         var originalIncludeProjectPackages = request.IncludeProjectPackages;
+        var originalReuseStaging = request.ReuseStaging;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -47,6 +49,8 @@ internal sealed partial class PowerForgeReleaseService
                 request.SkipInstall = skipInstall.Value;
             if (includeProjectPackages.HasValue)
                 request.IncludeProjectPackages = includeProjectPackages.Value;
+            if (reuseStaging.HasValue)
+                request.ReuseStaging = reuseStaging.Value;
 
             return _executeModuleBuild(request, cancellationToken);
         }
@@ -58,6 +62,7 @@ internal sealed partial class PowerForgeReleaseService
             request.NoDotnetBuildWasSpecified = originalNoDotnetBuildWasSpecified;
             request.SkipInstall = originalSkipInstall;
             request.IncludeProjectPackages = originalIncludeProjectPackages;
+            request.ReuseStaging = originalReuseStaging;
         }
     }
 

@@ -33,6 +33,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(moduleCalls[1].IncludeModulePublishing);
             Assert.True(moduleCalls[1].NoDotnetBuild);
             Assert.True(moduleCalls[1].NoDotnetBuildWasSpecified);
+            Assert.False(moduleCalls[0].ReuseStaging);
+            Assert.False(moduleCalls[1].ReuseStaging);
             Assert.True(moduleCalls[1].SkipInstall);
             Assert.False(moduleCalls[1].IncludeProjectPackages);
             Assert.True(moduleCalls[0].RequireReusableOutput);
@@ -152,6 +154,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal(2, moduleCalls.Count);
             Assert.Equal(moduleCalls[0].StagingPath, moduleCalls[1].StagingPath);
             Assert.Equal(moduleCalls[0].StagingPath, result.ModulePlan!.StagingPath);
+            Assert.False(moduleCalls[0].ReuseStaging);
+            Assert.True(moduleCalls[1].ReuseStaging);
             Assert.False(Directory.Exists(moduleCalls[0].StagingPath));
         }
         finally
@@ -217,6 +221,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     request.IncludeModulePublishing,
                     request.NoDotnetBuild,
                     request.NoDotnetBuildWasSpecified,
+                    request.ReuseStaging,
                     request.SkipInstall,
                     request.IncludeProjectPackages,
                     request.StagingPath,
@@ -229,6 +234,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         bool IncludeModulePublishing,
         bool NoDotnetBuild,
         bool NoDotnetBuildWasSpecified,
+        bool ReuseStaging,
         bool SkipInstall,
         bool IncludeProjectPackages,
         string? StagingPath,

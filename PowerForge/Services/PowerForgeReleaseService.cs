@@ -53,7 +53,7 @@ internal sealed partial class PowerForgeReleaseService
     private readonly Func<PowerForgeToolReleaseSpec, string, (DotNetPublishSpec Spec, string SourceConfigPath)> _loadDotNetToolsSpec;
     private readonly Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, ISet<PowerForgeReleaseToolOutputKind>, DotNetPublishPlan> _planDotNetTools;
     private readonly Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult> _runDotNetTools;
-    private readonly Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> _publishGitHubRelease;
+    private readonly Func<GitHubReleasePublishRequest, CancellationToken, GitHubReleasePublishResult> _publishGitHubRelease;
     private readonly Func<PowerForgeWingetSubmissionPlan, PowerForgeWingetSubmissionResult> _submitWinget;
     private readonly Func<AppleAppArchiveRequest, AppleAppArchiveResult> _archiveAppleApp;
     private readonly Func<AppleAppArchiveUploadRequest, AppleAppArchiveUploadResult> _uploadAppleApp;
@@ -101,7 +101,9 @@ internal sealed partial class PowerForgeReleaseService
             runToolsWithProgressAndCancellation: (plan, progress, cancellationToken) =>
                 new PowerForgeToolReleaseService(logger).Run(plan, progress, cancellationToken),
             runDotNetToolsWithProgressAndCancellation: (plan, progress, cancellationToken) =>
-                new DotNetPublishPipelineRunner(logger).Run(plan, progress, cancellationToken))
+                new DotNetPublishPipelineRunner(logger).Run(plan, progress, cancellationToken),
+            publishGitHubReleaseWithCancellation: (publishRequest, cancellationToken) =>
+                new GitHubReleasePublisher(logger).PublishRelease(publishRequest, cancellationToken))
     {
     }
 
@@ -153,7 +155,8 @@ internal sealed partial class PowerForgeReleaseService
         Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, DotNetPublishResult>? runDotNetToolsWithProgress = null,
         Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult>? runDotNetToolsWithProgressAndCancellation = null,
         Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, CancellationToken, PowerForgeToolReleaseResult>? runToolsWithProgressAndCancellation = null,
-        Func<ModuleBuildHostBuildRequest, CancellationToken, ModuleBuildHostExecutionResult>? executeModuleBuild = null)
+        Func<ModuleBuildHostBuildRequest, CancellationToken, ModuleBuildHostExecutionResult>? executeModuleBuild = null,
+        Func<GitHubReleasePublishRequest, CancellationToken, GitHubReleasePublishResult>? publishGitHubReleaseWithCancellation = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
@@ -172,7 +175,10 @@ internal sealed partial class PowerForgeReleaseService
             ?? (runDotNetToolsWithProgress is not null
                 ? (plan, progress, _) => runDotNetToolsWithProgress(plan, progress)
                 : (plan, _, _) => runDotNetTools(plan));
-        _publishGitHubRelease = publishGitHubRelease ?? throw new ArgumentNullException(nameof(publishGitHubRelease));
+        if (publishGitHubRelease is null)
+            throw new ArgumentNullException(nameof(publishGitHubRelease));
+        _publishGitHubRelease = publishGitHubReleaseWithCancellation
+            ?? ((publishRequest, _) => publishGitHubRelease(publishRequest));
         _submitWinget = submitWinget ?? (plan => new WingetSubmissionService(logger).Run(plan));
         _archiveAppleApp = archiveAppleApp ?? (request => new AppleAppArchiveService().CreateArchiveAsync(request).GetAwaiter().GetResult());
         _uploadAppleApp = uploadAppleApp ?? (request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult());
@@ -574,7 +580,13 @@ internal sealed partial class PowerForgeReleaseService
                         var publishToolGitHub = request.PublishToolGitHub ?? spec.Tools!.GitHub.Publish;
                         if (publishToolGitHub)
                         {
-                            var releases = PublishDotNetToolGitHubReleases(spec, configDirectory, dotNetPlan, dotNetTools, sharedReleaseVersion);
+                            var releases = PublishDotNetToolGitHubReleases(
+                                spec,
+                                configDirectory,
+                                dotNetPlan,
+                                dotNetTools,
+                                sharedReleaseVersion,
+                                request.CancellationToken);
                             result.ToolGitHubReleases = releases;
                             var failures = releases.Where(entry => !entry.Success).ToArray();
                             if (failures.Length > 0)
@@ -619,7 +631,11 @@ internal sealed partial class PowerForgeReleaseService
                         var publishToolGitHub = request.PublishToolGitHub ?? spec.Tools!.GitHub.Publish;
                         if (publishToolGitHub)
                         {
-                            var releases = PublishLegacyToolGitHubReleases(spec, configDirectory, tools);
+                            var releases = PublishLegacyToolGitHubReleases(
+                                spec,
+                                configDirectory,
+                                tools,
+                                request.CancellationToken);
                             result.ToolGitHubReleases = releases;
                             var failures = releases.Where(entry => !entry.Success).ToArray();
                             if (failures.Length > 0)
@@ -746,6 +762,7 @@ internal sealed partial class PowerForgeReleaseService
                 noDotnetBuild: true,
                 skipInstall: true,
                 includeProjectPackages: false,
+                reuseStaging: deferredModulePublishRequest.ConfigPath is not null,
                 cancellationToken: request.CancellationToken);
             result.ModulePublication = modulePublication;
             if (!modulePublication.Succeeded)
@@ -774,13 +791,19 @@ internal sealed partial class PowerForgeReleaseService
             result.ToolGitHubReleasePlans = BuildToolGitHubReleasePlans(spec, result);
             GenerateWingetOutputs(spec, request, configDirectory, result);
             IncludeWingetOutputsInReleaseAssets(result);
+            RewriteReleaseSummaryFiles(result);
             if (publishUnifiedGitHub)
             {
                 request.Progress?.PhaseStarted(
                     PowerForgeReleaseProgressPhase.GitHub,
                     result.ReleaseAssets.Length,
                     $"Uploading {result.ReleaseAssets.Length} release asset(s)");
-                var unifiedGitHubRelease = PublishUnifiedGitHubRelease(spec, configDirectory, result, sharedReleaseVersion);
+                var unifiedGitHubRelease = PublishUnifiedGitHubRelease(
+                    spec,
+                    configDirectory,
+                    result,
+                    sharedReleaseVersion,
+                    request.CancellationToken);
                 result.UnifiedGitHubRelease = unifiedGitHubRelease;
                 if (!unifiedGitHubRelease.Success)
                 {
@@ -794,7 +817,6 @@ internal sealed partial class PowerForgeReleaseService
                     unifiedGitHubRelease.ReleaseUrl ?? "GitHub release published");
             }
             SubmitWingetOutputs(spec, request, configDirectory, result);
-            RewriteReleaseSummaryFiles(result);
         }
 
         return result;
@@ -878,14 +900,16 @@ internal sealed partial class PowerForgeReleaseService
                     configDirectory,
                     builtResult.DotNetToolPlan,
                     builtResult.DotNetTools,
-                    sharedReleaseVersion);
+                    sharedReleaseVersion,
+                    request.CancellationToken);
             }
             else if (builtResult.Tools is not null)
             {
                 builtResult.ToolGitHubReleases = PublishLegacyToolGitHubReleases(
                     spec,
                     configDirectory,
-                    builtResult.Tools);
+                    builtResult.Tools,
+                    request.CancellationToken);
             }
 
             var toolFailure = builtResult.ToolGitHubReleases.FirstOrDefault(static release => !release.Success);
@@ -901,7 +925,12 @@ internal sealed partial class PowerForgeReleaseService
         if (ShouldPublishUnifiedGitHub(spec, request, moduleSelected))
         {
             request.CancellationToken.ThrowIfCancellationRequested();
-            var unified = PublishUnifiedGitHubRelease(spec, configDirectory, builtResult, sharedReleaseVersion);
+            var unified = PublishUnifiedGitHubRelease(
+                spec,
+                configDirectory,
+                builtResult,
+                sharedReleaseVersion,
+                request.CancellationToken);
             builtResult.UnifiedGitHubRelease = unified;
             if (!unified.Success)
             {
@@ -917,7 +946,6 @@ internal sealed partial class PowerForgeReleaseService
         if (!builtResult.Success)
             return builtResult;
 
-        RewriteReleaseSummaryFiles(builtResult);
         builtResult.Success = true;
         builtResult.ErrorMessage = null;
         return builtResult;
@@ -2806,7 +2834,8 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeReleaseSpec spec,
         string configDirectory,
         PowerForgeReleaseResult result,
-        string? sharedReleaseVersion)
+        string? sharedReleaseVersion,
+        CancellationToken cancellationToken)
     {
         var gitHub = spec.GitHub ?? throw new InvalidOperationException("Unified GitHub release options were not configured.");
         var version = ResolveUnifiedReleaseVersion(gitHub, result, sharedReleaseVersion);
@@ -2892,19 +2921,21 @@ internal sealed partial class PowerForgeReleaseService
 
         try
         {
-            var publishResult = _publishGitHubRelease(new GitHubReleasePublishRequest
-            {
-                Owner = resolved.Owner!,
-                Repository = resolved.Repository!,
-                Token = resolved.Token!,
-                TagName = tagName,
-                ReleaseName = releaseName,
-                GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
-                IsPreRelease = gitHub.IsPreRelease,
-                ReuseExistingReleaseOnConflict = true,
-                ReplaceExistingAssets = gitHub.ReplaceExistingAssets,
-                AssetFilePaths = assets
-            });
+            var publishResult = _publishGitHubRelease(
+                new GitHubReleasePublishRequest
+                {
+                    Owner = resolved.Owner!,
+                    Repository = resolved.Repository!,
+                    Token = resolved.Token!,
+                    TagName = tagName,
+                    ReleaseName = releaseName,
+                    GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
+                    IsPreRelease = gitHub.IsPreRelease,
+                    ReuseExistingReleaseOnConflict = true,
+                    ReplaceExistingAssets = gitHub.ReplaceExistingAssets,
+                    AssetFilePaths = assets
+                },
+                cancellationToken);
 
             return new PowerForgeUnifiedGitHubReleaseResult
             {
@@ -2921,6 +2952,10 @@ internal sealed partial class PowerForgeReleaseService
                 SkippedExistingAssets = publishResult.SkippedExistingAssets?.ToArray() ?? Array.Empty<string>(),
                 ReplacedExistingAssets = publishResult.ReplacedExistingAssets?.ToArray() ?? Array.Empty<string>()
             };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -2941,7 +2976,8 @@ internal sealed partial class PowerForgeReleaseService
     private PowerForgeToolGitHubReleaseResult[] PublishLegacyToolGitHubReleases(
         PowerForgeReleaseSpec spec,
         string configDirectory,
-        PowerForgeToolReleaseResult result)
+        PowerForgeToolReleaseResult result,
+        CancellationToken cancellationToken)
     {
         var gitHub = spec.Tools?.GitHub ?? new PowerForgeToolReleaseGitHubOptions();
         var resolved = ResolveGitHubConfiguration(spec, gitHub, configDirectory);
@@ -2993,7 +3029,8 @@ internal sealed partial class PowerForgeReleaseService
                 gitHub,
                 group.Key.Target,
                 group.Key.Version,
-                assets));
+                assets,
+                cancellationToken));
         }
 
         return results.ToArray();
@@ -3004,7 +3041,8 @@ internal sealed partial class PowerForgeReleaseService
         string configDirectory,
         DotNetPublishPlan plan,
         DotNetPublishResult result,
-        string? sharedReleaseVersion)
+        string? sharedReleaseVersion,
+        CancellationToken cancellationToken)
     {
         var gitHub = spec.Tools?.GitHub ?? new PowerForgeToolReleaseGitHubOptions();
         var resolved = ResolveGitHubConfiguration(spec, gitHub, configDirectory);
@@ -3088,7 +3126,8 @@ internal sealed partial class PowerForgeReleaseService
                 gitHub,
                 target.Name,
                 version!,
-                uniqueAssets));
+                uniqueAssets,
+                cancellationToken));
         }
 
         return releases.ToArray();
@@ -3101,7 +3140,8 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeToolReleaseGitHubOptions gitHub,
         string target,
         string version,
-        string[] assets)
+        string[] assets,
+        CancellationToken cancellationToken)
     {
         var tagTemplate = string.IsNullOrWhiteSpace(gitHub.TagTemplate)
             ? "{Target}-v{Version}"
@@ -3115,19 +3155,21 @@ internal sealed partial class PowerForgeReleaseService
 
         try
         {
-            var publishResult = _publishGitHubRelease(new GitHubReleasePublishRequest
-            {
-                Owner = owner,
-                Repository = repository,
-                Token = token,
-                TagName = tagName,
-                ReleaseName = releaseName,
-                GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
-                IsPreRelease = gitHub.IsPreRelease,
-                ReuseExistingReleaseOnConflict = true,
-                ReplaceExistingAssets = gitHub.ReplaceExistingAssets,
-                AssetFilePaths = assets
-            });
+            var publishResult = _publishGitHubRelease(
+                new GitHubReleasePublishRequest
+                {
+                    Owner = owner,
+                    Repository = repository,
+                    Token = token,
+                    TagName = tagName,
+                    ReleaseName = releaseName,
+                    GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
+                    IsPreRelease = gitHub.IsPreRelease,
+                    ReuseExistingReleaseOnConflict = true,
+                    ReplaceExistingAssets = gitHub.ReplaceExistingAssets,
+                    AssetFilePaths = assets
+                },
+                cancellationToken);
 
             return new PowerForgeToolGitHubReleaseResult
             {
@@ -3145,6 +3187,10 @@ internal sealed partial class PowerForgeReleaseService
                 SkippedExistingAssets = publishResult.SkippedExistingAssets?.ToArray() ?? Array.Empty<string>(),
                 ReplacedExistingAssets = publishResult.ReplacedExistingAssets?.ToArray() ?? Array.Empty<string>()
             };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {

@@ -80,6 +80,11 @@ public sealed class ModuleBuildHostBuildRequest
     public string? StagingPath { get; set; }
 
     /// <summary>
+    /// Reuses the existing staged module output during a deferred JSON publication pass.
+    /// </summary>
+    internal bool ReuseStaging { get; set; }
+
+    /// <summary>
     /// Requires a legacy script to expose the staging and no-build parameters needed
     /// to publish the exact output produced by an earlier deferred build.
     /// </summary>

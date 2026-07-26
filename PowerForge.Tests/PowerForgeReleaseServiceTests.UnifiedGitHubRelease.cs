@@ -485,7 +485,11 @@ public sealed partial class PowerForgeReleaseServiceTests
         try
         {
             var zipPath = Path.Combine(root, "PowerForge-1.0.7-win-x64.zip");
+            var manifestPath = Path.Combine(root, "release-manifest.json");
+            var checksumsPath = Path.Combine(root, "SHA256SUMS.txt");
             File.WriteAllText(zipPath, "zip");
+            File.WriteAllText(manifestPath, "approved manifest");
+            File.WriteAllText(checksumsPath, "approved checksums");
             var publishCalls = new List<GitHubReleasePublishRequest>();
             var service = new PowerForgeReleaseService(
                 new NullLogger(),
@@ -512,6 +516,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             var built = new PowerForgeReleaseResult {
                 Success = true,
                 ReleaseAssets = [zipPath],
+                ReleaseManifestPath = manifestPath,
+                ReleaseChecksumsPath = checksumsPath,
                 ReleaseAssetEntries = [
                     new PowerForgeReleaseAssetEntry {
                         Path = zipPath,
@@ -530,7 +536,81 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.True(result.Success);
             Assert.NotNull(result.UnifiedGitHubRelease);
-            Assert.Equal(zipPath, Assert.Single(Assert.Single(publishCalls).AssetFilePaths));
+            Assert.Equal(
+                new[] { zipPath, manifestPath, checksumsPath }.OrderBy(static path => path),
+                Assert.Single(publishCalls).AssetFilePaths.OrderBy(static path => path));
+            Assert.Equal("approved manifest", File.ReadAllText(manifestPath));
+            Assert.Equal("approved checksums", File.ReadAllText(checksumsPath));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void PublishBuiltReleaseOutputs_ForwardsCancellationIntoUnifiedGitHubUpload()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var zipPath = Path.Combine(root, "PowerForge-1.0.7-win-x64.zip");
+            File.WriteAllText(zipPath, "zip");
+            using var cancellation = new CancellationTokenSource();
+            var publishInvoked = false;
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages must not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools must not plan."),
+                runTools: _ => throw new InvalidOperationException("Tools must not run."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("DotNet tools must not load."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools must not plan."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools must not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("The cancellation-aware publisher must be used."),
+                publishGitHubReleaseWithCancellation: (_, cancellationToken) =>
+                {
+                    publishInvoked = true;
+                    Assert.Equal(cancellation.Token, cancellationToken);
+                    cancellation.Cancel();
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return new GitHubReleasePublishResult { Succeeded = true };
+                });
+            var built = new PowerForgeReleaseResult
+            {
+                Success = true,
+                ReleaseAssets = [zipPath],
+                ReleaseAssetEntries =
+                [
+                    new PowerForgeReleaseAssetEntry
+                    {
+                        Path = zipPath,
+                        Version = "1.0.7",
+                        Category = PowerForgeReleaseAssetCategory.Portable
+                    }
+                ]
+            };
+
+            Assert.Throws<OperationCanceledException>(() =>
+                service.PublishBuiltReleaseOutputs(
+                    new PowerForgeReleaseSpec
+                    {
+                        GitHub = new PowerForgeReleaseGitHubOptions
+                        {
+                            Publish = true,
+                            VersionSource = PowerForgeReleaseVersionSource.Assets,
+                            Owner = "EvotecIT",
+                            Repository = "PSPublishModule",
+                            Token = "token"
+                        }
+                    },
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "release.json"),
+                        CancellationToken = cancellation.Token
+                    },
+                    built));
+
+            Assert.True(publishInvoked);
         }
         finally
         {

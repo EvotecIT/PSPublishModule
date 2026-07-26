@@ -16,7 +16,7 @@ Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <stri
 
 ### Config
 ```powershell
-Invoke-ModuleBuild -ConfigPath <string> [-RunMode <ConfigurationGateMode>] [-ModuleVersion <string>] [-PreReleaseTag <string>] [-BuildConfiguration <string>] [-BuildFramework <string>] [-NoDotnetBuild] [-NoSign] [-SignModule] [-IncludeProjectPackages <bool>] [-IncludeModulePublishing <bool>] [-PowerForgeUnifiedGitHubRelease] [-CertificateThumbprint <string>] [-SignIncludeBinaries <bool>] [-SignIncludeInternals <bool>] [-SignIncludeExe <bool>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-StagingPath <string>] [-SkipInstall] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild -ConfigPath <string> [-RunMode <ConfigurationGateMode>] [-ModuleVersion <string>] [-PreReleaseTag <string>] [-BuildConfiguration <string>] [-BuildFramework <string>] [-NoDotnetBuild] [-NoSign] [-SignModule] [-IncludeProjectPackages <bool>] [-IncludeModulePublishing <bool>] [-PowerForgeUnifiedGitHubRelease] [-CertificateThumbprint <string>] [-SignIncludeBinaries <bool>] [-SignIncludeInternals <bool>] [-SignIncludeExe <bool>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-StagingPath <string>] [-ReuseStaging] [-SkipInstall] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Configuration
@@ -857,6 +857,22 @@ Suppresses host rendering and log output. Intended for callers that request stru
 ```yaml
 Type: SwitchParameter
 Parameter Sets: Modern, Config, Configuration
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ReuseStaging
+Reuses an existing staged module output for an internal deferred publication pass.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Config
 Aliases: None
 Possible values:
 

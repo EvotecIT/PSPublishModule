@@ -166,6 +166,8 @@ internal sealed class ModuleBuildPreparationService
 
         if (!string.IsNullOrWhiteSpace(request.StagingPath))
             spec.Build.StagingPath = request.ResolvePath!(request.StagingPath!);
+        if (request.ReuseStaging)
+            spec.Build.ReuseStaging = true;
 
         if (request.SkipInstall)
             spec.Install.Enabled = false;

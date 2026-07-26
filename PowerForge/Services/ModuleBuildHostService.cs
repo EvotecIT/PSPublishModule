@@ -333,6 +333,8 @@ public sealed class ModuleBuildHostService
         if (request.PreReleaseTag is not null)
             AddDirectStringArgument(arguments, "PreReleaseTag", request.PreReleaseTag);
         AddDirectStringArgument(arguments, "StagingPath", request.StagingPath);
+        if (request.ReuseStaging)
+            arguments.Add("$moduleBuildArguments['ReuseStaging'] = $true");
         AddDirectBooleanArgument(
             arguments,
             "NoDotnetBuild",

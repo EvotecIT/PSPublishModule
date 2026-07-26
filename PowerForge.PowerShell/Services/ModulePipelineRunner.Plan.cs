@@ -706,6 +706,7 @@ public sealed partial class ModulePipelineRunner
             Name = moduleName,
             SourcePath = projectRoot,
             StagingPath = spec.Build.StagingPath,
+            ReuseStaging = spec.Build.ReuseStaging,
             CsprojPath = refreshPsd1Only || spec.Build.SkipDotNetBuild ? string.Empty : csproj,
             SkipDotNetBuild = spec.Build.SkipDotNetBuild,
             Version = resolved,

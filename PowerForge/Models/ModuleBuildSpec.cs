@@ -17,6 +17,13 @@ public sealed class ModuleBuildSpec
     public string? StagingPath { get; set; }
 
     /// <summary>
+    /// Reuses the existing contents of <see cref="StagingPath"/> instead of copying the source module again.
+    /// Intended for a deferred publish pass over an output produced earlier in the same release.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool ReuseStaging { get; set; }
+
+    /// <summary>
     /// Optional path to a .NET project (.csproj) to publish into the module. When null/empty, binary build is skipped.
     /// </summary>
     public string? CsprojPath { get; set; }
