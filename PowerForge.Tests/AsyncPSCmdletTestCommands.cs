@@ -454,7 +454,10 @@ public sealed class TestAsyncCommandDetailCommand : AsyncPSCmdlet
     }
 }
 
-[Cmdlet(VerbsDiagnostic.Test, "AsyncReentrantPump")]
+[Cmdlet(
+    VerbsDiagnostic.Test,
+    "AsyncReentrantPump",
+    SupportsShouldProcess = true)]
 public sealed class TestAsyncReentrantPumpCommand : AsyncPSCmdlet
 {
     protected override async Task ProcessRecordAsync()
@@ -475,6 +478,9 @@ public sealed class TestAsyncReentrantPumpCommand : AsyncPSCmdlet
 
         public IEnumerator<string> GetEnumerator()
         {
+            Assert.True(
+                _command.ShouldProcess(
+                    "enumerated-target"));
             _command.WriteWarning("during-enumeration");
             yield return "value";
         }

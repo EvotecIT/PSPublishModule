@@ -579,7 +579,9 @@ public sealed class AsyncPSCmdletTests
         runspace.Open();
         using var powerShell = PowerShell.Create();
         powerShell.Runspace = runspace;
-        powerShell.AddCommand("Test-AsyncReentrantPump");
+        powerShell
+            .AddCommand("Test-AsyncReentrantPump")
+            .AddParameter("Confirm", false);
 
         var result = powerShell.Invoke();
 
