@@ -215,10 +215,10 @@ For a routine release, set the new marketing version once and let PowerForge cho
 the next remote-safe build number:
 
 ```text
-powerforge apple-release Version --config powerforge.release.json --version 1.6.0 --plan
-powerforge apple-release Version --config powerforge.release.json --version 1.6.0 --summary --output json
+powerforge apple-release Version --config powerforge.release.json --apple-version 1.6.0 --plan
+powerforge apple-release Version --config powerforge.release.json --apple-version 1.6.0 --confirm-apple-action --summary --output json
 powerforge apple-release Advance --config powerforge.release.json --plan
-powerforge apple-release Advance --config powerforge.release.json --summary --output json
+powerforge apple-release Advance --config powerforge.release.json --confirm-apple-action --summary --output json
 ```
 
 `Advance` is intentionally safe to resume. It acquires the configured operation lock,
