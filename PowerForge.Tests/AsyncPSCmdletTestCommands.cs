@@ -530,10 +530,10 @@ public sealed class TestAsyncSynchronousStopCommand : AsyncPSCmdlet
     }
 }
 
-public sealed class ChoiceHost(bool approved) : PSHost
+public sealed class ChoiceHost(bool approved, Exception? promptFailure = null) : PSHost
 {
     private readonly Guid _id = Guid.NewGuid();
-    private readonly ChoiceHostUserInterface _ui = new(approved);
+    private readonly ChoiceHostUserInterface _ui = new(approved, promptFailure);
 
     public override Guid InstanceId => _id;
     public override string Name => nameof(ChoiceHost);
@@ -548,7 +548,7 @@ public sealed class ChoiceHost(bool approved) : PSHost
     public override void SetShouldExit(int exitCode) { }
 }
 
-public sealed class ChoiceHostUserInterface(bool approved) : PSHostUserInterface
+public sealed class ChoiceHostUserInterface(bool approved, Exception? promptFailure) : PSHostUserInterface
 {
     public override PSHostRawUserInterface RawUI => null!;
 
@@ -557,7 +557,7 @@ public sealed class ChoiceHostUserInterface(bool approved) : PSHostUserInterface
         string message,
         Collection<ChoiceDescription> choices,
         int defaultChoice)
-        => approved ? 0 : 1;
+        => promptFailure is null ? (approved ? 0 : 1) : throw promptFailure;
 
     public override string ReadLine() => string.Empty;
     public override SecureString ReadLineAsSecureString() => new();

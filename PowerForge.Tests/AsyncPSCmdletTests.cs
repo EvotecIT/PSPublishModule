@@ -386,6 +386,27 @@ public sealed class AsyncPSCmdletTests
     }
 
     [Fact]
+    public void AsyncPSCmdlet_returns_host_interaction_failures_to_the_requesting_worker()
+    {
+        var sessionState = InitialSessionState.Create();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncShouldContinue",
+            typeof(TestAsyncShouldContinueCommand),
+            helpFileName: null));
+
+        var promptFailure = new InvalidOperationException("host prompt failed");
+        using var runspace = RunspaceFactory.CreateRunspace(new ChoiceHost(approved: false, promptFailure), sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncShouldContinue");
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => powerShell.Invoke());
+
+        Assert.Same(promptFailure, exception.InnerException);
+    }
+
+    [Fact]
     public void AsyncPSCmdlet_preserves_operation_cancellation_that_is_not_a_pipeline_stop()
     {
         var sessionState = InitialSessionState.CreateDefault();
