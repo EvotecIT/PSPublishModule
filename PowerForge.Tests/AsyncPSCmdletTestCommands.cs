@@ -171,6 +171,38 @@ public sealed class TestAsyncSynchronousEnumerationCommand : AsyncPSCmdlet
     }
 }
 
+[Cmdlet(VerbsDiagnostic.Test, "AsyncSynchronousReentrantDrain")]
+public sealed class TestAsyncSynchronousReentrantDrainCommand : AsyncPSCmdlet
+{
+    [Parameter]
+    public SwitchParameter Fail { get; set; }
+
+    protected override Task ProcessRecordAsync()
+    {
+        var streams = CapturePipelineStreams();
+        WriteObject(
+            new ReentrantWarningEnumerable(streams.WriteWarning),
+            enumerateCollection: true);
+
+        if (Fail)
+            throw new InvalidOperationException("synchronous reentrant drain failure");
+
+        return Task.CompletedTask;
+    }
+
+    private sealed class ReentrantWarningEnumerable(Action<string> writeWarning) : IEnumerable<string>
+    {
+        public IEnumerator<string> GetEnumerator()
+        {
+            writeWarning("reentrant-during-drain");
+            yield return "value";
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
+    }
+}
+
 [Cmdlet(VerbsDiagnostic.Test, "AsyncSynchronousFailure")]
 public sealed class TestAsyncSynchronousFailureCommand : AsyncPSCmdlet
 {
@@ -178,6 +210,29 @@ public sealed class TestAsyncSynchronousFailureCommand : AsyncPSCmdlet
     {
         Task.Run(() => WriteWarning("before-failure")).GetAwaiter().GetResult();
         throw new InvalidOperationException("synchronous hook failure");
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncSynchronousPipelineStop")]
+public sealed class TestAsyncSynchronousPipelineStopCommand : AsyncPSCmdlet
+{
+    private static ManualResetEventSlim _cancellationObserved = new();
+
+    public static ManualResetEventSlim CancellationObserved => _cancellationObserved;
+
+    public static void Reset()
+    {
+        _cancellationObserved.Dispose();
+        _cancellationObserved = new ManualResetEventSlim();
+    }
+
+    public void InvokeProcessRecord()
+        => base.ProcessRecord();
+
+    protected override Task ProcessRecordAsync()
+    {
+        _ = CancelToken.Register(_cancellationObserved.Set);
+        throw new PipelineStoppedException();
     }
 }
 
@@ -409,6 +464,32 @@ public sealed class TestAsyncShouldContinueCommand : AsyncPSCmdlet
     {
         await Task.Yield();
         WriteObject(ShouldContinue("Proceed?", "Question"));
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncClaimedShouldContinue")]
+public sealed class TestAsyncClaimedShouldContinueCommand : AsyncPSCmdlet
+{
+    private static ManualResetEventSlim _replyObserved = new();
+    private static ManualResetEventSlim _cancellationObserved = new();
+
+    public static ManualResetEventSlim ReplyObserved => _replyObserved;
+    public static ManualResetEventSlim CancellationObserved => _cancellationObserved;
+
+    public static void Reset()
+    {
+        _replyObserved.Dispose();
+        _cancellationObserved.Dispose();
+        _replyObserved = new ManualResetEventSlim();
+        _cancellationObserved = new ManualResetEventSlim();
+    }
+
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        _ = CancelToken.Register(_cancellationObserved.Set);
+        _ = ShouldContinue("Proceed?", "Question");
+        _replyObserved.Set();
     }
 }
 

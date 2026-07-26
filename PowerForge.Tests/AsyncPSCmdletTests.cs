@@ -204,6 +204,35 @@ public sealed partial class AsyncPSCmdletTests
             item => Assert.Equal(2, item.BaseObject));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AsyncPSCmdlet_drains_reentrant_records_from_synchronous_hooks(bool fail)
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncSynchronousReentrantDrain",
+            typeof(TestAsyncSynchronousReentrantDrainCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell
+            .AddCommand("Test-AsyncSynchronousReentrantDrain")
+            .AddParameter("Fail", fail);
+
+        if (fail)
+            _ = Assert.ThrowsAny<RuntimeException>(() => powerShell.Invoke());
+        else
+            Assert.Equal("value", Assert.Single(powerShell.Invoke()).BaseObject);
+
+        Assert.Equal(
+            "reentrant-during-drain",
+            Assert.Single(powerShell.Streams.Warning).Message);
+    }
+
     [Fact]
     public void AsyncPSCmdlet_drains_worker_records_before_a_synchronous_hook_failure()
     {
@@ -223,6 +252,18 @@ public sealed partial class AsyncPSCmdletTests
 
         var warning = Assert.Single(powerShell.Streams.Warning);
         Assert.Equal("before-failure", warning.Message);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_cancels_the_shared_token_after_a_synchronous_pipeline_stop()
+    {
+        using var command = new TestAsyncSynchronousPipelineStopCommand();
+        TestAsyncSynchronousPipelineStopCommand.Reset();
+
+        Assert.Throws<PipelineStoppedException>(command.InvokeProcessRecord);
+        Assert.True(
+            TestAsyncSynchronousPipelineStopCommand.CancellationObserved.Wait(TimeSpan.FromSeconds(5)),
+            "The shared cancellation token did not observe the synchronous pipeline stop.");
     }
 
     [Fact]
@@ -447,6 +488,45 @@ public sealed partial class AsyncPSCmdletTests
         var exception = Assert.Throws<CmdletInvocationException>(() => powerShell.Invoke());
 
         Assert.Same(promptFailure, exception.InnerException);
+    }
+
+    [Fact]
+    public async Task AsyncPSCmdlet_keeps_a_claimed_host_reply_observed_during_cancellation()
+    {
+        using var promptEntered = new ManualResetEventSlim();
+        using var promptRelease = new ManualResetEventSlim();
+        var sessionState = InitialSessionState.Create();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncClaimedShouldContinue",
+            typeof(TestAsyncClaimedShouldContinueCommand),
+            helpFileName: null));
+
+        var host = new ChoiceHost(
+            approved: true,
+            promptEntered: promptEntered,
+            promptRelease: promptRelease);
+        using var runspace = RunspaceFactory.CreateRunspace(host, sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncClaimedShouldContinue");
+        TestAsyncClaimedShouldContinueCommand.Reset();
+
+        var invocation = powerShell.BeginInvoke();
+        Assert.True(
+            promptEntered.Wait(TimeSpan.FromSeconds(5)),
+            "The host interaction did not start in time.");
+        var stopTask = Task.Run(powerShell.Stop);
+        Assert.True(
+            TestAsyncClaimedShouldContinueCommand.CancellationObserved.Wait(TimeSpan.FromSeconds(5)),
+            "The claimed requester did not observe pipeline cancellation.");
+        promptRelease.Set();
+
+        await stopTask.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Throws<PipelineStoppedException>(() => powerShell.EndInvoke(invocation));
+        Assert.True(
+            TestAsyncClaimedShouldContinueCommand.ReplyObserved.Wait(TimeSpan.FromSeconds(5)),
+            "The claimed requester abandoned the host reply during cancellation.");
     }
 
     [Fact]

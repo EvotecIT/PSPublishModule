@@ -456,10 +456,15 @@ public sealed class TestAsyncSynchronousStopCommand : AsyncPSCmdlet
     }
 }
 
-public sealed class ChoiceHost(bool approved, Exception? promptFailure = null) : PSHost
+public sealed class ChoiceHost(
+    bool approved,
+    Exception? promptFailure = null,
+    ManualResetEventSlim? promptEntered = null,
+    ManualResetEventSlim? promptRelease = null) : PSHost
 {
     private readonly Guid _id = Guid.NewGuid();
-    private readonly ChoiceHostUserInterface _ui = new(approved, promptFailure);
+    private readonly ChoiceHostUserInterface _ui =
+        new(approved, promptFailure, promptEntered, promptRelease);
 
     public override Guid InstanceId => _id;
     public override string Name => nameof(ChoiceHost);
@@ -476,7 +481,11 @@ public sealed class ChoiceHost(bool approved, Exception? promptFailure = null) :
     public override void SetShouldExit(int exitCode) { }
 }
 
-public sealed class ChoiceHostUserInterface(bool approved, Exception? promptFailure) : PSHostUserInterface
+public sealed class ChoiceHostUserInterface(
+    bool approved,
+    Exception? promptFailure,
+    ManualResetEventSlim? promptEntered,
+    ManualResetEventSlim? promptRelease) : PSHostUserInterface
 {
     private readonly List<ProgressRecord> _progressRecords = new();
 
@@ -489,7 +498,13 @@ public sealed class ChoiceHostUserInterface(bool approved, Exception? promptFail
         string message,
         Collection<ChoiceDescription> choices,
         int defaultChoice)
-        => promptFailure is null ? (approved ? 0 : 1) : throw promptFailure;
+    {
+        promptEntered?.Set();
+        Assert.True(
+            promptRelease?.Wait(TimeSpan.FromSeconds(5)) ?? true,
+            "The test host prompt was not released in time.");
+        return promptFailure is null ? (approved ? 0 : 1) : throw promptFailure;
+    }
 
     public override string ReadLine() => string.Empty;
     public override SecureString ReadLineAsSecureString() => new();
@@ -575,4 +590,3 @@ public sealed class ForwardingSynchronizationContext : SynchronizationContext
         ThreadPool.QueueUserWorkItem(_ => callback(state));
     }
 }
-
