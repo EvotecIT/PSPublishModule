@@ -465,6 +465,41 @@ public sealed class AsyncPSCmdletTests
     }
 
     [Fact]
+    public async Task AsyncPSCmdlet_drops_pre_lifecycle_writes_from_other_threads()
+    {
+        using var command = new TestAsyncDisposableCommand();
+
+        var exception = await Record.ExceptionAsync(
+            () => Task.Run(() => command.WriteWarning("too-early")));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_does_not_recursively_drain_when_enumeration_writes_to_the_pipeline()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncReentrantPump",
+            typeof(TestAsyncReentrantPumpCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncReentrantPump");
+
+        var result = powerShell.Invoke();
+
+        Assert.Collection(result, item => Assert.Equal("value", item.BaseObject));
+        Assert.Collection(
+            powerShell.Streams.Warning,
+            warning => Assert.Equal("during-enumeration", warning.Message),
+            warning => Assert.Equal("after-enumeration", warning.Message));
+    }
+
+    [Fact]
     public void AsyncPSCmdlet_allows_ShouldProcess_before_the_async_base_hook_starts()
     {
         var sessionState = InitialSessionState.CreateDefault();

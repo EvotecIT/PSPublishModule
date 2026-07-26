@@ -425,6 +425,36 @@ public sealed class TestAsyncDisposableCommand : AsyncPSCmdlet
     public CancellationToken StoppingToken => CancelToken;
 }
 
+[Cmdlet(VerbsDiagnostic.Test, "AsyncReentrantPump")]
+public sealed class TestAsyncReentrantPumpCommand : AsyncPSCmdlet
+{
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        WriteObject(new WarningEnumerable(this), enumerateCollection: true);
+        WriteWarning("after-enumeration");
+    }
+
+    private sealed class WarningEnumerable : IEnumerable<string>
+    {
+        private readonly TestAsyncReentrantPumpCommand _command;
+
+        public WarningEnumerable(TestAsyncReentrantPumpCommand command)
+        {
+            _command = command;
+        }
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            _command.WriteWarning("during-enumeration");
+            yield return "value";
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
+    }
+}
+
 [Cmdlet(VerbsDiagnostic.Test, "AsyncEarlyShouldProcess", SupportsShouldProcess = true)]
 public sealed class TestAsyncEarlyShouldProcessCommand : AsyncPSCmdlet
 {
