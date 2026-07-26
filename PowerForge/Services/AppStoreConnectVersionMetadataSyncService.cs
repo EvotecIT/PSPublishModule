@@ -28,7 +28,11 @@ public sealed class AppStoreConnectVersionMetadataSyncService
         if (string.IsNullOrWhiteSpace(spec.AppId))
             throw new ArgumentException("Spec.AppId is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(spec.VersionString) && string.IsNullOrWhiteSpace(spec.VersionId))
-            throw new ArgumentException("Spec.VersionString or Spec.VersionId is required.", nameof(request));
+            throw new ArgumentException(
+                spec.UseReleaseVersion
+                    ? "Spec.UseReleaseVersion must be resolved by the unified Apple release workflow before metadata sync."
+                    : "Spec.VersionString or Spec.VersionId is required.",
+                nameof(request));
         if (string.IsNullOrWhiteSpace(spec.Locale))
             throw new ArgumentException("Spec.Locale is required.", nameof(request));
 

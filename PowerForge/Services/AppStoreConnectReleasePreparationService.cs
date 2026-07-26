@@ -234,6 +234,7 @@ public sealed class AppStoreConnectReleasePreparationService
             AppId = appId,
             VersionString = versionString,
             VersionId = versionId,
+            UseReleaseVersion = false,
             Platform = platform,
             Locale = source.Locale,
             ScreenshotSets = source.ScreenshotSets,
@@ -263,6 +264,7 @@ public sealed class AppStoreConnectReleasePreparationService
             AppId = appId,
             VersionString = versionString,
             VersionId = versionId,
+            UseReleaseVersion = false,
             Platform = platform,
             Locale = source.Locale,
             Metadata = source.Metadata

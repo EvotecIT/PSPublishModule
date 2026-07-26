@@ -41,6 +41,7 @@ internal sealed partial class PowerForgeReleaseService
         switch (request.AppleAction)
         {
             case PowerForgeAppleReleaseAction.Status:
+            case PowerForgeAppleReleaseAction.Version:
             case PowerForgeAppleReleaseAction.Cleanup:
                 break;
             case PowerForgeAppleReleaseAction.Archive:
@@ -67,6 +68,19 @@ internal sealed partial class PowerForgeReleaseService
             case PowerForgeAppleReleaseAction.TestFlight:
                 options.DistributeTestFlight = true;
                 break;
+            case PowerForgeAppleReleaseAction.Advance:
+                options.Archive = true;
+                options.Upload = true;
+                options.PrepareDistribution = true;
+                options.SelectBuildForDistribution = true;
+                options.SyncMetadata = HasConfiguredPath(options.MetadataConfigPath, options.MetadataConfigPaths);
+                options.SyncAppInfo = HasConfiguredPath(options.AppInfoConfigPath, options.AppInfoConfigPaths);
+                options.SyncScreenshots = HasConfiguredPath(options.ScreenshotConfigPath, options.ScreenshotConfigPaths);
+                options.CheckReleaseReadiness = true;
+                options.DistributeTestFlight =
+                    (options.TestFlightBetaGroupIds?.Length ?? 0) > 0 ||
+                    (options.TestFlightBetaGroupNames?.Length ?? 0) > 0;
+                break;
             case PowerForgeAppleReleaseAction.SubmitTestFlightReview:
                 options.SubmitTestFlightBetaReview = true;
                 break;
@@ -90,6 +104,8 @@ internal sealed partial class PowerForgeReleaseService
              options.ReleaseApprovedVersion ||
              (options.SyncScreenshots && options.ReplaceScreenshots))) ||
            action == PowerForgeAppleReleaseAction.SubmitTestFlightReview ||
+           action == PowerForgeAppleReleaseAction.Advance ||
+           action == PowerForgeAppleReleaseAction.Version ||
            action == PowerForgeAppleReleaseAction.SubmitAppReview ||
            action == PowerForgeAppleReleaseAction.Release ||
            (action == PowerForgeAppleReleaseAction.Screenshots && options.ReplaceScreenshots);
@@ -100,12 +116,17 @@ internal sealed partial class PowerForgeReleaseService
 
     private static bool IsUploadAction(PowerForgeAppleReleaseAction action)
         => action == PowerForgeAppleReleaseAction.Upload ||
-           action == PowerForgeAppleReleaseAction.UploadExisting;
+           action == PowerForgeAppleReleaseAction.UploadExisting ||
+           action == PowerForgeAppleReleaseAction.Advance;
 
     private static void ValidateAppleAutomation(PowerForgeAppleReleaseAutomationOptions automation)
     {
         if (string.IsNullOrWhiteSpace(automation.ReceiptPath))
             throw new InvalidOperationException("AppleApps.Automation.ReceiptPath is required.");
+        if (string.IsNullOrWhiteSpace(automation.PlanReceiptPath))
+            throw new InvalidOperationException("AppleApps.Automation.PlanReceiptPath is required.");
+        if (string.IsNullOrWhiteSpace(automation.LockPath))
+            throw new InvalidOperationException("AppleApps.Automation.LockPath is required.");
         if (automation.ProcessingTimeoutSeconds <= 0)
             throw new InvalidOperationException("AppleApps.Automation.ProcessingTimeoutSeconds must be greater than zero.");
         if (automation.PollIntervalSeconds <= 0)
@@ -300,16 +321,18 @@ internal sealed partial class PowerForgeReleaseService
     private PowerForgeAppleReleaseReceipt CompleteAppleReleaseReceipt(
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseResult[] results,
-        PowerForgeAppleReleaseCleanupReceipt cleanup)
+        PowerForgeAppleReleaseCleanupReceipt cleanup,
+        PowerForgeAppleVersionReceipt? versioning = null)
     {
         var resultByName = results.ToDictionary(static result => result.Plan.Name, StringComparer.OrdinalIgnoreCase);
         var remoteAction = plan.Action != PowerForgeAppleReleaseAction.Archive &&
+                           plan.Action != PowerForgeAppleReleaseAction.Version &&
                            plan.Action != PowerForgeAppleReleaseAction.Cleanup;
         foreach (var app in plan.Apps)
         {
             if (!resultByName.TryGetValue(app.Name, out var result))
                 continue;
-            if (remoteAction && result.Success && result.RemoteState is null)
+            if (remoteAction && (!result.Success || result.RemoteState is null))
             {
                 try
                 {
@@ -317,9 +340,12 @@ internal sealed partial class PowerForgeReleaseService
                 }
                 catch (Exception exception)
                 {
-                    result.Success = false;
-                    result.ErrorMessage =
-                        $"Unable to read the final App Store Connect state for '{app.Name}': {exception.Message}";
+                    if (result.Success)
+                    {
+                        result.Success = false;
+                        result.ErrorMessage =
+                            $"Unable to read the final App Store Connect state for '{app.Name}': {exception.Message}";
+                    }
                 }
             }
         }
@@ -433,11 +459,13 @@ internal sealed partial class PowerForgeReleaseService
         var receipt = new PowerForgeAppleReleaseReceipt
         {
             Action = plan.Action,
+            PlanOnly = false,
             CheckedAt = DateTimeOffset.UtcNow,
             Success = results.Length == plan.Apps.Length &&
                       results.All(static result => result.Success),
             ErrorMessage = errors.Length == 0 ? null : string.Join(" ", errors),
             ReceiptPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, plan.ReceiptPath).Replace('\\', '/'),
+            Versioning = versioning,
             Targets = targets,
             Cleanup = cleanup,
             NextActions = targets

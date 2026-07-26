@@ -25,7 +25,9 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
         var messages = new List<string>();
         if (string.IsNullOrWhiteSpace(spec.AppId))
             messages.Add("AppId is required.");
-        if (string.IsNullOrWhiteSpace(spec.VersionString) && string.IsNullOrWhiteSpace(spec.VersionId))
+        if (!spec.UseReleaseVersion &&
+            string.IsNullOrWhiteSpace(spec.VersionString) &&
+            string.IsNullOrWhiteSpace(spec.VersionId))
             messages.Add("VersionString or VersionId is required.");
         if (string.IsNullOrWhiteSpace(spec.Locale))
             messages.Add("Locale is required.");

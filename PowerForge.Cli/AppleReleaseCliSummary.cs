@@ -39,5 +39,9 @@ internal sealed class AppleReleaseCliTargetSummary
 
     public string Scheme { get; set; } = string.Empty;
 
+    public string? MarketingVersion { get; set; }
+
+    public string? BuildNumber { get; set; }
+
     public bool GenerateProjectIfMissing { get; set; }
 }
