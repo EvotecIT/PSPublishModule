@@ -105,6 +105,9 @@ try {
     if ($Publish -and $PackagesOnly) {
         throw 'The full -Publish switch cannot be combined with -PackagesOnly. Use -PackagesOnly -PublishNuget for a package-only publication.'
     }
+    if ($Publish -and $ToolsOnly) {
+        throw 'The full -Publish switch cannot be combined with -ToolsOnly. Use -ToolsOnly -PublishToolGitHub for a tool-only publication.'
+    }
 
     foreach ($framework in $bootstrapFrameworks) {
         $buildOutput = & dotnet build $moduleProject -c $Configuration -f $framework --nologo --verbosity quiet 2>&1
