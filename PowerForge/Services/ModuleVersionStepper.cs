@@ -48,12 +48,17 @@ public sealed class ModuleVersionStepper
     /// <param name="localPsd1Path">Optional local PSD1 path to resolve current version from.</param>
     /// <param name="repository">Repository name used with PSResourceGet (default: PSGallery).</param>
     /// <param name="prerelease">Whether to include prerelease versions when resolving current version.</param>
+    /// <param name="verifyRepositoryAvailability">
+    /// Whether a candidate derived from a local manifest must also be checked against the repository.
+    /// Enable this for publish planning so a stale local manifest cannot select an already-published version.
+    /// </param>
     public ModuleVersionStepResult Step(
         string expectedVersion,
         string? moduleName = null,
         string? localPsd1Path = null,
         string repository = "PSGallery",
-        bool prerelease = false)
+        bool prerelease = false,
+        bool verifyRepositoryAvailability = false)
     {
         if (string.IsNullOrWhiteSpace(expectedVersion))
             throw new ArgumentException("ExpectedVersion is required.", nameof(expectedVersion));
@@ -71,8 +76,12 @@ public sealed class ModuleVersionStepper
 
         var (current, source) = ResolveCurrentVersion(expectedVersion, moduleName, localPsd1Path, repository, prerelease);
         var proposed = ComputeNextVersion(expectedVersion, current);
-        if (source != ModuleVersionSource.LocalPsd1 || current is null)
+        if (verifyRepositoryAvailability ||
+            source != ModuleVersionSource.LocalPsd1 ||
+            current is null)
+        {
             proposed = EnsureResolvedVersionIsAvailable(expectedVersion, moduleName, repository, prerelease, proposed);
+        }
 
         return new ModuleVersionStepResult(
             expectedVersion: expectedVersion,

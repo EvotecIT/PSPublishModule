@@ -26,6 +26,11 @@ public sealed class ModuleBuildHostExecutionResult
     public string StandardError { get; set; } = string.Empty;
 
     /// <summary>
+    /// Concise failure detail reported by the structured module progress protocol.
+    /// </summary>
+    public string? FailureMessage { get; set; }
+
+    /// <summary>
     /// PowerShell executable used for the run.
     /// </summary>
     public string Executable { get; set; } = string.Empty;

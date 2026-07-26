@@ -91,6 +91,76 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_build_mode_never_defers_or_publishes_module()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var scriptPath = Path.Combine(root, "Build-Module.ps1");
+            var releasePath = Path.Combine(root, "release.json");
+            File.WriteAllText(scriptPath, "# module build");
+            File.WriteAllText(releasePath, "{}");
+            var moduleCalls = new List<ModuleExecutionSnapshot>();
+            var service = CreateReleaseService(
+                root,
+                moduleCalls,
+                new PowerForgeToolReleaseResult { Success = true });
+
+            var result = service.Execute(
+                CreateReleaseSpec(root, scriptPath),
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ModuleRunMode = ConfigurationGateMode.Build
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var build = Assert.Single(moduleCalls);
+            Assert.Equal(ConfigurationGateMode.Build, build.RunMode);
+            Assert.True(build.IncludeModulePublishing);
+            Assert.Null(result.ModulePublication);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void BuildModuleFailureMessage_UsesStructuredFailureWithoutRepeatingStandardOutput()
+    {
+        var message = PowerForgeReleaseService.BuildModuleFailureMessage(
+            @"C:\repo\powerforge.json",
+            new ModuleBuildHostExecutionResult
+            {
+                ExitCode = 1,
+                FailureMessage = "The module version is already published.",
+                StandardOutput = "hundreds of lines of ordinary build output"
+            });
+
+        Assert.Contains("exit code 1", message, StringComparison.Ordinal);
+        Assert.Contains("The module version is already published.", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("ordinary build output", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildModuleFailureMessage_UsesBoundedStdoutTailWhenStructuredFailureIsUnavailable()
+    {
+        var message = PowerForgeReleaseService.BuildModuleFailureMessage(
+            @"C:\repo\powerforge.json",
+            new ModuleBuildHostExecutionResult
+            {
+                ExitCode = 1,
+                StandardOutput = "\u001b[31m" + new string('x', 5_000) + "\u001b[0m\r\nActual module failure"
+            });
+
+        Assert.Contains("Actual module failure", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("\u001b[31m", message, StringComparison.Ordinal);
+        Assert.DoesNotContain(new string('x', 5_000), message, StringComparison.Ordinal);
+        Assert.InRange(message.Length, 1, 4_200);
+    }
+
+    [Fact]
     public void Execute_deferred_json_module_publish_reuses_and_cleans_staging_directory()
     {
         var root = CreateSandbox();

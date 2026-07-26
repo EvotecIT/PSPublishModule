@@ -42,6 +42,7 @@ public sealed partial class ModulePipelineRunner
     private readonly IScriptFunctionExportDetector _scriptFunctionExportDetector;
     private readonly ModulePipelineRunnerDefaults.ModulePackageBuildExecutor _packageBuildExecutor;
     private readonly ModulePipelineRunnerDefaults.ModuleGitHubReleasePublisher _gitHubReleasePublisher;
+    private readonly ModulePipelineRunnerDefaults.ModuleVersionStepResolver _moduleVersionStepResolver;
 
     private sealed class RequiredModuleDraft
     {
@@ -91,8 +92,9 @@ public sealed partial class ModulePipelineRunner
         IMissingFunctionAnalysisService? missingFunctionAnalysisService = null,
         IScriptFunctionExportDetector? scriptFunctionExportDetector = null,
         ModulePipelineRunnerDefaults.ModulePackageBuildExecutor? packageBuildExecutor = null,
-        ModulePipelineRunnerDefaults.ModuleGitHubReleasePublisher? gitHubReleasePublisher = null)
-        : this(logger, ModulePipelineRunnerDefaults.Create(logger, powerShellRunner, moduleDependencyMetadataProvider, hostedOperations, manifestMutator, missingFunctionAnalysisService, scriptFunctionExportDetector, packageBuildExecutor, gitHubReleasePublisher))
+        ModulePipelineRunnerDefaults.ModuleGitHubReleasePublisher? gitHubReleasePublisher = null,
+        ModulePipelineRunnerDefaults.ModuleVersionStepResolver? moduleVersionStepResolver = null)
+        : this(logger, ModulePipelineRunnerDefaults.Create(logger, powerShellRunner, moduleDependencyMetadataProvider, hostedOperations, manifestMutator, missingFunctionAnalysisService, scriptFunctionExportDetector, packageBuildExecutor, gitHubReleasePublisher, moduleVersionStepResolver))
     {
     }
 
@@ -110,6 +112,7 @@ public sealed partial class ModulePipelineRunner
         _scriptFunctionExportDetector = services.ScriptFunctionExportDetector;
         _packageBuildExecutor = services.PackageBuildExecutor;
         _gitHubReleasePublisher = services.GitHubReleasePublisher;
+        _moduleVersionStepResolver = services.ModuleVersionStepResolver;
     }
 
 }

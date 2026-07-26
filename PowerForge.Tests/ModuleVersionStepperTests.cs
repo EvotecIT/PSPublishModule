@@ -109,6 +109,35 @@ public sealed class ModuleVersionStepperTests
     }
 
     [Fact]
+    public void Step_PublishAvailabilityCheckBumpsPastRepositoryVersionWhenLocalManifestIsStale()
+    {
+        using var directory = new TemporaryDirectory();
+        var manifestPath = Path.Combine(directory.Path, "PSPublishModule.psd1");
+        File.WriteAllText(manifestPath, "@{ ModuleVersion = '3.0.75' }");
+
+        using var client = new HttpClient(new FakeCandidateReservationHandler("3.0.76"));
+        var stepper = new ModuleVersionStepper(
+            new NullLogger(),
+            new StubPowerShellRunner(new PowerShellRunResult(
+                1,
+                string.Empty,
+                "Find-PSResource should not run.",
+                "pwsh.exe")),
+            client);
+
+        var result = stepper.Step(
+            "3.0.X",
+            moduleName: "PSPublishModule",
+            localPsd1Path: manifestPath,
+            repository: "PSGallery",
+            verifyRepositoryAvailability: true);
+
+        Assert.Equal("3.0.77", result.Version);
+        Assert.Equal(ModuleVersionSource.LocalPsd1, result.CurrentVersionSource);
+        Assert.Equal("3.0.75", result.CurrentVersion);
+    }
+
+    [Fact]
     public void Step_MissingLocalPsd1DoesNotUseAnUnverifiedBaselineCandidate()
     {
         using var directory = new TemporaryDirectory();

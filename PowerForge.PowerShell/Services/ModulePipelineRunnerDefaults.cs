@@ -11,6 +11,13 @@ internal static class ModulePipelineRunnerDefaults
 
     internal delegate GitHubReleasePublishResult ModuleGitHubReleasePublisher(GitHubReleasePublishRequest request);
 
+    internal delegate ModuleVersionStepResult ModuleVersionStepResolver(
+        string expectedVersion,
+        string moduleName,
+        string? localPsd1Path,
+        bool prerelease,
+        bool verifyRepositoryAvailability);
+
     internal static ModulePipelineRunnerServices Create(
         ILogger logger,
         IPowerShellRunner? powerShellRunner,
@@ -20,12 +27,14 @@ internal static class ModulePipelineRunnerDefaults
         IMissingFunctionAnalysisService? missingFunctionAnalysisService,
         IScriptFunctionExportDetector? scriptFunctionExportDetector,
         ModulePackageBuildExecutor? packageBuildExecutor = null,
-        ModuleGitHubReleasePublisher? gitHubReleasePublisher = null)
+        ModuleGitHubReleasePublisher? gitHubReleasePublisher = null,
+        ModuleVersionStepResolver? moduleVersionStepResolver = null)
     {
         if (logger is null)
             throw new ArgumentNullException(nameof(logger));
 
         var resolvedRunner = powerShellRunner ?? new PowerShellRunner();
+        var versionStepper = new ModuleVersionStepper(logger, resolvedRunner);
         return new ModulePipelineRunnerServices(
             resolvedRunner,
             moduleDependencyMetadataProvider ?? new PowerShellModuleDependencyMetadataProvider(resolvedRunner, logger),
@@ -43,7 +52,14 @@ internal static class ModulePipelineRunnerDefaults
                     ? service.Execute(request)
                     : service.Execute(request, configuration, configPath ?? request.ConfigPath);
             }),
-            gitHubReleasePublisher ?? (request => new GitHubReleasePublisher(logger).PublishRelease(request)));
+            gitHubReleasePublisher ?? (request => new GitHubReleasePublisher(logger).PublishRelease(request)),
+            moduleVersionStepResolver ?? ((expectedVersion, moduleName, localPsd1Path, prerelease, verifyRepositoryAvailability) =>
+                versionStepper.Step(
+                    expectedVersion,
+                    moduleName,
+                    localPsd1Path: localPsd1Path,
+                    prerelease: prerelease,
+                    verifyRepositoryAvailability: verifyRepositoryAvailability)));
     }
 }
 
@@ -57,7 +73,8 @@ internal sealed class ModulePipelineRunnerServices
         IMissingFunctionAnalysisService missingFunctionAnalysisService,
         IScriptFunctionExportDetector scriptFunctionExportDetector,
         ModulePipelineRunnerDefaults.ModulePackageBuildExecutor packageBuildExecutor,
-        ModulePipelineRunnerDefaults.ModuleGitHubReleasePublisher gitHubReleasePublisher)
+        ModulePipelineRunnerDefaults.ModuleGitHubReleasePublisher gitHubReleasePublisher,
+        ModulePipelineRunnerDefaults.ModuleVersionStepResolver moduleVersionStepResolver)
     {
         PowerShellRunner = powerShellRunner ?? throw new ArgumentNullException(nameof(powerShellRunner));
         ModuleDependencyMetadataProvider = moduleDependencyMetadataProvider ?? throw new ArgumentNullException(nameof(moduleDependencyMetadataProvider));
@@ -67,6 +84,7 @@ internal sealed class ModulePipelineRunnerServices
         ScriptFunctionExportDetector = scriptFunctionExportDetector ?? throw new ArgumentNullException(nameof(scriptFunctionExportDetector));
         PackageBuildExecutor = packageBuildExecutor ?? throw new ArgumentNullException(nameof(packageBuildExecutor));
         GitHubReleasePublisher = gitHubReleasePublisher ?? throw new ArgumentNullException(nameof(gitHubReleasePublisher));
+        ModuleVersionStepResolver = moduleVersionStepResolver ?? throw new ArgumentNullException(nameof(moduleVersionStepResolver));
     }
 
     internal IPowerShellRunner PowerShellRunner { get; }
@@ -77,4 +95,5 @@ internal sealed class ModulePipelineRunnerServices
     internal IScriptFunctionExportDetector ScriptFunctionExportDetector { get; }
     internal ModulePipelineRunnerDefaults.ModulePackageBuildExecutor PackageBuildExecutor { get; }
     internal ModulePipelineRunnerDefaults.ModuleGitHubReleasePublisher GitHubReleasePublisher { get; }
+    internal ModulePipelineRunnerDefaults.ModuleVersionStepResolver ModuleVersionStepResolver { get; }
 }

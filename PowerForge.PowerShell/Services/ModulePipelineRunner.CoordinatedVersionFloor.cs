@@ -36,11 +36,12 @@ public sealed partial class ModulePipelineRunner
         var localManifestPath = plan.UseLocalVersioning
             ? Path.Combine(plan.ProjectRoot, $"{plan.ModuleName}.psd1")
             : null;
-        var step = new ModuleVersionStepper(_logger).Step(
+        var step = _moduleVersionStepResolver(
             plan.ExpectedVersion,
             plan.ModuleName,
-            localPsd1Path: localManifestPath,
-            prerelease: !string.IsNullOrWhiteSpace(plan.PreRelease));
+            localManifestPath,
+            prerelease: !string.IsNullOrWhiteSpace(plan.PreRelease),
+            verifyRepositoryAvailability: plan.GateMode == ConfigurationGateMode.Publish);
         var candidate = ModulePathTokenFormatter.FormatVersionWithPreRelease(
             step.Version,
             plan.PreRelease);

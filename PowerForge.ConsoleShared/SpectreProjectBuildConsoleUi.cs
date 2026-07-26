@@ -36,17 +36,9 @@ internal static class SpectreProjectBuildConsoleUi
         ProjectBuildWorkflowResult? result = null;
         Exception? failure = null;
 
-        AnsiConsole.Progress()
-            .AutoRefresh(true)
-            .AutoClear(false)
-            .HideCompleted(false)
-            .Columns(
-                new TaskDescriptionColumn(),
-                new ProgressBarColumn { CompletedStyle = new Style(Color.Green), FinishedStyle = new Style(Color.Green) },
-                new PercentageColumn(),
-                new ElapsedTimeColumn(),
-                new SpinnerColumn())
-            .Start(context =>
+        SpectreProgressDisplay.Run(
+            SpectreBuildProgressColumns.CreateStandard(),
+            context =>
             {
                 var tasks = phases.ToDictionary(
                     phase => phase,

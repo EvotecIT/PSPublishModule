@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Runtime.ExceptionServices;
 using PowerForge;
 using Spectre.Console;
-using Spectre.Console.Rendering;
 
 namespace PowerForge.ConsoleShared;
 
@@ -61,12 +60,15 @@ internal static class SpectreModulePipelineConsoleUi
 
         Exception? failure = null;
         ModulePipelineResult? result = null;
-        AnsiConsole.Progress()
-            .AutoRefresh(true)
-            .AutoClear(false)
-            .HideCompleted(false)
-            .Columns(BuildColumns(includeBar, includeElapsed, barWidth, iconLookup, startLookup, doneLookup))
-            .Start(ctx =>
+        SpectreProgressDisplay.Run(
+            SpectreBuildProgressColumns.CreateDetailed(
+                includeBar,
+                includeElapsed,
+                barWidth,
+                iconLookup,
+                startLookup,
+                doneLookup),
+            ctx =>
             {
                 var tasksByKey = new Dictionary<string, ProgressTask>(StringComparer.OrdinalIgnoreCase);
                 var labelsByKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -118,40 +120,6 @@ internal static class SpectreModulePipelineConsoleUi
         if (viewportWidth >= 100) return 14;
         if (viewportWidth >= 80) return 12;
         return 10;
-    }
-
-    private static ProgressColumn[] BuildColumns(
-        bool includeBar,
-        bool includeElapsed,
-        int barWidth,
-        ConcurrentDictionary<ProgressTask, string> iconLookup,
-        ConcurrentDictionary<ProgressTask, DateTimeOffset> startLookup,
-        ConcurrentDictionary<ProgressTask, TimeSpan> doneLookup)
-    {
-        var columns = new List<ProgressColumn>
-        {
-            new StepIconColumn(iconLookup),
-            new IconAndDescriptionColumn(string.Empty),
-        };
-
-        if (includeBar)
-        {
-            columns.Add(new ProgressBarColumn
-            {
-                Width = barWidth,
-                CompletedStyle = new Style(Color.Green),
-                FinishedStyle = new Style(Color.Green),
-                IndeterminateStyle = new Style(Color.Grey)
-            });
-        }
-
-        columns.Add(new PercentageColumn());
-
-        if (includeElapsed)
-            columns.Add(new FixedElapsedColumn(startLookup, doneLookup));
-
-        columns.Add(new SpinnerColumn());
-        return columns.ToArray();
     }
 
     private static void WriteHeader(ModulePipelinePlan plan, string? configLabel, ModulePipelineStep[] steps)
@@ -481,65 +449,4 @@ internal static class SpectreModulePipelineConsoleUi
             _ => unicode ? "[grey]•[/]" : "[grey]?[/]"
         };
 
-    private sealed class StepIconColumn : ProgressColumn
-    {
-        private readonly ConcurrentDictionary<ProgressTask, string> _icons;
-
-        public StepIconColumn(ConcurrentDictionary<ProgressTask, string> icons) => _icons = icons;
-
-        public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
-        {
-            var icon = _icons.TryGetValue(task, out var s) && !string.IsNullOrWhiteSpace(s) ? s : string.Empty;
-            return new Panel(new Markup(icon))
-            {
-                Border = BoxBorder.None,
-                Padding = new Padding(0, 0, 0, 0),
-                Width = 2
-            };
-        }
-    }
-
-    private sealed class IconAndDescriptionColumn : ProgressColumn
-    {
-        private readonly string _icon;
-
-        public IconAndDescriptionColumn(string icon = "•") => _icon = icon;
-
-        public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
-        {
-            var desc = task.Description ?? string.Empty;
-            var prefix = string.IsNullOrWhiteSpace(_icon) ? string.Empty : _icon + " ";
-            var text = new Text(prefix + desc);
-            try { text.Overflow = Overflow.Ellipsis; } catch { }
-            return text;
-        }
-    }
-
-    private sealed class FixedElapsedColumn : ProgressColumn
-    {
-        private readonly ConcurrentDictionary<ProgressTask, DateTimeOffset> _start;
-        private readonly ConcurrentDictionary<ProgressTask, TimeSpan> _done;
-
-        public FixedElapsedColumn(
-            ConcurrentDictionary<ProgressTask, DateTimeOffset> start,
-            ConcurrentDictionary<ProgressTask, TimeSpan> done)
-        {
-            _start = start;
-            _done = done;
-        }
-
-        public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
-        {
-            if (_done.TryGetValue(task, out var elapsed))
-                return new Markup($"[blue]{elapsed:mm\\:ss}[/]");
-
-            if (_start.TryGetValue(task, out var start))
-            {
-                var current = DateTimeOffset.Now - start;
-                return new Markup($"[blue]{current:mm\\:ss}[/]");
-            }
-
-            return new Markup("[blue]00:00[/]");
-        }
-    }
 }
