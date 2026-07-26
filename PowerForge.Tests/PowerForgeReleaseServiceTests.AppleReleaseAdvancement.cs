@@ -2,6 +2,45 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests
 {
+    [Theory]
+    [InlineData("1.6")]
+    [InlineData("1.6.0-beta")]
+    [InlineData("1.6.0\nCURRENT_PROJECT_VERSION: 999")]
+    public void Execute_AppleVersion_RejectsNonThreePartMarketingVersion(string marketingVersion)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.5.0", "13");
+            WriteXcodeGenVersionSource(root, "1.5.0", "13");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.VersionSourcePath = "project.yml";
+
+            var service = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Version must not query release status."),
+                    getHighestAppleBuildNumber: (_, _, _) => 13);
+
+            var exception = Assert.Throws<ArgumentException>(() => service.Execute(spec, new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Version,
+                    AppleMarketingVersion = marketingVersion,
+                    PlanOnly = true
+                }));
+
+            Assert.Contains("must use x.y.z", exception.Message, StringComparison.Ordinal);
+            var source = new AppleReleaseVersionSourceService().Read(Path.Combine(root, "project.yml"));
+            Assert.Equal("1.5.0", source.MarketingVersion);
+            Assert.Equal("13", source.BuildNumber);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Fact]
     public void Execute_AppleVersion_UsesOneBuildAboveLocalAndEveryRemotePlatform()
     {

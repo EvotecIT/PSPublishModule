@@ -1,0 +1,138 @@
+name: PowerForge Apple Advance
+
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        description: Exact merged source ref to release.
+        required: true
+        type: string
+      config_path:
+        description: PowerForge release configuration path.
+        required: false
+        default: powerforge.release.json
+        type: string
+      tool_manifest_path:
+        description: Checked-in PowerForge tool manifest path.
+        required: false
+        default: .powerforge/powerforge.tool.json
+        type: string
+      powerforge_ref:
+        description: Exact PSPublishModule commit containing the shared action.
+        required: true
+        type: string
+      runner_labels_json:
+        description: JSON array of trusted Apple runner labels.
+        required: false
+        default: '["self-hosted","macOS","ARM64"]'
+        type: string
+      environment_name:
+        description: Protected GitHub environment for Apple draft/TestFlight mutation.
+        required: false
+        default: apple-release
+        type: string
+    secrets:
+      app_store_connect_issuer_id:
+        required: true
+      app_store_connect_key_id:
+        required: true
+      app_store_connect_private_key:
+        required: true
+
+concurrency:
+  group: powerforge-apple-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  advance:
+    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    timeout-minutes: 120
+    environment: ${{ inputs.environment_name }}
+    permissions:
+      contents: read
+    outputs:
+      marketing-version: ${{ steps.advance.outputs.marketing-version }}
+      build-number: ${{ steps.advance.outputs.build-number }}
+      ready-for-submission: ${{ steps.advance.outputs.ready-for-submission }}
+      next-actions: ${{ steps.advance.outputs.next-actions }}
+    steps:
+      - name: Require immutable source and shared refs
+        shell: pwsh
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+          POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+        run: |
+          foreach ($entry in @{ source_ref = $env:SOURCE_REF; powerforge_ref = $env:POWERFORGE_REF }.GetEnumerator()) {
+            if ($entry.Value -notmatch '^[0-9A-Fa-f]{40}$') { throw "$($entry.Key) must be an exact 40-character commit SHA." }
+          }
+
+      - name: Checkout the exact merged release source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 1
+          path: source
+          persist-credentials: false
+
+      - name: Checkout the pinned shared release action
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: EvotecIT/PSPublishModule
+          ref: ${{ inputs.powerforge_ref }}
+          fetch-depth: 1
+          path: powerforge-shared
+          persist-credentials: false
+
+      - name: Verify exact checked-out commits
+        shell: pwsh
+        env:
+          EXPECTED_SOURCE_REF: ${{ inputs.source_ref }}
+          EXPECTED_POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+        run: |
+          $source = (git -C source rev-parse HEAD).Trim()
+          $shared = (git -C powerforge-shared rev-parse HEAD).Trim()
+          if ($source -ine $env:EXPECTED_SOURCE_REF) { throw "Expected source '$($env:EXPECTED_SOURCE_REF)', received '$source'." }
+          if ($shared -ine $env:EXPECTED_POWERFORGE_REF) { throw "Expected shared '$($env:EXPECTED_POWERFORGE_REF)', received '$shared'." }
+
+      - name: Plan safe release advancement
+        id: plan
+        uses: ./powerforge-shared/.github/actions/apple-release
+        with:
+          action: Advance
+          config-path: ${{ github.workspace }}/source/${{ inputs.config_path }}
+          tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
+          plan-only: "true"
+          issuer-id: ${{ secrets.app_store_connect_issuer_id }}
+          key-id: ${{ secrets.app_store_connect_key_id }}
+          private-key: ${{ secrets.app_store_connect_private_key }}
+
+      - name: Advance through upload, preparation, screenshots, and configured TestFlight
+        id: advance
+        uses: ./powerforge-shared/.github/actions/apple-release
+        with:
+          action: Advance
+          config-path: ${{ github.workspace }}/source/${{ inputs.config_path }}
+          tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
+          plan-only: "false"
+          confirm: "true"
+          issuer-id: ${{ secrets.app_store_connect_issuer_id }}
+          key-id: ${{ secrets.app_store_connect_key_id }}
+          private-key: ${{ secrets.app_store_connect_private_key }}
+
+      - name: Upload compact release plan receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: powerforge-apple-advance-${{ inputs.source_ref }}-plan
+          path: ${{ steps.plan.outputs.receipt-path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload compact release action receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: powerforge-apple-advance-${{ inputs.source_ref }}-actual
+          path: ${{ steps.advance.outputs.receipt-path }}
+          if-no-files-found: error
+          retention-days: 30

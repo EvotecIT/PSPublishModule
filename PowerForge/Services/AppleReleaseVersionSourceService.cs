@@ -10,6 +10,9 @@ internal sealed class AppleReleaseVersionSourceService
 {
     private static readonly Regex MarketingVersionPattern = CreateSettingPattern("MARKETING_VERSION");
     private static readonly Regex BuildNumberPattern = CreateSettingPattern("CURRENT_PROJECT_VERSION");
+    private static readonly Regex MarketingVersionValuePattern = new(
+        "^\\d+\\.\\d+\\.\\d+$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     internal PowerForgeAppleVersionReceipt Read(string sourcePath)
     {
@@ -30,8 +33,11 @@ internal sealed class AppleReleaseVersionSourceService
         long highestRemoteBuildNumber,
         bool whatIf)
     {
-        if (string.IsNullOrWhiteSpace(marketingVersion))
-            throw new ArgumentException("Marketing version is required.", nameof(marketingVersion));
+        if (string.IsNullOrWhiteSpace(marketingVersion) ||
+            !MarketingVersionValuePattern.IsMatch(marketingVersion.Trim()))
+        {
+            throw new ArgumentException("Apple marketing version must use x.y.z.", nameof(marketingVersion));
+        }
         if (!long.TryParse(buildNumber, out var parsedBuildNumber) || parsedBuildNumber <= 0)
             throw new ArgumentException("Apple build number must be a positive integer.", nameof(buildNumber));
 
