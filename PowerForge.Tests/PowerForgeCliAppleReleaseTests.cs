@@ -45,6 +45,20 @@ public sealed class PowerForgeCliAppleReleaseTests
                 Assert.Equal("status", Assert.Single(result.GetProperty("enabledSteps").EnumerateArray()).GetString());
             }
 
+            var advance = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-release Advance --config \"{configPath}\" --plan --summary --output json");
+            Assert.Equal(0, advance.ExitCode);
+            using (var advanceDocument = JsonDocument.Parse(advance.StdOut))
+            {
+                var result = advanceDocument.RootElement.GetProperty("result");
+                Assert.Equal("Advance", result.GetProperty("action").GetString());
+                Assert.True(result.GetProperty("requiresConfirmation").GetBoolean());
+                Assert.Contains(
+                    result.GetProperty("enabledSteps").EnumerateArray(),
+                    static step => step.GetString() == "stopBeforeReview");
+            }
+
             var configuredDedicated = await RunCliAsync(
                 repoRoot,
                 $"\"{GetCliPath(repoRoot)}\" apple-release Configured --config \"{configPath}\" --plan --summary --output json");

@@ -124,6 +124,10 @@ public sealed class AppStoreConnectReleaseStateService
             platform,
             limit: 50,
             cancellationToken).ConfigureAwait(false);
+        reviewSubmissions = await FilterReviewSubmissionsForVersionAsync(
+            reviewSubmissions,
+            version?.Id,
+            cancellationToken).ConfigureAwait(false);
 
         var testFlightBuild = matchedBuild ?? selectedBuild;
         AppStoreConnectBuildBetaDetailInfo? betaDetail = null;
@@ -152,6 +156,36 @@ public sealed class AppStoreConnectReleaseStateService
             Messages = messages.ToArray()
         };
     }
+
+    private async Task<AppStoreConnectReviewSubmissionInfo[]> FilterReviewSubmissionsForVersionAsync(
+        AppStoreConnectReviewSubmissionInfo[] submissions,
+        string? versionId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(versionId) || submissions.Length == 0)
+            return Array.Empty<AppStoreConnectReviewSubmissionInfo>();
+
+        var matching = new List<AppStoreConnectReviewSubmissionInfo>();
+        foreach (var submission in submissions.Where(ShouldInspectReviewSubmission))
+        {
+            var items = await _client.GetReviewSubmissionItemsAsync(
+                submission.Id,
+                limit: 50,
+                cancellationToken).ConfigureAwait(false);
+            if (items.Any(item =>
+                    string.Equals(item.AppStoreVersionId, versionId, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(item.EncodedAppStoreVersionId, versionId, StringComparison.OrdinalIgnoreCase)))
+            {
+                matching.Add(submission);
+            }
+        }
+
+        return matching.ToArray();
+    }
+
+    private static bool ShouldInspectReviewSubmission(AppStoreConnectReviewSubmissionInfo submission)
+        => !string.Equals(submission.State, "COMPLETE", StringComparison.OrdinalIgnoreCase) &&
+           !string.Equals(submission.State, "CANCELLED", StringComparison.OrdinalIgnoreCase);
 
     private async Task<AppStoreConnectBetaGroupReleaseState[]> GetBetaGroupStatesAsync(
         string appId,

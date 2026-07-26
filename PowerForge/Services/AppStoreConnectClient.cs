@@ -631,18 +631,29 @@ public sealed partial class AppStoreConnectClient : IDisposable
         ApplePlatform? platform,
         CancellationToken cancellationToken)
     {
-        using var doc = await GetJsonAsync(relativeUrl, cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("App Store Connect API request returned no response body.");
-        if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
-            return Array.Empty<AppStoreConnectBuildInfo>();
-
-        var preReleaseVersions = ReadIncludedPreReleaseVersions(doc.RootElement);
         var list = new List<AppStoreConnectBuildInfo>();
-        foreach (var item in data.EnumerateArray())
+        var visitedPages = new HashSet<string>(StringComparer.Ordinal);
+        string? nextPage = relativeUrl;
+        while (nextPage is not null)
         {
-            var build = ParseBuild(item, preReleaseVersions);
-            if (BuildMatches(build, marketingVersion, platform))
-                list.Add(build);
+            var currentPage = nextPage;
+            if (!visitedPages.Add(currentPage))
+                throw new InvalidOperationException($"App Store Connect API returned a repeated pagination link: {currentPage}");
+
+            using var doc = await GetJsonAsync(currentPage, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("App Store Connect API request returned no response body.");
+            if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
+            {
+                var preReleaseVersions = ReadIncludedPreReleaseVersions(doc.RootElement);
+                foreach (var item in data.EnumerateArray())
+                {
+                    var build = ParseBuild(item, preReleaseVersions);
+                    if (BuildMatches(build, marketingVersion, platform))
+                        list.Add(build);
+                }
+            }
+
+            nextPage = GetNextPageLink(doc.RootElement);
         }
 
         return list.ToArray();

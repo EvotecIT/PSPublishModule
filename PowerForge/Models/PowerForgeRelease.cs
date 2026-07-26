@@ -215,6 +215,8 @@ internal sealed class PowerForgeReleaseRequest
 
     public PowerForgeAppleReleaseAction AppleAction { get; set; } = PowerForgeAppleReleaseAction.Configured;
 
+    public string? AppleMarketingVersion { get; set; }
+
     public bool AppleActionConfirmed { get; set; }
 
     public bool? AppleResume { get; set; }
@@ -448,6 +450,14 @@ internal sealed class PowerForgeAppleReleasePlan
     public PowerForgeAppleReleaseAutomationOptions Automation { get; set; } = new();
 
     public string ReceiptPath { get; set; } = string.Empty;
+
+    public string PlanReceiptPath { get; set; } = string.Empty;
+
+    public string LockPath { get; set; } = string.Empty;
+
+    public string? VersionSourcePath { get; set; }
+
+    public string? RequestedMarketingVersion { get; set; }
 
     public bool Archive { get; set; }
 

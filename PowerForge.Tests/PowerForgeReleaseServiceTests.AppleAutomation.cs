@@ -605,7 +605,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
 
             Assert.False(result.Success);
-            Assert.Equal(2, stateCalls);
+            Assert.Equal(3, stateCalls);
             var receipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt);
             Assert.False(receipt.Success);
             Assert.Contains(
@@ -657,8 +657,10 @@ public sealed partial class PowerForgeReleaseServiceTests
         Func<AppleAppArchiveRequest, AppleAppArchiveResult>? archiveAppleApp = null,
         Func<AppleAppArchiveUploadRequest, AppleAppArchiveUploadResult>? uploadAppleApp = null,
         Func<AppStoreConnectReleasePreparationRequest, AppStoreConnectReleasePreparationResult>? prepareAppleDistribution = null,
+        Func<AppStoreConnectTestFlightDistributionRequest, AppStoreConnectTestFlightDistributionResult>? distributeTestFlight = null,
         Func<AppStoreConnectApiCredential, string, AppStoreConnectBuildUploadInfo?>? getAppleBuildUpload = null,
-        Func<PowerForgeAppleAppReleaseTargetPlan, bool>? generateAppleProject = null)
+        Func<PowerForgeAppleAppReleaseTargetPlan, bool>? generateAppleProject = null,
+        Func<AppStoreConnectApiCredential, string, ApplePlatform, long>? getHighestAppleBuildNumber = null)
         => new(
             new NullLogger(),
             executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
@@ -671,11 +673,13 @@ public sealed partial class PowerForgeReleaseServiceTests
             archiveAppleApp: archiveAppleApp ?? (_ => throw new InvalidOperationException("Exact remote build should skip archive.")),
             uploadAppleApp: uploadAppleApp ?? (_ => throw new InvalidOperationException("Exact remote build should skip upload.")),
             prepareAppleDistribution: prepareAppleDistribution,
+            distributeTestFlight: distributeTestFlight,
             getAppleReleaseState: getState,
             getAppleBuildUpload: getAppleBuildUpload,
             generateAppleProject: generateAppleProject,
             delay: delay,
-            appleArtifactService: new AppleReleaseArtifactService(getAvailableBytes ?? (_ => long.MaxValue)));
+            appleArtifactService: new AppleReleaseArtifactService(getAvailableBytes ?? (_ => long.MaxValue)),
+            getHighestAppleBuildNumber: getHighestAppleBuildNumber);
 
     private static AppStoreConnectReleaseStateResult CreateReleaseState(
         AppStoreConnectReleaseStateRequest request,
