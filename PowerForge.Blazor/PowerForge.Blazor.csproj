@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <VersionPrefix>1.0.8</VersionPrefix>
+    <VersionPrefix>3.0.77</VersionPrefix>
 
     <!-- Package metadata -->
     <PackageId>PowerForge.Blazor</PackageId>
