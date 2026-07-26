@@ -84,7 +84,9 @@ internal sealed partial class PowerForgeReleaseService
             expectedVersion!,
             moduleName,
             manifestPath,
-            prerelease: !string.IsNullOrWhiteSpace(preRelease));
+            prerelease: !string.IsNullOrWhiteSpace(preRelease),
+            verifyRepositoryAvailability:
+                request.ModuleRunMode == ConfigurationGateMode.Publish);
         var candidate = ModulePathTokenFormatter.FormatVersionWithPreRelease(step.Version, preRelease);
         if (!PackageVersionUtility.TryNormalizeExact(candidate, out var normalizedFloor))
             throw new InvalidOperationException($"Coordinated module version floor '{candidate}' is not a valid exact package version.");

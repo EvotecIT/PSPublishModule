@@ -91,9 +91,15 @@ public sealed class ModuleBuildHostService
             {
                 [ModulePipelineProgressProtocol.EnvironmentVariable] = "1"
             };
+        string? progressFailure = null;
         Action<string>? outputLineReceived = progress is null
             ? null
-            : line => ForwardProgress(line, progress);
+            : line =>
+            {
+                var failure = ForwardProgress(line, progress);
+                if (!string.IsNullOrWhiteSpace(failure))
+                    progressFailure = failure;
+            };
         var runRequest = requiredRuntimeMajor > 0
             ? PowerShellRunRequest.ForCompatibleCommand(
                 commandText: script,
@@ -127,6 +133,7 @@ public sealed class ModuleBuildHostService
             Duration = startedAt.Elapsed,
             StandardOutput = progress is null ? result.StdOut : StripProgressLines(result.StdOut),
             StandardError = result.StdErr,
+            FailureMessage = progressFailure,
             Executable = result.Executable
         };
     }
@@ -142,18 +149,22 @@ public sealed class ModuleBuildHostService
         return string.Join(Environment.NewLine, lines).TrimEnd('\r', '\n');
     }
 
-    private static void ForwardProgress(
+    private static string? ForwardProgress(
         string line,
         IPowerForgeReleaseProgressReporterV2 progress)
     {
         if (!ModulePipelineProgressProtocol.TryParse(line, out var message) || message is null)
-            return;
+            return null;
 
         if (message.Items is { Length: > 0 })
             progress.ItemsPlanned(PowerForgeReleaseProgressPhase.Module, message.Items);
 
         if (message.Item is not null && message.State.HasValue)
             progress.ItemUpdated(message.Item, message.State.Value, message.Detail);
+
+        return message.State == PowerForgeReleaseProgressItemState.Failed
+            ? message.Detail
+            : null;
     }
 
     private static PowerShellHostRequirements ResolveHostRequirements(string? framework)

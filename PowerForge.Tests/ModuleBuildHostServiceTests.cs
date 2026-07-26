@@ -566,6 +566,52 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Equal(PowerForgeReleaseProgressItemState.Completed, update.State);
     }
 
+    [Fact]
+    public async Task ExecuteBuildAsync_PreservesConciseStructuredFailureFromChildHost()
+    {
+        var progress = new RecordingReleaseProgress();
+        var runner = new StubPowerShellRunner(request =>
+        {
+            var item = new PowerForgeReleaseProgressItem
+            {
+                Phase = PowerForgeReleaseProgressPhase.Module,
+                Key = "publish:module",
+                Title = "Publish module",
+                Kind = ModulePipelineStepKind.Publish.ToString(),
+                Position = 1,
+                Total = 1
+            };
+            var failed = JsonSerializer.Serialize(new ModulePipelineProgressProtocolMessage
+            {
+                Item = item,
+                State = PowerForgeReleaseProgressItemState.Failed,
+                Detail = "Module version '3.0.76' is not greater than repository version '3.0.76'."
+            });
+            request.OutputLineReceived!(
+                "##powerforge-module-progress-v1##" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(failed)));
+            return new PowerShellRunResult(
+                1,
+                "many lines of successful build output",
+                string.Empty,
+                "pwsh");
+        });
+
+        var result = await new ModuleBuildHostService(runner).ExecuteBuildAsync(
+            new ModuleBuildHostBuildRequest
+            {
+                RepositoryRoot = @"C:\repo",
+                ScriptPath = @"C:\repo\Build\Build-Module.ps1",
+                ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
+                Progress = progress
+            });
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(
+            "Module version '3.0.76' is not greater than repository version '3.0.76'.",
+            result.FailureMessage);
+    }
+
     private sealed class RecordingReleaseProgress : IPowerForgeReleaseProgressReporterV2
     {
         public List<PowerForgeReleaseProgressItem> Planned { get; } = new();

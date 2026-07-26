@@ -4865,19 +4865,17 @@ internal sealed partial class PowerForgeReleaseService
         return fullPath + Path.DirectorySeparatorChar;
     }
 
-    private static string BuildModuleFailureMessage(string scriptPath, ModuleBuildHostExecutionResult result)
+    internal static string BuildModuleFailureMessage(string scriptPath, ModuleBuildHostExecutionResult result)
     {
-        var message = string.Join(
-            Environment.NewLine,
-            new[]
-            {
-                result.StandardError,
-                result.StandardOutput
-            }.Where(text => !string.IsNullOrWhiteSpace(text)));
+        var heading = $"Module release workflow failed while executing '{scriptPath}' (exit code {result.ExitCode}).";
+        var detail = result.FailureMessage is string structuredFailure &&
+                     !string.IsNullOrWhiteSpace(structuredFailure)
+            ? structuredFailure
+            : result.StandardError;
 
-        if (string.IsNullOrWhiteSpace(message))
-            return $"Module release workflow failed while executing '{scriptPath}'.";
+        if (string.IsNullOrWhiteSpace(detail))
+            return heading + " See the captured module log for details.";
 
-        return $"Module release workflow failed while executing '{scriptPath}'.{Environment.NewLine}{message}";
+        return heading + Environment.NewLine + detail.Trim();
     }
 }
