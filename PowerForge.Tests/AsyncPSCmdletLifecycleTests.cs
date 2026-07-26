@@ -206,7 +206,7 @@ public sealed partial class AsyncPSCmdletTests
     }
 
     [Fact]
-    public void AsyncPSCmdlet_rejects_context_free_callbacks_after_their_hook_completes()
+    public void AsyncPSCmdlet_preserves_context_free_callbacks_while_their_output_is_pumped()
     {
         var sessionState = InitialSessionState.CreateDefault();
         sessionState.Commands.Add(new SessionStateCmdletEntry(
@@ -223,7 +223,10 @@ public sealed partial class AsyncPSCmdletTests
         var result = powerShell.Invoke();
 
         Assert.Equal("value", Assert.Single(result).BaseObject);
-        Assert.Empty(powerShell.Streams.Warning);
+        Assert.Equal(
+            "captured-during-enumeration",
+            Assert.Single(
+                powerShell.Streams.Warning).Message);
     }
 
     [Fact]
@@ -276,6 +279,97 @@ public sealed partial class AsyncPSCmdletTests
             ["outer", "tail"],
             result.Select(static item => item.BaseObject));
         Assert.True(TestAsyncDirectBarrierTailCommand.TailEnumeratedBeforeInteraction);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_drains_reentrant_records_before_direct_interactions()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncReentrantInteractionTail",
+            typeof(
+                TestAsyncReentrantInteractionTailCommand),
+            helpFileName: null));
+
+        using var runspace =
+            RunspaceFactory.CreateRunspace(
+                sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell
+            .AddCommand(
+                "Test-AsyncReentrantInteractionTail")
+            .AddParameter(
+                "Confirm",
+                false);
+        TestAsyncReentrantInteractionTailCommand
+            .Reset();
+
+        var result = powerShell.Invoke();
+
+        Assert.Equal(
+            ["tail", "outer"],
+            result.Select(
+                static item => item.BaseObject));
+        Assert.True(
+            TestAsyncReentrantInteractionTailCommand
+                .TailEnumeratedBeforeInteraction);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_clears_a_completed_pipe_before_a_recovery_write()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncFailureRecoveryWrite",
+            typeof(
+                TestAsyncFailureRecoveryWriteCommand),
+            helpFileName: null));
+
+        using var runspace =
+            RunspaceFactory.CreateRunspace(
+                sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand(
+            "Test-AsyncFailureRecoveryWrite");
+        TestAsyncFailureRecoveryWriteCommand
+            .Reset();
+
+        var result = powerShell.Invoke();
+
+        Assert.Empty(result);
+        Assert.True(
+            TestAsyncFailureRecoveryWriteCommand
+                .TransportClearedAfterFailure);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_uses_a_distinct_context_for_each_hook()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncHookContextIdentity",
+            typeof(
+                TestAsyncHookContextIdentityCommand),
+            helpFileName: null));
+
+        using var runspace =
+            RunspaceFactory.CreateRunspace(
+                sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand(
+            "Test-AsyncHookContextIdentity");
+
+        var result = powerShell.Invoke();
+
+        Assert.False(
+            (bool)Assert.Single(
+                result).BaseObject);
     }
 
     [Fact]
@@ -354,6 +448,51 @@ public sealed partial class AsyncPSCmdletTests
                 Convert.ChangeType(42, totalProperty.PropertyType, CultureInfo.InvariantCulture),
                 totalProperty.GetValue(captured));
         }
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_snapshots_captured_errors_before_queueing()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncCapturedErrorSnapshot",
+            typeof(TestAsyncCapturedErrorSnapshotCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncCapturedErrorSnapshot");
+
+        var result = powerShell.Invoke();
+
+        Assert.Equal("completed", Assert.Single(result).BaseObject);
+        var captured = Assert.Single(powerShell.Streams.Error);
+        Assert.Equal("original details", captured.ErrorDetails?.Message);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_preserves_causal_stream_records_before_enumerator_failure()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncEnumeratorFailure",
+            typeof(TestAsyncEnumeratorFailureCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncEnumeratorFailure");
+
+        var exception = Record.Exception(() => powerShell.Invoke());
+
+        Assert.NotNull(exception);
+        Assert.Equal(
+            "before enumeration failure",
+            Assert.Single(powerShell.Streams.Warning).Message);
     }
 
     [Fact]
@@ -500,10 +639,12 @@ public sealed partial class AsyncPSCmdletTests
         Assert.Throws<PipelineStoppedException>(() => powerShell.EndInvoke(invocation));
 
         TestAsyncLateProgressCommand.ReportAfterStop();
+        TestAsyncLateProgressCommand.WriteAfterStop();
 
         Assert.True(
             TestAsyncLateProgressCommand.CallbackCompleted.Wait(TimeSpan.FromSeconds(5)),
             "The posted progress callback did not complete in time.");
+        Assert.Null(TestAsyncLateProgressCommand.LateWriteException);
     }
 
     [Fact]
@@ -512,5 +653,15 @@ public sealed partial class AsyncPSCmdletTests
         using var command = new TestAsyncSynchronousStopCommand();
 
         Assert.Throws<PipelineStoppedException>(command.InvokeProcessRecord);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_does_not_invoke_a_hook_after_stop()
+    {
+        using var command = new TestAsyncStoppedBeforeHookCommand();
+        command.InvokeStopProcessing();
+
+        Assert.Throws<PipelineStoppedException>(command.InvokeProcessRecord);
+        Assert.False(command.HookInvoked);
     }
 }

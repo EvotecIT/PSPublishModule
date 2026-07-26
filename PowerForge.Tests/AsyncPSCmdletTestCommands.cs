@@ -475,6 +475,7 @@ public sealed class TestAsyncClaimedShouldContinueCommand : AsyncPSCmdlet
 
     public static ManualResetEventSlim ReplyObserved => _replyObserved;
     public static ManualResetEventSlim CancellationObserved => _cancellationObserved;
+    public static bool SideEffectStarted { get; private set; }
 
     public static void Reset()
     {
@@ -482,14 +483,22 @@ public sealed class TestAsyncClaimedShouldContinueCommand : AsyncPSCmdlet
         _cancellationObserved.Dispose();
         _replyObserved = new ManualResetEventSlim();
         _cancellationObserved = new ManualResetEventSlim();
+        SideEffectStarted = false;
     }
 
     protected override async Task ProcessRecordAsync()
     {
         await Task.Yield();
         _ = CancelToken.Register(_cancellationObserved.Set);
-        _ = ShouldContinue("Proceed?", "Question");
-        _replyObserved.Set();
+        try
+        {
+            _ = ShouldContinue("Proceed?", "Question");
+            SideEffectStarted = true;
+        }
+        finally
+        {
+            _replyObserved.Set();
+        }
     }
 }
 

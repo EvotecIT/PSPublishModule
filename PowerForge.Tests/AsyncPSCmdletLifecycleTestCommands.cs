@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Management.Automation;
 using System.Management.Automation.Host;
 using System.Management.Automation.Runspaces;
+using System.Reflection;
 using System.Security;
 using System.Threading;
 using System.Threading.Tasks;
@@ -232,6 +233,147 @@ public sealed class TestAsyncDirectBarrierTailCommand : AsyncPSCmdlet
     }
 }
 
+[Cmdlet(
+    VerbsDiagnostic.Test,
+    "AsyncReentrantInteractionTail",
+    SupportsShouldProcess = true)]
+public sealed class TestAsyncReentrantInteractionTailCommand : AsyncPSCmdlet
+{
+    private static int _tailEnumerated;
+
+    public static bool TailEnumeratedBeforeInteraction { get; private set; }
+
+    public static void Reset()
+    {
+        Volatile.Write(ref _tailEnumerated, 0);
+        TailEnumeratedBeforeInteraction = false;
+    }
+
+    protected override Task ProcessRecordAsync()
+    {
+        var streams =
+            CapturePipelineStreams();
+        Task.Run(
+                () => streams.WriteObject(
+                    new OuterEnumerable(this),
+                    enumerateCollection: true))
+            .GetAwaiter()
+            .GetResult();
+        return Task.CompletedTask;
+    }
+
+    private sealed class OuterEnumerable(
+        TestAsyncReentrantInteractionTailCommand command)
+        : IEnumerable<string>
+    {
+        public IEnumerator<string> GetEnumerator()
+        {
+            command.WriteObject(
+                new TailEnumerable(),
+                enumerateCollection: true);
+            _ = command.ShouldProcess(
+                "reentrant-target");
+            TailEnumeratedBeforeInteraction =
+                Volatile.Read(ref _tailEnumerated) != 0;
+            yield return "outer";
+        }
+
+        System.Collections.IEnumerator
+            System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
+    }
+
+    private sealed class TailEnumerable : IEnumerable<string>
+    {
+        public IEnumerator<string> GetEnumerator()
+        {
+            Volatile.Write(ref _tailEnumerated, 1);
+            yield return "tail";
+        }
+
+        System.Collections.IEnumerator
+            System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
+    }
+}
+
+[Cmdlet(
+    VerbsDiagnostic.Test,
+    "AsyncFailureRecoveryWrite")]
+public sealed class TestAsyncFailureRecoveryWriteCommand : AsyncPSCmdlet
+{
+    public static bool TransportClearedAfterFailure { get; private set; }
+
+    public static void Reset()
+        => TransportClearedAfterFailure = false;
+
+    protected override void ProcessRecord()
+    {
+        try
+        {
+            base.ProcessRecord();
+        }
+        catch (Exception)
+        {
+            TransportClearedAfterFailure =
+                typeof(AsyncPSCmdlet)
+                    .GetField(
+                        "_currentOutPipe",
+                        BindingFlags.Instance |
+                        BindingFlags.NonPublic)!
+                    .GetValue(this) is null;
+        }
+    }
+
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        WriteObject(
+            new FailingEnumerable(),
+            enumerateCollection: true);
+    }
+
+    private sealed class FailingEnumerable : IEnumerable<string>
+    {
+        public IEnumerator<string> GetEnumerator()
+        {
+            throw new InvalidOperationException(
+                "enumeration failed");
+#pragma warning disable CS0162
+            yield break;
+#pragma warning restore CS0162
+        }
+
+        System.Collections.IEnumerator
+            System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
+    }
+}
+
+[Cmdlet(
+    VerbsDiagnostic.Test,
+    "AsyncHookContextIdentity")]
+public sealed class TestAsyncHookContextIdentityCommand : AsyncPSCmdlet
+{
+    private SynchronizationContext? _beginContext;
+
+    protected override Task BeginProcessingAsync()
+    {
+        _beginContext =
+            SynchronizationContext.Current;
+        return Task.CompletedTask;
+    }
+
+    protected override Task ProcessRecordAsync()
+    {
+        WriteObject(
+            ReferenceEquals(
+                _beginContext,
+                SynchronizationContext.Current));
+        return Task.CompletedTask;
+    }
+}
+
 [Cmdlet(VerbsDiagnostic.Test, "AsyncEarlyShouldProcess", SupportsShouldProcess = true)]
 public sealed class TestAsyncEarlyShouldProcessCommand : AsyncPSCmdlet
 {
@@ -290,6 +432,62 @@ public sealed class TestAsyncProgressSnapshotCommand : AsyncPSCmdlet
                 Convert.ChangeType(99, totalProperty.PropertyType, CultureInfo.InvariantCulture));
         }
         WriteObject("completed");
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncCapturedErrorSnapshot")]
+public sealed class TestAsyncCapturedErrorSnapshotCommand : AsyncPSCmdlet
+{
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        var streams = CapturePipelineStreams();
+        WriteObject(new ErrorSnapshotEnumerable(streams), enumerateCollection: true);
+    }
+
+    private sealed class ErrorSnapshotEnumerable(CapturedPipelineStreams streams) : IEnumerable<string>
+    {
+        public IEnumerator<string> GetEnumerator()
+        {
+            var error = new ErrorRecord(
+                new InvalidOperationException("snapshot failure"),
+                "CapturedErrorSnapshot",
+                ErrorCategory.InvalidOperation,
+                targetObject: null)
+            {
+                ErrorDetails = new ErrorDetails("original details")
+            };
+            streams.WriteError(error);
+            error.ErrorDetails = new ErrorDetails("mutated details");
+            yield return "completed";
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncEnumeratorFailure")]
+public sealed class TestAsyncEnumeratorFailureCommand : AsyncPSCmdlet
+{
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        var streams = CapturePipelineStreams();
+        WriteObject(new FailingEnumerable(streams), enumerateCollection: true);
+    }
+
+    private sealed class FailingEnumerable(CapturedPipelineStreams streams) : IEnumerable<string>
+    {
+        public IEnumerator<string> GetEnumerator()
+        {
+            streams.WriteWarning("before enumeration failure");
+            yield return "first";
+            throw new InvalidOperationException("enumeration failed");
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
     }
 }
 
@@ -462,11 +660,14 @@ public sealed class TestAsyncLateProgressCommand : AsyncPSCmdlet
 {
     private static ManualResetEventSlim _callbackCompleted = new();
     private static ManualResetEventSlim _initialized = new();
+    private static TestAsyncLateProgressCommand? _instance;
     private static IProgress<int>? _progress;
 
     public static ManualResetEventSlim CallbackCompleted => _callbackCompleted;
 
     public static ManualResetEventSlim Initialized => _initialized;
+
+    public static Exception? LateWriteException { get; private set; }
 
     public static void Reset()
     {
@@ -474,14 +675,29 @@ public sealed class TestAsyncLateProgressCommand : AsyncPSCmdlet
         _initialized.Dispose();
         _callbackCompleted = new ManualResetEventSlim();
         _initialized = new ManualResetEventSlim();
+        _instance = null;
         _progress = null;
+        LateWriteException = null;
     }
 
     public static void ReportAfterStop()
         => _progress!.Report(50);
 
+    public static void WriteAfterStop()
+    {
+        try
+        {
+            _instance!.WriteWarning("after stop");
+        }
+        catch (Exception exception)
+        {
+            LateWriteException = exception;
+        }
+    }
+
     protected override async Task ProcessRecordAsync()
     {
+        _instance = this;
         _progress = new Progress<int>(percent =>
         {
             try
@@ -511,6 +727,24 @@ public sealed class TestAsyncSynchronousStopCommand : AsyncPSCmdlet
     {
         Dispose();
         throw new OperationCanceledException("stopped synchronously");
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncStoppedBeforeHook")]
+public sealed class TestAsyncStoppedBeforeHookCommand : AsyncPSCmdlet
+{
+    public bool HookInvoked { get; private set; }
+
+    public void InvokeProcessRecord()
+        => base.ProcessRecord();
+
+    public void InvokeStopProcessing()
+        => base.StopProcessing();
+
+    protected override Task ProcessRecordAsync()
+    {
+        HookInvoked = true;
+        return Task.CompletedTask;
     }
 }
 

@@ -527,6 +527,7 @@ public sealed partial class AsyncPSCmdletTests
         Assert.True(
             TestAsyncClaimedShouldContinueCommand.ReplyObserved.Wait(TimeSpan.FromSeconds(5)),
             "The claimed requester abandoned the host reply during cancellation.");
+        Assert.False(TestAsyncClaimedShouldContinueCommand.SideEffectStarted);
     }
 
     [Fact]
