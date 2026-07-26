@@ -25,6 +25,7 @@ public sealed class DotNetRepositoryReleaseSummaryService
                 IsPackable = project.IsPackable,
                 VersionDisplay = BuildVersionDisplay(project),
                 PackageCount = project.Packages.Count + project.SymbolPackages.Count,
+                PackageBuildDuration = project.PackageBuildDuration,
                 Status = ResolveStatus(project),
                 ErrorMessage = project.ErrorMessage?.Trim() ?? string.Empty,
                 ErrorPreview = TrimForSummary(project.ErrorMessage, maxErrorLength)

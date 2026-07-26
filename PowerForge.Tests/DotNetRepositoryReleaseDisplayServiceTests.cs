@@ -18,6 +18,7 @@ public sealed class DotNetRepositoryReleaseDisplayServiceTests
                     IsPackable = true,
                     VersionDisplay = "1.0.0 -> 1.0.1",
                     PackageCount = 2,
+                    PackageBuildDuration = TimeSpan.FromSeconds(12.5),
                     Status = DotNetRepositoryReleaseProjectStatus.Ok,
                     ErrorPreview = string.Empty
                 },
@@ -57,9 +58,11 @@ public sealed class DotNetRepositoryReleaseDisplayServiceTests
 
         Assert.Equal("Summary", display.Title);
         Assert.Equal("Yes", display.Projects[0].Packable);
+        Assert.Equal("12.5s", display.Projects[0].Duration);
         Assert.Equal("Ok", display.Projects[0].StatusText);
         Assert.Equal(ConsoleColor.Green, display.Projects[0].StatusColor);
         Assert.Equal("Skipped", display.Projects[1].StatusText);
+        Assert.Equal("-", display.Projects[1].Duration);
         Assert.Equal(ConsoleColor.Gray, display.Projects[1].StatusColor);
         Assert.Equal("Fail", display.Projects[2].StatusText);
         Assert.Equal(ConsoleColor.Red, display.Projects[2].StatusColor);

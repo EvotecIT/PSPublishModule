@@ -16,7 +16,7 @@ internal static class SpectreBuildProgressColumns
     public static ProgressColumn[] CreateStandard()
         =>
         [
-            new TaskDescriptionColumn { Alignment = Justify.Left },
+            new LeftMarkupDescriptionColumn(),
             new ProgressBarColumn
             {
                 CompletedStyle = new Style(Color.Green),
@@ -97,6 +97,16 @@ internal static class SpectreBuildProgressColumns
             try { text.Overflow = Overflow.Ellipsis; } catch { }
             return text;
         }
+    }
+
+    private sealed class LeftMarkupDescriptionColumn : ProgressColumn
+    {
+        public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
+            => new Markup(task.Description ?? string.Empty)
+            {
+                Justification = Justify.Left,
+                Overflow = Overflow.Ellipsis
+            };
     }
 
     private sealed class FixedElapsedColumn : ProgressColumn

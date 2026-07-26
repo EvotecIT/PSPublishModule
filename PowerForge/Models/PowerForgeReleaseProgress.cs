@@ -69,6 +69,9 @@ public sealed class PowerForgeReleaseProgressItem
 
     /// <summary>Maximum numeric progress for presentation hosts; zero when indeterminate.</summary>
     public double ProgressMaximum { get; set; }
+
+    /// <summary>Measured duration after the item reaches a terminal state.</summary>
+    public TimeSpan? Duration { get; set; }
 }
 
 /// <summary>

@@ -58,6 +58,32 @@ public sealed partial class DotNetRepositoryReleaseService
         return result.ExitCode;
     }
 
+    private static void MarkPackageSigningFailure(
+        IEnumerable<DotNetRepositoryProjectResult> projects,
+        IReadOnlyList<string> packagesToSign,
+        string signError)
+    {
+        var failedPackages = new HashSet<string>(
+            packagesToSign.Where(package => !string.IsNullOrWhiteSpace(package)),
+            StringComparer.OrdinalIgnoreCase);
+
+        if (failedPackages.Count == 0)
+            return;
+
+        var message = string.IsNullOrWhiteSpace(signError)
+            ? "Package signing failed."
+            : $"Package signing failed: {signError}";
+
+        foreach (var project in projects)
+        {
+            if (!string.IsNullOrWhiteSpace(project.ErrorMessage))
+                continue;
+
+            if (project.Packages.Concat(project.SymbolPackages).Any(package => failedPackages.Contains(package)))
+                project.ErrorMessage = message;
+        }
+    }
+
     private static string? GetCertificateSha256(string thumbprint, CertificateStoreLocation storeLocation)
     {
         try

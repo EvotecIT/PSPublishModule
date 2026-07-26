@@ -25,6 +25,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
         WriteHeader(spec, request, phases, phaseNames);
         PowerForgeReleaseResult? result = null;
         Exception? failure = null;
+        Reporter? reporter = null;
 
         SpectreProgressDisplay.Run(
             SpectreBuildProgressColumns.CreateStandard(),
@@ -33,7 +34,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 var tasks = phases.ToDictionary(
                     phase => phase,
                     phase => context.AddTask($"[grey]{Markup.Escape(phaseNames[phase])} — pending[/]", maxValue: 100, autoStart: false));
-                var reporter = new Reporter(context, tasks, phaseNames);
+                reporter = new Reporter(context, tasks, phaseNames);
                 try
                 {
                     result = run(reporter);
@@ -46,6 +47,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 }
             });
 
+        reporter?.WriteLedger();
         if (failure is not null)
             ExceptionDispatchInfo.Capture(failure).Throw();
         return result!;
@@ -193,9 +195,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
         private readonly IReadOnlyDictionary<PowerForgeReleaseProgressPhase, ProgressTask> _tasks;
         private readonly IReadOnlyDictionary<PowerForgeReleaseProgressPhase, string> _phaseNames;
         private readonly HashSet<PowerForgeReleaseProgressPhase> _failed = new();
-        private readonly Dictionary<string, ProgressTask> _itemTasks = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, PowerForgeReleaseProgressItem> _items = new(StringComparer.OrdinalIgnoreCase);
-        private readonly object _sync = new();
+        private readonly SpectreBoundedProgressLedger _ledger;
 
         public Reporter(
             ProgressContext context,
@@ -205,6 +205,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             _context = context;
             _tasks = tasks;
             _phaseNames = phaseNames;
+            _ledger = new SpectreBoundedProgressLedger(context);
         }
 
         public void PhaseStarted(PowerForgeReleaseProgressPhase phase, int totalItems, string? detail = null)
@@ -241,24 +242,9 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             if (items is null || items.Count == 0)
                 return;
 
-            lock (_sync)
-            {
-                foreach (var item in items)
-                {
-                    if (item is null)
-                        continue;
-
-                    var key = ItemKey(item);
-                    if (_itemTasks.ContainsKey(key))
-                        continue;
-
-                    _items[key] = item;
-                    _itemTasks[key] = _context.AddTask(
-                        BuildItemLabel(item, PowerForgeReleaseProgressItemState.Planned, null),
-                        maxValue: 1,
-                        autoStart: false);
-                }
-            }
+            _ledger.Plan(items
+                .Where(item => item is not null)
+                .Select(ToLedgerItem));
 
             if (_tasks.TryGetValue(phase, out var phaseTask))
                 phaseTask.Description = Label(phase, $"{CountItems(phase)} detailed step(s)", "cyan");
@@ -272,46 +258,17 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             if (item is null)
                 return;
 
-            ProgressTask task;
-            lock (_sync)
-            {
-                var key = ItemKey(item);
-                if (!_itemTasks.TryGetValue(key, out task!))
+            _ledger.Update(
+                ToLedgerItem(item),
+                state switch
                 {
-                    _items[key] = item;
-                    task = _context.AddTask(
-                        BuildItemLabel(item, PowerForgeReleaseProgressItemState.Planned, null),
-                        maxValue: 1,
-                        autoStart: false);
-                    _itemTasks[key] = task;
-                }
-            }
-
-            task.Description = BuildItemLabel(item, state, detail);
-            switch (state)
-            {
-                case PowerForgeReleaseProgressItemState.Started:
-                    if (!task.IsStarted) task.StartTask();
-                    if (item.ProgressMaximum > 0)
-                    {
-                        task.IsIndeterminate = false;
-                        task.Value = task.MaxValue *
-                                     Math.Min(1d, Math.Max(0d, item.ProgressValue / item.ProgressMaximum));
-                    }
-                    else
-                    {
-                        task.IsIndeterminate = true;
-                    }
-                    break;
-                case PowerForgeReleaseProgressItemState.Completed:
-                case PowerForgeReleaseProgressItemState.Failed:
-                case PowerForgeReleaseProgressItemState.Skipped:
-                    if (!task.IsStarted) task.StartTask();
-                    task.IsIndeterminate = false;
-                    task.Value = task.MaxValue;
-                    task.StopTask();
-                    break;
-            }
+                    PowerForgeReleaseProgressItemState.Started => SpectreProgressLedgerState.Started,
+                    PowerForgeReleaseProgressItemState.Completed => SpectreProgressLedgerState.Completed,
+                    PowerForgeReleaseProgressItemState.Failed => SpectreProgressLedgerState.Failed,
+                    PowerForgeReleaseProgressItemState.Skipped => SpectreProgressLedgerState.Skipped,
+                    _ => SpectreProgressLedgerState.Planned
+                },
+                detail);
 
             UpdatePhaseProgress(item.Phase);
         }
@@ -333,23 +290,16 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 entry.Value.StopTask();
             }
 
-            lock (_sync)
-            {
-                foreach (var entry in _itemTasks)
-                {
-                    var task = entry.Value;
-                    if (task.IsFinished) continue;
-                    var item = _items[entry.Key];
-                    var state = task.IsStarted && !success
-                        ? PowerForgeReleaseProgressItemState.Failed
-                        : PowerForgeReleaseProgressItemState.Skipped;
-                    ItemUpdated(
-                        item,
-                        state,
-                        success ? "not required" : "skipped after failure");
-                }
-            }
+            _ledger.FinishRemaining(success);
+            _ledger.ClearLiveTasks();
+            _context.Refresh();
         }
+
+        public void WriteLedger()
+            => SpectreBoundedProgressLedger.WriteLedger(
+                AnsiConsole.Console,
+                _ledger.GetSnapshots(),
+                "Unified release details");
 
         private string Label(PowerForgeReleaseProgressPhase phase, string? detail, string color, string? status = null)
         {
@@ -367,76 +317,30 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 return;
             }
 
-            lock (_sync)
-            {
-                var tasks = _items
-                    .Where(entry => entry.Value.Phase == phase)
-                    .Select(entry => _itemTasks[entry.Key])
-                    .ToArray();
-                if (tasks.Length == 0)
-                    return;
+            if (_ledger.GetItemCount(phase.ToString()) == 0)
+                return;
 
-                var completed = tasks.Sum(task =>
-                    task.MaxValue <= 0 ? 0 : Math.Min(1d, Math.Max(0d, task.Value / task.MaxValue)));
-                phaseTask.Value = Math.Max(5d, Math.Min(99d, completed / tasks.Length * 100d));
-            }
+            var completed = _ledger.GetCompletionRatio(phase.ToString());
+            phaseTask.Value = Math.Max(5d, Math.Min(99d, completed * 100d));
         }
 
         private int CountItems(PowerForgeReleaseProgressPhase phase)
-        {
-            lock (_sync)
-                return _items.Values.Count(item => item.Phase == phase);
-        }
+            => _ledger.GetItemCount(phase.ToString());
 
-        private static string ItemKey(PowerForgeReleaseProgressItem item)
-            => $"{item.Phase}:{item.Key}";
-
-        private static string BuildItemLabel(
-            PowerForgeReleaseProgressItem item,
-            PowerForgeReleaseProgressItemState state,
-            string? detail)
-        {
-            var ordinal = item.Position > 0 && item.Total > 0
-                ? $"{item.Position:00}/{item.Total:00} "
-                : string.Empty;
-            var status = GetItemIcon(item, state) + " ";
-            var color = state switch
+        private SpectreProgressLedgerItem ToLedgerItem(PowerForgeReleaseProgressItem item)
+            => new()
             {
-                PowerForgeReleaseProgressItemState.Started => "cyan",
-                PowerForgeReleaseProgressItemState.Completed => "green",
-                PowerForgeReleaseProgressItemState.Failed => "red",
-                _ => "grey"
+                Key = $"{item.Phase}:{item.Key}",
+                GroupKey = item.Phase.ToString(),
+                GroupTitle = _phaseNames[item.Phase],
+                GroupOrder = (int)item.Phase,
+                Title = item.Title,
+                Kind = item.Kind,
+                Position = item.Position,
+                Total = item.Total,
+                ProgressValue = item.ProgressValue,
+                ProgressMaximum = item.ProgressMaximum,
+                Duration = item.Duration
             };
-            var suffix = string.IsNullOrWhiteSpace(detail) ? string.Empty : $" — {detail}";
-            return $"[{color}]{Markup.Escape($"  {status}{ordinal}{item.Title}{suffix}")}[/]";
-        }
-
-        private static string GetItemIcon(
-            PowerForgeReleaseProgressItem item,
-            PowerForgeReleaseProgressItemState state)
-        {
-            var unicode = ConsoleEncoding.ShouldRenderUnicode(AnsiConsole.Profile.Capabilities.Unicode);
-            if (state == PowerForgeReleaseProgressItemState.Completed) return unicode ? "✓" : "+";
-            if (state == PowerForgeReleaseProgressItemState.Failed) return "x";
-            if (state == PowerForgeReleaseProgressItemState.Skipped) return "–";
-            if (!unicode) return "·";
-
-            return item.Kind switch
-            {
-                nameof(ModulePipelineStepKind.Build) => "🔨",
-                nameof(ModulePipelineStepKind.Documentation) => "📝",
-                nameof(ModulePipelineStepKind.Formatting) => "🎨",
-                nameof(ModulePipelineStepKind.Signing) => "🔏",
-                nameof(ModulePipelineStepKind.Validation) => "🔎",
-                nameof(ModulePipelineStepKind.Tests) => "🧪",
-                nameof(ModulePipelineStepKind.Artefact) => "📦",
-                nameof(ModulePipelineStepKind.Install) => "📥",
-                nameof(ModulePipelineStepKind.Cleanup) => "🧹",
-                nameof(ProjectBuildProgressPhase.NuGetPublish) => "🚀",
-                nameof(ProjectBuildProgressPhase.PackageSigning) => "🔏",
-                "ToolPublish" => "🚀",
-                _ => "•"
-            };
-        }
     }
 }

@@ -20,6 +20,9 @@ internal sealed class DotNetRepositoryReleaseDisplayService
                 Packable = project.IsPackable ? "Yes" : "No",
                 VersionDisplay = project.VersionDisplay,
                 PackageCount = project.PackageCount.ToString(),
+                Duration = project.PackageBuildDuration > TimeSpan.Zero
+                    ? DotNetRepositoryReleaseService.FormatDuration(project.PackageBuildDuration)
+                    : "-",
                 StatusText = ResolveStatusText(project.Status),
                 StatusColor = ResolveStatusColor(project.Status),
                 ErrorPreview = project.ErrorPreview

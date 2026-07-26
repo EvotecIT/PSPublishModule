@@ -27,23 +27,32 @@ internal static class SpectreProjectBuildConsoleUi
     public static ProjectBuildWorkflowResult RunInteractive(
         ProjectBuildConsolePlan plan,
         Func<IProjectBuildProgressReporter, ProjectBuildWorkflowResult> run)
+        => RunInteractive(AnsiConsole.Console, plan, run);
+
+    internal static ProjectBuildWorkflowResult RunInteractive(
+        IAnsiConsole console,
+        ProjectBuildConsolePlan plan,
+        Func<IProjectBuildProgressReporter, ProjectBuildWorkflowResult> run)
     {
+        if (console is null) throw new ArgumentNullException(nameof(console));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (run is null) throw new ArgumentNullException(nameof(run));
 
-        WriteHeader(plan);
+        WriteHeader(console, plan);
         var phases = ResolvePhases(plan);
         ProjectBuildWorkflowResult? result = null;
         Exception? failure = null;
+        SpectreProjectBuildProgressReporter? reporter = null;
 
         SpectreProgressDisplay.Run(
+            console,
             SpectreBuildProgressColumns.CreateStandard(),
             context =>
             {
                 var tasks = phases.ToDictionary(
                     phase => phase,
                     phase => context.AddTask(BuildPendingLabel(phase), maxValue: 100, autoStart: false));
-                var reporter = new SpectreProjectBuildProgressReporter(tasks);
+                reporter = new SpectreProjectBuildProgressReporter(context, tasks);
 
                 try
                 {
@@ -58,7 +67,10 @@ internal static class SpectreProjectBuildConsoleUi
             });
 
         if (failure is not null)
+        {
+            reporter?.WriteLedger(console);
             ExceptionDispatchInfo.Capture(failure).Throw();
+        }
 
         return result!;
     }
@@ -76,12 +88,12 @@ internal static class SpectreProjectBuildConsoleUi
         return phases.ToArray();
     }
 
-    private static void WriteHeader(ProjectBuildConsolePlan plan)
+    private static void WriteHeader(IAnsiConsole console, ProjectBuildConsolePlan plan)
     {
         static string Esc(string? value) => Markup.Escape(value ?? string.Empty);
-        var unicode = ConsoleEncoding.ShouldRenderUnicode(AnsiConsole.Profile.Capabilities.Unicode);
+        var unicode = ConsoleEncoding.ShouldRenderUnicode(console.Profile.Capabilities.Unicode);
         var title = unicode ? "🛠️ PowerForge • Project build" : "PowerForge • Project build";
-        AnsiConsole.Write(new Rule($"[yellow bold underline]{Esc(title)}[/]") { Justification = Justify.Left });
+        console.Write(new Rule($"[yellow bold underline]{Esc(title)}[/]") { Justification = Justify.Left });
 
         var actions = new List<string>();
         if (plan.UpdateVersions) actions.Add("versions");
@@ -102,8 +114,8 @@ internal static class SpectreProjectBuildConsoleUi
         if (!string.IsNullOrWhiteSpace(plan.StagingPath)) table.AddRow("[grey]Staging[/]", Esc(plan.StagingPath));
         if (!string.IsNullOrWhiteSpace(plan.OutputPath)) table.AddRow("[grey]Packages[/]", Esc(plan.OutputPath));
         if (!string.IsNullOrWhiteSpace(plan.PlanOutputPath)) table.AddRow("[grey]Plan file[/]", Esc(plan.PlanOutputPath));
-        AnsiConsole.Write(table);
-        AnsiConsole.WriteLine();
+        console.Write(table);
+        console.WriteLine();
     }
 
     private static string BuildPendingLabel(ProjectBuildProgressPhase phase)
@@ -121,13 +133,21 @@ internal static class SpectreProjectBuildConsoleUi
             _ => phase.ToString()
         };
 
-    private sealed class SpectreProjectBuildProgressReporter : IProjectBuildProgressReporter
+    private sealed class SpectreProjectBuildProgressReporter : IProjectBuildProgressReporterV2
     {
+        private readonly ProgressContext _context;
         private readonly IReadOnlyDictionary<ProjectBuildProgressPhase, ProgressTask> _tasks;
         private readonly HashSet<ProjectBuildProgressPhase> _failed = new();
+        private readonly SpectreBoundedProgressLedger _ledger;
 
-        public SpectreProjectBuildProgressReporter(IReadOnlyDictionary<ProjectBuildProgressPhase, ProgressTask> tasks)
-            => _tasks = tasks;
+        public SpectreProjectBuildProgressReporter(
+            ProgressContext context,
+            IReadOnlyDictionary<ProjectBuildProgressPhase, ProgressTask> tasks)
+        {
+            _context = context;
+            _tasks = tasks;
+            _ledger = new SpectreBoundedProgressLedger(context);
+        }
 
         public void PhaseStarted(ProjectBuildProgressPhase phase, int totalItems, string? detail = null)
         {
@@ -165,6 +185,27 @@ internal static class SpectreProjectBuildConsoleUi
             task.StopTask();
         }
 
+        public void ItemsPlanned(
+            ProjectBuildProgressPhase phase,
+            IReadOnlyList<ProjectBuildProgressItem> items)
+            => _ledger.Plan(items.Select(item => ToLedgerItem(item)));
+
+        public void ItemUpdated(
+            ProjectBuildProgressItem item,
+            ProjectBuildProgressItemState state,
+            string? detail = null)
+            => _ledger.Update(
+                ToLedgerItem(item),
+                state switch
+                {
+                    ProjectBuildProgressItemState.Started => SpectreProgressLedgerState.Started,
+                    ProjectBuildProgressItemState.Completed => SpectreProgressLedgerState.Completed,
+                    ProjectBuildProgressItemState.Failed => SpectreProgressLedgerState.Failed,
+                    ProjectBuildProgressItemState.Skipped => SpectreProgressLedgerState.Skipped,
+                    _ => SpectreProgressLedgerState.Planned
+                },
+                detail);
+
         public void FinishRemaining(bool success)
         {
             foreach (var entry in _tasks)
@@ -183,7 +224,31 @@ internal static class SpectreProjectBuildConsoleUi
                 task.Value = 100;
                 task.StopTask();
             }
+
+            _ledger.FinishRemaining(success);
+            _ledger.ClearLiveTasks();
+            _context.Refresh();
         }
+
+        public void WriteLedger(IAnsiConsole console)
+            => SpectreBoundedProgressLedger.WriteLedger(
+                console,
+                _ledger.GetSnapshots(),
+                "Project build details");
+
+        private static SpectreProgressLedgerItem ToLedgerItem(ProjectBuildProgressItem item)
+            => new()
+            {
+                Key = $"{item.Phase}:{item.Key}",
+                GroupKey = item.Phase.ToString(),
+                GroupTitle = GetPhaseName(item.Phase),
+                GroupOrder = (int)item.Phase,
+                Title = item.Title,
+                Kind = item.Kind,
+                Position = item.Position,
+                Total = item.Total,
+                Duration = item.Duration
+            };
 
         private static string BuildLabel(
             ProjectBuildProgressPhase phase,

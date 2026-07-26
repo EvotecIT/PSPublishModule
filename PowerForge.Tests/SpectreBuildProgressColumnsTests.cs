@@ -13,11 +13,7 @@ public sealed class SpectreBuildProgressColumnsTests
 
         Assert.Collection(
             columns,
-            column =>
-            {
-                var description = Assert.IsType<TaskDescriptionColumn>(column);
-                Assert.Equal(Justify.Left, description.Alignment);
-            },
+            column => Assert.Equal("LeftMarkupDescriptionColumn", column.GetType().Name),
             column => Assert.IsType<ProgressBarColumn>(column),
             column => Assert.IsType<PercentageColumn>(column),
             column => Assert.IsType<ElapsedTimeColumn>(column),

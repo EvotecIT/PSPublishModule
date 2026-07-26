@@ -9,6 +9,49 @@ namespace PowerForge;
 
 public sealed partial class DotNetRepositoryReleaseService
 {
+    private static DotNetRepositoryProjectResult[] PrepareMsBuildBatchCandidates(
+        IReadOnlyList<DotNetRepositoryProjectResult> projects,
+        ILogger logger)
+    {
+        var candidates = projects
+            .Where(project =>
+                string.IsNullOrWhiteSpace(project.ErrorMessage) &&
+                !string.IsNullOrWhiteSpace(project.NewVersion))
+            .ToArray();
+        var missingVersions = projects
+            .Where(project =>
+                string.IsNullOrWhiteSpace(project.ErrorMessage) &&
+                string.IsNullOrWhiteSpace(project.NewVersion))
+            .ToArray();
+        if (missingVersions.Length == 0)
+            return candidates;
+
+        var names = string.Join(", ", missingVersions.Select(project => project.ProjectName));
+        logger.Warn($"MSBuild batch pack excluded {missingVersions.Length} project(s) without a resolved version; they will be skipped during pack: {names}");
+        foreach (var project in missingVersions)
+            project.ErrorMessage = "No resolved version; skipping pack.";
+        return candidates;
+    }
+
+    private static DotNetPackResult PackProjectsWithMsBuildAndTrackProgress(
+        IReadOnlyList<DotNetRepositoryProjectResult> projects,
+        DotNetRepositoryReleaseSpec spec,
+        ILogger logger,
+        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies,
+        IReadOnlyDictionary<DotNetRepositoryProjectResult, ProjectBuildProgressItem> items,
+        IReadOnlyDictionary<DotNetRepositoryProjectResult, Stopwatch> watches,
+        IProjectBuildProgressReporterV2? detailedProgress)
+    {
+        try
+        {
+            return PackProjectsWithMsBuild(projects, spec, logger, signAssemblies);
+        }
+        finally
+        {
+            PauseMsBuildBatchProgress(projects, items, watches, detailedProgress);
+        }
+    }
+
     private static DotNetPackResult PackProjectsWithMsBuild(
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         DotNetRepositoryReleaseSpec spec,

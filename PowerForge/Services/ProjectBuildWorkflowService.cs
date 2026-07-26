@@ -49,6 +49,10 @@ internal sealed class ProjectBuildWorkflowService
         if (preparation is null)
             throw new ArgumentNullException(nameof(preparation));
 
+        using var operationLock = executeBuild && !preparation.PlanOnly
+            ? ProjectBuildOperationLock.Acquire(preparation)
+            : null;
+
         var spec = preparation.Spec ?? throw new ArgumentException("Prepared spec is required.", nameof(preparation));
         spec.WhatIf = true;
         progress?.PhaseStarted(ProjectBuildProgressPhase.Plan, 1, "Discovering projects and resolving versions");

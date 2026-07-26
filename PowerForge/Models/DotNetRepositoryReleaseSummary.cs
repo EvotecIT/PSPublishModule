@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace PowerForge;
@@ -43,6 +44,11 @@ public sealed class DotNetRepositoryReleaseProjectSummaryRow
     /// Gets or sets the number of produced packages.
     /// </summary>
     public int PackageCount { get; set; }
+
+    /// <summary>
+    /// Gets or sets the measured package/archive build duration.
+    /// </summary>
+    public TimeSpan PackageBuildDuration { get; set; }
 
     /// <summary>
     /// Gets or sets the status classification used for summary rendering.
