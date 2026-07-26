@@ -260,6 +260,7 @@ public sealed class AsyncPSCmdletTests
 
         Assert.False(powerShell.HadErrors, string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
         Assert.IsType<InvalidOperationException>(TestAsyncStaleInteractionCommand.StaleInteractionException);
+        Assert.DoesNotContain(powerShell.Streams.Warning, static warning => warning.Message == "stale-warning");
     }
 
     [Fact]

@@ -217,6 +217,7 @@ public sealed class TestAsyncStaleInteractionCommand : AsyncPSCmdlet
                     "The second lifecycle did not start in time.");
                 try
                 {
+                    WriteWarning("stale-warning");
                     _ = ShouldProcess("stale-target");
                 }
                 catch (Exception exception)
