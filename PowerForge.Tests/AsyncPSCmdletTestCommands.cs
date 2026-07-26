@@ -935,6 +935,71 @@ public sealed class TestAsyncDirectPipelineStopCommand : AsyncPSCmdlet
     }
 }
 
+[Cmdlet(VerbsDiagnostic.Test, "AsyncSuccessfulCompletion")]
+public sealed class TestAsyncSuccessfulCompletionCommand : AsyncPSCmdlet
+{
+    private static ManualResetEventSlim _cancellationObserved = new();
+
+    public static ManualResetEventSlim CancellationObserved => _cancellationObserved;
+
+    public static void Reset()
+    {
+        _cancellationObserved.Dispose();
+        _cancellationObserved = new ManualResetEventSlim();
+    }
+
+    protected override async Task ProcessRecordAsync()
+    {
+        _ = CancelToken.Register(_cancellationObserved.Set);
+        await Task.Yield();
+        WriteObject("completed");
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncLateProgress")]
+public sealed class TestAsyncLateProgressCommand : AsyncPSCmdlet
+{
+    private static ManualResetEventSlim _callbackCompleted = new();
+    private static ManualResetEventSlim _initialized = new();
+    private static IProgress<int>? _progress;
+
+    public static ManualResetEventSlim CallbackCompleted => _callbackCompleted;
+
+    public static ManualResetEventSlim Initialized => _initialized;
+
+    public static void Reset()
+    {
+        _callbackCompleted.Dispose();
+        _initialized.Dispose();
+        _callbackCompleted = new ManualResetEventSlim();
+        _initialized = new ManualResetEventSlim();
+        _progress = null;
+    }
+
+    public static void ReportAfterStop()
+        => _progress!.Report(50);
+
+    protected override async Task ProcessRecordAsync()
+    {
+        _progress = new Progress<int>(percent =>
+        {
+            try
+            {
+                WriteProgress(new ProgressRecord(1, "late", "after stop")
+                {
+                    PercentComplete = percent
+                });
+            }
+            finally
+            {
+                _callbackCompleted.Set();
+            }
+        });
+        _initialized.Set();
+        await Task.Delay(Timeout.InfiniteTimeSpan, CancelToken);
+    }
+}
+
 [Cmdlet(VerbsDiagnostic.Test, "AsyncSynchronousStop")]
 public sealed class TestAsyncSynchronousStopCommand : AsyncPSCmdlet
 {

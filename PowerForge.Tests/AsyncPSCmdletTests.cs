@@ -920,6 +920,58 @@ public sealed class AsyncPSCmdletTests
     }
 
     [Fact]
+    public void AsyncPSCmdlet_does_not_cancel_after_successful_async_completion()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncSuccessfulCompletion",
+            typeof(TestAsyncSuccessfulCompletionCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncSuccessfulCompletion");
+        TestAsyncSuccessfulCompletionCommand.Reset();
+
+        var result = powerShell.Invoke();
+
+        Assert.Equal("completed", Assert.Single(result).BaseObject);
+        Assert.False(TestAsyncSuccessfulCompletionCommand.CancellationObserved.IsSet);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_suppresses_pipeline_stop_from_posted_progress_callbacks()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncLateProgress",
+            typeof(TestAsyncLateProgressCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncLateProgress");
+        TestAsyncLateProgressCommand.Reset();
+
+        var invocation = powerShell.BeginInvoke();
+        Assert.True(
+            TestAsyncLateProgressCommand.Initialized.Wait(TimeSpan.FromSeconds(5)),
+            "The progress callback was not initialized in time.");
+        powerShell.Stop();
+        Assert.Throws<PipelineStoppedException>(() => powerShell.EndInvoke(invocation));
+
+        TestAsyncLateProgressCommand.ReportAfterStop();
+
+        Assert.True(
+            TestAsyncLateProgressCommand.CallbackCompleted.Wait(TimeSpan.FromSeconds(5)),
+            "The posted progress callback did not complete in time.");
+    }
+
+    [Fact]
     public void AsyncPSCmdlet_normalizes_synchronous_cancellation_after_stop()
     {
         using var command = new TestAsyncSynchronousStopCommand();
