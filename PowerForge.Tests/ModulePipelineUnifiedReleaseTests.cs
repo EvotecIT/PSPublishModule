@@ -552,6 +552,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
             string? capturedFloor = null;
             string? capturedProject = null;
+            bool? capturedRepositoryVerification = null;
             var runner = new ModulePipelineRunner(
                 new NullLogger(),
                 powerShellRunner: null,
@@ -588,6 +589,17 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                             Release = release
                         }
                     };
+                },
+                gitHubReleasePublisher: null,
+                moduleVersionStepResolver: (expectedVersion, _, _, _, verifyRepositoryAvailability) =>
+                {
+                    capturedRepositoryVerification = verifyRepositoryAvailability;
+                    return new ModuleVersionStepResult(
+                        expectedVersion,
+                        coordinatedVersion,
+                        "2.1.6",
+                        ModuleVersionSource.Repository,
+                        usedAutoVersioning: true);
                 });
 
             var result = runner.Run(new ModulePipelineSpec
@@ -602,6 +614,13 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 Install = new ModulePipelineInstallOptions { Enabled = false },
                 Segments = new IConfigurationSegment[]
                 {
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Publish
+                        }
+                    },
                     new ConfigurationBuildSegment
                     {
                         BuildModule = new BuildModuleConfiguration { LocalVersion = true }
@@ -631,6 +650,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.Equal(coordinatedVersion, capturedFloor);
             Assert.Equal(moduleName, capturedProject);
             Assert.Equal(coordinatedVersion, result.Plan.ResolvedVersion);
+            Assert.True(capturedRepositoryVerification);
         }
         finally
         {

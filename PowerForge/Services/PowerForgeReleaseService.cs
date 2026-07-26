@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -12,6 +13,9 @@ internal sealed partial class PowerForgeReleaseService
 {
     private static readonly JsonSerializerOptions DotNetToolsJsonOptions = CreateJsonOptions();
     private static readonly JsonSerializerOptions WorkspaceValidationJsonOptions = CreateJsonOptions();
+    private static readonly Regex AnsiEscapeSequence = new(
+        @"\x1B\[[0-?]*[ -/]*[@-~]",
+        RegexOptions.Compiled);
 
     private const string DefaultDotNetTargetOutputTemplate =
         "Artifacts/DotNetPublish/{target}/{rid}/{framework}/{style}";
@@ -4871,11 +4875,38 @@ internal sealed partial class PowerForgeReleaseService
         var detail = result.FailureMessage is string structuredFailure &&
                      !string.IsNullOrWhiteSpace(structuredFailure)
             ? structuredFailure
-            : result.StandardError;
+            : !string.IsNullOrWhiteSpace(result.StandardError)
+                ? result.StandardError
+                : NormalizeModuleFailureOutput(result.StandardOutput);
 
         if (string.IsNullOrWhiteSpace(detail))
             return heading + " See the captured module log for details.";
 
-        return heading + Environment.NewLine + detail.Trim();
+        return heading + Environment.NewLine + detail!.Trim();
+    }
+
+    private static string? NormalizeModuleFailureOutput(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+            return null;
+
+        var plain = AnsiEscapeSequence
+            .Replace(output, string.Empty)
+            .Replace("\r\n", "\n")
+            .Replace('\r', '\n');
+        var normalized = string.Join(
+            Environment.NewLine,
+            plain.Split('\n')
+                .Select(static line => line.Trim())
+                .Where(static line => line.Length > 0));
+
+        if (normalized.Length == 0)
+            return null;
+
+        const int maxCharacters = 4_000;
+        if (normalized.Length <= maxCharacters)
+            return normalized;
+
+        return "…" + normalized.Substring(normalized.Length - (maxCharacters - 1));
     }
 }

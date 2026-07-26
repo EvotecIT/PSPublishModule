@@ -619,8 +619,12 @@ public sealed partial class ModulePipelineRunner
         else
         {
             var localPsd1 = localVersioning ? Path.Combine(projectRoot, $"{moduleName}.psd1") : null;
-            var stepper = new ModuleVersionStepper(_logger);
-            resolved = stepper.Step(expectedVersionResolved, moduleName, localPsd1Path: localPsd1).Version;
+            resolved = _moduleVersionStepResolver(
+                expectedVersionResolved,
+                moduleName,
+                localPsd1,
+                prerelease: !string.IsNullOrWhiteSpace(preRelease),
+                verifyRepositoryAvailability: gateMode == ConfigurationGateMode.Publish).Version;
         }
 
         // Resolve .csproj path: explicit build setting wins, otherwise derive from BuildLibraries NETProjectPath/ProjectName.

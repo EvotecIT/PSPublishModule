@@ -144,6 +144,23 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void BuildModuleFailureMessage_UsesBoundedStdoutTailWhenStructuredFailureIsUnavailable()
+    {
+        var message = PowerForgeReleaseService.BuildModuleFailureMessage(
+            @"C:\repo\powerforge.json",
+            new ModuleBuildHostExecutionResult
+            {
+                ExitCode = 1,
+                StandardOutput = "\u001b[31m" + new string('x', 5_000) + "\u001b[0m\r\nActual module failure"
+            });
+
+        Assert.Contains("Actual module failure", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("\u001b[31m", message, StringComparison.Ordinal);
+        Assert.DoesNotContain(new string('x', 5_000), message, StringComparison.Ordinal);
+        Assert.InRange(message.Length, 1, 4_200);
+    }
+
+    [Fact]
     public void Execute_deferred_json_module_publish_reuses_and_cleans_staging_directory()
     {
         var root = CreateSandbox();
