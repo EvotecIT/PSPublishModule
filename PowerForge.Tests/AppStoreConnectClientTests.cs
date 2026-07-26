@@ -61,6 +61,22 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task FindAppsAsync_MapsWatchArchivePlatformToIosStorePlatform()
+    {
+        var handler = new RecordingHandler("""{ "data": [] }""");
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        await client.FindAppsAsync(bundleId: "com.example.WatchOnly", platform: ApplePlatform.watchOS);
+
+        Assert.Contains(
+            "filter%5BappStoreVersions.platform%5D=IOS",
+            handler.RequestUris[0].Query,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("WATCH_OS", handler.RequestUris[0].Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GetAppAsync_ReturnsNullForMissingApp()
     {
         var handler = new RecordingHandler("{}", HttpStatusCode.NotFound);
