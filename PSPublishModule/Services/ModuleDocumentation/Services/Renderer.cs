@@ -265,7 +265,7 @@ internal sealed class Renderer
     public string RenderInlines(InlineSequence inlines)
     {
         var sb = new System.Text.StringBuilder();
-        foreach (var part in inlines.Items.Select(RenderInline))
+        foreach (var part in inlines.Nodes.Select(RenderInline))
         {
             if (part != null) sb.Append(part);
         }

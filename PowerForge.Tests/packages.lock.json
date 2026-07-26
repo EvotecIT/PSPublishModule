@@ -83,16 +83,16 @@
       },
       "HtmlForgeX": {
         "type": "Transitive",
-        "resolved": "0.50.0",
-        "contentHash": "5ZsrNDDjEihdAtoMg0lPgW3kDLpbhCTKOr16lb4kxiSW9k4COJdDAVBFzHk3xrWFCl8/LKosLm1GeH3hx7GGAw=="
+        "resolved": "0.53.0",
+        "contentHash": "9lkx+cSv8wW8/uY3QiWmPdsOyynvlqAp7R+aD92LLfnlfOYHhB/XCKnLYtBdXcn0qKRqc0z4FpLNUTyCANMOvw=="
       },
       "HtmlForgeX.Markdown": {
         "type": "Transitive",
-        "resolved": "0.21.0",
-        "contentHash": "6zT2EM6lf7/R7jQh+iONeVIBX+ImJK1edeLENMXoh/WPFpHECK8wYsMuaj7msvjopY4+2H8Ahqrv2ODMjuamMA==",
+        "resolved": "0.53.0",
+        "contentHash": "oAYqpJhly53PThJkCCaIezY1aqDEuccpbUvMbGe7x+sD+oJsUPjpGUgJ+hS63BYIxk9EyzJATkBi0w91EMo/bA==",
         "dependencies": {
-          "HtmlForgeX": "0.50.0",
-          "OfficeIMO.Markdown": "0.6.42"
+          "HtmlForgeX": "0.53.0",
+          "OfficeIMO.Markdown": "3.0.2"
         }
       },
       "HtmlTinkerX": {
@@ -455,10 +455,18 @@
         "resolved": "1.21.17",
         "contentHash": "K2ywYpoPEvU3+Ooq6wxz+FJOkmbDeoE41q/sJZWv9tI7qbTmH2A5R0E4hWzruvl/9pnUhqwbu1mxT06C45D0ZQ=="
       },
+      "OfficeIMO.Drawing": {
+        "type": "Transitive",
+        "resolved": "3.0.2",
+        "contentHash": "QRk5Gqc7ID9knhroFpmzcY/qacHcJJLlErvW2ZDll7mIoSuY8z8NRHeY/JicSPjQDuM1Dgu7tLRMp+lT6gZR5Q=="
+      },
       "OfficeIMO.Markdown": {
         "type": "Transitive",
-        "resolved": "0.6.42",
-        "contentHash": "eApNM/lo9Sk5gET2fmNojBurTW6eRA11pJE3UGPzcBfOzOgpVHEO2PZmWPogajBjKt+YOszljcz47f5uDKaglw=="
+        "resolved": "3.0.2",
+        "contentHash": "kjJpbvVmkOlIZiIXiBdOR3DgOWHl6gMxRBFM4FvaQzWGvolfYSVjqvjPf5jYwdTo/pIrX5ChnmzfvO7mXFFWHw==",
+        "dependencies": {
+          "OfficeIMO.Drawing": "3.0.2"
+        }
       },
       "OfficeIMO.Markdown.Html": {
         "type": "Transitive",
@@ -917,9 +925,9 @@
       "pspublishmodule": {
         "type": "Project",
         "dependencies": {
-          "HtmlForgeX": "[0.50.0, )",
-          "HtmlForgeX.Markdown": "[0.21.0, )",
-          "OfficeIMO.Markdown": "[0.6.42, )",
+          "HtmlForgeX": "[0.53.0, )",
+          "HtmlForgeX.Markdown": "[0.53.0, )",
+          "OfficeIMO.Markdown": "[3.0.2, )",
           "PowerForge": "[1.0.4, )",
           "PowerForge.PowerShell": "[1.0.4, )",
           "Spectre.Console": "[0.55.2, )",

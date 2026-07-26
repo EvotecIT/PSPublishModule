@@ -4,23 +4,23 @@
     ".NETFramework,Version=v4.7.2": {
       "HtmlForgeX": {
         "type": "Direct",
-        "requested": "[0.50.0, )",
-        "resolved": "0.50.0",
-        "contentHash": "5ZsrNDDjEihdAtoMg0lPgW3kDLpbhCTKOr16lb4kxiSW9k4COJdDAVBFzHk3xrWFCl8/LKosLm1GeH3hx7GGAw==",
+        "requested": "[0.53.0, )",
+        "resolved": "0.53.0",
+        "contentHash": "9lkx+cSv8wW8/uY3QiWmPdsOyynvlqAp7R+aD92LLfnlfOYHhB/XCKnLYtBdXcn0qKRqc0z4FpLNUTyCANMOvw==",
         "dependencies": {
           "System.ComponentModel.Annotations": "5.0.0",
-          "System.Text.Json": "9.0.17"
+          "System.Text.Json": "9.0.18"
         }
       },
       "HtmlForgeX.Markdown": {
         "type": "Direct",
-        "requested": "[0.21.0, )",
-        "resolved": "0.21.0",
-        "contentHash": "6zT2EM6lf7/R7jQh+iONeVIBX+ImJK1edeLENMXoh/WPFpHECK8wYsMuaj7msvjopY4+2H8Ahqrv2ODMjuamMA==",
+        "requested": "[0.53.0, )",
+        "resolved": "0.53.0",
+        "contentHash": "oAYqpJhly53PThJkCCaIezY1aqDEuccpbUvMbGe7x+sD+oJsUPjpGUgJ+hS63BYIxk9EyzJATkBi0w91EMo/bA==",
         "dependencies": {
-          "HtmlForgeX": "0.50.0",
-          "OfficeIMO.Markdown": "0.6.42",
-          "System.Text.Json": "9.0.17"
+          "HtmlForgeX": "0.53.0",
+          "OfficeIMO.Markdown": "3.0.2",
+          "System.Text.Json": "9.0.18"
         }
       },
       "Microsoft.NETFramework.ReferenceAssemblies": {
@@ -34,9 +34,12 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[0.6.42, )",
-        "resolved": "0.6.42",
-        "contentHash": "eApNM/lo9Sk5gET2fmNojBurTW6eRA11pJE3UGPzcBfOzOgpVHEO2PZmWPogajBjKt+YOszljcz47f5uDKaglw=="
+        "requested": "[3.0.2, )",
+        "resolved": "3.0.2",
+        "contentHash": "kjJpbvVmkOlIZiIXiBdOR3DgOWHl6gMxRBFM4FvaQzWGvolfYSVjqvjPf5jYwdTo/pIrX5ChnmzfvO7mXFFWHw==",
+        "dependencies": {
+          "OfficeIMO.Drawing": "3.0.2"
+        }
       },
       "PowerShellStandard.Library": {
         "type": "Direct",
@@ -149,6 +152,11 @@
         "type": "Transitive",
         "resolved": "7.6.0",
         "contentHash": "rJ7QtKN45XzLXCrMATve6eFLiUyUGEkA1rFSb6U6Fw6laM4hEAcKOrcdbgWlcFUlCK2158qP1LF00hg/ivF3nw=="
+      },
+      "OfficeIMO.Drawing": {
+        "type": "Transitive",
+        "resolved": "3.0.2",
+        "contentHash": "QRk5Gqc7ID9knhroFpmzcY/qacHcJJLlErvW2ZDll7mIoSuY8z8NRHeY/JicSPjQDuM1Dgu7tLRMp+lT6gZR5Q=="
       },
       "Spectre.Console.Ansi": {
         "type": "Transitive",
@@ -280,25 +288,28 @@
     "net10.0": {
       "HtmlForgeX": {
         "type": "Direct",
-        "requested": "[0.50.0, )",
-        "resolved": "0.50.0",
-        "contentHash": "5ZsrNDDjEihdAtoMg0lPgW3kDLpbhCTKOr16lb4kxiSW9k4COJdDAVBFzHk3xrWFCl8/LKosLm1GeH3hx7GGAw=="
+        "requested": "[0.53.0, )",
+        "resolved": "0.53.0",
+        "contentHash": "9lkx+cSv8wW8/uY3QiWmPdsOyynvlqAp7R+aD92LLfnlfOYHhB/XCKnLYtBdXcn0qKRqc0z4FpLNUTyCANMOvw=="
       },
       "HtmlForgeX.Markdown": {
         "type": "Direct",
-        "requested": "[0.21.0, )",
-        "resolved": "0.21.0",
-        "contentHash": "6zT2EM6lf7/R7jQh+iONeVIBX+ImJK1edeLENMXoh/WPFpHECK8wYsMuaj7msvjopY4+2H8Ahqrv2ODMjuamMA==",
+        "requested": "[0.53.0, )",
+        "resolved": "0.53.0",
+        "contentHash": "oAYqpJhly53PThJkCCaIezY1aqDEuccpbUvMbGe7x+sD+oJsUPjpGUgJ+hS63BYIxk9EyzJATkBi0w91EMo/bA==",
         "dependencies": {
-          "HtmlForgeX": "0.50.0",
-          "OfficeIMO.Markdown": "0.6.42"
+          "HtmlForgeX": "0.53.0",
+          "OfficeIMO.Markdown": "3.0.2"
         }
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[0.6.42, )",
-        "resolved": "0.6.42",
-        "contentHash": "eApNM/lo9Sk5gET2fmNojBurTW6eRA11pJE3UGPzcBfOzOgpVHEO2PZmWPogajBjKt+YOszljcz47f5uDKaglw=="
+        "requested": "[3.0.2, )",
+        "resolved": "3.0.2",
+        "contentHash": "kjJpbvVmkOlIZiIXiBdOR3DgOWHl6gMxRBFM4FvaQzWGvolfYSVjqvjPf5jYwdTo/pIrX5ChnmzfvO7mXFFWHw==",
+        "dependencies": {
+          "OfficeIMO.Drawing": "3.0.2"
+        }
       },
       "PowerShellStandard.Library": {
         "type": "Direct",
@@ -629,6 +640,11 @@
         "type": "Transitive",
         "resolved": "7.6.0",
         "contentHash": "rJ7QtKN45XzLXCrMATve6eFLiUyUGEkA1rFSb6U6Fw6laM4hEAcKOrcdbgWlcFUlCK2158qP1LF00hg/ivF3nw=="
+      },
+      "OfficeIMO.Drawing": {
+        "type": "Transitive",
+        "resolved": "3.0.2",
+        "contentHash": "QRk5Gqc7ID9knhroFpmzcY/qacHcJJLlErvW2ZDll7mIoSuY8z8NRHeY/JicSPjQDuM1Dgu7tLRMp+lT6gZR5Q=="
       },
       "runtime.linux-arm.runtime.native.System.IO.Ports": {
         "type": "Transitive",
@@ -965,25 +981,28 @@
     "net8.0": {
       "HtmlForgeX": {
         "type": "Direct",
-        "requested": "[0.50.0, )",
-        "resolved": "0.50.0",
-        "contentHash": "5ZsrNDDjEihdAtoMg0lPgW3kDLpbhCTKOr16lb4kxiSW9k4COJdDAVBFzHk3xrWFCl8/LKosLm1GeH3hx7GGAw=="
+        "requested": "[0.53.0, )",
+        "resolved": "0.53.0",
+        "contentHash": "9lkx+cSv8wW8/uY3QiWmPdsOyynvlqAp7R+aD92LLfnlfOYHhB/XCKnLYtBdXcn0qKRqc0z4FpLNUTyCANMOvw=="
       },
       "HtmlForgeX.Markdown": {
         "type": "Direct",
-        "requested": "[0.21.0, )",
-        "resolved": "0.21.0",
-        "contentHash": "6zT2EM6lf7/R7jQh+iONeVIBX+ImJK1edeLENMXoh/WPFpHECK8wYsMuaj7msvjopY4+2H8Ahqrv2ODMjuamMA==",
+        "requested": "[0.53.0, )",
+        "resolved": "0.53.0",
+        "contentHash": "oAYqpJhly53PThJkCCaIezY1aqDEuccpbUvMbGe7x+sD+oJsUPjpGUgJ+hS63BYIxk9EyzJATkBi0w91EMo/bA==",
         "dependencies": {
-          "HtmlForgeX": "0.50.0",
-          "OfficeIMO.Markdown": "0.6.42"
+          "HtmlForgeX": "0.53.0",
+          "OfficeIMO.Markdown": "3.0.2"
         }
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[0.6.42, )",
-        "resolved": "0.6.42",
-        "contentHash": "eApNM/lo9Sk5gET2fmNojBurTW6eRA11pJE3UGPzcBfOzOgpVHEO2PZmWPogajBjKt+YOszljcz47f5uDKaglw=="
+        "requested": "[3.0.2, )",
+        "resolved": "3.0.2",
+        "contentHash": "kjJpbvVmkOlIZiIXiBdOR3DgOWHl6gMxRBFM4FvaQzWGvolfYSVjqvjPf5jYwdTo/pIrX5ChnmzfvO7mXFFWHw==",
+        "dependencies": {
+          "OfficeIMO.Drawing": "3.0.2"
+        }
       },
       "PowerShellStandard.Library": {
         "type": "Direct",
@@ -1324,6 +1343,11 @@
         "type": "Transitive",
         "resolved": "7.6.0",
         "contentHash": "rJ7QtKN45XzLXCrMATve6eFLiUyUGEkA1rFSb6U6Fw6laM4hEAcKOrcdbgWlcFUlCK2158qP1LF00hg/ivF3nw=="
+      },
+      "OfficeIMO.Drawing": {
+        "type": "Transitive",
+        "resolved": "3.0.2",
+        "contentHash": "QRk5Gqc7ID9knhroFpmzcY/qacHcJJLlErvW2ZDll7mIoSuY8z8NRHeY/JicSPjQDuM1Dgu7tLRMp+lT6gZR5Q=="
       },
       "runtime.linux-arm.runtime.native.System.IO.Ports": {
         "type": "Transitive",
