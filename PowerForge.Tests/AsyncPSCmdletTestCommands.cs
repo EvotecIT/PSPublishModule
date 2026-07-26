@@ -634,6 +634,103 @@ public sealed class TestAsyncReentrantPumpCommand : AsyncPSCmdlet
     }
 }
 
+[Cmdlet(VerbsDiagnostic.Test, "AsyncReentrantFifo")]
+public sealed class TestAsyncReentrantFifoCommand : AsyncPSCmdlet
+{
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        WriteObject(new WarningEnumerable(this), enumerateCollection: true);
+    }
+
+    private sealed class WarningEnumerable : IEnumerable<string>
+    {
+        private readonly TestAsyncReentrantFifoCommand _command;
+
+        public WarningEnumerable(TestAsyncReentrantFifoCommand command)
+        {
+            _command = command;
+        }
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            Task.Run(() => _command.WriteWarning("queued-first")).GetAwaiter().GetResult();
+            _command.WriteWarning("direct-second");
+            yield return "value";
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncCapturedEnumeration")]
+public sealed class TestAsyncCapturedEnumerationCommand : AsyncPSCmdlet
+{
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        var streams = CapturePipelineStreams();
+        WriteObject(
+            new CapturedWarningEnumerable(
+                message => streams.WriteWarning(message)),
+            enumerateCollection: true);
+    }
+
+    private sealed class CapturedWarningEnumerable : IEnumerable<string>
+    {
+        private readonly Action<string> _writeWarning;
+
+        public CapturedWarningEnumerable(Action<string> writeWarning)
+        {
+            _writeWarning = writeWarning;
+        }
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            using var completed = new ManualResetEventSlim();
+            Exception? callbackException = null;
+            ThreadPool.UnsafeQueueUserWorkItem(
+                _ =>
+                {
+                    try
+                    {
+                        _writeWarning("captured-during-enumeration");
+                    }
+                    catch (Exception exception)
+                    {
+                        callbackException = exception;
+                    }
+                    finally
+                    {
+                        completed.Set();
+                    }
+                },
+                null);
+            Assert.True(
+                completed.Wait(TimeSpan.FromSeconds(5)),
+                "The context-free callback did not complete in time.");
+            if (callbackException is not null)
+                throw callbackException;
+
+            yield return "value";
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncDerivedEndProcessing")]
+public sealed class TestAsyncDerivedEndProcessingCommand : AsyncPSCmdlet
+{
+    protected override void EndProcessing()
+    {
+        base.EndProcessing();
+        WriteObject("derived-end");
+    }
+}
+
 [Cmdlet(VerbsDiagnostic.Test, "AsyncEarlyShouldProcess", SupportsShouldProcess = true)]
 public sealed class TestAsyncEarlyShouldProcessCommand : AsyncPSCmdlet
 {
@@ -751,6 +848,90 @@ public sealed class TestAsyncDisposeDuringHookCommand : AsyncPSCmdlet
             _tokenRead.Set();
             throw;
         }
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncDisposeDuringCancellation")]
+public sealed class TestAsyncDisposeDuringCancellationCommand : AsyncPSCmdlet
+{
+    private static ManualResetEventSlim _callbackCompleted = new();
+
+    public static ManualResetEventSlim CallbackCompleted => _callbackCompleted;
+
+    public static bool TokenReadDuringCancellation { get; private set; }
+
+    public static Exception? TokenReadException { get; private set; }
+
+    public static void Reset()
+    {
+        _callbackCompleted.Dispose();
+        _callbackCompleted = new ManualResetEventSlim();
+        TokenReadDuringCancellation = false;
+        TokenReadException = null;
+    }
+
+    protected override Task ProcessRecordAsync()
+    {
+        using var cancellationEntered = new ManualResetEventSlim();
+        using var releaseCancellation = new ManualResetEventSlim();
+        _ = CancelToken.Register(
+            () =>
+            {
+                cancellationEntered.Set();
+                releaseCancellation.Wait(TimeSpan.FromSeconds(5));
+                try
+                {
+                    _ = CancelToken;
+                    TokenReadDuringCancellation = true;
+                }
+                catch (Exception exception)
+                {
+                    TokenReadException = exception;
+                }
+                finally
+                {
+                    _callbackCompleted.Set();
+                }
+            });
+
+        _ = Task.Run(Dispose);
+        Assert.True(
+            cancellationEntered.Wait(TimeSpan.FromSeconds(5)),
+            "Cancellation did not enter the registered callback.");
+        ThreadPool.QueueUserWorkItem(
+            _ =>
+            {
+                Thread.Sleep(100);
+                releaseCancellation.Set();
+            });
+        return Task.CompletedTask;
+    }
+
+    protected override void EndProcessing()
+    {
+        // ProcessRecord intentionally disposes the command to exercise the cancellation race.
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncDirectPipelineStop")]
+public sealed class TestAsyncDirectPipelineStopCommand : AsyncPSCmdlet
+{
+    private static ManualResetEventSlim _cancellationObserved = new();
+
+    public static ManualResetEventSlim CancellationObserved => _cancellationObserved;
+
+    public static void Reset()
+    {
+        _cancellationObserved.Dispose();
+        _cancellationObserved = new ManualResetEventSlim();
+    }
+
+    protected override async Task ProcessRecordAsync()
+    {
+        _ = CancelToken.Register(_cancellationObserved.Set);
+        await Task.CompletedTask;
+        WriteObject(1);
+        WriteObject(2);
     }
 }
 
