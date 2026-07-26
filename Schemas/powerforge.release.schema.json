@@ -331,6 +331,9 @@
           "properties": {
             "WriteReceipt": { "type": "boolean" },
             "ReceiptPath": { "type": "string" },
+            "PlanReceiptPath": { "type": "string" },
+            "LockPath": { "type": "string" },
+            "VersionSourcePath": { "type": [ "string", "null" ] },
             "Resume": { "type": "boolean" },
             "WaitForProcessing": { "type": "boolean" },
             "ProcessingTimeoutSeconds": { "type": "integer", "minimum": 1 },

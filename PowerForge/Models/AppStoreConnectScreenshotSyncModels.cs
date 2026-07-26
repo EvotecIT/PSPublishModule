@@ -14,6 +14,9 @@ public sealed class AppStoreConnectScreenshotSyncSpec
     /// <summary>Optional App Store version id. When provided, version lookup by string is skipped.</summary>
     public string? VersionId { get; set; }
 
+    /// <summary>Bind this mapping to the release version selected by the unified Apple workflow.</summary>
+    public bool UseReleaseVersion { get; set; }
+
     /// <summary>Apple platform for the App Store version.</summary>
     public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
 

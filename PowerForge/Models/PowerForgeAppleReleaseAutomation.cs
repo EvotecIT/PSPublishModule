@@ -11,6 +11,9 @@ public enum PowerForgeAppleReleaseAction
     /// <summary>Read App Store Connect state without changing it.</summary>
     Status,
 
+    /// <summary>Set the requested marketing version and the next available build number in the configured version source.</summary>
+    Version,
+
     /// <summary>Create signed local archives without uploading them.</summary>
     Archive,
 
@@ -28,6 +31,9 @@ public enum PowerForgeAppleReleaseAction
 
     /// <summary>Assign a processed build to configured TestFlight groups and testers.</summary>
     TestFlight,
+
+    /// <summary>Run the resumable non-review release steps and stop at the first human approval gate.</summary>
+    Advance,
 
     /// <summary>Submit a processed build to TestFlight Beta App Review.</summary>
     SubmitTestFlightReview,
@@ -52,6 +58,15 @@ internal sealed class PowerForgeAppleReleaseAutomationOptions
 
     /// <summary>Receipt path relative to the Apple project root.</summary>
     public string ReceiptPath { get; set; } = "build/powerforge/apple/release-receipt.json";
+
+    /// <summary>Plan receipt path relative to the Apple project root.</summary>
+    public string PlanReceiptPath { get; set; } = "build/powerforge/apple/release-plan.json";
+
+    /// <summary>Exclusive operation lock path relative to the Apple project root.</summary>
+    public string LockPath { get; set; } = "build/powerforge/apple/release.lock";
+
+    /// <summary>Optional checked-in XcodeGen project.yml used as the authoritative version source.</summary>
+    public string? VersionSourcePath { get; set; }
 
     /// <summary>Reuse an exact remote build instead of uploading the same version/build again.</summary>
     public bool Resume { get; set; } = true;
@@ -87,6 +102,8 @@ internal sealed class PowerForgeAppleReleaseReceipt
 
     public PowerForgeAppleReleaseAction Action { get; set; }
 
+    public bool PlanOnly { get; set; }
+
     public DateTimeOffset CheckedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public bool Success { get; set; }
@@ -95,11 +112,33 @@ internal sealed class PowerForgeAppleReleaseReceipt
 
     public string? ReceiptPath { get; set; }
 
+    public PowerForgeAppleVersionReceipt? Versioning { get; set; }
+
     public PowerForgeAppleReleaseTargetReceipt[] Targets { get; set; } = Array.Empty<PowerForgeAppleReleaseTargetReceipt>();
 
     public PowerForgeAppleReleaseCleanupReceipt Cleanup { get; set; } = new();
 
     public string[] NextActions { get; set; } = Array.Empty<string>();
+}
+
+/// <summary>
+/// Version identity selected for an Apple release.
+/// </summary>
+internal sealed class PowerForgeAppleVersionReceipt
+{
+    public string? SourcePath { get; set; }
+
+    public string MarketingVersion { get; set; } = string.Empty;
+
+    public string BuildNumber { get; set; } = string.Empty;
+
+    public string? PreviousMarketingVersion { get; set; }
+
+    public string? PreviousBuildNumber { get; set; }
+
+    public long HighestRemoteBuildNumber { get; set; }
+
+    public bool Changed { get; set; }
 }
 
 /// <summary>

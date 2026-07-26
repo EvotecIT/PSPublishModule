@@ -7,7 +7,7 @@ using System.Text.Json;
 internal static partial class Program
 {
     private const string ReleaseUsage =
-        "Usage: powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--module-only] [--tools-only] [--apple-action <Configured|Status|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>] [--confirm-apple-action] [--apple-resume|--no-apple-resume] [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>] [--summary] [--configuration <Release|Debug>] [--module-framework <auto|net10.0|net8.0>] [--module-run-mode <Manifest|Documentation|Build|Publish>] [--module-timeout-seconds <seconds>] [--module-no-dotnet-build] [--module-version <version>] [--module-prerelease-tag <tag>] [--module-no-sign] [--module-sign] [--module-certificate-thumbprint <sha1>] [--module-sign-include-binaries|--module-no-sign-include-binaries] [--module-sign-include-internals|--module-no-sign-include-internals] [--module-sign-include-exe|--module-no-sign-include-exe] [--module-diagnostics-baseline <path>] [--module-diagnostics-baseline-generate|--module-no-diagnostics-baseline-generate] [--module-diagnostics-baseline-update|--module-no-diagnostics-baseline-update] [--module-fail-on-new-diagnostics|--module-no-fail-on-new-diagnostics] [--module-fail-on-diagnostics-severity <Warning|Error>] [--skip-workspace-validation] [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>] [--publish-nuget] [--publish-project-github] [--publish-tool-github] [--submit-winget] [--skip-winget-submit] [--winget-submit-mode <Manifest|Update>] [--winget-tool-path <path>] [--winget-token-env <name>] [--winget-token-file <path>] [--winget-pr-title <text>] [--winget-open-browser] [--winget-replace [version]] [--winget-allow-interactive-auth] [--winget-timeout-seconds <seconds>] [--skip-restore] [--skip-build] [--output-root <path>] [--stage-root <path>] [--manifest-json <path>] [--allow-output-outside-project-root] [--allow-manifest-outside-project-root] [--checksums-path <path>] [--skip-release-checksums] [--keep-symbols] [--sign] [--sign-profile <name>] [--sign-tool-path <path>] [--sign-thumbprint <sha1>] [--sign-subject-name <name>] [--sign-on-missing-tool <Warn|Fail|Skip>] [--sign-on-failure <Warn|Fail|Skip>] [--sign-timeout-seconds <seconds>] [--sign-timestamp-url <url>] [--sign-description <text>] [--sign-url <url>] [--sign-csp <name>] [--sign-key-container <name>] [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>] [--installer-property <Name=Value>] [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <...>] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]";
+        "Usage: powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--module-only] [--tools-only] [--apple-action <Configured|Status|Version|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|Advance|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>] [--apple-version <marketing-version>] [--confirm-apple-action] [--apple-resume|--no-apple-resume] [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>] [--summary] [--configuration <Release|Debug>] [--module-framework <auto|net10.0|net8.0>] [--module-run-mode <Manifest|Documentation|Build|Publish>] [--module-timeout-seconds <seconds>] [--module-no-dotnet-build] [--module-version <version>] [--module-prerelease-tag <tag>] [--module-no-sign] [--module-sign] [--module-certificate-thumbprint <sha1>] [--module-sign-include-binaries|--module-no-sign-include-binaries] [--module-sign-include-internals|--module-no-sign-include-internals] [--module-sign-include-exe|--module-no-sign-include-exe] [--module-diagnostics-baseline <path>] [--module-diagnostics-baseline-generate|--module-no-diagnostics-baseline-generate] [--module-diagnostics-baseline-update|--module-no-diagnostics-baseline-update] [--module-fail-on-new-diagnostics|--module-no-fail-on-new-diagnostics] [--module-fail-on-diagnostics-severity <Warning|Error>] [--skip-workspace-validation] [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>] [--publish-nuget] [--publish-project-github] [--publish-tool-github] [--submit-winget] [--skip-winget-submit] [--winget-submit-mode <Manifest|Update>] [--winget-tool-path <path>] [--winget-token-env <name>] [--winget-token-file <path>] [--winget-pr-title <text>] [--winget-open-browser] [--winget-replace [version]] [--winget-allow-interactive-auth] [--winget-timeout-seconds <seconds>] [--skip-restore] [--skip-build] [--output-root <path>] [--stage-root <path>] [--manifest-json <path>] [--allow-output-outside-project-root] [--allow-manifest-outside-project-root] [--checksums-path <path>] [--skip-release-checksums] [--keep-symbols] [--sign] [--sign-profile <name>] [--sign-tool-path <path>] [--sign-thumbprint <sha1>] [--sign-subject-name <name>] [--sign-on-missing-tool <Warn|Fail|Skip>] [--sign-on-failure <Warn|Fail|Skip>] [--sign-timeout-seconds <seconds>] [--sign-timestamp-url <url>] [--sign-description <text>] [--sign-url <url>] [--sign-csp <name>] [--sign-key-container <name>] [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>] [--installer-property <Name=Value>] [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <...>] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]";
 
     private static int CommandRelease(
         string[] filteredArgs,
@@ -359,6 +359,7 @@ internal static partial class Program
         request.ModuleOnly = moduleOnly;
         request.ToolsOnly = request.ToolsOnly || toolsOnly;
         request.AppleAction = ParseAppleReleaseAction(TryGetOptionValue(argv, "--apple-action"));
+        request.AppleMarketingVersion = ChooseString(request.AppleMarketingVersion, TryGetOptionValue(argv, "--apple-version"));
         request.AppleActionConfirmed = argv.Any(a => a.Equals("--confirm-apple-action", StringComparison.OrdinalIgnoreCase));
         request.AppleResume = ResolveBooleanOverride(argv, "--apple-resume", "--no-apple-resume", request.AppleResume);
         request.AppleWaitForProcessing = ResolveBooleanOverride(argv, "--apple-wait", "--no-apple-wait", request.AppleWaitForProcessing);
@@ -521,7 +522,7 @@ internal static partial class Program
         PowerForgeReleaseResult result,
         PowerForgeReleaseRequest request)
     {
-        if (result.AppleReceipt is not null)
+        if (result.AppleReceipt is not null && !request.PlanOnly)
             return CliJson.SerializeToElement(result.AppleReceipt, CliJson.Context.PowerForgeAppleReleaseReceipt);
         if (result.AppleAppPlan is null)
             return CliJson.SerializeToElement(result, CliJson.Context.PowerForgeReleaseResult);
@@ -542,6 +543,10 @@ internal static partial class Program
         AddEnabledStep(enabledSteps, plan.ReleaseApprovedVersion, "release");
         if (plan.Action == PowerForgeAppleReleaseAction.Status)
             enabledSteps.Add("status");
+        if (plan.Action == PowerForgeAppleReleaseAction.Version)
+            enabledSteps.Add("version");
+        if (plan.Action == PowerForgeAppleReleaseAction.Advance)
+            enabledSteps.Add("stopBeforeReview");
         if (plan.Action == PowerForgeAppleReleaseAction.Cleanup)
             enabledSteps.Add("cleanup");
 
@@ -550,20 +555,24 @@ internal static partial class Program
             Action = plan.Action,
             PlanOnly = request.PlanOnly,
             ValidateOnly = request.ValidateOnly,
-            ReceiptPath = Path.GetRelativePath(plan.ProjectRoot, plan.ReceiptPath).Replace('\\', '/'),
+            ReceiptPath = Path.GetRelativePath(
+                plan.ProjectRoot,
+                request.PlanOnly ? plan.PlanReceiptPath : plan.ReceiptPath).Replace('\\', '/'),
             Resume = plan.Automation.Resume,
             WaitForProcessing = plan.Automation.WaitForProcessing,
             ProcessingTimeoutSeconds = plan.Automation.ProcessingTimeoutSeconds,
             PollIntervalSeconds = plan.Automation.PollIntervalSeconds,
             EnabledSteps = enabledSteps.ToArray(),
             RequiresConfirmation = RequiresAppleActionConfirmation(plan),
-            Targets = plan.Apps.Select(static app => new AppleReleaseCliTargetSummary
+            Targets = plan.Apps.Select(app => new AppleReleaseCliTargetSummary
             {
                 Name = app.Name,
                 Platform = app.Platform,
                 BundleId = app.BundleId,
                 AppId = app.AppStoreConnectAppId,
                 Scheme = app.Scheme,
+                MarketingVersion = result.AppleReceipt?.Versioning?.MarketingVersion ?? app.MarketingVersion,
+                BuildNumber = result.AppleReceipt?.Versioning?.BuildNumber ?? app.BuildNumber,
                 GenerateProjectIfMissing = app.GenerateProjectIfMissing
             }).ToArray()
         };
@@ -583,6 +592,8 @@ internal static partial class Program
              plan.ReleaseApprovedVersion ||
              (plan.SyncScreenshots && plan.ReplaceScreenshots))) ||
            plan.Action == PowerForgeAppleReleaseAction.SubmitTestFlightReview ||
+           plan.Action == PowerForgeAppleReleaseAction.Advance ||
+           plan.Action == PowerForgeAppleReleaseAction.Version ||
            plan.Action == PowerForgeAppleReleaseAction.SubmitAppReview ||
            plan.Action == PowerForgeAppleReleaseAction.Release ||
            (plan.Action == PowerForgeAppleReleaseAction.Screenshots && plan.ReplaceScreenshots);
