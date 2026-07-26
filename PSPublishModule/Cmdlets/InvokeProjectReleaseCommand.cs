@@ -39,6 +39,12 @@ public sealed class InvokeProjectReleaseCommand : PSCmdlet
     public SwitchParameter PublishToolGitHub { get; set; }
 
     /// <summary>
+    /// Exact x.y.z version override for the tool-only release.
+    /// </summary>
+    [Parameter]
+    public string? ReleaseVersion { get; set; }
+
+    /// <summary>
     /// Submits generated Winget manifests with wingetcreate after release assets are available.
     /// </summary>
     [Parameter]
@@ -380,6 +386,7 @@ public sealed class InvokeProjectReleaseCommand : PSCmdlet
             PlanOnly = Plan.IsPresent,
             ValidateOnly = Validate.IsPresent,
             ToolsOnly = true,
+            ReleaseVersion = NormalizeNullable(ReleaseVersion),
             PublishToolGitHub = ResolveRequestedFlag(boundParameters, nameof(PublishToolGitHub)),
             SubmitWinget = ResolveWingetSubmitFlag(boundParameters),
             WingetSubmitMode = ParseWingetSubmitMode(WingetSubmitMode),

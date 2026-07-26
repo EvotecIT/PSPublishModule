@@ -20,6 +20,7 @@ param(
     [ValidateSet('auto', 'net10.0', 'net8.0')]
     [string] $ModuleFramework = 'auto',
     [string] $ModuleVersion,
+    [string] $ReleaseVersion,
     [Alias('PreReleaseTag')]
     [string] $ModulePreReleaseTag,
     [Alias('NoBuild')]

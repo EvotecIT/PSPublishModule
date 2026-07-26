@@ -110,10 +110,15 @@ Unified release entrypoint
   - `-ModulePreReleaseTag <tag>`
   - `-ModuleNoSign`
   - `-ModuleSignModule`
+- Standalone tool publication has an explicit version boundary. Use
+  `Build/Build-PowerForge.ps1 -Version <x.y.z> -Plan` first, then add
+  `-PublishGitHub` for the confirmed run. The wrapper selects `ToolsOnly`, so it
+  cannot accidentally occupy a module/package release tag or invoke an Apple lane.
 - Unified release can also declare a reusable workspace preflight via `WorkspaceValidation`
   backed by `workspace.validation.json` and `powerforge workspace validate`.
 - Common release-time overrides:
   - `--configuration Debug|Release`
+  - `--tools-only --release-version <x.y.z>` for an exact standalone tool release
   - `--module-no-dotnet-build`, `--module-version`, `--module-prerelease-tag`, `--module-no-sign`, `--module-sign`
   - `--skip-workspace-validation`, `--workspace-config`, `--workspace-profile`
   - `--workspace-enable-feature`, `--workspace-disable-feature`, `--workspace-external-root <name=path>`

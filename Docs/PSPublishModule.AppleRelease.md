@@ -236,6 +236,7 @@ PowerForge release asset and verifies it before execution:
   "schemaVersion": 1,
   "repository": "EvotecIT/PSPublishModule",
   "version": "3.0.80",
+  "releaseTag": "PowerForge-v3.0.80",
   "assets": {
     "osx-arm64": {
       "sha256": "<64-character release asset digest>"
@@ -243,6 +244,9 @@ PowerForge release asset and verifies it before execution:
   }
 }
 ```
+
+`releaseTag` is optional for compatibility and otherwise defaults to `v<version>`.
+Set it when the standalone CLI is published independently from the full module release.
 
 The reusable workflow boundary mirrors the human approval boundary:
 

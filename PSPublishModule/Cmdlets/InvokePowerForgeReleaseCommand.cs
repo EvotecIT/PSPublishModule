@@ -111,6 +111,12 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     public string? ModuleFramework { get; set; }
 
     /// <summary>
+    /// Exact x.y.z version override for an explicitly tool-only release.
+    /// </summary>
+    [Parameter]
+    public string? ReleaseVersion { get; set; }
+
+    /// <summary>
     /// Module pipeline gate used by the native module-release lane.
     /// </summary>
     [Parameter]
@@ -779,6 +785,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             KeepSymbols = ResolveRequestedFlag(boundParameters, nameof(KeepSymbols)),
             EnableSigning = ResolveRequestedFlag(boundParameters, nameof(Sign)),
             Configuration = NormalizeNullable(Configuration),
+            ReleaseVersion = NormalizeNullable(ReleaseVersion),
             ModuleVersion = NormalizeNullable(ModuleVersion),
             ModulePreReleaseTag = NormalizeNullable(ModulePreReleaseTag),
             WorkspaceConfigPath = NormalizeNullable(WorkspaceConfigPath),

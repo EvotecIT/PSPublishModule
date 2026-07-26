@@ -16,6 +16,14 @@ if ($version -notmatch '^\d+\.\d+\.\d+$') {
     throw "PowerForge tool manifest version must use x.y.z."
 }
 
+$releaseTag = [string] $manifest.releaseTag
+if ([string]::IsNullOrWhiteSpace($releaseTag)) {
+    $releaseTag = "v$version"
+}
+if ($releaseTag -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') {
+    throw "PowerForge release tag contains unsupported characters."
+}
+
 $repository = [string] $manifest.repository
 if ([string]::IsNullOrWhiteSpace($repository)) {
     $repository = 'EvotecIT/PSPublishModule'
@@ -46,7 +54,7 @@ if ($expectedSha256 -notmatch '^[a-f0-9]{64}$') {
 }
 
 $assetName = "PowerForge-$version-net10.0-$rid-SingleContained.zip"
-$downloadUrl = "https://github.com/$repository/releases/download/v$version/$assetName"
+$downloadUrl = "https://github.com/$repository/releases/download/$releaseTag/$assetName"
 $tempRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
 $executionScope = if ($env:GITHUB_RUN_ID) {
     "$($env:GITHUB_RUN_ID)-$($env:GITHUB_JOB)-$($env:GITHUB_RUN_ATTEMPT)"

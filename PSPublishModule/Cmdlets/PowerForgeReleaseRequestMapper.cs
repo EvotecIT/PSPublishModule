@@ -50,6 +50,7 @@ internal static class PowerForgeReleaseRequestMapper
         request.SkipReleaseChecksums = request.SkipReleaseChecksums || options.SkipReleaseChecksums;
 
         request.Configuration = ChooseString(request.Configuration, options.Configuration);
+        request.ReleaseVersion = ChooseString(request.ReleaseVersion, options.ReleaseVersion);
         request.ModuleVersion = ChooseString(request.ModuleVersion, options.ModuleVersion);
         request.ModulePreReleaseTag = ChooseString(request.ModulePreReleaseTag, options.ModulePreReleaseTag);
         request.WorkspaceConfigPath = ChooseString(request.WorkspaceConfigPath, options.WorkspaceConfigPath);
@@ -136,6 +137,7 @@ internal static class PowerForgeReleaseRequestMapper
             PublishProjectGitHub = source.PublishProjectGitHub,
             PublishToolGitHub = source.PublishToolGitHub,
             Configuration = source.Configuration,
+            ReleaseVersion = source.ReleaseVersion,
             ModuleFramework = source.ModuleFramework,
             ModuleRunMode = source.ModuleRunMode,
             ModuleNoDotnetBuild = source.ModuleNoDotnetBuild,

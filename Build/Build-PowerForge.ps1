@@ -12,6 +12,8 @@
     [switch] $Plan,
     [switch] $Validate,
     [switch] $PublishGitHub,
+    [ValidatePattern('^\d+\.\d+\.\d+$')]
+    [string] $Version,
     [string] $ConfigPath
 )
 
@@ -35,6 +37,7 @@ $buildProjectParams = @{
 if ($Plan) { $buildProjectParams.Plan = $true }
 if ($Validate) { $buildProjectParams.Validate = $true }
 if ($PublishGitHub) { $buildProjectParams.PublishToolGitHub = $true }
+if (-not [string]::IsNullOrWhiteSpace($Version)) { $buildProjectParams.ReleaseVersion = $Version }
 
 & (Join-Path $PSScriptRoot 'Build-Project.ps1') @buildProjectParams
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

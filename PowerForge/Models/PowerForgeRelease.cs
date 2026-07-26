@@ -67,6 +67,11 @@ internal sealed class PowerForgeReleaseRequest
 
     public string? Configuration { get; set; }
 
+    /// <summary>
+    /// Exact x.y.z version override for an explicitly tool-only release.
+    /// </summary>
+    public string? ReleaseVersion { get; set; }
+
     public string? ModuleFramework { get; set; }
 
     public string? ModuleHostPath { get; set; }
