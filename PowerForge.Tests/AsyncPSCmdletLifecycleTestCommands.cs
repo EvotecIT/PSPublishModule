@@ -467,6 +467,80 @@ public sealed class TestAsyncCapturedErrorSnapshotCommand : AsyncPSCmdlet
     }
 }
 
+[Cmdlet(VerbsDiagnostic.Test, "AsyncTerminatingErrorSnapshot")]
+public sealed class TestAsyncTerminatingErrorSnapshotCommand : AsyncPSCmdlet
+{
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        var error = new ErrorRecord(
+            new InvalidOperationException("terminating snapshot failure"),
+            "TerminatingErrorSnapshot",
+            ErrorCategory.InvalidOperation,
+            targetObject: null)
+        {
+            ErrorDetails = new ErrorDetails("original terminating details")
+        };
+        try
+        {
+            ThrowTerminatingError(error);
+        }
+        catch (PipelineStoppedException)
+        {
+            error.ErrorDetails = new ErrorDetails("mutated terminating details");
+            throw;
+        }
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncStaleProgress")]
+public sealed class TestAsyncStaleProgressCommand : AsyncPSCmdlet
+{
+    private IProgress<int>? _firstRecordProgress;
+    private int _record;
+
+    [Parameter(ValueFromPipeline = true)]
+    public int InputObject { get; set; }
+
+    protected override async Task ProcessRecordAsync()
+    {
+        _record++;
+        if (_record == 1)
+        {
+            _firstRecordProgress = new Progress<int>(
+                _ => WriteWarning("stale-first-record-warning"));
+            return;
+        }
+
+        using var completed = new ManualResetEventSlim();
+        Exception? callbackException = null;
+        ThreadPool.UnsafeQueueUserWorkItem(
+            _ =>
+            {
+                try
+                {
+                    _firstRecordProgress!.Report(InputObject);
+                }
+                catch (Exception exception)
+                {
+                    callbackException = exception;
+                }
+                finally
+                {
+                    completed.Set();
+                }
+            },
+            null);
+        Assert.True(
+            completed.Wait(TimeSpan.FromSeconds(5)),
+            "The context-free progress producer did not complete in time.");
+        await Task.Delay(100);
+        if (callbackException is not null)
+            throw callbackException;
+        WriteObject(InputObject);
+    }
+}
+
 [Cmdlet(VerbsDiagnostic.Test, "AsyncEnumeratorFailure")]
 public sealed class TestAsyncEnumeratorFailureCommand : AsyncPSCmdlet
 {

@@ -473,6 +473,51 @@ public sealed partial class AsyncPSCmdletTests
     }
 
     [Fact]
+    public void AsyncPSCmdlet_snapshots_terminating_errors_before_queueing()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncTerminatingErrorSnapshot",
+            typeof(TestAsyncTerminatingErrorSnapshotCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncTerminatingErrorSnapshot");
+
+        var exception = Assert.Throws<CmdletInvocationException>(
+            () => powerShell.Invoke());
+
+        Assert.Equal(
+            "original terminating details",
+            exception.ErrorRecord.ErrorDetails?.Message);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_rejects_context_callbacks_from_an_earlier_hook()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncStaleProgress",
+            typeof(TestAsyncStaleProgressCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddScript("1, 2 | Test-AsyncStaleProgress");
+
+        var result = powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors);
+        Assert.Equal(2, Assert.Single(result).BaseObject);
+        Assert.Empty(powerShell.Streams.Warning);
+    }
+
+    [Fact]
     public void AsyncPSCmdlet_preserves_causal_stream_records_before_enumerator_failure()
     {
         var sessionState = InitialSessionState.CreateDefault();

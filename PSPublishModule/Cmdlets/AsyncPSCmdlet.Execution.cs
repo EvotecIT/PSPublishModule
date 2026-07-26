@@ -20,7 +20,7 @@ public abstract partial class AsyncPSCmdlet
         var hookGeneration = Interlocked.Increment(ref _nextHookGeneration);
         var synchronizationContext = SynchronizationContext.Current;
         var hookSynchronizationContext =
-            new AsyncHookSynchronizationContext();
+            new AsyncHookSynchronizationContext(this, hookGeneration);
 
         void ClearPipes()
         {

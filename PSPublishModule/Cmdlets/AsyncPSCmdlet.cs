@@ -22,17 +22,34 @@ public abstract partial class AsyncPSCmdlet : PSCmdlet, IDisposable
 {
     private sealed class AsyncHookSynchronizationContext : SynchronizationContext
     {
+        private readonly AsyncPSCmdlet _owner;
+        private readonly long _hookGeneration;
+
+        internal AsyncHookSynchronizationContext(
+            AsyncPSCmdlet owner,
+            long hookGeneration)
+        {
+            _owner = owner;
+            _hookGeneration = hookGeneration;
+        }
+
         public override void Post(SendOrPostCallback callback, object? state)
             => ThreadPool.QueueUserWorkItem(_ =>
             {
+                var priorHookGeneration = _owner._hookGeneration.Value;
                 try
                 {
+                    _owner._hookGeneration.Value = _hookGeneration;
                     callback(state);
                 }
                 catch (PipelineStoppedException)
                 {
                     // Fire-and-forget callbacks such as Progress<T> can run after StopProcessing.
                     // Await continuations capture their own exceptions into the hook task.
+                }
+                finally
+                {
+                    _owner._hookGeneration.Value = priorHookGeneration;
                 }
             });
     }
@@ -635,7 +652,9 @@ public abstract partial class AsyncPSCmdlet : PSCmdlet, IDisposable
             return;
         }
 
-        if (!TryQueue(new PipelineItem(errorRecord, PipelineType.TerminatingError)))
+        if (!TryQueue(new PipelineItem(
+                SnapshotErrorRecord(errorRecord),
+                PipelineType.TerminatingError)))
         {
             ThrowIfStopped();
             throw new InvalidOperationException(
