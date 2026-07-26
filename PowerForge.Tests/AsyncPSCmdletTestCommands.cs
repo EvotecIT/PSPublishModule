@@ -425,6 +425,35 @@ public sealed class TestAsyncDisposableCommand : AsyncPSCmdlet
     public CancellationToken StoppingToken => CancelToken;
 }
 
+[Cmdlet(VerbsDiagnostic.Test, "AsyncCapturedCallback")]
+public sealed class TestAsyncCapturedCallbackCommand : AsyncPSCmdlet
+{
+    protected override async Task ProcessRecordAsync()
+    {
+        var writeOutput = CapturePipelineWriter();
+        var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ThreadPool.UnsafeQueueUserWorkItem(
+            _ =>
+            {
+                writeOutput("callback-output");
+                completed.TrySetResult(true);
+            },
+            null);
+        await completed.Task.ConfigureAwait(false);
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncCommandDetail")]
+public sealed class TestAsyncCommandDetailCommand : AsyncPSCmdlet
+{
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        WriteCommandDetail("worker-detail");
+        WriteObject("completed");
+    }
+}
+
 [Cmdlet(VerbsDiagnostic.Test, "AsyncReentrantPump")]
 public sealed class TestAsyncReentrantPumpCommand : AsyncPSCmdlet
 {

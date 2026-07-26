@@ -42,14 +42,19 @@ public abstract partial class AsyncPSCmdlet
             _disposeRequested = true;
         }
 
-        CancelSource();
-
-        lock (_lifecycleLock)
+        try
         {
-            DisposeCancelSourceIfInactive();
+            CancelSource();
         }
+        finally
+        {
+            lock (_lifecycleLock)
+            {
+                DisposeCancelSourceIfInactive();
+            }
 
-        _pipelineThreadId = 0;
+            _pipelineThreadId = 0;
+        }
     }
 
     private bool IsPipelineThread
@@ -138,6 +143,26 @@ public abstract partial class AsyncPSCmdlet
         {
             replyPipe.ReleaseRequester();
         }
+    }
+
+    /// <summary>
+    /// Captures an output writer for callbacks whose producer does not flow the hook execution context.
+    /// </summary>
+    /// <remarks>
+    /// Capture the writer inside an asynchronous PowerShell hook. Calls made after that hook ends are
+    /// rejected rather than being rebound to a later record lifecycle.
+    /// </remarks>
+    protected Action<object?> CapturePipelineWriter(bool enumerateCollection = false)
+    {
+        var hookGeneration = _hookGeneration.Value;
+        if (hookGeneration == 0)
+        {
+            throw new InvalidOperationException(
+                "A lifecycle-bound pipeline writer can only be captured from an asynchronous PowerShell hook.");
+        }
+
+        var pipelineType = enumerateCollection ? PipelineType.OutputEnumerate : PipelineType.Output;
+        return value => _ = TryQueue(new PipelineItem(value, pipelineType, hookGeneration: hookGeneration));
     }
 
     private bool TryQueue(PipelineItem item)
@@ -264,6 +289,9 @@ public abstract partial class AsyncPSCmdlet
                     break;
                 case PipelineType.Progress:
                     base.WriteProgress((ProgressRecord)item.Value!);
+                    break;
+                case PipelineType.CommandDetail:
+                    base.WriteCommandDetail((string)item.Value!);
                     break;
                 case PipelineType.ShouldProcessTarget:
                     item.ReplyPipe!.Publish(

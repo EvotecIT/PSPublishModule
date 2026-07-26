@@ -486,14 +486,84 @@ public sealed class AsyncPSCmdletTests
     }
 
     [Fact]
-    public async Task AsyncPSCmdlet_drops_pre_lifecycle_writes_from_other_threads()
+    public void AsyncPSCmdlet_drops_pre_lifecycle_writes_from_other_threads()
     {
         using var command = new TestAsyncDisposableCommand();
+        Exception? exception = null;
+        var workerThreadId = 0;
+        using var completed = new ManualResetEventSlim();
+        var thread = new Thread(() =>
+        {
+            workerThreadId = Environment.CurrentManagedThreadId;
+            exception = Record.Exception(() => command.WriteWarning("too-early"));
+            completed.Set();
+        });
 
-        var exception = await Record.ExceptionAsync(
-            () => Task.Run(() => command.WriteWarning("too-early")));
+        thread.Start();
 
+        Assert.True(completed.Wait(TimeSpan.FromSeconds(5)));
+        thread.Join();
+        Assert.NotEqual(Environment.CurrentManagedThreadId, workerThreadId);
         Assert.Null(exception);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_finishes_disposal_when_cancellation_callbacks_throw()
+    {
+        var command = new TestAsyncDisposableCommand();
+        var stoppingToken = command.StoppingToken;
+        using var registration = stoppingToken.Register(
+            static () => throw new InvalidOperationException("cancellation callback failed"));
+
+        Assert.Throws<AggregateException>(command.Dispose);
+
+        var sourceField = typeof(AsyncPSCmdlet).GetField(
+            "_cancelSource",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var source = Assert.IsType<CancellationTokenSource>(sourceField!.GetValue(command));
+        Assert.Throws<ObjectDisposedException>(source.Cancel);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_accepts_context_free_callbacks_through_a_captured_writer()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncCapturedCallback",
+            typeof(TestAsyncCapturedCallbackCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncCapturedCallback");
+
+        var result = powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors);
+        Assert.Equal("callback-output", Assert.Single(result).BaseObject);
+    }
+
+    [Fact]
+    public void AsyncPSCmdlet_marshals_command_details_to_the_pipeline_thread()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncCommandDetail",
+            typeof(TestAsyncCommandDetailCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncCommandDetail");
+
+        var result = powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors);
+        Assert.Equal("completed", Assert.Single(result).BaseObject);
     }
 
     [Fact]
