@@ -44,6 +44,7 @@ public static partial class WebApiDocsGenerator
         var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks, prismCss);
         var social = ResolveApiSocialProfile(options);
         var indexRoute = NormalizeApiIndexRoute(options.BaseUrl);
+        var indexDescription = BuildApiIndexSeoDescription(options, types.Count);
 
         var indexTemplate = LoadTemplate(options, "index.html", options.IndexTemplatePath);
         var searchScript = JoinHtmlFragments(
@@ -52,8 +53,8 @@ public static partial class WebApiDocsGenerator
         var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
-            ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {options.Title}."),
-            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, $"API reference for {options.Title}.", indexRoute),
+            ["DESCRIPTION_META"] = BuildDescriptionMetaTag(indexDescription),
+            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, indexDescription, indexRoute),
             ["HEAD_HTML"] = head,
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
@@ -72,14 +73,15 @@ public static partial class WebApiDocsGenerator
         foreach (var type in types)
         {
             var typeTitle = $"{type.FullName} - {options.Title}";
+            var typeDescription = BuildApiTypeSeoDescription(options, type, type.FullName);
             var typeTemplate = LoadTemplate(options, "type.html", options.TypeTemplatePath);
             var typeRoute = $"{NormalizeApiRoute(options.BaseUrl).TrimEnd('/')}/types/{type.Slug}.html";
             var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
             {
                 ["TYPE_TITLE"] = System.Web.HttpUtility.HtmlEncode(typeTitle),
                 ["TYPE_FULLNAME"] = System.Web.HttpUtility.HtmlEncode(type.FullName),
-                ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {type.FullName} in {options.Title}."),
-                ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, typeTitle, $"API reference for {type.FullName} in {options.Title}.", typeRoute),
+                ["DESCRIPTION_META"] = BuildDescriptionMetaTag(typeDescription),
+                ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, typeTitle, typeDescription, typeRoute),
                 ["HEAD_HTML"] = head,
                 ["CRITICAL_CSS"] = criticalCss,
                 ["CSS"] = cssBlock,
@@ -135,13 +137,14 @@ public static partial class WebApiDocsGenerator
         var slugMap = BuildTypeSlugMap(types);
         var typeIndex = BuildTypeIndex(types);
         var derivedMap = BuildDerivedTypeMap(types, typeIndex);
+        var indexDescription = BuildApiIndexSeoDescription(options, types.Count);
 
         var indexTemplate = LoadTemplate(options, "docs-index.html", options.DocsIndexTemplatePath);
         var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
-            ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {options.Title}."),
-            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, $"API reference for {options.Title}.", NormalizeApiIndexRoute(baseUrl)),
+            ["DESCRIPTION_META"] = BuildDescriptionMetaTag(indexDescription),
+            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, indexDescription, NormalizeApiIndexRoute(baseUrl)),
             ["HEAD_HTML"] = head,
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
@@ -165,12 +168,13 @@ public static partial class WebApiDocsGenerator
             var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap, usage, relatedContent, codeLanguage, displayName);
             var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
             var pageTitle = $"{displayName} - {options.Title}";
+            var typeDescription = BuildApiTypeSeoDescription(options, type, displayName);
             var typeRoute = $"{NormalizeApiRoute(baseUrl).TrimEnd('/')}/{type.Slug}/";
             var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
             {
                 ["TITLE"] = System.Web.HttpUtility.HtmlEncode(pageTitle),
-                ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {displayName} in {options.Title}."),
-                ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, pageTitle, $"API reference for {displayName} in {options.Title}.", typeRoute),
+                ["DESCRIPTION_META"] = BuildDescriptionMetaTag(typeDescription),
+                ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, pageTitle, typeDescription, typeRoute),
                 ["HEAD_HTML"] = head,
                 ["CRITICAL_CSS"] = criticalCss,
                 ["CSS"] = cssBlock,

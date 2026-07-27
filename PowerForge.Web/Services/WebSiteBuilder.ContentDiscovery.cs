@@ -541,6 +541,10 @@ public static partial class WebSiteBuilder
 
                 var taxRoute = BuildRoute(taxonomy.BasePath, string.Empty, spec.TrailingSlash);
                 taxRoute = ApplyLanguagePrefixToRoute(spec, taxRoute, language);
+                var taxonomyPageCount = languageTerms.Values
+                    .SelectMany(static termItems => termItems)
+                    .Distinct()
+                    .Count();
                 results.Add(new ContentItem
                 {
                     Collection = taxonomy.Name,
@@ -548,7 +552,11 @@ public static partial class WebSiteBuilder
                     Language = language,
                     TranslationKey = $"taxonomy:{taxonomy.Name}",
                     Title = HumanizeSegment(taxonomy.Name),
-                    Description = string.Empty,
+                    Description = BuildTaxonomyIndexDescription(
+                        spec,
+                        taxonomy.Name,
+                        languageTerms.Count,
+                        taxonomyPageCount),
                     LastModifiedUtc = MaxLastModifiedUtc(languageTerms
                         .SelectMany(static term => term.Value)
                         .Select(static item => item.LastModifiedUtc)),
@@ -566,6 +574,7 @@ public static partial class WebSiteBuilder
                     var slug = Slugify(term);
                     var termRoute = BuildRoute(taxonomy.BasePath, slug, spec.TrailingSlash);
                     termRoute = ApplyLanguagePrefixToRoute(spec, termRoute, language);
+                    var taxonomyTermPageCount = languageTerms[term].Distinct().Count();
                     results.Add(new ContentItem
                     {
                         Collection = taxonomy.Name,
@@ -573,7 +582,11 @@ public static partial class WebSiteBuilder
                         Language = language,
                         TranslationKey = $"taxonomy:{taxonomy.Name}:term:{slug}",
                         Title = term,
-                        Description = string.Empty,
+                        Description = BuildTaxonomyTermDescription(
+                            spec,
+                            taxonomy.Name,
+                            term,
+                            taxonomyTermPageCount),
                         LastModifiedUtc = MaxLastModifiedUtc(languageTerms[term]
                             .Select(static item => item.LastModifiedUtc)),
                         Kind = PageKind.Term,

@@ -46,12 +46,12 @@ public class WebSiteTaxonomyFeedMetadataTests
             File.WriteAllText(Path.Combine(themeRoot, "layouts", "taxonomy.html"),
                 """
                 <!doctype html>
-                <html><head>{{ head_html }}</head><body>{{ content }}</body></html>
+                <html><head>{{ description_meta_html }}{{ head_html }}</head><body>{{ content }}</body></html>
                 """);
             File.WriteAllText(Path.Combine(themeRoot, "layouts", "term.html"),
                 """
                 <!doctype html>
-                <html><head>{{ head_html }}</head><body>{{ content }}</body></html>
+                <html><head>{{ description_meta_html }}{{ head_html }}</head><body>{{ content }}</body></html>
                 """);
             File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
                 """
@@ -108,11 +108,31 @@ public class WebSiteTaxonomyFeedMetadataTests
             var termFeed = XDocument.Load(Path.Combine(result.OutputPath, "tags", "release", "index.xml"));
             Assert.Equal("Feed Metadata Test tag: release", termFeed.Root?.Element("channel")?.Element("title")?.Value);
             Assert.Equal("Posts filed under release in Feed Metadata Test.", termFeed.Root?.Element("channel")?.Element("description")?.Value);
+
+            var taxonomyHtml = File.ReadAllText(Path.Combine(result.OutputPath, "tags", "index.html"));
+            var taxonomyDescription = ReadMetaDescription(taxonomyHtml);
+            Assert.InRange(taxonomyDescription.Length, 120, 160);
+            Assert.Contains("Browse Feed Metadata Test content by Tags", taxonomyDescription, StringComparison.Ordinal);
+
+            var termHtml = File.ReadAllText(Path.Combine(result.OutputPath, "tags", "release", "index.html"));
+            var termDescription = ReadMetaDescription(termHtml);
+            Assert.InRange(termDescription.Length, 120, 160);
+            Assert.Contains("Explore 1 Feed Metadata Test page tagged release", termDescription, StringComparison.Ordinal);
         }
         finally
         {
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
         }
+    }
+
+    private static string ReadMetaDescription(string html)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
+            html,
+            "<meta\\s+name=\"description\"\\s+content=\"(?<content>[^\"]*)\"",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        Assert.True(match.Success, "Expected a generated meta description.");
+        return System.Net.WebUtility.HtmlDecode(match.Groups["content"].Value);
     }
 }
