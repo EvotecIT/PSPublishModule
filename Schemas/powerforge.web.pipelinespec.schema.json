@@ -3453,6 +3453,8 @@
         "name": { "type": "string" },
         "package": { "type": "string" },
         "packageId": { "type": "string" },
+        "packageFiles": { "type": "array", "items": { "type": "string" } },
+        "package-files": { "type": "array", "items": { "type": "string" } },
         "version": { "type": "string" },
         "quickstart": { "type": "string" },
         "discovery": { "type": "string" },

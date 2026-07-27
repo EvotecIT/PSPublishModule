@@ -533,6 +533,46 @@ public class WebLlmsGeneratorTests
     }
 
     [Fact]
+    public void Generate_IncludesPowerShellPrereleaseLabelInEffectiveVersion()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-powershell-prerelease-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var modulePath = Path.Combine(root, "ExampleModule.psd1");
+            File.WriteAllText(modulePath,
+                """
+                @{
+                    ModuleVersion = '2.4.1'
+                    Description = 'Example PowerShell automation module.'
+                    PrivateData = @{
+                        PSData = @{
+                            Prerelease = 'beta1'
+                        }
+                    }
+                }
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { modulePath }
+            });
+
+            Assert.Equal("2.4.1-beta1", result.Version);
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.Contains("source version `2.4.1-beta1`", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("\"version\": \"2.4.1-beta1\"", llmsJson, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Generate_FallsBackFromUnresolvedMsBuildMetadata()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-msbuild-properties-" + Guid.NewGuid().ToString("N"));

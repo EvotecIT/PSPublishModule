@@ -165,11 +165,13 @@ public static class WebLlmsGenerator
         var content = File.ReadAllText(full);
         if (Path.GetExtension(full).Equals(".psd1", StringComparison.OrdinalIgnoreCase))
         {
+            var moduleVersion = NormalizeEmpty(MatchPowerShellDataValue(content, "ModuleVersion"));
+            var prerelease = NormalizeEmpty(MatchPowerShellDataValue(content, "Prerelease"));
             return new ProjectInfo
             {
                 Name = Path.GetFileNameWithoutExtension(full),
                 PackageId = Path.GetFileNameWithoutExtension(full),
-                Version = NormalizeEmpty(MatchPowerShellDataValue(content, "ModuleVersion")),
+                Version = CombineMsBuildVersion(moduleVersion, prerelease),
                 Description = NormalizeEmpty(MatchPowerShellDataValue(content, "Description")),
                 IsPowerShellModule = true
             };
