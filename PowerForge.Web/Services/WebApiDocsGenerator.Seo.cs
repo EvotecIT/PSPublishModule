@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
@@ -13,9 +14,10 @@ public static partial class WebApiDocsGenerator
         int documentedTypeCount)
     {
         var title = NormalizeApiSeoText(options.Title);
-        var itemLabel = options.Type == ApiDocsType.PowerShell ? "cmdlets" : "types";
-        var description =
-            $"Browse {title} for {documentedTypeCount:N0} documented {itemLabel}, with signatures, parameters, examples, related APIs, inheritance details, and source links.";
+        var count = FormatApiSeoCount(documentedTypeCount);
+        var description = options.Type == ApiDocsType.PowerShell
+            ? $"Browse {title} for {count} documented reference entries, with searchable syntax, parameters, pipeline details, and navigation across the API."
+            : $"Browse {title} for {count} documented types, with searchable signatures, members, parameters, type relationships, and navigation across the API.";
 
         return FitApiSeoDescription(description);
     }
@@ -28,9 +30,12 @@ public static partial class WebApiDocsGenerator
         var title = NormalizeApiSeoText(options.Title);
         var name = NormalizeApiSeoText(displayName);
         var summary = NormalizeApiSeoText(type.Summary);
+        var referenceDetails = options.Type == ApiDocsType.PowerShell
+            ? "available syntax, parameters, pipeline guidance, and reference details"
+            : "signatures, members, parameters, type relationships, and available reference details";
         var description = string.IsNullOrWhiteSpace(summary)
-            ? $"Explore {name} in {title}, including syntax, members, parameters, examples, related APIs, inheritance details, and source links."
-            : $"{name}: {summary.TrimEnd('.', '!', '?')}. Review syntax, members, parameters, examples, related APIs, and source links in {title}.";
+            ? $"Explore {name} in {title}, including {referenceDetails}."
+            : $"{name}: {summary.TrimEnd('.', '!', '?')}. Review {referenceDetails} in {title}.";
 
         return FitApiSeoDescription(description);
     }
@@ -40,11 +45,15 @@ public static partial class WebApiDocsGenerator
         int entryCount)
     {
         var normalizedTitle = NormalizeApiSeoText(title);
+        var count = FormatApiSeoCount(entryCount);
         var description =
-            $"Browse {normalizedTitle} across {entryCount:N0} API references, with searchable symbols, curated guidance, coverage signals, related samples, and source links.";
+            $"Browse {normalizedTitle} across {count} API references, with searchable symbols, curated guidance, coverage signals, and cross-project navigation from one landing page.";
 
         return FitApiSeoDescription(description);
     }
+
+    private static string FormatApiSeoCount(int value)
+        => value.ToString("N0", CultureInfo.InvariantCulture);
 
     private static string NormalizeApiSeoText(string? value)
     {
@@ -52,7 +61,6 @@ public static partial class WebApiDocsGenerator
             return string.Empty;
 
         var text = StripCrefTokens(value);
-        text = Regex.Replace(text, "<[^>]+>", " ");
         text = System.Web.HttpUtility.HtmlDecode(text);
         return Regex.Replace(text, "\\s+", " ").Trim();
     }
@@ -62,7 +70,7 @@ public static partial class WebApiDocsGenerator
         var description = NormalizeApiSeoText(value);
         if (description.Length < ApiSeoDescriptionMinimumLength)
         {
-            description = $"{description.TrimEnd('.', '!', '?')}. Includes current signatures, parameters, examples, related APIs, and source links.";
+            description = $"{description.TrimEnd('.', '!', '?')}. Includes current reference details, navigation context, and searchable documentation for practical implementation work.";
         }
 
         if (description.Length <= ApiSeoDescriptionMaximumLength)

@@ -24,9 +24,12 @@ public static partial class WebSiteBuilder
     {
         var siteName = string.IsNullOrWhiteSpace(spec.Name) ? "Site" : spec.Name.Trim();
         var pages = pageCount == 1 ? "page" : "pages";
+        var taxonomyTitle = HumanizeSegment(taxonomyName);
         var relationship = taxonomyName.Equals("categories", StringComparison.OrdinalIgnoreCase)
             ? $"in the {term} category"
-            : $"tagged {term}";
+            : taxonomyName.Equals("tags", StringComparison.OrdinalIgnoreCase)
+                ? $"tagged {term}"
+                : $"filed under {term} in the {taxonomyTitle} taxonomy";
 
         return FitTaxonomyDescription(
             $"Explore {pageCount} {siteName} {pages} {relationship}, with related guides, articles, examples, workflow notes, and reference material collected in one place.");

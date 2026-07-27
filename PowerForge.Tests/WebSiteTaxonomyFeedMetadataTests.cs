@@ -31,6 +31,7 @@ public class WebSiteTaxonomyFeedMetadataTests
                 description: First release notes entry.
                 date: 2026-01-01
                 tags: [release]
+                authors: [Alice]
                 ---
 
                 Hello
@@ -91,6 +92,17 @@ public class WebSiteTaxonomyFeedMetadataTests
                         FeedDescription = "Browse release notes and tutorial topics.",
                         TermFeedTitleTemplate = "{site} tag: {term}",
                         TermFeedDescriptionTemplate = "Posts filed under {term} in {site}."
+                    },
+                    new TaxonomySpec
+                    {
+                        Name = "authors",
+                        BasePath = "/authors",
+                        ListLayout = "taxonomy",
+                        TermLayout = "term",
+                        FeedTitle = "Blog Authors",
+                        FeedDescription = "Browse articles by author.",
+                        TermFeedTitleTemplate = "{site} author: {term}",
+                        TermFeedDescriptionTemplate = "Posts written by {term} in {site}."
                     }
                 }
             };
@@ -118,6 +130,12 @@ public class WebSiteTaxonomyFeedMetadataTests
             var termDescription = ReadMetaDescription(termHtml);
             Assert.InRange(termDescription.Length, 120, 160);
             Assert.Contains("Explore 1 Feed Metadata Test page tagged release", termDescription, StringComparison.Ordinal);
+
+            var authorHtml = File.ReadAllText(Path.Combine(result.OutputPath, "authors", "alice", "index.html"));
+            var authorDescription = ReadMetaDescription(authorHtml);
+            Assert.InRange(authorDescription.Length, 120, 160);
+            Assert.Contains("filed under Alice in the Authors taxonomy", authorDescription, StringComparison.Ordinal);
+            Assert.DoesNotContain("tagged Alice", authorDescription, StringComparison.Ordinal);
         }
         finally
         {

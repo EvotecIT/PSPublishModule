@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.RegularExpressions;
 using PowerForge.Web;
@@ -52,6 +53,9 @@ public sealed class WebApiDocsSeoDescriptionTests
             Assert.StartsWith("ReportBuilder:", typeDescription, StringComparison.Ordinal);
             Assert.Contains("Builds validated reports", typeDescription, StringComparison.Ordinal);
             Assert.Contains("parameters", typeDescription, StringComparison.Ordinal);
+            Assert.DoesNotContain("examples", typeDescription, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("source links", typeDescription, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("related APIs", typeDescription, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(typeDescription, ReadMetaContent(typeHtml, "og:description", propertyAttribute: true));
             Assert.Equal(typeDescription, ReadMetaContent(typeHtml, "twitter:description"));
         }
@@ -102,7 +106,7 @@ public sealed class WebApiDocsSeoDescriptionTests
 
             var indexDescription = ReadMetaContent(Path.Combine(outputPath, "index.html"), "description");
             Assert.InRange(indexDescription.Length, 120, 160);
-            Assert.Contains("documented cmdlets", indexDescription, StringComparison.Ordinal);
+            Assert.Contains("documented reference entries", indexDescription, StringComparison.Ordinal);
 
             var cmdletDescription = ReadMetaContent(
                 Path.Combine(outputPath, "save-samplereport", "index.html"),
@@ -113,6 +117,95 @@ public sealed class WebApiDocsSeoDescriptionTests
         }
         finally
         {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_PreservesLiteralAngleBracketNotationInSummary()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-apidocs-seo-angle-brackets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var xmlPath = Path.Combine(root, "Sample.Api.xml");
+            File.WriteAllText(xmlPath,
+                """
+                <doc>
+                  <assembly><name>Sample.Api</name></assembly>
+                  <members>
+                    <member name="T:Sample.Api.ComparisonGuide">
+                      <summary>Compares x &lt; y &gt; z and preserves List&lt;T&gt; notation.</summary>
+                    </member>
+                  </members>
+                </doc>
+                """);
+
+            var outputPath = Path.Combine(root, "_site", "api");
+            _ = WebApiDocsGenerator.Generate(new WebApiDocsOptions
+            {
+                Type = ApiDocsType.CSharp,
+                XmlPath = xmlPath,
+                OutputPath = outputPath,
+                Title = "Sample API Reference",
+                BaseUrl = "/api",
+                Format = "html",
+                Template = "docs"
+            });
+
+            var typePath = Directory.GetDirectories(outputPath)
+                .Select(path => Path.Combine(path, "index.html"))
+                .Single(File.Exists);
+            var description = ReadMetaContent(typePath, "description");
+            Assert.Contains("x < y > z", description, StringComparison.Ordinal);
+            Assert.Contains("List<T>", description, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void GenerateSuitePortal_FormatsCountsIndependentlyOfBuildCulture()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-apidocs-seo-culture-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var originalCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
+            var outputPath = Path.Combine(root, "_site", "api-suite");
+            var options = new WebApiDocsOptions
+            {
+                OutputPath = outputPath,
+                Title = "Project APIs",
+                BaseUrl = "/api-suite"
+            };
+            for (var index = 0; index < 1_000; index++)
+            {
+                options.ApiSuiteEntries.Add(new WebApiDocsSuiteEntry
+                {
+                    Id = $"project-{index}",
+                    Label = $"Project {index}",
+                    Href = $"/projects/{index}/api/",
+                    Order = index
+                });
+            }
+
+            _ = WebApiDocsGenerator.GenerateSuitePortal(options);
+
+            var description = ReadMetaContent(Path.Combine(outputPath, "index.html"), "description");
+            Assert.Contains("1,000 API references", description, StringComparison.Ordinal);
+            Assert.DoesNotContain("1.000 API references", description, StringComparison.Ordinal);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
         }
