@@ -1675,6 +1675,7 @@ internal static partial class WebPipelineRunner
             License = GetString(step, "license"),
             Targets = GetString(step, "targets"),
             ExtraContentPath = ResolvePath(baseDir, GetString(step, "extra")),
+            DiscoveryContentPath = ResolvePath(baseDir, GetString(step, "discovery")),
             ApiDetailLevel = ParseApiDetailLevel(apiLevelText),
             ApiMaxTypes = GetInt(step, "apiMaxTypes") ?? 200,
             ApiMaxMembers = GetInt(step, "apiMaxMembers") ?? 2000

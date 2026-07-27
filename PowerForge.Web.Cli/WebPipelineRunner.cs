@@ -67,7 +67,7 @@ internal static partial class WebPipelineRunner
         "csvSources", "csv-sources", "apacheOut", "apache-out",
         "csproj", "csprojFiles", "csproj-files", "psd1", "psd1Files", "psd1-files",
         "markdownOut", "markdown-out", "markdownOutput", "markdown-output",
-        "headerHtml", "footerHtml", "quickstart", "extra",
+        "headerHtml", "footerHtml", "quickstart", "extra", "discovery",
         "htmlOutput", "htmlTemplate",
         "entriesJson", "entriesFile", "entries-json", "entries-file",
         "jsonOutput", "jsonOut", "json-output", "json-out",

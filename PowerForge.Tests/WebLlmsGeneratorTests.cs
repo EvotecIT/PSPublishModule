@@ -36,6 +36,48 @@ public class WebLlmsGeneratorTests
     }
 
     [Fact]
+    public void Generate_AppendsCuratedDiscoveryToIndexAndFullContext()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-discovery-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var discoveryPath = Path.Combine(root, "discovery.md");
+            var extraPath = Path.Combine(root, "extra.md");
+            File.WriteAllText(discoveryPath,
+                """
+                ## Decision guides
+
+                - [Compare libraries](/comparisons/): Dated first-party evidence.
+                - [License policy](/licensing/): License and public crawler policy.
+                """);
+            File.WriteAllText(extraPath, "## Full-only implementation notes");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Product",
+                PackageId = "Example.Product",
+                DiscoveryContentPath = discoveryPath,
+                ExtraContentPath = extraPath
+            });
+
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            var llmsFull = File.ReadAllText(result.LlmsFullPath);
+            Assert.Contains("[Compare libraries](/comparisons/)", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("[License policy](/licensing/)", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("Full-only implementation notes", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("[Compare libraries](/comparisons/)", llmsFull, StringComparison.Ordinal);
+            Assert.Contains("Full-only implementation notes", llmsFull, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Generate_AggregatesMultipleApiCatalogsWithTheirPublishedRoutes()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-multi-api-" + Guid.NewGuid().ToString("N"));

@@ -3455,6 +3455,7 @@
         "packageId": { "type": "string" },
         "version": { "type": "string" },
         "quickstart": { "type": "string" },
+        "discovery": { "type": "string" },
         "overview": { "type": "string" },
         "license": { "type": "string" },
         "targets": { "type": "string" },

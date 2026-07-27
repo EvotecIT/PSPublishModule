@@ -36,6 +36,8 @@ public sealed class WebLlmsOptions
     public string? Targets { get; set; }
     /// <summary>Optional path to extra content for llms-full.</summary>
     public string? ExtraContentPath { get; set; }
+    /// <summary>Optional curated Markdown appended to both llms.txt and llms-full.txt.</summary>
+    public string? DiscoveryContentPath { get; set; }
     /// <summary>Optional API detail level for llms-full (none, summary, full).</summary>
     public WebApiDetailLevel ApiDetailLevel { get; set; } = WebApiDetailLevel.None;
     /// <summary>Maximum number of API types to include.</summary>
@@ -83,7 +85,7 @@ public static class WebLlmsGenerator
             primaryPackage?.ToolCommandName ?? projectInfo.ToolCommandName);
         var legacyInstallCommand = CreateInstallCommand(packageId, projectInfo.IsPowerShellModule, projectInfo.IsDotNetTool);
         var overview = ResolveOverview(options, projectInfo, siteRoot, name);
-        WriteLlmsTxt(llmsTxtPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, overview, quickstart);
+        WriteLlmsTxt(llmsTxtPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, overview, quickstart, options.DiscoveryContentPath);
         WriteLlmsJson(llmsJsonPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, quickstart);
         WriteLlmsFull(llmsFullPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, overview, quickstart, options);
 
@@ -490,7 +492,8 @@ public static class WebLlmsGenerator
         int? typeCount,
         IReadOnlyList<ApiCatalogInfo> apiCatalogs,
         string overview,
-        QuickstartInfo quickstart)
+        QuickstartInfo quickstart,
+        string? discoveryContentPath)
     {
         var lines = new List<string>
         {
@@ -526,6 +529,7 @@ public static class WebLlmsGenerator
         lines.Add(string.Empty);
         lines.Add("## Machine-friendly API data");
         AppendApiResourceLinks(lines, apiCatalogs);
+        AppendOptionalMarkdown(lines, discoveryContentPath);
         lines.Add(string.Empty);
         lines.Add("Slug rule: lower-case, dots/symbols -> dashes.");
 
@@ -637,6 +641,7 @@ public static class WebLlmsGenerator
         AppendApiResourceLinks(lines, apiCatalogs);
 
         AppendApiDetails(lines, options, apiCatalogs);
+        AppendOptionalMarkdown(lines, options.DiscoveryContentPath);
 
         if (!string.IsNullOrWhiteSpace(options.ExtraContentPath))
         {
@@ -649,6 +654,19 @@ public static class WebLlmsGenerator
         }
 
         File.WriteAllText(path, string.Join(Environment.NewLine, lines), Encoding.UTF8);
+    }
+
+    private static void AppendOptionalMarkdown(List<string> lines, string? contentPath)
+    {
+        if (string.IsNullOrWhiteSpace(contentPath))
+            return;
+
+        var fullPath = Path.GetFullPath(contentPath);
+        if (!File.Exists(fullPath))
+            return;
+
+        lines.Add(string.Empty);
+        lines.AddRange(File.ReadAllLines(fullPath));
     }
 
     private static void AppendPackageInstallMarkdown(List<string> lines, IReadOnlyList<PackageInfo> packages)

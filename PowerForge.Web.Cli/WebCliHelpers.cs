@@ -125,7 +125,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web llms --site-root <dir> [--project <path>] [--package-files <path[,path...]>] [--api-index <path>] [--api-indexes <path[,path...]>]");
         Console.WriteLine("                     [--api-base /api]");
         Console.WriteLine("                     [--name <Name>] [--package <Id>] [--version <X.Y.Z>] [--quickstart <file>]");
-        Console.WriteLine("                     [--overview <text>] [--license <text>] [--targets <text>] [--extra <file>]");
+        Console.WriteLine("                     [--overview <text>] [--license <text>] [--targets <text>] [--discovery <file>] [--extra <file>]");
         Console.WriteLine("                     [--api-level none|summary|full] [--api-max-types <n>] [--api-max-members <n>]");
         Console.WriteLine("  powerforge-web sitemap --site-root <dir> --base-url <url> [--api-sitemap <path>] [--out <file>] [--entries <file>] [--entries-json <file>]");
         Console.WriteLine("                     [--sitemap-json] [--sitemap-json-out <file>] [--html] [--html-out <file>] [--html-template <file>] [--html-css <href>] [--html-title <text>]");

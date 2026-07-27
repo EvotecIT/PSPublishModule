@@ -1240,6 +1240,7 @@ public static partial class WebSiteBuilder
             process.StartInfo.ArgumentList.Add("core.quotePath=false");
             process.StartInfo.ArgumentList.Add("log");
             process.StartInfo.ArgumentList.Add("--format=@@POWERFORGE_DATE@@%aI");
+            process.StartInfo.ArgumentList.Add("--relative");
             process.StartInfo.ArgumentList.Add("--name-only");
             process.StartInfo.ArgumentList.Add("--diff-filter=AMR");
             process.StartInfo.ArgumentList.Add("--");
