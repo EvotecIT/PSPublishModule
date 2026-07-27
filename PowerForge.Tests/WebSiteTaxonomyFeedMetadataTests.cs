@@ -117,13 +117,13 @@ public class WebSiteTaxonomyFeedMetadataTests
                 """
                 ---
                 title: Pierwszy wpis
-                description: Opisuje polskie wydanie produktu, najważniejsze poprawki, zgodność pakietów oraz praktyczne informacje potrzebne podczas aktualizacji środowiska.
+                description: Krótki opis.
                 date: 2026-01-02
                 language: pl
                 tags: [wydanie]
                 ---
 
-                Cześć
+                Opisuje polskie wydanie produktu, najważniejsze poprawki, zgodność pakietów oraz praktyczne informacje potrzebne podczas aktualizacji środowiska.
                 """);
 
             var themeRoot = Path.Combine(root, "themes", "taxonomy-feed-meta");
@@ -246,6 +246,7 @@ public class WebSiteTaxonomyFeedMetadataTests
             var polishTaxonomyDescription = ReadMetaDescription(polishTaxonomyHtml);
             Assert.InRange(polishTaxonomyDescription.Length, 120, 160);
             Assert.Contains("Opisuje polskie wydanie produktu", polishTaxonomyDescription, StringComparison.Ordinal);
+            Assert.Contains("Krótki opis", polishTaxonomyDescription, StringComparison.Ordinal);
             Assert.DoesNotContain("Browse", polishTaxonomyDescription, StringComparison.Ordinal);
             Assert.DoesNotContain("Explore", polishTaxonomyDescription, StringComparison.Ordinal);
         }

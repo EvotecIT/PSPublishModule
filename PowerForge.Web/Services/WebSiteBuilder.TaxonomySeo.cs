@@ -66,9 +66,10 @@ public static partial class WebSiteBuilder
             {
                 var title = item.Title?.Trim() ?? string.Empty;
                 var description = item.Description?.Trim() ?? string.Empty;
-                if (description.Length == 0)
-                    return title;
-                return title.Length == 0 ? description : $"{title}: {description}";
+                var body = BuildSnippet(item.HtmlContent, 220);
+                return string.Join(". ", new[] { title, description, body }
+                    .Where(static value => value.Length > 0)
+                    .Distinct(StringComparer.Ordinal));
             })
             .Where(static value => value.Length > 0)
             .Distinct(StringComparer.Ordinal)

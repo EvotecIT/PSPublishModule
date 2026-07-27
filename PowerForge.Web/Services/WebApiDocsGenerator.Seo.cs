@@ -48,19 +48,19 @@ public static partial class WebApiDocsGenerator
         var count = FormatApiSeoCount(suite.Entries.Count);
         var capabilities = new List<string>();
         if (!string.IsNullOrWhiteSpace(suite.SearchUrl))
-            capabilities.Add("search symbols");
+            capabilities.Add("symbol search");
         if (!string.IsNullOrWhiteSpace(suite.NarrativeUrl))
-            capabilities.Add("follow curated guidance");
+            capabilities.Add("curated guidance");
         if (!string.IsNullOrWhiteSpace(suite.CoverageUrl))
-            capabilities.Add("review coverage signals");
+            capabilities.Add("coverage signals");
         if (!string.IsNullOrWhiteSpace(suite.RelatedContentUrl))
-            capabilities.Add("find related guides and samples");
+            capabilities.Add("related guides and samples");
         if (!string.IsNullOrWhiteSpace(suite.XrefMapUrl))
-            capabilities.Add("follow cross-project references");
+            capabilities.Add("cross-project references");
 
         var description = capabilities.Count == 0
             ? $"Browse {normalizedTitle} across {count} API references, compare project scopes, and open each documented API from one cross-project landing page."
-            : $"Browse {normalizedTitle} across {count} API references, compare project scopes, {FormatApiSeoActions(capabilities)}, and open each API from one landing page.";
+            : $"Browse {normalizedTitle} across {count} API references with {FormatApiSeoActions(capabilities)}. Compare project scopes and open each API from one landing page.";
 
         return FitApiSeoDescription(description);
     }
@@ -104,6 +104,12 @@ public static partial class WebApiDocsGenerator
         if (wordBoundary < ApiSeoDescriptionMinimumLength)
             wordBoundary = limit;
 
-        return description[..wordBoundary].TrimEnd(' ', ',', ';', ':', '-', '.', '!', '?') + ".";
+        var truncated = description[..wordBoundary].TrimEnd(' ', ',', ';', ':', '-', '.', '!', '?');
+        truncated = Regex.Replace(
+            truncated,
+            @"(?:,\s*)?\b(?:and|or|with|including|from|to)\z",
+            string.Empty,
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).TrimEnd(' ', ',', ';', ':', '-');
+        return truncated + ".";
     }
 }

@@ -172,6 +172,7 @@ public class WebApiDocsGeneratorSuiteTests
             var description = ExtractMetaContent(html, "description", isProperty: false);
             Assert.InRange(description.Length, 120, 160);
             Assert.Contains("Project APIs", description, StringComparison.Ordinal);
+            Assert.DoesNotMatch(@"\b(?:and|or|with|including|from|to)\.$", description);
             Assert.Equal(description, ExtractMetaContent(html, "og:description", isProperty: true));
             Assert.Equal(description, ExtractMetaContent(html, "twitter:description", isProperty: false));
 
