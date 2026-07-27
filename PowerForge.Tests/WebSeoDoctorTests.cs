@@ -5,6 +5,220 @@ namespace PowerForge.Tests;
 public class WebSeoDoctorTests
 {
     [Fact]
+    public void Analyze_AcceptsHomeAssistantRedirectLinkWithinFirstTenKilobytes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-ha-redirect-ok-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <link href='com.example.app://home-assistant/auth-callback' data-owner='app' rel='alternate redirect_uri' />
+                  <title>Home Assistant application discovery contract</title>
+                  <meta name="description" content="This page validates the Home Assistant redirect discovery contract in generated HTML." />
+                </head>
+                <body><h1>Home Assistant application</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root));
+
+            Assert.DoesNotContain(result.Issues, issue => issue.Category == "home-assistant-discovery");
+            Assert.True(result.Success);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_FailsWhenHomeAssistantRedirectLinkStartsAfterFirstTenKilobytes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-ha-redirect-late-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var padding = new string('x', (10 * 1024) + 128);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                $"""
+                <!doctype html>
+                <html>
+                <head>
+                  <!-- {padding} -->
+                  <link rel="redirect_uri" href="com.example.app://home-assistant/auth-callback" />
+                  <title>Home Assistant application discovery contract</title>
+                  <meta name="description" content="This page validates the Home Assistant redirect discovery contract in generated HTML." />
+                </head>
+                <body><h1>Home Assistant application</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root));
+
+            Assert.Contains(result.Issues, issue =>
+                issue.Hint == "redirect-uri-first-10kb" &&
+                issue.Severity.Equals("error", StringComparison.OrdinalIgnoreCase));
+            Assert.False(result.Success);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_StillValidatesHomeAssistantRedirectOnNoIndexPage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-ha-redirect-noindex-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var padding = new string('x', (10 * 1024) + 128);
+            File.WriteAllText(Path.Combine(root, "callback.html"),
+                $"""
+                <!doctype html>
+                <html>
+                <head>
+                  <meta name="robots" content="noindex,nofollow" />
+                  <!-- {padding} -->
+                  <link rel="redirect_uri" href="com.example.app://home-assistant/auth-callback" />
+                </head>
+                <body><h1>Application callback</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root));
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "redirect-uri-first-10kb");
+            Assert.False(result.Success);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_DoesNotTreatCommentedRedirectExampleAsDiscoverable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-ha-redirect-comment-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var padding = new string('x', (10 * 1024) + 128);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                $"""
+                <!doctype html>
+                <html>
+                <head>
+                  <!-- <link rel="redirect_uri" href="com.example.invalid://example" /> -->
+                  <script>const example = '<link rel="redirect_uri" href="com.example.invalid://script" />';</script>
+                  <!-- {padding} -->
+                  <link rel="redirect_uri" href="com.example.app://home-assistant/auth-callback" />
+                  <title>Home Assistant application discovery contract</title>
+                  <meta name="description" content="This page validates the Home Assistant redirect discovery contract in generated HTML." />
+                </head>
+                <body><h1>Home Assistant application</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root));
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "redirect-uri-first-10kb");
+            Assert.False(result.Success);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_FlagsBreadcrumbListWithFewerThanTwoItems()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-breadcrumb-count-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Structured data breadcrumb contract page</title>
+                  <meta name="description" content="This page validates the minimum breadcrumb hierarchy required by search engines." />
+                  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home"}]}</script>
+                </head>
+                <body><h1>Breadcrumb contract</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root, checkStructuredData: true));
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-breadcrumb-items");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_FlagsBreadcrumbListWithMalformedItems()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-breadcrumb-shape-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Structured data breadcrumb contract page</title>
+                  <meta name="description" content="This page validates the minimum breadcrumb hierarchy required by search engines." />
+                  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[null,{"@type":"ListItem","position":2}]}</script>
+                </head>
+                <body><h1>Breadcrumb contract</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root, checkStructuredData: true));
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-breadcrumb-items");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    private static WebSeoDoctorOptions CreateFocusedOptions(string root, bool checkStructuredData = false) => new()
+    {
+        SiteRoot = root,
+        CheckTitleLength = false,
+        CheckDescriptionLength = false,
+        CheckH1 = false,
+        CheckImageAlt = false,
+        CheckDuplicateTitles = false,
+        CheckOrphanPages = false,
+        CheckCanonical = false,
+        CheckHreflang = false,
+        CheckStructuredData = checkStructuredData,
+        CheckContentLeaks = false
+    };
+
+    [Fact]
     public void Analyze_FlagsExpectedIssues_AndSkipsNoIndexByDefault()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-" + Guid.NewGuid().ToString("N"));

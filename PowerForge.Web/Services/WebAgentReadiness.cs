@@ -2017,8 +2017,8 @@ public static class WebAgentReadiness
             target);
         AddCheck(checks, "breadcrumb-list", "ai-search-signals", "BreadcrumbList",
             jsonLd.Any(static item => item.Contains("BreadcrumbList", StringComparison.OrdinalIgnoreCase)) ||
-            html.Contains("BreadcrumbList", StringComparison.OrdinalIgnoreCase) ? "pass" : "warn",
-            "BreadcrumbList structured data helps agents resolve page context.",
+            html.Contains("BreadcrumbList", StringComparison.OrdinalIgnoreCase) ? "pass" : "info",
+            "BreadcrumbList is optional on a homepage and useful on hierarchical pages with at least two items.",
             target);
         AddCheck(checks, "organization-schema", "ai-search-signals", "Organization Schema",
             jsonLd.Any(static item => item.Contains("Organization", StringComparison.OrdinalIgnoreCase)) ? "pass" : "warn",

@@ -39,6 +39,7 @@ public static partial class WebSeoDoctor
         TimeSpan.FromMilliseconds(250));
     private static readonly TimeSpan GlobMatchRegexTimeout = TimeSpan.FromMilliseconds(100);
     private const int MaxJsonLdPayloadLength = 1_000_000;
+    private const int HomeAssistantRedirectDiscoveryByteLimit = 10 * 1024;
     private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
@@ -161,6 +162,14 @@ public static partial class WebSeoDoctor
                     "canonical-alias-noindex",
                     canonicalAliasRoute);
             }
+
+            // Home Assistant discovery is a machine-facing contract and still matters
+            // on callback or association pages that intentionally opt out of indexing.
+            ValidateHomeAssistantRedirectDiscovery(
+                doc,
+                file,
+                relativePath,
+                AddIssue);
 
             if (!options.IncludeNoIndexPages && hasNoIndexRobots)
                 continue;
@@ -1385,6 +1394,12 @@ public static partial class WebSeoDoctor
                     continue;
                 }
 
+                if (type.Equals("BreadcrumbList", StringComparison.OrdinalIgnoreCase))
+                {
+                    ValidateBreadcrumbProfile(obj, relativePath, objectLabel, addIssue);
+                    continue;
+                }
+
                 if (type.Equals("HowTo", StringComparison.OrdinalIgnoreCase))
                 {
                     ValidateHowToProfile(obj, relativePath, objectLabel, addIssue);
@@ -1422,6 +1437,108 @@ public static partial class WebSeoDoctor
                 }
             }
         }
+    }
+
+    private static void ValidateBreadcrumbProfile(
+        JsonElement obj,
+        string relativePath,
+        string objectLabel,
+        Action<string, string, string?, string, string?, string?> addIssue)
+    {
+        if (!obj.TryGetProperty("itemListElement", out var items) ||
+            items.ValueKind != JsonValueKind.Array ||
+            items.GetArrayLength() < 2 ||
+            items.EnumerateArray().Any(static item => !IsValidBreadcrumbListItem(item)))
+        {
+            addIssue("warning", "structured-data", relativePath,
+                $"JSON-LD payload ({objectLabel}) type BreadcrumbList should contain at least two ListItem entries.",
+                "structured-data-breadcrumb-items",
+                objectLabel);
+        }
+    }
+
+    private static bool IsValidBreadcrumbListItem(JsonElement item)
+    {
+        if (item.ValueKind != JsonValueKind.Object ||
+            !GetJsonLdTypes(item).Contains("ListItem", StringComparer.OrdinalIgnoreCase) ||
+            !item.TryGetProperty("position", out var position) ||
+            position.ValueKind != JsonValueKind.Number ||
+            !position.TryGetInt32(out var positionValue) ||
+            positionValue < 1 ||
+            !item.TryGetProperty("name", out var name) ||
+            name.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(name.GetString());
+    }
+
+    private static void ValidateHomeAssistantRedirectDiscovery(
+        AngleSharp.Dom.IDocument doc,
+        string filePath,
+        string relativePath,
+        Action<string, string, string?, string, string?, string?> addIssue)
+    {
+        var redirectLinks = doc.QuerySelectorAll("link[rel]")
+            .Where(link => ContainsRelToken(link.GetAttribute("rel"), "redirect_uri"))
+            .ToArray();
+        if (redirectLinks.Length == 0)
+            return;
+
+        if (redirectLinks.All(link => string.IsNullOrWhiteSpace(link.GetAttribute("href"))))
+        {
+            addIssue("error", "home-assistant-discovery", relativePath,
+                "redirect_uri link is missing a non-empty href.",
+                "redirect-uri-href-missing",
+                null);
+            return;
+        }
+
+        byte[] bytes;
+        try
+        {
+            bytes = File.ReadAllBytes(filePath);
+        }
+        catch (Exception ex)
+        {
+            addIssue("error", "home-assistant-discovery", relativePath,
+                $"failed to inspect the first {HomeAssistantRedirectDiscoveryByteLimit} bytes ({ex.Message}).",
+                "redirect-uri-read",
+                ex.GetType().Name);
+            return;
+        }
+
+        var prefixLength = Math.Min(bytes.Length, HomeAssistantRedirectDiscoveryByteLimit);
+        var prefix = System.Text.Encoding.UTF8.GetString(bytes, 0, prefixLength);
+        var lastCompleteTagBoundary = prefix.LastIndexOf('>');
+        if (lastCompleteTagBoundary >= 0)
+        {
+            AngleSharp.Dom.IDocument? prefixDocument = null;
+            try
+            {
+                // Parse the prefix as one document so comments, scripts, and other HTML
+                // contexts remain non-executable discovery examples. Trimming after the
+                // last complete tag also prevents parser recovery of a boundary-crossing tag.
+                prefixDocument = HtmlParser.ParseWithAngleSharp(prefix[..(lastCompleteTagBoundary + 1)]);
+            }
+            catch
+            {
+                // Fall through to the contract error below.
+            }
+
+            if (prefixDocument is not null && prefixDocument.QuerySelectorAll("link[rel]")
+                    .Any(link => ContainsRelToken(link.GetAttribute("rel"), "redirect_uri") &&
+                                 !string.IsNullOrWhiteSpace(link.GetAttribute("href"))))
+            {
+                return;
+            }
+        }
+
+        addIssue("error", "home-assistant-discovery", relativePath,
+            $"redirect_uri link must be complete within the first {HomeAssistantRedirectDiscoveryByteLimit} bytes for Home Assistant discovery.",
+            "redirect-uri-first-10kb",
+            null);
     }
 
     private static void ValidateFaqProfile(

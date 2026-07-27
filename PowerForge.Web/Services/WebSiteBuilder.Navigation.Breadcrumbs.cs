@@ -13,7 +13,8 @@ public static partial class WebSiteBuilder
 {
     private static BreadcrumbItem[] BuildBreadcrumbs(SiteSpec spec, ContentItem item, MenuSpec[] menuSpecs)
     {
-        var current = NormalizeRouteForMatch(item.OutputPath);
+        var localization = ResolveLocalizationConfig(spec);
+        var current = NormalizeRouteForMatch(StripLanguagePrefix(localization, item.OutputPath));
         var crumbs = new List<BreadcrumbItem>();
         var nav = BuildNavigation(spec, item, menuSpecs);
 
@@ -130,4 +131,3 @@ public static partial class WebSiteBuilder
 
 
 }
-
