@@ -15,9 +15,29 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("checksum mismatch", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("^\\d+\\.\\d+\\.\\d+$", script, StringComparison.Ordinal);
         Assert.Contains("sha256", schema, StringComparison.Ordinal);
+        Assert.Contains("releaseTag", schema, StringComparison.Ordinal);
+        Assert.Contains("$manifest.releaseTag", script, StringComparison.Ordinal);
+        Assert.Contains("$releaseTag = \"v$version\"", script, StringComparison.Ordinal);
+        Assert.Contains("releases/download/$releaseTag/$assetName", script, StringComparison.Ordinal);
+        Assert.Contains("unsupported characters", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("latest", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("MANIFEST_PATH: ${{ inputs.manifest-path }}", action, StringComparison.Ordinal);
         Assert.DoesNotContain("-ManifestPath '${{", action, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StandaloneToolWrapperPinsAnExplicitReleaseVersion()
+    {
+        var root = FindRepoRoot();
+        var wrapper = Read(root, "Build", "Build-PowerForge.ps1");
+        var project = Read(root, "Build", "Build-Project.ps1");
+        var cli = Read(root, "PowerForge.Cli", "Program.Command.Release.cs");
+
+        Assert.Contains("[string] $Version", wrapper, StringComparison.Ordinal);
+        Assert.Contains("$buildProjectParams.ReleaseVersion = $Version", wrapper, StringComparison.Ordinal);
+        Assert.Contains("[string] $ReleaseVersion", project, StringComparison.Ordinal);
+        Assert.Contains("--release-version", cli, StringComparison.Ordinal);
+        Assert.Contains("request.ReleaseVersion", cli, StringComparison.Ordinal);
     }
 
     [Fact]

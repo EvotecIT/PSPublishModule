@@ -113,6 +113,22 @@ public sealed class PowerForgeReleaseRequestMapperTests
     }
 
     [Fact]
+    public void Build_MapsStandaloneReleaseVersion()
+    {
+        var request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
+            "/repo/powerforge.release.json",
+            defaults: null,
+            new PSPublishModule.PowerForgeReleaseInvocationOptions
+            {
+                ToolsOnly = true,
+                ReleaseVersion = "3.0.80"
+            });
+
+        Assert.True(request.ToolsOnly);
+        Assert.Equal("3.0.80", request.ReleaseVersion);
+    }
+
+    [Fact]
     public void Build_MapsModuleReleaseOverrides()
     {
         var request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(

@@ -766,6 +766,26 @@ public sealed partial class PowerForgeReleaseServiceTests
         Assert.False(PowerForgeReleaseService.ShouldPublishUnifiedGitHub(spec, request, moduleSelected: false));
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ShouldPublishUnifiedGitHub_ExplicitToolsOnlyNeverOwnsTheUnifiedTag(bool? publishToolGitHub)
+    {
+        var spec = new PowerForgeReleaseSpec
+        {
+            GitHub = new PowerForgeReleaseGitHubOptions { Publish = true }
+        };
+        var request = new PowerForgeReleaseRequest
+        {
+            ToolsOnly = true,
+            PublishToolGitHub = publishToolGitHub,
+            ReleaseVersion = "3.0.80"
+        };
+
+        Assert.False(PowerForgeReleaseService.ShouldPublishUnifiedGitHub(spec, request, moduleSelected: false));
+    }
+
     [Fact]
     public void TargetedToolRelease_DoesNotApplyTheInactiveModuleBuildGateToUnifiedGitHubPublishing()
     {

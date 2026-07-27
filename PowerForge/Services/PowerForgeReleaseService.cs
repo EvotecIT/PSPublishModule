@@ -251,6 +251,7 @@ internal sealed partial class PowerForgeReleaseService
                            !request.ModuleOnly &&
                            !request.PackagesOnly &&
                            !request.ToolsOnly;
+        ApplyExplicitToolOnlyReleaseVersion(request, runModule, runPackages, runTools, runAppleApps);
         var appleTargetMatches = runAppleApps
             ? ResolveAppleTargetMatches(spec.AppleApps!, selectedTargets)
             : Array.Empty<string>();
@@ -840,6 +841,29 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         return result;
+    }
+
+    private static void ApplyExplicitToolOnlyReleaseVersion(
+        PowerForgeReleaseRequest request,
+        bool runModule,
+        bool runPackages,
+        bool runTools,
+        bool runAppleApps)
+    {
+        if (string.IsNullOrWhiteSpace(request.ReleaseVersion))
+            return;
+
+        if (!request.ToolsOnly || !runTools || runModule || runPackages || runAppleApps)
+        {
+            throw new InvalidOperationException(
+                "ReleaseVersion is supported only for an explicitly tool-only release. Use ToolsOnly to keep module, package, and Apple lanes out of the publication.");
+        }
+
+        var version = request.ReleaseVersion!.Trim();
+        if (!Regex.IsMatch(version, @"^\d+\.\d+\.\d+$", RegexOptions.CultureInvariant))
+            throw new ArgumentException("ReleaseVersion must use exact x.y.z format.", nameof(request));
+
+        request.ResolvedReleaseVersion = version;
     }
 
     internal static PowerForgeReleaseSpec LoadConfiguration(string configPath)
@@ -2713,7 +2737,7 @@ internal sealed partial class PowerForgeReleaseService
             return false;
         }
 
-        if (request.ToolsOnly && request.PublishToolGitHub == true)
+        if (request.ToolsOnly)
             return false;
 
         if (request.PackagesOnly && request.PublishProjectGitHub == true)
