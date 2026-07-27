@@ -178,6 +178,222 @@ public class WebLlmsGeneratorTests
         }
     }
 
+    [Fact]
+    public void Generate_DescribesMultiPackageSuiteFromProjectAndModuleManifests()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-package-suite-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var projectPath = Path.Combine(root, "OfficeIMO.Word.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <PackageId>OfficeIMO.Word</PackageId>
+                    <VersionPrefix>3.0.3</VersionPrefix>
+                  </PropertyGroup>
+                </Project>
+                """);
+            var modulePath = Path.Combine(root, "PSWriteOffice.psd1");
+            File.WriteAllText(modulePath,
+                """
+                @{
+                    ModuleVersion = '3.0.1'
+                    Description = 'PowerShell document automation powered by OfficeIMO.'
+                }
+                """);
+            var quickstartPath = Path.Combine(root, "quickstart.cs");
+            File.WriteAllText(quickstartPath,
+                """
+                using OfficeIMO.Word;
+
+                using var document = WordDocument.Create("Example.docx");
+                document.AddParagraph("Hello from OfficeIMO");
+                document.Save();
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "OfficeIMO library suite",
+                PackageFiles = new[] { projectPath, modulePath },
+                QuickstartPath = quickstartPath
+            });
+
+            Assert.Equal(2, result.PackageCount);
+            Assert.Equal("varies by package", result.Version);
+
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("- Packages: 2", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("`dotnet add package OfficeIMO.Word` — source version `3.0.3`", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("`Install-Module PSWriteOffice` — source version `3.0.1`", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("using OfficeIMO.Word;", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("Version: unknown", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("dotnet add package OfficeIMO library suite", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("TODO", llmsTxt, StringComparison.Ordinal);
+
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.Contains("\"packages\"", llmsJson, StringComparison.Ordinal);
+            Assert.Contains("\"id\": \"OfficeIMO.Word\"", llmsJson, StringComparison.Ordinal);
+            Assert.Contains("\"install\": \"Install-Module PSWriteOffice\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"package\": \"OfficeIMO library suite\"", llmsJson, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_RejectsMissingConfiguredPackageManifest()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-missing-package-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var missingPath = Path.Combine(root, "Missing.Package.csproj");
+            var error = Assert.Throws<FileNotFoundException>(() => WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Suite",
+                PackageFiles = new[] { missingPath }
+            }));
+
+            Assert.Equal(missingPath, error.FileName);
+            Assert.Contains("Configured package manifest not found", error.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_PreservesPowerShellSurfaceForLegacyProjectFile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-powershell-project-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var modulePath = Path.Combine(root, "ExampleModule.psd1");
+            File.WriteAllText(modulePath,
+                """
+                @{
+                    ModuleVersion = '2.4.1'
+                    Description = 'Example PowerShell automation module.'
+                }
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ProjectFile = modulePath
+            });
+
+            Assert.Equal(1, result.PackageCount);
+            Assert.Equal("ExampleModule", result.PackageId);
+            Assert.Equal("2.4.1", result.Version);
+
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("`Install-Module ExampleModule`", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("```powershell", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("Import-Module ExampleModule", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("dotnet add package", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("```csharp", llmsTxt, StringComparison.Ordinal);
+
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.Contains("\"quickstartLanguage\": \"powershell\"", llmsJson, StringComparison.Ordinal);
+            Assert.Contains("\"Install-Module ExampleModule\"", llmsJson, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_ReportsUnknownSuiteVersionWhenAnyManifestHasNoVersion()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-unknown-suite-version-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var versionedPath = Path.Combine(root, "Versioned.csproj");
+            File.WriteAllText(versionedPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <PackageId>Example.Versioned</PackageId>
+                    <Version>1.2.3</Version>
+                  </PropertyGroup>
+                </Project>
+                """);
+            var unversionedPath = Path.Combine(root, "Unversioned.csproj");
+            File.WriteAllText(unversionedPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <PackageId>Example.Unversioned</PackageId>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { versionedPath, unversionedPath }
+            });
+
+            Assert.Equal(2, result.PackageCount);
+            Assert.Equal("unknown", result.Version);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_UsesDotNetToolInstallationForToolManifest()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-dotnet-tool-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var toolPath = Path.Combine(root, "Example.Tool.csproj");
+            File.WriteAllText(toolPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <PackageId>Example.Tool</PackageId>
+                    <Version>1.2.3</Version>
+                    <PackAsTool>true</PackAsTool>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { toolPath }
+            });
+
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("`dotnet tool install --global Example.Tool`", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("dotnet add package Example.Tool", llmsTxt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

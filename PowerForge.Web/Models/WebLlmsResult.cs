@@ -15,6 +15,8 @@ public sealed class WebLlmsResult
     public string PackageId { get; set; } = string.Empty;
     /// <summary>Package version.</summary>
     public string Version { get; set; } = "unknown";
+    /// <summary>Number of installable packages represented by the generated files.</summary>
+    public int PackageCount { get; set; }
     /// <summary>Optional count of API types included.</summary>
     public int? ApiTypeCount { get; set; }
     /// <summary>Number of API catalogs represented in the generated files.</summary>

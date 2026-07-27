@@ -1652,10 +1652,18 @@ internal static partial class WebPipelineRunner
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(path => path!)
             .ToArray();
+        var packageFiles = (GetArrayOfStrings(step, "packageFiles") ??
+                            GetArrayOfStrings(step, "package-files") ??
+                            Array.Empty<string>())
+            .Select(path => ResolvePath(baseDir, path))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path!)
+            .ToArray();
         var res = WebLlmsGenerator.Generate(new WebLlmsOptions
         {
             SiteRoot = siteRoot,
             ProjectFile = ResolvePath(baseDir, GetString(step, "project")),
+            PackageFiles = packageFiles,
             ApiIndexPath = ResolvePath(baseDir, GetString(step, "apiIndex") ?? GetString(step, "api-index")),
             ApiIndexPaths = apiIndexPaths,
             ApiBase = GetString(step, "apiBase") ?? "/api",

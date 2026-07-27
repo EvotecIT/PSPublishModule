@@ -518,6 +518,7 @@ internal static partial class WebCliCommandHandlers
                        TryGetOptionValue(subArgs, "--root") ??
                        TryGetOptionValue(subArgs, "--path");
         var projectFile = TryGetOptionValue(subArgs, "--project");
+        var packageFiles = ReadOptionList(subArgs, "--package-files");
         var apiIndex = TryGetOptionValue(subArgs, "--api-index");
         var apiIndexes = ReadOptionList(subArgs, "--api-indexes");
         var apiBase = TryGetOptionValue(subArgs, "--api-base");
@@ -547,6 +548,7 @@ internal static partial class WebCliCommandHandlers
         {
             SiteRoot = siteRoot,
             ProjectFile = projectFile,
+            PackageFiles = packageFiles.ToArray(),
             ApiIndexPath = apiIndex,
             ApiIndexPaths = apiIndexes.ToArray(),
             ApiBase = apiBase ?? "/api",
