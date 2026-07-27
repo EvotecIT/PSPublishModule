@@ -229,7 +229,7 @@ public static class WebLlmsGenerator
 
     private static string MatchPowerShellDataValue(string content, string name)
     {
-        var pattern = $@"(?im)^\s*{Regex.Escape(name)}\s*=\s*['""](?<value>[^'""]+)['""]";
+        var pattern = $@"(?im)(?:^|[;{{])\s*{Regex.Escape(name)}\s*=\s*['""](?<value>[^'""]+)['""]";
         var match = Regex.Match(content, pattern, RegexOptions.CultureInvariant);
         return match.Success ? match.Groups["value"].Value.Trim() : string.Empty;
     }

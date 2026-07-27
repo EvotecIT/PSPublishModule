@@ -154,10 +154,34 @@ public class WebSiteTaxonomyFeedMetadataTests
                 description: Krótki opis.
                 date: 2026-01-02
                 language: pl
-                tags: [wydanie]
+                tags: [wydanie, aktualizacja]
                 ---
 
                 Opisuje polskie wydanie produktu, najważniejsze poprawki, zgodność pakietów oraz praktyczne informacje potrzebne podczas aktualizacji środowiska.
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "komunikat.md"),
+                """
+                ---
+                title: Komunikat
+                description: Krótka informacja.
+                date: 2026-01-03
+                language: pl
+                tags: [komunikat]
+                ---
+
+                Aktualizacja opisuje zmianę pakietu i sposób bezpiecznego wdrożenia.
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "sygnal.md"),
+                """
+                ---
+                title: Sygnał
+                description: Krótko.
+                date: 2026-01-04
+                language: pl
+                tags: [sygnal]
+                ---
+
+                Zmiana.
                 """);
 
             var themeRoot = Path.Combine(root, "themes", "taxonomy-feed-meta");
@@ -279,10 +303,31 @@ public class WebSiteTaxonomyFeedMetadataTests
             var polishTaxonomyHtml = File.ReadAllText(Path.Combine(result.OutputPath, "pl", "tags", "index.html"));
             var polishTaxonomyDescription = ReadMetaDescription(polishTaxonomyHtml);
             Assert.InRange(polishTaxonomyDescription.Length, 120, 160);
-            Assert.Contains("Opisuje polskie wydanie produktu", polishTaxonomyDescription, StringComparison.Ordinal);
-            Assert.Contains("Krótki opis", polishTaxonomyDescription, StringComparison.Ordinal);
+            Assert.Contains("Tags — Feed Metadata Test", polishTaxonomyDescription, StringComparison.Ordinal);
             Assert.DoesNotContain("Browse", polishTaxonomyDescription, StringComparison.Ordinal);
             Assert.DoesNotContain("Explore", polishTaxonomyDescription, StringComparison.Ordinal);
+
+            var polishReleaseDescription = ReadMetaDescription(
+                File.ReadAllText(Path.Combine(result.OutputPath, "pl", "tags", "wydanie", "index.html")));
+            var polishUpdateDescription = ReadMetaDescription(
+                File.ReadAllText(Path.Combine(result.OutputPath, "pl", "tags", "aktualizacja", "index.html")));
+            Assert.InRange(polishReleaseDescription.Length, 120, 160);
+            Assert.InRange(polishUpdateDescription.Length, 120, 160);
+            Assert.Contains("wydanie", polishReleaseDescription, StringComparison.Ordinal);
+            Assert.Contains("aktualizacja", polishUpdateDescription, StringComparison.Ordinal);
+            Assert.NotEqual(polishReleaseDescription, polishUpdateDescription);
+
+            var polishSparseDescription = ReadMetaDescription(
+                File.ReadAllText(Path.Combine(result.OutputPath, "pl", "tags", "komunikat", "index.html")));
+            Assert.InRange(polishSparseDescription.Length, 120, 160);
+            Assert.Contains("komunikat", polishSparseDescription, StringComparison.Ordinal);
+            Assert.Contains("Aktualizacja opisuje zmianę pakietu", polishSparseDescription, StringComparison.Ordinal);
+
+            var polishMinimumDescription = ReadMetaDescription(
+                File.ReadAllText(Path.Combine(result.OutputPath, "pl", "tags", "sygnal", "index.html")));
+            Assert.InRange(polishMinimumDescription.Length, 120, 160);
+            Assert.Contains("sygnal", polishMinimumDescription, StringComparison.Ordinal);
+            Assert.Contains("2026-01-04", polishMinimumDescription, StringComparison.Ordinal);
         }
         finally
         {

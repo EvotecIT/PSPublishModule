@@ -573,6 +573,37 @@ public class WebLlmsGeneratorTests
     }
 
     [Fact]
+    public void Generate_ReadsInlinePowerShellManifestMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-powershell-inline-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var modulePath = Path.Combine(root, "InlineModule.psd1");
+            File.WriteAllText(
+                modulePath,
+                "@{ ModuleVersion = '1.7.0'; Description = 'Inline PowerShell module metadata.'; PrivateData = @{ PSData = @{ Prerelease = 'preview2' } } }");
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                ProjectFile = modulePath,
+                PackageFiles = new[] { modulePath }
+            });
+
+            Assert.Equal("1.7.0-preview2", result.Version);
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("Inline PowerShell module metadata.", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("source version `1.7.0-preview2`", llmsTxt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Generate_FallsBackFromUnresolvedMsBuildMetadata()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-msbuild-properties-" + Guid.NewGuid().ToString("N"));
