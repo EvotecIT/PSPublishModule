@@ -781,7 +781,10 @@ public static partial class WebSiteBuilder
         var baseUrl = languageBaseUrl?.TrimEnd('/') ?? string.Empty;
         var scripts = new List<string>();
 
-        if (spec.StructuredData.Breadcrumbs && breadcrumbs.Length > 0)
+        // A BreadcrumbList represents a path through a hierarchy. A single home-page
+        // item is not a useful trail and is not eligible for Google's breadcrumb
+        // presentation, which requires at least two ListItem entries.
+        if (spec.StructuredData.Breadcrumbs && breadcrumbs.Length > 1)
         {
             var items = breadcrumbs
                 .Select((crumb, index) => new Dictionary<string, object?>

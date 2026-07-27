@@ -649,9 +649,265 @@ public class WebSiteSocialCardsTests
             };
 
             var html = BuildAndRead(root, spec, "index.html");
-            Assert.Contains("\"@type\":\"BreadcrumbList\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"@type\":\"BreadcrumbList\"", html, StringComparison.Ordinal);
             Assert.Contains("\"@type\":\"WebSite\"", html, StringComparison.Ordinal);
             Assert.Contains("\"@type\":\"Organization\"", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void Build_EmitsBreadcrumbStructuredData_ForHierarchicalPage()
+    {
+        var root = CreateTempRoot("pf-web-structured-breadcrumb-hierarchy-");
+        try
+        {
+            WritePage(root, "index.md",
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home body.
+                """);
+            WritePage(root, "guide.md",
+                """
+                ---
+                title: Guide
+                slug: guide
+                ---
+
+                Guide body.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.StructuredData = new StructuredDataSpec
+            {
+                Enabled = true,
+                Breadcrumbs = true
+            };
+
+            var html = BuildAndRead(root, spec, Path.Combine("guide", "index.html"));
+            Assert.Contains("\"@type\":\"BreadcrumbList\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"position\":1", html, StringComparison.Ordinal);
+            Assert.Contains("\"position\":2", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void Build_DoesNotEmitBreadcrumbStructuredData_ForLocalizedHomepage()
+    {
+        var root = CreateTempRoot("pf-web-structured-breadcrumb-localized-home-");
+        try
+        {
+            WritePage(root, "index.md",
+                """
+                ---
+                title: Home
+                slug: index
+                language: en
+                ---
+
+                Home body.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Localization = new LocalizationSpec
+            {
+                Enabled = true,
+                DefaultLanguage = "en",
+                PrefixDefaultLanguage = false,
+                FallbackToDefaultLanguage = true,
+                MaterializeFallbackPages = true,
+                Languages = new[]
+                {
+                    new LanguageSpec { Code = "en", Label = "EN", Default = true, Prefix = "en" },
+                    new LanguageSpec { Code = "pl", Label = "PL", Prefix = "pl" }
+                }
+            };
+            spec.StructuredData = new StructuredDataSpec
+            {
+                Enabled = true,
+                Breadcrumbs = true
+            };
+
+            var html = BuildAndRead(root, spec, Path.Combine("pl", "index.html"));
+            Assert.DoesNotContain("\"@type\":\"BreadcrumbList\"", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void Build_PreservesLanguagePrefix_InLocalizedBreadcrumbHierarchy()
+    {
+        var root = CreateTempRoot("pf-web-structured-breadcrumb-localized-hierarchy-");
+        try
+        {
+            WritePage(root, "guide-pl.md",
+                """
+                ---
+                title: Przewodnik
+                slug: docs/guide
+                language: pl
+                ---
+
+                Treść przewodnika.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Localization = new LocalizationSpec
+            {
+                Enabled = true,
+                DefaultLanguage = "en",
+                PrefixDefaultLanguage = false,
+                Languages = new[]
+                {
+                    new LanguageSpec { Code = "en", Label = "EN", Default = true, Prefix = "en" },
+                    new LanguageSpec { Code = "pl", Label = "PL", Prefix = "pl" }
+                }
+            };
+            spec.StructuredData = new StructuredDataSpec
+            {
+                Enabled = true,
+                Breadcrumbs = true
+            };
+
+            var html = BuildAndRead(root, spec, Path.Combine("pl", "docs", "guide", "index.html"));
+            Assert.Contains("\"item\":\"https://example.test/pl\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"item\":\"https://example.test/pl/docs/\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"item\":\"https://example.test/pl/docs/guide/\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"item\":\"https://example.test/docs/\"", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void Build_StripsCompleteMultiSegmentLanguagePrefix_FromBreadcrumbHierarchy()
+    {
+        var root = CreateTempRoot("pf-web-structured-breadcrumb-multisegment-prefix-");
+        try
+        {
+            WritePage(root, "guide-pl.md",
+                """
+                ---
+                title: Przewodnik
+                slug: docs/guide
+                language: pl
+                ---
+
+                Treść przewodnika.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Localization = new LocalizationSpec
+            {
+                Enabled = true,
+                DefaultLanguage = "en",
+                PrefixDefaultLanguage = false,
+                Languages = new[]
+                {
+                    new LanguageSpec { Code = "en", Label = "EN", Default = true, Prefix = "en" },
+                    new LanguageSpec { Code = "pl", Label = "PL", Prefix = "regional/pl" }
+                }
+            };
+            spec.StructuredData = new StructuredDataSpec { Enabled = true, Breadcrumbs = true };
+
+            var html = BuildAndRead(root, spec, Path.Combine("regional", "pl", "docs", "guide", "index.html"));
+
+            Assert.Contains("\"item\":\"https://example.test/regional/pl/docs/\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"item\":\"https://example.test/regional/pl/docs/guide/\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("https://example.test/regional/pl/regional/", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void Build_StripsEmittedLanguagePrefix_WhenPrefixUsesUnderscore()
+    {
+        var root = CreateTempRoot("pf-web-structured-breadcrumb-underscore-prefix-");
+        try
+        {
+            WritePage(root, "guide-pt-br.md",
+                """
+                ---
+                title: Guia
+                slug: docs/guide
+                language: pt-BR
+                ---
+
+                Conteúdo do guia.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Localization = new LocalizationSpec
+            {
+                Enabled = true,
+                DefaultLanguage = "en",
+                PrefixDefaultLanguage = false,
+                Languages = new[]
+                {
+                    new LanguageSpec { Code = "en", Label = "EN", Default = true, Prefix = "en" },
+                    new LanguageSpec { Code = "pt-BR", Label = "PT-BR", Prefix = "pt_BR" }
+                }
+            };
+            spec.StructuredData = new StructuredDataSpec { Enabled = true, Breadcrumbs = true };
+
+            var html = BuildAndRead(root, spec, Path.Combine("pt_BR", "docs", "guide", "index.html"));
+
+            Assert.Contains("\"item\":\"https://example.test/pt_BR/docs/\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"item\":\"https://example.test/pt_BR/docs/guide/\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("https://example.test/pt_BR/pt_BR/", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void Build_PreservesOrdinaryLeadingLanguageLikeSegment_WhenLocalizationIsDisabled()
+    {
+        var root = CreateTempRoot("pf-web-structured-breadcrumb-nonlocalized-en-route-");
+        try
+        {
+            WritePage(root, "guide.md",
+                """
+                ---
+                title: English Guide
+                slug: en/docs/guide
+                ---
+
+                Guide body.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.StructuredData = new StructuredDataSpec
+            {
+                Enabled = true,
+                Breadcrumbs = true
+            };
+
+            var html = BuildAndRead(root, spec, Path.Combine("en", "docs", "guide", "index.html"));
+            Assert.Contains("\"item\":\"https://example.test/en/\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"item\":\"https://example.test/en/docs/\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"item\":\"https://example.test/en/docs/guide/\"", html, StringComparison.Ordinal);
         }
         finally
         {

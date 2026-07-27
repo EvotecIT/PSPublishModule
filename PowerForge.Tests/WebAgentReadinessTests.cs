@@ -64,6 +64,9 @@ public class WebAgentReadinessTests
             });
 
             Assert.True(result.Success, string.Join(Environment.NewLine, result.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
+            var breadcrumbCheck = result.Checks.Single(check => check.Id == "breadcrumb-list");
+            Assert.Equal("info", breadcrumbCheck.Status);
+            Assert.Contains("optional on a homepage", breadcrumbCheck.Message, StringComparison.OrdinalIgnoreCase);
             Assert.True(File.Exists(Path.Combine(root, "robots.txt")));
             Assert.True(File.Exists(Path.Combine(root, ".well-known", "custom-api-catalog")));
             Assert.True(File.Exists(Path.Combine(root, ".well-known", "agent-skills", "index.json")));

@@ -39,6 +39,7 @@ public static partial class WebSeoDoctor
         TimeSpan.FromMilliseconds(250));
     private static readonly TimeSpan GlobMatchRegexTimeout = TimeSpan.FromMilliseconds(100);
     private const int MaxJsonLdPayloadLength = 1_000_000;
+    private const int HomeAssistantRedirectDiscoveryByteLimit = 10 * 1024;
     private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
@@ -161,6 +162,14 @@ public static partial class WebSeoDoctor
                     "canonical-alias-noindex",
                     canonicalAliasRoute);
             }
+
+            // Home Assistant discovery is a machine-facing contract and still matters
+            // on callback or association pages that intentionally opt out of indexing.
+            ValidateHomeAssistantRedirectDiscovery(
+                doc,
+                file,
+                relativePath,
+                AddIssue);
 
             if (!options.IncludeNoIndexPages && hasNoIndexRobots)
                 continue;
@@ -1385,6 +1394,12 @@ public static partial class WebSeoDoctor
                     continue;
                 }
 
+                if (type.Equals("BreadcrumbList", StringComparison.OrdinalIgnoreCase))
+                {
+                    ValidateBreadcrumbProfile(obj, relativePath, objectLabel, addIssue);
+                    continue;
+                }
+
                 if (type.Equals("HowTo", StringComparison.OrdinalIgnoreCase))
                 {
                     ValidateHowToProfile(obj, relativePath, objectLabel, addIssue);
@@ -1422,6 +1437,157 @@ public static partial class WebSeoDoctor
                 }
             }
         }
+    }
+
+    private static void ValidateBreadcrumbProfile(
+        JsonElement obj,
+        string relativePath,
+        string objectLabel,
+        Action<string, string, string?, string, string?, string?> addIssue)
+    {
+        if (!obj.TryGetProperty("itemListElement", out var items) ||
+            items.ValueKind != JsonValueKind.Array ||
+            items.GetArrayLength() < 2)
+        {
+            addIssue("warning", "structured-data", relativePath,
+                $"JSON-LD payload ({objectLabel}) type BreadcrumbList should contain at least two ListItem entries.",
+                "structured-data-breadcrumb-items",
+                objectLabel);
+            return;
+        }
+
+        var entries = items.EnumerateArray().ToArray();
+        if (entries.Select((item, index) => (item, expectedPosition: index + 1, isFinal: index == entries.Length - 1))
+            .Any(static entry => !IsValidBreadcrumbListItem(entry.item, entry.expectedPosition, entry.isFinal)))
+        {
+            addIssue("warning", "structured-data", relativePath,
+                $"JSON-LD payload ({objectLabel}) type BreadcrumbList should contain sequential, named ListItem entries with targets on every ancestor.",
+                "structured-data-breadcrumb-items",
+                objectLabel);
+        }
+    }
+
+    private static bool IsValidBreadcrumbListItem(JsonElement item, int expectedPosition, bool isFinal)
+    {
+        if (item.ValueKind != JsonValueKind.Object ||
+            !GetJsonLdTypes(item).Contains("ListItem", StringComparer.OrdinalIgnoreCase) ||
+            !item.TryGetProperty("position", out var position) ||
+            position.ValueKind != JsonValueKind.Number ||
+            !position.TryGetInt32(out var positionValue) ||
+            positionValue != expectedPosition ||
+            !item.TryGetProperty("name", out var name) ||
+            name.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(name.GetString()))
+            return false;
+
+        if (isFinal)
+            return true;
+
+        if (!item.TryGetProperty("item", out var target))
+            return false;
+
+        return target.ValueKind switch
+        {
+            JsonValueKind.String => !string.IsNullOrWhiteSpace(target.GetString()),
+            JsonValueKind.Object => JsonLdObjectHasNonEmptyValue(target, "@id"),
+            _ => false
+        };
+    }
+
+    private static void ValidateHomeAssistantRedirectDiscovery(
+        AngleSharp.Dom.IDocument doc,
+        string filePath,
+        string relativePath,
+        Action<string, string, string?, string, string?, string?> addIssue)
+    {
+        var redirectLinks = doc.QuerySelectorAll("link[rel]")
+            .Where(link => ContainsRelToken(link.GetAttribute("rel"), "redirect_uri"))
+            .ToArray();
+        if (redirectLinks.Length == 0)
+            return;
+
+        if (redirectLinks.Any(link => string.IsNullOrWhiteSpace(link.GetAttribute("href"))))
+        {
+            addIssue("error", "home-assistant-discovery", relativePath,
+                "redirect_uri link is missing a non-empty href.",
+                "redirect-uri-href-missing",
+                null);
+            return;
+        }
+
+        byte[] bytes;
+        try
+        {
+            bytes = File.ReadAllBytes(filePath);
+        }
+        catch (Exception ex)
+        {
+            addIssue("error", "home-assistant-discovery", relativePath,
+                $"failed to inspect the first {HomeAssistantRedirectDiscoveryByteLimit} bytes ({ex.Message}).",
+                "redirect-uri-read",
+                ex.GetType().Name);
+            return;
+        }
+
+        var prefixLength = Math.Min(bytes.Length, HomeAssistantRedirectDiscoveryByteLimit);
+        var prefix = DecodeHtmlPrefix(bytes, prefixLength);
+        var lastCompleteTagBoundary = prefix.LastIndexOf('>');
+        if (lastCompleteTagBoundary >= 0)
+        {
+            AngleSharp.Dom.IDocument? prefixDocument = null;
+            try
+            {
+                // Parse the prefix as one document so comments, scripts, and other HTML
+                // contexts remain non-executable discovery examples. Trimming after the
+                // last complete tag also prevents parser recovery of a boundary-crossing tag.
+                prefixDocument = HtmlParser.ParseWithAngleSharp(prefix[..(lastCompleteTagBoundary + 1)]);
+            }
+            catch
+            {
+                // Fall through to the contract error below.
+            }
+
+            if (prefixDocument is not null)
+            {
+                var declaredTargets = redirectLinks
+                    .Select(static link => link.GetAttribute("href")?.Trim())
+                    .Where(static href => !string.IsNullOrWhiteSpace(href))
+                    .Cast<string>()
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+                var prefixTargets = prefixDocument.QuerySelectorAll("link[rel]")
+                    .Where(link => ContainsRelToken(link.GetAttribute("rel"), "redirect_uri"))
+                    .Select(static link => link.GetAttribute("href")?.Trim())
+                    .Where(static href => !string.IsNullOrWhiteSpace(href))
+                    .Cast<string>()
+                    .ToHashSet(StringComparer.Ordinal);
+
+                if (declaredTargets.All(prefixTargets.Contains))
+                    return;
+            }
+        }
+
+        addIssue("error", "home-assistant-discovery", relativePath,
+            $"redirect_uri link must be complete within the first {HomeAssistantRedirectDiscoveryByteLimit} bytes for Home Assistant discovery.",
+            "redirect-uri-first-10kb",
+            null);
+    }
+
+    private static string DecodeHtmlPrefix(byte[] bytes, int prefixLength)
+    {
+        if (prefixLength <= 0)
+            return string.Empty;
+
+        using var stream = new MemoryStream(bytes, 0, prefixLength, writable: false);
+        using var reader = new StreamReader(
+            stream,
+            System.Text.Encoding.UTF8,
+            detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
     }
 
     private static void ValidateFaqProfile(
@@ -1581,17 +1747,26 @@ public static partial class WebSeoDoctor
 
     private static JsonElement[] EnumerateJsonLdObjects(JsonElement root)
     {
-        if (root.ValueKind == JsonValueKind.Object)
-            return new[] { root };
+        var objects = new List<JsonElement>();
+        AddJsonLdObjects(root, objects);
+        return objects.ToArray();
+    }
 
-        if (root.ValueKind == JsonValueKind.Array)
+    private static void AddJsonLdObjects(JsonElement value, List<JsonElement> objects)
+    {
+        if (value.ValueKind == JsonValueKind.Array)
         {
-            return root.EnumerateArray()
-                .Where(static value => value.ValueKind == JsonValueKind.Object)
-                .ToArray();
+            foreach (var item in value.EnumerateArray())
+                AddJsonLdObjects(item, objects);
+            return;
         }
 
-        return Array.Empty<JsonElement>();
+        if (value.ValueKind != JsonValueKind.Object)
+            return;
+
+        objects.Add(value);
+        if (value.TryGetProperty("@graph", out var graph))
+            AddJsonLdObjects(graph, objects);
     }
 
     private static string[] GetJsonLdTypes(JsonElement obj)
@@ -1601,7 +1776,7 @@ public static partial class WebSeoDoctor
 
         if (typeValue.ValueKind == JsonValueKind.String)
         {
-            var type = NormalizeWhitespace(typeValue.GetString());
+            var type = NormalizeJsonLdType(typeValue.GetString());
             return string.IsNullOrWhiteSpace(type) ? Array.Empty<string>() : new[] { type };
         }
 
@@ -1609,13 +1784,34 @@ public static partial class WebSeoDoctor
         {
             return typeValue.EnumerateArray()
                 .Where(static value => value.ValueKind == JsonValueKind.String)
-                .Select(value => NormalizeWhitespace(value.GetString()))
+                .Select(value => NormalizeJsonLdType(value.GetString()))
                 .Where(static value => !string.IsNullOrWhiteSpace(value))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         }
 
         return Array.Empty<string>();
+    }
+
+    private static string NormalizeJsonLdType(string? value)
+    {
+        var type = NormalizeWhitespace(value);
+        if (string.IsNullOrWhiteSpace(type))
+            return string.Empty;
+
+        if (!Uri.TryCreate(type, UriKind.Absolute, out var uri) ||
+            !(uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+              uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)) ||
+            !(uri.Host.Equals("schema.org", StringComparison.OrdinalIgnoreCase) ||
+              uri.Host.Equals("www.schema.org", StringComparison.OrdinalIgnoreCase)))
+        {
+            return type;
+        }
+
+        var schemaType = uri.AbsolutePath.Trim('/');
+        return string.IsNullOrWhiteSpace(schemaType) || schemaType.Contains('/', StringComparison.Ordinal)
+            ? type
+            : schemaType;
     }
 
     private static bool TryValidateJsonLdElement(JsonElement root, out bool hasContext, out bool hasType)
