@@ -796,6 +796,40 @@ public class WebSiteSocialCardsTests
     }
 
     [Fact]
+    public void Build_PreservesOrdinaryLeadingLanguageLikeSegment_WhenLocalizationIsDisabled()
+    {
+        var root = CreateTempRoot("pf-web-structured-breadcrumb-nonlocalized-en-route-");
+        try
+        {
+            WritePage(root, "guide.md",
+                """
+                ---
+                title: English Guide
+                slug: en/docs/guide
+                ---
+
+                Guide body.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.StructuredData = new StructuredDataSpec
+            {
+                Enabled = true,
+                Breadcrumbs = true
+            };
+
+            var html = BuildAndRead(root, spec, Path.Combine("en", "docs", "guide", "index.html"));
+            Assert.Contains("\"item\":\"https://example.test/en/\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"item\":\"https://example.test/en/docs/\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"item\":\"https://example.test/en/docs/guide/\"", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
     public void Build_EmitsExtendedOrganizationStructuredData_WhenConfigured()
     {
         var root = CreateTempRoot("pf-web-structured-org-extended-");

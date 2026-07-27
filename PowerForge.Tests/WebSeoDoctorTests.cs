@@ -37,6 +37,29 @@ public class WebSeoDoctorTests
     }
 
     [Fact]
+    public void Analyze_AcceptsUtf16HomeAssistantRedirectLinkWithinFirstTenKilobytes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-ha-redirect-utf16-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                "<!doctype html><html><head><link rel=\"redirect_uri\" href=\"com.example.app://home-assistant/auth-callback\" /><title>Home Assistant application discovery contract</title><meta name=\"description\" content=\"This page validates the Home Assistant redirect discovery contract in generated HTML.\" /></head><body><h1>Home Assistant application</h1></body></html>",
+                System.Text.Encoding.Unicode);
+
+            var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root));
+
+            Assert.DoesNotContain(result.Issues, issue => issue.Category == "home-assistant-discovery");
+            Assert.True(result.Success);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Analyze_FailsWhenHomeAssistantRedirectLinkStartsAfterFirstTenKilobytes()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-ha-redirect-late-" + Guid.NewGuid().ToString("N"));
@@ -190,6 +213,68 @@ public class WebSeoDoctorTests
                   <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[null,{"@type":"ListItem","position":2}]}</script>
                 </head>
                 <body><h1>Breadcrumb contract</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root, checkStructuredData: true));
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-breadcrumb-items");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_FlagsBreadcrumbListWithNonSequentialPositions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-breadcrumb-order-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Structured data breadcrumb contract page</title>
+                  <meta name="description" content="This page validates ordered breadcrumb positions required by search engines." />
+                  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home"},{"@type":"ListItem","position":1,"name":"Guide"}]}</script>
+                </head>
+                <body><h1>Breadcrumb contract</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root, checkStructuredData: true));
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-breadcrumb-items");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_ValidatesBreadcrumbListNestedInJsonLdGraph()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-breadcrumb-graph-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Structured data breadcrumb graph contract page</title>
+                  <meta name="description" content="This page validates breadcrumb profiles nested inside a JSON-LD graph." />
+                  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home"}]}]}</script>
+                </head>
+                <body><h1>Breadcrumb graph contract</h1></body>
                 </html>
                 """);
 

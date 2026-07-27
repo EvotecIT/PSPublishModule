@@ -341,6 +341,9 @@ public static partial class WebSiteBuilder
             return "/";
 
         var normalized = route.StartsWith("/", StringComparison.Ordinal) ? route : "/" + route;
+        if (!localization.Enabled)
+            return normalized;
+
         if (!TryExtractLeadingSegment(normalized.TrimStart('/'), out var segment, out var remainder))
             return normalized;
 

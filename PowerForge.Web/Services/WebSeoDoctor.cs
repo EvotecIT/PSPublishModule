@@ -1448,7 +1448,8 @@ public static partial class WebSeoDoctor
         if (!obj.TryGetProperty("itemListElement", out var items) ||
             items.ValueKind != JsonValueKind.Array ||
             items.GetArrayLength() < 2 ||
-            items.EnumerateArray().Any(static item => !IsValidBreadcrumbListItem(item)))
+            items.EnumerateArray().Select((item, index) => (item, expectedPosition: index + 1))
+                .Any(static entry => !IsValidBreadcrumbListItem(entry.item, entry.expectedPosition)))
         {
             addIssue("warning", "structured-data", relativePath,
                 $"JSON-LD payload ({objectLabel}) type BreadcrumbList should contain at least two ListItem entries.",
@@ -1457,14 +1458,14 @@ public static partial class WebSeoDoctor
         }
     }
 
-    private static bool IsValidBreadcrumbListItem(JsonElement item)
+    private static bool IsValidBreadcrumbListItem(JsonElement item, int expectedPosition)
     {
         if (item.ValueKind != JsonValueKind.Object ||
             !GetJsonLdTypes(item).Contains("ListItem", StringComparer.OrdinalIgnoreCase) ||
             !item.TryGetProperty("position", out var position) ||
             position.ValueKind != JsonValueKind.Number ||
             !position.TryGetInt32(out var positionValue) ||
-            positionValue < 1 ||
+            positionValue != expectedPosition ||
             !item.TryGetProperty("name", out var name) ||
             name.ValueKind != JsonValueKind.String)
         {
@@ -1510,7 +1511,7 @@ public static partial class WebSeoDoctor
         }
 
         var prefixLength = Math.Min(bytes.Length, HomeAssistantRedirectDiscoveryByteLimit);
-        var prefix = System.Text.Encoding.UTF8.GetString(bytes, 0, prefixLength);
+        var prefix = DecodeHtmlPrefix(bytes, prefixLength);
         var lastCompleteTagBoundary = prefix.LastIndexOf('>');
         if (lastCompleteTagBoundary >= 0)
         {
@@ -1539,6 +1540,19 @@ public static partial class WebSeoDoctor
             $"redirect_uri link must be complete within the first {HomeAssistantRedirectDiscoveryByteLimit} bytes for Home Assistant discovery.",
             "redirect-uri-first-10kb",
             null);
+    }
+
+    private static string DecodeHtmlPrefix(byte[] bytes, int prefixLength)
+    {
+        if (prefixLength <= 0)
+            return string.Empty;
+
+        using var stream = new MemoryStream(bytes, 0, prefixLength, writable: false);
+        using var reader = new StreamReader(
+            stream,
+            System.Text.Encoding.UTF8,
+            detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
     }
 
     private static void ValidateFaqProfile(
@@ -1698,17 +1712,26 @@ public static partial class WebSeoDoctor
 
     private static JsonElement[] EnumerateJsonLdObjects(JsonElement root)
     {
-        if (root.ValueKind == JsonValueKind.Object)
-            return new[] { root };
+        var objects = new List<JsonElement>();
+        AddJsonLdObjects(root, objects);
+        return objects.ToArray();
+    }
 
-        if (root.ValueKind == JsonValueKind.Array)
+    private static void AddJsonLdObjects(JsonElement value, List<JsonElement> objects)
+    {
+        if (value.ValueKind == JsonValueKind.Array)
         {
-            return root.EnumerateArray()
-                .Where(static value => value.ValueKind == JsonValueKind.Object)
-                .ToArray();
+            foreach (var item in value.EnumerateArray())
+                AddJsonLdObjects(item, objects);
+            return;
         }
 
-        return Array.Empty<JsonElement>();
+        if (value.ValueKind != JsonValueKind.Object)
+            return;
+
+        objects.Add(value);
+        if (value.TryGetProperty("@graph", out var graph))
+            AddJsonLdObjects(graph, objects);
     }
 
     private static string[] GetJsonLdTypes(JsonElement obj)
