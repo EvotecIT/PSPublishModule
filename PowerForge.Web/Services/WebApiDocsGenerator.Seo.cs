@@ -35,6 +35,17 @@ public static partial class WebApiDocsGenerator
         return FitApiSeoDescription(description);
     }
 
+    private static string BuildApiSuiteSeoDescription(
+        string title,
+        int entryCount)
+    {
+        var normalizedTitle = NormalizeApiSeoText(title);
+        var description =
+            $"Browse {normalizedTitle} across {entryCount:N0} API references, with searchable symbols, curated guidance, coverage signals, related samples, and source links.";
+
+        return FitApiSeoDescription(description);
+    }
+
     private static string NormalizeApiSeoText(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))

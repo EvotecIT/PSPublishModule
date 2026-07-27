@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using PowerForge.Web;
 using Xunit;
 
@@ -168,6 +169,11 @@ public class WebApiDocsGeneratorSuiteTests
             Assert.Contains("Guides & Samples", html, StringComparison.Ordinal);
             Assert.Contains("Suite Assets", html, StringComparison.Ordinal);
             Assert.Contains("/projects/testimox/api/", html, StringComparison.Ordinal);
+            var description = ExtractMetaContent(html, "description", isProperty: false);
+            Assert.InRange(description.Length, 120, 160);
+            Assert.Contains("Project APIs", description, StringComparison.Ordinal);
+            Assert.Equal(description, ExtractMetaContent(html, "og:description", isProperty: true));
+            Assert.Equal(description, ExtractMetaContent(html, "twitter:description", isProperty: false));
 
             using var json = JsonDocument.Parse(File.ReadAllText(result.JsonPath));
             Assert.Equal("api-suite-portal", json.RootElement.GetProperty("kind").GetString());
@@ -195,5 +201,14 @@ public class WebApiDocsGeneratorSuiteTests
         {
             // ignore cleanup failures in tests
         }
+    }
+
+    private static string ExtractMetaContent(string html, string name, bool isProperty)
+    {
+        var attribute = isProperty ? "property" : "name";
+        var pattern = $"""<meta\b(?=[^>]*\b{attribute}="{Regex.Escape(name)}")(?=[^>]*\bcontent="(?<value>[^"]*)")[^>]*>""";
+        var match = Regex.Match(html, pattern, RegexOptions.IgnoreCase);
+        Assert.True(match.Success, $"Missing meta tag '{name}'.");
+        return match.Groups["value"].Value;
     }
 }

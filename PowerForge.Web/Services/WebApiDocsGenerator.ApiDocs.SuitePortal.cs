@@ -34,13 +34,14 @@ public static partial class WebApiDocsGenerator
         var social = ResolveApiSocialProfile(options);
         var baseUrl = NormalizeApiRoute(options.BaseUrl);
         var title = string.IsNullOrWhiteSpace(options.Title) ? (suite.Title ?? "API Suite") : options.Title.Trim();
+        var description = BuildApiSuiteSeoDescription(title, suite.Entries.Count);
 
         var template = LoadTemplate(options, "suite-portal.html", null);
         var html = ApplyTemplate(template, new Dictionary<string, string?>
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(title),
-            ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"Search and browse the {title} API suite."),
-            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, title, $"Search and browse the {title} API suite.", baseUrl),
+            ["DESCRIPTION_META"] = BuildDescriptionMetaTag(description),
+            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, title, description, baseUrl),
             ["HEAD_HTML"] = head,
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
