@@ -17,9 +17,10 @@ public static partial class WebSiteBuilder
         var current = NormalizeRouteForMatch(StripLanguagePrefix(localization, item.OutputPath));
         var crumbs = new List<BreadcrumbItem>();
         var nav = BuildNavigation(spec, item, menuSpecs);
+        var localizedHomeRoute = ApplyLanguagePrefixToRoute(spec, "/", item.Language);
 
-        var homeTitle = FindNavTitle(nav, "/") ?? "Home";
-        crumbs.Add(new BreadcrumbItem { Title = homeTitle, Url = "/", IsCurrent = current == "/" });
+        var homeTitle = FindNavTitle(nav, localizedHomeRoute) ?? FindNavTitle(nav, "/") ?? "Home";
+        crumbs.Add(new BreadcrumbItem { Title = homeTitle, Url = localizedHomeRoute, IsCurrent = current == "/" });
         if (current == "/")
             return crumbs.ToArray();
 
@@ -29,8 +30,9 @@ public static partial class WebSiteBuilder
         {
             path += "/" + segments[i];
             var route = path + "/";
+            var localizedRoute = ApplyLanguagePrefixToRoute(spec, route, item.Language);
             var isCurrent = i == segments.Length - 1;
-            var navTitle = FindNavTitle(nav, route);
+            var navTitle = FindNavTitle(nav, localizedRoute) ?? FindNavTitle(nav, route);
             var breadcrumbTitle = GetMetaString(item.Meta, "breadcrumb_title");
             var title = isCurrent
                 ? (!string.IsNullOrWhiteSpace(breadcrumbTitle) ? breadcrumbTitle : navTitle ?? item.Title)
@@ -38,7 +40,7 @@ public static partial class WebSiteBuilder
             crumbs.Add(new BreadcrumbItem
             {
                 Title = title,
-                Url = route,
+                Url = localizedRoute,
                 IsCurrent = isCurrent
             });
         }
