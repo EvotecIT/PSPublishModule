@@ -1536,7 +1536,11 @@ internal static partial class WebPipelineRunner
 
         var trimmed = value.Trim();
         if (trimmed.StartsWith("/", StringComparison.Ordinal))
-            return true;
+        {
+            return !trimmed.StartsWith("//", StringComparison.Ordinal) &&
+                   !trimmed.Contains('\\') &&
+                   !trimmed.Any(char.IsControl);
+        }
 
         if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
             return false;
