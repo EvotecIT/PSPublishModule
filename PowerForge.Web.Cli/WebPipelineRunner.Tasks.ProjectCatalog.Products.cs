@@ -463,6 +463,7 @@ internal static partial class WebPipelineRunner
         WriteMetaString(lines, "meta.software.operating_system", product.Platforms is { Length: > 0 } ? string.Join(", ", product.Platforms) : null);
         WriteMetaString(lines, "meta.software.version", project.Version);
         WriteMetaString(lines, "meta.software.download_url", TryGetProjectDictionaryValue(project.Links, "appStore") ?? TryGetProjectDictionaryValue(project.Links, "downloads"));
+        WriteMetaString(lines, "meta.software.website_url", project.ExternalUrl ?? TryGetProjectDictionaryValue(project.Links, "website"));
         WriteMetaString(lines, "meta.software.image", hero?.Src);
         WriteMetaString(lines, "meta.social_image", project.Brand?.SocialImage ?? hero?.Src);
         var socialImageWidth = project.Brand is { SocialImageWidth: > 0 } ? project.Brand.SocialImageWidth : hero?.Width ?? 0;
