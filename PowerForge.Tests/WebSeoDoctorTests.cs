@@ -127,6 +127,35 @@ public class WebSeoDoctorTests
     }
 
     [Fact]
+    public void Analyze_FailsWhenAnyDeclaredHomeAssistantRedirectHasNoHref()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-ha-redirect-each-href-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html><html><head>
+                  <link rel="redirect_uri" href="com.example.valid://home-assistant/auth-callback" />
+                  <link rel="redirect_uri" href="" />
+                  <title>Home Assistant application discovery contract</title>
+                  <meta name="description" content="Every declared Home Assistant callback must provide a discoverable target." />
+                </head><body><h1>Home Assistant application</h1></body></html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root));
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "redirect-uri-href-missing");
+            Assert.False(result.Success);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Analyze_StillValidatesHomeAssistantRedirectOnNoIndexPage()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-ha-redirect-noindex-" + Guid.NewGuid().ToString("N"));
@@ -339,6 +368,60 @@ public class WebSeoDoctorTests
             var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root, checkStructuredData: true));
 
             Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-breadcrumb-items");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_ValidatesExpandedSchemaOrgBreadcrumbType()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-breadcrumb-expanded-type-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html><html><head>
+                  <title>Expanded structured data breadcrumb contract</title>
+                  <meta name="description" content="Expanded Schema.org identifiers receive the same breadcrumb validation as compact names." />
+                  <script type="application/ld+json">{"@context":"https://schema.org","@type":"https://schema.org/BreadcrumbList","itemListElement":[{"@type":"https://schema.org/ListItem","position":1,"name":"Home"}]}</script>
+                </head><body><h1>Breadcrumb contract</h1></body></html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root, checkStructuredData: true));
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-breadcrumb-items");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_AcceptsExpandedSchemaOrgListItemTypes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-breadcrumb-expanded-list-item-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html><html><head>
+                  <title>Expanded structured data list item contract</title>
+                  <meta name="description" content="Expanded Schema.org list items remain valid breadcrumb hierarchy entries." />
+                  <script type="application/ld+json">{"@context":"https://schema.org","@type":"https://schema.org/BreadcrumbList","itemListElement":[{"@type":"https://schema.org/ListItem","position":1,"name":"Home","item":"https://example.test/"},{"@type":"https://schema.org/ListItem","position":2,"name":"Guide"}]}</script>
+                </head><body><h1>Breadcrumb contract</h1></body></html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root, checkStructuredData: true));
+
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "structured-data-breadcrumb-items");
         }
         finally
         {

@@ -1510,7 +1510,7 @@ public static partial class WebSeoDoctor
         if (redirectLinks.Length == 0)
             return;
 
-        if (redirectLinks.All(link => string.IsNullOrWhiteSpace(link.GetAttribute("href"))))
+        if (redirectLinks.Any(link => string.IsNullOrWhiteSpace(link.GetAttribute("href"))))
         {
             addIssue("error", "home-assistant-discovery", relativePath,
                 "redirect_uri link is missing a non-empty href.",
@@ -1776,7 +1776,7 @@ public static partial class WebSeoDoctor
 
         if (typeValue.ValueKind == JsonValueKind.String)
         {
-            var type = NormalizeWhitespace(typeValue.GetString());
+            var type = NormalizeJsonLdType(typeValue.GetString());
             return string.IsNullOrWhiteSpace(type) ? Array.Empty<string>() : new[] { type };
         }
 
@@ -1784,13 +1784,34 @@ public static partial class WebSeoDoctor
         {
             return typeValue.EnumerateArray()
                 .Where(static value => value.ValueKind == JsonValueKind.String)
-                .Select(value => NormalizeWhitespace(value.GetString()))
+                .Select(value => NormalizeJsonLdType(value.GetString()))
                 .Where(static value => !string.IsNullOrWhiteSpace(value))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         }
 
         return Array.Empty<string>();
+    }
+
+    private static string NormalizeJsonLdType(string? value)
+    {
+        var type = NormalizeWhitespace(value);
+        if (string.IsNullOrWhiteSpace(type))
+            return string.Empty;
+
+        if (!Uri.TryCreate(type, UriKind.Absolute, out var uri) ||
+            !(uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+              uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)) ||
+            !(uri.Host.Equals("schema.org", StringComparison.OrdinalIgnoreCase) ||
+              uri.Host.Equals("www.schema.org", StringComparison.OrdinalIgnoreCase)))
+        {
+            return type;
+        }
+
+        var schemaType = uri.AbsolutePath.Trim('/');
+        return string.IsNullOrWhiteSpace(schemaType) || schemaType.Contains('/', StringComparison.Ordinal)
+            ? type
+            : schemaType;
     }
 
     private static bool TryValidateJsonLdElement(JsonElement root, out bool hasContext, out bool hasType)
