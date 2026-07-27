@@ -43,7 +43,7 @@ public static partial class WebSiteBuilder
                 : $"filed under {term} in the {taxonomyTitle} taxonomy";
 
         return FitTaxonomyDescription(
-            $"Explore {pageCount} published {siteName} {pages} {relationship}. This taxonomy page collects the matching content and links to each available page in one place.",
+            $"Explore {pageCount} published {siteName} {pages} {relationship}. This taxonomy page groups the matching content across the available result set.",
             ensureEnglishMinimum: true);
     }
 
@@ -90,8 +90,22 @@ public static partial class WebSiteBuilder
 
         var wordBoundary = description.LastIndexOf(' ', maximumLength - 1);
         if (wordBoundary < minimumLength)
-            wordBoundary = maximumLength - 1;
+            wordBoundary = ClampTaxonomyDescriptionToUnicodeScalarBoundary(description, maximumLength - 1);
 
         return description[..wordBoundary].TrimEnd(' ', ',', ';', ':', '-', '.', '!', '?') + ".";
+    }
+
+    private static int ClampTaxonomyDescriptionToUnicodeScalarBoundary(string value, int boundary)
+    {
+        var safeBoundary = Math.Clamp(boundary, 0, value.Length);
+        if (safeBoundary > 0 &&
+            safeBoundary < value.Length &&
+            char.IsHighSurrogate(value[safeBoundary - 1]) &&
+            char.IsLowSurrogate(value[safeBoundary]))
+        {
+            safeBoundary--;
+        }
+
+        return safeBoundary;
     }
 }

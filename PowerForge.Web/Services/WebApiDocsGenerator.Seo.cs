@@ -15,9 +15,14 @@ public static partial class WebApiDocsGenerator
     {
         var title = NormalizeApiSeoText(options.Title);
         var count = FormatApiSeoCount(documentedTypeCount);
+        var richTemplate = UsesRichApiDocsTemplate(options);
         var description = options.Type == ApiDocsType.PowerShell
-            ? $"Browse {title} for {count} documented reference entries, with searchable syntax, parameters, pipeline details, and navigation across the API."
-            : $"Browse {title} for {count} documented types, with searchable signatures, members, parameters, type relationships, and navigation across the API.";
+            ? richTemplate
+                ? $"Browse {title} for {count} documented reference entries, with searchable syntax, parameters, pipeline details, and navigation across the API."
+                : $"Browse {title} for {count} documented reference entries, with command summaries, reference pages, and navigation across the available API."
+            : richTemplate
+                ? $"Browse {title} for {count} documented types, with searchable signatures, members, parameters, type relationships, and navigation across the API."
+                : $"Browse {title} for {count} documented types, with summaries, generated reference pages, member details, and navigation across the available API.";
 
         return FitApiSeoDescription(description);
     }
@@ -30,9 +35,18 @@ public static partial class WebApiDocsGenerator
         var title = NormalizeApiSeoText(options.Title);
         var name = NormalizeApiSeoText(displayName);
         var summary = NormalizeApiSeoText(type.Summary);
-        var referenceDetails = options.Type == ApiDocsType.PowerShell
-            ? "available syntax, parameters, pipeline guidance, and reference details"
-            : "signatures, members, parameters, type relationships, and available reference details";
+        var richTemplate = UsesRichApiDocsTemplate(options);
+        var isAboutTopic = options.Type == ApiDocsType.PowerShell &&
+                           string.Equals(type.Kind, "About", StringComparison.OrdinalIgnoreCase);
+        var referenceDetails = isAboutTopic
+            ? "the complete conceptual topic, related help context, and navigation"
+            : options.Type == ApiDocsType.PowerShell
+                ? richTemplate
+                    ? "available syntax, parameters, pipeline guidance, and reference details"
+                    : "command summaries, syntax details, and navigation"
+                : richTemplate
+                    ? "signatures, members, parameters, type relationships, and available reference details"
+                    : "type summaries, signatures, member details, and navigation";
         var description = string.IsNullOrWhiteSpace(summary)
             ? $"Explore {name} in {title}, including {referenceDetails}."
             : $"{name}: {summary.TrimEnd('.', '!', '?')}. Review {referenceDetails} in {title}.";
@@ -78,6 +92,12 @@ public static partial class WebApiDocsGenerator
     private static string FormatApiSeoCount(int value)
         => value.ToString("N0", CultureInfo.InvariantCulture);
 
+    private static bool UsesRichApiDocsTemplate(WebApiDocsOptions options)
+    {
+        var template = (options.Template ?? string.Empty).Trim().ToLowerInvariant();
+        return template is "docs" or "sidebar";
+    }
+
     private static string NormalizeApiSeoText(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -102,14 +122,35 @@ public static partial class WebApiDocsGenerator
         var limit = ApiSeoDescriptionMaximumLength - 1;
         var wordBoundary = description.LastIndexOf(' ', limit);
         if (wordBoundary < ApiSeoDescriptionMinimumLength)
-            wordBoundary = limit;
+            wordBoundary = ClampToUnicodeScalarBoundary(description, limit);
 
         var truncated = description[..wordBoundary].TrimEnd(' ', ',', ';', ':', '-', '.', '!', '?');
-        truncated = Regex.Replace(
+        var withoutDanglingWord = Regex.Replace(
             truncated,
             @"(?:,\s*)?\b(?:and|or|with|including|from|to)\z",
             string.Empty,
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).TrimEnd(' ', ',', ';', ':', '-');
+        if (withoutDanglingWord.Length + 1 >= ApiSeoDescriptionMinimumLength)
+            return withoutDanglingWord + ".";
+
+        var completed = withoutDanglingWord + " reference details";
+        if (completed.Length <= limit)
+            return completed + ".";
+
         return truncated + ".";
+    }
+
+    private static int ClampToUnicodeScalarBoundary(string value, int boundary)
+    {
+        var safeBoundary = Math.Clamp(boundary, 0, value.Length);
+        if (safeBoundary > 0 &&
+            safeBoundary < value.Length &&
+            char.IsHighSurrogate(value[safeBoundary - 1]) &&
+            char.IsLowSurrogate(value[safeBoundary]))
+        {
+            safeBoundary--;
+        }
+
+        return safeBoundary;
     }
 }

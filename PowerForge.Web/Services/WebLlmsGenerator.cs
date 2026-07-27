@@ -74,10 +74,11 @@ public static class WebLlmsGenerator
         var llmsJsonPath = Path.Combine(siteRoot, "llms.json");
         var llmsFullPath = Path.Combine(siteRoot, "llms-full.txt");
 
+        var primaryPackage = packages.FirstOrDefault();
         var quickstart = ResolveQuickstart(
             options.QuickstartPath,
-            packages.FirstOrDefault()?.Id ?? name,
-            packages.Count == 0 && projectInfo.IsPowerShellModule);
+            primaryPackage?.Id ?? name,
+            primaryPackage?.IsPowerShellModule ?? projectInfo.IsPowerShellModule);
         var legacyInstallCommand = CreateInstallCommand(packageId, projectInfo.IsPowerShellModule, projectInfo.IsDotNetTool);
         var overview = ResolveOverview(options, projectInfo, siteRoot, name);
         WriteLlmsTxt(llmsTxtPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, overview, quickstart);
@@ -119,7 +120,8 @@ public static class WebLlmsGenerator
             {
                 Id = id,
                 Version = project.Version,
-                InstallCommand = CreateInstallCommand(id, project.IsPowerShellModule, project.IsDotNetTool)
+                InstallCommand = CreateInstallCommand(id, project.IsPowerShellModule, project.IsDotNetTool),
+                IsPowerShellModule = project.IsPowerShellModule
             });
         }
 
@@ -167,17 +169,37 @@ public static class WebLlmsGenerator
             };
         }
 
+        var assemblyName = NormalizeMsBuildMetadataValue(MatchValue(content, "AssemblyName"));
+        var rootNamespace = NormalizeMsBuildMetadataValue(MatchValue(content, "RootNamespace"));
+        var packageId = NormalizeMsBuildMetadataValue(MatchValue(content, "PackageId"));
+        var version = NormalizeMsBuildMetadataValue(MatchValue(content, "Version")) ??
+                      NormalizeMsBuildMetadataValue(MatchValue(content, "VersionPrefix"));
+        var description = NormalizeMsBuildMetadataValue(MatchValue(content, "Description"));
+        var packAsTool = NormalizeMsBuildMetadataValue(MatchValue(content, "PackAsTool"));
+
         return new ProjectInfo
         {
-            Name = NormalizeEmpty(MatchValue(content, "AssemblyName")) ?? NormalizeEmpty(MatchValue(content, "RootNamespace")),
-            PackageId = NormalizeEmpty(MatchValue(content, "PackageId")),
-            Version = NormalizeEmpty(MatchValue(content, "Version")) ?? NormalizeEmpty(MatchValue(content, "VersionPrefix")),
-            Description = NormalizeEmpty(MatchValue(content, "Description")),
+            Name = assemblyName ?? rootNamespace,
+            PackageId = packageId,
+            Version = version,
+            Description = description,
             IsDotNetTool = string.Equals(
-                NormalizeEmpty(MatchValue(content, "PackAsTool")),
+                packAsTool,
                 "true",
                 StringComparison.OrdinalIgnoreCase)
         };
+    }
+
+    private static string? NormalizeMsBuildMetadataValue(string value)
+    {
+        var normalized = NormalizeEmpty(value);
+        if (normalized is null)
+            return null;
+
+        return normalized.Contains("$(", StringComparison.Ordinal) ||
+               normalized.Contains("%(", StringComparison.Ordinal)
+            ? null
+            : normalized;
     }
 
     private static string MatchPowerShellDataValue(string content, string name)
@@ -445,6 +467,7 @@ public static class WebLlmsGenerator
         else
         {
             lines.Add($"- Packages: {packages.Count}");
+            lines.Add($"- Suite version: {version}");
         }
         if (typeCount.HasValue) lines.Add($"- API types: {typeCount.Value}");
         if (apiCatalogs.Count > 1) lines.Add($"- API catalogs: {apiCatalogs.Count}");
@@ -482,13 +505,13 @@ public static class WebLlmsGenerator
         var payload = new Dictionary<string, object?>
         {
             ["name"] = name,
+            ["version"] = version,
             ["quickstart"] = quickstart.Lines.Where(l => l != null).ToArray(),
             ["quickstartLanguage"] = quickstart.Language,
             ["apiTypeCount"] = typeCount
         };
         if (packages.Count == 0)
         {
-            payload["version"] = version;
             payload["package"] = packageId;
             payload["install"] = new[] { legacyInstallCommand };
         }
@@ -544,6 +567,7 @@ public static class WebLlmsGenerator
         else
         {
             lines.Add($"- Packages: {packages.Count}");
+            lines.Add($"- Suite version: {version}");
         }
         if (typeCount.HasValue) lines.Add($"- API types: {typeCount.Value}");
         if (apiCatalogs.Count > 1) lines.Add($"- API catalogs: {apiCatalogs.Count}");
@@ -808,6 +832,7 @@ public static class WebLlmsGenerator
         public string Id { get; set; } = string.Empty;
         public string? Version { get; set; }
         public string InstallCommand { get; set; } = string.Empty;
+        public bool IsPowerShellModule { get; set; }
     }
 
     private sealed class ProjectInfo

@@ -17,9 +17,10 @@ public class WebSiteTaxonomyFeedMetadataTests
             Directory.CreateDirectory(contentPath);
             for (var index = 1; index <= 12; index++)
             {
-                var tags = string.Join(", ", Enumerable.Range(1, 27)
-                    .Where(tag => tag == index || index == 1)
-                    .Select(tag => $"tag-{tag}"));
+                var tags = string.Join(", ", new[] { "shared" }.Concat(
+                    Enumerable.Range(1, 27)
+                        .Where(tag => tag == index || index == 1)
+                        .Select(tag => $"tag-{tag}")));
                 File.WriteAllText(Path.Combine(contentPath, $"post-{index}.md"),
                     $"""
                     ---
@@ -61,6 +62,7 @@ public class WebSiteTaxonomyFeedMetadataTests
                     {
                         Name = "tags",
                         BasePath = "/tags",
+                        PageSize = 5,
                         ListLayout = "page",
                         TermLayout = "page"
                     }
@@ -73,12 +75,44 @@ public class WebSiteTaxonomyFeedMetadataTests
             var description = ReadMetaDescription(File.ReadAllText(Path.Combine(result.OutputPath, "tags", "index.html")));
 
             Assert.InRange(description.Length, 120, 160);
-            Assert.Contains("Browse 12 published OfficeIMO pages through 27 Tags terms", description, StringComparison.Ordinal);
+            Assert.Contains("Browse 12 published OfficeIMO pages through 28 Tags terms", description, StringComparison.Ordinal);
+
+            var paginatedDescription = ReadMetaDescription(
+                File.ReadAllText(Path.Combine(result.OutputPath, "tags", "shared", "page", "2", "index.html")));
+            Assert.DoesNotContain("in one place", paginatedDescription, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("available result set", paginatedDescription, StringComparison.Ordinal);
         }
         finally
         {
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void FitTaxonomyDescription_PreservesUnicodeScalars()
+    {
+        var method = typeof(WebSiteBuilder).GetMethod(
+            "FitTaxonomyDescription",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var input = new string('界', 158) + "😀tail";
+        var description = Assert.IsType<string>(method!.Invoke(null, [input, false]));
+
+        Assert.InRange(description.Length, 120, 160);
+        Assert.DoesNotContain('\uFFFD', description);
+        for (var index = 0; index < description.Length; index++)
+        {
+            if (char.IsHighSurrogate(description[index]))
+            {
+                Assert.True(index + 1 < description.Length && char.IsLowSurrogate(description[index + 1]));
+                index++;
+            }
+            else
+            {
+                Assert.False(char.IsLowSurrogate(description[index]));
+            }
         }
     }
 

@@ -394,6 +394,121 @@ public class WebLlmsGeneratorTests
         }
     }
 
+    [Fact]
+    public void Generate_UsesPowerShellQuickstartForPackageManifest()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-powershell-package-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var modulePath = Path.Combine(root, "ExampleModule.psd1");
+            File.WriteAllText(modulePath,
+                """
+                @{
+                    ModuleVersion = '2.4.1'
+                    Description = 'Example PowerShell automation module.'
+                }
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { modulePath }
+            });
+
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            Assert.Contains("```powershell", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("Import-Module ExampleModule", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("```csharp", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("using ExampleModule", llmsTxt, StringComparison.Ordinal);
+
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.Contains("\"quickstartLanguage\": \"powershell\"", llmsJson, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_FallsBackFromUnresolvedMsBuildMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-msbuild-properties-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var projectPath = Path.Combine(root, "Example.Indirect.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <PackageId>$(PackageName)</PackageId>
+                    <Version>$(VersionPrefix)</Version>
+                    <Description>$(PackageDescription)</Description>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { projectPath }
+            });
+
+            Assert.Equal("unknown", result.Version);
+            var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.Contains("dotnet add package Example.Indirect", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("$(", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("$(", llmsJson, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_RecordsExplicitVersionForPackageSuite()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-explicit-suite-version-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var projectPath = Path.Combine(root, "Example.Package.csproj");
+            File.WriteAllText(projectPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <PackageId>Example.Package</PackageId>
+                    <Version>1.0.0</Version>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "Example Suite",
+                Version = "2026.7.0",
+                PackageFiles = new[] { projectPath }
+            });
+
+            Assert.Equal("2026.7.0", result.Version);
+            Assert.Contains("- Suite version: 2026.7.0", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+            Assert.Contains("\"version\": \"2026.7.0\"", File.ReadAllText(result.LlmsJsonPath), StringComparison.Ordinal);
+            Assert.Contains("- Suite version: 2026.7.0", File.ReadAllText(result.LlmsFullPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try
