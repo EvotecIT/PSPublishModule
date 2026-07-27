@@ -190,6 +190,52 @@ public class WebApiDocsGeneratorSuiteTests
         }
     }
 
+    [Fact]
+    public void GenerateSuitePortal_DescribesOnlyConfiguredCapabilities()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-suite-portal-minimal-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var outputPath = Path.Combine(root, "_site", "projects", "api-suite");
+            var result = WebApiDocsGenerator.GenerateSuitePortal(new WebApiDocsOptions
+            {
+                OutputPath = outputPath,
+                Title = "Project APIs",
+                BaseUrl = "/projects/api-suite",
+                ApiSuiteEntries =
+                {
+                    new WebApiDocsSuiteEntry
+                    {
+                        Id = "first",
+                        Label = "First",
+                        Href = "/projects/first/api/"
+                    },
+                    new WebApiDocsSuiteEntry
+                    {
+                        Id = "second",
+                        Label = "Second",
+                        Href = "/projects/second/api/"
+                    }
+                }
+            });
+
+            var html = File.ReadAllText(result.IndexPath);
+            var description = ExtractMetaContent(html, "description", isProperty: false);
+            Assert.InRange(description.Length, 120, 160);
+            Assert.Contains("2 API references", description, StringComparison.Ordinal);
+            Assert.DoesNotContain("searchable symbols", description, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("curated guidance", description, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("coverage signals", description, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("related guides", description, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

@@ -541,10 +541,10 @@ public static partial class WebSiteBuilder
 
                 var taxRoute = BuildRoute(taxonomy.BasePath, string.Empty, spec.TrailingSlash);
                 taxRoute = ApplyLanguagePrefixToRoute(spec, taxRoute, language);
-                var taxonomyPageCount = languageTerms.Values
+                var taxonomyItems = languageTerms.Values
                     .SelectMany(static termItems => termItems)
                     .Distinct()
-                    .Count();
+                    .ToArray();
                 results.Add(new ContentItem
                 {
                     Collection = taxonomy.Name,
@@ -555,8 +555,10 @@ public static partial class WebSiteBuilder
                     Description = BuildTaxonomyIndexDescription(
                         spec,
                         taxonomy.Name,
+                        language,
                         languageTerms.Count,
-                        taxonomyPageCount),
+                        taxonomyItems.Length,
+                        taxonomyItems),
                     LastModifiedUtc = MaxLastModifiedUtc(languageTerms
                         .SelectMany(static term => term.Value)
                         .Select(static item => item.LastModifiedUtc)),
@@ -574,7 +576,7 @@ public static partial class WebSiteBuilder
                     var slug = Slugify(term);
                     var termRoute = BuildRoute(taxonomy.BasePath, slug, spec.TrailingSlash);
                     termRoute = ApplyLanguagePrefixToRoute(spec, termRoute, language);
-                    var taxonomyTermPageCount = languageTerms[term].Distinct().Count();
+                    var taxonomyTermItems = languageTerms[term].Distinct().ToArray();
                     results.Add(new ContentItem
                     {
                         Collection = taxonomy.Name,
@@ -586,7 +588,9 @@ public static partial class WebSiteBuilder
                             spec,
                             taxonomy.Name,
                             term,
-                            taxonomyTermPageCount),
+                            language,
+                            taxonomyTermItems.Length,
+                            taxonomyTermItems),
                         LastModifiedUtc = MaxLastModifiedUtc(languageTerms[term]
                             .Select(static item => item.LastModifiedUtc)),
                         Kind = PageKind.Term,

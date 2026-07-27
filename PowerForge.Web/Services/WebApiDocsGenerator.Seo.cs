@@ -42,14 +42,37 @@ public static partial class WebApiDocsGenerator
 
     private static string BuildApiSuiteSeoDescription(
         string title,
-        int entryCount)
+        ApiSuiteContext suite)
     {
         var normalizedTitle = NormalizeApiSeoText(title);
-        var count = FormatApiSeoCount(entryCount);
-        var description =
-            $"Browse {normalizedTitle} across {count} API references, with searchable symbols, curated guidance, coverage signals, and cross-project navigation from one landing page.";
+        var count = FormatApiSeoCount(suite.Entries.Count);
+        var capabilities = new List<string>();
+        if (!string.IsNullOrWhiteSpace(suite.SearchUrl))
+            capabilities.Add("search symbols");
+        if (!string.IsNullOrWhiteSpace(suite.NarrativeUrl))
+            capabilities.Add("follow curated guidance");
+        if (!string.IsNullOrWhiteSpace(suite.CoverageUrl))
+            capabilities.Add("review coverage signals");
+        if (!string.IsNullOrWhiteSpace(suite.RelatedContentUrl))
+            capabilities.Add("find related guides and samples");
+        if (!string.IsNullOrWhiteSpace(suite.XrefMapUrl))
+            capabilities.Add("follow cross-project references");
+
+        var description = capabilities.Count == 0
+            ? $"Browse {normalizedTitle} across {count} API references, compare project scopes, and open each documented API from one cross-project landing page."
+            : $"Browse {normalizedTitle} across {count} API references, compare project scopes, {FormatApiSeoActions(capabilities)}, and open each API from one landing page.";
 
         return FitApiSeoDescription(description);
+    }
+
+    private static string FormatApiSeoActions(IReadOnlyList<string> actions)
+    {
+        if (actions.Count == 1)
+            return actions[0];
+        if (actions.Count == 2)
+            return $"{actions[0]} and {actions[1]}";
+
+        return $"{string.Join(", ", actions.Take(actions.Count - 1))}, and {actions[^1]}";
     }
 
     private static string FormatApiSeoCount(int value)

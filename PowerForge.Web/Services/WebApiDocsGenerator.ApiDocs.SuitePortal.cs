@@ -34,7 +34,7 @@ public static partial class WebApiDocsGenerator
         var social = ResolveApiSocialProfile(options);
         var baseUrl = NormalizeApiRoute(options.BaseUrl);
         var title = string.IsNullOrWhiteSpace(options.Title) ? (suite.Title ?? "API Suite") : options.Title.Trim();
-        var description = BuildApiSuiteSeoDescription(title, suite.Entries.Count);
+        var description = BuildApiSuiteSeoDescription(title, suite);
 
         var template = LoadTemplate(options, "suite-portal.html", null);
         var html = ApplyTemplate(template, new Dictionary<string, string?>

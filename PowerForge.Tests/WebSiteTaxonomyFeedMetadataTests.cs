@@ -36,6 +36,18 @@ public class WebSiteTaxonomyFeedMetadataTests
 
                 Hello
                 """);
+            File.WriteAllText(Path.Combine(blogPath, "pierwszy-wpis.md"),
+                """
+                ---
+                title: Pierwszy wpis
+                description: Opisuje polskie wydanie produktu, najważniejsze poprawki, zgodność pakietów oraz praktyczne informacje potrzebne podczas aktualizacji środowiska.
+                date: 2026-01-02
+                language: pl
+                tags: [wydanie]
+                ---
+
+                Cześć
+                """);
 
             var themeRoot = Path.Combine(root, "themes", "taxonomy-feed-meta");
             Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
@@ -70,6 +82,16 @@ public class WebSiteTaxonomyFeedMetadataTests
                 ContentRoot = "content",
                 DefaultTheme = "taxonomy-feed-meta",
                 ThemesRoot = "themes",
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    Languages =
+                    [
+                        new LanguageSpec { Code = "en", Default = true },
+                        new LanguageSpec { Code = "pl" }
+                    ]
+                },
                 Collections = new[]
                 {
                     new CollectionSpec
@@ -124,18 +146,31 @@ public class WebSiteTaxonomyFeedMetadataTests
             var taxonomyHtml = File.ReadAllText(Path.Combine(result.OutputPath, "tags", "index.html"));
             var taxonomyDescription = ReadMetaDescription(taxonomyHtml);
             Assert.InRange(taxonomyDescription.Length, 120, 160);
-            Assert.Contains("Browse Feed Metadata Test content by Tags", taxonomyDescription, StringComparison.Ordinal);
+            Assert.Contains("Browse 1 published Feed Metadata Test page through 1 Tags term", taxonomyDescription, StringComparison.Ordinal);
+            Assert.DoesNotContain("guides", taxonomyDescription, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("articles", taxonomyDescription, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("examples", taxonomyDescription, StringComparison.OrdinalIgnoreCase);
 
             var termHtml = File.ReadAllText(Path.Combine(result.OutputPath, "tags", "release", "index.html"));
             var termDescription = ReadMetaDescription(termHtml);
             Assert.InRange(termDescription.Length, 120, 160);
-            Assert.Contains("Explore 1 Feed Metadata Test page tagged release", termDescription, StringComparison.Ordinal);
+            Assert.Contains("Explore 1 published Feed Metadata Test page tagged release", termDescription, StringComparison.Ordinal);
+            Assert.DoesNotContain("guides", termDescription, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("articles", termDescription, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("examples", termDescription, StringComparison.OrdinalIgnoreCase);
 
             var authorHtml = File.ReadAllText(Path.Combine(result.OutputPath, "authors", "alice", "index.html"));
             var authorDescription = ReadMetaDescription(authorHtml);
             Assert.InRange(authorDescription.Length, 120, 160);
             Assert.Contains("filed under Alice in the Authors taxonomy", authorDescription, StringComparison.Ordinal);
             Assert.DoesNotContain("tagged Alice", authorDescription, StringComparison.Ordinal);
+
+            var polishTaxonomyHtml = File.ReadAllText(Path.Combine(result.OutputPath, "pl", "tags", "index.html"));
+            var polishTaxonomyDescription = ReadMetaDescription(polishTaxonomyHtml);
+            Assert.InRange(polishTaxonomyDescription.Length, 120, 160);
+            Assert.Contains("Opisuje polskie wydanie produktu", polishTaxonomyDescription, StringComparison.Ordinal);
+            Assert.DoesNotContain("Browse", polishTaxonomyDescription, StringComparison.Ordinal);
+            Assert.DoesNotContain("Explore", polishTaxonomyDescription, StringComparison.Ordinal);
         }
         finally
         {
