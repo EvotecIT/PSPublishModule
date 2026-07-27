@@ -541,6 +541,10 @@ public static partial class WebSiteBuilder
 
                 var taxRoute = BuildRoute(taxonomy.BasePath, string.Empty, spec.TrailingSlash);
                 taxRoute = ApplyLanguagePrefixToRoute(spec, taxRoute, language);
+                var taxonomyItems = languageTerms.Values
+                    .SelectMany(static termItems => termItems)
+                    .Distinct()
+                    .ToArray();
                 results.Add(new ContentItem
                 {
                     Collection = taxonomy.Name,
@@ -548,7 +552,13 @@ public static partial class WebSiteBuilder
                     Language = language,
                     TranslationKey = $"taxonomy:{taxonomy.Name}",
                     Title = HumanizeSegment(taxonomy.Name),
-                    Description = string.Empty,
+                    Description = BuildTaxonomyIndexDescription(
+                        spec,
+                        taxonomy.Name,
+                        language,
+                        languageTerms.Count,
+                        taxonomyItems.Length,
+                        taxonomyItems),
                     LastModifiedUtc = MaxLastModifiedUtc(languageTerms
                         .SelectMany(static term => term.Value)
                         .Select(static item => item.LastModifiedUtc)),
@@ -566,6 +576,7 @@ public static partial class WebSiteBuilder
                     var slug = Slugify(term);
                     var termRoute = BuildRoute(taxonomy.BasePath, slug, spec.TrailingSlash);
                     termRoute = ApplyLanguagePrefixToRoute(spec, termRoute, language);
+                    var taxonomyTermItems = languageTerms[term].Distinct().ToArray();
                     results.Add(new ContentItem
                     {
                         Collection = taxonomy.Name,
@@ -573,7 +584,13 @@ public static partial class WebSiteBuilder
                         Language = language,
                         TranslationKey = $"taxonomy:{taxonomy.Name}:term:{slug}",
                         Title = term,
-                        Description = string.Empty,
+                        Description = BuildTaxonomyTermDescription(
+                            spec,
+                            taxonomy.Name,
+                            term,
+                            language,
+                            taxonomyTermItems.Length,
+                            taxonomyTermItems),
                         LastModifiedUtc = MaxLastModifiedUtc(languageTerms[term]
                             .Select(static item => item.LastModifiedUtc)),
                         Kind = PageKind.Term,
@@ -1223,6 +1240,7 @@ public static partial class WebSiteBuilder
             process.StartInfo.ArgumentList.Add("core.quotePath=false");
             process.StartInfo.ArgumentList.Add("log");
             process.StartInfo.ArgumentList.Add("--format=@@POWERFORGE_DATE@@%aI");
+            process.StartInfo.ArgumentList.Add("--relative");
             process.StartInfo.ArgumentList.Add("--name-only");
             process.StartInfo.ArgumentList.Add("--diff-filter=AMR");
             process.StartInfo.ArgumentList.Add("--");

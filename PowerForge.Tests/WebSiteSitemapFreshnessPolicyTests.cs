@@ -131,6 +131,45 @@ public class WebSiteSitemapFreshnessPolicyTests
     }
 
     [Fact]
+    public void Build_SourceDateSitemapLastmod_UsesGitDateWhenSiteRootIsNestedInRepository()
+    {
+        var repositoryRoot = CreateTempRoot("pf-web-sitemap-nested-source-freshness-");
+        var siteRoot = Path.Combine(repositoryRoot, "website");
+        Directory.CreateDirectory(siteRoot);
+        try
+        {
+            WriteMarkdown(repositoryRoot, "website/content/pages/about.md",
+                """
+                ---
+                title: About
+                slug: about
+                ---
+
+                Reference content in a nested website root.
+                """);
+            CommitAll(repositoryRoot, "2026-01-15T12:34:56Z");
+
+            Build(siteRoot, new[]
+            {
+                new CollectionSpec
+                {
+                    Name = "pages",
+                    Preset = "pages",
+                    Input = "content/pages",
+                    Output = "/",
+                    SitemapLastModified = SitemapLastModifiedPolicy.SourceDate
+                }
+            });
+
+            Assert.Equal("2026-01-15T12:34:56.000Z", ReadSitemapMetadataLastModified(siteRoot, "/about/"));
+        }
+        finally
+        {
+            Cleanup(repositoryRoot);
+        }
+    }
+
+    [Fact]
     public void Build_AutoSitemapLastmod_DoesNotTreatBlogPrefixedReferenceRoutesAsEditorial()
     {
         var root = CreateTempRoot("pf-web-sitemap-blog-tools-freshness-");

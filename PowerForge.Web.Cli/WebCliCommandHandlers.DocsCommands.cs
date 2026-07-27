@@ -518,6 +518,7 @@ internal static partial class WebCliCommandHandlers
                        TryGetOptionValue(subArgs, "--root") ??
                        TryGetOptionValue(subArgs, "--path");
         var projectFile = TryGetOptionValue(subArgs, "--project");
+        var packageFiles = ReadOptionList(subArgs, "--package-files");
         var apiIndex = TryGetOptionValue(subArgs, "--api-index");
         var apiIndexes = ReadOptionList(subArgs, "--api-indexes");
         var apiBase = TryGetOptionValue(subArgs, "--api-base");
@@ -529,6 +530,7 @@ internal static partial class WebCliCommandHandlers
         var license = TryGetOptionValue(subArgs, "--license");
         var targets = TryGetOptionValue(subArgs, "--targets");
         var extra = TryGetOptionValue(subArgs, "--extra");
+        var discovery = TryGetOptionValue(subArgs, "--discovery");
         var apiLevelText = TryGetOptionValue(subArgs, "--api-level");
         var apiMaxTypesText = TryGetOptionValue(subArgs, "--api-max-types");
         var apiMaxMembersText = TryGetOptionValue(subArgs, "--api-max-members");
@@ -547,6 +549,7 @@ internal static partial class WebCliCommandHandlers
         {
             SiteRoot = siteRoot,
             ProjectFile = projectFile,
+            PackageFiles = packageFiles.ToArray(),
             ApiIndexPath = apiIndex,
             ApiIndexPaths = apiIndexes.ToArray(),
             ApiBase = apiBase ?? "/api",
@@ -558,6 +561,7 @@ internal static partial class WebCliCommandHandlers
             License = license,
             Targets = targets,
             ExtraContentPath = extra,
+            DiscoveryContentPath = discovery,
             ApiDetailLevel = apiLevel,
             ApiMaxTypes = apiMaxTypes,
             ApiMaxMembers = apiMaxMembers

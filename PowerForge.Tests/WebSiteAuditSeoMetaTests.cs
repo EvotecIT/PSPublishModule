@@ -98,6 +98,59 @@ public class WebSiteAuditSeoMetaTests
     }
 
     [Fact]
+    public void Audit_AllowsNoIndexAliasCanonicalToIndexableSitemapRoute()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-seo-sitemap-noindex-alias-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "convert"));
+        Directory.CreateDirectory(Path.Combine(root, "playground"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "convert", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Converter</title>
+                  <link rel="canonical" href="https://example.test/convert/" />
+                  <meta name="robots" content="index,follow" />
+                </head>
+                <body>Converter</body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(root, "playground", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Converter alias</title>
+                  <link rel="canonical" href="https://example.test/convert/" />
+                  <meta name="robots" content="noindex,follow" />
+                </head>
+                <body>Converter alias</body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/convert/</loc></url>
+                </urlset>
+                """);
+
+            var result = WebSiteAuditor.Audit(CreateSeoOnlyOptions(root));
+
+            Assert.DoesNotContain(result.Issues, issue =>
+                issue.Hint.StartsWith("seo-sitemap-noindex", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_FlagsSitemapCanonicalMismatch_WhenSitemapLocDiffersFromPageCanonical()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-seo-sitemap-canonical-" + Guid.NewGuid().ToString("N"));

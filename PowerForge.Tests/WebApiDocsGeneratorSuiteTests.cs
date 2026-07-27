@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using PowerForge.Web;
 using Xunit;
 
@@ -168,6 +169,12 @@ public class WebApiDocsGeneratorSuiteTests
             Assert.Contains("Guides & Samples", html, StringComparison.Ordinal);
             Assert.Contains("Suite Assets", html, StringComparison.Ordinal);
             Assert.Contains("/projects/testimox/api/", html, StringComparison.Ordinal);
+            var description = ExtractMetaContent(html, "description", isProperty: false);
+            Assert.InRange(description.Length, 120, 160);
+            Assert.Contains("Project APIs", description, StringComparison.Ordinal);
+            Assert.DoesNotMatch(@"\b(?:and|or|with|including|from|to)\.$", description);
+            Assert.Equal(description, ExtractMetaContent(html, "og:description", isProperty: true));
+            Assert.Equal(description, ExtractMetaContent(html, "twitter:description", isProperty: false));
 
             using var json = JsonDocument.Parse(File.ReadAllText(result.JsonPath));
             Assert.Equal("api-suite-portal", json.RootElement.GetProperty("kind").GetString());
@@ -177,6 +184,52 @@ public class WebApiDocsGeneratorSuiteTests
             Assert.Equal("../api-suite-related-content.json", suite.GetProperty("relatedContentUrl").GetString());
             Assert.Equal("../api-suite-narrative.json", suite.GetProperty("narrativeUrl").GetString());
             Assert.Equal(2, suite.GetProperty("entries").GetArrayLength());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateSuitePortal_DescribesOnlyConfiguredCapabilities()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-suite-portal-minimal-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var outputPath = Path.Combine(root, "_site", "projects", "api-suite");
+            var result = WebApiDocsGenerator.GenerateSuitePortal(new WebApiDocsOptions
+            {
+                OutputPath = outputPath,
+                Title = "Project APIs",
+                BaseUrl = "/projects/api-suite",
+                ApiSuiteEntries =
+                {
+                    new WebApiDocsSuiteEntry
+                    {
+                        Id = "first",
+                        Label = "First",
+                        Href = "/projects/first/api/"
+                    },
+                    new WebApiDocsSuiteEntry
+                    {
+                        Id = "second",
+                        Label = "Second",
+                        Href = "/projects/second/api/"
+                    }
+                }
+            });
+
+            var html = File.ReadAllText(result.IndexPath);
+            var description = ExtractMetaContent(html, "description", isProperty: false);
+            Assert.InRange(description.Length, 120, 160);
+            Assert.Contains("2 API references", description, StringComparison.Ordinal);
+            Assert.DoesNotContain("searchable symbols", description, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("curated guidance", description, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("coverage signals", description, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("related guides", description, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -195,5 +248,14 @@ public class WebApiDocsGeneratorSuiteTests
         {
             // ignore cleanup failures in tests
         }
+    }
+
+    private static string ExtractMetaContent(string html, string name, bool isProperty)
+    {
+        var attribute = isProperty ? "property" : "name";
+        var pattern = $"""<meta\b(?=[^>]*\b{attribute}="{Regex.Escape(name)}")(?=[^>]*\bcontent="(?<value>[^"]*)")[^>]*>""";
+        var match = Regex.Match(html, pattern, RegexOptions.IgnoreCase);
+        Assert.True(match.Success, $"Missing meta tag '{name}'.");
+        return match.Groups["value"].Value;
     }
 }
