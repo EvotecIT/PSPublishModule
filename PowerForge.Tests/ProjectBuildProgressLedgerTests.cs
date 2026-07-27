@@ -6,11 +6,11 @@ namespace PowerForge.Tests;
 public sealed class ProjectBuildProgressLedgerTests
 {
     [Fact]
-    public void BoundedLedger_KeepsLiveTasksSmallAndRetainsCompleteTimedHistory()
+    public void ProgressLedger_KeepsEveryLiveTaskVisibleAndRetainsCompleteTimedHistory()
     {
         using var writer = new StringWriter();
         var console = CreateConsole(writer, height: 12);
-        SpectreBoundedProgressLedger? ledger = null;
+        SpectreProgressLedger? ledger = null;
 
         SpectreProgressDisplay.Run(
             console,
@@ -22,7 +22,7 @@ public sealed class ProjectBuildProgressLedgerTests
             ],
             context =>
             {
-                ledger = new SpectreBoundedProgressLedger(context);
+                ledger = new SpectreProgressLedger(context);
                 var items = Enumerable.Range(1, 85)
                     .Select(index => new SpectreProgressLedgerItem
                     {
@@ -37,16 +37,16 @@ public sealed class ProjectBuildProgressLedgerTests
                     .ToArray();
 
                 ledger.Plan(items);
-                Assert.Equal(2, ledger.VisibleTaskCount);
+                Assert.Equal(85, ledger.VisibleTaskCount);
 
                 foreach (var item in items)
                 {
                     ledger.Update(item, SpectreProgressLedgerState.Started, "building");
-                    Assert.InRange(ledger.VisibleTaskCount, 1, 6);
+                    Assert.Equal(85, ledger.VisibleTaskCount);
 
                     item.Duration = TimeSpan.FromSeconds(item.Position);
                     ledger.Update(item, SpectreProgressLedgerState.Completed, "1 package, 1 archive");
-                    Assert.InRange(ledger.VisibleTaskCount, 1, 5);
+                    Assert.Equal(85, ledger.VisibleTaskCount);
                     if (item.Position == items.Length)
                     {
                         var stoppedAt = ledger.GetVisibleElapsedTime(item.Key);
@@ -57,7 +57,7 @@ public sealed class ProjectBuildProgressLedgerTests
 
                 Assert.Equal(85, ledger.GetItemCount("PackageBuild"));
                 Assert.Equal(1d, ledger.GetCompletionRatio("PackageBuild"), 5);
-                Assert.Equal(3, ledger.VisibleTaskCount);
+                Assert.Equal(85, ledger.VisibleTaskCount);
                 ledger.ClearLiveTasks();
                 Assert.Equal(0, ledger.VisibleTaskCount);
             });
@@ -69,7 +69,7 @@ public sealed class ProjectBuildProgressLedgerTests
         Assert.Equal(TimeSpan.FromSeconds(1), snapshots[0].Duration);
         Assert.Equal(TimeSpan.FromSeconds(85), snapshots[^1].Duration);
 
-        SpectreBoundedProgressLedger.WriteLedger(console, snapshots, "Project build details");
+        SpectreProgressLedger.WriteLedger(console, snapshots, "Project build details");
         var output = writer.ToString();
         Assert.Contains("Project.01", output, StringComparison.Ordinal);
         Assert.Contains("Project.85", output, StringComparison.Ordinal);
@@ -77,17 +77,18 @@ public sealed class ProjectBuildProgressLedgerTests
     }
 
     [Fact]
-    public void BoundedLedger_KeepsConcurrentBatchItemsBounded()
+    public void ProgressLedger_KeepsCurrentWorkVisibleWhenLiveRegionOverflows()
     {
         using var writer = new StringWriter();
         var console = CreateConsole(writer, height: 12);
+        IReadOnlyList<string>? finalTaskDescriptions = null;
 
         SpectreProgressDisplay.Run(
             console,
             SpectreBuildProgressColumns.CreateStandard(),
             context =>
             {
-                var ledger = new SpectreBoundedProgressLedger(context);
+                var ledger = new SpectreProgressLedger(context);
                 var items = Enumerable.Range(1, 85)
                     .Select(index => new SpectreProgressLedgerItem
                     {
@@ -102,11 +103,58 @@ public sealed class ProjectBuildProgressLedgerTests
                     .ToArray();
 
                 ledger.Plan(items);
-                foreach (var item in items)
-                    ledger.Update(item, SpectreProgressLedgerState.Started, "building in MSBuild batch");
+                ledger.Update(items[0], SpectreProgressLedgerState.Started, "building");
+                Assert.Equal(85, ledger.VisibleTaskCount);
+            },
+            tasks => finalTaskDescriptions = tasks.Select(task => task.Description).ToArray());
 
-                Assert.Equal(2, ledger.VisibleTaskCount);
+        Assert.NotNull(finalTaskDescriptions);
+        Assert.Contains("Project.01", finalTaskDescriptions![^1], StringComparison.Ordinal);
+        var output = writer.ToString();
+        Assert.Contains("Project.01", output, StringComparison.Ordinal);
+        Assert.Contains("Project.85", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StandaloneConsole_WritesDetailedLedgerAfterSuccess()
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer, height: 12);
+
+        var result = SpectreProjectBuildConsoleUi.RunInteractive(
+            console,
+            new ProjectBuildConsolePlan
+            {
+                ConfigPath = "project.build.json",
+                RootPath = "repository",
+                Build = true
+            },
+            progress =>
+            {
+                var detailed = Assert.IsAssignableFrom<IProjectBuildProgressReporterV2>(progress);
+                var item = new ProjectBuildProgressItem
+                {
+                    Phase = ProjectBuildProgressPhase.PackageBuild,
+                    Key = "package:Sample.Project",
+                    Title = "Sample.Project",
+                    Position = 1,
+                    Total = 1,
+                    Duration = TimeSpan.FromSeconds(2)
+                };
+                detailed.ItemsPlanned(ProjectBuildProgressPhase.PackageBuild, [item]);
+                detailed.ItemUpdated(item, ProjectBuildProgressItemState.Started, "building");
+                detailed.ItemUpdated(item, ProjectBuildProgressItemState.Completed, "1 package, 1 archive");
+                return new ProjectBuildWorkflowResult
+                {
+                    Result = new ProjectBuildResult { Success = true }
+                };
             });
+
+        Assert.True(result.Result.Success);
+        var output = writer.ToString();
+        Assert.Contains("Project build details", output, StringComparison.Ordinal);
+        Assert.Contains("Sample.Project", output, StringComparison.Ordinal);
+        Assert.Contains("00:02.000", output, StringComparison.Ordinal);
     }
 
     [Fact]

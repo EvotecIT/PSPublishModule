@@ -66,9 +66,9 @@ internal static class SpectreProjectBuildConsoleUi
                 }
             });
 
+        reporter?.WriteLedger(console);
         if (failure is not null)
         {
-            reporter?.WriteLedger(console);
             ExceptionDispatchInfo.Capture(failure).Throw();
         }
 
@@ -138,7 +138,7 @@ internal static class SpectreProjectBuildConsoleUi
         private readonly ProgressContext _context;
         private readonly IReadOnlyDictionary<ProjectBuildProgressPhase, ProgressTask> _tasks;
         private readonly HashSet<ProjectBuildProgressPhase> _failed = new();
-        private readonly SpectreBoundedProgressLedger _ledger;
+        private readonly SpectreProgressLedger _ledger;
 
         public SpectreProjectBuildProgressReporter(
             ProgressContext context,
@@ -146,7 +146,7 @@ internal static class SpectreProjectBuildConsoleUi
         {
             _context = context;
             _tasks = tasks;
-            _ledger = new SpectreBoundedProgressLedger(context);
+            _ledger = new SpectreProgressLedger(context);
         }
 
         public void PhaseStarted(ProjectBuildProgressPhase phase, int totalItems, string? detail = null)
@@ -231,7 +231,7 @@ internal static class SpectreProjectBuildConsoleUi
         }
 
         public void WriteLedger(IAnsiConsole console)
-            => SpectreBoundedProgressLedger.WriteLedger(
+            => SpectreProgressLedger.WriteLedger(
                 console,
                 _ledger.GetSnapshots(),
                 "Project build details");

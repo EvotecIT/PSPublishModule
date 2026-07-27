@@ -195,7 +195,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
         private readonly IReadOnlyDictionary<PowerForgeReleaseProgressPhase, ProgressTask> _tasks;
         private readonly IReadOnlyDictionary<PowerForgeReleaseProgressPhase, string> _phaseNames;
         private readonly HashSet<PowerForgeReleaseProgressPhase> _failed = new();
-        private readonly SpectreBoundedProgressLedger _ledger;
+        private readonly SpectreProgressLedger _ledger;
 
         public Reporter(
             ProgressContext context,
@@ -205,7 +205,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             _context = context;
             _tasks = tasks;
             _phaseNames = phaseNames;
-            _ledger = new SpectreBoundedProgressLedger(context);
+            _ledger = new SpectreProgressLedger(context);
         }
 
         public void PhaseStarted(PowerForgeReleaseProgressPhase phase, int totalItems, string? detail = null)
@@ -296,7 +296,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
         }
 
         public void WriteLedger()
-            => SpectreBoundedProgressLedger.WriteLedger(
+            => SpectreProgressLedger.WriteLedger(
                 AnsiConsole.Console,
                 _ledger.GetSnapshots(),
                 "Unified release details");
