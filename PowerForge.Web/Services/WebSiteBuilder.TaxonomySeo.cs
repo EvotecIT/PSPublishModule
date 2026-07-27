@@ -18,7 +18,8 @@ public static partial class WebSiteBuilder
         var terms = termCount == 1 ? "term" : "terms";
         var pages = pageCount == 1 ? "page" : "pages";
         return FitTaxonomyDescription(
-            $"Browse {pageCount} published {siteName} {pages} through {termCount} {taxonomyTitle} {terms}, with each term linking to its matching content on the site.");
+            $"Browse {pageCount} published {siteName} {pages} through {termCount} {taxonomyTitle} {terms}, with each term linking to its matching content on the site.",
+            ensureEnglishMinimum: true);
     }
 
     private static string BuildTaxonomyTermDescription(
@@ -42,7 +43,8 @@ public static partial class WebSiteBuilder
                 : $"filed under {term} in the {taxonomyTitle} taxonomy";
 
         return FitTaxonomyDescription(
-            $"Explore {pageCount} published {siteName} {pages} {relationship}. This taxonomy page collects the matching content and links to each available page in one place.");
+            $"Explore {pageCount} published {siteName} {pages} {relationship}. This taxonomy page collects the matching content and links to each available page in one place.",
+            ensureEnglishMinimum: true);
     }
 
     private static bool IsEnglishTaxonomyLanguage(string? language)
@@ -72,17 +74,21 @@ public static partial class WebSiteBuilder
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        return FitTaxonomyDescription(string.Join(". ", fragments));
+        return FitTaxonomyDescription(string.Join(". ", fragments), ensureEnglishMinimum: false);
     }
 
-    private static string FitTaxonomyDescription(string description)
+    private static string FitTaxonomyDescription(string description, bool ensureEnglishMinimum)
     {
+        const int minimumLength = 120;
         const int maximumLength = 160;
+        if (ensureEnglishMinimum && description.Length < minimumLength)
+            description = $"{description.TrimEnd(' ', ',', ';', ':', '-', '.', '!', '?')}. Browse the grouped results and open any matching page from this index.";
+
         if (description.Length <= maximumLength)
             return description;
 
         var wordBoundary = description.LastIndexOf(' ', maximumLength - 1);
-        if (wordBoundary < 120)
+        if (wordBoundary < minimumLength)
             wordBoundary = maximumLength - 1;
 
         return description[..wordBoundary].TrimEnd(' ', ',', ';', ':', '-', '.', '!', '?') + ".";

@@ -693,24 +693,6 @@ public static partial class WebSiteAuditor
         return $"{uri.Scheme.ToLowerInvariant()}://{uri.Host.ToLowerInvariant()}{path}";
     }
 
-    private static string[] BuildRouteCandidatesForSeoChecks(string relativePath, string routePath, AngleSharp.Dom.IDocument doc)
-    {
-        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        AddGeneratedPageRouteCandidates(candidates, relativePath, routePath);
-
-        if (doc.Head is not null)
-        {
-            var canonicalHref = doc.Head.QuerySelectorAll("link[rel][href]")
-                .Where(link => ContainsRelToken(link.GetAttribute("rel"), "canonical"))
-                .Select(link => (link.GetAttribute("href") ?? string.Empty).Trim())
-                .FirstOrDefault(href => !string.IsNullOrWhiteSpace(href));
-            if (!string.IsNullOrWhiteSpace(canonicalHref))
-                AddRouteCandidates(candidates, canonicalHref);
-        }
-
-        return candidates.ToArray();
-    }
-
     private static string[] BuildGeneratedPageRouteCandidates(string relativePath, string routePath)
     {
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -854,7 +836,7 @@ public static partial class WebSiteAuditor
             if (!HasNoIndexRobots(doc, html))
                 continue;
 
-            foreach (var candidate in BuildRouteCandidatesForSeoChecks(relativePath, routePath, doc))
+            foreach (var candidate in BuildGeneratedPageRouteCandidates(relativePath, routePath))
             {
                 if (!string.IsNullOrWhiteSpace(candidate))
                     noIndexRoutes.Add(candidate);

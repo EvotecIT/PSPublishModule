@@ -6,6 +6,83 @@ namespace PowerForge.Tests;
 public class WebSiteTaxonomyFeedMetadataTests
 {
     [Fact]
+    public void Build_TaxonomyIndexDescription_StaysWithinSearchSnippetRangeForMultiDigitCounts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-taxonomy-seo-counts-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var contentPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(contentPath);
+            for (var index = 1; index <= 12; index++)
+            {
+                var tags = string.Join(", ", Enumerable.Range(1, 27)
+                    .Where(tag => tag == index || index == 1)
+                    .Select(tag => $"tag-{tag}"));
+                File.WriteAllText(Path.Combine(contentPath, $"post-{index}.md"),
+                    $"""
+                    ---
+                    title: Post {index}
+                    description: Published content item {index}.
+                    tags: [{tags}]
+                    ---
+
+                    Content
+                    """);
+            }
+
+            var themeRoot = Path.Combine(root, "themes", "taxonomy-seo-counts");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "page.html"),
+                "<!doctype html><html><head>{{ description_meta_html }}{{ head_html }}</head><body>{{ content }}</body></html>");
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """{"name":"taxonomy-seo-counts","engine":"scriban","defaultLayout":"page"}""");
+
+            var spec = new SiteSpec
+            {
+                Name = "OfficeIMO",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "taxonomy-seo-counts",
+                ThemesRoot = "themes",
+                Collections =
+                [
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog"
+                    }
+                ],
+                Taxonomies =
+                [
+                    new TaxonomySpec
+                    {
+                        Name = "tags",
+                        BasePath = "/tags",
+                        ListLayout = "page",
+                        TermLayout = "page"
+                    }
+                ]
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var result = WebSiteBuilder.Build(spec, WebSitePlanner.Plan(spec, configPath), Path.Combine(root, "_site"));
+            var description = ReadMetaDescription(File.ReadAllText(Path.Combine(result.OutputPath, "tags", "index.html")));
+
+            Assert.InRange(description.Length, 120, 160);
+            Assert.Contains("Browse 12 published OfficeIMO pages through 27 Tags terms", description, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_TaxonomyFeeds_UseConfiguredTaxonomyMetadata()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-taxonomy-feed-meta-" + Guid.NewGuid().ToString("N"));
