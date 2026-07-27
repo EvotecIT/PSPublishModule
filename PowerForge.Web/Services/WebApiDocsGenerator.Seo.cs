@@ -15,14 +15,20 @@ public static partial class WebApiDocsGenerator
     {
         var title = NormalizeApiSeoText(options.Title);
         var count = FormatApiSeoCount(documentedTypeCount);
+        var referenceEntryLabel = documentedTypeCount == 1
+            ? "documented reference entry"
+            : "documented reference entries";
+        var typeLabel = documentedTypeCount == 1
+            ? "documented type"
+            : "documented types";
         var richTemplate = UsesRichApiDocsTemplate(options);
         var description = options.Type == ApiDocsType.PowerShell
             ? richTemplate
-                ? $"Browse {title} for {count} documented reference entries, with searchable syntax, parameters, pipeline details, and navigation across the API."
-                : $"Browse {title} for {count} documented reference entries, with command summaries, reference pages, and navigation across the available API."
+                ? $"Browse {title} for {count} {referenceEntryLabel}, with searchable syntax, parameters, pipeline details, and navigation across the API."
+                : $"Browse {title} for {count} {referenceEntryLabel}, with command summaries, reference pages, and navigation across the available API."
             : richTemplate
-                ? $"Browse {title} for {count} documented types, with searchable signatures, members, parameters, type relationships, and navigation across the API."
-                : $"Browse {title} for {count} documented types, with summaries, generated reference pages, member details, and navigation across the available API.";
+                ? $"Browse {title} for {count} {typeLabel}, with searchable signatures, members, parameters, type relationships, and navigation across the API."
+                : $"Browse {title} for {count} {typeLabel}, with summaries, generated reference pages, member details, and navigation across the available API.";
 
         return FitApiSeoDescription(description);
     }

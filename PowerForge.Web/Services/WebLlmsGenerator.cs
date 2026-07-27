@@ -78,7 +78,9 @@ public static class WebLlmsGenerator
         var quickstart = ResolveQuickstart(
             options.QuickstartPath,
             primaryPackage?.Id ?? name,
-            primaryPackage?.IsPowerShellModule ?? projectInfo.IsPowerShellModule);
+            primaryPackage?.IsPowerShellModule ?? projectInfo.IsPowerShellModule,
+            primaryPackage?.IsDotNetTool ?? projectInfo.IsDotNetTool,
+            primaryPackage?.ToolCommandName ?? projectInfo.ToolCommandName);
         var legacyInstallCommand = CreateInstallCommand(packageId, projectInfo.IsPowerShellModule, projectInfo.IsDotNetTool);
         var overview = ResolveOverview(options, projectInfo, siteRoot, name);
         WriteLlmsTxt(llmsTxtPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, overview, quickstart);
@@ -121,7 +123,9 @@ public static class WebLlmsGenerator
                 Id = id,
                 Version = project.Version,
                 InstallCommand = CreateInstallCommand(id, project.IsPowerShellModule, project.IsDotNetTool),
-                IsPowerShellModule = project.IsPowerShellModule
+                IsPowerShellModule = project.IsPowerShellModule,
+                IsDotNetTool = project.IsDotNetTool,
+                ToolCommandName = project.ToolCommandName
             });
         }
 
@@ -172,10 +176,16 @@ public static class WebLlmsGenerator
         var assemblyName = NormalizeMsBuildMetadataValue(MatchValue(content, "AssemblyName"));
         var rootNamespace = NormalizeMsBuildMetadataValue(MatchValue(content, "RootNamespace"));
         var packageId = NormalizeMsBuildMetadataValue(MatchValue(content, "PackageId"));
-        var version = NormalizeMsBuildMetadataValue(MatchValue(content, "Version")) ??
-                      NormalizeMsBuildMetadataValue(MatchValue(content, "VersionPrefix"));
+        var packageVersion = NormalizeMsBuildMetadataValue(MatchValue(content, "PackageVersion"));
+        var versionValue = NormalizeMsBuildMetadataValue(MatchValue(content, "Version"));
+        var versionPrefix = NormalizeMsBuildMetadataValue(MatchValue(content, "VersionPrefix"));
+        var versionSuffix = NormalizeMsBuildMetadataValue(MatchValue(content, "VersionSuffix"));
+        var version = packageVersion ??
+                      versionValue ??
+                      CombineMsBuildVersion(versionPrefix, versionSuffix);
         var description = NormalizeMsBuildMetadataValue(MatchValue(content, "Description"));
         var packAsTool = NormalizeMsBuildMetadataValue(MatchValue(content, "PackAsTool"));
+        var toolCommandName = NormalizeMsBuildMetadataValue(MatchValue(content, "ToolCommandName"));
 
         return new ProjectInfo
         {
@@ -183,11 +193,22 @@ public static class WebLlmsGenerator
             PackageId = packageId,
             Version = version,
             Description = description,
+            ToolCommandName = toolCommandName ?? assemblyName ?? rootNamespace ?? packageId,
             IsDotNetTool = string.Equals(
                 packAsTool,
                 "true",
                 StringComparison.OrdinalIgnoreCase)
         };
+    }
+
+    private static string? CombineMsBuildVersion(string? versionPrefix, string? versionSuffix)
+    {
+        if (string.IsNullOrWhiteSpace(versionPrefix))
+            return null;
+        if (string.IsNullOrWhiteSpace(versionSuffix))
+            return versionPrefix;
+
+        return $"{versionPrefix}-{versionSuffix.TrimStart('-')}";
     }
 
     private static string? NormalizeMsBuildMetadataValue(string value)
@@ -389,7 +410,12 @@ public static class WebLlmsGenerator
         return Regex.Replace(decoded, @"\s+", " ").Trim();
     }
 
-    private static QuickstartInfo ResolveQuickstart(string? quickstartPath, string name, bool isPowerShellModule)
+    private static QuickstartInfo ResolveQuickstart(
+        string? quickstartPath,
+        string name,
+        bool isPowerShellModule,
+        bool isDotNetTool,
+        string? toolCommandName)
     {
         if (!string.IsNullOrWhiteSpace(quickstartPath))
         {
@@ -416,6 +442,21 @@ public static class WebLlmsGenerator
                 [
                     $"Import-Module {name}",
                     $"Get-Command -Module {name}"
+                ]
+            };
+        }
+
+        if (isDotNetTool)
+        {
+            var commandName = string.IsNullOrWhiteSpace(toolCommandName)
+                ? name
+                : toolCommandName;
+            return new QuickstartInfo
+            {
+                Language = "shell",
+                Lines =
+                [
+                    $"{commandName} --help"
                 ]
             };
         }
@@ -833,6 +874,8 @@ public static class WebLlmsGenerator
         public string? Version { get; set; }
         public string InstallCommand { get; set; } = string.Empty;
         public bool IsPowerShellModule { get; set; }
+        public bool IsDotNetTool { get; set; }
+        public string? ToolCommandName { get; set; }
     }
 
     private sealed class ProjectInfo
@@ -841,6 +884,7 @@ public static class WebLlmsGenerator
         public string? PackageId { get; set; }
         public string? Version { get; set; }
         public string? Description { get; set; }
+        public string? ToolCommandName { get; set; }
         public bool IsPowerShellModule { get; set; }
         public bool IsDotNetTool { get; set; }
     }

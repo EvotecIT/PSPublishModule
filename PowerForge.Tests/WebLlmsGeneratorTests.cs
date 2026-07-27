@@ -374,6 +374,7 @@ public class WebLlmsGeneratorTests
                     <PackageId>Example.Tool</PackageId>
                     <Version>1.2.3</Version>
                     <PackAsTool>true</PackAsTool>
+                    <ToolCommandName>example-tool</ToolCommandName>
                   </PropertyGroup>
                 </Project>
                 """);
@@ -387,6 +388,63 @@ public class WebLlmsGeneratorTests
             var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
             Assert.Contains("`dotnet tool install --global Example.Tool`", llmsTxt, StringComparison.Ordinal);
             Assert.DoesNotContain("dotnet add package Example.Tool", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("```shell", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("example-tool --help", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("using Example.Tool", llmsTxt, StringComparison.Ordinal);
+
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.Contains("\"quickstartLanguage\": \"shell\"", llmsJson, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Generate_UsesEffectiveNuGetPackageVersions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-package-version-precedence-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var packageVersionPath = Path.Combine(root, "PackageVersion.csproj");
+            File.WriteAllText(packageVersionPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <PackageId>Example.PackageVersion</PackageId>
+                    <PackageVersion>4.2.0</PackageVersion>
+                    <Version>1.0.0</Version>
+                    <VersionPrefix>2.0.0</VersionPrefix>
+                    <VersionSuffix>preview.1</VersionSuffix>
+                  </PropertyGroup>
+                </Project>
+                """);
+            var prefixedPath = Path.Combine(root, "Prefixed.csproj");
+            File.WriteAllText(prefixedPath,
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <PackageId>Example.Prefixed</PackageId>
+                    <VersionPrefix>2.0.0</VersionPrefix>
+                    <VersionSuffix>rc.1</VersionSuffix>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                PackageFiles = new[] { packageVersionPath, prefixedPath }
+            });
+
+            Assert.Equal("varies by package", result.Version);
+            var llmsJson = File.ReadAllText(result.LlmsJsonPath);
+            Assert.Contains("\"version\": \"4.2.0\"", llmsJson, StringComparison.Ordinal);
+            Assert.Contains("\"version\": \"2.0.0-rc.1\"", llmsJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"version\": \"1.0.0\"", llmsJson, StringComparison.Ordinal);
         }
         finally
         {

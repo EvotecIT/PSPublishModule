@@ -42,7 +42,8 @@ public sealed class WebApiDocsSeoDescriptionTests
 
             var indexDescription = ReadMetaContent(Path.Combine(outputPath, "index.html"), "description");
             Assert.InRange(indexDescription.Length, 120, 160);
-            Assert.Contains("documented types", indexDescription, StringComparison.Ordinal);
+            Assert.Contains("1 documented type", indexDescription, StringComparison.Ordinal);
+            Assert.DoesNotContain("1 documented types", indexDescription, StringComparison.Ordinal);
 
             var typePath = Directory.GetDirectories(outputPath)
                 .Select(path => Path.Combine(path, "index.html"))
@@ -106,7 +107,8 @@ public sealed class WebApiDocsSeoDescriptionTests
 
             var indexDescription = ReadMetaContent(Path.Combine(outputPath, "index.html"), "description");
             Assert.InRange(indexDescription.Length, 120, 160);
-            Assert.Contains("documented reference entries", indexDescription, StringComparison.Ordinal);
+            Assert.Contains("1 documented reference entry", indexDescription, StringComparison.Ordinal);
+            Assert.DoesNotContain("1 documented reference entries", indexDescription, StringComparison.Ordinal);
 
             var cmdletDescription = ReadMetaContent(
                 Path.Combine(outputPath, "save-samplereport", "index.html"),
