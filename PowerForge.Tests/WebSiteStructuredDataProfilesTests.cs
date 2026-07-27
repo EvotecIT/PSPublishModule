@@ -80,6 +80,7 @@ public class WebSiteStructuredDataProfilesTests
                 meta.software.operating_system: Windows, Linux, macOS
                 meta.software.version: 1.4.0
                 meta.software.download_url: /downloads/ix-cli
+                meta.software.website_url: https://intelligencex.example/
                 meta.software.price: 0
                 meta.software.price_currency: USD
                 ---
@@ -103,6 +104,8 @@ public class WebSiteStructuredDataProfilesTests
             Assert.Contains("\"@type\":\"SoftwareApplication\"", html, StringComparison.Ordinal);
             Assert.Contains("\"applicationCategory\":\"DeveloperApplication\"", html, StringComparison.Ordinal);
             Assert.Contains("\"downloadUrl\":\"https://example.test/downloads/ix-cli\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"publisher\":{\"@type\":\"Organization\",\"name\":\"Example Site\",\"url\":\"https://example.test\"}", html, StringComparison.Ordinal);
+            Assert.Contains("\"sameAs\":[\"https://intelligencex.example/\"]", html, StringComparison.Ordinal);
         }
         finally
         {

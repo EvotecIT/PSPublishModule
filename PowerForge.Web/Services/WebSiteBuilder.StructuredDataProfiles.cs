@@ -283,6 +283,19 @@ public static partial class WebSiteBuilder
         if (!string.IsNullOrWhiteSpace(downloadUrl))
             appModel["downloadUrl"] = ResolveAbsoluteUrl(languageBaseUrl, downloadUrl);
 
+        var publisher = new Dictionary<string, object?>
+        {
+            ["@type"] = "Organization",
+            ["name"] = spec.Name
+        };
+        if (!string.IsNullOrWhiteSpace(languageBaseUrl))
+            publisher["url"] = languageBaseUrl;
+        appModel["publisher"] = publisher;
+
+        var websiteUrl = ReadMetaString(item.Meta, "software.website_url", "software.websiteUrl", "softwareapplication.sameAs");
+        if (!string.IsNullOrWhiteSpace(websiteUrl))
+            appModel["sameAs"] = new[] { ResolveAbsoluteUrl(languageBaseUrl, websiteUrl) };
+
         var appImage = ReadMetaString(item.Meta, "software.image", "softwareapplication.image");
         if (string.IsNullOrWhiteSpace(appImage))
             appImage = ReadMetaString(item.Meta, "social_image");

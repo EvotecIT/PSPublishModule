@@ -94,6 +94,7 @@ public partial class WebPipelineRunnerProjectCatalogProductTests
             Assert.Contains("height: 1600", page, StringComparison.Ordinal);
             Assert.Contains("meta.software.application_category: \"UtilitiesApplication\"", page, StringComparison.Ordinal);
             Assert.Contains("meta.software.download_url: \"https://apps.apple.com/us/app/casaray/id6778025328\"", page, StringComparison.Ordinal);
+            Assert.Contains("meta.software.website_url: \"https://casaray.dev/\"", page, StringComparison.Ordinal);
             Assert.Contains("meta.social_card_image: \"/assets/products/casaray/social.png\"", page, StringComparison.Ordinal);
             Assert.Contains("meta.social_image_width: 1536", page, StringComparison.Ordinal);
             Assert.Contains("meta.social_image_height: 1024", page, StringComparison.Ordinal);
