@@ -183,6 +183,14 @@ public class WebSiteTaxonomyFeedMetadataTests
 
                 Zmiana.
                 """);
+            File.WriteAllText(Path.Combine(blogPath, "x.md"),
+                """
+                ---
+                title: X
+                language: pl
+                tags: [x]
+                ---
+                """);
 
             var themeRoot = Path.Combine(root, "themes", "taxonomy-feed-meta");
             Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
@@ -328,6 +336,13 @@ public class WebSiteTaxonomyFeedMetadataTests
             Assert.InRange(polishMinimumDescription.Length, 120, 160);
             Assert.Contains("sygnal", polishMinimumDescription, StringComparison.Ordinal);
             Assert.Contains("2026-01-04", polishMinimumDescription, StringComparison.Ordinal);
+
+            var polishExtremeMinimumDescription = ReadMetaDescription(
+                File.ReadAllText(Path.Combine(result.OutputPath, "pl", "tags", "x", "index.html")));
+            Assert.InRange(polishExtremeMinimumDescription.Length, 120, 160);
+            Assert.Contains("x — Feed Metadata Test", polishExtremeMinimumDescription, StringComparison.Ordinal);
+            Assert.DoesNotContain("Browse", polishExtremeMinimumDescription, StringComparison.Ordinal);
+            Assert.DoesNotContain("Explore", polishExtremeMinimumDescription, StringComparison.Ordinal);
         }
         finally
         {

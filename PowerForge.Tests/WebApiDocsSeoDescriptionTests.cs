@@ -256,6 +256,7 @@ public sealed class WebApiDocsSeoDescriptionTests
             var typeDescription = ReadMetaContent(typePath, "description");
             Assert.InRange(typeDescription.Length, 120, 160);
             Assert.Contains("member details", typeDescription, StringComparison.Ordinal);
+            Assert.DoesNotContain("searchable", typeDescription, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("type relationships", typeDescription, StringComparison.Ordinal);
         }
         finally

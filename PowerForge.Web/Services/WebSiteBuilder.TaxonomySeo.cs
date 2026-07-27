@@ -150,9 +150,26 @@ public static partial class WebSiteBuilder
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        return details.Length == 0
+        var completed = details.Length == 0
             ? description
             : $"{description.TrimEnd(' ', ',', ';', ':', '-', '.', '!', '?')}. {string.Join(" · ", details)}";
+        if (completed.Length >= minimumLength)
+            return completed;
+
+        // Extremely sparse source pages may not expose 120 unique characters. Reuse
+        // only their own locale-neutral context rather than inventing capabilities or
+        // English prose, and let the normal fitter trim the result at a word boundary.
+        var completionFragments = details
+            .Append(description)
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .ToArray();
+        for (var index = 0; completed.Length < minimumLength; index++)
+        {
+            var fragment = completionFragments[index % completionFragments.Length];
+            completed = $"{completed.TrimEnd(' ', ',', ';', ':', '-', '.', '!', '?')}. {fragment}";
+        }
+
+        return completed;
     }
 
     private static string FitTaxonomyDescription(string description, bool ensureEnglishMinimum)

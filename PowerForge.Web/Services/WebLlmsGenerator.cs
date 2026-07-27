@@ -47,7 +47,7 @@ public sealed class WebLlmsOptions
 }
 
 /// <summary>Generates llms.txt files for documentation consumers.</summary>
-public static class WebLlmsGenerator
+public static partial class WebLlmsGenerator
 {
     /// <summary>Generates llms.txt, llms.json, and llms-full.txt.</summary>
     /// <param name="options">Generation options.</param>
@@ -65,7 +65,7 @@ public static class WebLlmsGenerator
         var name = options.Name ?? projectInfo.Name ?? options.PackageId ?? projectInfo.PackageId ??
                    packages.FirstOrDefault()?.Id ?? Path.GetFileName(siteRoot);
         var packageId = options.PackageId ?? projectInfo.PackageId ?? name;
-        var version = options.Version ?? projectInfo.Version ?? ResolveSuiteVersion(packages) ?? "unknown";
+        var version = options.Version ?? ResolveSuiteVersion(packages) ?? projectInfo.Version ?? "unknown";
 
         var apiCatalogs = ResolveApiCatalogs(options, siteRoot);
         int? typeCount = apiCatalogs.Any(catalog => catalog.TypeCount.HasValue)
@@ -101,137 +101,6 @@ public static class WebLlmsGenerator
             ApiTypeCount = typeCount,
             ApiCatalogCount = apiCatalogs.Count
         };
-    }
-
-    private static List<PackageInfo> ResolvePackages(IEnumerable<string>? packageFiles)
-    {
-        var packages = new List<PackageInfo>();
-        foreach (var packageFile in packageFiles ?? Array.Empty<string>())
-        {
-            if (string.IsNullOrWhiteSpace(packageFile))
-                continue;
-
-            var fullPath = Path.GetFullPath(packageFile);
-            if (!File.Exists(fullPath))
-                throw new FileNotFoundException($"Configured package manifest not found: {fullPath}", fullPath);
-
-            var project = ReadProjectInfo(fullPath);
-            var id = project.PackageId ?? project.Name ?? Path.GetFileNameWithoutExtension(fullPath);
-            if (string.IsNullOrWhiteSpace(id))
-                continue;
-
-            packages.Add(new PackageInfo
-            {
-                Id = id,
-                Version = project.Version,
-                InstallCommand = CreateInstallCommand(id, project.IsPowerShellModule, project.IsDotNetTool),
-                IsPowerShellModule = project.IsPowerShellModule,
-                IsDotNetTool = project.IsDotNetTool,
-                ToolCommandName = project.ToolCommandName
-            });
-        }
-
-        return packages
-            .GroupBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
-            .Select(static group => group.First())
-            .ToList();
-    }
-
-    private static string? ResolveSuiteVersion(IReadOnlyList<PackageInfo> packages)
-    {
-        if (packages.Count == 0)
-            return null;
-
-        var versions = packages
-            .Select(static package => package.Version)
-            .Where(static version => !string.IsNullOrWhiteSpace(version))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (packages.Any(static package => string.IsNullOrWhiteSpace(package.Version)))
-            return "unknown";
-
-        return versions.Length == 1 ? versions[0] : "varies by package";
-    }
-
-    private static ProjectInfo ReadProjectInfo(string? projectFile)
-    {
-        if (string.IsNullOrWhiteSpace(projectFile))
-            return new ProjectInfo();
-
-        var full = Path.GetFullPath(projectFile);
-        if (!File.Exists(full))
-            return new ProjectInfo();
-
-        var content = File.ReadAllText(full);
-        if (Path.GetExtension(full).Equals(".psd1", StringComparison.OrdinalIgnoreCase))
-        {
-            var moduleVersion = NormalizeEmpty(MatchPowerShellDataValue(content, "ModuleVersion"));
-            var prerelease = NormalizeEmpty(MatchPowerShellDataValue(content, "Prerelease"));
-            return new ProjectInfo
-            {
-                Name = Path.GetFileNameWithoutExtension(full),
-                PackageId = Path.GetFileNameWithoutExtension(full),
-                Version = CombineMsBuildVersion(moduleVersion, prerelease),
-                Description = NormalizeEmpty(MatchPowerShellDataValue(content, "Description")),
-                IsPowerShellModule = true
-            };
-        }
-
-        var assemblyName = NormalizeMsBuildMetadataValue(MatchValue(content, "AssemblyName"));
-        var rootNamespace = NormalizeMsBuildMetadataValue(MatchValue(content, "RootNamespace"));
-        var packageId = NormalizeMsBuildMetadataValue(MatchValue(content, "PackageId"));
-        var packageVersion = NormalizeMsBuildMetadataValue(MatchValue(content, "PackageVersion"));
-        var versionValue = NormalizeMsBuildMetadataValue(MatchValue(content, "Version"));
-        var versionPrefix = NormalizeMsBuildMetadataValue(MatchValue(content, "VersionPrefix"));
-        var versionSuffix = NormalizeMsBuildMetadataValue(MatchValue(content, "VersionSuffix"));
-        var version = packageVersion ??
-                      versionValue ??
-                      CombineMsBuildVersion(versionPrefix, versionSuffix);
-        var description = NormalizeMsBuildMetadataValue(MatchValue(content, "Description"));
-        var packAsTool = NormalizeMsBuildMetadataValue(MatchValue(content, "PackAsTool"));
-        var toolCommandName = NormalizeMsBuildMetadataValue(MatchValue(content, "ToolCommandName"));
-
-        return new ProjectInfo
-        {
-            Name = assemblyName ?? rootNamespace,
-            PackageId = packageId,
-            Version = version,
-            Description = description,
-            ToolCommandName = toolCommandName ?? assemblyName ?? rootNamespace ?? packageId,
-            IsDotNetTool = string.Equals(
-                packAsTool,
-                "true",
-                StringComparison.OrdinalIgnoreCase)
-        };
-    }
-
-    private static string? CombineMsBuildVersion(string? versionPrefix, string? versionSuffix)
-    {
-        if (string.IsNullOrWhiteSpace(versionPrefix))
-            return null;
-        if (string.IsNullOrWhiteSpace(versionSuffix))
-            return versionPrefix;
-
-        return $"{versionPrefix}-{versionSuffix.TrimStart('-')}";
-    }
-
-    private static string? NormalizeMsBuildMetadataValue(string value)
-    {
-        var normalized = NormalizeEmpty(value);
-        if (normalized is null)
-            return null;
-
-        return normalized.Contains("$(", StringComparison.Ordinal) ||
-               normalized.Contains("%(", StringComparison.Ordinal)
-            ? null
-            : normalized;
-    }
-
-    private static string MatchPowerShellDataValue(string content, string name)
-    {
-        var pattern = $@"(?im)(?:^|[;{{])\s*{Regex.Escape(name)}\s*=\s*['""](?<value>[^'""]+)['""]";
-        var match = Regex.Match(content, pattern, RegexOptions.CultureInvariant);
-        return match.Success ? match.Groups["value"].Value.Trim() : string.Empty;
     }
 
     private static string ResolveOverview(WebLlmsOptions options, ProjectInfo projectInfo, string siteRoot, string name)
@@ -325,18 +194,6 @@ public static class WebLlmsGenerator
     {
         var normalized = string.IsNullOrWhiteSpace(apiBase) ? "/api" : apiBase.Trim();
         return normalized.Length > 1 ? normalized.TrimEnd('/') : normalized;
-    }
-
-    private static string MatchValue(string content, string name)
-    {
-        var pattern = $@"<{name}>([^<]+)</{name}>";
-        var match = Regex.Match(content, pattern, RegexOptions.IgnoreCase);
-        return match.Success ? match.Groups[1].Value.Trim() : string.Empty;
-    }
-
-    private static string? NormalizeEmpty(string value)
-    {
-        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     private static bool TryReadOverviewFromHomepage(string siteRoot, out string overview)
@@ -886,27 +743,6 @@ public static class WebLlmsGenerator
         public string Name { get; set; } = string.Empty;
         public string Summary { get; set; } = string.Empty;
         public string Signature { get; set; } = string.Empty;
-    }
-
-    private sealed class PackageInfo
-    {
-        public string Id { get; set; } = string.Empty;
-        public string? Version { get; set; }
-        public string InstallCommand { get; set; } = string.Empty;
-        public bool IsPowerShellModule { get; set; }
-        public bool IsDotNetTool { get; set; }
-        public string? ToolCommandName { get; set; }
-    }
-
-    private sealed class ProjectInfo
-    {
-        public string? Name { get; set; }
-        public string? PackageId { get; set; }
-        public string? Version { get; set; }
-        public string? Description { get; set; }
-        public string? ToolCommandName { get; set; }
-        public bool IsPowerShellModule { get; set; }
-        public bool IsDotNetTool { get; set; }
     }
 
     private sealed class QuickstartInfo

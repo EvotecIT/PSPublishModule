@@ -260,6 +260,7 @@ public class WebLlmsGeneratorTests
             {
                 SiteRoot = root,
                 Name = "OfficeIMO library suite",
+                ProjectFile = projectPath,
                 PackageFiles = new[] { projectPath, modulePath },
                 QuickstartPath = quickstartPath
             });
@@ -281,6 +282,16 @@ public class WebLlmsGeneratorTests
             Assert.Contains("\"id\": \"OfficeIMO.Word\"", llmsJson, StringComparison.Ordinal);
             Assert.Contains("\"install\": \"Install-Module PSWriteOffice\"", llmsJson, StringComparison.Ordinal);
             Assert.DoesNotContain("\"package\": \"OfficeIMO library suite\"", llmsJson, StringComparison.Ordinal);
+
+            var overridden = WebLlmsGenerator.Generate(new WebLlmsOptions
+            {
+                SiteRoot = root,
+                Name = "OfficeIMO library suite",
+                ProjectFile = projectPath,
+                PackageFiles = new[] { projectPath, modulePath },
+                Version = "2026.7.0"
+            });
+            Assert.Equal("2026.7.0", overridden.Version);
         }
         finally
         {
@@ -583,7 +594,13 @@ public class WebLlmsGeneratorTests
             var modulePath = Path.Combine(root, "InlineModule.psd1");
             File.WriteAllText(
                 modulePath,
-                "@{ ModuleVersion = '1.7.0'; Description = 'Inline PowerShell module metadata.'; PrivateData = @{ PSData = @{ Prerelease = 'preview2' } } }");
+                """
+                # Example only: @{ ModuleVersion = '0.1.0'; Description = 'Commented metadata.'; Prerelease = 'ignored' }
+                <# Another example:
+                @{ ModuleVersion = '0.2.0'; Description = 'Blocked metadata.' }
+                #>
+                @{ ModuleVersion = '1.7.0'; Description = 'Inline # PowerShell module metadata.'; PrivateData = @{ PSData = @{ Prerelease = 'preview2' } } }
+                """);
 
             var result = WebLlmsGenerator.Generate(new WebLlmsOptions
             {
@@ -594,8 +611,10 @@ public class WebLlmsGeneratorTests
 
             Assert.Equal("1.7.0-preview2", result.Version);
             var llmsTxt = File.ReadAllText(result.LlmsTxtPath);
-            Assert.Contains("Inline PowerShell module metadata.", llmsTxt, StringComparison.Ordinal);
+            Assert.Contains("Inline # PowerShell module metadata.", llmsTxt, StringComparison.Ordinal);
             Assert.Contains("source version `1.7.0-preview2`", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("Commented metadata", llmsTxt, StringComparison.Ordinal);
+            Assert.DoesNotContain("Blocked metadata", llmsTxt, StringComparison.Ordinal);
         }
         finally
         {

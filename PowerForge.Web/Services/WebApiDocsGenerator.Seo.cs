@@ -119,7 +119,7 @@ public static partial class WebApiDocsGenerator
         var description = NormalizeApiSeoText(value);
         if (description.Length < ApiSeoDescriptionMinimumLength)
         {
-            description = $"{description.TrimEnd('.', '!', '?')}. Includes current reference details, navigation context, and searchable documentation for practical implementation work.";
+            description = $"{description.TrimEnd('.', '!', '?')}. Includes current reference details, navigation context, and practical implementation guidance for the documented API.";
         }
 
         if (description.Length <= ApiSeoDescriptionMaximumLength)
