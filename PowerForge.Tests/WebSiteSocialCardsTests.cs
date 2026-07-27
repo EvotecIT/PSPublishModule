@@ -796,6 +796,49 @@ public class WebSiteSocialCardsTests
     }
 
     [Fact]
+    public void Build_StripsCompleteMultiSegmentLanguagePrefix_FromBreadcrumbHierarchy()
+    {
+        var root = CreateTempRoot("pf-web-structured-breadcrumb-multisegment-prefix-");
+        try
+        {
+            WritePage(root, "guide-pl.md",
+                """
+                ---
+                title: Przewodnik
+                slug: docs/guide
+                language: pl
+                ---
+
+                Treść przewodnika.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Localization = new LocalizationSpec
+            {
+                Enabled = true,
+                DefaultLanguage = "en",
+                PrefixDefaultLanguage = false,
+                Languages = new[]
+                {
+                    new LanguageSpec { Code = "en", Label = "EN", Default = true, Prefix = "en" },
+                    new LanguageSpec { Code = "pl", Label = "PL", Prefix = "regional/pl" }
+                }
+            };
+            spec.StructuredData = new StructuredDataSpec { Enabled = true, Breadcrumbs = true };
+
+            var html = BuildAndRead(root, spec, Path.Combine("regional", "pl", "docs", "guide", "index.html"));
+
+            Assert.Contains("\"item\":\"https://example.test/regional/pl/docs/\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"item\":\"https://example.test/regional/pl/docs/guide/\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("https://example.test/regional/pl/regional/", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
     public void Build_PreservesOrdinaryLeadingLanguageLikeSegment_WhenLocalizationIsDisabled()
     {
         var root = CreateTempRoot("pf-web-structured-breadcrumb-nonlocalized-en-route-");

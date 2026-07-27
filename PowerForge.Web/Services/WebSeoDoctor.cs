@@ -1447,18 +1447,27 @@ public static partial class WebSeoDoctor
     {
         if (!obj.TryGetProperty("itemListElement", out var items) ||
             items.ValueKind != JsonValueKind.Array ||
-            items.GetArrayLength() < 2 ||
-            items.EnumerateArray().Select((item, index) => (item, expectedPosition: index + 1))
-                .Any(static entry => !IsValidBreadcrumbListItem(entry.item, entry.expectedPosition)))
+            items.GetArrayLength() < 2)
         {
             addIssue("warning", "structured-data", relativePath,
                 $"JSON-LD payload ({objectLabel}) type BreadcrumbList should contain at least two ListItem entries.",
                 "structured-data-breadcrumb-items",
                 objectLabel);
+            return;
+        }
+
+        var entries = items.EnumerateArray().ToArray();
+        if (entries.Select((item, index) => (item, expectedPosition: index + 1, isFinal: index == entries.Length - 1))
+            .Any(static entry => !IsValidBreadcrumbListItem(entry.item, entry.expectedPosition, entry.isFinal)))
+        {
+            addIssue("warning", "structured-data", relativePath,
+                $"JSON-LD payload ({objectLabel}) type BreadcrumbList should contain sequential, named ListItem entries with targets on every ancestor.",
+                "structured-data-breadcrumb-items",
+                objectLabel);
         }
     }
 
-    private static bool IsValidBreadcrumbListItem(JsonElement item, int expectedPosition)
+    private static bool IsValidBreadcrumbListItem(JsonElement item, int expectedPosition, bool isFinal)
     {
         if (item.ValueKind != JsonValueKind.Object ||
             !GetJsonLdTypes(item).Contains("ListItem", StringComparer.OrdinalIgnoreCase) ||
@@ -1472,7 +1481,21 @@ public static partial class WebSeoDoctor
             return false;
         }
 
-        return !string.IsNullOrWhiteSpace(name.GetString());
+        if (string.IsNullOrWhiteSpace(name.GetString()))
+            return false;
+
+        if (isFinal)
+            return true;
+
+        if (!item.TryGetProperty("item", out var target))
+            return false;
+
+        return target.ValueKind switch
+        {
+            JsonValueKind.String => !string.IsNullOrWhiteSpace(target.GetString()),
+            JsonValueKind.Object => JsonLdObjectHasNonEmptyValue(target, "@id"),
+            _ => false
+        };
     }
 
     private static void ValidateHomeAssistantRedirectDiscovery(
@@ -1528,11 +1551,23 @@ public static partial class WebSeoDoctor
                 // Fall through to the contract error below.
             }
 
-            if (prefixDocument is not null && prefixDocument.QuerySelectorAll("link[rel]")
-                    .Any(link => ContainsRelToken(link.GetAttribute("rel"), "redirect_uri") &&
-                                 !string.IsNullOrWhiteSpace(link.GetAttribute("href"))))
+            if (prefixDocument is not null)
             {
-                return;
+                var declaredTargets = redirectLinks
+                    .Select(static link => link.GetAttribute("href")?.Trim())
+                    .Where(static href => !string.IsNullOrWhiteSpace(href))
+                    .Cast<string>()
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+                var prefixTargets = prefixDocument.QuerySelectorAll("link[rel]")
+                    .Where(link => ContainsRelToken(link.GetAttribute("rel"), "redirect_uri"))
+                    .Select(static link => link.GetAttribute("href")?.Trim())
+                    .Where(static href => !string.IsNullOrWhiteSpace(href))
+                    .Cast<string>()
+                    .ToHashSet(StringComparer.Ordinal);
+
+                if (declaredTargets.All(prefixTargets.Contains))
+                    return;
             }
         }
 

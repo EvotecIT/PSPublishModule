@@ -344,17 +344,22 @@ public static partial class WebSiteBuilder
         if (!localization.Enabled)
             return normalized;
 
-        if (!TryExtractLeadingSegment(normalized.TrimStart('/'), out var segment, out var remainder))
-            return normalized;
+        var routeWithoutLeadingSlash = normalized.Replace('\\', '/').TrimStart('/');
+        foreach (var prefix in localization.ByPrefix.Keys.OrderByDescending(static value => value.Length))
+        {
+            var normalizedPrefix = NormalizePath(prefix).Trim('/');
+            if (string.IsNullOrWhiteSpace(normalizedPrefix))
+                continue;
 
-        var token = NormalizeLanguageToken(segment);
-        if (string.IsNullOrWhiteSpace(token))
-            return normalized;
+            if (routeWithoutLeadingSlash.Equals(normalizedPrefix, StringComparison.OrdinalIgnoreCase))
+                return "/";
 
-        if (!localization.ByPrefix.ContainsKey(token))
-            return normalized;
+            var prefixWithBoundary = normalizedPrefix + "/";
+            if (routeWithoutLeadingSlash.StartsWith(prefixWithBoundary, StringComparison.OrdinalIgnoreCase))
+                return "/" + routeWithoutLeadingSlash[prefixWithBoundary.Length..];
+        }
 
-        return string.IsNullOrWhiteSpace(remainder) ? "/" : "/" + remainder;
+        return normalized;
     }
 
     private static bool TryExtractLeadingSegment(string value, out string segment, out string remainder)

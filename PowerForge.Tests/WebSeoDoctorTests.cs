@@ -96,6 +96,37 @@ public class WebSeoDoctorTests
     }
 
     [Fact]
+    public void Analyze_RequiresEveryDeclaredHomeAssistantRedirectWithinFirstTenKilobytes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-ha-redirect-all-targets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var padding = new string('x', (10 * 1024) + 128);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                $"""
+                <!doctype html><html><head>
+                  <link rel="redirect_uri" href="com.example.first://home-assistant/auth-callback" />
+                  <!-- {padding} -->
+                  <link rel="redirect_uri" href="com.example.second://home-assistant/auth-callback" />
+                  <title>Home Assistant application discovery contract</title>
+                  <meta name="description" content="Every declared callback must remain discoverable within Home Assistant's byte budget." />
+                </head><body><h1>Home Assistant application</h1></body></html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root));
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "redirect-uri-first-10kb");
+            Assert.False(result.Success);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Analyze_StillValidatesHomeAssistantRedirectOnNoIndexPage()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-ha-redirect-noindex-" + Guid.NewGuid().ToString("N"));
@@ -245,6 +276,33 @@ public class WebSeoDoctorTests
                 </head>
                 <body><h1>Breadcrumb contract</h1></body>
                 </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root, checkStructuredData: true));
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-breadcrumb-items");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_FlagsBreadcrumbAncestorWithoutTarget()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-breadcrumb-ancestor-target-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html><html><head>
+                  <title>Structured data breadcrumb ancestor contract</title>
+                  <meta name="description" content="Ancestor breadcrumbs identify the page represented by each hierarchy entry." />
+                  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home"},{"@type":"ListItem","position":2,"name":"Guide"}]}</script>
+                </head><body><h1>Breadcrumb contract</h1></body></html>
                 """);
 
             var result = WebSeoDoctor.Analyze(CreateFocusedOptions(root, checkStructuredData: true));
