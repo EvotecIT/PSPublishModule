@@ -222,7 +222,7 @@ public static partial class WebAssetOptimizer
             {
                 var attrs = match.Groups["attrs"].Value;
                 var trimmedAttrs = attrs.TrimEnd();
-                var selfClosing = trimmedAttrs.EndsWith("/", StringComparison.Ordinal);
+                var selfClosing = HasHtmlSelfClosingMarker(trimmedAttrs);
                 if (selfClosing)
                     attrs = trimmedAttrs[..^1].TrimEnd();
                 var srcMatch = ImgSrcAttrRegex.Match(attrs);
@@ -316,6 +316,60 @@ public static partial class WebAssetOptimizer
             result.ImageHintedCount += hintedInFile;
             onUpdated?.Invoke(htmlFile);
         }
+    }
+
+    private static bool HasHtmlSelfClosingMarker(string attributes)
+    {
+        if (!attributes.EndsWith("/", StringComparison.Ordinal))
+            return false;
+        if (attributes.Length == 1)
+            return true;
+
+        var state = HtmlAttributeParseState.BeforeName;
+        for (var index = 0; index < attributes.Length - 1; index++)
+        {
+            var character = attributes[index];
+            state = state switch
+            {
+                HtmlAttributeParseState.BeforeName when IsHtmlSpace(character) => state,
+                HtmlAttributeParseState.BeforeName => HtmlAttributeParseState.Name,
+                HtmlAttributeParseState.Name when IsHtmlSpace(character) => HtmlAttributeParseState.AfterName,
+                HtmlAttributeParseState.Name when character == '=' => HtmlAttributeParseState.BeforeValue,
+                HtmlAttributeParseState.Name => state,
+                HtmlAttributeParseState.AfterName when IsHtmlSpace(character) => state,
+                HtmlAttributeParseState.AfterName when character == '=' => HtmlAttributeParseState.BeforeValue,
+                HtmlAttributeParseState.AfterName => HtmlAttributeParseState.Name,
+                HtmlAttributeParseState.BeforeValue when IsHtmlSpace(character) => state,
+                HtmlAttributeParseState.BeforeValue when character == '\'' => HtmlAttributeParseState.SingleQuotedValue,
+                HtmlAttributeParseState.BeforeValue when character == '"' => HtmlAttributeParseState.DoubleQuotedValue,
+                HtmlAttributeParseState.BeforeValue => HtmlAttributeParseState.UnquotedValue,
+                HtmlAttributeParseState.UnquotedValue when IsHtmlSpace(character) => HtmlAttributeParseState.BeforeName,
+                HtmlAttributeParseState.UnquotedValue => state,
+                HtmlAttributeParseState.SingleQuotedValue when character == '\'' => HtmlAttributeParseState.AfterName,
+                HtmlAttributeParseState.SingleQuotedValue => state,
+                HtmlAttributeParseState.DoubleQuotedValue when character == '"' => HtmlAttributeParseState.AfterName,
+                HtmlAttributeParseState.DoubleQuotedValue => state,
+                _ => state
+            };
+        }
+
+        return state is HtmlAttributeParseState.BeforeName
+            or HtmlAttributeParseState.Name
+            or HtmlAttributeParseState.AfterName;
+    }
+
+    private static bool IsHtmlSpace(char value)
+        => value is '\t' or '\n' or '\f' or '\r' or ' ';
+
+    private enum HtmlAttributeParseState
+    {
+        BeforeName,
+        Name,
+        AfterName,
+        BeforeValue,
+        UnquotedValue,
+        SingleQuotedValue,
+        DoubleQuotedValue
     }
 
     private static bool TryResolveImageReference(string siteRoot, string htmlFile, string sourceUrl, out string relativePath)

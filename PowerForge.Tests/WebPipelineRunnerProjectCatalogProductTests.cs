@@ -4,7 +4,7 @@ using System.Text.Json;
 using PowerForge.Web.Cli;
 using Xunit;
 
-public class WebPipelineRunnerProjectCatalogProductTests
+public partial class WebPipelineRunnerProjectCatalogProductTests
 {
     [Fact]
     public void RunPipeline_ProjectCatalog_GeneratesDedicatedProductProfileWithTypedMedia()
