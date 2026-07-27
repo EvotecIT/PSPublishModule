@@ -11,7 +11,7 @@ Executes a PowerShell-authored project release object through the unified PowerF
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Invoke-ProjectRelease -Project <ConfigurationProject> [-Plan] [-Validate] [-PublishToolGitHub] [-SubmitWinget] [-SkipWingetSubmit] [-WingetSubmitMode <string>] [-WingetToolPath <string>] [-WingetTokenEnvName <string>] [-WingetTokenFilePath <string>] [-WingetPullRequestTitle <string>] [-WingetOpenBrowser] [-WingetReplace] [-WingetReplaceVersion <string>] [-WingetAllowInteractiveAuthentication] [-WingetTimeoutSeconds <int>] [-SkipWorkspaceValidation] [-WorkspaceConfigPath <string>] [-WorkspaceProfile <string>] [-WorkspaceEnableFeature <string[]>] [-WorkspaceDisableFeature <string[]>] [-SkipRestore] [-SkipBuild] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-ToolOutput <string[]>] [-SkipToolOutput <string[]>] [-OutputRoot <string>] [-StageRoot <string>] [-ManifestJsonPath <string>] [-ChecksumsPath <string>] [-SkipReleaseChecksums] [-KeepSymbols] [-Sign] [-SignProfile <string>] [-SignToolPath <string>] [-SignThumbprint <string>] [-SignSubjectName <string>] [-SignOnMissingTool <DotNetPublishPolicyMode>] [-SignOnFailure <DotNetPublishPolicyMode>] [-SignTimestampUrl <string>] [-SignDescription <string>] [-SignUrl <string>] [-SignCsp <string>] [-SignKeyContainer <string>] [-InstallerProperty <string[]>] [-ExitCode] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-ProjectRelease -Project <ConfigurationProject> [-Plan] [-Validate] [-PublishToolGitHub] [-ReleaseVersion <string>] [-SubmitWinget] [-SkipWingetSubmit] [-WingetSubmitMode <string>] [-WingetToolPath <string>] [-WingetTokenEnvName <string>] [-WingetTokenFilePath <string>] [-WingetPullRequestTitle <string>] [-WingetOpenBrowser] [-WingetReplace] [-WingetReplaceVersion <string>] [-WingetAllowInteractiveAuthentication] [-WingetTimeoutSeconds <int>] [-SkipWorkspaceValidation] [-WorkspaceConfigPath <string>] [-WorkspaceProfile <string>] [-WorkspaceEnableFeature <string[]>] [-WorkspaceDisableFeature <string[]>] [-SkipRestore] [-SkipBuild] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-ToolOutput <string[]>] [-SkipToolOutput <string[]>] [-OutputRoot <string>] [-StageRoot <string>] [-ManifestJsonPath <string>] [-ChecksumsPath <string>] [-SkipReleaseChecksums] [-KeepSymbols] [-Sign] [-SignProfile <string>] [-SignToolPath <string>] [-SignThumbprint <string>] [-SignSubjectName <string>] [-SignOnMissingTool <DotNetPublishPolicyMode>] [-SignOnFailure <DotNetPublishPolicyMode>] [-SignTimestampUrl <string>] [-SignDescription <string>] [-SignUrl <string>] [-SignCsp <string>] [-SignKeyContainer <string>] [-InstallerProperty <string[]>] [-ExitCode] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -176,6 +176,22 @@ Enables tool/app GitHub release publishing for this run.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ReleaseVersion
+Exact x.y.z version override for the tool-only release.
+
+```yaml
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
