@@ -170,6 +170,82 @@ public sealed class ProjectBuildHostServiceTests
         Assert.Equal(Path.Combine(scope.RootPath, "Repo"), result.RootPath);
     }
 
+    [Fact]
+    public async Task Execute_RejectsConcurrentMutationOfTheSameStagingWorkspace()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var configDirectory = scope.CreateDirectory("Repo");
+        var stagingDirectory = Path.Combine(configDirectory, "artifacts", "ProjectBuild");
+        var configPath = Path.Combine(configDirectory, "project.build.json");
+        File.WriteAllText(
+            configPath,
+            """
+            {
+              "RootPath": ".",
+              "StagingPath": "artifacts/ProjectBuild",
+              "Build": true,
+              "PublishNuget": false,
+              "PublishGitHub": false
+            }
+            """);
+
+        using var releaseStarted = new ManualResetEventSlim();
+        using var releaseMayFinish = new ManualResetEventSlim();
+        var firstCall = 0;
+        var firstService = new ProjectBuildHostService(
+            new NullLogger(),
+            executeRelease: spec =>
+            {
+                if (Interlocked.Increment(ref firstCall) == 1)
+                    return new DotNetRepositoryReleaseResult { Success = true };
+
+                releaseStarted.Set();
+                Assert.True(releaseMayFinish.Wait(TimeSpan.FromSeconds(10)));
+                return new DotNetRepositoryReleaseResult { Success = true };
+            },
+            publishGitHub: null,
+            validateGitHubPreflight: null);
+        var request = new ProjectBuildHostRequest
+        {
+            ConfigPath = configPath,
+            ExecuteBuild = true,
+            Build = true,
+            UpdateVersions = false,
+            PublishNuget = false,
+            PublishGitHub = false
+        };
+
+        var firstExecution = Task.Run(() => firstService.Execute(request));
+        Assert.True(releaseStarted.Wait(TimeSpan.FromSeconds(10)));
+
+        try
+        {
+            var secondService = new ProjectBuildHostService(
+                new NullLogger(),
+                executeRelease: _ => new DotNetRepositoryReleaseResult { Success = true },
+                publishGitHub: null,
+                validateGitHubPreflight: null);
+
+            var exception = Assert.Throws<InvalidOperationException>(() => secondService.Execute(request));
+            Assert.Contains("Another project build is already using workspace", exception.Message, StringComparison.Ordinal);
+            Assert.Contains(stagingDirectory, exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            releaseMayFinish.Set();
+        }
+
+        var result = await firstExecution;
+        Assert.True(result.Success);
+
+        var retryService = new ProjectBuildHostService(
+            new NullLogger(),
+            executeRelease: _ => new DotNetRepositoryReleaseResult { Success = true },
+            publishGitHub: null,
+            validateGitHubPreflight: null);
+        Assert.True(retryService.Execute(request).Success);
+    }
+
     private sealed class TemporaryDirectoryScope : IDisposable
     {
         public TemporaryDirectoryScope()

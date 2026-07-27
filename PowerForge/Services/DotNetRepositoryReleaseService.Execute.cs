@@ -372,35 +372,19 @@ public sealed partial class DotNetRepositoryReleaseService
                 progress?.PhaseFailed(ProjectBuildProgressPhase.Versioning, "One or more project versions could not be resolved");
             else
                 progress?.PhaseCompleted(ProjectBuildProgressPhase.Versioning, $"{packable.Length} project version(s) resolved");
-
             if (spec.Pack)
             {
                 progress?.PhaseStarted(ProjectBuildProgressPhase.PackageBuild, packable.Length, "Building and packing projects");
+                var detailedProgress = progress as IProjectBuildProgressReporterV2;
+                var packageProgressItems = CreatePackageProgressItems(packable, detailedProgress);
+                var packageWatches = new Dictionary<DotNetRepositoryProjectResult, Stopwatch>();
                 DotNetPackResult? batchPackResult = null;
                 HashSet<DotNetRepositoryProjectResult>? batchCandidateSet = null;
                 var batchPackRequested = spec.PackStrategy == DotNetRepositoryPackStrategy.MSBuild && !spec.WhatIf;
                 if (batchPackRequested)
                 {
-                    var batchCandidates = packable
-                        .Where(project =>
-                            string.IsNullOrWhiteSpace(project.ErrorMessage) &&
-                            !string.IsNullOrWhiteSpace(project.NewVersion))
-                        .ToArray();
-                    var missingVersionCandidates = packable
-                        .Where(project =>
-                            string.IsNullOrWhiteSpace(project.ErrorMessage) &&
-                            string.IsNullOrWhiteSpace(project.NewVersion))
-                        .ToArray();
+                    var batchCandidates = PrepareMsBuildBatchCandidates(packable, _logger);
                     batchCandidateSet = new HashSet<DotNetRepositoryProjectResult>(batchCandidates);
-
-                    if (missingVersionCandidates.Length > 0)
-                    {
-                        var names = string.Join(", ", missingVersionCandidates.Select(project => project.ProjectName));
-                        _logger.Warn($"MSBuild batch pack excluded {missingVersionCandidates.Length} project(s) without a resolved version; they will be skipped during pack: {names}");
-                        foreach (var project in missingVersionCandidates)
-                            project.ErrorMessage = "No resolved version; skipping pack.";
-                    }
-
                     if (string.IsNullOrWhiteSpace(spec.OutputPath))
                     {
                         _logger.Warn("MSBuild pack strategy requires OutputPath/StagingPath; falling back to per-project dotnet pack.");
@@ -408,7 +392,16 @@ public sealed partial class DotNetRepositoryReleaseService
                     else if (batchCandidates.Length > 0)
                     {
                         _logger.Info($"Packing {batchCandidates.Length} project(s) with MSBuild batch strategy...");
-                        batchPackResult = PackProjectsWithMsBuild(batchCandidates, spec, _logger, signAssemblyOutputs ? signAssemblies : null);
+                        StartMsBuildBatchProgress(
+                            batchCandidates,
+                            packageProgressItems,
+                            packageWatches,
+                            detailedProgress,
+                            progress,
+                            packable.Length);
+                        batchPackResult = PackProjectsWithMsBuildAndTrackProgress(
+                            batchCandidates, spec, _logger, signAssemblyOutputs ? signAssemblies : null,
+                            packageProgressItems, packageWatches, detailedProgress);
                         if (!batchPackResult.Success)
                         {
                             var batchError = $"{batchPackResult.ErrorMessage ?? "MSBuild batch pack failed."} (MSBuild batch failed; enable verbose logging to see per-project MSBuild output.)";
@@ -418,7 +411,13 @@ public sealed partial class DotNetRepositoryReleaseService
                             result.Success = false;
                             _logger.Warn(batchError);
                             if (spec.PublishFailFast)
+                            {
+                                CompleteFailedMsBuildBatchProgress(
+                                    batchCandidates, packageProgressItems, packageWatches, spec.WhatIf,
+                                    detailedProgress, progress, packable.Length);
+                                progress?.PhaseFailed(ProjectBuildProgressPhase.PackageBuild, batchError);
                                 return result;
+                            }
                         }
                         else
                         {
@@ -426,12 +425,22 @@ public sealed partial class DotNetRepositoryReleaseService
                         }
                     }
                 }
-
                 var packageProgress = 0;
                 foreach (var project in packable)
                 {
-                    progress?.PhaseUpdated(ProjectBuildProgressPhase.PackageBuild, packageProgress, packable.Length, project.ProjectName);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var progressItem = packageProgressItems[project];
+                    var packageWatch = GetProjectPackageProgressWatch(
+                        project,
+                        progressItem,
+                        packageWatches,
+                        detailedProgress,
+                        progress,
+                        packageProgress,
+                        packable.Length);
                     packageProgress++;
+                    try
+                    {
                     if (!string.IsNullOrWhiteSpace(project.ErrorMessage))
                     {
                         result.Success = false;
@@ -545,6 +554,31 @@ public sealed partial class DotNetRepositoryReleaseService
                                 _logger.Success($"{project.ProjectName}: release zip created in {FormatDuration(zipWatch.Elapsed)} ({zippedFiles} file(s), {FormatBytes(zippedBytes)} input, {FormatBytes(zipSize)} zip).");
                             }
                         }
+                    }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        if (string.IsNullOrWhiteSpace(project.ErrorMessage))
+                            project.ErrorMessage = ex.Message;
+                        throw;
+                    }
+                    finally
+                    {
+                        packageWatch.Stop();
+                        CompleteProjectPackageProgress(
+                            project,
+                            progressItem,
+                            packageWatch.Elapsed,
+                            spec.WhatIf,
+                            cancellationToken.IsCancellationRequested,
+                            detailedProgress,
+                            progress,
+                            packageProgress,
+                            packable.Length);
                     }
                 }
 
@@ -739,12 +773,7 @@ public sealed partial class DotNetRepositoryReleaseService
                     result.ResolvedVersion = distinct[0];
             }
 
-            var projectErrors = projects
-                .Where(p => !string.IsNullOrWhiteSpace(p.ErrorMessage))
-                .Select(p => $"{p.ProjectName}: {p.ErrorMessage}")
-                .ToArray();
-            if (projectErrors.Length > 0 && string.IsNullOrWhiteSpace(result.ErrorMessage))
-                result.ErrorMessage = "One or more projects failed: " + string.Join("; ", projectErrors);
+            SetAggregateProjectError(result, projects);
 
             return result;
         }
@@ -761,32 +790,6 @@ public sealed partial class DotNetRepositoryReleaseService
         finally
         {
             ActiveCancellationToken.Value = previousCancellationToken;
-        }
-    }
-
-    private static void MarkPackageSigningFailure(
-        IEnumerable<DotNetRepositoryProjectResult> projects,
-        IReadOnlyList<string> packagesToSign,
-        string signError)
-    {
-        var failedPackages = new HashSet<string>(
-            packagesToSign.Where(package => !string.IsNullOrWhiteSpace(package)),
-            StringComparer.OrdinalIgnoreCase);
-
-        if (failedPackages.Count == 0)
-            return;
-
-        var message = string.IsNullOrWhiteSpace(signError)
-            ? "Package signing failed."
-            : $"Package signing failed: {signError}";
-
-        foreach (var project in projects)
-        {
-            if (!string.IsNullOrWhiteSpace(project.ErrorMessage))
-                continue;
-
-            if (project.Packages.Concat(project.SymbolPackages).Any(package => failedPackages.Contains(package)))
-                project.ErrorMessage = message;
         }
     }
 

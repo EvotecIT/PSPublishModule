@@ -33,6 +33,44 @@ public sealed class PowerForgeReleaseProgressAdaptersTests
     }
 
     [Fact]
+    public void ProjectBuildAdapter_ForwardsPerProjectTimingAndState()
+    {
+        var release = new RecordingReleaseProgress();
+        var adapter = new ProjectBuildReleaseProgressAdapter(
+            release,
+            PowerForgeReleaseProgressPhase.Packages);
+        var item = new ProjectBuildProgressItem
+        {
+            Phase = ProjectBuildProgressPhase.PackageBuild,
+            Key = "package:Sample.Project",
+            Title = "Sample.Project",
+            Kind = nameof(ProjectBuildProgressPhase.PackageBuild),
+            Position = 7,
+            Total = 85
+        };
+
+        adapter.ItemsPlanned(ProjectBuildProgressPhase.PackageBuild, new[] { item });
+        adapter.ItemUpdated(item, ProjectBuildProgressItemState.Started, "building");
+        item.Duration = TimeSpan.FromSeconds(42);
+        adapter.ItemUpdated(item, ProjectBuildProgressItemState.Completed, "1 package, 1 archive");
+
+        var mapped = Assert.Single(release.Planned);
+        Assert.Equal(PowerForgeReleaseProgressPhase.Packages, mapped.Phase);
+        Assert.Equal("Sample.Project", mapped.Title);
+        Assert.Equal(7, mapped.Position);
+        Assert.Equal(85, mapped.Total);
+        Assert.Equal(TimeSpan.FromSeconds(42), mapped.Duration);
+        Assert.Collection(
+            release.Updates,
+            update => Assert.Equal(PowerForgeReleaseProgressItemState.Started, update.State),
+            update =>
+            {
+                Assert.Equal(PowerForgeReleaseProgressItemState.Completed, update.State);
+                Assert.Equal(TimeSpan.FromSeconds(42), update.Item.Duration);
+            });
+    }
+
+    [Fact]
     public void DotNetPublishAdapter_ForwardsPlannedMatrixAndStepState()
     {
         var release = new RecordingReleaseProgress();

@@ -16,7 +16,8 @@ public sealed class DotNetRepositoryReleaseSummaryServiceTests
             ProjectName = "LibraryA",
             IsPackable = true,
             OldVersion = "2.0.4",
-            NewVersion = "2.0.5"
+            NewVersion = "2.0.5",
+            PackageBuildDuration = TimeSpan.FromSeconds(12.5)
         });
         result.Projects[0].Packages.Add("LibraryA.2.0.5.nupkg");
         result.Projects[0].SymbolPackages.Add("LibraryA.2.0.5.snupkg");
@@ -42,6 +43,7 @@ public sealed class DotNetRepositoryReleaseSummaryServiceTests
         Assert.Equal(DotNetRepositoryReleaseProjectStatus.Ok, summary.Projects[0].Status);
         Assert.Equal("2.0.4 -> 2.0.5", summary.Projects[0].VersionDisplay);
         Assert.Equal(2, summary.Projects[0].PackageCount);
+        Assert.Equal(TimeSpan.FromSeconds(12.5), summary.Projects[0].PackageBuildDuration);
         Assert.Equal("LibraryB", summary.Projects[1].ProjectName);
         Assert.Equal(DotNetRepositoryReleaseProjectStatus.Skipped, summary.Projects[1].Status);
         Assert.Equal("LibraryC", summary.Projects[2].ProjectName);

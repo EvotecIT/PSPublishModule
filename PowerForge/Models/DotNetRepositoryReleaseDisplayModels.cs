@@ -18,6 +18,7 @@ internal sealed class DotNetRepositoryReleaseProjectDisplayRow
     internal string Packable { get; set; } = string.Empty;
     internal string VersionDisplay { get; set; } = string.Empty;
     internal string PackageCount { get; set; } = string.Empty;
+    internal string Duration { get; set; } = string.Empty;
     internal string StatusText { get; set; } = string.Empty;
     internal ConsoleColor? StatusColor { get; set; }
     internal string ErrorPreview { get; set; } = string.Empty;

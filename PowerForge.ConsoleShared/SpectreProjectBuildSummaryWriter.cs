@@ -33,6 +33,7 @@ internal static class SpectreProjectBuildSummaryWriter
             .AddColumn(new TableColumn("Packable").NoWrap())
             .AddColumn(new TableColumn("Version").NoWrap())
             .AddColumn(new TableColumn("Packages").NoWrap())
+            .AddColumn(new TableColumn("Duration").RightAligned().NoWrap())
             .AddColumn(new TableColumn("Status").NoWrap())
             .AddColumn(new TableColumn("Error"));
 
@@ -43,6 +44,7 @@ internal static class SpectreProjectBuildSummaryWriter
                 project.Packable,
                 Esc(project.VersionDisplay),
                 project.PackageCount,
+                $"[deepskyblue1]{Esc(project.Duration)}[/]",
                 $"[{ColorTag(project.StatusColor)}]{Esc(project.StatusText)}[/]",
                 Esc(project.ErrorPreview));
         }

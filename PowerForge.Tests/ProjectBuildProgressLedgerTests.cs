@@ -1,0 +1,330 @@
+using PowerForge.ConsoleShared;
+using Spectre.Console;
+
+namespace PowerForge.Tests;
+
+public sealed class ProjectBuildProgressLedgerTests
+{
+    [Fact]
+    public void BoundedLedger_KeepsLiveTasksSmallAndRetainsCompleteTimedHistory()
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer, height: 12);
+        SpectreBoundedProgressLedger? ledger = null;
+
+        SpectreProgressDisplay.Run(
+            console,
+            [
+                new TaskDescriptionColumn { Alignment = Justify.Left },
+                new ProgressBarColumn(),
+                new PercentageColumn(),
+                new ElapsedTimeColumn()
+            ],
+            context =>
+            {
+                ledger = new SpectreBoundedProgressLedger(context);
+                var items = Enumerable.Range(1, 85)
+                    .Select(index => new SpectreProgressLedgerItem
+                    {
+                        Key = $"package:{index}",
+                        GroupKey = "PackageBuild",
+                        GroupTitle = "Build packages and archives",
+                        GroupOrder = 1,
+                        Title = $"Project.{index:00}",
+                        Position = index,
+                        Total = 85
+                    })
+                    .ToArray();
+
+                ledger.Plan(items);
+                Assert.Equal(2, ledger.VisibleTaskCount);
+
+                foreach (var item in items)
+                {
+                    ledger.Update(item, SpectreProgressLedgerState.Started, "building");
+                    Assert.InRange(ledger.VisibleTaskCount, 1, 6);
+
+                    item.Duration = TimeSpan.FromSeconds(item.Position);
+                    ledger.Update(item, SpectreProgressLedgerState.Completed, "1 package, 1 archive");
+                    Assert.InRange(ledger.VisibleTaskCount, 1, 5);
+                    if (item.Position == items.Length)
+                    {
+                        var stoppedAt = ledger.GetVisibleElapsedTime(item.Key);
+                        Thread.Sleep(25);
+                        Assert.Equal(stoppedAt, ledger.GetVisibleElapsedTime(item.Key));
+                    }
+                }
+
+                Assert.Equal(85, ledger.GetItemCount("PackageBuild"));
+                Assert.Equal(1d, ledger.GetCompletionRatio("PackageBuild"), 5);
+                Assert.Equal(3, ledger.VisibleTaskCount);
+                ledger.ClearLiveTasks();
+                Assert.Equal(0, ledger.VisibleTaskCount);
+            });
+
+        var snapshots = Assert.IsAssignableFrom<IReadOnlyList<SpectreProgressLedgerSnapshot>>(
+            ledger!.GetSnapshots());
+        Assert.Equal(85, snapshots.Count);
+        Assert.All(snapshots, snapshot => Assert.Equal(SpectreProgressLedgerState.Completed, snapshot.State));
+        Assert.Equal(TimeSpan.FromSeconds(1), snapshots[0].Duration);
+        Assert.Equal(TimeSpan.FromSeconds(85), snapshots[^1].Duration);
+
+        SpectreBoundedProgressLedger.WriteLedger(console, snapshots, "Project build details");
+        var output = writer.ToString();
+        Assert.Contains("Project.01", output, StringComparison.Ordinal);
+        Assert.Contains("Project.85", output, StringComparison.Ordinal);
+        Assert.Contains("01:25.000", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BoundedLedger_KeepsConcurrentBatchItemsBounded()
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer, height: 12);
+
+        SpectreProgressDisplay.Run(
+            console,
+            SpectreBuildProgressColumns.CreateStandard(),
+            context =>
+            {
+                var ledger = new SpectreBoundedProgressLedger(context);
+                var items = Enumerable.Range(1, 85)
+                    .Select(index => new SpectreProgressLedgerItem
+                    {
+                        Key = $"package:{index}",
+                        GroupKey = "PackageBuild",
+                        GroupTitle = "Build packages and archives",
+                        GroupOrder = 1,
+                        Title = $"Project.{index:00}",
+                        Position = index,
+                        Total = 85
+                    })
+                    .ToArray();
+
+                ledger.Plan(items);
+                foreach (var item in items)
+                    ledger.Update(item, SpectreProgressLedgerState.Started, "building in MSBuild batch");
+
+                Assert.Equal(2, ledger.VisibleTaskCount);
+            });
+    }
+
+    [Fact]
+    public void StandaloneConsole_WritesDetailedLedgerBeforeRethrowingFailure()
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer, height: 12);
+        var expected = new InvalidOperationException("synthetic failure");
+
+        var actual = Assert.Throws<InvalidOperationException>(() =>
+            SpectreProjectBuildConsoleUi.RunInteractive(
+                console,
+                new ProjectBuildConsolePlan
+                {
+                    ConfigPath = "project.build.json",
+                    RootPath = "repository",
+                    Build = true
+                },
+                progress =>
+                {
+                    var detailed = Assert.IsAssignableFrom<IProjectBuildProgressReporterV2>(progress);
+                    var item = new ProjectBuildProgressItem
+                    {
+                        Phase = ProjectBuildProgressPhase.PackageBuild,
+                        Key = "package:Sample.Project",
+                        Title = "Sample.Project",
+                        Position = 1,
+                        Total = 2
+                    };
+                    detailed.ItemsPlanned(ProjectBuildProgressPhase.PackageBuild, [item]);
+                    detailed.ItemUpdated(item, ProjectBuildProgressItemState.Started, "building");
+                    item.Duration = TimeSpan.FromSeconds(2);
+                    detailed.ItemUpdated(item, ProjectBuildProgressItemState.Completed, "1 package, 1 archive");
+                    throw expected;
+                }));
+
+        Assert.Same(expected, actual);
+        var output = writer.ToString();
+        Assert.Contains("Project build details", output, StringComparison.Ordinal);
+        Assert.Contains("Sample.Project", output, StringComparison.Ordinal);
+        Assert.Contains("00:02.000", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Execute_ReportsPerProjectPackageEventsAndDurations()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            WriteProject(root.FullName, "Sample.First");
+            WriteProject(root.FullName, "Sample.Second");
+            var progress = new RecordingProjectBuildProgress();
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(
+                new DotNetRepositoryReleaseSpec
+                {
+                    RootPath = root.FullName,
+                    Configuration = "Release",
+                    OutputPath = Path.Combine(root.FullName, "packages"),
+                    Pack = true,
+                    Publish = false,
+                    UpdateVersions = false,
+                    WhatIf = true,
+                    CreateReleaseZip = false
+                },
+                signAssemblies: null,
+                validateAssemblySigning: null,
+                progress);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(
+                new[] { "Sample.First", "Sample.Second" },
+                progress.Planned.Select(item => item.Title).OrderBy(title => title, StringComparer.Ordinal));
+            Assert.Equal(new[] { 1, 2 }, progress.Planned.Select(item => item.Position).OrderBy(position => position));
+            Assert.All(progress.Planned, item => Assert.Equal(2, item.Total));
+            Assert.Equal(2, progress.Updates.Count(update => update.State == ProjectBuildProgressItemState.Started));
+            Assert.Equal(2, progress.Updates.Count(update => update.State == ProjectBuildProgressItemState.Completed));
+            Assert.All(
+                progress.Updates.Where(update => update.State == ProjectBuildProgressItemState.Completed),
+                update =>
+                {
+                    Assert.NotNull(update.Item.Duration);
+                    Assert.True(update.Item.Duration >= TimeSpan.Zero);
+                    Assert.Contains("package(s)", update.Detail, StringComparison.Ordinal);
+                    Assert.Contains("planned", update.Detail, StringComparison.Ordinal);
+                });
+            Assert.All(result.Projects.Where(project => project.IsPackable), project =>
+                Assert.True(project.PackageBuildDuration >= TimeSpan.Zero));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Execute_MsBuildBatchStartsEveryProjectBeforeCompletingAnyAndIncludesBatchTime()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            WriteProject(root.FullName, "Sample.First");
+            WriteProject(root.FullName, "Sample.Second");
+            var progress = new RecordingProjectBuildProgress();
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(
+                new DotNetRepositoryReleaseSpec
+                {
+                    RootPath = root.FullName,
+                    Configuration = "Release",
+                    OutputPath = Path.Combine(root.FullName, "packages"),
+                    Pack = true,
+                    PackStrategy = DotNetRepositoryPackStrategy.MSBuild,
+                    Publish = false,
+                    UpdateVersions = false,
+                    CreateReleaseZip = false
+                },
+                signAssemblies: null,
+                validateAssemblySigning: null,
+                progress);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var firstTerminal = progress.Updates.FindIndex(update =>
+                update.State is ProjectBuildProgressItemState.Completed or ProjectBuildProgressItemState.Failed);
+            Assert.Equal(2, progress.Updates.Take(firstTerminal).Count(update =>
+                update.State == ProjectBuildProgressItemState.Started &&
+                update.Detail == "building in MSBuild batch"));
+            Assert.Equal(2, progress.Updates.Take(firstTerminal).Count(update =>
+                update.State == ProjectBuildProgressItemState.Started &&
+                update.Detail == "MSBuild batch complete; awaiting package collection" &&
+                update.Item.Duration > TimeSpan.Zero));
+            Assert.All(
+                result.Projects.Where(project => project.IsPackable),
+                project => Assert.True(project.PackageBuildDuration > TimeSpan.Zero));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private static IAnsiConsole CreateConsole(TextWriter writer, int height)
+        => AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Out = new TerminalConsoleOutput(writer, height),
+            Ansi = AnsiSupport.Yes,
+            ColorSystem = ColorSystemSupport.NoColors,
+            Interactive = InteractionSupport.Yes
+        });
+
+    private static void WriteProject(string rootPath, string name)
+    {
+        var directory = Directory.CreateDirectory(Path.Combine(rootPath, name));
+        File.WriteAllText(
+            Path.Combine(directory.FullName, $"{name}.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net8.0</TargetFramework>
+                <VersionPrefix>1.0.0</VersionPrefix>
+                <IsPackable>true</IsPackable>
+              </PropertyGroup>
+            </Project>
+            """);
+    }
+
+    private sealed class RecordingProjectBuildProgress : IProjectBuildProgressReporterV2
+    {
+        public List<ProjectBuildProgressItem> Planned { get; } = new();
+        public List<(ProjectBuildProgressItem Item, ProjectBuildProgressItemState State, string? Detail)> Updates { get; } = new();
+
+        public void PhaseStarted(ProjectBuildProgressPhase phase, int totalItems, string? detail = null) { }
+        public void PhaseUpdated(ProjectBuildProgressPhase phase, int completedItems, int totalItems, string? detail = null) { }
+        public void PhaseCompleted(ProjectBuildProgressPhase phase, string? detail = null) { }
+        public void PhaseFailed(ProjectBuildProgressPhase phase, string? detail = null) { }
+
+        public void ItemsPlanned(
+            ProjectBuildProgressPhase phase,
+            IReadOnlyList<ProjectBuildProgressItem> items)
+            => Planned.AddRange(items);
+
+        public void ItemUpdated(
+            ProjectBuildProgressItem item,
+            ProjectBuildProgressItemState state,
+            string? detail = null)
+            => Updates.Add((
+                new ProjectBuildProgressItem
+                {
+                    Phase = item.Phase,
+                    Key = item.Key,
+                    Title = item.Title,
+                    Kind = item.Kind,
+                    Position = item.Position,
+                    Total = item.Total,
+                    Duration = item.Duration
+                },
+                state,
+                detail));
+    }
+
+    private sealed class TerminalConsoleOutput : IAnsiConsoleOutput
+    {
+        public TerminalConsoleOutput(TextWriter writer, int height)
+        {
+            Writer = writer;
+            Height = height;
+        }
+
+        public TextWriter Writer { get; }
+        public bool IsTerminal => true;
+        public int Width => 140;
+        public int Height { get; }
+        public void SetEncoding(System.Text.Encoding encoding) { }
+    }
+}

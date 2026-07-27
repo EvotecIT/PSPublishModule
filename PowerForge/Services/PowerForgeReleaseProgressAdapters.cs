@@ -1,10 +1,11 @@
 namespace PowerForge;
 
-internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgressReporter
+internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgressReporterV2
 {
     private readonly IPowerForgeReleaseProgressReporterV2 _release;
     private readonly PowerForgeReleaseProgressPhase _releasePhase;
     private readonly Dictionary<ProjectBuildProgressPhase, PowerForgeReleaseProgressItem> _items = new();
+    private readonly Dictionary<string, PowerForgeReleaseProgressItem> _projectItems = new(StringComparer.OrdinalIgnoreCase);
 
     internal ProjectBuildReleaseProgressAdapter(
         IPowerForgeReleaseProgressReporterV2 release,
@@ -39,6 +40,43 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
     public void PhaseFailed(ProjectBuildProgressPhase phase, string? detail = null)
         => _release.ItemUpdated(GetOrCreate(phase), PowerForgeReleaseProgressItemState.Failed, detail);
 
+    public void ItemsPlanned(
+        ProjectBuildProgressPhase phase,
+        IReadOnlyList<ProjectBuildProgressItem> items)
+    {
+        if (items is null || items.Count == 0)
+            return;
+
+        var mapped = items
+            .Where(item => item is not null)
+            .Select(item => MapItem(item))
+            .ToArray();
+        _release.ItemsPlanned(_releasePhase, mapped);
+    }
+
+    public void ItemUpdated(
+        ProjectBuildProgressItem item,
+        ProjectBuildProgressItemState state,
+        string? detail = null)
+    {
+        if (item is null)
+            return;
+
+        var mapped = MapItem(item);
+        mapped.Duration = item.Duration;
+        _release.ItemUpdated(
+            mapped,
+            state switch
+            {
+                ProjectBuildProgressItemState.Started => PowerForgeReleaseProgressItemState.Started,
+                ProjectBuildProgressItemState.Completed => PowerForgeReleaseProgressItemState.Completed,
+                ProjectBuildProgressItemState.Failed => PowerForgeReleaseProgressItemState.Failed,
+                ProjectBuildProgressItemState.Skipped => PowerForgeReleaseProgressItemState.Skipped,
+                _ => PowerForgeReleaseProgressItemState.Planned
+            },
+            detail);
+    }
+
     private PowerForgeReleaseProgressItem GetOrCreate(ProjectBuildProgressPhase phase)
     {
         if (_items.TryGetValue(phase, out var item))
@@ -54,6 +92,29 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
         _items[phase] = item;
         _release.ItemsPlanned(_releasePhase, new[] { item });
         return item;
+    }
+
+    private PowerForgeReleaseProgressItem MapItem(ProjectBuildProgressItem item)
+    {
+        var key = $"project:{item.Phase}:{item.Key}";
+        if (_projectItems.TryGetValue(key, out var mapped))
+        {
+            mapped.Duration = item.Duration;
+            return mapped;
+        }
+
+        mapped = new PowerForgeReleaseProgressItem
+        {
+            Phase = _releasePhase,
+            Key = key,
+            Title = item.Title,
+            Kind = item.Kind,
+            Position = item.Position,
+            Total = item.Total,
+            Duration = item.Duration
+        };
+        _projectItems[key] = mapped;
+        return mapped;
     }
 
     private static string GetTitle(ProjectBuildProgressPhase phase)

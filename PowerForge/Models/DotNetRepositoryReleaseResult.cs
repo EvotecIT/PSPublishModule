@@ -67,6 +67,9 @@ public sealed class DotNetRepositoryProjectResult
     /// <summary>Release zip path (if created).</summary>
     public string? ReleaseZipPath { get; set; }
 
+    /// <summary>Total time spent building packages and release archives for this project.</summary>
+    public TimeSpan PackageBuildDuration { get; set; }
+
     /// <summary>Optional error message for the project.</summary>
     public string? ErrorMessage { get; set; }
 }
