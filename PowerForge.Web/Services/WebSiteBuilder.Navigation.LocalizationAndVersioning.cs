@@ -345,7 +345,10 @@ public static partial class WebSiteBuilder
             return normalized;
 
         var routeWithoutLeadingSlash = normalized.Replace('\\', '/').TrimStart('/');
-        foreach (var prefix in localization.ByPrefix.Keys.OrderByDescending(static value => value.Length))
+        foreach (var prefix in localization.Languages
+                     .Select(static language => language.Prefix)
+                     .Distinct(StringComparer.OrdinalIgnoreCase)
+                     .OrderByDescending(static value => value.Length))
         {
             var normalizedPrefix = NormalizePath(prefix).Trim('/');
             if (string.IsNullOrWhiteSpace(normalizedPrefix))
