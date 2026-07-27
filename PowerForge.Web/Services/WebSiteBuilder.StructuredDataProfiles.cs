@@ -292,9 +292,13 @@ public static partial class WebSiteBuilder
             publisher["url"] = languageBaseUrl;
         appModel["publisher"] = publisher;
 
-        var websiteUrl = ReadMetaString(item.Meta, "software.website_url", "software.websiteUrl", "softwareapplication.sameAs");
-        if (!string.IsNullOrWhiteSpace(websiteUrl))
-            appModel["sameAs"] = new[] { ResolveAbsoluteUrl(languageBaseUrl, websiteUrl) };
+        var sameAs = ReadMetaStringList(item.Meta, "software.website_url", "software.websiteUrl", "softwareapplication.sameAs")
+            .Select(url => ResolveAbsoluteUrl(languageBaseUrl, url))
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (sameAs.Length > 0)
+            appModel["sameAs"] = sameAs;
 
         var appImage = ReadMetaString(item.Meta, "software.image", "softwareapplication.image");
         if (string.IsNullOrWhiteSpace(appImage))
