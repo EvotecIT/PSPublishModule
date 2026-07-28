@@ -4,8 +4,9 @@ on:
   workflow_call:
     inputs:
       source_ref:
-        description: Exact source commit represented by the reviewed capture.
-        required: true
+        description: Optional exact source commit assertion; blank resolves it from the reviewed capture artifact.
+        required: false
+        default: ""
         type: string
       capture_run_id:
         description: GitHub Actions run id containing the reviewed capture artifact.
@@ -85,7 +86,61 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  resolve-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+    outputs:
+      source_ref: ${{ steps.resolve.outputs.source_ref }}
+    steps:
+      - name: Resolve exact source from reviewed capture
+        id: resolve
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CAPTURE_RUN_ID: ${{ inputs.capture_run_id }}
+          EXPECTED_SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          set -euo pipefail
+          [[ "$CAPTURE_RUN_ID" =~ ^[0-9]+$ ]] || {
+            echo 'capture_run_id must be a numeric GitHub Actions run id.' >&2
+            exit 1
+          }
+
+          artifact_prefix='powerforge-apple-screenshots-'
+          mapfile -t artifact_names < <(
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/actions/runs/${CAPTURE_RUN_ID}/artifacts" \
+              --jq '.artifacts[] | select(.expired == false) | .name'
+          )
+          source_refs=()
+          for artifact_name in "${artifact_names[@]}"; do
+            if [[ "$artifact_name" =~ ^${artifact_prefix}([0-9A-Fa-f]{40})$ ]]; then
+              source_refs+=("${BASH_REMATCH[1],,}")
+            fi
+          done
+          [[ ${#source_refs[@]} -eq 1 ]] || {
+            echo "Capture run ${CAPTURE_RUN_ID} must contain exactly one unexpired ${artifact_prefix}<sha> artifact; found ${#source_refs[@]}." >&2
+            exit 1
+          }
+
+          resolved_source_ref="${source_refs[0]}"
+          if [[ -n "$EXPECTED_SOURCE_REF" ]]; then
+            [[ "$EXPECTED_SOURCE_REF" =~ ^[0-9A-Fa-f]{40}$ ]] || {
+              echo 'source_ref must be blank or an exact 40-character commit SHA.' >&2
+              exit 1
+            }
+            [[ "${EXPECTED_SOURCE_REF,,}" == "$resolved_source_ref" ]] || {
+              echo "Requested source_ref ${EXPECTED_SOURCE_REF} does not match capture source ${resolved_source_ref}." >&2
+              exit 1
+            }
+          fi
+
+          echo "source_ref=$resolved_source_ref" >> "$GITHUB_OUTPUT"
+
   approve-and-sync:
+    needs: resolve-source
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: 60
     environment: ${{ inputs.environment_name }}
@@ -96,7 +151,7 @@ jobs:
       - name: Verify authorized dispatcher and immutable evidence
         shell: pwsh
         env:
-          SOURCE_REF: ${{ inputs.source_ref }}
+          SOURCE_REF: ${{ needs.resolve-source.outputs.source_ref }}
           POWERFORGE_REF: ${{ inputs.powerforge_ref }}
           CAPTURE_RUN_ID: ${{ inputs.capture_run_id }}
           DISPATCHERS_JSON: ${{ inputs.allowed_dispatchers_json }}
@@ -115,7 +170,7 @@ jobs:
       - name: Checkout exact approved source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ inputs.source_ref }}
+          ref: ${{ needs.resolve-source.outputs.source_ref }}
           fetch-depth: 1
           path: source
           persist-credentials: false
@@ -156,7 +211,7 @@ jobs:
       - name: Restore the exact reviewed capture artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: powerforge-apple-screenshots-${{ inputs.source_ref }}
+          name: powerforge-apple-screenshots-${{ needs.resolve-source.outputs.source_ref }}
           path: ${{ steps.capture-path.outputs.path }}
           repository: ${{ github.repository }}
           run-id: ${{ inputs.capture_run_id }}
@@ -187,7 +242,7 @@ jobs:
             & $env:POWERFORGE_TOOL apple-screenshots manifest `
               --config $configPath `
               --version '${{ inputs.marketing_version }}' `
-              --source-commit '${{ inputs.source_ref }}' `
+              --source-commit '${{ needs.resolve-source.outputs.source_ref }}' `
               --approved-by 'GitHub protected environment: ${{ inputs.environment_name }}' `
               --allowed-root '${{ steps.capture-path.outputs.path }}' `
               --initiated-by '${{ github.actor }}' `
@@ -205,7 +260,7 @@ jobs:
         with:
           action: Screenshots
           config-path: ${{ github.workspace }}/source/${{ inputs.release_config_path }}
-          source-commit: ${{ inputs.source_ref }}
+          source-commit: ${{ needs.resolve-source.outputs.source_ref }}
           tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           target: ${{ inputs.target }}
           plan-only: "false"
@@ -218,7 +273,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: powerforge-apple-screenshots-approved-${{ inputs.source_ref }}
+          name: powerforge-apple-screenshots-approved-${{ needs.resolve-source.outputs.source_ref }}
           path: |
             ${{ steps.capture-path.outputs.path }}
             source/**/*.approval.json

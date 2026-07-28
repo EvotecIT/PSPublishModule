@@ -229,6 +229,10 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("powerforge-apple-screenshots-${{ inputs.source_ref }}", capture, StringComparison.Ordinal);
         Assert.Contains("allowed_dispatchers_json", approval, StringComparison.Ordinal);
         Assert.Contains("${{ github.actor }}", approval, StringComparison.Ordinal);
+        Assert.Contains("Resolve exact source from reviewed capture", approval, StringComparison.Ordinal);
+        Assert.Contains("repos/${GITHUB_REPOSITORY}/actions/runs/${CAPTURE_RUN_ID}/artifacts", approval, StringComparison.Ordinal);
+        Assert.Contains("must contain exactly one unexpired ${artifact_prefix}<sha> artifact", approval, StringComparison.Ordinal);
+        Assert.Contains("does not match capture source", approval, StringComparison.Ordinal);
         Assert.Contains("--approved-by 'GitHub protected environment: ${{ inputs.environment_name }}'", approval, StringComparison.Ordinal);
         Assert.Contains("run-id: ${{ inputs.capture_run_id }}", approval, StringComparison.Ordinal);
         Assert.Contains("approval-evidence", approval, StringComparison.Ordinal);
@@ -238,7 +242,8 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("FileAttributes]::ReparsePoint", approval, StringComparison.Ordinal);
         Assert.Contains("path: ${{ steps.capture-path.outputs.path }}", approval, StringComparison.Ordinal);
         Assert.Contains("--allowed-root '${{ steps.capture-path.outputs.path }}'", approval, StringComparison.Ordinal);
-        Assert.Contains("source-commit: ${{ inputs.source_ref }}", approval, StringComparison.Ordinal);
+        Assert.Contains("--source-commit '${{ needs.resolve-source.outputs.source_ref }}'", approval, StringComparison.Ordinal);
+        Assert.Contains("source-commit: ${{ needs.resolve-source.outputs.source_ref }}", approval, StringComparison.Ordinal);
     }
 
     [Fact]
