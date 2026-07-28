@@ -129,9 +129,11 @@ internal sealed class PowerForgeAppleDirectDistributionOptions
 /// </summary>
 internal sealed class PowerForgeAppleReleaseReceipt
 {
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
 
     public PowerForgeAppleReleaseAction Action { get; set; }
+
+    public string? SourceCommit { get; set; }
 
     public bool PlanOnly { get; set; }
 

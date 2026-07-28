@@ -163,12 +163,7 @@ public sealed partial class AppStoreConnectClient
             {
                 type = "territoryAvailabilities",
                 id = territory.Id,
-                attributes = new
-                {
-                    available = (bool?)territory.Spec.Available,
-                    releaseDate = Normalize(territory.Spec.ReleaseDate),
-                    preOrderEnabled = territory.Spec.PreOrderEnabled
-                },
+                attributes = BuildTerritoryAvailabilityAttributes(territory.Spec),
                 relationships = new
                 {
                     territory = new { data = new { type = "territories", id = territory.Spec.TerritoryId.Trim() } }
@@ -200,12 +195,7 @@ public sealed partial class AppStoreConnectClient
             {
                 type = "territoryAvailabilities",
                 id = territoryAvailabilityId.Trim(),
-                attributes = new
-                {
-                    available = (bool?)spec.Available,
-                    releaseDate = Normalize(spec.ReleaseDate),
-                    preOrderEnabled = spec.PreOrderEnabled
-                }
+                attributes = BuildTerritoryAvailabilityAttributes(spec)
             }
         };
         return PatchSingleAsync(
@@ -213,6 +203,18 @@ public sealed partial class AppStoreConnectClient
             body,
             ParseTerritoryAvailability,
             cancellationToken);
+    }
+
+    private static object BuildTerritoryAvailabilityAttributes(AppStoreConnectTerritoryAvailabilitySpec spec)
+    {
+        var attributes = new Dictionary<string, object?>
+        {
+            ["available"] = spec.Available,
+            ["releaseDate"] = Normalize(spec.ReleaseDate)
+        };
+        if (spec.PreOrderEnabled.HasValue)
+            attributes["preOrderEnabled"] = spec.PreOrderEnabled.Value;
+        return attributes;
     }
 
     /// <summary>Lists accessibility declarations for an app.</summary>

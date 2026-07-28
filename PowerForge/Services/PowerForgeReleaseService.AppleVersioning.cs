@@ -11,6 +11,7 @@ internal sealed partial class PowerForgeReleaseService
         var receipt = new PowerForgeAppleReleaseReceipt
         {
             Action = plan.Action,
+            SourceCommit = plan.SourceCommit,
             PlanOnly = true,
             CheckedAt = DateTimeOffset.UtcNow,
             Success = true,

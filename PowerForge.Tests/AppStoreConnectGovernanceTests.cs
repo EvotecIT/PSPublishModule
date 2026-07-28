@@ -81,7 +81,10 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal("https://api.appstoreconnect.apple.com/v2/appAvailabilities", Assert.Single(handler.RequestUris).ToString());
         using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
         var territory = Assert.Single(body.RootElement.GetProperty("included").EnumerateArray());
-        Assert.True(territory.GetProperty("attributes").GetProperty("available").GetBoolean());
+        var attributes = territory.GetProperty("attributes");
+        Assert.True(attributes.GetProperty("available").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, attributes.GetProperty("releaseDate").ValueKind);
+        Assert.False(attributes.TryGetProperty("preOrderEnabled", out _));
         Assert.Equal("POL", territory.GetProperty("relationships").GetProperty("territory").GetProperty("data").GetProperty("id").GetString());
     }
 
@@ -122,6 +125,32 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal(
             "https://api.appstoreconnect.apple.com/v2/territoryAvailabilities/territory-1",
             Assert.Single(handler.RequestUris).ToString());
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        var attributes = body.RootElement.GetProperty("data").GetProperty("attributes");
+        Assert.False(attributes.GetProperty("available").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, attributes.GetProperty("releaseDate").ValueKind);
+        Assert.False(attributes.TryGetProperty("preOrderEnabled", out _));
+    }
+
+    [Fact]
+    public async Task UpdateTerritoryAvailabilityAsync_IncludesExplicitPreorderChoice()
+    {
+        var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.OK,
+            """{ "data": { "type": "territoryAvailabilities", "id": "territory-1", "attributes": { "available": true, "preOrderEnabled": false }, "relationships": { "territory": { "data": { "type": "territories", "id": "POL" } } } } }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        _ = await client.UpdateTerritoryAvailabilityAsync(
+            "territory-1",
+            new AppStoreConnectTerritoryAvailabilitySpec
+            {
+                TerritoryId = "POL",
+                Available = true,
+                PreOrderEnabled = false
+            });
+
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.False(body.RootElement.GetProperty("data").GetProperty("attributes").GetProperty("preOrderEnabled").GetBoolean());
     }
 
     [Fact]
@@ -169,6 +198,32 @@ public sealed partial class AppStoreConnectClientTests
         var data = body.RootElement.GetProperty("data");
         Assert.Equal("com.example.pro", data.GetProperty("attributes").GetProperty("productId").GetString());
         Assert.Equal("group-1", data.GetProperty("relationships").GetProperty("group").GetProperty("data").GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task UpdateSubscriptionAsync_DistinguishesClearedAndUnmanagedReviewNotes()
+    {
+        var response = new SequenceResponse(HttpStatusCode.OK,
+            """{ "data": { "type": "subscriptions", "id": "sub-1", "attributes": { "productId": "com.example.pro", "name": "Pro", "subscriptionPeriod": "ONE_MONTH" } } }""");
+        var handler = new SequenceHandler(response, response);
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var spec = new AppStoreConnectSubscriptionSpec
+        {
+            ProductId = "com.example.pro",
+            Name = "Pro",
+            SubscriptionPeriod = "ONE_MONTH",
+            ReviewNote = string.Empty
+        };
+
+        _ = await client.UpdateSubscriptionAsync("sub-1", spec);
+        spec.ReviewNote = null;
+        _ = await client.UpdateSubscriptionAsync("sub-1", spec);
+
+        using var clearBody = JsonDocument.Parse(handler.RequestBodies[0]);
+        using var unmanagedBody = JsonDocument.Parse(handler.RequestBodies[1]);
+        Assert.Equal(string.Empty, clearBody.RootElement.GetProperty("data").GetProperty("attributes").GetProperty("reviewNote").GetString());
+        Assert.False(unmanagedBody.RootElement.GetProperty("data").GetProperty("attributes").TryGetProperty("reviewNote", out _));
     }
 
     [Fact]

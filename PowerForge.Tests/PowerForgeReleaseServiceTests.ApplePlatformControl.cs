@@ -220,7 +220,7 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.True(result.Success);
             var receipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt);
-            Assert.Equal(2, receipt.SchemaVersion);
+            Assert.Equal(3, receipt.SchemaVersion);
             var target = Assert.Single(receipt.Targets);
             Assert.Equal(AppleDistributionRoute.AppStore, target.DistributionRoute);
             Assert.Equal("6778025328", target.AppId);
@@ -658,6 +658,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void Execute_AppleUpload_PreservesAcceptedNotarizationWhenStaplingFails()
     {
+        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
         var root = CreateSandbox();
         try
         {
@@ -702,6 +703,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     new PowerForgeReleaseRequest
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleSourceCommit = sourceCommit,
                         AppleAction = PowerForgeAppleReleaseAction.Upload
                     });
 
@@ -711,6 +713,9 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("accepted-then-staple-failed", target.NotarizationSubmissionId);
             Assert.False(target.Stapled);
             Assert.Contains("ticket stapling", target.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(sourceCommit, result.AppleReceipt.SourceCommit);
+
+            var receiptPath = Path.Combine(root, "build", "powerforge", "apple", "release-receipt.json");
 
             AppleNotarizationRequest? resumedRequest = null;
             var resumeService = CreateAppleAutomationService(
@@ -739,6 +744,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     new PowerForgeReleaseRequest
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleSourceCommit = sourceCommit,
                         AppleAction = PowerForgeAppleReleaseAction.Configured
                     });
 
@@ -754,6 +760,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleSourceCommit = sourceCommit,
                     AppleAction = PowerForgeAppleReleaseAction.Upload
                 });
 
@@ -767,7 +774,6 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             // Simulate another target failing after this target completed. Aggregate failure
             // must retain and reuse the fully verified direct target.
-            var receiptPath = Path.Combine(root, "build", "powerforge", "apple", "release-receipt.json");
             var successfulReceipt = File.ReadAllText(receiptPath);
             Assert.Contains("\"success\": true", successfulReceipt, StringComparison.Ordinal);
             File.WriteAllText(
@@ -814,6 +820,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleSourceCommit = sourceCommit,
                     AppleAction = PowerForgeAppleReleaseAction.Upload
                 });
 
@@ -848,6 +855,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleSourceCommit = sourceCommit,
                     AppleAction = PowerForgeAppleReleaseAction.Upload
                 });
 
@@ -870,6 +878,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleSourceCommit = sourceCommit,
                     AppleAction = PowerForgeAppleReleaseAction.Upload
                 });
             Assert.False(changedArtifact.Success);

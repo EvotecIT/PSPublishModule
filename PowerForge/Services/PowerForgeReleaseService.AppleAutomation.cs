@@ -308,6 +308,9 @@ internal sealed partial class PowerForgeReleaseService
 
         if (priorReceipt is null || priorReceipt.Success)
             return false;
+        if (string.IsNullOrWhiteSpace(plan.SourceCommit) ||
+            !string.Equals(priorReceipt.SourceCommit, plan.SourceCommit, StringComparison.OrdinalIgnoreCase))
+            return false;
 
         var prior = priorReceipt.Targets.SingleOrDefault(target =>
             target.Name.Equals(app.Name, StringComparison.OrdinalIgnoreCase) &&
@@ -694,6 +697,7 @@ internal sealed partial class PowerForgeReleaseService
         var receipt = new PowerForgeAppleReleaseReceipt
         {
             Action = plan.Action,
+            SourceCommit = plan.SourceCommit,
             PlanOnly = false,
             CheckedAt = DateTimeOffset.UtcNow,
             Success = results.Length == plan.Apps.Length &&

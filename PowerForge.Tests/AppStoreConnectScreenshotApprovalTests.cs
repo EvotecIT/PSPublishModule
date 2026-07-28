@@ -176,6 +176,17 @@ public sealed class AppStoreConnectScreenshotApprovalTests
                 expectedSourceCommit: ApprovedSourceCommit);
             Assert.True(approved.IsValid);
 
+            spec.VersionString = null;
+            spec.VersionId = "version-1";
+            var versionIdOnly = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
+                spec,
+                root.FullName,
+                expectedSourceCommit: ApprovedSourceCommit);
+            Assert.False(versionIdOnly.IsValid);
+            Assert.Contains(versionIdOnly.Messages, message => message.Contains("VersionString is required", StringComparison.Ordinal));
+            spec.VersionString = "1.5.0";
+            spec.VersionId = null;
+
             spec.AppId = "another-app";
             var wrongApp = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
                 spec,

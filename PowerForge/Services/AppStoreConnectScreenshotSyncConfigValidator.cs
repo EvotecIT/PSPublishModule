@@ -67,6 +67,14 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
         if (string.IsNullOrWhiteSpace(quality.ApprovalManifestPath))
             return new[] { "Screenshot approval manifest is required but ApprovalManifestPath is missing." };
 
+        if (string.IsNullOrWhiteSpace(spec.VersionString))
+        {
+            return new[]
+            {
+                "VersionString is required when a screenshot approval manifest is enforced; VersionId alone cannot bind reviewed bytes to an App Store version."
+            };
+        }
+
         var path = ResolvePath(baseDirectory, quality.ApprovalManifestPath!);
         if (!File.Exists(path))
             return new[] { $"Screenshot approval manifest was not found: {path}" };

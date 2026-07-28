@@ -386,9 +386,10 @@ public sealed partial class AppStoreConnectClient
             ["name"] = spec.Name.Trim(),
             ["familySharable"] = spec.FamilySharable,
             ["subscriptionPeriod"] = spec.SubscriptionPeriod.Trim().ToUpperInvariant(),
-            ["reviewNote"] = Normalize(spec.ReviewNote),
             ["groupLevel"] = spec.GroupLevel
         };
+        if (spec.ReviewNote is not null)
+            attributes["reviewNote"] = spec.ReviewNote.Trim();
         if (includeProductId)
             attributes["productId"] = spec.ProductId.Trim();
         return attributes.Where(static pair => pair.Value is not null)
