@@ -21,6 +21,10 @@ inputs:
     description: Marketing version required by Version.
     required: false
     default: ""
+  source-commit:
+    description: Exact source commit whose reviewed release assets may be used.
+    required: false
+    default: ""
   target:
     description: Optional comma-separated recovery target selection.
     required: false
@@ -118,6 +122,7 @@ runs:
         INPUT_ACTION: ${{ inputs.action }}
         INPUT_CONFIG_PATH: ${{ inputs.config-path }}
         INPUT_MARKETING_VERSION: ${{ inputs.marketing-version }}
+        INPUT_SOURCE_COMMIT: ${{ inputs.source-commit }}
         INPUT_TARGET: ${{ inputs.target }}
         INPUT_PLAN_ONLY: ${{ inputs.plan-only }}
         INPUT_CONFIRM: ${{ inputs.confirm }}

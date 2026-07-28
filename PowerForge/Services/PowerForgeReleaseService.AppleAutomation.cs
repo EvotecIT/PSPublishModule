@@ -299,8 +299,6 @@ internal sealed partial class PowerForgeReleaseService
             string.Equals(target.Version, app.MarketingVersion, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(target.Build, app.BuildNumber, StringComparison.OrdinalIgnoreCase));
         if (prior is null ||
-            string.IsNullOrWhiteSpace(prior.ErrorMessage) ||
-            (prior.Stapled == true && prior.StapleValidated == true && prior.GatekeeperAccepted == true) ||
             !string.Equals(prior.NotarizationStatus, "Accepted", StringComparison.OrdinalIgnoreCase) ||
             string.IsNullOrWhiteSpace(prior.NotarizationSubmissionId) ||
             string.IsNullOrWhiteSpace(prior.DirectArtifactPath) ||
@@ -310,10 +308,50 @@ internal sealed partial class PowerForgeReleaseService
             return false;
         }
 
+        var artifactPath = Path.GetFullPath(prior.DirectArtifactPath);
+        var completed = prior.Stapled == true &&
+                        prior.StapleValidated == true &&
+                        prior.GatekeeperAccepted == true;
+        if (completed)
+        {
+            var artifactSha256 = AppleNotarizationService.ComputeArtifactSha256(artifactPath);
+            if (!string.Equals(artifactSha256, prior.DirectArtifactSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"The completed direct Apple artifact changed after release. Expected SHA-256 " +
+                    $"'{prior.DirectArtifactSha256}', received '{artifactSha256}'. Archive, export, and notarize the changed artifact as a new release attempt.");
+            }
+
+            static ProcessRunResult CompletedStep(string message, string executable)
+                => new(0, message, string.Empty, executable, TimeSpan.Zero, false);
+
+            result.Notarization = new AppleNotarizationResult
+            {
+                ArtifactPath = artifactPath,
+                ArtifactSha256 = artifactSha256,
+                SubmissionPath = artifactPath,
+                SubmissionId = prior.NotarizationSubmissionId,
+                Status = "Accepted",
+                ResumedAcceptedSubmission = true,
+                Submission = CompletedStep("Reused the retained accepted notarization submission.", "xcrun"),
+                Staple = CompletedStep("Reused completed ticket stapling.", "xcrun"),
+                StapleValidation = CompletedStep("Reused completed staple validation.", "xcrun"),
+                Assessment = CompletedStep("Reused completed Gatekeeper assessment.", "spctl")
+            };
+            result.ResumedAcceptedNotarization = true;
+            result.SkippedSteps = MergeAppleSkippedSteps(
+                result.SkippedSteps,
+                new[] { "archive", "export", "notarySubmission", "staple", "stapleValidation", "gatekeeperAssessment" });
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(prior.ErrorMessage))
+            return false;
+
         result.Notarization = NotarizeDirectAppleExport(
             plan,
             app,
-            Path.GetFullPath(prior.DirectArtifactPath),
+            artifactPath,
             prior.NotarizationSubmissionId,
             prior.DirectArtifactSha256,
             prior.Stapled == true);

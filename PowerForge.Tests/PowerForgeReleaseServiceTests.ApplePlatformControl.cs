@@ -590,7 +590,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         return new AppleNotarizationResult
                         {
                             ArtifactPath = request.ArtifactPath,
-                            ArtifactSha256 = request.ExpectedArtifactSha256!,
+                            ArtifactSha256 = AppleNotarizationService.ComputeArtifactSha256(request.ArtifactPath),
                             SubmissionPath = request.ArtifactPath,
                             SubmissionId = request.AcceptedSubmissionId,
                             Status = "Accepted",
@@ -633,7 +633,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Contains("notarySubmission", resumedTarget.SkippedSteps);
 
             // Simulate another target failing after this target completed. Aggregate failure
-            // must not turn a locally successful target into a notarization-resume candidate.
+            // must retain and reuse the fully verified direct target.
             var receiptPath = Path.Combine(root, "build", "powerforge", "apple", "release-receipt.json");
             var successfulReceipt = File.ReadAllText(receiptPath);
             Assert.Contains("\"success\": true", successfulReceipt, StringComparison.Ordinal);
@@ -644,7 +644,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var archiveCalls = 0;
             var exportCalls = 0;
             AppleNotarizationRequest? nextReleaseRequest = null;
-            var nextRelease = CreateAppleAutomationService(
+            var nextReleaseService = CreateAppleAutomationService(
                     _ => throw new InvalidOperationException("Direct distribution must not query App Store release state."),
                     archiveAppleApp: request =>
                     {
@@ -675,20 +675,42 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Status = "Accepted",
                             Submission = new ProcessRunResult(0, "accepted", string.Empty, "xcrun", TimeSpan.Zero, false)
                         };
-                    })
-                .Execute(
-                    spec,
-                    new PowerForgeReleaseRequest
-                    {
-                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                        AppleAction = PowerForgeAppleReleaseAction.Upload
                     });
+            var nextRelease = nextReleaseService.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Upload
+                });
 
             Assert.True(nextRelease.Success);
-            Assert.Equal(1, archiveCalls);
-            Assert.Equal(1, exportCalls);
-            Assert.NotNull(nextReleaseRequest);
-            Assert.Null(nextReleaseRequest!.AcceptedSubmissionId);
+            Assert.Equal(0, archiveCalls);
+            Assert.Equal(0, exportCalls);
+            Assert.Null(nextReleaseRequest);
+            var retainedTarget = Assert.Single(nextRelease.AppleReceipt!.Targets);
+            Assert.True(retainedTarget.ResumedAcceptedNotarization);
+            Assert.True(retainedTarget.Stapled);
+            Assert.True(retainedTarget.StapleValidated);
+            Assert.True(retainedTarget.GatekeeperAccepted);
+            Assert.Contains("gatekeeperAssessment", retainedTarget.SkippedSteps);
+
+            var retainedReceipt = File.ReadAllText(receiptPath)
+                .Replace("\"success\": true", "\"success\": false", StringComparison.Ordinal);
+            File.WriteAllText(receiptPath, retainedReceipt);
+            File.WriteAllText(Path.Combine(retainedTarget.DirectArtifactPath!, "changed-after-release.txt"), "changed");
+            var changedArtifact = nextReleaseService.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Upload
+                });
+            Assert.False(changedArtifact.Success);
+            Assert.Contains(
+                "changed after release",
+                Assert.Single(changedArtifact.AppleReceipt!.Targets).ErrorMessage,
+                StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

@@ -165,6 +165,8 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("gh issue create", workflow, StringComparison.Ordinal);
         Assert.Contains("gh issue comment", workflow, StringComparison.Ordinal);
         Assert.Contains("gh issue close", workflow, StringComparison.Ordinal);
+        Assert.Contains("GH_REPO: ${{ github.repository }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("source-commit: ${{ inputs.source_ref }}", workflow, StringComparison.Ordinal);
         Assert.Contains("Fail when Apple Doctor found a problem", workflow, StringComparison.Ordinal);
         Assert.Contains("diagnostics:", action, StringComparison.Ordinal);
         Assert.Contains("'Status', 'Doctor'", script, StringComparison.Ordinal);
@@ -197,6 +199,7 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("--initiated-by '${{ github.actor }}'", workflow, StringComparison.Ordinal);
         Assert.Contains("--approval-evidence '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'", workflow, StringComparison.Ordinal);
         Assert.Contains("action: Screenshots", workflow, StringComparison.Ordinal);
+        Assert.Contains("source-commit: ${{ inputs.source_ref }}", workflow, StringComparison.Ordinal);
         Assert.Contains("target: ${{ inputs.target }}", workflow, StringComparison.Ordinal);
         Assert.Contains("confirm: \"true\"", workflow, StringComparison.Ordinal);
         Assert.Contains("retention-days: 90", workflow, StringComparison.Ordinal);
@@ -235,6 +238,7 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("FileAttributes]::ReparsePoint", approval, StringComparison.Ordinal);
         Assert.Contains("path: ${{ steps.capture-path.outputs.path }}", approval, StringComparison.Ordinal);
         Assert.Contains("--allowed-root '${{ steps.capture-path.outputs.path }}'", approval, StringComparison.Ordinal);
+        Assert.Contains("source-commit: ${{ inputs.source_ref }}", approval, StringComparison.Ordinal);
     }
 
     [Fact]

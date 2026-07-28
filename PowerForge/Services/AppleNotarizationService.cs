@@ -205,7 +205,7 @@ public sealed class AppleNotarizationService
         }
     }
 
-    private static string ComputeArtifactSha256(string artifactPath)
+    internal static string ComputeArtifactSha256(string artifactPath)
     {
         using var sha256 = SHA256.Create();
         if (File.Exists(artifactPath))

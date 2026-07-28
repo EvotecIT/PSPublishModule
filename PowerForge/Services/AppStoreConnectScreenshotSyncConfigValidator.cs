@@ -15,11 +15,13 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
     /// <param name="spec">Screenshot sync configuration.</param>
     /// <param name="baseDirectory">Base directory used to resolve relative screenshot paths.</param>
     /// <param name="configPath">Optional configuration path used in the result.</param>
+    /// <param name="expectedSourceCommit">Exact release source commit expected by a required approval manifest.</param>
     /// <returns>Local validation result.</returns>
     public AppStoreConnectScreenshotSyncValidationResult Validate(
         AppStoreConnectScreenshotSyncSpec spec,
         string baseDirectory,
-        string? configPath = null)
+        string? configPath = null,
+        string? expectedSourceCommit = null)
     {
         if (spec is null)
             throw new ArgumentNullException(nameof(spec));
@@ -41,7 +43,7 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
             setResults.Add(ValidateSet(set, spec.Quality ?? new AppStoreConnectScreenshotQualitySpec(), baseDirectory));
 
         messages.AddRange(FindDuplicateDisplayTypes(spec.ScreenshotSets));
-        messages.AddRange(ValidateApprovalManifest(spec, baseDirectory, setResults));
+        messages.AddRange(ValidateApprovalManifest(spec, baseDirectory, setResults, expectedSourceCommit));
         var isValid = messages.Count == 0 && setResults.All(static set => set.IsValid);
 
         return new AppStoreConnectScreenshotSyncValidationResult
@@ -56,7 +58,8 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
     private static string[] ValidateApprovalManifest(
         AppStoreConnectScreenshotSyncSpec spec,
         string baseDirectory,
-        IReadOnlyCollection<AppStoreConnectScreenshotSetSyncValidationResult> sets)
+        IReadOnlyCollection<AppStoreConnectScreenshotSetSyncValidationResult> sets,
+        string? expectedSourceCommit)
     {
         var quality = spec.Quality ?? new AppStoreConnectScreenshotQualitySpec();
         if (!quality.RequireApprovalManifest)
@@ -100,6 +103,17 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
             !manifest.SourceCommit.Trim().All(Uri.IsHexDigit))
         {
             messages.Add("Screenshot approval manifest SourceCommit must be an exact 40-character Git commit SHA.");
+        }
+        var normalizedExpectedSourceCommit = expectedSourceCommit?.Trim() ?? string.Empty;
+        if (normalizedExpectedSourceCommit.Length != 40 ||
+            !normalizedExpectedSourceCommit.All(Uri.IsHexDigit))
+        {
+            messages.Add("ExpectedSourceCommit must be an exact 40-character Git commit SHA when an approval manifest is required.");
+        }
+        else if (!string.Equals(manifest.SourceCommit, normalizedExpectedSourceCommit, StringComparison.OrdinalIgnoreCase))
+        {
+            messages.Add(
+                $"Screenshot approval manifest source commit '{manifest.SourceCommit}' does not match release source commit '{normalizedExpectedSourceCommit}'.");
         }
         if (!string.IsNullOrWhiteSpace(spec.VersionString) &&
             !string.Equals(manifest.VersionString, spec.VersionString, StringComparison.OrdinalIgnoreCase))

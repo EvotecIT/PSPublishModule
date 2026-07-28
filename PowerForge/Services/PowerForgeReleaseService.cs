@@ -1517,6 +1517,12 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException("AppleApps DistributeTestFlight requires TestFlightBetaGroupIds or TestFlightBetaGroupNames.");
         if (options.SyncScreenshots && screenshotConfigPath is null && screenshotConfigPaths.Length == 0)
             throw new InvalidOperationException("AppleApps SyncScreenshots requires ScreenshotConfigPath or ScreenshotConfigPaths.");
+        var appleSourceCommit = request.AppleSourceCommit?.Trim() ?? string.Empty;
+        if (appleSourceCommit.Length > 0 &&
+            (appleSourceCommit.Length != 40 || !appleSourceCommit.All(Uri.IsHexDigit)))
+        {
+            throw new InvalidOperationException("Apple source commit must be an exact 40-character Git commit SHA.");
+        }
         if (options.SyncMetadata && metadataConfigPath is null && metadataConfigPaths.Length == 0)
             throw new InvalidOperationException("AppleApps SyncMetadata requires MetadataConfigPath or MetadataConfigPaths.");
         if (options.SyncAppInfo && appInfoConfigPath is null && appInfoConfigPaths.Length == 0)
@@ -1606,6 +1612,7 @@ internal sealed partial class PowerForgeReleaseService
             LockPath = lockPath,
             VersionSourcePath = versionSourcePath,
             RequestedMarketingVersion = request.AppleMarketingVersion?.Trim(),
+            SourceCommit = appleSourceCommit.Length == 0 ? null : appleSourceCommit,
             Archive = options.Archive,
             Upload = options.Upload,
             SyncScreenshots = options.SyncScreenshots,
@@ -1875,7 +1882,7 @@ internal sealed partial class PowerForgeReleaseService
                 }
                 screenshotsByApp[app] = matchingScreenshotSpec;
                 if (plan.SyncScreenshots && matchingScreenshotSpec is not null)
-                    ValidateAppleScreenshotPreflight(matchingScreenshotSpec.Value);
+                    ValidateAppleScreenshotPreflight(matchingScreenshotSpec.Value, plan.SourceCommit);
 
                 var matchingMetadataSpec = plan.SyncMetadata &&
                                            app.DistributionRoute == AppleDistributionRoute.AppStore
@@ -2047,6 +2054,7 @@ internal sealed partial class PowerForgeReleaseService
                     MetadataSpec = matchingMetadataSpec?.Spec,
                     AppInfoMetadataSpecs = appInfoMetadataSpecs,
                     ReplaceScreenshots = plan.ReplaceScreenshots,
+                    ExpectedSourceCommit = plan.SourceCommit,
                     CheckReadiness = plan.CheckReleaseReadiness,
                     ReadinessRequest = plan.CheckReleaseReadiness && matchingScreenshotSpec is not null
                         ? new AppStoreConnectReleaseReadinessRequest
@@ -2353,11 +2361,12 @@ internal sealed partial class PowerForgeReleaseService
     }
 
     private static void ValidateAppleScreenshotPreflight(
-        (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath) configured)
+        (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath) configured,
+        string? expectedSourceCommit)
     {
         var baseDirectory = Path.GetDirectoryName(configured.ConfigPath) ?? Directory.GetCurrentDirectory();
         var validation = new AppStoreConnectScreenshotSyncConfigValidator()
-            .Validate(configured.Spec, baseDirectory);
+            .Validate(configured.Spec, baseDirectory, expectedSourceCommit: expectedSourceCommit);
         if (validation.IsValid)
             return;
 

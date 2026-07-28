@@ -11,7 +11,7 @@ Validates an App Store Connect screenshot sync configuration against local files
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Test-AppStoreConnectScreenshotSyncConfig [-ConfigPath] <string> [-PassThru] [-Quiet] [<CommonParameters>]
+Test-AppStoreConnectScreenshotSyncConfig [-ConfigPath] <string> [-PassThru] [-Quiet] [-SourceCommit <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -64,6 +64,22 @@ Suppress validation warnings.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SourceCommit
+Exact source commit expected by the reviewed approval manifest.
+
+```yaml
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

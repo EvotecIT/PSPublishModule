@@ -49,6 +49,9 @@ public sealed class AppStoreConnectReleasePreparationRequest
 
     /// <summary>Base directory for resolving relative screenshot paths.</summary>
     public string BaseDirectory { get; set; } = Directory.GetCurrentDirectory();
+
+    /// <summary>Exact release source commit expected by a reviewed screenshot manifest.</summary>
+    public string? ExpectedSourceCommit { get; set; }
 }
 
 /// <summary>

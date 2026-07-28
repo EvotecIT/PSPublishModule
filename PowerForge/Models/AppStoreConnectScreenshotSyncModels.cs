@@ -216,6 +216,9 @@ public sealed class AppStoreConnectScreenshotSyncRequest
 
     /// <summary>Base directory for resolving relative screenshot paths.</summary>
     public string BaseDirectory { get; set; } = Directory.GetCurrentDirectory();
+
+    /// <summary>Exact source commit whose reviewed screenshots may be uploaded.</summary>
+    public string? ExpectedSourceCommit { get; set; }
 }
 
 /// <summary>

@@ -373,6 +373,9 @@ The command writes `Quality.ApprovalManifestPath` when configured, or a sibling
 then binds only the selected files. Approval manifest schema 2 also binds the
 review to the exact App Store Connect app id and platform, so identical images
 cannot be replayed to another product or store destination.
+Every upload also supplies the expected release source commit and requires it to
+match the manifest. Direct `Sync-AppStoreConnectScreenshots` recovery runs must pass
+that exact commit through `-SourceCommit` when approval manifests are required.
 
 ## Apple target modeling
 

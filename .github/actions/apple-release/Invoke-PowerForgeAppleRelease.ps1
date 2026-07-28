@@ -79,6 +79,12 @@ if ($confirm) { $arguments += '--confirm-apple-action' }
 if (-not [string]::IsNullOrWhiteSpace($env:INPUT_MARKETING_VERSION)) {
     $arguments += @('--apple-version', $env:INPUT_MARKETING_VERSION)
 }
+if (-not [string]::IsNullOrWhiteSpace($env:INPUT_SOURCE_COMMIT)) {
+    if ($env:INPUT_SOURCE_COMMIT -notmatch '^[0-9A-Fa-f]{40}$') {
+        throw 'source-commit must be an exact 40-character commit SHA.'
+    }
+    $arguments += @('--apple-source-commit', $env:INPUT_SOURCE_COMMIT)
+}
 if (-not [string]::IsNullOrWhiteSpace($env:INPUT_TARGET)) {
     $arguments += @('--target', $env:INPUT_TARGET)
 }

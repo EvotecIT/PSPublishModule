@@ -164,6 +164,7 @@ jobs:
         with:
           action: Advance
           config-path: ${{ github.workspace }}/source/${{ inputs.config_path }}
+          source-commit: ${{ inputs.source_ref }}
           tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
           tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           plan-only: "true"
@@ -177,6 +178,7 @@ jobs:
         with:
           action: Advance
           config-path: ${{ github.workspace }}/source/${{ inputs.config_path }}
+          source-commit: ${{ inputs.source_ref }}
           tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
           tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           plan-only: "false"

@@ -39,6 +39,11 @@ public sealed class SyncAppStoreConnectScreenshotsCommand : AsyncPSCmdlet
     [Parameter]
     public SwitchParameter ReplaceExisting { get; set; }
 
+    /// <summary>Exact source commit expected by the reviewed approval manifest.</summary>
+    [Parameter]
+    [ValidatePattern("^[0-9A-Fa-f]{40}$")]
+    public string? SourceCommit { get; set; }
+
     /// <summary>Syncs local screenshot folders to App Store Connect screenshot sets.</summary>
     protected override async Task ProcessRecordAsync()
     {
@@ -64,7 +69,8 @@ public sealed class SyncAppStoreConnectScreenshotsCommand : AsyncPSCmdlet
         {
             Spec = spec,
             ReplaceExisting = ReplaceExisting.IsPresent,
-            BaseDirectory = Path.GetDirectoryName(resolvedConfigPath) ?? SessionState.Path.CurrentFileSystemLocation.Path
+            BaseDirectory = Path.GetDirectoryName(resolvedConfigPath) ?? SessionState.Path.CurrentFileSystemLocation.Path,
+            ExpectedSourceCommit = SourceCommit
         }, CancelToken);
 
         WriteObject(result);

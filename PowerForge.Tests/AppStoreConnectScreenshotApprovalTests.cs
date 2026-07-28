@@ -5,6 +5,8 @@ namespace PowerForge.Tests;
 
 public sealed class AppStoreConnectScreenshotApprovalTests
 {
+    private const string ApprovedSourceCommit = "0123456789abcdef0123456789abcdef01234567";
+
     [Fact]
     public void Create_BindsReviewedCaptureFilesWithoutManualHashing()
     {
@@ -23,7 +25,7 @@ public sealed class AppStoreConnectScreenshotApprovalTests
                     BaseDirectory = root.FullName,
                     AllowedRoot = screenshotFolder.FullName,
                     VersionString = "1.5.0",
-                    SourceCommit = "0123456789abcdef0123456789abcdef01234567",
+                    SourceCommit = ApprovedSourceCommit,
                     ApprovedBy = "release-owner",
                     InitiatedBy = "workflow-initiator",
                     ApprovalEvidence = "https://github.example/actions/runs/123",
@@ -71,7 +73,7 @@ public sealed class AppStoreConnectScreenshotApprovalTests
                         BaseDirectory = root.FullName,
                         AllowedRoot = reviewedFolder.FullName,
                         VersionString = "1.5.0",
-                        SourceCommit = "0123456789abcdef0123456789abcdef01234567",
+                        SourceCommit = ApprovedSourceCommit,
                         ApprovedBy = "release-owner"
                     }));
 
@@ -99,7 +101,7 @@ public sealed class AppStoreConnectScreenshotApprovalTests
                 AppId = "6778025328",
                 Platform = ApplePlatform.iOS,
                 VersionString = "1.5.0",
-                SourceCommit = "0123456789abcdef0123456789abcdef01234567",
+                SourceCommit = ApprovedSourceCommit,
                 Locale = "en-US",
                 Runtime = "iOS 26.0",
                 Device = "iPhone 17 Pro Max",
@@ -121,23 +123,46 @@ public sealed class AppStoreConnectScreenshotApprovalTests
             }));
             var spec = CreateSpec();
 
-            var approved = new AppStoreConnectScreenshotSyncConfigValidator().Validate(spec, root.FullName);
+            var missingExpectedSource = new AppStoreConnectScreenshotSyncConfigValidator().Validate(spec, root.FullName);
+            Assert.False(missingExpectedSource.IsValid);
+            Assert.Contains(missingExpectedSource.Messages, message => message.Contains("ExpectedSourceCommit", StringComparison.Ordinal));
+
+            var wrongSource = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
+                spec,
+                root.FullName,
+                expectedSourceCommit: "abcdef0123456789abcdef0123456789abcdef01");
+            Assert.False(wrongSource.IsValid);
+            Assert.Contains(wrongSource.Messages, message => message.Contains("does not match release source commit", StringComparison.OrdinalIgnoreCase));
+
+            var approved = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
+                spec,
+                root.FullName,
+                expectedSourceCommit: ApprovedSourceCommit);
             Assert.True(approved.IsValid);
 
             spec.AppId = "another-app";
-            var wrongApp = new AppStoreConnectScreenshotSyncConfigValidator().Validate(spec, root.FullName);
+            var wrongApp = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
+                spec,
+                root.FullName,
+                expectedSourceCommit: ApprovedSourceCommit);
             Assert.False(wrongApp.IsValid);
             Assert.Contains(wrongApp.Messages, message => message.Contains("app id", StringComparison.OrdinalIgnoreCase));
             spec.AppId = "6778025328";
 
             spec.Platform = ApplePlatform.macOS;
-            var wrongPlatform = new AppStoreConnectScreenshotSyncConfigValidator().Validate(spec, root.FullName);
+            var wrongPlatform = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
+                spec,
+                root.FullName,
+                expectedSourceCommit: ApprovedSourceCommit);
             Assert.False(wrongPlatform.IsValid);
             Assert.Contains(wrongPlatform.Messages, message => message.Contains("platform", StringComparison.OrdinalIgnoreCase));
             spec.Platform = ApplePlatform.iOS;
 
             File.AppendAllText(screenshotPath, "changed-after-approval");
-            var changed = new AppStoreConnectScreenshotSyncConfigValidator().Validate(spec, root.FullName);
+            var changed = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
+                spec,
+                root.FullName,
+                expectedSourceCommit: ApprovedSourceCommit);
             Assert.False(changed.IsValid);
             Assert.Contains(changed.Messages, message => message.Contains("changed after approval", StringComparison.OrdinalIgnoreCase));
         }

@@ -6,7 +6,7 @@ internal static partial class Program
     private const string AppleReleaseUsage =
         "Usage: powerforge apple-release <Status|Doctor|Version|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|Advance|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup> " +
         "[--config <release.json>] [--plan] [--validate] [--confirm-apple-action] " +
-        "[--apple-version <marketing-version>] " +
+        "[--apple-version <marketing-version>] [--apple-source-commit <sha>] " +
         "[--apple-resume|--no-apple-resume] [--apple-wait|--no-apple-wait] " +
         "[--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>] " +
         "[--target <Name[,Name...]>] [--summary] [--output json]";
@@ -86,6 +86,7 @@ internal static partial class Program
             "--apple-timeout-seconds",
             "--apple-poll-seconds",
             "--apple-version",
+            "--apple-source-commit",
             "--output"
         };
 

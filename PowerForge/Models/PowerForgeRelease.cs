@@ -222,6 +222,8 @@ internal sealed class PowerForgeReleaseRequest
 
     public string? AppleMarketingVersion { get; set; }
 
+    public string? AppleSourceCommit { get; set; }
+
     public bool AppleActionConfirmed { get; set; }
 
     public bool? AppleResume { get; set; }
@@ -467,6 +469,8 @@ internal sealed class PowerForgeAppleReleasePlan
     public string? VersionSourcePath { get; set; }
 
     public string? RequestedMarketingVersion { get; set; }
+
+    public string? SourceCommit { get; set; }
 
     public bool Archive { get; set; }
 

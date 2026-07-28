@@ -243,6 +243,7 @@ jobs:
         with:
           action: Screenshots
           config-path: ${{ github.workspace }}/source/${{ inputs.release_config_path }}
+          source-commit: ${{ inputs.source_ref }}
           tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           target: ${{ inputs.target }}
           plan-only: "false"

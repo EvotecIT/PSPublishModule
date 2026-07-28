@@ -28,6 +28,11 @@ public sealed class TestAppStoreConnectScreenshotSyncConfigCommand : PSCmdlet
     [Parameter]
     public SwitchParameter Quiet { get; set; }
 
+    /// <summary>Exact source commit expected by the reviewed approval manifest.</summary>
+    [Parameter]
+    [ValidatePattern("^[0-9A-Fa-f]{40}$")]
+    public string? SourceCommit { get; set; }
+
     /// <summary>Validates the screenshot sync configuration.</summary>
     protected override void ProcessRecord()
     {
@@ -42,7 +47,8 @@ public sealed class TestAppStoreConnectScreenshotSyncConfigCommand : PSCmdlet
         var result = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
             spec,
             Path.GetDirectoryName(resolvedConfigPath) ?? SessionState.Path.CurrentFileSystemLocation.Path,
-            resolvedConfigPath);
+            resolvedConfigPath,
+            SourceCommit);
 
         if (!Quiet.IsPresent)
         {

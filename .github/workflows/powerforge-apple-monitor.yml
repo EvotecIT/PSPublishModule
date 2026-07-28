@@ -103,6 +103,7 @@ jobs:
         with:
           action: Doctor
           config-path: ${{ github.workspace }}/source/${{ inputs.config_path }}
+          source-commit: ${{ inputs.source_ref }}
           tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
           tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           plan-only: "false"
@@ -125,6 +126,7 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           ISSUE_TITLE: ${{ inputs.issue_title }}
           DOCTOR_OUTCOME: ${{ steps.doctor.outcome }}
           STRUCTURED_DIAGNOSTICS: ${{ steps.doctor.outputs.diagnostics }}
