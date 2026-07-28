@@ -1,3 +1,7 @@
+using System.Collections;
+using System.Management.Automation.Language;
+using YamlDotNet.Serialization;
+
 namespace PowerForge.Tests;
 
 public sealed class AppleReleaseWorkflowTests
@@ -176,6 +180,13 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("gh issue create", workflow, StringComparison.Ordinal);
         Assert.Contains("gh issue comment", workflow, StringComparison.Ordinal);
         Assert.Contains("gh issue close", workflow, StringComparison.Ordinal);
+        Assert.Contains("gh api --paginate --slurp", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("gh issue list --state open --limit 100", workflow, StringComparison.Ordinal);
+        Assert.Contains("Unable to enumerate all open repository issues", workflow, StringComparison.Ordinal);
+        Assert.Contains("Unable to close recovered Apple incident", workflow, StringComparison.Ordinal);
+        Assert.Contains("Unable to create the proactive Apple incident", workflow, StringComparison.Ordinal);
+        Assert.Contains("Unable to update proactive Apple incident", workflow, StringComparison.Ordinal);
+        Assert.Contains("Unable to close duplicate Apple incident", workflow, StringComparison.Ordinal);
         Assert.Contains("GH_REPO: ${{ github.repository }}", workflow, StringComparison.Ordinal);
         Assert.Contains("source-commit: ${{ inputs.source_ref }}", workflow, StringComparison.Ordinal);
         Assert.Contains("Fail when Apple Doctor found a problem", workflow, StringComparison.Ordinal);
@@ -262,6 +273,9 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("path: ${{ steps.capture-path.outputs.review_path }}", workflow, StringComparison.Ordinal);
         Assert.Contains("Materialize only reviewed PNG files", workflow, StringComparison.Ordinal);
         Assert.Contains("Reviewed capture artifacts must contain only PNG files", workflow, StringComparison.Ordinal);
+        Assert.Contains("Screenshot destination must not contain symbolic links or reparse points", workflow, StringComparison.Ordinal);
+        Assert.Contains("Remove-Item -Force", workflow, StringComparison.Ordinal);
+        Assert.Contains("Materialized screenshot set does not exactly match the reviewed PNG set", workflow, StringComparison.Ordinal);
         Assert.Contains("schemaVersion = 2", workflow, StringComparison.Ordinal);
         Assert.Contains("xcodeVersion = $xcodeVersion", workflow, StringComparison.Ordinal);
         Assert.Contains("'--runtime', $captureRuntime", workflow, StringComparison.Ordinal);
@@ -338,6 +352,9 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("Restore the exact reviewed capture artifact outside source", approval, StringComparison.Ordinal);
         Assert.Contains("Materialize only reviewed PNG files", approval, StringComparison.Ordinal);
         Assert.Contains("Reviewed capture artifacts must contain only PNG files", approval, StringComparison.Ordinal);
+        Assert.Contains("Screenshot destination must not contain symbolic links or reparse points", approval, StringComparison.Ordinal);
+        Assert.Contains("Remove-Item -Force", approval, StringComparison.Ordinal);
+        Assert.Contains("Materialized screenshot set does not exactly match the reviewed PNG set", approval, StringComparison.Ordinal);
         Assert.Contains("powerforge-apple-screenshot-provenance.json", approval, StringComparison.Ordinal);
         Assert.Contains("'--xcode-version', $xcodeVersion", approval, StringComparison.Ordinal);
         Assert.Contains("'--runtime', $captureRuntime", approval, StringComparison.Ordinal);
@@ -348,6 +365,49 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("Screenshot approval manifest output escapes source", approval, StringComparison.Ordinal);
         Assert.Contains("'--source-commit', $env:SOURCE_REF", approval, StringComparison.Ordinal);
         Assert.Contains("source-commit: ${{ needs.resolve-source.outputs.source_ref }}", approval, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AppleWorkflowRunScriptsDoNotInlineCallerControlledInputs()
+    {
+        var root = FindRepoRoot();
+        foreach (var workflowName in new[]
+                 {
+                     "powerforge-apple-screenshots.yml",
+                     "powerforge-apple-screenshot-approve.yml",
+                     "powerforge-apple-monitor.yml",
+                     "powerforge-apple-advance.yml"
+                 })
+        {
+            var workflow = Read(root, ".github", "workflows", workflowName);
+            Assert.DoesNotContain("if ('${{ inputs.", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("-ine '${{ inputs.", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("Source: ${{ inputs.", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("actions/runs/${{ inputs.", workflow, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void AppleWorkflowYamlAndEmbeddedPowerShellParse()
+    {
+        var root = FindRepoRoot();
+        foreach (var workflowName in new[]
+                 {
+                     "powerforge-apple-screenshots.yml",
+                     "powerforge-apple-screenshot-approve.yml",
+                     "powerforge-apple-monitor.yml",
+                     "powerforge-apple-advance.yml"
+                 })
+        {
+            var workflow = Read(root, ".github", "workflows", workflowName);
+            var document = new DeserializerBuilder().Build().Deserialize<object>(workflow);
+            Assert.NotNull(document);
+            foreach (var script in EnumeratePowerShellRunScripts(document))
+            {
+                Parser.ParseInput(script, out _, out var errors);
+                Assert.True(errors.Length == 0, $"{workflowName}: {string.Join("; ", errors.Select(error => error.Message))}");
+            }
+        }
     }
 
     [Fact]
@@ -371,6 +431,29 @@ public sealed class AppleReleaseWorkflowTests
 
     private static int Count(string value, string search)
         => value.Split(search, StringSplitOptions.None).Length - 1;
+
+    private static IEnumerable<string> EnumeratePowerShellRunScripts(object? node)
+    {
+        if (node is IDictionary<object, object> mapping)
+        {
+            if (mapping.TryGetValue("run", out var run) && run is string script &&
+                mapping.TryGetValue("shell", out var shell) &&
+                shell is string shellName && shellName.Equals("pwsh", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return script;
+            }
+
+            foreach (var value in mapping.Values)
+            foreach (var child in EnumeratePowerShellRunScripts(value))
+                yield return child;
+        }
+        else if (node is IEnumerable sequence and not string)
+        {
+            foreach (var value in sequence)
+            foreach (var child in EnumeratePowerShellRunScripts(value))
+                yield return child;
+        }
+    }
 
     private static string FindRepoRoot()
     {

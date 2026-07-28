@@ -350,6 +350,8 @@ public sealed class AppStoreConnectGovernanceFinding
 public sealed class AppStoreConnectGovernancePlan
 {
     public string AppId { get; set; } = string.Empty;
+    /// <summary>SHA-256 of the exact desired governance declaration represented by this plan.</summary>
+    public string SpecSha256 { get; set; } = string.Empty;
     public DateTimeOffset CheckedAtUtc { get; set; }
     public AppStoreConnectGovernanceChange[] Changes { get; set; } = Array.Empty<AppStoreConnectGovernanceChange>();
     public AppStoreConnectGovernanceFinding[] Findings { get; set; } = Array.Empty<AppStoreConnectGovernanceFinding>();

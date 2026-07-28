@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+
 namespace PowerForge;
 
 /// <summary>Plans and converges explicit App Store commercial and compliance state.</summary>
@@ -22,6 +25,7 @@ public sealed partial class AppStoreConnectGovernanceService
         var plan = new AppStoreConnectGovernancePlan
         {
             AppId = spec.AppId?.Trim() ?? string.Empty,
+            SpecSha256 = ComputeSpecSha256(spec),
             CheckedAtUtc = DateTimeOffset.UtcNow,
             Findings = findings.ToArray()
         };
@@ -163,6 +167,8 @@ public sealed partial class AppStoreConnectGovernanceService
         IReadOnlyList<AppStoreConnectGovernanceChange> remainingReviewedChanges)
     {
         if (!string.Equals(current.AppId, reviewed.AppId, StringComparison.Ordinal) ||
+            string.IsNullOrWhiteSpace(current.SpecSha256) ||
+            !string.Equals(current.SpecSha256, reviewed.SpecSha256, StringComparison.OrdinalIgnoreCase) ||
             current.Changes.Length != remainingReviewedChanges.Count ||
             current.Findings.Length != reviewed.Findings.Length)
         {
@@ -199,6 +205,24 @@ public sealed partial class AppStoreConnectGovernanceService
         }
 
         return true;
+    }
+
+    internal static string ComputeSpecSha256(AppStoreConnectGovernanceSpec spec)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+        var canonical = new
+        {
+            spec.SchemaVersion,
+            spec.AppId,
+            spec.Pricing,
+            spec.Availability,
+            spec.Accessibility,
+            spec.EncryptionDeclarations,
+            spec.SubscriptionGroups
+        };
+        var payload = JsonSerializer.SerializeToUtf8Bytes(canonical);
+        using var sha256 = SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(payload)).Replace("-", string.Empty);
     }
 
     private static string ChangeFingerprint(AppStoreConnectGovernanceChange change)

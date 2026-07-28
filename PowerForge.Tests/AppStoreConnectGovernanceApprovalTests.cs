@@ -43,6 +43,11 @@ public sealed partial class AppStoreConnectClientTests
                 ReviewedPlan = new AppStoreConnectGovernancePlan
                 {
                     AppId = "app-1",
+                    SpecSha256 = AppStoreConnectGovernanceService.ComputeSpecSha256(new AppStoreConnectGovernanceSpec
+                    {
+                        AppId = "app-1",
+                        Accessibility = [new AppStoreConnectAccessibilityDeclarationSpec { DeviceFamily = "IPHONE", SupportsVoiceover = true }]
+                    }),
                     Changes =
                     [
                         new AppStoreConnectGovernanceChange
@@ -97,6 +102,7 @@ public sealed partial class AppStoreConnectClientTests
                 ReviewedPlan = new AppStoreConnectGovernancePlan
                 {
                     AppId = "app-1",
+                    SpecSha256 = AppStoreConnectGovernanceService.ComputeSpecSha256(spec),
                     Changes =
                     [
                         new AppStoreConnectGovernanceChange
@@ -168,6 +174,11 @@ public sealed partial class AppStoreConnectClientTests
                 ReviewedPlan = new AppStoreConnectGovernancePlan
                 {
                     AppId = "app-1",
+                    SpecSha256 = AppStoreConnectGovernanceService.ComputeSpecSha256(new AppStoreConnectGovernanceSpec
+                    {
+                        AppId = "app-1",
+                        Accessibility = [new AppStoreConnectAccessibilityDeclarationSpec { DeviceFamily = "IPHONE", SupportsVoiceover = true }]
+                    }),
                     Changes =
                     [
                         new AppStoreConnectGovernanceChange
@@ -191,6 +202,51 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Single(result.AppliedChanges);
         Assert.True(result.FinalPlan.IsConverged);
         Assert.Equal(new[] { HttpMethod.Get, HttpMethod.Post, HttpMethod.Get }, handler.Methods);
+    }
+
+    [Fact]
+    public async Task GovernanceApply_RejectsReviewedPlanWhenDesiredValuesChanged()
+    {
+        var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var reviewedSpec = new AppStoreConnectGovernanceSpec
+        {
+            AppId = "app-1",
+            Accessibility = [new AppStoreConnectAccessibilityDeclarationSpec { DeviceFamily = "IPHONE", SupportsVoiceover = true }]
+        };
+
+        var result = await new AppStoreConnectGovernanceService(client).ApplyAsync(
+            new AppStoreConnectGovernanceApplyRequest
+            {
+                ConfirmApply = true,
+                Spec = new AppStoreConnectGovernanceSpec
+                {
+                    AppId = "app-1",
+                    Accessibility = [new AppStoreConnectAccessibilityDeclarationSpec { DeviceFamily = "IPHONE", SupportsVoiceover = false }]
+                },
+                ReviewedPlan = new AppStoreConnectGovernancePlan
+                {
+                    AppId = "app-1",
+                    SpecSha256 = AppStoreConnectGovernanceService.ComputeSpecSha256(reviewedSpec),
+                    Changes =
+                    [
+                        new AppStoreConnectGovernanceChange
+                        {
+                            Section = "Accessibility",
+                            ResourceType = "AccessibilityDeclaration",
+                            Key = "IPHONE",
+                            Action = AppStoreConnectGovernanceChangeAction.Create,
+                            Summary = "Create reviewed accessibility facts for 'IPHONE'."
+                        }
+                    ]
+                }
+            });
+
+        Assert.False(result.Success);
+        Assert.Empty(result.AppliedChanges);
+        Assert.Contains("no longer matches the remaining reviewed governance plan", Assert.Single(result.NextActions), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(HttpMethod.Get, Assert.Single(handler.Methods));
     }
 
     [Fact]

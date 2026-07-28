@@ -109,6 +109,7 @@ jobs:
         shell: pwsh
         env:
           SOURCE_BOOTSTRAP_SCRIPT: ${{ inputs.source_bootstrap_script }}
+          EXPECTED_POWERFORGE_REF: ${{ inputs.powerforge_ref }}
         run: |
           $ErrorActionPreference = 'Stop'
           $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source').TrimEnd([IO.Path]::DirectorySeparatorChar)
@@ -153,7 +154,7 @@ jobs:
 
           $sharedRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/powerforge-shared')
           $shared = (& git -C $sharedRoot rev-parse HEAD).Trim()
-          if ($LASTEXITCODE -ne 0 -or $shared -ine '${{ inputs.powerforge_ref }}') {
+          if ($LASTEXITCODE -ne 0 -or $shared -ine $env:EXPECTED_POWERFORGE_REF) {
             throw "source_bootstrap_script changed the pinned shared checkout identity: $shared"
           }
           $sharedStatus = @(& git -C $sharedRoot status --porcelain=v1 --untracked-files=all)

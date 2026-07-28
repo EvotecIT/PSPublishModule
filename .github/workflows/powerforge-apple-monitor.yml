@@ -132,9 +132,15 @@ jobs:
           STRUCTURED_DIAGNOSTICS: ${{ steps.doctor.outputs.diagnostics }}
           RECEIPT_PATH: ${{ steps.doctor.outputs.receipt-path }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SOURCE_REF: ${{ inputs.source_ref }}
         run: |
-          $open = @(gh issue list --state open --limit 100 --json number,title | ConvertFrom-Json)
-          $issue = $open | Where-Object { $_.title -eq $env:ISSUE_TITLE } | Select-Object -First 1
+          $ErrorActionPreference = 'Stop'
+          $pagesJson = gh api --paginate --slurp "repos/$env:GH_REPO/issues?state=open&per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to enumerate all open repository issues.' }
+          $pages = @($pagesJson | ConvertFrom-Json -Depth 20)
+          $open = @($pages | ForEach-Object { @($_) } | Where-Object { $null -eq $_.pull_request })
+          $issues = @($open | Where-Object { $_.title -eq $env:ISSUE_TITLE } | Sort-Object number)
+          $issue = $issues | Select-Object -First 1
           $structured = if ([string]::IsNullOrWhiteSpace($env:STRUCTURED_DIAGNOSTICS)) {
             @()
           } else {
@@ -145,8 +151,9 @@ jobs:
           $healthyOutput = (!$unhealthy).ToString().ToLowerInvariant()
           "healthy=$healthyOutput" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           if (-not $unhealthy) {
-            if ($issue) {
-              gh issue close $issue.number --comment "Apple Doctor recovered on $env:RUN_URL."
+            foreach ($openIssue in $issues) {
+              gh issue close $openIssue.number --comment "Apple Doctor recovered on $env:RUN_URL."
+              if ($LASTEXITCODE -ne 0) { throw "Unable to close recovered Apple incident #$($openIssue.number)." }
             }
             exit 0
           }
@@ -161,15 +168,21 @@ jobs:
             'PowerForge Apple Doctor detected a release, upload, signing, metadata, screenshot, review, or observability problem before relying on Apple email.',
             '',
             "Run: $env:RUN_URL",
-            "Source: ${{ inputs.source_ref }}",
+            "Source: $env:SOURCE_REF",
             '',
             '## Diagnostics',
             ($diagnostics.Count -gt 0 ? $diagnostics : '- The action failed before a structured receipt was available; inspect the linked run.')
           ) -join "`n"
           if (-not $issue) {
             gh issue create --title $env:ISSUE_TITLE --body $body
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to create the proactive Apple incident.' }
           } else {
             gh issue comment $issue.number --body $body
+            if ($LASTEXITCODE -ne 0) { throw "Unable to update proactive Apple incident #$($issue.number)." }
+            foreach ($duplicate in @($issues | Select-Object -Skip 1)) {
+              gh issue close $duplicate.number --comment "Consolidated into #$($issue.number) by the Apple release monitor."
+              if ($LASTEXITCODE -ne 0) { throw "Unable to close duplicate Apple incident #$($duplicate.number)." }
+            }
           }
 
       - name: Fail when Apple Doctor found a problem
