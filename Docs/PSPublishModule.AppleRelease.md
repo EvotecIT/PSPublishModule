@@ -261,7 +261,8 @@ The reusable workflow boundary mirrors the human approval boundary:
 - `powerforge-apple-advance.yml` runs a plan and confirmed resumable `Advance` from
   an exact merged commit. It stops before every review and public-release action.
 - `powerforge-apple-approval.yml` accepts only `SubmitTestFlightReview`,
-  `SubmitAppReview`, or `Release` and runs inside a protected GitHub environment.
+  `SubmitAppReview`, or `Release`, verifies an optional approver allow-list, and runs
+  inside a protected GitHub environment when the repository plan supports reviewers.
 - `powerforge-apple-monitor.yml` runs scheduled `Doctor`, retains the compact receipt,
   and maintains one GitHub incident until errors and warnings are cleared.
 - `powerforge-apple-screenshots.yml` captures from an exact source commit, retains the

@@ -101,6 +101,8 @@ public sealed class AppleReleaseWorkflowTests
         Assert.DoesNotContain("SubmitAppReview", advance, StringComparison.Ordinal);
         Assert.DoesNotContain("action: Release", advance, StringComparison.Ordinal);
         Assert.Contains("environment: ${{ inputs.environment_name }}", approval, StringComparison.Ordinal);
+        Assert.Contains("allowed_approvers_json", approval, StringComparison.Ordinal);
+        Assert.Contains("${{ github.actor }}", approval, StringComparison.Ordinal);
         Assert.Contains("@('SubmitTestFlightReview', 'SubmitAppReview', 'Release')", approval, StringComparison.Ordinal);
         Assert.Contains("plan-only: \"true\"", approval, StringComparison.Ordinal);
         Assert.Contains("confirm: \"true\"", approval, StringComparison.Ordinal);
