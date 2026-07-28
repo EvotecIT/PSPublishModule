@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
@@ -17,7 +18,8 @@ internal static class SpectreProgressDisplay
     internal static void Run(
         IAnsiConsole console,
         ProgressColumn[] columns,
-        Action<ProgressContext> action)
+        Action<ProgressContext> action,
+        Action<IReadOnlyList<ProgressTask>>? taskObserver = null)
     {
         if (console is null) throw new ArgumentNullException(nameof(console));
         if (columns is null) throw new ArgumentNullException(nameof(columns));
@@ -29,9 +31,10 @@ internal static class SpectreProgressDisplay
             .AutoClear(true)
             .HideCompleted(false)
             .Columns(columns)
-            .UseRenderHook((renderable, _) =>
+            .UseRenderHook((renderable, tasks) =>
             {
                 finalFrame = renderable;
+                taskObserver?.Invoke(tasks);
                 return renderable;
             })
             .Start(action);

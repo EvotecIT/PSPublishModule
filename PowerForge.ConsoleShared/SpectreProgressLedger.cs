@@ -7,23 +7,17 @@ using Spectre.Console;
 namespace PowerForge.ConsoleShared;
 
 /// <summary>
-/// Keeps detailed work visible without allowing a Spectre live region to grow with
-/// every planned item. The complete history is retained for a durable post-run ledger.
+/// Keeps every planned work item visible in the Spectre live region and retains the
+/// complete history for a durable post-run ledger.
 /// </summary>
-internal sealed class SpectreBoundedProgressLedger
+internal sealed class SpectreProgressLedger
 {
-    private const int RecentCompletedLimit = 3;
-    private const int ActiveLimit = 2;
-    private const int UpcomingLimit = 2;
-    private const int PinnedFailureLimit = 3;
-
     private readonly ProgressContext _context;
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ProgressTask> _visibleTasks = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _sync = new();
-    private long _terminalSequence;
 
-    internal SpectreBoundedProgressLedger(ProgressContext context)
+    internal SpectreProgressLedger(ProgressContext context)
         => _context = context ?? throw new ArgumentNullException(nameof(context));
 
     internal void Plan(IEnumerable<SpectreProgressLedgerItem> items)
@@ -47,7 +41,7 @@ internal sealed class SpectreBoundedProgressLedger
                 _entries[item.Key] = new Entry(item);
             }
 
-            ReconcileVisibleTasks();
+            RefreshVisibleTasks();
         }
     }
 
@@ -71,36 +65,8 @@ internal sealed class SpectreBoundedProgressLedger
                 entry.Item = item;
             }
 
-            entry.State = state;
-            entry.Detail = detail;
-            entry.ProgressFraction = ResolveProgressFraction(item, state);
-
-            var task = EnsureVisibleTask(entry);
-            task.Description = BuildLiveLabel(entry);
-
-            if (state == SpectreProgressLedgerState.Started)
-            {
-                if (!task.IsStarted)
-                    task.StartTask();
-
-                task.IsIndeterminate = item.ProgressMaximum <= 0;
-                if (!task.IsIndeterminate)
-                    task.Value = task.MaxValue * entry.ProgressFraction;
-            }
-            else if (IsTerminal(state))
-            {
-                if (!task.IsStarted)
-                    task.StartTask();
-
-                task.IsIndeterminate = false;
-                task.Value = task.MaxValue;
-                task.StopTask();
-
-                entry.Duration = item.Duration ?? task.ElapsedTime ?? TimeSpan.Zero;
-                entry.TerminalSequence = ++_terminalSequence;
-            }
-
-            ReconcileVisibleTasks();
+            ApplyUpdate(entry, state, detail, moveStartedTaskToEnd: true);
+            RefreshVisibleTasks();
             _context.Refresh();
         }
     }
@@ -152,11 +118,15 @@ internal sealed class SpectreBoundedProgressLedger
                 var state = entry.State == SpectreProgressLedgerState.Started && !success
                     ? SpectreProgressLedgerState.Failed
                     : SpectreProgressLedgerState.Skipped;
-                Update(
-                    entry.Item,
+                ApplyUpdate(
+                    entry,
                     state,
-                    success ? "not required" : "skipped after failure");
+                    success ? "not required" : "skipped after failure",
+                    moveStartedTaskToEnd: false);
             }
+
+            RefreshVisibleTasks();
+            _context.Refresh();
         }
     }
 
@@ -252,52 +222,58 @@ internal sealed class SpectreBoundedProgressLedger
         return task;
     }
 
-    private void ReconcileVisibleTasks()
+    private void ApplyUpdate(
+        Entry entry,
+        SpectreProgressLedgerState state,
+        string? detail,
+        bool moveStartedTaskToEnd)
     {
-        var desired = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        entry.State = state;
+        entry.Detail = detail;
+        entry.ProgressFraction = ResolveProgressFraction(entry.Item, state);
 
+        if (moveStartedTaskToEnd &&
+            state == SpectreProgressLedgerState.Started &&
+            _visibleTasks.TryGetValue(entry.Item.Key, out var plannedTask) &&
+            !plannedTask.IsStarted)
+        {
+            // Spectre crops overflowing live displays from the top. Re-adding the
+            // newly started task keeps the current work at the visible bottom while
+            // the full plan remains registered and is written durably after the run.
+            _context.RemoveTask(plannedTask);
+            _visibleTasks.Remove(entry.Item.Key);
+        }
+
+        var task = EnsureVisibleTask(entry);
+        task.Description = BuildLiveLabel(entry);
+
+        if (state == SpectreProgressLedgerState.Started)
+        {
+            if (!task.IsStarted)
+                task.StartTask();
+
+            task.IsIndeterminate = entry.Item.ProgressMaximum <= 0;
+            if (!task.IsIndeterminate)
+                task.Value = task.MaxValue * entry.ProgressFraction;
+        }
+        else if (IsTerminal(state))
+        {
+            if (!task.IsStarted)
+                task.StartTask();
+
+            task.IsIndeterminate = false;
+            task.Value = task.MaxValue;
+            task.StopTask();
+            entry.Duration = entry.Item.Duration ?? task.ElapsedTime ?? TimeSpan.Zero;
+        }
+    }
+
+    private void RefreshVisibleTasks()
+    {
         foreach (var entry in _entries.Values
-                     .Where(entry => entry.State == SpectreProgressLedgerState.Started)
                      .OrderBy(entry => entry.Item.GroupOrder)
                      .ThenBy(entry => entry.Item.Position <= 0 ? int.MaxValue : entry.Item.Position)
-                     .Take(ActiveLimit))
-        {
-            desired.Add(entry.Item.Key);
-        }
-
-        foreach (var entry in _entries.Values
-                     .Where(entry => entry.State == SpectreProgressLedgerState.Completed ||
-                                     entry.State == SpectreProgressLedgerState.Skipped)
-                     .OrderByDescending(entry => entry.TerminalSequence)
-                     .Take(RecentCompletedLimit))
-        {
-            desired.Add(entry.Item.Key);
-        }
-
-        foreach (var entry in _entries.Values
-                     .Where(entry => entry.State == SpectreProgressLedgerState.Failed)
-                     .OrderByDescending(entry => entry.TerminalSequence)
-                     .Take(PinnedFailureLimit))
-        {
-            desired.Add(entry.Item.Key);
-        }
-
-        foreach (var entry in _entries.Values
-                     .Where(entry => entry.State == SpectreProgressLedgerState.Planned)
-                     .OrderBy(entry => entry.Item.GroupOrder)
-                     .ThenBy(entry => entry.Item.Position <= 0 ? int.MaxValue : entry.Item.Position)
-                     .Take(UpcomingLimit))
-        {
-            desired.Add(entry.Item.Key);
-        }
-
-        foreach (var key in _visibleTasks.Keys.Where(key => !desired.Contains(key)).ToArray())
-        {
-            _context.RemoveTask(_visibleTasks[key]);
-            _visibleTasks.Remove(key);
-        }
-
-        foreach (var entry in _entries.Values.Where(entry => desired.Contains(entry.Item.Key)))
+                     .ThenBy(entry => entry.Item.Title, StringComparer.OrdinalIgnoreCase))
             EnsureVisibleTask(entry).Description = BuildLiveLabel(entry);
     }
 
@@ -360,7 +336,6 @@ internal sealed class SpectreBoundedProgressLedger
         internal string? Detail { get; set; }
         internal double ProgressFraction { get; set; }
         internal TimeSpan? Duration { get; set; }
-        internal long TerminalSequence { get; set; }
     }
 }
 
