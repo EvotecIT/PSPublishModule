@@ -72,6 +72,45 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("Info.plist", "<key>ITSAppUsesNonExemptEncryption</key><false/>", false)]
+    [InlineData("project.yml", "ITSAppUsesNonExemptEncryption: false", false)]
+    [InlineData("project.pbxproj", "INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;", false)]
+    [InlineData("Info.plist", "<key>ITSAppUsesNonExemptEncryption</key><true/>", true)]
+    public void AppleReleaseDoctor_RecognizesExplicitExemptEncryptionEvidence(
+        string fileName,
+        string evidence,
+        bool expectsWarning)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var evidencePath = Path.Combine(root, fileName);
+            File.WriteAllText(evidencePath, evidence);
+            var app = new PowerForgeAppleAppReleaseTargetPlan
+            {
+                Name = "Store App",
+                BundleId = "com.evotecit.storeapp",
+                AppStoreConnectAppId = "app-1",
+                DistributionRoute = AppleDistributionRoute.AppStore,
+                ProjectPath = evidencePath
+            };
+
+            var diagnostics = AppleReleaseDoctor.Evaluate(
+                new PowerForgeAppleReleasePlan { Apps = new[] { app } },
+                app,
+                new AppStoreConnectControlPlaneState { AppId = "app-1" });
+
+            Assert.Equal(
+                expectsWarning,
+                diagnostics.Any(item => item.Code == "APPLE_ENCRYPTION_ATTESTATION_UNTRACKED"));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Fact]
     public void AppleReleaseDoctor_DiagnosesMissingDirectNotarizationAuthentication()
     {
@@ -694,6 +733,39 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(retainedTarget.StapleValidated);
             Assert.True(retainedTarget.GatekeeperAccepted);
             Assert.Contains("gatekeeperAssessment", retainedTarget.SkippedSteps);
+
+            // Disabled post-notarization checks are complete by policy even though
+            // their receipt flags remain null. A mixed-target retry must still reuse
+            // the retained artifact instead of submitting it again.
+            spec.AppleApps.DirectDistribution.Staple = false;
+            spec.AppleApps.DirectDistribution.Assess = false;
+            var disabledChecksReceipt = File.ReadAllText(receiptPath)
+                .Replace("\"success\": true", "\"success\": false", StringComparison.Ordinal)
+                .Replace("\"stapled\": true", "\"stapled\": null", StringComparison.Ordinal)
+                .Replace("\"stapleValidated\": true", "\"stapleValidated\": null", StringComparison.Ordinal)
+                .Replace("\"gatekeeperAccepted\": true", "\"gatekeeperAccepted\": null", StringComparison.Ordinal);
+            File.WriteAllText(receiptPath, disabledChecksReceipt);
+            archiveCalls = 0;
+            exportCalls = 0;
+            nextReleaseRequest = null;
+
+            var disabledChecksRetry = nextReleaseService.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Upload
+                });
+
+            Assert.True(disabledChecksRetry.Success);
+            Assert.Equal(0, archiveCalls);
+            Assert.Equal(0, exportCalls);
+            Assert.Null(nextReleaseRequest);
+            var disabledChecksTarget = Assert.Single(disabledChecksRetry.AppleReceipt!.Targets);
+            Assert.True(disabledChecksTarget.ResumedAcceptedNotarization);
+            Assert.Null(disabledChecksTarget.Stapled);
+            Assert.Null(disabledChecksTarget.StapleValidated);
+            Assert.Null(disabledChecksTarget.GatekeeperAccepted);
 
             var retainedReceipt = File.ReadAllText(receiptPath)
                 .Replace("\"success\": true", "\"success\": false", StringComparison.Ordinal);

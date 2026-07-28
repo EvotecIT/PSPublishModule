@@ -284,9 +284,11 @@ commits. The reusable jobs select the caller repository's protected environment 
 resolve its environment-scoped App Store Connect secrets there. Do not add
 repository-wide `secrets: inherit`; that would weaken the environment boundary. The composite
 action writes the private key to a permission-restricted temporary file and removes
-it after every plan or action. Mutating release workflows share one repository-scoped
-concurrency group; monitoring and screenshot capture have dedicated groups so a long
-capture cannot cancel a release and two publication captures cannot overlap.
+it after every plan or action. Mutating release workflows, including both screenshot
+approve-and-sync variants, share one repository-scoped concurrency group. Monitoring
+and screenshot capture have dedicated groups so a long capture cannot cancel a release,
+two publication captures cannot overlap, and App Review never observes a partially
+replaced screenshot set.
 
 The workflows upload the exact configured plan and actual receipt paths and fail if
 a required receipt is absent. Successful logs contain only the short step summary,

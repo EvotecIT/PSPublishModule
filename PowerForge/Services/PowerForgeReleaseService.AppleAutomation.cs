@@ -309,9 +309,11 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         var artifactPath = Path.GetFullPath(prior.DirectArtifactPath);
-        var completed = prior.Stapled == true &&
-                        prior.StapleValidated == true &&
-                        prior.GatekeeperAccepted == true;
+        var stapleCompleted = !plan.DirectDistribution.Staple ||
+                              (prior.Stapled == true && prior.StapleValidated == true);
+        var assessmentCompleted = !plan.DirectDistribution.Assess ||
+                                  prior.GatekeeperAccepted == true;
+        var completed = stapleCompleted && assessmentCompleted;
         if (completed)
         {
             var artifactSha256 = AppleNotarizationService.ComputeArtifactSha256(artifactPath);
@@ -334,9 +336,15 @@ internal sealed partial class PowerForgeReleaseService
                 Status = "Accepted",
                 ResumedAcceptedSubmission = true,
                 Submission = CompletedStep("Reused the retained accepted notarization submission.", "xcrun"),
-                Staple = CompletedStep("Reused completed ticket stapling.", "xcrun"),
-                StapleValidation = CompletedStep("Reused completed staple validation.", "xcrun"),
-                Assessment = CompletedStep("Reused completed Gatekeeper assessment.", "spctl")
+                Staple = plan.DirectDistribution.Staple
+                    ? CompletedStep("Reused completed ticket stapling.", "xcrun")
+                    : null,
+                StapleValidation = plan.DirectDistribution.Staple
+                    ? CompletedStep("Reused completed staple validation.", "xcrun")
+                    : null,
+                Assessment = plan.DirectDistribution.Assess
+                    ? CompletedStep("Reused completed Gatekeeper assessment.", "spctl")
+                    : null
             };
             result.ResumedAcceptedNotarization = true;
             result.SkippedSteps = MergeAppleSkippedSteps(

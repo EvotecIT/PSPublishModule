@@ -81,12 +81,11 @@ on:
       app_store_connect_private_key:
         required: false
 
-concurrency:
-  group: powerforge-apple-screenshots-${{ github.repository }}
-  cancel-in-progress: false
-
 jobs:
   capture:
+    concurrency:
+      group: powerforge-apple-screenshot-capture-${{ github.repository }}
+      cancel-in-progress: false
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: 90
     permissions:
@@ -148,6 +147,9 @@ jobs:
 
   approve-and-sync:
     needs: capture
+    concurrency:
+      group: powerforge-apple-${{ github.repository }}
+      cancel-in-progress: false
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: 60
     environment: ${{ inputs.approval_environment }}

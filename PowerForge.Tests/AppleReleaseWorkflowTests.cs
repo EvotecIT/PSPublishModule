@@ -187,6 +187,8 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("powerforge_ref", workflow, StringComparison.Ordinal);
         Assert.Contains("must be an exact 40-character commit SHA", workflow, StringComparison.Ordinal);
         Assert.Contains("Capture deterministic App Store screenshots", workflow, StringComparison.Ordinal);
+        Assert.Contains("group: powerforge-apple-screenshot-capture-${{ github.repository }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("group: powerforge-apple-${{ github.repository }}", workflow, StringComparison.Ordinal);
         Assert.Contains("escapes the checked-out source", workflow, StringComparison.Ordinal);
         Assert.Contains("environment: ${{ inputs.approval_environment }}", workflow, StringComparison.Ordinal);
         Assert.Contains("Validate the reviewed capture destination", workflow, StringComparison.Ordinal);
@@ -238,6 +240,8 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("approval-evidence", approval, StringComparison.Ordinal);
         Assert.Contains("target: ${{ inputs.target }}", approval, StringComparison.Ordinal);
         Assert.Contains("environment: ${{ inputs.environment_name }}", approval, StringComparison.Ordinal);
+        Assert.Contains("group: powerforge-apple-${{ github.repository }}", approval, StringComparison.Ordinal);
+        Assert.DoesNotContain("powerforge-apple-screenshot-approval-", approval, StringComparison.Ordinal);
         Assert.Contains("capture_artifact_path must resolve to a child of the checked-out source", approval, StringComparison.Ordinal);
         Assert.Contains("FileAttributes]::ReparsePoint", approval, StringComparison.Ordinal);
         Assert.Contains("path: ${{ steps.capture-path.outputs.path }}", approval, StringComparison.Ordinal);

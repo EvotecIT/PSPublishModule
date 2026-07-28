@@ -82,7 +82,7 @@ on:
         required: false
 
 concurrency:
-  group: powerforge-apple-screenshot-approval-${{ github.repository }}
+  group: powerforge-apple-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -146,7 +147,7 @@ internal static class AppleReleaseDoctor
         }
 
         if (usesStore && controlPlane is not null)
-            AddControlPlaneDiagnostics(app, controlPlane, diagnostics);
+            AddControlPlaneDiagnostics(app, controlPlane, source, diagnostics);
 
         return diagnostics.ToArray();
     }
@@ -154,6 +155,7 @@ internal static class AppleReleaseDoctor
     private static void AddControlPlaneDiagnostics(
         PowerForgeAppleAppReleaseTargetPlan app,
         AppStoreConnectControlPlaneState state,
+        string projectEvidence,
         List<PowerForgeAppleReleaseDiagnostic> diagnostics)
     {
         if (app.DistributionRoute == AppleDistributionRoute.AppStore && !state.ReviewDetailsConfigured)
@@ -197,7 +199,8 @@ internal static class AppleReleaseDoctor
                 $"No territory availability configuration was found for '{app.Name}'.",
                 "Configure storefront availability and verify any business/education distribution choices."));
         }
-        if (state.EncryptionDeclarationCount == 0)
+        if (state.EncryptionDeclarationCount == 0 &&
+            !DeclaresExemptEncryption(projectEvidence))
         {
             diagnostics.Add(Warning(
                 "compliance",
@@ -246,6 +249,25 @@ internal static class AppleReleaseDoctor
     private static bool HasConfiguredPath(string? path, string[]? paths)
         => !string.IsNullOrWhiteSpace(path) ||
            (paths ?? Array.Empty<string>()).Any(static value => !string.IsNullOrWhiteSpace(value));
+
+    private static bool DeclaresExemptEncryption(string evidence)
+    {
+        if (string.IsNullOrWhiteSpace(evidence))
+            return false;
+
+        return Regex.IsMatch(
+                   evidence,
+                   @"<key>\s*ITSAppUsesNonExemptEncryption\s*</key>\s*<false\s*/>",
+                   RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
+               Regex.IsMatch(
+                   evidence,
+                   @"\bITSAppUsesNonExemptEncryption\s*:\s*false\b",
+                   RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
+               Regex.IsMatch(
+                   evidence,
+                   @"\bINFOPLIST_KEY_ITSAppUsesNonExemptEncryption\s*=\s*NO\s*;",
+                   RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
 
     private static string ReadProjectEvidence(string projectPath)
     {
