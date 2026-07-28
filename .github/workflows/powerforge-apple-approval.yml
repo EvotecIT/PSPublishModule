@@ -40,6 +40,11 @@ on:
         required: false
         default: apple-release-approval
         type: string
+      planning_environment_name:
+        description: Non-approval environment containing read-only App Store Connect credentials.
+        required: false
+        default: apple-release
+        type: string
       allowed_dispatchers_json:
         description: Optional JSON array of GitHub logins allowed to dispatch the protected transition; environment review remains enforced by GitHub.
         required: false
@@ -58,12 +63,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  approve:
+  plan:
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: 30
-    environment: ${{ inputs.environment_name }}
+    environment: ${{ inputs.planning_environment_name }}
     permissions:
       contents: read
+    outputs:
+      plan_sha256: ${{ steps.plan.outputs.plan-sha256 }}
     steps:
       - name: Validate the protected action
         shell: pwsh
@@ -136,6 +143,107 @@ jobs:
           key-id: ${{ secrets.app_store_connect_key_id }}
           private-key: ${{ secrets.app_store_connect_private_key }}
 
+      - name: Upload compact approval plan receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: powerforge-apple-${{ inputs.action }}-${{ inputs.source_ref }}-plan
+          path: ${{ steps.plan.outputs.receipt-path }}
+          if-no-files-found: error
+          retention-days: 90
+
+  approve:
+    needs: plan
+    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    timeout-minutes: 30
+    environment: ${{ inputs.environment_name }}
+    permissions:
+      contents: read
+    steps:
+      - name: Revalidate the protected action
+        shell: pwsh
+        env:
+          ACTION: ${{ inputs.action }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+          DISPATCHERS_JSON: ${{ inputs.allowed_dispatchers_json }}
+          DISPATCHER: ${{ github.triggering_actor }}
+          ORIGINAL_DISPATCHER: ${{ github.actor }}
+        run: |
+          if ($env:ACTION -notin @('SubmitTestFlightReview', 'SubmitAppReview', 'Release')) {
+            throw "Approval workflow accepts only SubmitTestFlightReview, SubmitAppReview, or Release."
+          }
+          foreach ($entry in @{ source_ref = $env:SOURCE_REF; powerforge_ref = $env:POWERFORGE_REF }.GetEnumerator()) {
+            if ($entry.Value -notmatch '^[0-9A-Fa-f]{40}$') { throw "$($entry.Key) must be an exact 40-character commit SHA." }
+          }
+          $dispatchers = @($env:DISPATCHERS_JSON | ConvertFrom-Json -Depth 5)
+          if ($dispatchers.Count -gt 0 -and $env:DISPATCHER -notin $dispatchers) {
+            throw "GitHub triggering actor '$($env:DISPATCHER)' is not an authorized Apple release dispatcher."
+          }
+          Write-Host "Authorized triggering actor '$($env:DISPATCHER)' (original run actor '$($env:ORIGINAL_DISPATCHER)')."
+
+      - name: Checkout the exact approved source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 1
+          path: source
+          persist-credentials: false
+
+      - name: Checkout the pinned shared release action
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: EvotecIT/PSPublishModule
+          ref: ${{ inputs.powerforge_ref }}
+          fetch-depth: 1
+          path: powerforge-shared
+          persist-credentials: false
+
+      - name: Verify exact checked-out commits
+        shell: pwsh
+        env:
+          EXPECTED_SOURCE_REF: ${{ inputs.source_ref }}
+          EXPECTED_POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+        run: |
+          $source = (git -C source rev-parse HEAD).Trim()
+          $shared = (git -C powerforge-shared rev-parse HEAD).Trim()
+          if ($source -ine $env:EXPECTED_SOURCE_REF) { throw "Expected source '$($env:EXPECTED_SOURCE_REF)', received '$source'." }
+          if ($shared -ine $env:EXPECTED_POWERFORGE_REF) { throw "Expected shared '$($env:EXPECTED_POWERFORGE_REF)', received '$shared'." }
+
+      - name: Build exact PowerForge source
+        id: build-powerforge
+        uses: ./powerforge-shared/.github/actions/build-powerforge
+        with:
+          source-root: ${{ github.workspace }}/powerforge-shared
+          runtime: ${{ inputs.tool_runtime }}
+
+      - name: Replan the exact approved transition
+        id: replan
+        uses: ./powerforge-shared/.github/actions/apple-release
+        with:
+          action: ${{ inputs.action }}
+          config-path: ${{ github.workspace }}/source/${{ inputs.config_path }}
+          source-commit: ${{ inputs.source_ref }}
+          tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
+          tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
+          plan-only: "true"
+          issuer-id: ${{ secrets.app_store_connect_issuer_id }}
+          key-id: ${{ secrets.app_store_connect_key_id }}
+          private-key: ${{ secrets.app_store_connect_private_key }}
+
+      - name: Bind execution to the reviewed plan
+        shell: pwsh
+        env:
+          REVIEWED_PLAN_SHA256: ${{ needs.plan.outputs.plan_sha256 }}
+          CURRENT_PLAN_SHA256: ${{ steps.replan.outputs.plan-sha256 }}
+        run: |
+          foreach ($entry in @{ reviewed = $env:REVIEWED_PLAN_SHA256; current = $env:CURRENT_PLAN_SHA256 }.GetEnumerator()) {
+            if ($entry.Value -notmatch '^[0-9A-Fa-f]{64}$') { throw "$($entry.Key) plan SHA-256 is invalid." }
+          }
+          if (-not $env:REVIEWED_PLAN_SHA256.Equals($env:CURRENT_PLAN_SHA256, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Apple state or release inputs changed after review. Inspect the new plan and request a new environment approval.'
+          }
+
       - name: Execute the approved transition
         id: approval
         uses: ./powerforge-shared/.github/actions/apple-release
@@ -151,12 +259,12 @@ jobs:
           key-id: ${{ secrets.app_store_connect_key_id }}
           private-key: ${{ secrets.app_store_connect_private_key }}
 
-      - name: Upload compact approval plan receipt
+      - name: Upload compact approved replan receipt
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: powerforge-apple-${{ inputs.action }}-${{ inputs.source_ref }}-plan
-          path: ${{ steps.plan.outputs.receipt-path }}
+          name: powerforge-apple-${{ inputs.action }}-${{ inputs.source_ref }}-approved-replan
+          path: ${{ steps.replan.outputs.receipt-path }}
           if-no-files-found: error
           retention-days: 90
 

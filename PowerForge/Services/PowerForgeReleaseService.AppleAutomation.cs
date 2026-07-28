@@ -225,6 +225,13 @@ internal sealed partial class PowerForgeReleaseService
         EnsureNoReparsePointsInExistingPath(root, candidate, settingName);
     }
 
+    private static void EnsureInputFileWithinProjectRoot(string projectRoot, string path, string settingName)
+    {
+        EnsurePathWithinProjectRoot(projectRoot, path, settingName);
+        if (!File.Exists(path))
+            throw new FileNotFoundException($"{settingName} was not found inside AppleApps.ProjectRoot: {path}", path);
+    }
+
     private static void EnsureNoReparsePointsInExistingPath(
         string projectRoot,
         string path,

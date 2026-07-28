@@ -445,6 +445,67 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task GovernanceApply_BaseTerritoryReplacementPlansAndReceiptsEveryIncludedPrice()
+    {
+        var oldSchedule = """{ "data": { "type": "appPriceSchedules", "id": "schedule-1", "relationships": { "baseTerritory": { "data": { "type": "territories", "id": "CAN" } } } } }""";
+        var oldPrices = """{ "data": [ { "type": "appPrices", "id": "price-1", "attributes": { "startDate": "2026-08-01", "endDate": null }, "relationships": { "appPricePoint": { "data": { "type": "appPricePoints", "id": "point-1" } }, "territory": { "data": { "type": "territories", "id": "USA" } } } } ] }""";
+        var createdSchedule = """{ "data": { "type": "appPriceSchedules", "id": "schedule-2", "relationships": { "baseTerritory": { "data": { "type": "territories", "id": "USA" } } } } }""";
+        var newSchedule = """{ "data": { "type": "appPriceSchedules", "id": "schedule-2", "relationships": { "baseTerritory": { "data": { "type": "territories", "id": "USA" } } } } }""";
+        var newPrices = """{ "data": [ { "type": "appPrices", "id": "price-1", "attributes": { "startDate": "2026-08-01", "endDate": null }, "relationships": { "appPricePoint": { "data": { "type": "appPricePoints", "id": "point-1" } }, "territory": { "data": { "type": "territories", "id": "USA" } } } }, { "type": "appPrices", "id": "price-2", "attributes": { "startDate": "2026-08-01", "endDate": null }, "relationships": { "appPricePoint": { "data": { "type": "appPricePoints", "id": "point-2" } }, "territory": { "data": { "type": "territories", "id": "GBR" } } } } ] }""";
+        var spec = new AppStoreConnectGovernanceSpec
+        {
+            AppId = "app-1",
+            Pricing = new AppStoreConnectAppPricingSpec
+            {
+                BaseTerritoryId = "USA",
+                Prices =
+                [
+                    new AppStoreConnectAppPriceSpec { TerritoryId = "USA", AppPricePointId = "point-1", StartDate = "2026-08-01" },
+                    new AppStoreConnectAppPriceSpec { TerritoryId = "GBR", AppPricePointId = "point-2", StartDate = "2026-08-01" }
+                ]
+            }
+        };
+        var reviewHandler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK, oldSchedule),
+            new SequenceResponse(HttpStatusCode.OK, oldPrices));
+        using var reviewHttp = new HttpClient(reviewHandler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var reviewClient = new AppStoreConnectClient(CreateCredential(), reviewHttp);
+        var reviewedPlan = await new AppStoreConnectGovernanceService(reviewClient).PlanAsync(spec);
+        Assert.Collection(
+            reviewedPlan.Changes,
+            change => Assert.Equal("AppPriceSchedule", change.ResourceType),
+            change => Assert.Equal(("AppPrice", AppStoreConnectGovernanceChangeAction.Update), (change.ResourceType, change.Action)),
+            change => Assert.Equal(("AppPrice", AppStoreConnectGovernanceChangeAction.Create), (change.ResourceType, change.Action)));
+
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK, oldSchedule),
+            new SequenceResponse(HttpStatusCode.OK, oldPrices),
+            new SequenceResponse(HttpStatusCode.Created, createdSchedule),
+            new SequenceResponse(HttpStatusCode.OK, newSchedule),
+            new SequenceResponse(HttpStatusCode.OK, newPrices));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var result = await new AppStoreConnectGovernanceService(client).ApplyAsync(new AppStoreConnectGovernanceApplyRequest
+        {
+            ConfirmApply = true,
+            Spec = spec,
+            ReviewedPlan = reviewedPlan
+        });
+
+        Assert.True(result.Success, string.Join(" ", result.NextActions));
+        Assert.True(result.FinalPlan.IsConverged);
+        Assert.Collection(
+            result.AppliedChanges,
+            change => Assert.Equal("AppPriceSchedule", change.ResourceType),
+            change => Assert.Equal(("AppPrice", AppStoreConnectGovernanceChangeAction.Update), (change.ResourceType, change.Action)),
+            change => Assert.Equal(("AppPrice", AppStoreConnectGovernanceChangeAction.Create), (change.ResourceType, change.Action)));
+        Assert.Equal(new[] { HttpMethod.Get, HttpMethod.Get, HttpMethod.Post, HttpMethod.Get, HttpMethod.Get }, handler.Methods);
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies, value => !string.IsNullOrWhiteSpace(value)));
+        Assert.Equal(2, body.RootElement.GetProperty("included").GetArrayLength());
+    }
+
+    [Fact]
     public async Task GovernancePlan_BlocksAnUnmatchedExplicitSubscriptionGroupIdWithoutCreatingADuplicate()
     {
         var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.OK,

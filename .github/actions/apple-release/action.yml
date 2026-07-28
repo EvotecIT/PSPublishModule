@@ -54,6 +54,9 @@ outputs:
   receipt-path:
     description: Actual or plan receipt path.
     value: ${{ steps.release.outputs.receipt-path }}
+  plan-sha256:
+    description: Stable SHA-256 of an exact read-only Apple transition plan.
+    value: ${{ steps.release.outputs.plan-sha256 }}
   version-source-path:
     description: Version source changed by Version, when applicable.
     value: ${{ steps.release.outputs.version-source-path }}
@@ -76,6 +79,20 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Validate exact tracked release inputs
+      shell: pwsh
+      env:
+        CONFIG_PATH: ${{ inputs.config-path }}
+        TOOL_MANIFEST_PATH: ${{ inputs.tool-manifest-path }}
+        SOURCE_COMMIT: ${{ inputs.source-commit }}
+        TOOL_PATH: ${{ inputs.tool-path }}
+      run: >-
+        & '${{ github.action_path }}/Assert-TrackedAppleReleaseInputs.ps1'
+        -ConfigPath $env:CONFIG_PATH
+        -ToolManifestPath $env:TOOL_MANIFEST_PATH
+        -SourceCommit $env:SOURCE_COMMIT
+        -SkipToolManifest:(-not [string]::IsNullOrWhiteSpace($env:TOOL_PATH))
+
     - name: Setup pinned PowerForge
       id: setup
       if: inputs.tool-path == ''

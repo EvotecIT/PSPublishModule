@@ -313,6 +313,55 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleInputConfig_RejectsSymlinkEscape()
+    {
+        var root = CreateSandbox();
+        var outside = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var outsideConfig = Path.Combine(outside, "screenshots.json");
+            File.WriteAllText(outsideConfig, "{}");
+            var configLink = Path.Combine(root, "screenshots.json");
+            try
+            {
+                File.CreateSymbolicLink(configLink, outsideConfig);
+            }
+            catch (Exception linkCreationException) when (
+                linkCreationException is PlatformNotSupportedException ||
+                linkCreationException is UnauthorizedAccessException ||
+                linkCreationException is IOException)
+            {
+                return;
+            }
+
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.ScreenshotConfigPath = "screenshots.json";
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new PowerForgeReleaseService(new NullLogger()).Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Screenshots,
+                        PlanOnly = true
+                    }));
+
+            Assert.Contains("symbolic link", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            var configLink = Path.Combine(root, "screenshots.json");
+            if (File.Exists(configLink))
+                File.Delete(configLink);
+            TryDelete(root);
+            TryDelete(outside);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleReceipt_RejectsParentSymlinkEscape()
     {
         var root = CreateSandbox();

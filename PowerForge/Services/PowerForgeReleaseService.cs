@@ -1429,6 +1429,15 @@ internal sealed partial class PowerForgeReleaseService
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(path => ResolveOutputPath(projectRoot, path))
             .ToArray();
+        foreach (var input in new[] { screenshotConfigPath, metadataConfigPath, appInfoConfigPath, governanceConfigPath }
+                     .Where(static path => path is not null)
+                     .Concat(screenshotConfigPaths)
+                     .Concat(metadataConfigPaths)
+                     .Concat(appInfoConfigPaths)
+                     .Concat(governanceConfigPaths))
+        {
+            EnsureInputFileWithinProjectRoot(projectRoot, input!, "AppleApps input config");
+        }
         var automation = options.Automation ?? new PowerForgeAppleReleaseAutomationOptions();
         var directDistribution = options.DirectDistribution ?? new PowerForgeAppleDirectDistributionOptions();
         automation.Resume = request.AppleResume ?? automation.Resume;

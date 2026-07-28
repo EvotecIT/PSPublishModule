@@ -50,9 +50,17 @@ public sealed class AppleReleaseWorkflowTests
         var root = FindRepoRoot();
         var action = Read(root, ".github", "actions", "apple-release", "action.yml");
         var script = Read(root, ".github", "actions", "apple-release", "Invoke-PowerForgeAppleRelease.ps1");
+        var trackedInputs = Read(root, ".github", "actions", "apple-release", "Assert-TrackedAppleReleaseInputs.ps1");
 
         Assert.Contains("plan-only", action, StringComparison.Ordinal);
         Assert.Contains("confirm", action, StringComparison.Ordinal);
+        Assert.Contains("plan-sha256", action, StringComparison.Ordinal);
+        Assert.Contains("Assert-TrackedAppleReleaseInputs.ps1", action, StringComparison.Ordinal);
+        Assert.Contains("valid exact plan SHA-256", script, StringComparison.Ordinal);
+        Assert.Contains("FileAttributes]::ReparsePoint", trackedInputs, StringComparison.Ordinal);
+        Assert.Contains("ls-files --error-unmatch", trackedInputs, StringComparison.Ordinal);
+        Assert.Contains("diff --quiet HEAD", trackedInputs, StringComparison.Ordinal);
+        Assert.Contains("does not match source-commit", trackedInputs, StringComparison.Ordinal);
         Assert.Contains("if ($planOnly -and $confirm)", script, StringComparison.Ordinal);
         Assert.Contains("--confirm-apple-action", script, StringComparison.Ordinal);
         Assert.Contains("--summary", script, StringComparison.Ordinal);
@@ -118,6 +126,12 @@ public sealed class AppleReleaseWorkflowTests
         Assert.DoesNotContain("SubmitAppReview", advance, StringComparison.Ordinal);
         Assert.DoesNotContain("action: Release", advance, StringComparison.Ordinal);
         Assert.Contains("environment: ${{ inputs.environment_name }}", approval, StringComparison.Ordinal);
+        Assert.Contains("environment: ${{ inputs.planning_environment_name }}", approval, StringComparison.Ordinal);
+        Assert.Contains("needs: plan", approval, StringComparison.Ordinal);
+        Assert.Contains("plan_sha256: ${{ steps.plan.outputs.plan-sha256 }}", approval, StringComparison.Ordinal);
+        Assert.Contains("REVIEWED_PLAN_SHA256: ${{ needs.plan.outputs.plan_sha256 }}", approval, StringComparison.Ordinal);
+        Assert.Contains("CURRENT_PLAN_SHA256: ${{ steps.replan.outputs.plan-sha256 }}", approval, StringComparison.Ordinal);
+        Assert.Contains("Apple state or release inputs changed after review", approval, StringComparison.Ordinal);
         Assert.Contains("allowed_dispatchers_json", approval, StringComparison.Ordinal);
         Assert.Contains("authorized Apple release dispatcher", approval, StringComparison.Ordinal);
         Assert.Contains("DISPATCHER: ${{ github.triggering_actor }}", approval, StringComparison.Ordinal);
@@ -132,13 +146,20 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("${{ steps.plan.outputs.receipt-path }}", advance, StringComparison.Ordinal);
         Assert.Contains("${{ steps.advance.outputs.receipt-path }}", advance, StringComparison.Ordinal);
         Assert.Equal(2, Count(advance, "if-no-files-found: error"));
-        Assert.Equal(2, Count(approval, "if-no-files-found: error"));
+        Assert.Equal(3, Count(approval, "if-no-files-found: error"));
         Assert.Contains("-plan", advance, StringComparison.Ordinal);
         Assert.Contains("-actual", advance, StringComparison.Ordinal);
         Assert.Contains("./powerforge-shared/.github/actions/build-powerforge", advance, StringComparison.Ordinal);
         Assert.Contains("./powerforge-shared/.github/actions/build-powerforge", approval, StringComparison.Ordinal);
         Assert.Equal(2, Count(advance, "tool-path: ${{ steps.build-powerforge.outputs.tool-path }}"));
-        Assert.Equal(2, Count(approval, "tool-path: ${{ steps.build-powerforge.outputs.tool-path }}"));
+        Assert.Equal(3, Count(approval, "tool-path: ${{ steps.build-powerforge.outputs.tool-path }}"));
+        Assert.Equal(3, Count(approval, "uses: ./powerforge-shared/.github/actions/apple-release"));
+        Assert.True(
+            approval.IndexOf("  plan:", StringComparison.Ordinal) <
+            approval.IndexOf("  approve:", StringComparison.Ordinal));
+        Assert.True(
+            approval.IndexOf("Replan the exact approved transition", StringComparison.Ordinal) <
+            approval.IndexOf("Execute the approved transition", StringComparison.Ordinal));
         Assert.Contains("source_bootstrap_script", advance, StringComparison.Ordinal);
         Assert.Contains("source_bootstrap_script must resolve to a child", advance, StringComparison.Ordinal);
         Assert.Contains("FileAttributes]::ReparsePoint", advance, StringComparison.Ordinal);
@@ -365,6 +386,12 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("Screenshot approval manifest output escapes source", approval, StringComparison.Ordinal);
         Assert.Contains("'--source-commit', $env:SOURCE_REF", approval, StringComparison.Ordinal);
         Assert.Contains("source-commit: ${{ needs.resolve-source.outputs.source_ref }}", approval, StringComparison.Ordinal);
+        Assert.Contains("Assert-TrackedAppleReleaseInputs.ps1", approval, StringComparison.Ordinal);
+        Assert.Equal(2, Count(approval, "& $trackedInputValidator"));
+
+        var combined = Read(root, ".github", "workflows", "powerforge-apple-screenshots.yml");
+        Assert.Contains("Assert-TrackedAppleReleaseInputs.ps1", combined, StringComparison.Ordinal);
+        Assert.Equal(2, Count(combined, "& $trackedInputValidator"));
     }
 
     [Fact]
@@ -376,7 +403,8 @@ public sealed class AppleReleaseWorkflowTests
                      "powerforge-apple-screenshots.yml",
                      "powerforge-apple-screenshot-approve.yml",
                      "powerforge-apple-monitor.yml",
-                     "powerforge-apple-advance.yml"
+                     "powerforge-apple-advance.yml",
+                     "powerforge-apple-approval.yml"
                  })
         {
             var workflow = Read(root, ".github", "workflows", workflowName);
@@ -396,7 +424,8 @@ public sealed class AppleReleaseWorkflowTests
                      "powerforge-apple-screenshots.yml",
                      "powerforge-apple-screenshot-approve.yml",
                      "powerforge-apple-monitor.yml",
-                     "powerforge-apple-advance.yml"
+                     "powerforge-apple-advance.yml",
+                     "powerforge-apple-approval.yml"
                  })
         {
             var workflow = Read(root, ".github", "workflows", workflowName);

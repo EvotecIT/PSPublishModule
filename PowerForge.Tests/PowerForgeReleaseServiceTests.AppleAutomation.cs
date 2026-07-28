@@ -41,6 +41,46 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleProtectedPlan_BindsExactObservedAppleState()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var processingState = "VALID";
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, processingState));
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var request = new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                PlanOnly = true,
+                AppleAction = PowerForgeAppleReleaseAction.SubmitAppReview
+            };
+
+            var first = service.Execute(spec, request);
+            var second = service.Execute(spec, request);
+            processingState = "PROCESSING";
+            var changed = service.Execute(spec, request);
+
+            Assert.True(first.Success, first.ErrorMessage);
+            Assert.Matches("^[0-9A-F]{64}$", first.AppleReceipt!.PlanSha256!);
+            Assert.Equal(first.AppleReceipt.PlanSha256, second.AppleReceipt!.PlanSha256);
+            Assert.NotEqual(first.AppleReceipt.PlanSha256, changed.AppleReceipt!.PlanSha256);
+            var target = Assert.Single(first.AppleReceipt.Targets);
+            Assert.Equal("build-id", target.BuildId);
+            Assert.Equal("VALID", target.BuildProcessingState);
+            Assert.Equal("version-id", target.DistributionVersionId);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_ExplicitAppleAction_IgnoresEveryNonAppleReleaseSection()
     {
         var root = CreateSandbox();

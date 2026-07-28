@@ -102,6 +102,11 @@ if (-not [string]::IsNullOrWhiteSpace($json)) {
 }
 
 $result = $envelope.result
+$planSha256 = [string] $result.planSha256
+if ($planOnly -and $planSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
+    throw "PowerForge action '$action' did not return a valid exact plan SHA-256."
+}
+Write-ReleaseOutput -Name 'plan-sha256' -Value $planSha256
 $reportedReceiptPath = [string] $result.receiptPath
 if (-not [string]::IsNullOrWhiteSpace($reportedReceiptPath)) {
     $receiptPath = Resolve-ReleasePath -ProjectRoot $projectRoot -Path $reportedReceiptPath

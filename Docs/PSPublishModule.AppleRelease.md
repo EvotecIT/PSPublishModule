@@ -435,8 +435,10 @@ The reusable workflow boundary mirrors the human approval boundary:
   the workflow accepts only a tracked, unchanged, non-symlinked `.ps1` file beneath
   that exact checkout and runs it before both the plan and confirmed transition.
 - `powerforge-apple-approval.yml` accepts only `SubmitTestFlightReview`,
-  `SubmitAppReview`, or `Release`, verifies an optional approver allow-list, and runs
-  inside a protected GitHub environment when the repository plan supports reviewers.
+  `SubmitAppReview`, or `Release`, verifies an optional dispatcher allow-list, and first
+  publishes a read-only plan from the non-approval environment. The protected job starts
+  only after that plan can be inspected, replans after approval, and executes only when
+  the exact source, action, and observed Apple state still produce the reviewed SHA-256.
 - `powerforge-apple-monitor.yml` runs scheduled `Doctor`, retains the compact receipt,
   and maintains one GitHub incident until errors and warnings are cleared.
 - `powerforge-apple-screenshots.yml` captures from an exact source commit, retains the
@@ -454,7 +456,10 @@ The reusable workflow boundary mirrors the human approval boundary:
 Callers must pass 40-character commit SHAs for `powerforge_ref` and release
 `source_ref`; the workflows reject branches and tags and verify both checked-out
 commits. The reusable jobs select the caller repository's protected environment and
-resolve its environment-scoped App Store Connect secrets there. Do not add
+resolve its environment-scoped App Store Connect secrets there. Approval callers also
+provide a non-protected planning environment with read-only App Store Connect credentials.
+Release configs and tool manifests must be tracked, unchanged files beneath the exact
+checkout and must not traverse symbolic links or reparse points. Do not add
 repository-wide `secrets: inherit`; that would weaken the environment boundary. The composite
 action writes the private key to a permission-restricted temporary file and removes
 it after every plan or action. Mutating release workflows, including both screenshot

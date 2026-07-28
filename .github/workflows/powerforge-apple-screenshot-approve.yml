@@ -367,6 +367,8 @@ jobs:
           $prefix = $sourceRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
           $releaseConfigPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:RELEASE_CONFIG_RELATIVE))
           if (-not $releaseConfigPath.StartsWith($prefix, [StringComparison]::Ordinal)) { throw 'release_config_path escapes source.' }
+          $trackedInputValidator = '${{ github.workspace }}/powerforge-shared/.github/actions/apple-release/Assert-TrackedAppleReleaseInputs.ps1'
+          & $trackedInputValidator -ConfigPath $releaseConfigPath -SourceCommit $env:SOURCE_REF -SkipToolManifest
           $captureProvenance = Get-Content -LiteralPath '${{ runner.temp }}/powerforge-apple-screenshot-provenance/powerforge-apple-screenshot-provenance.json' -Raw | ConvertFrom-Json -Depth 10
           if ($captureProvenance.schemaVersion -ne 2 -or
               ([string] $captureProvenance.captureRunId) -ne $env:CAPTURE_RUN_ID -or
@@ -383,6 +385,7 @@ jobs:
           foreach ($config in $configs) {
             $configPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot ([string] $config)))
             if (-not $configPath.StartsWith($prefix, [StringComparison]::Ordinal)) { throw "Screenshot config escapes source: $config" }
+            & $trackedInputValidator -ConfigPath $configPath -SourceCommit $env:SOURCE_REF -SkipToolManifest
             $screenshotConfig = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -Depth 20
             $configuredManifestPath = [string] $screenshotConfig.quality.approvalManifestPath
             $manifestRelative = if ([string]::IsNullOrWhiteSpace($configuredManifestPath)) {

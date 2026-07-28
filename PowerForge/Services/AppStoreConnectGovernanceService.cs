@@ -119,10 +119,15 @@ public sealed partial class AppStoreConnectGovernanceService
                         "Apple still reports a change already applied in this run. PowerForge stopped to prevent a duplicate mutation; wait for App Store Connect consistency, then generate a new plan.");
                 }
 
+                var mutationEffects = GetMutationEffects(plan.Changes, next);
                 await ApplyChangeAsync(request.Spec, next, cancellationToken).ConfigureAwait(false);
-                applied.Add(next);
+                foreach (var effect in mutationEffects)
+                {
+                    executed.Add(ChangeFingerprint(effect));
+                    applied.Add(effect);
+                }
                 if (remainingReviewedChanges is not null)
-                    remainingReviewedChanges.RemoveAt(0);
+                    remainingReviewedChanges.RemoveRange(0, mutationEffects.Length);
             }
 
             plan = await PlanAsync(request.Spec, cancellationToken).ConfigureAwait(false);
@@ -228,6 +233,21 @@ public sealed partial class AppStoreConnectGovernanceService
     private static string ChangeFingerprint(AppStoreConnectGovernanceChange change)
         => $"{change.Action}|{change.ResourceType}|{change.Key}";
 
+    private static AppStoreConnectGovernanceChange[] GetMutationEffects(
+        IReadOnlyList<AppStoreConnectGovernanceChange> changes,
+        AppStoreConnectGovernanceChange next)
+    {
+        if (!string.Equals(next.ResourceType, "AppPriceSchedule", StringComparison.Ordinal))
+            return new[] { next };
+
+        return changes
+            .TakeWhile(change =>
+                ReferenceEquals(change, next) ||
+                (string.Equals(change.Section, "Pricing", StringComparison.Ordinal) &&
+                 string.Equals(change.ResourceType, "AppPrice", StringComparison.Ordinal)))
+            .ToArray();
+    }
+
     private async Task PlanPricingAsync(
         AppStoreConnectGovernanceSpec spec,
         List<AppStoreConnectGovernanceChange> changes,
@@ -246,6 +266,21 @@ public sealed partial class AppStoreConnectGovernanceService
         {
             Add(changes, "Pricing", "AppPriceSchedule", "schedule", AppStoreConnectGovernanceChangeAction.Update,
                 $"Change base territory from '{current.BaseTerritoryId}' to '{desired.BaseTerritoryId}'.", current.Id);
+            foreach (var price in desired.Prices)
+            {
+                var existing = current.Prices.FirstOrDefault(item => PriceMatches(item, price));
+                var key = PriceKey(price);
+                Add(
+                    changes,
+                    "Pricing",
+                    "AppPrice",
+                    key,
+                    existing is null ? AppStoreConnectGovernanceChangeAction.Create : AppStoreConnectGovernanceChangeAction.Update,
+                    existing is null
+                        ? $"Add app price for territory '{price.TerritoryId}' starting '{DisplayDate(price.StartDate)}' as part of the base-territory schedule replacement."
+                        : $"Reapply app price for territory '{price.TerritoryId}' starting '{DisplayDate(price.StartDate)}' as part of the base-territory schedule replacement.",
+                    current.Id);
+            }
             return;
         }
 

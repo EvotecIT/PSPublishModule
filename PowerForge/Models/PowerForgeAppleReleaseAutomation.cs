@@ -139,6 +139,9 @@ internal sealed class PowerForgeAppleReleaseReceipt
 
     public DateTimeOffset CheckedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>SHA-256 binding the stable action, source, target, and observed Apple state represented by a plan.</summary>
+    public string? PlanSha256 { get; set; }
+
     public bool Success { get; set; }
 
     public string? ErrorMessage { get; set; }
