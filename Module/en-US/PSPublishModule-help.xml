@@ -2775,6 +2775,272 @@ It can also export a post-conversion report so you can validate what remains inc
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Export-AppStoreConnectGovernance</command:name>
+      <command:verb>Export</command:verb>
+      <command:noun>AppStoreConnectGovernance</command:noun>
+      <maml:description>
+        <maml:para>Exports current Apple commerce and compliance state as a reviewable governance declaration.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Exports current Apple commerce and compliance state as a reviewable governance declaration.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Export-AppStoreConnectGovernance</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AppId</maml:name>
+          <maml:description>
+            <maml:para>Exact App Store Connect app id to export.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Replace an existing snapshot file.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IssuerId</maml:name>
+          <maml:description>
+            <maml:para>Issuer ID from App Store Connect API keys.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>KeyId</maml:name>
+          <maml:description>
+            <maml:para>Key ID associated with the private key.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PassThru</maml:name>
+          <maml:description>
+            <maml:para>Returns the declaration object instead of the output file.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Destination JSON file.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PrivateKey</maml:name>
+          <maml:description>
+            <maml:para>Private key text in PEM format.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PrivateKeyPath</maml:name>
+          <maml:description>
+            <maml:para>Path to a private key file in PEM format.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TokenLifetimeMinutes</maml:name>
+          <maml:description>
+            <maml:para>Token lifetime in minutes, up to 20.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AppId</maml:name>
+        <maml:description>
+          <maml:para>Exact App Store Connect app id to export.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Force</maml:name>
+        <maml:description>
+          <maml:para>Replace an existing snapshot file.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IssuerId</maml:name>
+        <maml:description>
+          <maml:para>Issuer ID from App Store Connect API keys.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>KeyId</maml:name>
+        <maml:description>
+          <maml:para>Key ID associated with the private key.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PassThru</maml:name>
+        <maml:description>
+          <maml:para>Returns the declaration object instead of the output file.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Destination JSON file.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PrivateKey</maml:name>
+        <maml:description>
+          <maml:para>Private key text in PEM format.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PrivateKeyPath</maml:name>
+        <maml:description>
+          <maml:para>Path to a private key file in PEM format.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>TokenLifetimeMinutes</maml:name>
+        <maml:description>
+          <maml:para>Token lifetime in minutes, up to 20.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.IO.FileInfo
+PowerForge.AppStoreConnectGovernanceSpec</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>EXAMPLE 1</maml:title>
+        <dev:code>Export-AppStoreConnectGovernance -IssuerId 'Value' -KeyId 'Value' -AppId 'Value'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Export-CertificateForNuGet</command:name>
       <command:verb>Export</command:verb>
       <command:noun>CertificateForNuGet</command:noun>
@@ -5282,6 +5548,199 @@ Command-name and DSC-resource-name searches inspect package contents and remain 
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
         <dev:code>Get-AppStoreConnectBuild -IssuerId 'Value' -KeyId 'Value' -AppId 'Value'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Get-AppStoreConnectGovernancePlan</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>AppStoreConnectGovernancePlan</command:noun>
+      <maml:description>
+        <maml:para>Reads Apple state and produces a non-mutating commerce and compliance drift plan.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Reads Apple state and produces a non-mutating commerce and compliance drift plan.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Get-AppStoreConnectGovernancePlan</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+          <maml:name>ConfigPath</maml:name>
+          <maml:description>
+            <maml:para>Path to the governance JSON configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IssuerId</maml:name>
+          <maml:description>
+            <maml:para>Issuer ID from App Store Connect API keys.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>KeyId</maml:name>
+          <maml:description>
+            <maml:para>Key ID associated with the private key.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PrivateKey</maml:name>
+          <maml:description>
+            <maml:para>Private key text in PEM format.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PrivateKeyPath</maml:name>
+          <maml:description>
+            <maml:para>Path to a private key file in PEM format.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TokenLifetimeMinutes</maml:name>
+          <maml:description>
+            <maml:para>Token lifetime in minutes, up to 20.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <maml:name>ConfigPath</maml:name>
+        <maml:description>
+          <maml:para>Path to the governance JSON configuration.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IssuerId</maml:name>
+        <maml:description>
+          <maml:para>Issuer ID from App Store Connect API keys.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>KeyId</maml:name>
+        <maml:description>
+          <maml:para>Key ID associated with the private key.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PrivateKey</maml:name>
+        <maml:description>
+          <maml:para>Private key text in PEM format.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PrivateKeyPath</maml:name>
+        <maml:description>
+          <maml:para>Path to a private key file in PEM format.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>TokenLifetimeMinutes</maml:name>
+        <maml:description>
+          <maml:para>Token lifetime in minutes, up to 20.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.AppStoreConnectGovernancePlan</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>EXAMPLE 1</maml:title>
+        <dev:code>Get-AppStoreConnectGovernancePlan -IssuerId 'Value' -KeyId 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -69982,6 +70441,224 @@ PowerForge.ModuleVersionStepResult</maml:name>
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Sync-AppStoreConnectGovernance</command:name>
+      <command:verb>Sync</command:verb>
+      <command:noun>AppStoreConnectGovernance</command:noun>
+      <maml:description>
+        <maml:para>Converges reviewed App Store commerce and compliance state through an approval-gated plan.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Converges reviewed App Store commerce and compliance state through an approval-gated plan.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Sync-AppStoreConnectGovernance</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+          <maml:name>ConfigPath</maml:name>
+          <maml:description>
+            <maml:para>Path to the governance JSON configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IssuerId</maml:name>
+          <maml:description>
+            <maml:para>Issuer ID from App Store Connect API keys.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>KeyId</maml:name>
+          <maml:description>
+            <maml:para>Key ID associated with the private key.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MaximumChanges</maml:name>
+          <maml:description>
+            <maml:para>Safety bound for one convergence run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PrivateKey</maml:name>
+          <maml:description>
+            <maml:para>Private key text in PEM format.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PrivateKeyPath</maml:name>
+          <maml:description>
+            <maml:para>Path to a private key file in PEM format.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TokenLifetimeMinutes</maml:name>
+          <maml:description>
+            <maml:para>Token lifetime in minutes, up to 20.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
+        <maml:name>ConfigPath</maml:name>
+        <maml:description>
+          <maml:para>Path to the governance JSON configuration.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IssuerId</maml:name>
+        <maml:description>
+          <maml:para>Issuer ID from App Store Connect API keys.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>KeyId</maml:name>
+        <maml:description>
+          <maml:para>Key ID associated with the private key.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MaximumChanges</maml:name>
+        <maml:description>
+          <maml:para>Safety bound for one convergence run.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PrivateKey</maml:name>
+        <maml:description>
+          <maml:para>Private key text in PEM format.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PrivateKeyPath</maml:name>
+        <maml:description>
+          <maml:para>Path to a private key file in PEM format.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>TokenLifetimeMinutes</maml:name>
+        <maml:description>
+          <maml:para>Token lifetime in minutes, up to 20.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.AppStoreConnectGovernanceApplyResult
+PowerForge.AppStoreConnectGovernancePlan</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>EXAMPLE 1</maml:title>
+        <dev:code>Sync-AppStoreConnectGovernance -IssuerId 'Value' -KeyId 'Value'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Sync-AppStoreConnectScreenshots</command:name>
       <command:verb>Sync</command:verb>
       <command:noun>AppStoreConnectScreenshots</command:noun>
@@ -70721,6 +71398,104 @@ PowerForge.AppleAppReleaseDriftReport</maml:name>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
         <dev:code>Test-AppleAppReleaseDrift -IssuerId 'Value' -KeyId 'Value'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Test-AppStoreConnectGovernanceConfig</command:name>
+      <command:verb>Test</command:verb>
+      <command:noun>AppStoreConnectGovernanceConfig</command:noun>
+      <maml:description>
+        <maml:para>Validates declarative App Store commercial and compliance state without contacting Apple.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Validates declarative App Store commercial and compliance state without contacting Apple.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Test-AppStoreConnectGovernanceConfig</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="FullName">
+          <maml:name>ConfigPath</maml:name>
+          <maml:description>
+            <maml:para>Path to the governance JSON configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PassThru</maml:name>
+          <maml:description>
+            <maml:para>Returns structured findings instead of a Boolean.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="FullName">
+        <maml:name>ConfigPath</maml:name>
+        <maml:description>
+          <maml:para>Path to the governance JSON configuration.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PassThru</maml:name>
+        <maml:description>
+          <maml:para>Returns structured findings instead of a Boolean.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Boolean
+PowerForge.AppStoreConnectGovernanceFinding</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>EXAMPLE 1</maml:title>
+        <dev:code>Test-AppStoreConnectGovernanceConfig -ConfigPath 'C:\Path'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

@@ -71,6 +71,7 @@ internal sealed partial class PowerForgeReleaseService
     private readonly Func<AppStoreConnectApiCredential, string, AppStoreConnectBuildUploadInfo?> _getAppleBuildUpload;
     private readonly Func<AppStoreConnectApiCredential, string, ApplePlatform, long> _getHighestAppleBuildNumber;
     private readonly Func<AppStoreConnectApiCredential, string, AppStoreConnectAppInfo[]> _findAppleApps;
+    private readonly Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan> _planAppleGovernance;
     private readonly Func<AppleNotarizationRequest, AppleNotarizationResult> _notarizeAppleArtifact;
     private readonly Func<PowerForgeAppleAppReleaseTargetPlan, bool> _generateAppleProject;
     private readonly Action<TimeSpan> _delay;
@@ -168,7 +169,8 @@ internal sealed partial class PowerForgeReleaseService
         Func<string, string, string, string, GitHubReleaseVersionOccupancy>? probeGitHubReleaseVersion = null,
         Func<AppStoreConnectApiCredential, string, ApplePlatform, long>? getHighestAppleBuildNumber = null,
         Func<AppStoreConnectApiCredential, string, AppStoreConnectAppInfo[]>? findAppleApps = null,
-        Func<AppleNotarizationRequest, AppleNotarizationResult>? notarizeAppleArtifact = null)
+        Func<AppleNotarizationRequest, AppleNotarizationResult>? notarizeAppleArtifact = null,
+        Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan>? planAppleGovernance = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
@@ -205,6 +207,7 @@ internal sealed partial class PowerForgeReleaseService
         _getAppleBuildUpload = getAppleBuildUpload ?? GetAppleBuildUpload;
         _getHighestAppleBuildNumber = getHighestAppleBuildNumber ?? GetHighestAppleBuildNumber;
         _findAppleApps = findAppleApps ?? FindAppleApps;
+        _planAppleGovernance = planAppleGovernance ?? PlanAppleGovernance;
         _notarizeAppleArtifact = notarizeAppleArtifact ?? (request =>
             new AppleNotarizationService().NotarizeAsync(request).GetAwaiter().GetResult());
         _generateAppleProject = generateAppleProject ?? (app => new AppleProjectGenerationService().Generate(app));
@@ -1419,6 +1422,13 @@ internal sealed partial class PowerForgeReleaseService
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(path => ResolveOutputPath(projectRoot, path))
             .ToArray();
+        var governanceConfigPath = string.IsNullOrWhiteSpace(options.GovernanceConfigPath)
+            ? null
+            : ResolveOutputPath(projectRoot, options.GovernanceConfigPath!);
+        var governanceConfigPaths = (options.GovernanceConfigPaths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => ResolveOutputPath(projectRoot, path))
+            .ToArray();
         var automation = options.Automation ?? new PowerForgeAppleReleaseAutomationOptions();
         var directDistribution = options.DirectDistribution ?? new PowerForgeAppleDirectDistributionOptions();
         automation.Resume = request.AppleResume ?? automation.Resume;
@@ -1495,6 +1505,7 @@ internal sealed partial class PowerForgeReleaseService
                                     options.SyncScreenshots ||
                                     options.SyncMetadata ||
                                     options.SyncAppInfo ||
+                                    options.CheckGovernance ||
                                     options.CheckReleaseReadiness ||
                                     options.DistributeTestFlight ||
                                     options.SubmitTestFlightBetaReview ||
@@ -1527,6 +1538,8 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException("AppleApps SyncMetadata requires MetadataConfigPath or MetadataConfigPaths.");
         if (options.SyncAppInfo && appInfoConfigPath is null && appInfoConfigPaths.Length == 0)
             throw new InvalidOperationException("AppleApps SyncAppInfo requires AppInfoConfigPath or AppInfoConfigPaths.");
+        if (options.CheckGovernance && governanceConfigPath is null && governanceConfigPaths.Length == 0)
+            throw new InvalidOperationException("AppleApps CheckGovernance requires GovernanceConfigPath or GovernanceConfigPaths.");
         if (request.AppleAction == PowerForgeAppleReleaseAction.Configured &&
             !options.Archive &&
             apps.Any(app => app.VersionUpdateRequested))
@@ -1622,6 +1635,9 @@ internal sealed partial class PowerForgeReleaseService
             MetadataConfigPaths = metadataConfigPaths,
             AppInfoConfigPath = appInfoConfigPath,
             AppInfoConfigPaths = appInfoConfigPaths,
+            GovernanceConfigPath = governanceConfigPath,
+            GovernanceConfigPaths = governanceConfigPaths,
+            CheckGovernance = options.CheckGovernance,
             PrepareDistribution = options.PrepareDistribution,
             SelectBuildForDistribution = options.SelectBuildForDistribution,
             AllowUnprocessedDistributionBuild = options.AllowUnprocessedDistributionBuild,
@@ -1798,6 +1814,9 @@ internal sealed partial class PowerForgeReleaseService
                 plan.Apps.Where(static app => app.DistributionRoute == AppleDistributionRoute.AppStore).ToArray())
             : new Dictionary<string, AppStoreConnectAppInfoMetadataSpec[]>(StringComparer.OrdinalIgnoreCase);
         var pendingAppInfoAppIds = new HashSet<string>(appInfoSpecsByAppId.Keys, StringComparer.OrdinalIgnoreCase);
+        var governanceSpecsByAppId = plan.CheckGovernance
+            ? LoadAppleGovernanceSpecs(plan)
+            : new Dictionary<string, AppStoreConnectGovernanceSpec>(StringComparer.OrdinalIgnoreCase);
         var resultsByApp = plan.Apps.ToDictionary(
             static app => app,
             static app => new PowerForgeAppleAppReleaseResult
@@ -1940,6 +1959,20 @@ internal sealed partial class PowerForgeReleaseService
             try
             {
                 var resumedUpload = resumedByApp[app];
+
+                if (plan.CheckGovernance && result.Success && UsesAppStoreConnect(app))
+                {
+                    if (!governanceSpecsByAppId.TryGetValue(app.AppStoreConnectAppId!, out var governanceSpec))
+                        throw new InvalidOperationException($"No governance config matches Apple app '{app.Name}' (AppStoreConnectAppId '{app.AppStoreConnectAppId}').");
+                    result.Governance = _planAppleGovernance(CreateAppStoreConnectCredential(plan), governanceSpec);
+                    if (!result.Governance.IsConverged)
+                    {
+                        throw new InvalidOperationException(
+                            $"Apple governance drift blocks '{app.Name}': {result.Governance.DriftCount} change(s), " +
+                            $"{result.Governance.BlockedCount} blocked, {result.Governance.Findings.Count(finding => finding.IsError)} config error(s). " +
+                            "Review the governance plan receipt and run 'powerforge apple-governance apply --confirm'.");
+                    }
+                }
 
                 if (plan.Archive && !resumedUpload)
                 {
@@ -2271,6 +2304,14 @@ internal sealed partial class PowerForgeReleaseService
         return new AppStoreConnectVersionReleaseService(client).ReleaseAsync(request).GetAwaiter().GetResult();
     }
 
+    private static AppStoreConnectGovernancePlan PlanAppleGovernance(
+        AppStoreConnectApiCredential credential,
+        AppStoreConnectGovernanceSpec spec)
+    {
+        using var client = new AppStoreConnectClient(credential);
+        return new AppStoreConnectGovernanceService(client).PlanAsync(spec).GetAwaiter().GetResult();
+    }
+
     private static AppStoreConnectApiCredential CreateAppStoreConnectCredential(PowerForgeAppleReleasePlan plan)
     {
         if (string.IsNullOrWhiteSpace(plan.AppStoreConnectApiKeyPath) ||
@@ -2358,6 +2399,27 @@ internal sealed partial class PowerForgeReleaseService
                 return (spec, path);
             })
             .ToArray();
+    }
+
+    private static Dictionary<string, AppStoreConnectGovernanceSpec> LoadAppleGovernanceSpecs(PowerForgeAppleReleasePlan plan)
+    {
+        var paths = new List<string>();
+        if (!string.IsNullOrWhiteSpace(plan.GovernanceConfigPath)) paths.Add(plan.GovernanceConfigPath!);
+        paths.AddRange(plan.GovernanceConfigPaths.Where(static path => !string.IsNullOrWhiteSpace(path)));
+        var configuration = new AppStoreConnectGovernanceConfiguration();
+        var result = new Dictionary<string, AppStoreConnectGovernanceSpec>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var spec = configuration.Load(path);
+            var findings = configuration.Validate(spec);
+            var errors = findings.Where(static finding => finding.IsError).ToArray();
+            if (errors.Length > 0)
+                throw new InvalidOperationException($"Apple governance config '{path}' is invalid: {string.Join(" ", errors.Select(error => $"{error.Path}: {error.Message}"))}");
+            if (result.ContainsKey(spec.AppId.Trim()))
+                throw new InvalidOperationException($"Multiple Apple governance configs target AppStoreConnectAppId '{spec.AppId}'.");
+            result.Add(spec.AppId.Trim(), spec);
+        }
+        return result;
     }
 
     private static void ValidateAppleScreenshotPreflight(
@@ -4534,6 +4596,7 @@ internal sealed partial class PowerForgeReleaseService
                 plan.SyncScreenshots,
                 plan.SyncMetadata,
                 plan.SyncAppInfo,
+                plan.CheckGovernance,
                 plan.PrepareDistribution,
                 plan.SelectBuildForDistribution,
                 plan.AllowUnprocessedDistributionBuild,
@@ -4543,6 +4606,8 @@ internal sealed partial class PowerForgeReleaseService
                 plan.MetadataConfigPaths,
                 plan.AppInfoConfigPath,
                 plan.AppInfoConfigPaths,
+                plan.GovernanceConfigPath,
+                plan.GovernanceConfigPaths,
                 plan.ReplaceScreenshots,
                 plan.CheckReleaseReadiness,
                 plan.DistributeTestFlight,

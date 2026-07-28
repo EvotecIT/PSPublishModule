@@ -317,6 +317,8 @@ internal static partial class Program
                 $"build={target.BuildProcessingState ?? "not found"}, " +
                 $"distribution={target.DistributionState ?? "not found"}, " +
                 $"testflight={target.TestFlightExternalState ?? target.TestFlightInternalState ?? "not available"}");
+            if (target.Governance is not null)
+                logger.Info($"    governance: drift={target.Governance.DriftCount}, blocked={target.Governance.BlockedCount}, converged={target.Governance.IsConverged}");
         }
         if (receipt.Cleanup.RemovedPaths.Length > 0)
             logger.Info($"Cleanup: {receipt.Cleanup.RemovedPaths.Length} path(s), {receipt.Cleanup.ReclaimedBytes} byte(s) reclaimed.");
@@ -542,6 +544,7 @@ internal static partial class Program
         AddEnabledStep(enabledSteps, plan.SyncMetadata, "syncMetadata");
         AddEnabledStep(enabledSteps, plan.SyncAppInfo, "syncAppInfo");
         AddEnabledStep(enabledSteps, plan.SyncScreenshots, "syncScreenshots");
+        AddEnabledStep(enabledSteps, plan.CheckGovernance, "checkGovernance");
         AddEnabledStep(enabledSteps, plan.CheckReleaseReadiness, "checkReadiness");
         AddEnabledStep(enabledSteps, plan.DistributeTestFlight, "testFlight");
         AddEnabledStep(enabledSteps, plan.SubmitTestFlightBetaReview, "submitTestFlightReview");

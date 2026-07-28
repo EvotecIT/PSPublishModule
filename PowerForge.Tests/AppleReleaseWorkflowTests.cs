@@ -178,6 +178,43 @@ public sealed class AppleReleaseWorkflowTests
     }
 
     [Fact]
+    public void GovernanceWorkflowPlansBeforeProtectedConfirmedApplyWithCompactReceipts()
+    {
+        var root = FindRepoRoot();
+        var action = Read(root, ".github", "actions", "apple-governance", "action.yml");
+        var script = Read(root, ".github", "actions", "apple-governance", "Invoke-PowerForgeAppleGovernance.ps1");
+        var workflow = Read(root, ".github", "workflows", "powerforge-apple-governance.yml");
+
+        Assert.Contains("Snapshot, Validate, Plan, or Apply", action, StringComparison.Ordinal);
+        Assert.Contains("Invoke-PowerForgeAppleGovernance.ps1", action, StringComparison.Ordinal);
+        Assert.Contains("Apply requires confirm=true", script, StringComparison.Ordinal);
+        Assert.Contains("--fail-on-drift", script, StringComparison.Ordinal);
+        Assert.Contains("[redacted]", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("$text | Write-Host", script, StringComparison.Ordinal);
+
+        Assert.Contains("source_ref", workflow, StringComparison.Ordinal);
+        Assert.Contains("powerforge_ref", workflow, StringComparison.Ordinal);
+        Assert.Contains("must be an exact 40-character commit SHA", workflow, StringComparison.Ordinal);
+        Assert.Contains("environment: ${{ inputs.operation == 'Apply' && inputs.approval_environment_name || inputs.environment_name }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("authorized Apple governance dispatcher", workflow, StringComparison.Ordinal);
+        Assert.Contains("$name must resolve to a child", workflow, StringComparison.Ordinal);
+        Assert.Contains("must not traverse a symbolic link or reparse point", workflow, StringComparison.Ordinal);
+        Assert.Contains("ls-files --error-unmatch", workflow, StringComparison.Ordinal);
+        Assert.Contains("Build exact PowerForge source", workflow, StringComparison.Ordinal);
+        Assert.Contains("operation: Validate", workflow, StringComparison.Ordinal);
+        Assert.Contains("operation: Plan", workflow, StringComparison.Ordinal);
+        Assert.Contains("operation: Apply", workflow, StringComparison.Ordinal);
+        Assert.True(
+            workflow.IndexOf("operation: Plan", StringComparison.Ordinal) <
+            workflow.IndexOf("operation: Apply", StringComparison.Ordinal));
+        Assert.Contains("confirm: \"true\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("powerforge-apple-governance-plan.json", workflow, StringComparison.Ordinal);
+        Assert.Contains("powerforge-apple-governance-actual.json", workflow, StringComparison.Ordinal);
+        Assert.Equal(2, Count(workflow, "if-no-files-found: error"));
+        Assert.DoesNotContain("secrets: inherit", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ScreenshotWorkflowRequiresPinnedCaptureProtectedApprovalAndExactByteManifests()
     {
         var root = FindRepoRoot();

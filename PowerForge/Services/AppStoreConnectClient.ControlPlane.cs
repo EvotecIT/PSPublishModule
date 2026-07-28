@@ -45,7 +45,7 @@ public sealed partial class AppStoreConnectClient
                 cancellationToken,
                 returnNullOnNotFound: true).ConfigureAwait(false);
         using var encryption = await GetJsonAsync(
-            $"apps/{Uri.EscapeDataString(appId)}/appEncryptionDeclarations?limit=1",
+            $"appEncryptionDeclarations?filter%5Bapp%5D={Uri.EscapeDataString(appId)}&limit=1",
             cancellationToken,
             returnNullOnNotFound: true).ConfigureAwait(false);
         using var accessibility = await GetJsonAsync(

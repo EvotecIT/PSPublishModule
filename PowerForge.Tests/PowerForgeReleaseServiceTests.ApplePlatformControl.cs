@@ -199,6 +199,58 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleDoctor_RetainsGovernanceDriftAndBlocksBeforePublication()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.5.0", "13");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var governancePath = Path.Combine(root, "governance.json");
+            File.WriteAllText(governancePath,
+                """{ "schemaVersion": 1, "appId": "6778025328", "accessibility": [ { "deviceFamily": "IPHONE", "supportsVoiceover": true } ] }""");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.GovernanceConfigPath = "governance.json";
+
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, "VALID"),
+                    planAppleGovernance: (_, governance) => new AppStoreConnectGovernancePlan
+                    {
+                        AppId = governance.AppId,
+                        CheckedAtUtc = DateTimeOffset.UtcNow,
+                        Changes =
+                        [
+                            new AppStoreConnectGovernanceChange
+                            {
+                                Section = "Accessibility",
+                                ResourceType = "AccessibilityDeclaration",
+                                Key = "IPHONE",
+                                Action = AppStoreConnectGovernanceChangeAction.Update,
+                                Summary = "Update reviewed accessibility facts."
+                            }
+                        ]
+                    })
+                .Execute(spec, new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Doctor
+                });
+
+            Assert.False(result.Success);
+            var target = Assert.Single(result.AppleReceipt!.Targets);
+            Assert.NotNull(target.Governance);
+            Assert.Equal(1, target.Governance!.DriftCount);
+            Assert.Contains(target.Diagnostics, diagnostic => diagnostic.Code == "APPLE_GOVERNANCE_DRIFT");
+            Assert.Contains(target.NextActions, action => action.Contains("apple-governance apply", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleDoctor_DetectsMissingEmbeddedProductBeforePublication()
     {
         var root = CreateSandbox();

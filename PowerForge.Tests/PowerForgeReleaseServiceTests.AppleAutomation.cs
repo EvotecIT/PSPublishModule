@@ -698,7 +698,8 @@ public sealed partial class PowerForgeReleaseServiceTests
         Func<PowerForgeAppleAppReleaseTargetPlan, bool>? generateAppleProject = null,
         Func<AppStoreConnectApiCredential, string, ApplePlatform, long>? getHighestAppleBuildNumber = null,
         Func<AppStoreConnectApiCredential, string, AppStoreConnectAppInfo[]>? findAppleApps = null,
-        Func<AppleNotarizationRequest, AppleNotarizationResult>? notarizeAppleArtifact = null)
+        Func<AppleNotarizationRequest, AppleNotarizationResult>? notarizeAppleArtifact = null,
+        Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan>? planAppleGovernance = null)
         => new(
             new NullLogger(),
             executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
@@ -719,7 +720,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             appleArtifactService: new AppleReleaseArtifactService(getAvailableBytes ?? (_ => long.MaxValue)),
             getHighestAppleBuildNumber: getHighestAppleBuildNumber,
             findAppleApps: findAppleApps,
-            notarizeAppleArtifact: notarizeAppleArtifact);
+            notarizeAppleArtifact: notarizeAppleArtifact,
+            planAppleGovernance: planAppleGovernance);
 
     private static AppStoreConnectReleaseStateResult CreateReleaseState(
         AppStoreConnectReleaseStateRequest request,

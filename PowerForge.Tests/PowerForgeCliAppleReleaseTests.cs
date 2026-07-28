@@ -26,8 +26,9 @@ public sealed class PowerForgeCliAppleReleaseTests
                 """);
             var apiKeyDirectory = Directory.CreateDirectory(Path.Combine(tempRoot, ".appstoreconnect"));
             File.WriteAllText(Path.Combine(apiKeyDirectory.FullName, "AuthKey_TEST123456.p8"), "test-private-key");
+            File.WriteAllText(Path.Combine(tempRoot, "governance.json"), """{ "schemaVersion": 1, "appId": "1234567890", "accessibility": [ { "deviceFamily": "IPHONE", "supportsVoiceover": true } ] }""");
             var configPath = Path.Combine(tempRoot, "powerforge.release.json");
-            WriteReleaseConfig(configPath, submitForReview: false, includeInvalidModule: true);
+            WriteReleaseConfig(configPath, submitForReview: false, includeInvalidModule: true, includeGovernance: true);
 
             var status = await RunCliAsync(
                 repoRoot,
@@ -45,6 +46,17 @@ public sealed class PowerForgeCliAppleReleaseTests
                 Assert.Equal("Status", result.GetProperty("action").GetString());
                 Assert.False(result.GetProperty("requiresConfirmation").GetBoolean());
                 Assert.Equal("status", Assert.Single(result.GetProperty("enabledSteps").EnumerateArray()).GetString());
+            }
+
+            var doctor = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-release Doctor --config \"{configPath}\" --plan --summary --output json");
+            Assert.Equal(0, doctor.ExitCode);
+            using (var doctorDocument = JsonDocument.Parse(doctor.StdOut))
+            {
+                var steps = doctorDocument.RootElement.GetProperty("result").GetProperty("enabledSteps").EnumerateArray().Select(step => step.GetString()).ToArray();
+                Assert.Contains("doctor", steps);
+                Assert.Contains("checkGovernance", steps);
             }
 
             var advance = await RunCliAsync(
@@ -179,10 +191,54 @@ public sealed class PowerForgeCliAppleReleaseTests
         }
     }
 
+    [Fact]
+    public async Task AppleGovernance_ValidatesOfflineAndBlocksUnconfirmedApplyBeforeCredentials()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = CreateTempDirectory();
+        try
+        {
+            var configPath = Path.Combine(tempRoot, "governance.json");
+            File.WriteAllText(configPath,
+                """
+                {
+                  "schemaVersion": 1,
+                  "appId": "1234567890",
+                  "accessibility": [
+                    { "deviceFamily": "IPHONE", "supportsVoiceover": true }
+                  ]
+                }
+                """);
+
+            var validation = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-governance validate --config \"{configPath}\" --output json");
+            Assert.Equal(0, validation.ExitCode);
+            using (var document = JsonDocument.Parse(validation.StdOut))
+            {
+                Assert.Equal("apple-governance validate", document.RootElement.GetProperty("command").GetString());
+                Assert.True(document.RootElement.GetProperty("success").GetBoolean());
+                Assert.Empty(document.RootElement.GetProperty("result").GetProperty("findings").EnumerateArray());
+            }
+
+            var apply = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-governance apply --config \"{configPath}\" --output json");
+            Assert.Equal(2, apply.ExitCode);
+            using var rejected = JsonDocument.Parse(apply.StdOut);
+            Assert.Contains("requires --confirm", rejected.RootElement.GetProperty("error").GetString(), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
     private static void WriteReleaseConfig(
         string path,
         bool submitForReview,
-        bool includeInvalidModule)
+        bool includeInvalidModule,
+        bool includeGovernance = false)
         => File.WriteAllText(
             path,
             $$"""
@@ -198,6 +254,7 @@ public sealed class PowerForgeCliAppleReleaseTests
                 "AppStoreConnectApiKeyPath": ".appstoreconnect/AuthKey_TEST123456.p8",
                 "AppStoreConnectApiKeyId": "TEST123456",
                 "AppStoreConnectApiIssuerId": "00000000-0000-0000-0000-000000000000",
+                {{(includeGovernance ? "\"GovernanceConfigPath\": \"governance.json\"," : string.Empty)}}
                 "Archive": false,
                 "Upload": false,
                 "SubmitForReview": {{submitForReview.ToString().ToLowerInvariant()}},

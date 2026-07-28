@@ -4,50 +4,34 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# Set-AppStoreConnectWebhook
+# Export-AppStoreConnectGovernance
 ## SYNOPSIS
-Updates an App Store Connect webhook.
+Exports current Apple commerce and compliance state as a reviewable governance declaration.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Set-AppStoreConnectWebhook -IssuerId <string> -KeyId <string> -WebhookId <string> -Name <string> -Url <string> -Secret <string> -EventType <string[]> [-PrivateKey <string>] [-PrivateKeyPath <string>] [-TokenLifetimeMinutes <int>] [-Enabled <bool>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Export-AppStoreConnectGovernance [-Path] <string> -IssuerId <string> -KeyId <string> -AppId <string> [-PrivateKey <string>] [-PrivateKeyPath <string>] [-TokenLifetimeMinutes <int>] [-Force] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Updates an App Store Connect webhook.
+Exports current Apple commerce and compliance state as a reviewable governance declaration.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-Set-AppStoreConnectWebhook -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath './AuthKey.p8' -WebhookId 'webhook-id' -Name 'Build status' -Url 'https://releases.example.com/apple/webhook' -Secret 'a-strong-webhook-secret' -EventType 'BUILD_UPLOAD_STATE_UPDATED'
+Export-AppStoreConnectGovernance -IssuerId 'Value' -KeyId 'Value' -AppId 'Value'
 ```
 
 
 ## PARAMETERS
 
-### -Enabled
-Whether Apple should deliver events.
+### -AppId
+Exact App Store Connect app id to export.
 
 ```yaml
-Type: Boolean
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -EventType
-App Store Connect event types.
-
-```yaml
-Type: String[]
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -59,8 +43,24 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -Force
+Replace an existing snapshot file.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -IssuerId
-App Store Connect API issuer id.
+Issuer ID from App Store Connect API keys.
 
 ```yaml
 Type: String
@@ -76,7 +76,7 @@ Accept wildcard characters: True
 ```
 
 ### -KeyId
-App Store Connect API key id.
+Key ID associated with the private key.
 
 ```yaml
 Type: String
@@ -91,8 +91,24 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Name
-Webhook display name.
+### -PassThru
+Returns the declaration object instead of the output file.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Path
+Destination JSON file.
 
 ```yaml
 Type: String
@@ -101,7 +117,7 @@ Aliases: None
 Possible values:
 
 Required: True
-Position: named
+Position: 0
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True
@@ -124,7 +140,7 @@ Accept wildcard characters: True
 ```
 
 ### -PrivateKeyPath
-Private key file path.
+Path to a private key file in PEM format.
 
 ```yaml
 Type: String
@@ -139,24 +155,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Secret
-Replacement HMAC signing secret. The cmdlet never writes it to output.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: True
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -TokenLifetimeMinutes
-JWT token lifetime in minutes.
+Token lifetime in minutes, up to 20.
 
 ```yaml
 Type: Int32
@@ -165,38 +165,6 @@ Aliases: None
 Possible values:
 
 Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Url
-Public HTTPS receiver URL.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: True
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -WebhookId
-Webhook resource id.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: True
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -212,7 +180,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.AppStoreConnectWebhookInfo`
+- `System.IO.FileInfo
+PowerForge.AppStoreConnectGovernanceSpec`
 
 ## RELATED LINKS
 

@@ -26,6 +26,7 @@ internal sealed partial class PowerForgeReleaseService
             return;
 
         var syncScreenshotsOnAdvance = options.SyncScreenshots;
+        var hasGovernanceConfig = HasConfiguredPath(options.GovernanceConfigPath, options.GovernanceConfigPaths);
         options.Archive = false;
         options.Upload = false;
         options.PrepareDistribution = false;
@@ -33,6 +34,7 @@ internal sealed partial class PowerForgeReleaseService
         options.SyncMetadata = false;
         options.SyncAppInfo = false;
         options.SyncScreenshots = false;
+        options.CheckGovernance = false;
         options.CheckReleaseReadiness = false;
         options.DistributeTestFlight = false;
         options.SubmitTestFlightBetaReview = false;
@@ -42,9 +44,11 @@ internal sealed partial class PowerForgeReleaseService
         switch (request.AppleAction)
         {
             case PowerForgeAppleReleaseAction.Status:
-            case PowerForgeAppleReleaseAction.Doctor:
             case PowerForgeAppleReleaseAction.Version:
             case PowerForgeAppleReleaseAction.Cleanup:
+                break;
+            case PowerForgeAppleReleaseAction.Doctor:
+                options.CheckGovernance = hasGovernanceConfig;
                 break;
             case PowerForgeAppleReleaseAction.Archive:
                 options.Archive = true;
@@ -62,6 +66,7 @@ internal sealed partial class PowerForgeReleaseService
                 options.SyncMetadata = HasConfiguredPath(options.MetadataConfigPath, options.MetadataConfigPaths);
                 options.SyncAppInfo = HasConfiguredPath(options.AppInfoConfigPath, options.AppInfoConfigPaths);
                 options.CheckReleaseReadiness = true;
+                options.CheckGovernance = hasGovernanceConfig;
                 break;
             case PowerForgeAppleReleaseAction.Screenshots:
                 options.SyncScreenshots = true;
@@ -80,6 +85,7 @@ internal sealed partial class PowerForgeReleaseService
                 options.SyncScreenshots = syncScreenshotsOnAdvance &&
                                           HasConfiguredPath(options.ScreenshotConfigPath, options.ScreenshotConfigPaths);
                 options.CheckReleaseReadiness = true;
+                options.CheckGovernance = hasGovernanceConfig;
                 options.DistributeTestFlight =
                     (options.TestFlightBetaGroupIds?.Length ?? 0) > 0 ||
                     (options.TestFlightBetaGroupNames?.Length ?? 0) > 0;
@@ -598,6 +604,7 @@ internal sealed partial class PowerForgeReleaseService
                 .Concat(plan.Action == PowerForgeAppleReleaseAction.Doctor
                     ? AppleReleaseDoctor.Evaluate(plan, app, result?.RemoteState?.ControlPlane)
                     : Array.Empty<PowerForgeAppleReleaseDiagnostic>())
+                .Concat(CreateGovernanceDiagnostics(result?.Governance))
                 .GroupBy(static diagnostic => diagnostic.Code, StringComparer.OrdinalIgnoreCase)
                 .Select(static group => group.First())
                 .ToArray();
@@ -644,6 +651,7 @@ internal sealed partial class PowerForgeReleaseService
                     .ToArray(),
                 TestFlightBetaGroupsConfigured = betaGroupsConfigured,
                 ControlPlane = result?.RemoteState?.ControlPlane,
+                Governance = result?.Governance,
                 ArchiveCreated = result?.Archive?.Succeeded == true,
                 ProjectGenerated = result?.ProjectGenerated == true,
                 UploadPerformed = result?.Upload?.Succeeded == true,
@@ -698,6 +706,29 @@ internal sealed partial class PowerForgeReleaseService
         if (plan.Automation.WriteReceipt)
             WriteAppleReceipt(plan.ProjectRoot, plan.ReceiptPath, receipt);
         return receipt;
+    }
+
+    private static PowerForgeAppleReleaseDiagnostic[] CreateGovernanceDiagnostics(AppStoreConnectGovernancePlan? plan)
+    {
+        if (plan is null || plan.IsConverged) return Array.Empty<PowerForgeAppleReleaseDiagnostic>();
+        var code = plan.Findings.Any(finding => finding.IsError)
+            ? "APPLE_GOVERNANCE_CONFIG_INVALID"
+            : plan.BlockedCount > 0
+                ? "APPLE_GOVERNANCE_BLOCKED"
+                : "APPLE_GOVERNANCE_DRIFT";
+        return new[]
+        {
+            new PowerForgeAppleReleaseDiagnostic
+            {
+                Severity = "error",
+                Category = "governance",
+                Code = code,
+                Summary = $"Declared Apple commerce/compliance state has {plan.DriftCount} change(s), {plan.BlockedCount} blocked change(s), and {plan.Findings.Count(finding => finding.IsError)} configuration error(s).",
+                Evidence = string.Join("; ", plan.Changes.Take(5).Select(change => $"{change.Action} {change.ResourceType} {change.Key}")),
+                Action = "Review the compact governance plan receipt, correct blocked/configuration items, then run powerforge apple-governance apply --confirm.",
+                Retryable = plan.BlockedCount == 0 && plan.Findings.All(finding => !finding.IsError)
+            }
+        };
     }
 
     private static string[] BuildAppleReceiptNextActions(

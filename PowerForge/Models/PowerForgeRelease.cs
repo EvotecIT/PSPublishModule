@@ -401,6 +401,13 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public string[] AppInfoConfigPaths { get; set; } = Array.Empty<string>();
 
+    public string? GovernanceConfigPath { get; set; }
+
+    public string[] GovernanceConfigPaths { get; set; } = Array.Empty<string>();
+
+    /// <summary>Fail Doctor/Prepare/Advance when declared commercial or compliance state has drift.</summary>
+    public bool CheckGovernance { get; set; }
+
     public bool PrepareDistribution { get; set; }
 
     public bool SelectBuildForDistribution { get; set; } = true;
@@ -489,6 +496,12 @@ internal sealed class PowerForgeAppleReleasePlan
     public string? AppInfoConfigPath { get; set; }
 
     public string[] AppInfoConfigPaths { get; set; } = Array.Empty<string>();
+
+    public string? GovernanceConfigPath { get; set; }
+
+    public string[] GovernanceConfigPaths { get; set; } = Array.Empty<string>();
+
+    public bool CheckGovernance { get; set; }
 
     public bool PrepareDistribution { get; set; }
 
@@ -637,6 +650,8 @@ internal sealed class PowerForgeAppleAppReleaseResult
     public AppStoreConnectVersionReleaseResult? VersionRelease { get; set; }
 
     public AppStoreConnectReleaseStateResult? RemoteState { get; set; }
+
+    public AppStoreConnectGovernancePlan? Governance { get; set; }
 
     public bool ResumedExistingBuild { get; set; }
 

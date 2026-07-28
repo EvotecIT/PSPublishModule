@@ -1,0 +1,375 @@
+namespace PowerForge;
+
+/// <summary>Plans and converges explicit App Store commercial and compliance state.</summary>
+public sealed partial class AppStoreConnectGovernanceService
+{
+    private readonly AppStoreConnectClient _client;
+    private readonly AppStoreConnectGovernanceConfiguration _configuration = new();
+
+    /// <summary>Creates a governance service over an authenticated App Store Connect client.</summary>
+    public AppStoreConnectGovernanceService(AppStoreConnectClient client)
+    {
+        _client = client ?? throw new ArgumentNullException(nameof(client));
+    }
+
+    /// <summary>Reads Apple state and returns a non-mutating drift plan.</summary>
+    public async Task<AppStoreConnectGovernancePlan> PlanAsync(
+        AppStoreConnectGovernanceSpec spec,
+        CancellationToken cancellationToken = default)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+        var findings = _configuration.Validate(spec).ToList();
+        var plan = new AppStoreConnectGovernancePlan
+        {
+            AppId = spec.AppId?.Trim() ?? string.Empty,
+            CheckedAtUtc = DateTimeOffset.UtcNow,
+            Findings = findings.ToArray()
+        };
+        if (findings.Any(finding => finding.IsError)) return plan;
+
+        var changes = new List<AppStoreConnectGovernanceChange>();
+        if (spec.Pricing is not null)
+            await PlanPricingAsync(spec, changes, cancellationToken).ConfigureAwait(false);
+        if (spec.Availability is not null)
+            await PlanAvailabilityAsync(spec, changes, cancellationToken).ConfigureAwait(false);
+        if (spec.Accessibility.Length > 0)
+            await PlanAccessibilityAsync(spec, changes, cancellationToken).ConfigureAwait(false);
+        if (spec.EncryptionDeclarations.Length > 0)
+            await PlanEncryptionAsync(spec, changes, cancellationToken).ConfigureAwait(false);
+        if (spec.SubscriptionGroups.Length > 0)
+            await PlanSubscriptionsAsync(spec, changes, cancellationToken).ConfigureAwait(false);
+        plan.Changes = changes.ToArray();
+        return plan;
+    }
+
+    /// <summary>Converges a reviewed declaration one idempotent change at a time.</summary>
+    public async Task<AppStoreConnectGovernanceApplyResult> ApplyAsync(
+        AppStoreConnectGovernanceApplyRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request is null) throw new ArgumentNullException(nameof(request));
+        if (!request.ConfirmApply)
+            throw new InvalidOperationException("Governance apply requires explicit ConfirmApply=true. Generate and review a plan first.");
+        if (request.MaximumChanges is < 1 or > 1000)
+            throw new ArgumentOutOfRangeException(nameof(request.MaximumChanges), "MaximumChanges must be between 1 and 1000.");
+
+        var started = DateTimeOffset.UtcNow;
+        var applied = new List<AppStoreConnectGovernanceChange>();
+        var executed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AppStoreConnectGovernancePlan plan = new();
+        try
+        {
+            for (var index = 0; index < request.MaximumChanges; index++)
+            {
+                plan = await PlanAsync(request.Spec, cancellationToken).ConfigureAwait(false);
+                if (plan.Findings.Any(finding => finding.IsError))
+                    return Failure(request.Spec.AppId, started, applied, plan, "Correct governance configuration errors, then generate a new plan.");
+
+                var next = plan.Changes.FirstOrDefault(change => change.Action != AppStoreConnectGovernanceChangeAction.Blocked);
+                if (next is null)
+                {
+                    if (plan.BlockedCount > 0)
+                        return Failure(request.Spec.AppId, started, applied, plan, "Resolve blocked Apple API constraints shown in the final plan, then rerun governance.");
+                    return new AppStoreConnectGovernanceApplyResult
+                    {
+                        AppId = request.Spec.AppId.Trim(),
+                        StartedAtUtc = started,
+                        CompletedAtUtc = DateTimeOffset.UtcNow,
+                        Success = true,
+                        AppliedChanges = applied.ToArray(),
+                        FinalPlan = plan
+                    };
+                }
+
+                var fingerprint = $"{next.Action}|{next.ResourceType}|{next.Key}";
+                if (!executed.Add(fingerprint))
+                {
+                    return Failure(
+                        request.Spec.AppId,
+                        started,
+                        applied,
+                        plan,
+                        "Apple still reports a change already applied in this run. PowerForge stopped to prevent a duplicate mutation; wait for App Store Connect consistency, then generate a new plan.");
+                }
+
+                await ApplyChangeAsync(request.Spec, next, cancellationToken).ConfigureAwait(false);
+                applied.Add(next);
+            }
+
+            plan = await PlanAsync(request.Spec, cancellationToken).ConfigureAwait(false);
+            return Failure(request.Spec.AppId, started, applied, plan, $"Stopped after the configured maximum of {request.MaximumChanges} changes. Review the receipt before continuing.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return Failure(
+                request.Spec.AppId,
+                started,
+                applied,
+                plan,
+                $"Apple rejected or failed the next governance change: {ex.Message} Run governance plan/Doctor again after correcting the reported cause.");
+        }
+    }
+
+    private async Task PlanPricingAsync(
+        AppStoreConnectGovernanceSpec spec,
+        List<AppStoreConnectGovernanceChange> changes,
+        CancellationToken cancellationToken)
+    {
+        var desired = spec.Pricing!;
+        var current = await _client.GetAppPriceScheduleAsync(spec.AppId, cancellationToken).ConfigureAwait(false);
+        if (current is null)
+        {
+            Add(changes, "Pricing", "AppPriceSchedule", "schedule", AppStoreConnectGovernanceChangeAction.Create,
+                "Create the declared app price schedule and manual prices.");
+            return;
+        }
+
+        if (!Same(current.BaseTerritoryId, desired.BaseTerritoryId))
+        {
+            Add(changes, "Pricing", "AppPriceSchedule", "schedule", AppStoreConnectGovernanceChangeAction.Update,
+                $"Change base territory from '{current.BaseTerritoryId}' to '{desired.BaseTerritoryId}'.", current.Id);
+            return;
+        }
+
+        foreach (var price in desired.Prices)
+        {
+            if (!current.Prices.Any(existing => PriceMatches(existing, price)))
+            {
+                var key = PriceKey(price);
+                Add(changes, "Pricing", "AppPrice", key, AppStoreConnectGovernanceChangeAction.Create,
+                    $"Add app price for territory '{price.TerritoryId}' starting '{DisplayDate(price.StartDate)}'.", current.Id);
+            }
+        }
+    }
+
+    private async Task PlanAvailabilityAsync(
+        AppStoreConnectGovernanceSpec spec,
+        List<AppStoreConnectGovernanceChange> changes,
+        CancellationToken cancellationToken)
+    {
+        var desired = spec.Availability!;
+        var current = await _client.GetAppAvailabilityAsync(spec.AppId, cancellationToken).ConfigureAwait(false);
+        if (current is null)
+        {
+            Add(changes, "Availability", "AppAvailability", "availability", AppStoreConnectGovernanceChangeAction.Create,
+                "Create explicit app territory availability.");
+            return;
+        }
+
+        if (current.AvailableInNewTerritories != desired.AvailableInNewTerritories)
+        {
+            Add(changes, "Availability", "AppAvailability", "availableInNewTerritories", AppStoreConnectGovernanceChangeAction.Blocked,
+                "Apple's published API does not expose an update operation for availableInNewTerritories after creation; change this in App Store Connect or recreate it under human supervision.", current.Id);
+        }
+
+        foreach (var territory in desired.Territories)
+        {
+            var existing = current.Territories.FirstOrDefault(item => Same(item.TerritoryId, territory.TerritoryId));
+            if (existing is null)
+            {
+                Add(changes, "Availability", "TerritoryAvailability", territory.TerritoryId, AppStoreConnectGovernanceChangeAction.Blocked,
+                    $"Territory '{territory.TerritoryId}' is not present in Apple's availability relationship and cannot be added independently by the published API.", current.Id);
+            }
+            else if (existing.Available != territory.Available ||
+                     !SameDate(existing.ReleaseDate, territory.ReleaseDate) ||
+                     (territory.PreOrderEnabled.HasValue && existing.PreOrderEnabled != territory.PreOrderEnabled))
+            {
+                Add(changes, "Availability", "TerritoryAvailability", territory.TerritoryId, AppStoreConnectGovernanceChangeAction.Update,
+                    $"Update availability for territory '{territory.TerritoryId}'.", existing.Id, current.Id);
+            }
+        }
+    }
+
+    private async Task PlanAccessibilityAsync(
+        AppStoreConnectGovernanceSpec spec,
+        List<AppStoreConnectGovernanceChange> changes,
+        CancellationToken cancellationToken)
+    {
+        var current = await _client.GetAccessibilityDeclarationsAsync(spec.AppId, cancellationToken).ConfigureAwait(false);
+        foreach (var desired in spec.Accessibility)
+        {
+            var existing = current.FirstOrDefault(item => Same(item.DeviceFamily, desired.DeviceFamily));
+            if (existing is null)
+            {
+                Add(changes, "Accessibility", "AccessibilityDeclaration", desired.DeviceFamily, AppStoreConnectGovernanceChangeAction.Create,
+                    $"Create reviewed accessibility facts for '{desired.DeviceFamily}'.");
+                continue;
+            }
+            if (!AccessibilityMatches(existing, desired))
+            {
+                Add(changes, "Accessibility", "AccessibilityDeclaration", desired.DeviceFamily, AppStoreConnectGovernanceChangeAction.Update,
+                    $"Update reviewed accessibility facts for '{desired.DeviceFamily}'.", existing.Id);
+            }
+            else if (desired.Publish && !Same(existing.State, "PUBLISHED"))
+            {
+                Add(changes, "Accessibility", "AccessibilityDeclaration", desired.DeviceFamily, AppStoreConnectGovernanceChangeAction.Publish,
+                    $"Publish the reviewed accessibility declaration for '{desired.DeviceFamily}'.", existing.Id);
+            }
+        }
+    }
+
+    private async Task PlanEncryptionAsync(
+        AppStoreConnectGovernanceSpec spec,
+        List<AppStoreConnectGovernanceChange> changes,
+        CancellationToken cancellationToken)
+    {
+        var current = await _client.GetEncryptionDeclarationsAsync(spec.AppId, cancellationToken).ConfigureAwait(false);
+        foreach (var desired in spec.EncryptionDeclarations)
+        {
+            if (!current.Any(existing => EncryptionMatches(existing, desired)))
+            {
+                Add(changes, "Encryption", "EncryptionDeclaration", EncryptionKey(desired), AppStoreConnectGovernanceChangeAction.Create,
+                    "Create the missing human-reviewed export-compliance declaration.");
+            }
+        }
+    }
+
+    private async Task PlanSubscriptionsAsync(
+        AppStoreConnectGovernanceSpec spec,
+        List<AppStoreConnectGovernanceChange> changes,
+        CancellationToken cancellationToken)
+    {
+        var currentGroups = await _client.GetSubscriptionGroupsAsync(spec.AppId, cancellationToken: cancellationToken).ConfigureAwait(false);
+        foreach (var desiredGroup in spec.SubscriptionGroups)
+        {
+            var group = !string.IsNullOrWhiteSpace(desiredGroup.Id)
+                ? currentGroups.FirstOrDefault(item => Same(item.Id, desiredGroup.Id))
+                : currentGroups.FirstOrDefault(item => Same(item.ReferenceName, desiredGroup.ReferenceName));
+            var groupKey = GroupKey(desiredGroup);
+            if (group is null)
+            {
+                Add(changes, "Subscriptions", "SubscriptionGroup", groupKey, AppStoreConnectGovernanceChangeAction.Create,
+                    $"Create subscription group '{desiredGroup.ReferenceName}'.");
+                continue;
+            }
+            if (!Same(group.ReferenceName, desiredGroup.ReferenceName))
+            {
+                Add(changes, "Subscriptions", "SubscriptionGroup", groupKey, AppStoreConnectGovernanceChangeAction.Update,
+                    $"Rename subscription group to '{desiredGroup.ReferenceName}'.", group.Id);
+                continue;
+            }
+            await PlanSubscriptionGroupChildrenAsync(desiredGroup, group, changes, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task PlanSubscriptionGroupChildrenAsync(
+        AppStoreConnectSubscriptionGroupSpec desiredGroup,
+        AppStoreConnectSubscriptionGroupInfo group,
+        List<AppStoreConnectGovernanceChange> changes,
+        CancellationToken cancellationToken)
+    {
+        var groupLocalizations = await _client.GetSubscriptionGroupLocalizationsAsync(group.Id, cancellationToken).ConfigureAwait(false);
+        foreach (var desired in desiredGroup.Localizations)
+        {
+            var existing = groupLocalizations.FirstOrDefault(item => Same(item.Locale, desired.Locale));
+            var key = GroupLocalizationKey(desiredGroup, desired.Locale);
+            if (existing is null)
+                Add(changes, "Subscriptions", "SubscriptionGroupLocalization", key, AppStoreConnectGovernanceChangeAction.Create, $"Create group localization '{desired.Locale}'.", parentId: group.Id);
+            else if (!Same(existing.Name, desired.Name) || !SameOptional(existing.CustomAppName, desired.CustomAppName))
+                Add(changes, "Subscriptions", "SubscriptionGroupLocalization", key, AppStoreConnectGovernanceChangeAction.Update, $"Update group localization '{desired.Locale}'.", existing.Id, group.Id);
+        }
+
+        var subscriptions = await _client.GetSubscriptionsAsync(group.Id, cancellationToken: cancellationToken).ConfigureAwait(false);
+        foreach (var desired in desiredGroup.Subscriptions)
+        {
+            var existing = subscriptions.FirstOrDefault(item => Same(item.ProductId, desired.ProductId));
+            if (existing is null)
+            {
+                Add(changes, "Subscriptions", "Subscription", desired.ProductId, AppStoreConnectGovernanceChangeAction.Create,
+                    $"Create subscription '{desired.ProductId}'.", parentId: group.Id);
+                continue;
+            }
+            if (!SubscriptionMatches(existing, desired))
+            {
+                Add(changes, "Subscriptions", "Subscription", desired.ProductId, AppStoreConnectGovernanceChangeAction.Update,
+                    $"Update subscription '{desired.ProductId}'.", existing.Id, group.Id);
+                continue;
+            }
+            await PlanSubscriptionChildrenAsync(desired, existing, changes, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task PlanSubscriptionChildrenAsync(
+        AppStoreConnectSubscriptionSpec desired,
+        AppStoreConnectSubscriptionInfo subscription,
+        List<AppStoreConnectGovernanceChange> changes,
+        CancellationToken cancellationToken)
+    {
+        var localizations = await _client.GetSubscriptionLocalizationsAsync(subscription.Id, cancellationToken).ConfigureAwait(false);
+        foreach (var desiredLocalization in desired.Localizations)
+        {
+            var existing = localizations.FirstOrDefault(item => Same(item.Locale, desiredLocalization.Locale));
+            var key = SubscriptionChildKey(desired.ProductId, desiredLocalization.Locale);
+            if (existing is null)
+                Add(changes, "Subscriptions", "SubscriptionLocalization", key, AppStoreConnectGovernanceChangeAction.Create, $"Create subscription localization '{desiredLocalization.Locale}'.", parentId: subscription.Id);
+            else if (!Same(existing.Name, desiredLocalization.Name) || !SameOptional(existing.Description, desiredLocalization.Description))
+                Add(changes, "Subscriptions", "SubscriptionLocalization", key, AppStoreConnectGovernanceChangeAction.Update, $"Update subscription localization '{desiredLocalization.Locale}'.", existing.Id, subscription.Id);
+        }
+
+        var prices = await _client.GetSubscriptionPricesAsync(subscription.Id, cancellationToken).ConfigureAwait(false);
+        foreach (var desiredPrice in desired.Prices)
+        {
+            if (!prices.Any(existing => SubscriptionPriceMatches(existing, desiredPrice)))
+                Add(changes, "Subscriptions", "SubscriptionPrice", SubscriptionPriceKey(desired.ProductId, desiredPrice), AppStoreConnectGovernanceChangeAction.Create, $"Add subscription price for '{desiredPrice.TerritoryId}'.", parentId: subscription.Id);
+        }
+
+        if (desired.Availabilities.Length > 0)
+        {
+            var availabilities = await _client.GetSubscriptionPlanAvailabilitiesAsync(subscription.Id, cancellationToken).ConfigureAwait(false);
+            foreach (var desiredAvailability in desired.Availabilities)
+            {
+                var existing = availabilities.FirstOrDefault(item => Same(item.PlanType, desiredAvailability.PlanType));
+                var key = SubscriptionChildKey(desired.ProductId, desiredAvailability.PlanType);
+                if (existing is null)
+                    Add(changes, "Subscriptions", "SubscriptionPlanAvailability", key, AppStoreConnectGovernanceChangeAction.Create, $"Create '{desiredAvailability.PlanType}' plan availability.", parentId: subscription.Id);
+                else if (!SubscriptionAvailabilityMatches(existing, desiredAvailability))
+                    Add(changes, "Subscriptions", "SubscriptionPlanAvailability", key, AppStoreConnectGovernanceChangeAction.Update, $"Update '{desiredAvailability.PlanType}' plan availability.", existing.Id, subscription.Id);
+            }
+        }
+    }
+
+    private static void Add(List<AppStoreConnectGovernanceChange> changes, string section, string type, string key,
+        AppStoreConnectGovernanceChangeAction action, string summary, string? resourceId = null, string? parentId = null) =>
+        changes.Add(new AppStoreConnectGovernanceChange { Section = section, ResourceType = type, Key = key, Action = action, Summary = summary, ResourceId = resourceId, ParentId = parentId });
+
+    private static bool Same(string? left, string? right) => string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
+    private static bool SameOptional(string? left, string? right) => Same(left ?? string.Empty, right ?? string.Empty);
+    private static bool SameDate(string? left, string? right) => SameOptional(left, right);
+    private static string DisplayDate(string? value) => string.IsNullOrWhiteSpace(value) ? "immediately" : value!;
+    private static string GroupKey(AppStoreConnectSubscriptionGroupSpec group) => string.IsNullOrWhiteSpace(group.Id) ? group.ReferenceName.Trim() : group.Id!.Trim();
+    private static string GroupLocalizationKey(AppStoreConnectSubscriptionGroupSpec group, string locale) => GroupKey(group) + "|" + locale.Trim();
+    private static string SubscriptionChildKey(string productId, string value) => productId.Trim() + "|" + value.Trim();
+    private static string PriceKey(AppStoreConnectAppPriceSpec price) => string.Join("|", price.TerritoryId.Trim(), price.StartDate?.Trim() ?? string.Empty, price.EndDate?.Trim() ?? string.Empty, price.AppPricePointId.Trim());
+    private static string SubscriptionPriceKey(string productId, AppStoreConnectSubscriptionPriceSpec price) => string.Join("|", productId.Trim(), price.TerritoryId.Trim(), price.StartDate?.Trim() ?? string.Empty, price.PlanType?.Trim().ToUpperInvariant() ?? string.Empty, price.SubscriptionPricePointId.Trim());
+    private static string EncryptionKey(AppStoreConnectEncryptionDeclarationSpec value) => string.Join("|", value.AppDescription.Trim(), value.ContainsProprietaryCryptography, value.ContainsThirdPartyCryptography, value.AvailableOnFrenchStore);
+
+    private static bool PriceMatches(AppStoreConnectAppPriceInfo actual, AppStoreConnectAppPriceSpec desired) => Same(actual.AppPricePointId, desired.AppPricePointId) && Same(actual.TerritoryId, desired.TerritoryId) && SameDate(actual.StartDate, desired.StartDate) && SameDate(actual.EndDate, desired.EndDate);
+    private static bool EncryptionMatches(AppStoreConnectEncryptionDeclarationInfo actual, AppStoreConnectEncryptionDeclarationSpec desired) => Same(actual.AppDescription, desired.AppDescription) && actual.ContainsProprietaryCryptography == desired.ContainsProprietaryCryptography && actual.ContainsThirdPartyCryptography == desired.ContainsThirdPartyCryptography && actual.AvailableOnFrenchStore == desired.AvailableOnFrenchStore;
+    private static bool SubscriptionMatches(AppStoreConnectSubscriptionInfo actual, AppStoreConnectSubscriptionSpec desired) => Same(actual.Name, desired.Name) && Same(actual.SubscriptionPeriod, desired.SubscriptionPeriod) && (!desired.FamilySharable.HasValue || actual.FamilySharable == desired.FamilySharable) && (desired.ReviewNote is null || SameOptional(actual.ReviewNote, desired.ReviewNote)) && (!desired.GroupLevel.HasValue || actual.GroupLevel == desired.GroupLevel);
+    private static bool SubscriptionPriceMatches(AppStoreConnectSubscriptionPriceInfo actual, AppStoreConnectSubscriptionPriceSpec desired) => Same(actual.TerritoryId, desired.TerritoryId) && Same(actual.SubscriptionPricePointId, desired.SubscriptionPricePointId) && SameDate(actual.StartDate, desired.StartDate) && (desired.PlanType is null || SameOptional(actual.PlanType, desired.PlanType));
+    private static bool SubscriptionAvailabilityMatches(AppStoreConnectSubscriptionAvailabilityInfo actual, AppStoreConnectSubscriptionAvailabilitySpec desired) => actual.AvailableInNewTerritories == desired.AvailableInNewTerritories && new HashSet<string>(actual.TerritoryIds, StringComparer.OrdinalIgnoreCase).SetEquals(desired.TerritoryIds);
+
+    private static bool AccessibilityMatches(AppStoreConnectAccessibilityDeclarationInfo actual, AppStoreConnectAccessibilityDeclarationSpec desired) =>
+        (!desired.SupportsAudioDescriptions.HasValue || actual.SupportsAudioDescriptions == desired.SupportsAudioDescriptions) &&
+        (!desired.SupportsCaptions.HasValue || actual.SupportsCaptions == desired.SupportsCaptions) &&
+        (!desired.SupportsDarkInterface.HasValue || actual.SupportsDarkInterface == desired.SupportsDarkInterface) &&
+        (!desired.SupportsDifferentiateWithoutColorAlone.HasValue || actual.SupportsDifferentiateWithoutColorAlone == desired.SupportsDifferentiateWithoutColorAlone) &&
+        (!desired.SupportsLargerText.HasValue || actual.SupportsLargerText == desired.SupportsLargerText) &&
+        (!desired.SupportsReducedMotion.HasValue || actual.SupportsReducedMotion == desired.SupportsReducedMotion) &&
+        (!desired.SupportsSufficientContrast.HasValue || actual.SupportsSufficientContrast == desired.SupportsSufficientContrast) &&
+        (!desired.SupportsVoiceControl.HasValue || actual.SupportsVoiceControl == desired.SupportsVoiceControl) &&
+        (!desired.SupportsVoiceover.HasValue || actual.SupportsVoiceover == desired.SupportsVoiceover);
+
+    private static AppStoreConnectGovernanceApplyResult Failure(string appId, DateTimeOffset started,
+        List<AppStoreConnectGovernanceChange> applied, AppStoreConnectGovernancePlan plan, string nextAction) =>
+        new()
+        {
+            AppId = appId?.Trim() ?? string.Empty,
+            StartedAtUtc = started,
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+            Success = false,
+            AppliedChanges = applied.ToArray(),
+            FinalPlan = plan,
+            NextActions = new[] { nextAction }
+        };
+}

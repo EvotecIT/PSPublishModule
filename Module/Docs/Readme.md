@@ -64,6 +64,9 @@ Compresses a managed PowerShell resource folder into a NuGet package.
 ### [Convert-ProjectConsistency](Convert-ProjectConsistency.md)
 Converts a project to a consistent encoding/line ending policy and reports the results.
 
+### [Export-AppStoreConnectGovernance](Export-AppStoreConnectGovernance.md)
+Exports current Apple commerce and compliance state as a reviewable governance declaration.
+
 ### [Export-CertificateForNuGet](Export-CertificateForNuGet.md)
 Exports a code-signing certificate to DER format for NuGet.org registration.
 
@@ -93,6 +96,9 @@ Reads App Store Connect TestFlight beta testers.
 
 ### [Get-AppStoreConnectBuild](Get-AppStoreConnectBuild.md)
 Reads build information from App Store Connect.
+
+### [Get-AppStoreConnectGovernancePlan](Get-AppStoreConnectGovernancePlan.md)
+Reads Apple state and produces a non-mutating commerce and compliance drift plan.
 
 ### [Get-AppStoreConnectReleaseState](Get-AppStoreConnectReleaseState.md)
 Reads a compact App Store Connect release state summary for App Store and TestFlight release work.
@@ -553,6 +559,9 @@ Submits a prepared App Store Connect Distribution version to App Review.
 ### [Sync-AppStoreConnectAppInfoMetadata](Sync-AppStoreConnectAppInfoMetadata.md)
 Syncs localized app-level App Store information from a JSON configuration file.
 
+### [Sync-AppStoreConnectGovernance](Sync-AppStoreConnectGovernance.md)
+Converges reviewed App Store commerce and compliance state through an approval-gated plan.
+
 ### [Sync-AppStoreConnectScreenshots](Sync-AppStoreConnectScreenshots.md)
 Syncs local screenshot folders to App Store Connect screenshot sets.
 
@@ -561,6 +570,9 @@ Syncs localized App Store version metadata from a JSON configuration file.
 
 ### [Test-AppleAppReleaseDrift](Test-AppleAppReleaseDrift.md)
 Tests local Xcode project version values against App Store Connect.
+
+### [Test-AppStoreConnectGovernanceConfig](Test-AppStoreConnectGovernanceConfig.md)
+Validates declarative App Store commercial and compliance state without contacting Apple.
 
 ### [Test-AppStoreConnectReleaseReadiness](Test-AppStoreConnectReleaseReadiness.md)
 Checks whether an App Store Connect Distribution version is ready for submission.

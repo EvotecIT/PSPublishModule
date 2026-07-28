@@ -151,6 +151,8 @@ submitting a version.
       "ArtifactRetentionDays": 7
     },
     "AppInfoConfigPath": "build/appstore-metadata/app-info.json",
+    "GovernanceConfigPath": "build/appstore-governance.json",
+    "CheckGovernance": true,
     "ScreenshotConfigPaths": [
       "build/appstore-screenshots/ios.json",
       "build/appstore-screenshots/macos.json"
@@ -228,6 +230,154 @@ uses a separate plan receipt, checks the exact version/build remotely, and stops
 `SubmitTestFlightReview`, `SubmitAppReview`, or `Release`.
 Screenshot replacement is opt-in during `Advance`. Keep `SyncScreenshots=false` when the
 protected `powerforge-apple-screenshots.yml` lane owns capture, approval, and immediate sync.
+
+## Commercial and compliance governance
+
+Use one checked-in governance file per App Store Connect app. The file declares only
+facts that a product owner has reviewed; PowerForge never derives prices, countries,
+encryption answers, or accessibility claims from source code. The bundled schema gives
+editors completion and catches misspelled fields before a release:
+
+```json
+{
+  "$schema": "../../Schemas/appstore-connect-governance.schema.json",
+  "schemaVersion": 1,
+  "appId": "1234567890",
+  "pricing": {
+    "baseTerritoryId": "USA",
+    "prices": [
+      {
+        "territoryId": "USA",
+        "appPricePointId": "eyJzIjoi...",
+        "startDate": "2026-08-01"
+      }
+    ]
+  },
+  "availability": {
+    "availableInNewTerritories": false,
+    "territories": [
+      { "territoryId": "USA", "available": true },
+      { "territoryId": "POL", "available": true }
+    ]
+  },
+  "accessibility": [
+    {
+      "deviceFamily": "IPHONE",
+      "supportsVoiceover": true,
+      "supportsLargerText": true,
+      "publish": true
+    }
+  ],
+  "encryptionDeclarations": [
+    {
+      "appDescription": "Human-reviewed description of the app and its cryptography",
+      "containsProprietaryCryptography": false,
+      "containsThirdPartyCryptography": true,
+      "availableOnFrenchStore": true
+    }
+  ],
+  "subscriptionGroups": [
+    {
+      "referenceName": "Pro",
+      "localizations": [
+        { "locale": "en-US", "name": "Pro" }
+      ],
+      "subscriptions": [
+        {
+          "productId": "com.example.product.pro.monthly",
+          "name": "Pro Monthly",
+          "subscriptionPeriod": "ONE_MONTH",
+          "groupLevel": 1,
+          "localizations": [
+            { "locale": "en-US", "name": "Pro Monthly", "description": "Monthly Pro access" }
+          ],
+          "prices": [
+            {
+              "territoryId": "USA",
+              "subscriptionPricePointId": "eyJzIjoi...",
+              "planType": "MONTHLY"
+            }
+          ],
+          "availabilities": [
+            {
+              "planType": "MONTHLY",
+              "availableInNewTerritories": false,
+              "territoryIds": [ "USA", "POL" ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+Validate locally, read Apple and write a drift receipt, then apply only after review:
+
+```text
+powerforge apple-governance snapshot --app-id 1234567890 --out build/appstore-governance.json --release-config powerforge.release.json
+powerforge apple-governance validate --config build/appstore-governance.json
+powerforge apple-governance plan --config build/appstore-governance.json --release-config powerforge.release.json --fail-on-drift --output json
+powerforge apple-governance apply --config build/appstore-governance.json --release-config powerforge.release.json --confirm --output json
+```
+
+`snapshot` bootstraps a declaration from existing Apple state and refuses to overwrite
+reviewed configuration unless `--force` is supplied. Review it before committing.
+`validate` needs no credentials. `plan` is read-only. `apply` requires `--confirm`,
+converges one dependency-aware change at a time, replans after every Apple mutation,
+and writes a compact receipt by default under `.powerforge/apple/`. It creates and
+updates declared resources but never performs implicit deletions. A safety limit
+prevents an unexpectedly large change set from running indefinitely.
+
+The equivalent PowerShell surface is:
+
+```powershell
+Test-AppStoreConnectGovernanceConfig '.\build\appstore-governance.json'
+
+Export-AppStoreConnectGovernance `
+    -AppId '1234567890' -Path '.\build\appstore-governance.json' `
+    -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath $keyPath
+
+Get-AppStoreConnectGovernancePlan `
+    -ConfigPath '.\build\appstore-governance.json' `
+    -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath $keyPath
+
+Sync-AppStoreConnectGovernance `
+    -ConfigPath '.\build\appstore-governance.json' `
+    -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath $keyPath `
+    -Confirm
+```
+
+When `GovernanceConfigPath` or `GovernanceConfigPaths` is present, named `Doctor`,
+`Prepare`, and `Advance` actions automatically enable `CheckGovernance`. Drift becomes
+a stable `APPLE_GOVERNANCE_*` diagnostic in the normal Apple release receipt and blocks
+the transition before review. A configured workflow can also set
+`CheckGovernance=true` explicitly.
+
+For GitHub-hosted control, call `powerforge-apple-governance.yml` with exact consumer
+and PowerForge commit SHAs. `Plan` uses the normal `apple-release` environment and is
+read-only. `Apply` always replans first, requires an authorized dispatcher, enters the
+separate `apple-release-approval` protected environment, passes the explicit confirmation
+flag, and uploads both compact receipts. App Store Connect secrets are declared
+individually; the workflow does not inherit the caller's complete secret set.
+
+```yaml
+jobs:
+  governance:
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-apple-governance.yml@<exact-40-character-sha>
+    with:
+      operation: Plan # change to Apply only after reviewing the plan
+      source_ref: ${{ github.sha }}
+      powerforge_ref: <exact-40-character-sha>
+      config_path: scripts/appstoreconnect-governance.json
+      allowed_dispatchers_json: '["authorized-login"]'
+```
+
+Apple's API is intentionally asymmetric. PowerForge reports a blocked change when the
+published API cannot safely mutate an existing property, such as
+`availableInNewTerritories` on an already-created app availability resource. Resolve
+that exact item in App Store Connect, then rerun the plan. A blocked receipt is never
+reported as successful convergence.
 
 ## Reusable GitHub workflows
 
@@ -475,10 +625,12 @@ next number, so retries do not reuse a build already uploaded by another lane.
 PowerForge owns archive/upload, direct notarization, bounded build processing waits,
 Distribution preparation, metadata and screenshot sync, build selection, TestFlight
 distribution, review submission, approved-version release, compact diagnostics, and
-local artifact cleanup. It reads pricing, availability, phased-release, monetization,
-compliance, accessibility, webhook, customer-review, and beta-feedback state for
-Doctor. Apple still owns processing and review decisions, and human-reviewed
-commercial or compliance changes remain explicit App Store Connect operations.
+local artifact cleanup. Declarative governance adds plan/diff/apply control for app
+pricing schedules, territory availability, accessibility declarations, export-
+compliance declarations, subscription groups and products, localizations, prices, and
+plan availability. Doctor also reads phased release, webhooks, customer reviews, and
+beta feedback. Apple still owns processing and review decisions, and a person must
+supply and approve every legal, commercial, and accessibility fact before apply.
 
 Keep every mutating action flag disabled in committed consumer configuration. Named
 actions override those flags for one run, and the three review/release transitions stay

@@ -552,7 +552,11 @@ public sealed partial class AppStoreConnectClient : IDisposable
         return parse(data);
     }
 
-    private async Task<T[]> GetArrayAsync<T>(string relativeUrl, Func<JsonElement, T> parse, CancellationToken cancellationToken)
+    private async Task<T[]> GetArrayAsync<T>(
+        string relativeUrl,
+        Func<JsonElement, T> parse,
+        CancellationToken cancellationToken,
+        bool returnEmptyOnNotFound = false)
     {
         var list = new List<T>();
         var visitedPages = new HashSet<string>(StringComparer.Ordinal);
@@ -565,8 +569,12 @@ public sealed partial class AppStoreConnectClient : IDisposable
             if (!visitedPages.Add(currentPage))
                 throw new InvalidOperationException($"App Store Connect API returned a repeated pagination link: {currentPage}");
 
-            using var doc = await GetJsonAsync(currentPage, cancellationToken).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("App Store Connect API request returned no response body.");
+            using var doc = await GetJsonAsync(
+                currentPage,
+                cancellationToken,
+                returnNullOnNotFound: returnEmptyOnNotFound && list.Count == 0).ConfigureAwait(false);
+            if (doc is null)
+                return Array.Empty<T>();
             if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
             {
                 foreach (var item in data.EnumerateArray())
@@ -666,7 +674,7 @@ public sealed partial class AppStoreConnectClient : IDisposable
             return null;
 
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"App Store Connect API request failed ({(int)response.StatusCode} {response.ReasonPhrase}): {response.Content}");
+            throw new InvalidOperationException($"App Store Connect API GET '{relativeUrl}' failed ({(int)response.StatusCode} {response.ReasonPhrase}): {response.Content}");
 
         return JsonDocument.Parse(response.Content);
     }
@@ -682,7 +690,7 @@ public sealed partial class AppStoreConnectClient : IDisposable
         using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"App Store Connect API request failed ({(int)response.StatusCode} {response.ReasonPhrase}): {content}");
+            throw new InvalidOperationException($"App Store Connect API {method.Method} '{relativeUrl}' failed ({(int)response.StatusCode} {response.ReasonPhrase}): {content}");
 
         return string.IsNullOrWhiteSpace(content) ? null : JsonDocument.Parse(content);
     }
@@ -820,7 +828,9 @@ public sealed partial class AppStoreConnectClient : IDisposable
             Name = GetString(attrs, "name"),
             State = GetString(attrs, "state"),
             SubscriptionPeriod = GetString(attrs, "subscriptionPeriod"),
-            FamilySharable = GetBool(attrs, "familySharable")
+            FamilySharable = GetBool(attrs, "familySharable"),
+            ReviewNote = GetString(attrs, "reviewNote"),
+            GroupLevel = GetInt32(attrs, "groupLevel")
         };
     }
 

@@ -239,6 +239,8 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public AppStoreConnectControlPlaneState? ControlPlane { get; set; }
 
+    public AppStoreConnectGovernancePlan? Governance { get; set; }
+
     public bool ArchiveCreated { get; set; }
 
     public bool ProjectGenerated { get; set; }
