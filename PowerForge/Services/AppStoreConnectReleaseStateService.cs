@@ -48,8 +48,11 @@ public sealed class AppStoreConnectReleaseStateService
         var controlPlaneVersionId = platformStates
             .Select(static state => state.Version?.Id)
             .FirstOrDefault(static id => !string.IsNullOrWhiteSpace(id));
+        var controlPlaneBuildId = platformStates
+            .Select(static state => state.TestFlightBuild?.Id)
+            .FirstOrDefault(static id => !string.IsNullOrWhiteSpace(id));
         var controlPlane = request.IncludeControlPlane
-            ? await _client.GetControlPlaneStateAsync(appId, controlPlaneVersionId, cancellationToken).ConfigureAwait(false)
+            ? await _client.GetControlPlaneStateAsync(appId, controlPlaneVersionId, controlPlaneBuildId, cancellationToken).ConfigureAwait(false)
             : null;
 
         return new AppStoreConnectReleaseStateResult

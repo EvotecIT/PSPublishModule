@@ -47,7 +47,7 @@ public sealed partial class AppStoreConnectClientTests
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);
 
-        var state = await client.GetControlPlaneStateAsync("app-1", "version-1");
+        var state = await client.GetControlPlaneStateAsync("app-1", "version-1", "build-1");
 
         Assert.True(state.ReviewDetailsConfigured);
         Assert.True(state.ReviewContactConfigured);
@@ -69,7 +69,8 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal("iPhone17,1", crash.DeviceModel);
         Assert.Equal(5, state.BetaScreenshotFeedbackCount);
         Assert.Equal(6, state.CustomerReviewCount);
-        Assert.Contains(handler.RequestUris, uri => uri.AbsolutePath.EndsWith("/betaFeedbackCrashSubmissions", StringComparison.Ordinal));
+        var crashRequest = Assert.Single(handler.RequestUris, uri => uri.AbsolutePath.EndsWith("/betaFeedbackCrashSubmissions", StringComparison.Ordinal));
+        Assert.Contains("filter%5Bbuild%5D=build-1", crashRequest.Query, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -90,7 +91,7 @@ public sealed partial class AppStoreConnectClientTests
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);
 
-        var state = await client.GetControlPlaneStateAsync("app-1", "version-1");
+        var state = await client.GetControlPlaneStateAsync("app-1", "version-1", "build-1");
 
         Assert.True(state.ReviewDetailsExist);
         Assert.False(state.ReviewContactConfigured);

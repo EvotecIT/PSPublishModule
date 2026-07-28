@@ -1715,25 +1715,34 @@ internal sealed partial class PowerForgeReleaseService
         var destination = AppleAppArchiveService.GetGenericDestination(platform, archiveVariant);
         var archivePath = Path.Combine(archiveRoot, platform.ToString(), $"{safeName}.xcarchive");
         var exportPath = Path.Combine(exportRoot, platform.ToString(), safeName);
+        var workspaceVersionMutationRequested = !allowMissingProject &&
+                                                isWorkspace &&
+                                                (app.UseResolvedVersion ||
+                                                 app.BuildNumberPolicy != AppleBuildNumberPolicy.KeepExisting);
+        if (workspaceVersionMutationRequested)
+            throw new InvalidOperationException($"Apple app '{name}' uses a .xcworkspace ProjectPath. Use explicit MarketingVersion and BuildNumber as read-only release identities, or point version mutation at the owning .xcodeproj/project.pbxproj.");
         var versionUpdateRequested = !allowMissingProject &&
+                                     !isWorkspace &&
                                      (app.UseResolvedVersion ||
                                       !string.IsNullOrWhiteSpace(app.MarketingVersion) ||
                                       !string.IsNullOrWhiteSpace(app.BuildNumber) ||
                                       app.BuildNumberPolicy != AppleBuildNumberPolicy.KeepExisting);
-        var marketingVersion = versionUpdateRequested
-            ? app.UseResolvedVersion ? sharedReleaseVersion : app.MarketingVersion
-            : null;
-        if (versionUpdateRequested && isWorkspace)
-            throw new InvalidOperationException($"Apple app '{name}' uses a .xcworkspace ProjectPath. Unified Apple version updates require a .xcodeproj ProjectPath or project.pbxproj path.");
+        var marketingVersion = isWorkspace
+            ? app.MarketingVersion
+            : versionUpdateRequested
+                ? app.UseResolvedVersion ? sharedReleaseVersion : app.MarketingVersion
+                : null;
         if (versionUpdateRequested && string.IsNullOrWhiteSpace(marketingVersion) && !(allowUnresolvedResolvedVersion && app.UseResolvedVersion))
             throw new InvalidOperationException($"Apple app '{name}' requires MarketingVersion unless UseResolvedVersion is enabled with a resolvable release version.");
 
         var buildNumberMustWaitForGeneration =
             app.BuildNumberPolicy == AppleBuildNumberPolicy.IncrementExisting &&
             (!projectExists || app.RegenerateProject);
-        var buildNumber = versionUpdateRequested && !buildNumberMustWaitForGeneration
-            ? ResolveAppleBuildNumber(app, projectPath, new XcodeProjectVersionEditor())
-            : null;
+        var buildNumber = isWorkspace
+            ? string.IsNullOrWhiteSpace(app.BuildNumber) ? null : app.BuildNumber!.Trim()
+            : versionUpdateRequested && !buildNumberMustWaitForGeneration
+                ? ResolveAppleBuildNumber(app, projectPath, new XcodeProjectVersionEditor())
+                : null;
 
         return new PowerForgeAppleAppReleaseTargetPlan
         {

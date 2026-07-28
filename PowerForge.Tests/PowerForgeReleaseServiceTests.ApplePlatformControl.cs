@@ -141,10 +141,12 @@ public sealed partial class PowerForgeReleaseServiceTests
         };
         var diagnostics = AppleReleaseDoctor.Evaluate(
             new PowerForgeAppleReleasePlan { Apps = new[] { app } },
-            app);
+            app,
+            new AppStoreConnectControlPlaneState());
 
         Assert.DoesNotContain(diagnostics, item => item.Code == "APPLE_METADATA_UNMANAGED");
         Assert.DoesNotContain(diagnostics, item => item.Code == "APPLE_APP_INFO_UNMANAGED");
+        Assert.DoesNotContain(diagnostics, item => item.Code == "APPLE_ACCESSIBILITY_UNDECLARED");
     }
 
     [Fact]
@@ -534,7 +536,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         var root = CreateSandbox();
         try
         {
-            CreateXcodeProject(root, "EasyControlXAgent.xcodeproj", "1.0.0", "4");
+            Directory.CreateDirectory(Path.Combine(root, "EasyControlXAgent.xcworkspace"));
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
             File.WriteAllText(keyPath, "private-key");
             var spec = CreateAppleAutomationSpec(root, keyPath);
@@ -543,11 +545,14 @@ public sealed partial class PowerForgeReleaseServiceTests
             spec.AppleApps.DirectDistribution.KeychainProfile = null;
             var app = Assert.Single(spec.AppleApps.Apps);
             app.Name = "EasyControlX Agent";
-            app.ProjectPath = "EasyControlXAgent.xcodeproj";
+            app.ProjectPath = "EasyControlXAgent.xcworkspace";
             app.Scheme = "EasyControlXAgent";
             app.Platform = ApplePlatform.macOS;
             app.DistributionRoute = AppleDistributionRoute.DirectNotarized;
             app.AppStoreConnectAppId = null;
+            app.MarketingVersion = "1.0.0";
+            app.BuildNumber = "4";
+            app.BuildNumberPolicy = AppleBuildNumberPolicy.KeepExisting;
             var stateCalls = 0;
             AppleNotarizationRequest? notarizationRequest = null;
 
@@ -602,6 +607,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("issuer-id", notarizationRequest.ApiIssuerId);
             var target = Assert.Single(result.AppleReceipt!.Targets);
             Assert.Equal(AppleDistributionRoute.DirectNotarized, target.DistributionRoute);
+            Assert.Equal("1.0.0", target.Version);
+            Assert.Equal("4", target.Build);
             Assert.Equal("notary-1", target.NotarizationSubmissionId);
             Assert.Equal("Accepted", target.NotarizationStatus);
             Assert.True(target.Stapled);
@@ -856,5 +863,14 @@ public sealed partial class PowerForgeReleaseServiceTests
         Assert.Equal(expectedCode, diagnostic.Code);
         Assert.Equal(expectedCategory, diagnostic.Category);
         Assert.False(string.IsNullOrWhiteSpace(diagnostic.Action));
+    }
+
+    [Fact]
+    public void AppleReleaseFailureClassifier_DoesNotTreatItmsNumbersAsHttpFailures()
+    {
+        var diagnostics = AppleReleaseFailureClassifier.Classify("Asset validation failed ITMS-90535");
+
+        Assert.Contains(diagnostics, item => item.Code == "APPLE_ASSET_VALIDATION");
+        Assert.DoesNotContain(diagnostics, item => item.Code == "APPLE_TRANSIENT");
     }
 }

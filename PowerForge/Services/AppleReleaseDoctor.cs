@@ -208,7 +208,8 @@ internal static class AppleReleaseDoctor
                 $"No encryption declaration is registered for '{app.Name}'.",
                 "Verify ITSAppUsesNonExemptEncryption in the shipped Info.plist or register the required encryption declaration."));
         }
-        if (state.AccessibilityDeclarationCount == 0)
+        if (app.DistributionRoute == AppleDistributionRoute.AppStore &&
+            state.AccessibilityDeclarationCount == 0)
         {
             diagnostics.Add(Warning(
                 "accessibility",

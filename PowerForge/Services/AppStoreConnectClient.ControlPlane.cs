@@ -11,12 +11,23 @@ public sealed partial class AppStoreConnectClient
         string appId,
         string? versionId = null,
         CancellationToken cancellationToken = default)
+        => await GetControlPlaneStateAsync(appId, versionId, buildId: null, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// Reads the release-critical control-plane inventory and scopes beta feedback to one exact build.
+    /// </summary>
+    public async Task<AppStoreConnectControlPlaneState> GetControlPlaneStateAsync(
+        string appId,
+        string? versionId,
+        string? buildId,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(appId))
             throw new ArgumentException("App id is required.", nameof(appId));
 
         appId = appId.Trim();
         versionId = string.IsNullOrWhiteSpace(versionId) ? null : versionId!.Trim();
+        buildId = string.IsNullOrWhiteSpace(buildId) ? null : buildId!.Trim();
         var appInfos = await GetAppInfosAsync(appId, limit: 50, cancellationToken).ConfigureAwait(false);
         var ageRatingDeclared = false;
         foreach (var appInfo in appInfos)
@@ -68,14 +79,18 @@ public sealed partial class AppStoreConnectClient
             $"apps/{Uri.EscapeDataString(appId)}/webhooks?limit=1",
             cancellationToken,
             returnNullOnNotFound: true).ConfigureAwait(false);
-        using var crashFeedback = await GetJsonAsync(
-            $"apps/{Uri.EscapeDataString(appId)}/betaFeedbackCrashSubmissions?limit=3&sort=-createdDate",
-            cancellationToken,
-            returnNullOnNotFound: true).ConfigureAwait(false);
-        using var screenshotFeedback = await GetJsonAsync(
-            $"apps/{Uri.EscapeDataString(appId)}/betaFeedbackScreenshotSubmissions?limit=3&sort=-createdDate",
-            cancellationToken,
-            returnNullOnNotFound: true).ConfigureAwait(false);
+        using var crashFeedback = buildId is null
+            ? null
+            : await GetJsonAsync(
+                $"apps/{Uri.EscapeDataString(appId)}/betaFeedbackCrashSubmissions?filter%5Bbuild%5D={Uri.EscapeDataString(buildId)}&limit=3&sort=-createdDate",
+                cancellationToken,
+                returnNullOnNotFound: true).ConfigureAwait(false);
+        using var screenshotFeedback = buildId is null
+            ? null
+            : await GetJsonAsync(
+                $"apps/{Uri.EscapeDataString(appId)}/betaFeedbackScreenshotSubmissions?filter%5Bbuild%5D={Uri.EscapeDataString(buildId)}&limit=3&sort=-createdDate",
+                cancellationToken,
+                returnNullOnNotFound: true).ConfigureAwait(false);
         using var customerReviews = await GetJsonAsync(
             $"apps/{Uri.EscapeDataString(appId)}/customerReviews?limit=1",
             cancellationToken,

@@ -1555,7 +1555,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                                 ProjectPath = "Tactra.xcworkspace",
                                 Scheme = "Tactra",
                                 Platform = ApplePlatform.iOS,
-                                MarketingVersion = "2.1.0"
+                                MarketingVersion = "2.1.0",
+                                BuildNumber = "14",
+                                BuildNumberPolicy = AppleBuildNumberPolicy.IncrementExisting
                             }
                         }
                     }
