@@ -223,6 +223,40 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public void GovernanceConfiguration_AllowsIntroductoryOffersToReuseReviewedPlanTerritories()
+    {
+        var findings = new AppStoreConnectGovernanceConfiguration().Validate(new AppStoreConnectGovernanceSpec
+        {
+            AppId = "app-1",
+            SubscriptionGroups = [new AppStoreConnectSubscriptionGroupSpec
+            {
+                ReferenceName = "Pro",
+                Subscriptions = [new AppStoreConnectSubscriptionSpec
+                {
+                    ProductId = "pro.monthly",
+                    Name = "Pro Monthly",
+                    SubscriptionPeriod = "ONE_MONTH",
+                    IntroductoryOffers = [new AppStoreConnectSubscriptionIntroductoryOfferSpec
+                    {
+                        Duration = "TWO_WEEKS",
+                        OfferMode = "FREE_TRIAL",
+                        NumberOfPeriods = 1,
+                        TerritoriesFromPlanType = "UPFRONT"
+                    }],
+                    Availabilities = [new AppStoreConnectSubscriptionAvailabilitySpec
+                    {
+                        PlanType = "UPFRONT",
+                        AvailableInNewTerritories = true,
+                        TerritoryIds = ["USA", "POL"]
+                    }]
+                }]
+            }]
+        });
+
+        Assert.DoesNotContain(findings, finding => finding.IsError);
+    }
+
+    [Fact]
     public void GovernanceConfiguration_RejectsUnknownPropertiesInsteadOfSilentlyIgnoringIntent()
     {
         var path = Path.Combine(Path.GetTempPath(), $"powerforge-governance-{Guid.NewGuid():N}.json");
@@ -234,6 +268,47 @@ public sealed partial class AppStoreConnectClientTests
             var error = Assert.Throws<InvalidOperationException>(() => new AppStoreConnectGovernanceConfiguration().Load(path));
 
             Assert.Contains("prcies", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void GovernanceConfiguration_LoadsDocumentedSchemaHint()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"powerforge-governance-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path,
+                """{ "$schema": "../../Schemas/appstore-connect-governance.schema.json", "schemaVersion": 1, "appId": "app-1" }""");
+
+            var spec = new AppStoreConnectGovernanceConfiguration().Load(path);
+
+            Assert.Equal("../../Schemas/appstore-connect-governance.schema.json", spec.Schema);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData("{ \"schemaVersion\": 1, \"appId\": \"app-1\", \"availability\": { \"territories\": [] } }", "availableInNewTerritories")]
+    [InlineData("{ \"schemaVersion\": 1, \"appId\": \"app-1\", \"availability\": { \"availableInNewTerritories\": false, \"territories\": [ { \"territoryId\": \"USA\" } ] } }", "available")]
+    [InlineData("{ \"schemaVersion\": 1, \"appId\": \"app-1\", \"encryptionDeclarations\": [ { \"appDescription\": \"Reviewed\", \"containsThirdPartyCryptography\": false, \"availableOnFrenchStore\": false } ] }", "containsProprietaryCryptography")]
+    [InlineData("{ \"schemaVersion\": 1, \"appId\": \"app-1\", \"subscriptionGroups\": [ { \"referenceName\": \"Pro\", \"subscriptions\": [ { \"productId\": \"pro\", \"name\": \"Pro\", \"subscriptionPeriod\": \"ONE_MONTH\", \"availabilities\": [ { \"planType\": \"MONTHLY\", \"territoryIds\": [ \"USA\" ] } ] } ] } ] }", "availableInNewTerritories")]
+    public void GovernanceConfiguration_RejectsOmittedRequiredBooleanFacts(string json, string property)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"powerforge-governance-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path, json);
+
+            var error = Assert.Throws<InvalidOperationException>(() => new AppStoreConnectGovernanceConfiguration().Load(path));
+
+            Assert.Contains(property, error.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -427,6 +502,118 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task GovernancePlan_DetectsExplicitPreserveCurrentPriceDrift()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptionGroups", "id": "group-1", "attributes": { "referenceName": "Pro" } } ] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptions", "id": "sub-1", "attributes": { "productId": "pro.monthly", "name": "Pro Monthly", "subscriptionPeriod": "ONE_MONTH" } } ] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptionPrices", "id": "price-1", "attributes": { "planType": "MONTHLY", "preserved": false }, "relationships": { "territory": { "data": { "type": "territories", "id": "USA" } }, "subscriptionPricePoint": { "data": { "type": "subscriptionPricePoints", "id": "point-1" } } } } ] }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var plan = await new AppStoreConnectGovernanceService(client).PlanAsync(new AppStoreConnectGovernanceSpec
+        {
+            AppId = "app-1",
+            SubscriptionGroups = [new AppStoreConnectSubscriptionGroupSpec
+            {
+                ReferenceName = "Pro",
+                Subscriptions = [new AppStoreConnectSubscriptionSpec
+                {
+                    ProductId = "pro.monthly", Name = "Pro Monthly", SubscriptionPeriod = "ONE_MONTH",
+                    Prices = [new AppStoreConnectSubscriptionPriceSpec { TerritoryId = "USA", SubscriptionPricePointId = "point-1", PlanType = "MONTHLY", PreserveCurrentPrice = true }]
+                }]
+            }]
+        });
+
+        Assert.Equal("SubscriptionPrice", Assert.Single(plan.Changes).ResourceType);
+    }
+
+    [Fact]
+    public async Task GovernancePlan_ConvergesDeclaredIntroductoryFreeTrial()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptionGroups", "id": "group-1", "attributes": { "referenceName": "Pro" } } ] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptions", "id": "sub-1", "attributes": { "productId": "pro.monthly", "name": "Pro Monthly", "subscriptionPeriod": "ONE_MONTH" } } ] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptionIntroductoryOffers", "id": "offer-1", "attributes": { "duration": "TWO_WEEKS", "offerMode": "FREE_TRIAL", "numberOfPeriods": 1 }, "relationships": { "subscription": { "data": { "type": "subscriptions", "id": "sub-1" } }, "territory": { "data": { "type": "territories", "id": "USA" } } } } ] }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var plan = await new AppStoreConnectGovernanceService(client).PlanAsync(new AppStoreConnectGovernanceSpec
+        {
+            AppId = "app-1",
+            SubscriptionGroups = [new AppStoreConnectSubscriptionGroupSpec
+            {
+                ReferenceName = "Pro",
+                Subscriptions = [new AppStoreConnectSubscriptionSpec
+                {
+                    ProductId = "pro.monthly", Name = "Pro Monthly", SubscriptionPeriod = "ONE_MONTH",
+                    IntroductoryOffers = [new AppStoreConnectSubscriptionIntroductoryOfferSpec { Duration = "TWO_WEEKS", OfferMode = "FREE_TRIAL", NumberOfPeriods = 1, TerritoryIds = ["USA"] }]
+                }]
+            }]
+        });
+
+        Assert.True(plan.IsConverged);
+        Assert.Empty(plan.Changes);
+        Assert.Contains(handler.RequestUris, uri => uri.AbsolutePath.EndsWith("/subscriptions/sub-1/introductoryOffers", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GovernanceApply_CreatesAndConvergesDeclaredIntroductoryFreeTrial()
+    {
+        var handler = new IntroductoryOfferGovernanceHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var result = await new AppStoreConnectGovernanceService(client).ApplyAsync(new AppStoreConnectGovernanceApplyRequest
+        {
+            ConfirmApply = true,
+            MaximumChanges = 1,
+            Spec = new AppStoreConnectGovernanceSpec
+            {
+                AppId = "app-1",
+                SubscriptionGroups = [new AppStoreConnectSubscriptionGroupSpec
+                {
+                    ReferenceName = "Pro",
+                    Subscriptions = [new AppStoreConnectSubscriptionSpec
+                    {
+                        ProductId = "pro.monthly", Name = "Pro Monthly", SubscriptionPeriod = "ONE_MONTH",
+                        IntroductoryOffers = [new AppStoreConnectSubscriptionIntroductoryOfferSpec
+                        {
+                            Duration = "TWO_WEEKS", OfferMode = "FREE_TRIAL", NumberOfPeriods = 1, TerritoryIds = ["USA"]
+                        }]
+                    }]
+                }]
+            }
+        });
+
+        Assert.True(result.Success);
+        Assert.True(result.FinalPlan.IsConverged);
+        Assert.Equal("SubscriptionIntroductoryOffer", Assert.Single(result.AppliedChanges).ResourceType);
+        Assert.Equal(1, handler.PostCount);
+    }
+
+    [Fact]
+    public async Task GovernanceSnapshot_PreservesSubscriptionPriceAndIntroductoryOfferFacts()
+    {
+        using var http = new HttpClient(new SubscriptionGovernanceSnapshotHandler()) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var snapshot = await new AppStoreConnectGovernanceService(client).SnapshotAsync("app-1");
+
+        var subscription = Assert.Single(Assert.Single(snapshot.SubscriptionGroups).Subscriptions);
+        Assert.True(Assert.Single(subscription.Prices).PreserveCurrentPrice);
+        var offer = Assert.Single(subscription.IntroductoryOffers);
+        Assert.Equal("TWO_WEEKS", offer.Duration);
+        Assert.Equal("FREE_TRIAL", offer.OfferMode);
+        Assert.Equal(new[] { "USA" }, offer.TerritoryIds);
+    }
+
+    [Fact]
     public async Task GovernanceSnapshot_ExportsObservedFactsWithoutInventingMissingSections()
     {
         var handler = new GovernanceSnapshotHandler();
@@ -496,6 +683,58 @@ public sealed partial class AppStoreConnectClientTests
             }
             return Response(HttpStatusCode.OK, """{ "data": [] }""");
         }
+
+        private static Task<HttpResponseMessage> Response(HttpStatusCode status, string body) => Task.FromResult(
+            new HttpResponseMessage(status) { Content = new StringContent(body) });
+    }
+
+    private sealed class SubscriptionGovernanceSnapshotHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/appPriceSchedule", StringComparison.Ordinal) || path.EndsWith("/appAvailabilityV2", StringComparison.Ordinal))
+                return Response(HttpStatusCode.NotFound, "{}");
+            if (path.EndsWith("/subscriptionGroups", StringComparison.Ordinal))
+                return Response(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptionGroups", "id": "group-1", "attributes": { "referenceName": "Pro" } } ] }""");
+            if (path.EndsWith("/group-1/subscriptions", StringComparison.Ordinal))
+                return Response(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptions", "id": "sub-1", "attributes": { "productId": "pro.monthly", "name": "Pro Monthly", "subscriptionPeriod": "ONE_MONTH" } } ] }""");
+            if (path.EndsWith("/sub-1/prices", StringComparison.Ordinal))
+                return Response(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptionPrices", "id": "price-1", "attributes": { "planType": "MONTHLY", "preserved": true }, "relationships": { "territory": { "data": { "type": "territories", "id": "USA" } }, "subscriptionPricePoint": { "data": { "type": "subscriptionPricePoints", "id": "point-1" } } } } ] }""");
+            if (path.EndsWith("/sub-1/introductoryOffers", StringComparison.Ordinal))
+                return Response(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptionIntroductoryOffers", "id": "offer-1", "attributes": { "duration": "TWO_WEEKS", "offerMode": "FREE_TRIAL", "numberOfPeriods": 1 }, "relationships": { "subscription": { "data": { "type": "subscriptions", "id": "sub-1" } }, "territory": { "data": { "type": "territories", "id": "USA" } } } } ] }""");
+            return Response(HttpStatusCode.OK, """{ "data": [] }""");
+        }
+
+        private static Task<HttpResponseMessage> Response(HttpStatusCode status, string body) => Task.FromResult(
+            new HttpResponseMessage(status) { Content = new StringContent(body) });
+    }
+
+    private sealed class IntroductoryOfferGovernanceHandler : HttpMessageHandler
+    {
+        private bool _offerCreated;
+        public int PostCount { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (request.Method == HttpMethod.Post && path.EndsWith("/subscriptionIntroductoryOffers", StringComparison.Ordinal))
+            {
+                PostCount++;
+                _offerCreated = true;
+                return Response(HttpStatusCode.Created, OfferJson);
+            }
+            if (path.EndsWith("/subscriptionGroups", StringComparison.Ordinal))
+                return Response(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptionGroups", "id": "group-1", "attributes": { "referenceName": "Pro" } } ] }""");
+            if (path.EndsWith("/group-1/subscriptions", StringComparison.Ordinal))
+                return Response(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptions", "id": "sub-1", "attributes": { "productId": "pro.monthly", "name": "Pro Monthly", "subscriptionPeriod": "ONE_MONTH" } } ] }""");
+            if (path.EndsWith("/sub-1/introductoryOffers", StringComparison.Ordinal))
+                return Response(HttpStatusCode.OK, _offerCreated ? $"{{ \"data\": [ {OfferJsonDocument} ] }}" : """{ "data": [] }""");
+            return Response(HttpStatusCode.OK, """{ "data": [] }""");
+        }
+
+        private const string OfferJsonDocument = "{ \"type\": \"subscriptionIntroductoryOffers\", \"id\": \"offer-1\", \"attributes\": { \"duration\": \"TWO_WEEKS\", \"offerMode\": \"FREE_TRIAL\", \"numberOfPeriods\": 1 }, \"relationships\": { \"subscription\": { \"data\": { \"type\": \"subscriptions\", \"id\": \"sub-1\" } }, \"territory\": { \"data\": { \"type\": \"territories\", \"id\": \"USA\" } } } }";
+        private const string OfferJson = "{ \"data\": " + OfferJsonDocument + " }";
 
         private static Task<HttpResponseMessage> Response(HttpStatusCode status, string body) => Task.FromResult(
             new HttpResponseMessage(status) { Content = new StringContent(body) });

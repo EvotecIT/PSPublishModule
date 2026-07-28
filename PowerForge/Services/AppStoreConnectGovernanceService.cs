@@ -338,6 +338,22 @@ public sealed partial class AppStoreConnectGovernanceService
                 Add(changes, "Subscriptions", "SubscriptionPrice", SubscriptionPriceKey(desired.ProductId, desiredPrice), AppStoreConnectGovernanceChangeAction.Create, $"Add subscription price for '{desiredPrice.TerritoryId}'.", parentId: subscription.Id);
         }
 
+        if (desired.IntroductoryOffers.Length > 0)
+        {
+            var introductoryOffers = await _client.GetSubscriptionIntroductoryOffersAsync(subscription.Id, cancellationToken: cancellationToken).ConfigureAwait(false);
+            foreach (var desiredOffer in desired.IntroductoryOffers)
+            {
+                foreach (var territoryId in ResolveIntroductoryOfferTerritories(desired, desiredOffer))
+                {
+                    if (!introductoryOffers.Any(existing => SubscriptionIntroductoryOfferMatches(existing, desiredOffer, territoryId)))
+                    {
+                        Add(changes, "Subscriptions", "SubscriptionIntroductoryOffer", SubscriptionIntroductoryOfferKey(desired.ProductId, desiredOffer, territoryId),
+                            AppStoreConnectGovernanceChangeAction.Create, $"Add {desiredOffer.OfferMode} introductory offer for '{territoryId}'.", parentId: subscription.Id);
+                    }
+                }
+            }
+        }
+
         if (desired.Availabilities.Length > 0)
         {
             var availabilities = await _client.GetSubscriptionPlanAvailabilitiesAsync(subscription.Id, cancellationToken).ConfigureAwait(false);
@@ -366,12 +382,19 @@ public sealed partial class AppStoreConnectGovernanceService
     private static string SubscriptionChildKey(string productId, string value) => productId.Trim() + "|" + value.Trim();
     private static string PriceKey(AppStoreConnectAppPriceSpec price) => string.Join("|", price.TerritoryId.Trim(), price.StartDate?.Trim() ?? string.Empty, price.EndDate?.Trim() ?? string.Empty, price.AppPricePointId.Trim());
     private static string SubscriptionPriceKey(string productId, AppStoreConnectSubscriptionPriceSpec price) => string.Join("|", productId.Trim(), price.TerritoryId.Trim(), price.StartDate?.Trim() ?? string.Empty, price.PlanType?.Trim().ToUpperInvariant() ?? string.Empty, price.SubscriptionPricePointId.Trim());
+    private static string SubscriptionIntroductoryOfferKey(string productId, AppStoreConnectSubscriptionIntroductoryOfferSpec offer, string territoryId) => string.Join("|", productId.Trim(), territoryId.Trim(), offer.StartDate?.Trim() ?? string.Empty, offer.EndDate?.Trim() ?? string.Empty, offer.Duration.Trim().ToUpperInvariant(), offer.OfferMode.Trim().ToUpperInvariant(), offer.NumberOfPeriods, offer.SubscriptionPricePointId?.Trim() ?? string.Empty);
+    private static string SubscriptionIntroductoryOfferShapeKey(string duration, string offerMode, int numberOfPeriods, string? startDate, string? endDate, string? pricePointId) => string.Join("|", duration.Trim().ToUpperInvariant(), offerMode.Trim().ToUpperInvariant(), numberOfPeriods, startDate?.Trim() ?? string.Empty, endDate?.Trim() ?? string.Empty, pricePointId?.Trim() ?? string.Empty);
+    private static string[] ResolveIntroductoryOfferTerritories(AppStoreConnectSubscriptionSpec subscription, AppStoreConnectSubscriptionIntroductoryOfferSpec offer) =>
+        offer.TerritoryIds is { Length: > 0 }
+            ? offer.TerritoryIds
+            : subscription.Availabilities.Single(availability => Same(availability.PlanType, offer.TerritoriesFromPlanType)).TerritoryIds;
     private static string EncryptionKey(AppStoreConnectEncryptionDeclarationSpec value) => string.Join("|", value.AppDescription.Trim(), value.ContainsProprietaryCryptography, value.ContainsThirdPartyCryptography, value.AvailableOnFrenchStore);
 
     private static bool PriceMatches(AppStoreConnectAppPriceInfo actual, AppStoreConnectAppPriceSpec desired) => Same(actual.AppPricePointId, desired.AppPricePointId) && Same(actual.TerritoryId, desired.TerritoryId) && SameDate(actual.StartDate, desired.StartDate) && SameDate(actual.EndDate, desired.EndDate);
     private static bool EncryptionMatches(AppStoreConnectEncryptionDeclarationInfo actual, AppStoreConnectEncryptionDeclarationSpec desired) => Same(actual.AppDescription, desired.AppDescription) && actual.ContainsProprietaryCryptography == desired.ContainsProprietaryCryptography && actual.ContainsThirdPartyCryptography == desired.ContainsThirdPartyCryptography && actual.AvailableOnFrenchStore == desired.AvailableOnFrenchStore;
     private static bool SubscriptionMatches(AppStoreConnectSubscriptionInfo actual, AppStoreConnectSubscriptionSpec desired) => Same(actual.Name, desired.Name) && Same(actual.SubscriptionPeriod, desired.SubscriptionPeriod) && (!desired.FamilySharable.HasValue || actual.FamilySharable == desired.FamilySharable) && (desired.ReviewNote is null || SameOptional(actual.ReviewNote, desired.ReviewNote)) && (!desired.GroupLevel.HasValue || actual.GroupLevel == desired.GroupLevel);
-    private static bool SubscriptionPriceMatches(AppStoreConnectSubscriptionPriceInfo actual, AppStoreConnectSubscriptionPriceSpec desired) => Same(actual.TerritoryId, desired.TerritoryId) && Same(actual.SubscriptionPricePointId, desired.SubscriptionPricePointId) && SameDate(actual.StartDate, desired.StartDate) && (desired.PlanType is null || SameOptional(actual.PlanType, desired.PlanType));
+    private static bool SubscriptionPriceMatches(AppStoreConnectSubscriptionPriceInfo actual, AppStoreConnectSubscriptionPriceSpec desired) => Same(actual.TerritoryId, desired.TerritoryId) && Same(actual.SubscriptionPricePointId, desired.SubscriptionPricePointId) && SameDate(actual.StartDate, desired.StartDate) && (desired.PlanType is null || SameOptional(actual.PlanType, desired.PlanType)) && (!desired.PreserveCurrentPrice.HasValue || actual.Preserved == desired.PreserveCurrentPrice);
+    private static bool SubscriptionIntroductoryOfferMatches(AppStoreConnectSubscriptionIntroductoryOfferInfo actual, AppStoreConnectSubscriptionIntroductoryOfferSpec desired, string territoryId) => Same(actual.TerritoryId, territoryId) && Same(actual.Duration, desired.Duration) && Same(actual.OfferMode, desired.OfferMode) && actual.NumberOfPeriods == desired.NumberOfPeriods && SameDate(actual.StartDate, desired.StartDate) && SameDate(actual.EndDate, desired.EndDate) && SameOptional(actual.SubscriptionPricePointId, desired.SubscriptionPricePointId);
     private static bool SubscriptionAvailabilityMatches(AppStoreConnectSubscriptionAvailabilityInfo actual, AppStoreConnectSubscriptionAvailabilitySpec desired) => actual.AvailableInNewTerritories == desired.AvailableInNewTerritories && new HashSet<string>(actual.TerritoryIds, StringComparer.OrdinalIgnoreCase).SetEquals(desired.TerritoryIds);
 
     private static bool AccessibilityMatches(AppStoreConnectAccessibilityDeclarationInfo actual, AppStoreConnectAccessibilityDeclarationSpec desired) =>

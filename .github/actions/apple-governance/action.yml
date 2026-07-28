@@ -44,7 +44,7 @@ inputs:
   maximum-changes:
     description: Maximum changes in one Apply run.
     required: false
-    default: "200"
+    default: "500"
   issuer-id:
     description: App Store Connect issuer id.
     required: false

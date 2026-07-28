@@ -235,6 +235,17 @@ jobs:
           foreach ($config in $configs) {
             $configPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot ([string] $config)))
             if (-not $configPath.StartsWith($prefix, [StringComparison]::Ordinal)) { throw "Screenshot config escapes source: $config" }
+            $screenshotConfig = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -Depth 20
+            $configuredManifestPath = [string] $screenshotConfig.quality.approvalManifestPath
+            $manifestRelative = if ([string]::IsNullOrWhiteSpace($configuredManifestPath)) {
+              [IO.Path]::GetFileNameWithoutExtension($configPath) + '.approval.json'
+            } else { $configuredManifestPath }
+            $manifestPath = if ([IO.Path]::IsPathRooted($manifestRelative)) {
+              [IO.Path]::GetFullPath($manifestRelative)
+            } else {
+              [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetDirectoryName($configPath)) $manifestRelative))
+            }
+            if (-not $manifestPath.StartsWith($prefix, [StringComparison]::Ordinal)) { throw "Screenshot approval manifest output escapes source: $manifestRelative" }
             $manifestArguments = @(
               'apple-screenshots', 'manifest',
               '--config', $configPath,
@@ -243,6 +254,8 @@ jobs:
               '--source-commit', $env:SOURCE_REF,
               '--approved-by', "GitHub protected environment: $($env:APPROVAL_ENVIRONMENT)",
               '--allowed-root', '${{ steps.capture-path.outputs.path }}',
+              '--out', $manifestPath,
+              '--write-root', $sourceRoot,
               '--initiated-by', '${{ github.actor }}',
               '--approval-evidence', '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}',
               '--xcode-version', $xcodeVersion,

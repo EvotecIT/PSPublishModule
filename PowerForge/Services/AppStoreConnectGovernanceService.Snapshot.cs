@@ -102,9 +102,34 @@ public sealed partial class AppStoreConnectGovernanceService
     {
         var localizationsTask = _client.GetSubscriptionLocalizationsAsync(subscription.Id, cancellationToken);
         var pricesTask = _client.GetSubscriptionPricesAsync(subscription.Id, cancellationToken);
+        var introductoryOffersTask = _client.GetSubscriptionIntroductoryOffersAsync(subscription.Id, cancellationToken: cancellationToken);
         var availabilitiesTask = _client.GetSubscriptionPlanAvailabilitiesAsync(subscription.Id, cancellationToken);
-        await Task.WhenAll(localizationsTask, pricesTask, availabilitiesTask).ConfigureAwait(false);
+        await Task.WhenAll(localizationsTask, pricesTask, introductoryOffersTask, availabilitiesTask).ConfigureAwait(false);
         var productId = RequireObserved(subscription.ProductId, $"subscription '{subscription.Id}' product id");
+        var introductoryOffers = introductoryOffersTask.Result.Select(item => new
+        {
+            Duration = RequireObserved(item.Duration, $"subscription introductory offer '{item.Id}' duration"),
+            OfferMode = RequireObserved(item.OfferMode, $"subscription introductory offer '{item.Id}' mode"),
+            NumberOfPeriods = RequireObserved(item.NumberOfPeriods, $"subscription introductory offer '{item.Id}' numberOfPeriods"),
+            TerritoryId = RequireObserved(item.TerritoryId, $"subscription introductory offer '{item.Id}' territory"),
+            StartDate = NormalizeObserved(item.StartDate),
+            EndDate = NormalizeObserved(item.EndDate),
+            SubscriptionPricePointId = NormalizeObserved(item.SubscriptionPricePointId)
+        }).GroupBy(item => SubscriptionIntroductoryOfferShapeKey(item.Duration, item.OfferMode, item.NumberOfPeriods, item.StartDate, item.EndDate, item.SubscriptionPricePointId))
+          .Select(group =>
+          {
+              var first = group.First();
+              return new AppStoreConnectSubscriptionIntroductoryOfferSpec
+              {
+                  Duration = first.Duration,
+                  OfferMode = first.OfferMode,
+                  NumberOfPeriods = first.NumberOfPeriods,
+                  TerritoryIds = group.Select(item => item.TerritoryId).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray(),
+                  StartDate = first.StartDate,
+                  EndDate = first.EndDate,
+                  SubscriptionPricePointId = first.SubscriptionPricePointId
+              };
+          }).ToArray();
         return new AppStoreConnectSubscriptionSpec
         {
             ProductId = productId,
@@ -124,8 +149,10 @@ public sealed partial class AppStoreConnectGovernanceService
                 TerritoryId = RequireObserved(item.TerritoryId, $"subscription price '{item.Id}' territory"),
                 SubscriptionPricePointId = RequireObserved(item.SubscriptionPricePointId, $"subscription price '{item.Id}' price point"),
                 StartDate = NormalizeObserved(item.StartDate),
+                PreserveCurrentPrice = item.Preserved,
                 PlanType = item.PlanType
             }).ToArray(),
+            IntroductoryOffers = introductoryOffers,
             Availabilities = availabilitiesTask.Result.Select(item => new AppStoreConnectSubscriptionAvailabilitySpec
             {
                 PlanType = RequireObserved(item.PlanType, $"subscription plan availability '{item.Id}' plan type"),
@@ -141,6 +168,9 @@ public sealed partial class AppStoreConnectGovernanceService
             : throw new InvalidOperationException($"App Store Connect omitted {field}; refusing to export an incomplete governance declaration.");
 
     private static bool RequireObserved(bool? value, string field) =>
+        value ?? throw new InvalidOperationException($"App Store Connect omitted {field}; refusing to export an incomplete governance declaration.");
+
+    private static int RequireObserved(int? value, string field) =>
         value ?? throw new InvalidOperationException($"App Store Connect omitted {field}; refusing to export an incomplete governance declaration.");
 
     private static string? NormalizeObserved(string? value)

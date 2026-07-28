@@ -298,6 +298,14 @@ editors completion and catches misspelled fields before a release:
               "planType": "MONTHLY"
             }
           ],
+          "introductoryOffers": [
+            {
+              "duration": "TWO_WEEKS",
+              "offerMode": "FREE_TRIAL",
+              "numberOfPeriods": 1,
+              "territoriesFromPlanType": "MONTHLY"
+            }
+          ],
           "availabilities": [
             {
               "planType": "MONTHLY",
@@ -317,8 +325,8 @@ Validate locally, read Apple and write a drift receipt, then apply only after re
 ```text
 powerforge apple-governance snapshot --app-id 1234567890 --out build/appstore-governance.json --release-config powerforge.release.json
 powerforge apple-governance validate --config build/appstore-governance.json
-powerforge apple-governance plan --config build/appstore-governance.json --release-config powerforge.release.json --fail-on-drift --output json
-powerforge apple-governance apply --config build/appstore-governance.json --release-config powerforge.release.json --confirm --output json
+powerforge apple-governance plan --config build/appstore-governance.json --release-config powerforge.release.json --fail-on-drift --summary --output json
+powerforge apple-governance apply --config build/appstore-governance.json --release-config powerforge.release.json --confirm --summary --output json
 ```
 
 `snapshot` bootstraps a declaration from existing Apple state and refuses to overwrite
@@ -328,6 +336,16 @@ converges one dependency-aware change at a time, replans after every Apple mutat
 and writes a compact receipt by default under `.powerforge/apple/`. It creates and
 updates declared resources but never performs implicit deletions. A safety limit
 prevents an unexpectedly large change set from running indefinitely.
+
+Use `--summary` for automation and agent-facing output. It reports counts, grouped
+resource types, at most ten representative changes or findings, and the full receipt
+path; the complete machine-readable plan remains in that receipt for deliberate review.
+
+Introductory offers may declare explicit `territoryIds`, or use
+`territoriesFromPlanType` to reuse the same reviewed `MONTHLY` or `UPFRONT` plan
+availability without repeating a large storefront list. The protected workflow allows
+500 confirmed mutations by default so a first global trial rollout can converge in one
+reviewed run; lower `maximum_changes` when a narrower safety boundary is appropriate.
 
 The equivalent PowerShell surface is:
 
@@ -627,8 +645,8 @@ Distribution preparation, metadata and screenshot sync, build selection, TestFli
 distribution, review submission, approved-version release, compact diagnostics, and
 local artifact cleanup. Declarative governance adds plan/diff/apply control for app
 pricing schedules, territory availability, accessibility declarations, export-
-compliance declarations, subscription groups and products, localizations, prices, and
-plan availability. Doctor also reads phased release, webhooks, customer reviews, and
+compliance declarations, subscription groups and products, localizations, prices,
+introductory offers, and plan availability. Doctor also reads phased release, webhooks, customer reviews, and
 beta feedback. Apple still owns processing and review decisions, and a person must
 supply and approve every legal, commercial, and accessibility fact before apply.
 

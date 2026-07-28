@@ -167,7 +167,7 @@ public sealed class PowerForgeCliAppleReleaseTests
 
             var result = await RunCliAsync(
                 repoRoot,
-                $"\"{GetCliPath(repoRoot)}\" apple-screenshots manifest --config \"{screenshotConfigPath}\" --release-config \"{releaseConfigPath}\" --target Sample --version 1.5.0 --source-commit {ApprovedSourceCommit} --approved-by release-owner --allowed-root \"{screenshotDirectory.FullName}\" --out \"{manifestPath}\" --output json");
+                $"\"{GetCliPath(repoRoot)}\" apple-screenshots manifest --config \"{screenshotConfigPath}\" --release-config \"{releaseConfigPath}\" --target Sample --version 1.5.0 --source-commit {ApprovedSourceCommit} --approved-by release-owner --allowed-root \"{screenshotDirectory.FullName}\" --out \"{manifestPath}\" --write-root \"{tempRoot}\" --output json");
 
             Assert.True(
                 result.ExitCode == 0,
@@ -188,6 +188,41 @@ public sealed class PowerForgeCliAppleReleaseTests
         {
             if (Directory.Exists(tempRoot))
                 Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AppleScreenshots_ManifestRejectsSymlinkOutputEscapeFromTrustedWriteRoot()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = CreateTempDirectory();
+        var outsideRoot = CreateTempDirectory();
+        var linkPath = Path.Combine(tempRoot, "manifest-link");
+
+        try
+        {
+            var screenshotDirectory = Directory.CreateDirectory(Path.Combine(tempRoot, "screenshots"));
+            File.WriteAllBytes(Path.Combine(screenshotDirectory.FullName, "01-home.png"),
+                Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII="));
+            var screenshotConfigPath = Path.Combine(tempRoot, "screenshots.json");
+            File.WriteAllText(screenshotConfigPath,
+                """{ "AppId": "1234567890", "Platform": "iOS", "Locale": "en-US", "ScreenshotSets": [ { "ScreenshotDisplayType": "APP_IPHONE_67", "Path": "screenshots", "AllowedDimensions": [ "1x1" ] } ] }""");
+            Directory.CreateSymbolicLink(linkPath, outsideRoot);
+            var manifestPath = Path.Combine(linkPath, "approval.json");
+
+            var result = await RunCliAsync(repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-screenshots manifest --config \"{screenshotConfigPath}\" --version 1.5.0 --source-commit {ApprovedSourceCommit} --approved-by release-owner --allowed-root \"{screenshotDirectory.FullName}\" --out \"{manifestPath}\" --write-root \"{tempRoot}\" --output json");
+
+            Assert.Equal(1, result.ExitCode);
+            Assert.Contains("link or reparse point", result.StdOut + result.StdErr, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(Path.Combine(outsideRoot, "approval.json")));
+        }
+        finally
+        {
+            if (Directory.Exists(linkPath)) Directory.Delete(linkPath);
+            if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
+            if (Directory.Exists(outsideRoot)) Directory.Delete(outsideRoot, recursive: true);
         }
     }
 
@@ -219,6 +254,18 @@ public sealed class PowerForgeCliAppleReleaseTests
                 Assert.Equal("apple-governance validate", document.RootElement.GetProperty("command").GetString());
                 Assert.True(document.RootElement.GetProperty("success").GetBoolean());
                 Assert.Empty(document.RootElement.GetProperty("result").GetProperty("findings").EnumerateArray());
+            }
+
+            var compactValidation = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-governance validate --config \"{configPath}\" --summary --output json");
+            Assert.Equal(0, compactValidation.ExitCode);
+            using (var document = JsonDocument.Parse(compactValidation.StdOut))
+            {
+                var result = document.RootElement.GetProperty("result");
+                Assert.Equal(0, result.GetProperty("driftCount").GetInt32());
+                Assert.Equal(0, result.GetProperty("findingCount").GetInt32());
+                Assert.False(result.TryGetProperty("changes", out _));
             }
 
             var apply = await RunCliAsync(

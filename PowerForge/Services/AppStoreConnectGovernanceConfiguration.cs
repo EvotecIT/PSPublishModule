@@ -22,6 +22,16 @@ public sealed class AppStoreConnectGovernanceConfiguration
         "MONTHLY", "UPFRONT"
     };
 
+    private static readonly HashSet<string> IntroductoryOfferDurations = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "THREE_DAYS", "ONE_WEEK", "TWO_WEEKS", "ONE_MONTH", "TWO_MONTHS", "THREE_MONTHS", "SIX_MONTHS", "ONE_YEAR"
+    };
+
+    private static readonly HashSet<string> IntroductoryOfferModes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "FREE_TRIAL", "PAY_AS_YOU_GO", "PAY_UP_FRONT"
+    };
+
     /// <summary>Loads one JSON declaration and rejects malformed input.</summary>
     public AppStoreConnectGovernanceSpec Load(string path)
     {
@@ -158,6 +168,7 @@ public sealed class AppStoreConnectGovernanceConfiguration
                     Error(findings, "Governance.Subscriptions.GroupLevel", subscriptionPath + ".groupLevel", "Group level must be at least one.");
                 ValidateSubscriptionLocalizations(subscription.Localizations, subscriptionPath, findings);
                 ValidateSubscriptionPrices(subscription.Prices, subscriptionPath, findings);
+                ValidateSubscriptionIntroductoryOffers(subscription, subscriptionPath, findings);
                 ValidateSubscriptionAvailabilities(subscription.Availabilities, subscriptionPath, findings);
             }
         }
@@ -217,6 +228,46 @@ public sealed class AppStoreConnectGovernanceConfiguration
                 Error(findings, "Governance.Subscriptions.AvailabilityTerritory", path + ".territoryIds", "Territory ids must not contain empty values.");
             if (item.TerritoryIds.GroupBy(value => value, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
                 Error(findings, "Governance.Subscriptions.DuplicateAvailabilityTerritory", path + ".territoryIds", "Territory ids must be unique.");
+        }
+    }
+
+    private static void ValidateSubscriptionIntroductoryOffers(AppStoreConnectSubscriptionSpec subscription, string parent, List<AppStoreConnectGovernanceFinding> findings)
+    {
+        var items = subscription.IntroductoryOffers;
+        Duplicate(findings, items, item => Key(item.TerritoriesFromPlanType ?? string.Join(",", (item.TerritoryIds ?? Array.Empty<string>()).OrderBy(value => value, StringComparer.OrdinalIgnoreCase)), item.StartDate, item.EndDate, item.Duration, item.OfferMode, item.NumberOfPeriods, item.SubscriptionPricePointId),
+            parent + ".introductoryOffers", "Governance.Subscriptions.DuplicateIntroductoryOffer");
+        for (var index = 0; index < items.Length; index++)
+        {
+            var item = items[index];
+            var path = $"{parent}.introductoryOffers[{index}]";
+            if (item is null) { Error(findings, "Governance.Subscriptions.NullIntroductoryOffer", path, "Introductory offer must not be null."); continue; }
+            Required(findings, item.Duration, path + ".duration", "Governance.Subscriptions.IntroductoryOfferDuration", "Introductory-offer duration is required.");
+            Required(findings, item.OfferMode, path + ".offerMode", "Governance.Subscriptions.IntroductoryOfferMode", "Introductory-offer mode is required.");
+            var hasExplicitTerritories = item.TerritoryIds is { Length: > 0 };
+            var hasPlanTerritories = !string.IsNullOrWhiteSpace(item.TerritoriesFromPlanType);
+            if (hasExplicitTerritories == hasPlanTerritories)
+                Error(findings, "Governance.Subscriptions.IntroductoryOfferTerritory", path, "Set exactly one of territoryIds or territoriesFromPlanType.");
+            if (item.TerritoryIds?.Any(string.IsNullOrWhiteSpace) == true)
+                Error(findings, "Governance.Subscriptions.IntroductoryOfferTerritory", path + ".territoryIds", "Territory ids must not contain empty values.");
+            if (item.TerritoryIds?.GroupBy(value => value, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1) == true)
+                Error(findings, "Governance.Subscriptions.DuplicateIntroductoryOfferTerritory", path + ".territoryIds", "Territory ids must be unique.");
+            if (hasPlanTerritories)
+            {
+                PlanType(findings, item.TerritoriesFromPlanType, path + ".territoriesFromPlanType", optional: false);
+                if (!subscription.Availabilities.Any(availability => availability is not null && string.Equals(availability.PlanType?.Trim(), item.TerritoriesFromPlanType?.Trim(), StringComparison.OrdinalIgnoreCase)))
+                    Error(findings, "Governance.Subscriptions.IntroductoryOfferTerritorySource", path + ".territoriesFromPlanType", "The referenced subscription plan availability must be declared on the same subscription.");
+            }
+            if (!string.IsNullOrWhiteSpace(item.Duration) && !IntroductoryOfferDurations.Contains(item.Duration.Trim()))
+                Error(findings, "Governance.Subscriptions.IntroductoryOfferDuration", path + ".duration", "Unsupported introductory-offer duration.");
+            if (!string.IsNullOrWhiteSpace(item.OfferMode) && !IntroductoryOfferModes.Contains(item.OfferMode.Trim()))
+                Error(findings, "Governance.Subscriptions.IntroductoryOfferMode", path + ".offerMode", "Unsupported introductory-offer mode.");
+            if (item.NumberOfPeriods < 1)
+                Error(findings, "Governance.Subscriptions.IntroductoryOfferPeriods", path + ".numberOfPeriods", "Number of periods must be at least one.");
+            if (!string.Equals(item.OfferMode?.Trim(), "FREE_TRIAL", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(item.SubscriptionPricePointId))
+                Error(findings, "Governance.Subscriptions.IntroductoryOfferPricePoint", path + ".subscriptionPricePointId", "Paid introductory offers require a subscription price-point id.");
+            Date(findings, item.StartDate, path + ".startDate");
+            Date(findings, item.EndDate, path + ".endDate");
+            DateOrder(findings, item.StartDate, item.EndDate, path);
         }
     }
 
@@ -282,6 +333,7 @@ public sealed class AppStoreConnectGovernanceConfiguration
             {
                 subscription.Localizations ??= Array.Empty<AppStoreConnectSubscriptionLocalizationSpec>();
                 subscription.Prices ??= Array.Empty<AppStoreConnectSubscriptionPriceSpec>();
+                subscription.IntroductoryOffers ??= Array.Empty<AppStoreConnectSubscriptionIntroductoryOfferSpec>();
                 subscription.Availabilities ??= Array.Empty<AppStoreConnectSubscriptionAvailabilitySpec>();
                 foreach (var availability in subscription.Availabilities.Where(availability => availability is not null))
                     availability.TerritoryIds ??= Array.Empty<string>();

@@ -8,12 +8,13 @@ internal static partial class Program
         "Usage: powerforge apple-governance <snapshot|validate|plan|apply> [--config <governance.json>] " +
         "[--app-id <id> --out <governance.json> [--force]] " +
         "[--release-config <release.json>] [--key-path <AuthKey.p8> --key-id <id> --issuer-id <id>] " +
-        "[--receipt <path>] [--confirm] [--max-changes <N>] [--fail-on-drift] [--output json]";
+        "[--receipt <path>] [--confirm] [--max-changes <N>] [--fail-on-drift] [--summary] [--output json]";
 
     private static int CommandAppleGovernance(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
         var argv = filteredArgs.Skip(1).ToArray();
         var outputJson = IsJsonOutput(argv);
+        var summary = argv.Any(value => value.Equals("--summary", StringComparison.OrdinalIgnoreCase));
         if (argv.Length == 0 || argv.Any(value => value is "-h" or "--help"))
         {
             if (outputJson) WriteAppleGovernanceJson("help", true, 0, JsonSerializer.SerializeToElement(new { usage = AppleGovernanceUsage }), null);
@@ -37,7 +38,7 @@ internal static partial class Program
                 var snapshot = new AppStoreConnectGovernanceService(snapshotClient).SnapshotAsync(appId).GetAwaiter().GetResult();
                 var snapshotOptions = new JsonSerializerOptions(CliJson.Options) { WriteIndented = true };
                 WriteGovernanceReceipt(fullOutputPath, JsonSerializer.Serialize(snapshot, snapshotOptions));
-                WriteAppleGovernanceOutput(operation, snapshot, true, outputJson, logger, fullOutputPath);
+                WriteAppleGovernanceOutput(operation, snapshot, true, outputJson, logger, fullOutputPath, summary);
                 return 0;
             }
             var configPath = TryGetOptionValue(argv, "--config") ?? throw new ArgumentException("--config is required.");
@@ -55,7 +56,7 @@ internal static partial class Program
                     CheckedAtUtc = DateTimeOffset.UtcNow,
                     Findings = findings
                 };
-                WriteAppleGovernanceOutput(operation, validation, success, outputJson, logger);
+                WriteAppleGovernanceOutput(operation, validation, success, outputJson, logger, summary: summary);
                 return success ? 0 : 2;
             }
             if (operation is not ("plan" or "apply"))
@@ -72,7 +73,7 @@ internal static partial class Program
                 var plan = service.PlanAsync(spec).GetAwaiter().GetResult();
                 var receiptPath = ResolveGovernanceReceiptPath(argv, fullConfigPath, "governance-plan.json");
                 WriteGovernanceReceipt(receiptPath, JsonSerializer.Serialize(plan, CliJson.Context.AppStoreConnectGovernancePlan));
-                WriteAppleGovernanceOutput(operation, plan, plan.Findings.All(finding => !finding.IsError), outputJson, logger, receiptPath);
+                WriteAppleGovernanceOutput(operation, plan, plan.Findings.All(finding => !finding.IsError), outputJson, logger, receiptPath, summary);
                 if (plan.Findings.Any(finding => finding.IsError)) return 2;
                 return argv.Any(value => value.Equals("--fail-on-drift", StringComparison.OrdinalIgnoreCase)) && !plan.IsConverged ? 3 : 0;
             }
@@ -86,7 +87,7 @@ internal static partial class Program
             }).GetAwaiter().GetResult();
             var applyReceiptPath = ResolveGovernanceReceiptPath(argv, fullConfigPath, "governance-receipt.json");
             WriteGovernanceReceipt(applyReceiptPath, JsonSerializer.Serialize(result, CliJson.Context.AppStoreConnectGovernanceApplyResult));
-            WriteAppleGovernanceOutput(operation, result, result.Success, outputJson, logger, applyReceiptPath);
+            WriteAppleGovernanceOutput(operation, result, result.Success, outputJson, logger, applyReceiptPath, summary);
             return result.Success ? 0 : 1;
         }
         catch (Exception ex)
@@ -149,11 +150,11 @@ internal static partial class Program
         File.Move(temporaryPath, path, overwrite: true);
     }
 
-    private static void WriteAppleGovernanceOutput(string operation, object result, bool success, bool outputJson, ILogger logger, string? receiptPath = null)
+    private static void WriteAppleGovernanceOutput(string operation, object result, bool success, bool outputJson, ILogger logger, string? receiptPath = null, bool summary = false)
     {
         if (outputJson)
         {
-            var element = result switch
+            var element = summary ? CreateAppleGovernanceSummary(result, receiptPath) : result switch
             {
                 AppStoreConnectGovernancePlan plan => CliJson.SerializeToElement(plan, CliJson.Context.AppStoreConnectGovernancePlan),
                 AppStoreConnectGovernanceApplyResult apply => CliJson.SerializeToElement(apply, CliJson.Context.AppStoreConnectGovernanceApplyResult),
@@ -180,6 +181,55 @@ internal static partial class Program
         if (!string.IsNullOrWhiteSpace(receiptPath)) logger.Info("Receipt: " + receiptPath);
     }
 
+    private static JsonElement CreateAppleGovernanceSummary(object result, string? receiptPath)
+    {
+        object summary = result switch
+        {
+            AppStoreConnectGovernancePlan plan => new
+            {
+                appId = plan.AppId,
+                checkedAtUtc = plan.CheckedAtUtc,
+                driftCount = plan.DriftCount,
+                blockedCount = plan.BlockedCount,
+                isConverged = plan.IsConverged,
+                canApply = plan.CanApply,
+                findingCount = plan.Findings.Length,
+                errorCount = plan.Findings.Count(finding => finding.IsError),
+                changeCounts = plan.Changes.GroupBy(change => new { change.Action, change.ResourceType })
+                    .Select(group => new { action = group.Key.Action.ToString(), resourceType = group.Key.ResourceType, count = group.Count() })
+                    .OrderBy(group => group.resourceType).ThenBy(group => group.action).ToArray(),
+                sampleChanges = plan.Changes.Take(10).Select(change => new { action = change.Action.ToString(), resourceType = change.ResourceType, summary = change.Summary }).ToArray(),
+                findings = plan.Findings.Take(10).Select(finding => new { code = finding.Code, path = finding.Path, message = finding.Message, isError = finding.IsError }).ToArray(),
+                receiptPath
+            },
+            AppStoreConnectGovernanceApplyResult apply => new
+            {
+                appId = apply.AppId,
+                startedAtUtc = apply.StartedAtUtc,
+                completedAtUtc = apply.CompletedAtUtc,
+                success = apply.Success,
+                appliedCount = apply.AppliedChanges.Length,
+                driftCount = apply.FinalPlan.DriftCount,
+                blockedCount = apply.FinalPlan.BlockedCount,
+                isConverged = apply.FinalPlan.IsConverged,
+                canApply = apply.FinalPlan.CanApply,
+                nextActions = apply.NextActions,
+                receiptPath
+            },
+            AppStoreConnectGovernanceSpec spec => new
+            {
+                appId = spec.AppId,
+                accessibilityCount = spec.Accessibility.Length,
+                encryptionDeclarationCount = spec.EncryptionDeclarations.Length,
+                subscriptionGroupCount = spec.SubscriptionGroups.Length,
+                subscriptionCount = spec.SubscriptionGroups.Sum(group => group.Subscriptions.Length),
+                receiptPath
+            },
+            _ => result
+        };
+        return JsonSerializer.SerializeToElement(summary);
+    }
+
     private static void WriteAppleGovernanceJson(string operation, bool success, int exitCode, JsonElement? result, string? error)
     {
         WriteJson(new CliJsonEnvelope { SchemaVersion = OutputSchemaVersion, Command = "apple-governance " + operation, Success = success, ExitCode = exitCode, Result = result, Error = error });
@@ -187,7 +237,7 @@ internal static partial class Program
 
     private static int ParseAppleGovernanceMaximumChanges(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value)) return 200;
+        if (string.IsNullOrWhiteSpace(value)) return 500;
         if (!int.TryParse(value, out var count) || count is < 1 or > 1000)
             throw new ArgumentException("--max-changes must be an integer between 1 and 1000.");
         return count;
@@ -195,7 +245,7 @@ internal static partial class Program
 
     private static void ValidateAppleGovernanceArguments(string[] argv)
     {
-        var flags = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "--confirm", "--fail-on-drift", "--force" };
+        var flags = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "--confirm", "--fail-on-drift", "--force", "--summary" };
         var options = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "--config", "--app-id", "--out", "--release-config", "--key-path", "--key-id", "--issuer-id", "--receipt", "--max-changes", "--output"

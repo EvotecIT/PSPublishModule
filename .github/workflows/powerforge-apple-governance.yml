@@ -53,7 +53,7 @@ on:
       maximum_changes:
         description: Maximum mutations allowed in one confirmed Apply.
         required: false
-        default: 200
+        default: 500
         type: number
     secrets:
       app_store_connect_issuer_id:

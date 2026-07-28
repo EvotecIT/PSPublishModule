@@ -189,6 +189,7 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("Invoke-PowerForgeAppleGovernance.ps1", action, StringComparison.Ordinal);
         Assert.Contains("Apply requires confirm=true", script, StringComparison.Ordinal);
         Assert.Contains("--fail-on-drift", script, StringComparison.Ordinal);
+        Assert.Contains("@('--summary', '--output', 'json')", script, StringComparison.Ordinal);
         Assert.Contains("[redacted]", script, StringComparison.Ordinal);
         Assert.DoesNotContain("$text | Write-Host", script, StringComparison.Ordinal);
 
@@ -235,6 +236,9 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("'apple-screenshots', 'manifest'", workflow, StringComparison.Ordinal);
         Assert.Contains("'--release-config', $releaseConfigPath", workflow, StringComparison.Ordinal);
         Assert.Contains("'--allowed-root', '${{ steps.capture-path.outputs.path }}'", workflow, StringComparison.Ordinal);
+        Assert.Contains("'--out', $manifestPath", workflow, StringComparison.Ordinal);
+        Assert.Contains("'--write-root', $sourceRoot", workflow, StringComparison.Ordinal);
+        Assert.Contains("Screenshot approval manifest output escapes source", workflow, StringComparison.Ordinal);
         Assert.Contains("'--source-commit', $env:SOURCE_REF", workflow, StringComparison.Ordinal);
         Assert.Contains("'--approved-by', \"GitHub protected environment:", workflow, StringComparison.Ordinal);
         Assert.Contains("'--initiated-by', '${{ github.actor }}'", workflow, StringComparison.Ordinal);
@@ -270,6 +274,7 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("powerforge-apple-screenshots-${{ inputs.source_ref }}", capture, StringComparison.Ordinal);
         Assert.Contains("powerforge-apple-screenshot-provenance-${{ inputs.source_ref }}", capture, StringComparison.Ordinal);
         Assert.Contains("workflowRef = $env:GITHUB_WORKFLOW_REF", capture, StringComparison.Ordinal);
+        Assert.Contains("marketingVersion = $env:MARKETING_VERSION", capture, StringComparison.Ordinal);
         Assert.Contains("allowed_dispatchers_json", approval, StringComparison.Ordinal);
         Assert.Contains("${{ github.actor }}", approval, StringComparison.Ordinal);
         Assert.Contains("Resolve exact source from reviewed capture", approval, StringComparison.Ordinal);
@@ -278,7 +283,8 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("must use the repository default-branch workflow definition", approval, StringComparison.Ordinal);
         Assert.Contains("must contain exactly one unexpired ${artifact_prefix}<sha> artifact", approval, StringComparison.Ordinal);
         Assert.Contains("powerforge-apple-screenshot-provenance-", approval, StringComparison.Ordinal);
-        Assert.Contains("Capture provenance does not match the successful dedicated workflow run and resolved source commit", approval, StringComparison.Ordinal);
+        Assert.Contains("Capture provenance does not match the successful dedicated workflow run, resolved source commit, and approved marketing version", approval, StringComparison.Ordinal);
+        Assert.Contains(".marketingVersion == $marketing_version", approval, StringComparison.Ordinal);
         Assert.Contains("does not match capture source", approval, StringComparison.Ordinal);
         Assert.Contains("'--approved-by', \"GitHub protected environment:", approval, StringComparison.Ordinal);
         Assert.Contains("run-id: ${{ inputs.capture_run_id }}", approval, StringComparison.Ordinal);
@@ -292,6 +298,9 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("path: ${{ steps.capture-path.outputs.path }}", approval, StringComparison.Ordinal);
         Assert.Contains("'--release-config', $releaseConfigPath", approval, StringComparison.Ordinal);
         Assert.Contains("'--allowed-root', '${{ steps.capture-path.outputs.path }}'", approval, StringComparison.Ordinal);
+        Assert.Contains("'--out', $manifestPath", approval, StringComparison.Ordinal);
+        Assert.Contains("'--write-root', $sourceRoot", approval, StringComparison.Ordinal);
+        Assert.Contains("Screenshot approval manifest output escapes source", approval, StringComparison.Ordinal);
         Assert.Contains("'--source-commit', $env:SOURCE_REF", approval, StringComparison.Ordinal);
         Assert.Contains("source-commit: ${{ needs.resolve-source.outputs.source_ref }}", approval, StringComparison.Ordinal);
     }

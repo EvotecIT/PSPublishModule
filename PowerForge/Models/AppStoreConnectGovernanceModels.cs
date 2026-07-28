@@ -1,10 +1,17 @@
 #pragma warning disable CS1591 // Schema DTO property names are the public JSON contract.
 
+using System.Text.Json.Serialization;
+
 namespace PowerForge;
 
 /// <summary>Declarative, human-approved App Store commercial and compliance state.</summary>
 public sealed class AppStoreConnectGovernanceSpec
 {
+    /// <summary>Optional JSON Schema hint used by editors.</summary>
+    [JsonPropertyName("$schema")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Schema { get; set; }
+
     /// <summary>Configuration schema version.</summary>
     public int SchemaVersion { get; set; } = 1;
 
@@ -57,6 +64,7 @@ public sealed class AppStoreConnectAppPriceSpec
 public sealed class AppStoreConnectAppAvailabilitySpec
 {
     /// <summary>Whether Apple should make the app available in territories introduced later.</summary>
+    [JsonRequired]
     public bool AvailableInNewTerritories { get; set; }
 
     /// <summary>Explicit territory availability entries.</summary>
@@ -70,6 +78,7 @@ public sealed class AppStoreConnectTerritoryAvailabilitySpec
     public string TerritoryId { get; set; } = string.Empty;
 
     /// <summary>Whether the app is available in this territory.</summary>
+    [JsonRequired]
     public bool Available { get; set; }
 
     /// <summary>Optional release date in yyyy-MM-dd form.</summary>
@@ -103,8 +112,11 @@ public sealed class AppStoreConnectAccessibilityDeclarationSpec
 public sealed class AppStoreConnectEncryptionDeclarationSpec
 {
     public string AppDescription { get; set; } = string.Empty;
+    [JsonRequired]
     public bool ContainsProprietaryCryptography { get; set; }
+    [JsonRequired]
     public bool ContainsThirdPartyCryptography { get; set; }
+    [JsonRequired]
     public bool AvailableOnFrenchStore { get; set; }
 }
 
@@ -147,6 +159,7 @@ public sealed class AppStoreConnectSubscriptionSpec
     public int? GroupLevel { get; set; }
     public AppStoreConnectSubscriptionLocalizationSpec[] Localizations { get; set; } = Array.Empty<AppStoreConnectSubscriptionLocalizationSpec>();
     public AppStoreConnectSubscriptionPriceSpec[] Prices { get; set; } = Array.Empty<AppStoreConnectSubscriptionPriceSpec>();
+    public AppStoreConnectSubscriptionIntroductoryOfferSpec[] IntroductoryOffers { get; set; } = Array.Empty<AppStoreConnectSubscriptionIntroductoryOfferSpec>();
     public AppStoreConnectSubscriptionAvailabilitySpec[] Availabilities { get; set; } = Array.Empty<AppStoreConnectSubscriptionAvailabilitySpec>();
 }
 
@@ -170,12 +183,38 @@ public sealed class AppStoreConnectSubscriptionPriceSpec
     public string? PlanType { get; set; }
 }
 
+/// <summary>One introductory offer for an auto-renewable subscription.</summary>
+public sealed class AppStoreConnectSubscriptionIntroductoryOfferSpec
+{
+    /// <summary>THREE_DAYS, ONE_WEEK, TWO_WEEKS, ONE_MONTH, TWO_MONTHS, THREE_MONTHS, SIX_MONTHS, or ONE_YEAR.</summary>
+    public string Duration { get; set; } = string.Empty;
+
+    /// <summary>FREE_TRIAL, PAY_AS_YOU_GO, or PAY_UP_FRONT.</summary>
+    public string OfferMode { get; set; } = string.Empty;
+
+    [JsonRequired]
+    public int NumberOfPeriods { get; set; } = 1;
+    /// <summary>Explicit offer territories. Set this or TerritoriesFromPlanType, never both.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string[]? TerritoryIds { get; set; }
+
+    /// <summary>Reuse the reviewed territory ids from the subscription's MONTHLY or UPFRONT availability declaration.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TerritoriesFromPlanType { get; set; }
+    public string? StartDate { get; set; }
+    public string? EndDate { get; set; }
+
+    /// <summary>Required for paid offers and omitted for free trials.</summary>
+    public string? SubscriptionPricePointId { get; set; }
+}
+
 /// <summary>Subscription plan availability by territory.</summary>
 public sealed class AppStoreConnectSubscriptionAvailabilitySpec
 {
     /// <summary>MONTHLY or UPFRONT.</summary>
     public string PlanType { get; set; } = "MONTHLY";
 
+    [JsonRequired]
     public bool AvailableInNewTerritories { get; set; }
     public string[] TerritoryIds { get; set; } = Array.Empty<string>();
 }
@@ -322,7 +361,7 @@ public sealed class AppStoreConnectGovernanceApplyRequest
 {
     public AppStoreConnectGovernanceSpec Spec { get; set; } = new();
     public bool ConfirmApply { get; set; }
-    public int MaximumChanges { get; set; } = 200;
+    public int MaximumChanges { get; set; } = 500;
 }
 
 /// <summary>Compact receipt for an approved governance convergence run.</summary>

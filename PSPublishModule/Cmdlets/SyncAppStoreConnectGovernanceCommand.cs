@@ -29,7 +29,7 @@ public sealed class SyncAppStoreConnectGovernanceCommand : AsyncPSCmdlet
     /// <summary>Safety bound for one convergence run.</summary>
     [Parameter]
     [ValidateRange(1, 1000)]
-    public int MaximumChanges { get; set; } = 200;
+    public int MaximumChanges { get; set; } = 500;
 
     /// <summary>Plans, confirms, and applies the declared state.</summary>
     protected override async Task ProcessRecordAsync()

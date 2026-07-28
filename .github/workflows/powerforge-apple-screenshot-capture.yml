@@ -7,6 +7,11 @@ on:
         description: Exact source commit to capture.
         required: true
         type: string
+      marketing_version:
+        description: Optional exact x.y.z App Store version represented by the captures; required by the approval workflow.
+        required: false
+        default: ""
+        type: string
       capture_script:
         description: Repository-relative deterministic capture script.
         required: true
@@ -42,9 +47,11 @@ jobs:
         shell: pwsh
         env:
           SOURCE_REF: ${{ inputs.source_ref }}
+          MARKETING_VERSION: ${{ inputs.marketing_version }}
           CAPTURE_SHELL: ${{ inputs.capture_shell }}
         run: |
           if ($env:SOURCE_REF -notmatch '^[0-9A-Fa-f]{40}$') { throw 'source_ref must be an exact 40-character commit SHA.' }
+          if (-not [string]::IsNullOrWhiteSpace($env:MARKETING_VERSION) -and $env:MARKETING_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'marketing_version must be blank or use x.y.z.' }
           if ($env:CAPTURE_SHELL -notin @('bash', 'pwsh')) { throw 'capture_shell must be bash or pwsh.' }
 
       - name: Checkout exact screenshot source
@@ -82,12 +89,14 @@ jobs:
         shell: pwsh
         env:
           SOURCE_REF: ${{ inputs.source_ref }}
+          MARKETING_VERSION: ${{ inputs.marketing_version }}
         run: |
           $provenance = [ordered]@{
             schemaVersion = 1
             repository = $env:GITHUB_REPOSITORY
             captureRunId = $env:GITHUB_RUN_ID
             sourceCommit = $env:SOURCE_REF.ToLowerInvariant()
+            marketingVersion = $env:MARKETING_VERSION
             workflowRef = $env:GITHUB_WORKFLOW_REF
           }
           $provenance | ConvertTo-Json -Depth 5 -Compress |

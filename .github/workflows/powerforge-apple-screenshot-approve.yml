@@ -107,6 +107,7 @@ jobs:
           CAPTURE_RUN_ID: ${{ inputs.capture_run_id }}
           CAPTURE_WORKFLOW_PATH: ${{ inputs.capture_workflow_path }}
           EXPECTED_SOURCE_REF: ${{ inputs.source_ref }}
+          EXPECTED_MARKETING_VERSION: ${{ inputs.marketing_version }}
         run: |
           set -euo pipefail
           [[ "$CAPTURE_RUN_ID" =~ ^[0-9]+$ ]] || {
@@ -116,6 +117,10 @@ jobs:
 
           [[ "$CAPTURE_WORKFLOW_PATH" =~ ^\.github/workflows/[A-Za-z0-9._/-]+\.ya?ml$ ]] || {
             echo 'capture_workflow_path must identify one repository workflow under .github/workflows.' >&2
+            exit 1
+          }
+          [[ "$EXPECTED_MARKETING_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo 'marketing_version must use x.y.z.' >&2
             exit 1
           }
           run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${CAPTURE_RUN_ID}")"
@@ -179,10 +184,11 @@ jobs:
             --arg repository "$GITHUB_REPOSITORY" \
             --arg run_id "$CAPTURE_RUN_ID" \
             --arg source "$resolved_source_ref" \
+            --arg marketing_version "$EXPECTED_MARKETING_VERSION" \
             --arg workflow_ref "$expected_workflow_ref" \
-            '.schemaVersion == 1 and .repository == $repository and (.captureRunId | tostring) == $run_id and .sourceCommit == $source and .workflowRef == $workflow_ref' \
+            '.schemaVersion == 1 and .repository == $repository and (.captureRunId | tostring) == $run_id and .sourceCommit == $source and .marketingVersion == $marketing_version and .workflowRef == $workflow_ref' \
             "$provenance_path" >/dev/null || {
-              echo 'Capture provenance does not match the successful dedicated workflow run and resolved source commit.' >&2
+              echo 'Capture provenance does not match the successful dedicated workflow run, resolved source commit, and approved marketing version.' >&2
               exit 1
             }
           if [[ -n "$EXPECTED_SOURCE_REF" ]]; then
@@ -309,6 +315,17 @@ jobs:
           foreach ($config in $configs) {
             $configPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot ([string] $config)))
             if (-not $configPath.StartsWith($prefix, [StringComparison]::Ordinal)) { throw "Screenshot config escapes source: $config" }
+            $screenshotConfig = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -Depth 20
+            $configuredManifestPath = [string] $screenshotConfig.quality.approvalManifestPath
+            $manifestRelative = if ([string]::IsNullOrWhiteSpace($configuredManifestPath)) {
+              [IO.Path]::GetFileNameWithoutExtension($configPath) + '.approval.json'
+            } else { $configuredManifestPath }
+            $manifestPath = if ([IO.Path]::IsPathRooted($manifestRelative)) {
+              [IO.Path]::GetFullPath($manifestRelative)
+            } else {
+              [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetDirectoryName($configPath)) $manifestRelative))
+            }
+            if (-not $manifestPath.StartsWith($prefix, [StringComparison]::Ordinal)) { throw "Screenshot approval manifest output escapes source: $manifestRelative" }
             $manifestArguments = @(
               'apple-screenshots', 'manifest',
               '--config', $configPath,
@@ -317,6 +334,8 @@ jobs:
               '--source-commit', $env:SOURCE_REF,
               '--approved-by', "GitHub protected environment: $($env:APPROVAL_ENVIRONMENT)",
               '--allowed-root', '${{ steps.capture-path.outputs.path }}',
+              '--out', $manifestPath,
+              '--write-root', $sourceRoot,
               '--initiated-by', '${{ github.actor }}',
               '--approval-evidence', $evidence,
               '--xcode-version', $xcodeVersion,

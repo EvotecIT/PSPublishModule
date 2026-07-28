@@ -20,6 +20,7 @@ public sealed partial class AppStoreConnectGovernanceService
             "Subscription" => ApplySubscriptionAsync(spec, change, cancellationToken),
             "SubscriptionLocalization" => ApplySubscriptionLocalizationAsync(spec, change, cancellationToken),
             "SubscriptionPrice" => ApplySubscriptionPriceAsync(spec, change, cancellationToken),
+            "SubscriptionIntroductoryOffer" => ApplySubscriptionIntroductoryOfferAsync(spec, change, cancellationToken),
             "SubscriptionPlanAvailability" => ApplySubscriptionAvailabilityAsync(spec, change, cancellationToken),
             _ => throw new InvalidOperationException($"Unsupported governance resource type '{change.ResourceType}'.")
         };
@@ -123,6 +124,49 @@ public sealed partial class AppStoreConnectGovernanceService
         else
             _ = await _client.UpdateSubscriptionPlanAvailabilityAsync(RequiredId(change), availability, cancellationToken).ConfigureAwait(false);
     }
+
+    private async Task ApplySubscriptionIntroductoryOfferAsync(AppStoreConnectGovernanceSpec spec, AppStoreConnectGovernanceChange change, CancellationToken cancellationToken)
+    {
+        var pair = spec.SubscriptionGroups.SelectMany(group => group.Subscriptions)
+            .SelectMany(subscription => subscription.IntroductoryOffers.SelectMany(offer => ResolveIntroductoryOfferTerritories(subscription, offer).Select(territoryId => (Subscription: subscription, Offer: offer, TerritoryId: territoryId))))
+            .Single(item => Same(SubscriptionIntroductoryOfferKey(item.Subscription.ProductId, item.Offer, item.TerritoryId), change.Key));
+        _ = await _client.CreateSubscriptionIntroductoryOfferAsync(
+            RequiredParentId(change),
+            ParseIntroductoryOfferDuration(pair.Offer.Duration),
+            ParseIntroductoryOfferMode(pair.Offer.OfferMode),
+            pair.TerritoryId,
+            pair.Offer.NumberOfPeriods,
+            ParseOptionalDate(pair.Offer.StartDate),
+            ParseOptionalDate(pair.Offer.EndDate),
+            pair.Offer.SubscriptionPricePointId,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static AppStoreConnectSubscriptionOfferDuration ParseIntroductoryOfferDuration(string value) => value.Trim().ToUpperInvariant() switch
+    {
+        "THREE_DAYS" => AppStoreConnectSubscriptionOfferDuration.ThreeDays,
+        "ONE_WEEK" => AppStoreConnectSubscriptionOfferDuration.OneWeek,
+        "TWO_WEEKS" => AppStoreConnectSubscriptionOfferDuration.TwoWeeks,
+        "ONE_MONTH" => AppStoreConnectSubscriptionOfferDuration.OneMonth,
+        "TWO_MONTHS" => AppStoreConnectSubscriptionOfferDuration.TwoMonths,
+        "THREE_MONTHS" => AppStoreConnectSubscriptionOfferDuration.ThreeMonths,
+        "SIX_MONTHS" => AppStoreConnectSubscriptionOfferDuration.SixMonths,
+        "ONE_YEAR" => AppStoreConnectSubscriptionOfferDuration.OneYear,
+        _ => throw new InvalidOperationException($"Unsupported introductory-offer duration '{value}'.")
+    };
+
+    private static AppStoreConnectSubscriptionOfferMode ParseIntroductoryOfferMode(string value) => value.Trim().ToUpperInvariant() switch
+    {
+        "FREE_TRIAL" => AppStoreConnectSubscriptionOfferMode.FreeTrial,
+        "PAY_AS_YOU_GO" => AppStoreConnectSubscriptionOfferMode.PayAsYouGo,
+        "PAY_UP_FRONT" => AppStoreConnectSubscriptionOfferMode.PayUpFront,
+        _ => throw new InvalidOperationException($"Unsupported introductory-offer mode '{value}'.")
+    };
+
+    private static DateTime? ParseOptionalDate(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? null
+            : DateTime.ParseExact(value!.Trim(), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None);
 
     private static AppStoreConnectSubscriptionSpec FindSubscription(AppStoreConnectGovernanceSpec spec, string productId) =>
         spec.SubscriptionGroups.SelectMany(group => group.Subscriptions).Single(subscription => Same(subscription.ProductId, productId));

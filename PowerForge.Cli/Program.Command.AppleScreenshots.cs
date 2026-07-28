@@ -7,6 +7,7 @@ internal static partial class Program
     private const string AppleScreenshotsUsage =
         "Usage: powerforge apple-screenshots manifest --config <screenshots.json> --version <x.y.z> " +
         "--source-commit <sha> --approved-by <identity> --allowed-root <reviewed-capture-root> [--out <manifest.json>] " +
+        "[--write-root <trusted-output-root>] " +
         "[--app-id <asc-app-id> | --release-config <powerforge.release.json> [--target <name-or-scheme>]] " +
         "[--initiated-by <identity>] [--approval-evidence <url-or-id>] " +
         "[--xcode-version <value>] [--runtime <value>] [--device <value>] [--theme <value>] [--scenario <value>] [--output json]";
@@ -56,7 +57,12 @@ internal static partial class Program
                 TryGetOptionValue(argv, "--out") ??
                 configuredOutput ??
                 Path.GetFileNameWithoutExtension(configPath) + ".approval.json");
+            var writeRoot = TryGetOptionValue(argv, "--write-root");
+            if (!string.IsNullOrWhiteSpace(writeRoot))
+                EnsureTrustedScreenshotManifestPath(outputPath, Path.GetFullPath(writeRoot));
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            if (!string.IsNullOrWhiteSpace(writeRoot))
+                EnsureTrustedScreenshotManifestPath(outputPath, Path.GetFullPath(writeRoot));
             File.WriteAllText(
                 outputPath,
                 JsonSerializer.Serialize(manifest, CliJson.Context.AppStoreConnectScreenshotApprovalManifest) + Environment.NewLine);
@@ -140,4 +146,33 @@ internal static partial class Program
         => string.Equals(app.Name?.Trim(), selected.Trim(), StringComparison.OrdinalIgnoreCase) ||
            string.Equals(app.Scheme?.Trim(), selected.Trim(), StringComparison.OrdinalIgnoreCase) ||
            string.Equals(app.BundleId?.Trim(), selected.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private static void EnsureTrustedScreenshotManifestPath(string outputPath, string writeRoot)
+    {
+        var root = Path.GetFullPath(writeRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var output = Path.GetFullPath(outputPath);
+        var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var relative = Path.GetRelativePath(root, output);
+        if (Path.IsPathRooted(relative) || relative.Equals("..", StringComparison.Ordinal) ||
+            relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+            relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Screenshot approval manifest output '{output}' escapes trusted write root '{root}'.");
+        }
+
+        FileSystemInfo? current = new FileInfo(output);
+        while (current is not null)
+        {
+            if (current.LinkTarget is not null || (current.Exists && (current.Attributes & FileAttributes.ReparsePoint) != 0))
+                throw new InvalidOperationException($"Screenshot approval manifest output traverses link or reparse point '{current.FullName}'.");
+            if (string.Equals(Path.GetFullPath(current.FullName).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), root, pathComparison))
+                break;
+            current = current switch
+            {
+                FileInfo file => file.Directory,
+                DirectoryInfo directory => directory.Parent,
+                _ => null
+            };
+        }
+    }
 }

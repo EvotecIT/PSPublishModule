@@ -37,14 +37,14 @@ if ($operation -eq 'Apply') {
     $arguments += @('--confirm', '--max-changes', $env:INPUT_MAXIMUM_CHANGES)
 }
 if ($operation -eq 'Plan' -and $env:INPUT_FAIL_ON_DRIFT -eq 'true') { $arguments += '--fail-on-drift' }
-$arguments += @('--output', 'json')
+$arguments += @('--summary', '--output', 'json')
 
 $output = & $env:POWERFORGE_TOOL_PATH @arguments 2>&1
 $exitCode = $LASTEXITCODE
 $text = ($output | Out-String).Trim()
 try { $envelope = $text | ConvertFrom-Json -Depth 100 } catch { throw "PowerForge returned invalid governance JSON (exit $exitCode)." }
 $result = $envelope.result
-$finalPlan = if ($operation -eq 'Apply') { $result.finalPlan } elseif ($operation -eq 'Plan') { $result } else { $null }
+$finalPlan = if ($operation -in @('Plan', 'Apply')) { $result } else { $null }
 $receiptPath = if ($operation -eq 'Snapshot') { $env:INPUT_OUTPUT_PATH } elseif ($operation -in @('Plan', 'Apply')) { $receiptPath } else { '' }
 "receipt-path=$receiptPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 "drift-count=$($finalPlan.driftCount ?? 0)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
