@@ -68,6 +68,11 @@ on:
         required: false
         default: app-store-publication
         type: string
+      target:
+        description: Optional comma-separated release target selection for partial platform capture lanes.
+        required: false
+        default: ""
+        type: string
     secrets:
       app_store_connect_issuer_id:
         required: true
@@ -214,6 +219,7 @@ jobs:
           action: Screenshots
           config-path: ${{ github.workspace }}/source/${{ inputs.release_config_path }}
           tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
+          target: ${{ inputs.target }}
           plan-only: "false"
           confirm: "true"
           issuer-id: ${{ secrets.app_store_connect_issuer_id }}

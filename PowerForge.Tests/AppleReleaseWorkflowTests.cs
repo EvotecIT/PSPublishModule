@@ -162,6 +162,7 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("--initiated-by '${{ github.actor }}'", workflow, StringComparison.Ordinal);
         Assert.Contains("--approval-evidence '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'", workflow, StringComparison.Ordinal);
         Assert.Contains("action: Screenshots", workflow, StringComparison.Ordinal);
+        Assert.Contains("target: ${{ inputs.target }}", workflow, StringComparison.Ordinal);
         Assert.Contains("confirm: \"true\"", workflow, StringComparison.Ordinal);
         Assert.Contains("retention-days: 90", workflow, StringComparison.Ordinal);
     }
