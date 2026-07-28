@@ -66,6 +66,15 @@ public sealed class AppleReleaseWorkflowTests
             "summary = [string] $_.summary",
             script.Substring(failureStart, failureEnd - failureStart),
             StringComparison.Ordinal);
+        var failureDiagnosticsOutput = script.IndexOf(
+            "Write-ReleaseOutput -Name 'diagnostics'",
+            failureStart,
+            StringComparison.Ordinal);
+        var failureThrow = script.IndexOf(
+            "throw \"PowerForge Apple action '$action' failed",
+            failureStart,
+            StringComparison.Ordinal);
+        Assert.True(failureDiagnosticsOutput > failureStart && failureDiagnosticsOutput < failureThrow);
         Assert.Contains("IsPathRooted($projectRootSetting)", script, StringComparison.Ordinal);
         Assert.True(
             script.IndexOf("Write-ReleaseOutput -Name 'receipt-path'", StringComparison.Ordinal) <

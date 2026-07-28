@@ -46,6 +46,7 @@ public sealed class AppStoreConnectTestFlightDistributionService
         var groups = await ResolveGroupsAsync(request, cancellationToken).ConfigureAwait(false);
         if (groups.Length == 0)
             throw new InvalidOperationException("At least one beta group id or beta group name is required.");
+        ValidateGroupPolicy(request, groups);
 
         var messages = new List<string>();
         foreach (var group in groups)
@@ -77,6 +78,27 @@ public sealed class AppStoreConnectTestFlightDistributionService
             Testers = testers.ToArray(),
             Messages = messages.ToArray()
         };
+    }
+
+    private static void ValidateGroupPolicy(
+        AppStoreConnectTestFlightDistributionRequest request,
+        AppStoreConnectBetaGroupInfo[] groups)
+    {
+        var mismatched = request.TestFlightPolicy switch
+        {
+            AppleTestFlightPolicy.Internal => groups.Where(static group => group.IsInternalGroup != true).ToArray(),
+            AppleTestFlightPolicy.External => groups.Where(static group => group.IsInternalGroup != false).ToArray(),
+            AppleTestFlightPolicy.Disabled => groups,
+            _ => Array.Empty<AppStoreConnectBetaGroupInfo>()
+        };
+        if (mismatched.Length == 0)
+            return;
+
+        var audience = request.TestFlightPolicy.ToString().ToLowerInvariant();
+        throw new InvalidOperationException(
+            $"TestFlight policy '{request.TestFlightPolicy}' rejects beta group(s) " +
+            $"{string.Join(", ", mismatched.Select(static group => $"'{group.Name ?? group.Id}'"))}. " +
+            $"Select only {audience} beta groups for this target.");
     }
 
     private async Task<AppStoreConnectBetaGroupInfo[]> ResolveGroupsAsync(

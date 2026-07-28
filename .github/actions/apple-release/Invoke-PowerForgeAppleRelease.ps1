@@ -115,6 +115,8 @@ if ($exitCode -ne 0) {
             retryable = [bool] $_.retryable
         }
     })
+    $safeDiagnosticsJson = $safeDiagnostics | ConvertTo-Json -Compress -AsArray
+    Write-ReleaseOutput -Name 'diagnostics' -Value $safeDiagnosticsJson
     [ordered]@{
         success = $false
         action = $action

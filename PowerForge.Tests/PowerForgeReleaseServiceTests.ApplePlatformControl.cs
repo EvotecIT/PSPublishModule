@@ -151,6 +151,45 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleTestFlightPassesTargetAudiencePolicyToDistribution()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.5.0", "13");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.TestFlightBetaGroupNames = new[] { "Home" };
+            Assert.Single(spec.AppleApps.Apps).TestFlightPolicy = AppleTestFlightPolicy.Internal;
+            AppStoreConnectTestFlightDistributionRequest? captured = null;
+
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, "VALID"),
+                    distributeTestFlight: request =>
+                    {
+                        captured = request;
+                        return new AppStoreConnectTestFlightDistributionResult();
+                    })
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.TestFlight
+                    });
+
+            Assert.True(result.Success);
+            Assert.NotNull(captured);
+            Assert.Equal(AppleTestFlightPolicy.Internal, captured!.TestFlightPolicy);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_EmbeddedCompanionRequiresKnownParent()
     {
         var root = CreateSandbox();
@@ -191,6 +230,94 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             TryDelete(root);
         }
+    }
+
+    [Fact]
+    public void Execute_AppleTopologyRejectsCyclicParentTargets()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "WatchA.xcodeproj", "1.0.0", "1");
+            CreateXcodeProject(root, "WatchB.xcodeproj", "1.0.0", "1");
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new PowerForgeReleaseService(new NullLogger()).Execute(
+                    new PowerForgeReleaseSpec
+                    {
+                        AppleApps = new PowerForgeAppleReleaseOptions
+                        {
+                            ProjectRoot = root,
+                            Apps = new[]
+                            {
+                                new AppleAppConfiguration
+                                {
+                                    Name = "Watch A",
+                                    BundleId = "com.example.watch-a",
+                                    Platform = ApplePlatform.watchOS,
+                                    ProjectPath = "WatchA.xcodeproj",
+                                    Scheme = "WatchA",
+                                    DistributionRoute = AppleDistributionRoute.EmbeddedCompanion,
+                                    ParentTarget = "Watch B"
+                                },
+                                new AppleAppConfiguration
+                                {
+                                    Name = "Watch B",
+                                    BundleId = "com.example.watch-b",
+                                    Platform = ApplePlatform.watchOS,
+                                    ProjectPath = "WatchB.xcodeproj",
+                                    Scheme = "WatchB",
+                                    DistributionRoute = AppleDistributionRoute.EmbeddedCompanion,
+                                    ParentTarget = "Watch A"
+                                }
+                            }
+                        }
+                    },
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Archive
+                    }));
+
+            Assert.Contains("cyclic ParentTarget", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void DirectNotarizationCredentialsAreRequiredOnlyForUploadActions()
+    {
+        var apps = new[]
+        {
+            new PowerForgeAppleAppReleaseTargetPlan
+            {
+                Name = "Agent",
+                DistributionRoute = AppleDistributionRoute.DirectNotarized
+            }
+        };
+
+        Assert.False(PowerForgeReleaseService.RequiresDirectNotarizationCredentials(
+            PowerForgeAppleReleaseAction.Archive,
+            configuredUpload: false,
+            apps));
+        Assert.False(PowerForgeReleaseService.RequiresDirectNotarizationCredentials(
+            PowerForgeAppleReleaseAction.Doctor,
+            configuredUpload: false,
+            apps));
+        Assert.True(PowerForgeReleaseService.RequiresDirectNotarizationCredentials(
+            PowerForgeAppleReleaseAction.Upload,
+            configuredUpload: false,
+            apps));
+        Assert.True(PowerForgeReleaseService.RequiresDirectNotarizationCredentials(
+            PowerForgeAppleReleaseAction.Advance,
+            configuredUpload: false,
+            apps));
+        Assert.True(PowerForgeReleaseService.RequiresDirectNotarizationCredentials(
+            PowerForgeAppleReleaseAction.Configured,
+            configuredUpload: true,
+            apps));
     }
 
     [Fact]

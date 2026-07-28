@@ -122,6 +122,14 @@ internal sealed partial class PowerForgeReleaseService
            action == PowerForgeAppleReleaseAction.UploadExisting ||
            action == PowerForgeAppleReleaseAction.Advance;
 
+    internal static bool RequiresDirectNotarizationCredentials(
+        PowerForgeAppleReleaseAction action,
+        bool configuredUpload,
+        IReadOnlyCollection<PowerForgeAppleAppReleaseTargetPlan> apps)
+        => apps.Any(static app => app.DistributionRoute == AppleDistributionRoute.DirectNotarized) &&
+           (IsUploadAction(action) ||
+            (action == PowerForgeAppleReleaseAction.Configured && configuredUpload));
+
     private static bool UsesAppStoreConnect(PowerForgeAppleAppReleaseTargetPlan app)
         => app.DistributionRoute == AppleDistributionRoute.AppStore ||
            app.DistributionRoute == AppleDistributionRoute.TestFlightOnly;
@@ -304,7 +312,8 @@ internal sealed partial class PowerForgeReleaseService
             app,
             Path.GetFullPath(prior.DirectArtifactPath),
             prior.NotarizationSubmissionId,
-            prior.DirectArtifactSha256);
+            prior.DirectArtifactSha256,
+            prior.Stapled == true);
         result.ResumedAcceptedNotarization = true;
         result.SkippedSteps = MergeAppleSkippedSteps(
             result.SkippedSteps,

@@ -54,6 +54,8 @@ public sealed class AppleNotarizationService
 
         var timeout = request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(30) : request.Timeout;
         var resumed = !string.IsNullOrWhiteSpace(request.AcceptedSubmissionId);
+        if (request.StaplingCompleted && !resumed)
+            throw new ArgumentException("StaplingCompleted requires AcceptedSubmissionId.", nameof(request));
         var submissionPath = resumed
             ? artifactPath
             : await PrepareSubmissionAsync(request, artifactPath, timeout, cancellationToken).ConfigureAwait(false);
@@ -89,8 +91,21 @@ public sealed class AppleNotarizationService
         ProcessRunResult? assessment = null;
         if (submission.Succeeded && string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) && request.Staple)
         {
-            staple = await RunAsync(request.XcrunExecutable, artifactPath, new[] { "stapler", "staple", artifactPath }, timeout, cancellationToken).ConfigureAwait(false);
-            if (staple.Succeeded)
+            if (request.StaplingCompleted)
+            {
+                staple = new ProcessRunResult(
+                    0,
+                    "Skipped stapling because the retained receipt records that it already succeeded.",
+                    string.Empty,
+                    request.XcrunExecutable,
+                    TimeSpan.Zero,
+                    false);
+            }
+            else
+            {
+                staple = await RunAsync(request.XcrunExecutable, artifactPath, new[] { "stapler", "staple", artifactPath }, timeout, cancellationToken).ConfigureAwait(false);
+            }
+            if (staple?.Succeeded == true)
                 validation = await RunAsync(request.XcrunExecutable, artifactPath, new[] { "stapler", "validate", artifactPath }, timeout, cancellationToken).ConfigureAwait(false);
         }
         if (submission.Succeeded && string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) && request.Assess)
@@ -109,7 +124,7 @@ public sealed class AppleNotarizationService
         return new AppleNotarizationResult
         {
             ArtifactPath = artifactPath,
-            ArtifactSha256 = artifactSha256,
+            ArtifactSha256 = ComputeArtifactSha256(artifactPath),
             SubmissionPath = submissionPath,
             SubmissionId = submissionId,
             Status = status,

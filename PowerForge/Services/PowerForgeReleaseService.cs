@@ -1572,7 +1572,7 @@ internal sealed partial class PowerForgeReleaseService
                 throw new FileNotFoundException($"AppleApps App Store Connect API key file was not found: {appStoreConnectApiKeyPath}", appStoreConnectApiKeyPath);
         }
 
-        if (apps.Any(static app => app.DistributionRoute == AppleDistributionRoute.DirectNotarized) &&
+        if (RequiresDirectNotarizationCredentials(request.AppleAction, options.Upload, apps) &&
             string.IsNullOrWhiteSpace(directDistribution.KeychainProfile) &&
             appStoreConnectApiConfiguredCount != 3)
         {
@@ -2067,6 +2067,7 @@ internal sealed partial class PowerForgeReleaseService
                     Platform = app.Platform,
                     BetaGroupIds = plan.TestFlightBetaGroupIds,
                     BetaGroupNames = plan.TestFlightBetaGroupNames,
+                    TestFlightPolicy = app.TestFlightPolicy,
                     Testers = plan.TestFlightTesterEmails
                         .Select(static email => new AppStoreConnectBetaTesterSpec { Email = email })
                         .ToArray(),

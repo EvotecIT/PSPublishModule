@@ -59,5 +59,29 @@ internal sealed partial class PowerForgeReleaseService
                     $"TestFlight-only Apple target '{app.Name}' cannot disable TestFlight.");
             }
         }
+
+        var appsByName = apps.ToDictionary(static app => app.Name, StringComparer.OrdinalIgnoreCase);
+        foreach (var app in apps)
+        {
+            var chain = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { app.Name };
+            var current = app;
+            while (!string.IsNullOrWhiteSpace(current.ParentTarget))
+            {
+                if (!chain.Add(current.ParentTarget!))
+                {
+                    throw new InvalidOperationException(
+                        $"Apple target '{app.Name}' has a cyclic ParentTarget chain involving '{current.ParentTarget}'.");
+                }
+
+                current = appsByName[current.ParentTarget!];
+            }
+
+            if (app.DistributionRoute == AppleDistributionRoute.EmbeddedCompanion &&
+                !IsIndependentReleaseTarget(current))
+            {
+                throw new InvalidOperationException(
+                    $"Embedded Apple target '{app.Name}' must ultimately reference an App Store, TestFlight-only, or direct-notarized archive owner.");
+            }
+        }
     }
 }

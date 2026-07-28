@@ -1521,6 +1521,58 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task TestFlightDistributionService_RejectsExternalGroupForInternalPolicy()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "build-9",
+                      "type": "builds",
+                      "attributes": { "version": "9", "processingState": "VALID", "expired": false },
+                      "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } }
+                    }
+                  ],
+                  "included": [
+                    { "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.5", "platform": "IOS" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "group-external",
+                      "type": "betaGroups",
+                      "attributes": { "name": "Discord Testers", "isInternalGroup": false }
+                    }
+                  ]
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectTestFlightDistributionService(client);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.DistributeAsync(
+            new AppStoreConnectTestFlightDistributionRequest
+            {
+                AppId = "app-1",
+                VersionString = "1.0.5",
+                BuildNumber = "9",
+                Platform = ApplePlatform.iOS,
+                BetaGroupNames = new[] { "Discord Testers" },
+                TestFlightPolicy = AppleTestFlightPolicy.Internal
+            }));
+
+        Assert.Contains("Internal", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Discord Testers", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(2, handler.RequestUris.Count);
+    }
+
+    [Fact]
     public async Task TestFlightDistributionService_AssignsExistingTesterToManualInternalGroup()
     {
         var handler = new SequenceHandler(

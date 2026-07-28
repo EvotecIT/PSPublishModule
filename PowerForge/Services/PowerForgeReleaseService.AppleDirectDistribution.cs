@@ -7,7 +7,8 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleAppReleaseTargetPlan app,
         string? artifactPath = null,
         string? acceptedSubmissionId = null,
-        string? expectedArtifactSha256 = null)
+        string? expectedArtifactSha256 = null,
+        bool staplingCompleted = false)
     {
         var result = _notarizeAppleArtifact(new AppleNotarizationRequest
         {
@@ -21,6 +22,7 @@ internal sealed partial class PowerForgeReleaseService
             ApiIssuerId = plan.AppStoreConnectApiIssuerId,
             AcceptedSubmissionId = acceptedSubmissionId,
             ExpectedArtifactSha256 = expectedArtifactSha256,
+            StaplingCompleted = staplingCompleted,
             Timeout = TimeSpan.FromSeconds(plan.DirectDistribution.TimeoutSeconds),
             Staple = plan.DirectDistribution.Staple,
             Assess = plan.DirectDistribution.Assess

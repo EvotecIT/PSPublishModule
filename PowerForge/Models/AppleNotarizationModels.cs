@@ -36,8 +36,11 @@ public sealed class AppleNotarizationRequest
     /// </summary>
     public string? AcceptedSubmissionId { get; set; }
 
-    /// <summary>Expected SHA-256 of the original artifact when resuming an accepted submission.</summary>
+    /// <summary>Expected SHA-256 of the retained artifact bytes when resuming an accepted submission.</summary>
     public string? ExpectedArtifactSha256 { get; set; }
+
+    /// <summary>Whether stapling already succeeded and must not mutate the artifact again during resume.</summary>
+    public bool StaplingCompleted { get; set; }
 
     /// <summary>Maximum runtime for each external command.</summary>
     public TimeSpan Timeout { get; set; } = TimeSpan.FromMinutes(30);
@@ -55,7 +58,7 @@ public sealed class AppleNotarizationResult
     /// <summary>Original artifact.</summary>
     public string ArtifactPath { get; set; } = string.Empty;
 
-    /// <summary>SHA-256 binding the accepted submission receipt to the original artifact bytes.</summary>
+    /// <summary>SHA-256 binding the receipt to the current artifact bytes after completed local processing.</summary>
     public string ArtifactSha256 { get; set; } = string.Empty;
 
     /// <summary>File submitted to notarytool.</summary>

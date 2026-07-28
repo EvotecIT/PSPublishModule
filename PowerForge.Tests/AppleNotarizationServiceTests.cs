@@ -175,6 +175,50 @@ public sealed class AppleNotarizationServiceTests
         }
     }
 
+    [Fact]
+    public async Task NotarizeAsync_ResumeUsesPostStapleHashAndDoesNotStapleAgain()
+    {
+        var artifact = Path.GetTempFileName() + ".pkg";
+        await File.WriteAllTextAsync(artifact, "pkg");
+        try
+        {
+            var firstRunner = new MutatingStapleRunner(artifact, failAssessment: true);
+            var first = await new AppleNotarizationService(firstRunner).NotarizeAsync(new AppleNotarizationRequest
+            {
+                ArtifactPath = artifact,
+                KeychainProfile = "powerforge-notary"
+            });
+
+            Assert.False(first.Succeeded);
+            Assert.True(first.Staple?.Succeeded);
+            Assert.False(first.Assessment?.Succeeded);
+
+            var resumedRunner = new MutatingStapleRunner(artifact, failAssessment: false);
+            var resumed = await new AppleNotarizationService(resumedRunner).NotarizeAsync(new AppleNotarizationRequest
+            {
+                ArtifactPath = artifact,
+                AcceptedSubmissionId = first.SubmissionId,
+                ExpectedArtifactSha256 = first.ArtifactSha256,
+                StaplingCompleted = true
+            });
+
+            Assert.True(resumed.Succeeded);
+            Assert.Equal(first.ArtifactSha256, resumed.ArtifactSha256);
+            Assert.DoesNotContain(resumedRunner.Requests, request =>
+                request.Arguments.Count > 1 &&
+                request.Arguments[0] == "stapler" &&
+                request.Arguments[1] == "staple");
+            Assert.Contains(resumedRunner.Requests, request =>
+                request.Arguments.Count > 1 &&
+                request.Arguments[0] == "stapler" &&
+                request.Arguments[1] == "validate");
+        }
+        finally
+        {
+            try { File.Delete(artifact); } catch { }
+        }
+    }
+
     private sealed class NotaryProcessRunner : IProcessRunner
     {
         private readonly string _status;
@@ -193,6 +237,42 @@ public sealed class AppleNotarizationServiceTests
                 ? JsonSerializer.Serialize(new { id = "submission-1", status = _status })
                 : "ok";
             return Task.FromResult(new ProcessRunResult(0, output, string.Empty, request.FileName, TimeSpan.FromMilliseconds(1), false));
+        }
+    }
+
+    private sealed class MutatingStapleRunner : IProcessRunner
+    {
+        private readonly string _artifact;
+        private readonly bool _failAssessment;
+
+        internal MutatingStapleRunner(string artifact, bool failAssessment)
+        {
+            _artifact = artifact;
+            _failAssessment = failAssessment;
+        }
+
+        internal List<ProcessRunRequest> Requests { get; } = new();
+
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            if (request.Arguments.Count > 1 &&
+                request.Arguments[0] == "stapler" &&
+                request.Arguments[1] == "staple")
+            {
+                File.AppendAllText(_artifact, "-stapled");
+            }
+
+            var notarySubmission = request.Arguments.Count > 0 && request.Arguments[0] == "notarytool";
+            var assessmentFailure = _failAssessment && request.FileName.Contains("spctl", StringComparison.OrdinalIgnoreCase);
+            var result = new ProcessRunResult(
+                assessmentFailure ? 1 : 0,
+                notarySubmission ? JsonSerializer.Serialize(new { id = "submission-1", status = "Accepted" }) : "ok",
+                assessmentFailure ? "rejected" : string.Empty,
+                request.FileName,
+                TimeSpan.FromMilliseconds(1),
+                false);
+            return Task.FromResult(result);
         }
     }
 }
