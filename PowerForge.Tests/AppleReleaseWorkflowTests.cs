@@ -134,6 +134,16 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("./powerforge-shared/.github/actions/build-powerforge", approval, StringComparison.Ordinal);
         Assert.Equal(2, Count(advance, "tool-path: ${{ steps.build-powerforge.outputs.tool-path }}"));
         Assert.Equal(2, Count(approval, "tool-path: ${{ steps.build-powerforge.outputs.tool-path }}"));
+        Assert.Contains("source_bootstrap_script", advance, StringComparison.Ordinal);
+        Assert.Contains("source_bootstrap_script must resolve to a child", advance, StringComparison.Ordinal);
+        Assert.Contains("FileAttributes]::ReparsePoint", advance, StringComparison.Ordinal);
+        Assert.Contains("ls-files --error-unmatch", advance, StringComparison.Ordinal);
+        Assert.Contains("diff --quiet", advance, StringComparison.Ordinal);
+        Assert.Contains("& $scriptPath", advance, StringComparison.Ordinal);
+        Assert.Contains("must not modify tracked release source", advance, StringComparison.Ordinal);
+        Assert.True(
+            advance.IndexOf("Prepare tracked source dependencies", StringComparison.Ordinal) <
+            advance.IndexOf("Plan safe release advancement", StringComparison.Ordinal));
     }
 
     [Fact]

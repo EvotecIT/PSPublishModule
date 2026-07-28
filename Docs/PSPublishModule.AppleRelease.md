@@ -260,6 +260,9 @@ The reusable workflow boundary mirrors the human approval boundary:
   version source, and opens a release-ready pull request. It never merges it.
 - `powerforge-apple-advance.yml` runs a plan and confirmed resumable `Advance` from
   an exact merged commit. It stops before every review and public-release action.
+  Consumers that need source-only dependencies can pass `source_bootstrap_script`;
+  the workflow accepts only a tracked, unchanged, non-symlinked `.ps1` file beneath
+  that exact checkout and runs it before both the plan and confirmed transition.
 - `powerforge-apple-approval.yml` accepts only `SubmitTestFlightReview`,
   `SubmitAppReview`, or `Release`, verifies an optional approver allow-list, and runs
   inside a protected GitHub environment when the repository plan supports reviewers.
@@ -276,7 +279,9 @@ The reusable workflow boundary mirrors the human approval boundary:
 
 Callers must pass 40-character commit SHAs for `powerforge_ref` and release
 `source_ref`; the workflows reject branches and tags and verify both checked-out
-commits. Pass App Store Connect credentials through GitHub secrets. The composite
+commits. The reusable jobs select the caller repository's protected environment and
+resolve its environment-scoped App Store Connect secrets there. Do not add
+repository-wide `secrets: inherit`; that would weaken the environment boundary. The composite
 action writes the private key to a permission-restricted temporary file and removes
 it after every plan or action. Mutating release workflows share one repository-scoped
 concurrency group; monitoring and screenshot capture have dedicated groups so a long

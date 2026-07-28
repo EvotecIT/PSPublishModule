@@ -12,6 +12,11 @@ on:
         required: false
         default: powerforge.release.json
         type: string
+      source_bootstrap_script:
+        description: Optional tracked PowerShell script that prepares source dependencies before planning and advancing.
+        required: false
+        default: ''
+        type: string
       tool_manifest_path:
         description: Checked-in PowerForge tool manifest path.
         required: false
@@ -98,6 +103,53 @@ jobs:
           $shared = (git -C powerforge-shared rev-parse HEAD).Trim()
           if ($source -ine $env:EXPECTED_SOURCE_REF) { throw "Expected source '$($env:EXPECTED_SOURCE_REF)', received '$source'." }
           if ($shared -ine $env:EXPECTED_POWERFORGE_REF) { throw "Expected shared '$($env:EXPECTED_POWERFORGE_REF)', received '$shared'." }
+
+      - name: Prepare tracked source dependencies
+        if: inputs.source_bootstrap_script != ''
+        shell: pwsh
+        env:
+          SOURCE_BOOTSTRAP_SCRIPT: ${{ inputs.source_bootstrap_script }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source').TrimEnd([IO.Path]::DirectorySeparatorChar)
+          if ([IO.Path]::IsPathRooted($env:SOURCE_BOOTSTRAP_SCRIPT)) {
+            throw 'source_bootstrap_script must be relative to the checked-out source.'
+          }
+          $scriptPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:SOURCE_BOOTSTRAP_SCRIPT))
+          $prefix = $sourceRoot + [IO.Path]::DirectorySeparatorChar
+          if (-not $scriptPath.StartsWith($prefix, [StringComparison]::Ordinal)) {
+            throw 'source_bootstrap_script must resolve to a child of the checked-out source.'
+          }
+          if ([IO.Path]::GetExtension($scriptPath) -ine '.ps1') {
+            throw 'source_bootstrap_script must identify a PowerShell .ps1 file.'
+          }
+          $current = $scriptPath
+          while ($current -ne $sourceRoot) {
+            if (Test-Path -LiteralPath $current) {
+              $item = Get-Item -LiteralPath $current -Force
+              if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "source_bootstrap_script must not traverse a symbolic link or reparse point: $current"
+              }
+            }
+            $current = Split-Path -Parent $current
+          }
+          if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {
+            throw "source_bootstrap_script was not found: $scriptPath"
+          }
+          $relativePath = [IO.Path]::GetRelativePath($sourceRoot, $scriptPath).Replace('\', '/')
+          & git -C $sourceRoot ls-files --error-unmatch -- $relativePath *> $null
+          if ($LASTEXITCODE -ne 0) {
+            throw "source_bootstrap_script must be tracked at the exact source commit: $relativePath"
+          }
+          & git -C $sourceRoot diff --quiet -- $relativePath
+          if ($LASTEXITCODE -ne 0) {
+            throw "source_bootstrap_script differs from the exact source commit: $relativePath"
+          }
+          & $scriptPath
+          & git -C $sourceRoot diff --quiet
+          if ($LASTEXITCODE -ne 0) {
+            throw 'source_bootstrap_script must not modify tracked release source.'
+          }
 
       - name: Build exact PowerForge source
         id: build-powerforge
