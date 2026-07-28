@@ -491,7 +491,10 @@ internal sealed partial class PowerForgeReleaseService
             var review = platform?.ReviewSubmissions.FirstOrDefault(static value => value.IsSubmitted == true) ??
                          platform?.ReviewSubmissions.FirstOrDefault();
             (string? MarketingVersion, string? BuildNumber) values = (null, null);
-            if (plan.Action == PowerForgeAppleReleaseAction.Archive)
+            var skippedIndependentRelease = result?.SkippedSteps.Contains(
+                "independentRelease",
+                StringComparer.OrdinalIgnoreCase) == true;
+            if (!skippedIndependentRelease && plan.Action == PowerForgeAppleReleaseAction.Archive)
             {
                 try
                 {
@@ -505,7 +508,7 @@ internal sealed partial class PowerForgeReleaseService
                         result?.VersionUpdate?.After.BuildNumber ?? app.BuildNumber);
                 }
             }
-            else if (plan.Action != PowerForgeAppleReleaseAction.Cleanup)
+            else if (!skippedIndependentRelease && plan.Action != PowerForgeAppleReleaseAction.Cleanup)
             {
                 try
                 {

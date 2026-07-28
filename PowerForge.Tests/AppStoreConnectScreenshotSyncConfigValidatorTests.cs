@@ -43,6 +43,46 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidatorTests
         }
     }
 
+    [Fact]
+    public void Validate_DoesNotRequirePredeclaredManifestUntilEnforcementIsEnabled()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            WritePngHeader(Path.Combine(root, "01.png"), 1290, 2796);
+            var spec = new AppStoreConnectScreenshotSyncSpec
+            {
+                AppId = "1234567890",
+                VersionString = "1.0.0",
+                ScreenshotSets = new[]
+                {
+                    new AppStoreConnectScreenshotSetSyncSpec
+                    {
+                        ScreenshotDisplayType = "APP_IPHONE_65",
+                        Path = root,
+                        AllowedDimensions = new[] { "1290x2796" }
+                    }
+                },
+                Quality = new AppStoreConnectScreenshotQualitySpec
+                {
+                    Enabled = true,
+                    MinimumFileBytes = 0,
+                    MinimumKilobytesPerMegapixel = 0,
+                    RequireApprovalManifest = false,
+                    ApprovalManifestPath = "future.approval.json"
+                }
+            };
+
+            var result = new AppStoreConnectScreenshotSyncConfigValidator().Validate(spec, root);
+
+            Assert.True(result.IsValid);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     private static AppStoreConnectScreenshotSyncValidationResult Validate(string root, string[] allowed)
         => new AppStoreConnectScreenshotSyncConfigValidator().Validate(
             new AppStoreConnectScreenshotSyncSpec

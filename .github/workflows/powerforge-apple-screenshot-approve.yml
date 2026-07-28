@@ -129,11 +129,35 @@ jobs:
           path: powerforge-shared
           persist-credentials: false
 
+      - name: Validate the reviewed capture destination
+        id: capture-path
+        shell: pwsh
+        env:
+          CAPTURE_ARTIFACT_PATH: ${{ inputs.capture_artifact_path }}
+        run: |
+          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source').TrimEnd([IO.Path]::DirectorySeparatorChar)
+          $destination = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_ARTIFACT_PATH))
+          $prefix = $sourceRoot + [IO.Path]::DirectorySeparatorChar
+          if (-not $destination.StartsWith($prefix, [StringComparison]::Ordinal)) {
+            throw 'capture_artifact_path must resolve to a child of the checked-out source.'
+          }
+          $current = $destination
+          while ($current -ne $sourceRoot) {
+            if (Test-Path -LiteralPath $current) {
+              $item = Get-Item -LiteralPath $current -Force
+              if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "capture_artifact_path must not traverse a symbolic link or reparse point: $current"
+              }
+            }
+            $current = Split-Path -Parent $current
+          }
+          "path=$destination" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       - name: Restore the exact reviewed capture artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: powerforge-apple-screenshots-${{ inputs.source_ref }}
-          path: source/${{ inputs.capture_artifact_path }}
+          path: ${{ steps.capture-path.outputs.path }}
           repository: ${{ github.repository }}
           run-id: ${{ inputs.capture_run_id }}
           github-token: ${{ github.token }}
@@ -165,7 +189,7 @@ jobs:
               --version '${{ inputs.marketing_version }}' `
               --source-commit '${{ inputs.source_ref }}' `
               --approved-by 'GitHub protected environment: ${{ inputs.environment_name }}' `
-              --allowed-root '${{ github.workspace }}/source/${{ inputs.capture_artifact_path }}' `
+              --allowed-root '${{ steps.capture-path.outputs.path }}' `
               --initiated-by '${{ github.actor }}' `
               --approval-evidence $evidence `
               --xcode-version $xcodeVersion `
@@ -195,7 +219,7 @@ jobs:
         with:
           name: powerforge-apple-screenshots-approved-${{ inputs.source_ref }}
           path: |
-            source/${{ inputs.capture_artifact_path }}
+            ${{ steps.capture-path.outputs.path }}
             source/**/*.approval.json
           if-no-files-found: error
           retention-days: 90

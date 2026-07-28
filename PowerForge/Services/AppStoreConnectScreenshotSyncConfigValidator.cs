@@ -59,7 +59,7 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
         IReadOnlyCollection<AppStoreConnectScreenshotSetSyncValidationResult> sets)
     {
         var quality = spec.Quality ?? new AppStoreConnectScreenshotQualitySpec();
-        if (!quality.RequireApprovalManifest && string.IsNullOrWhiteSpace(quality.ApprovalManifestPath))
+        if (!quality.RequireApprovalManifest)
             return Array.Empty<string>();
         if (string.IsNullOrWhiteSpace(quality.ApprovalManifestPath))
             return new[] { "Screenshot approval manifest is required but ApprovalManifestPath is missing." };

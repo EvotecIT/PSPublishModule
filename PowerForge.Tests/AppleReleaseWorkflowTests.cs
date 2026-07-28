@@ -159,6 +159,10 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("diagnostics:", action, StringComparison.Ordinal);
         Assert.Contains("'Status', 'Doctor'", script, StringComparison.Ordinal);
         Assert.Contains("reportedDiagnostics", script, StringComparison.Ordinal);
+        Assert.Contains("IsNullOrWhiteSpace($env:PRIVATE_KEY)", action, StringComparison.Ordinal);
+        Assert.True(
+            action.IndexOf("IsNullOrWhiteSpace($env:PRIVATE_KEY)", StringComparison.Ordinal) <
+            action.IndexOf("WriteAllText($path", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -214,7 +218,10 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("approval-evidence", approval, StringComparison.Ordinal);
         Assert.Contains("target: ${{ inputs.target }}", approval, StringComparison.Ordinal);
         Assert.Contains("environment: ${{ inputs.environment_name }}", approval, StringComparison.Ordinal);
-        Assert.Contains("--allowed-root '${{ github.workspace }}/source/${{ inputs.capture_artifact_path }}'", approval, StringComparison.Ordinal);
+        Assert.Contains("capture_artifact_path must resolve to a child of the checked-out source", approval, StringComparison.Ordinal);
+        Assert.Contains("FileAttributes]::ReparsePoint", approval, StringComparison.Ordinal);
+        Assert.Contains("path: ${{ steps.capture-path.outputs.path }}", approval, StringComparison.Ordinal);
+        Assert.Contains("--allowed-root '${{ steps.capture-path.outputs.path }}'", approval, StringComparison.Ordinal);
     }
 
     [Fact]

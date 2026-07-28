@@ -101,6 +101,10 @@ runs:
       env:
         PRIVATE_KEY: ${{ inputs.private-key }}
       run: |
+        if ([string]::IsNullOrWhiteSpace($env:PRIVATE_KEY)) {
+          "path=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          exit 0
+        }
         $path = Join-Path $env:RUNNER_TEMP "AuthKey_PowerForge_$PID.p8"
         $privateKey = $env:PRIVATE_KEY -replace '\\n', "`n"
         [System.IO.File]::WriteAllText($path, $privateKey, [System.Text.UTF8Encoding]::new($false))

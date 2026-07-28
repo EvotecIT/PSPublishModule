@@ -371,7 +371,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(keyPath, "private-key");
             var spec = CreateAppleAutomationSpec(root, keyPath);
             spec.AppleApps!.TeamId = "8ZPGZ79T7J";
-            spec.AppleApps.DirectDistribution.KeychainProfile = "powerforge-notary";
+            spec.AppleApps.AllowProvisioningUpdates = false;
+            spec.AppleApps.DirectDistribution.KeychainProfile = null;
             var app = Assert.Single(spec.AppleApps.Apps);
             app.Name = "EasyControlX Agent";
             app.ProjectPath = "EasyControlXAgent.xcodeproj";
@@ -427,7 +428,10 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(result.Success);
             Assert.Equal(0, stateCalls);
             Assert.NotNull(notarizationRequest);
-            Assert.Equal("powerforge-notary", notarizationRequest!.KeychainProfile);
+            Assert.Null(notarizationRequest!.KeychainProfile);
+            Assert.Equal(keyPath, notarizationRequest.ApiKeyPath);
+            Assert.Equal("TESTKEY123", notarizationRequest.ApiKeyId);
+            Assert.Equal("issuer-id", notarizationRequest.ApiIssuerId);
             var target = Assert.Single(result.AppleReceipt!.Targets);
             Assert.Equal(AppleDistributionRoute.DirectNotarized, target.DistributionRoute);
             Assert.Equal("notary-1", target.NotarizationSubmissionId);
