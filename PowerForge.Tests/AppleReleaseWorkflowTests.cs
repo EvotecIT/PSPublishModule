@@ -187,8 +187,11 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("Capture deterministic App Store screenshots", workflow, StringComparison.Ordinal);
         Assert.Contains("escapes the checked-out source", workflow, StringComparison.Ordinal);
         Assert.Contains("environment: ${{ inputs.approval_environment }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("Validate the reviewed capture destination", workflow, StringComparison.Ordinal);
+        Assert.Contains("capture_artifact_path must not traverse a symbolic link or reparse point", workflow, StringComparison.Ordinal);
+        Assert.Contains("path: ${{ steps.capture-path.outputs.path }}", workflow, StringComparison.Ordinal);
         Assert.Contains("apple-screenshots manifest", workflow, StringComparison.Ordinal);
-        Assert.Contains("--allowed-root '${{ github.workspace }}/source/${{ inputs.capture_artifact_path }}'", workflow, StringComparison.Ordinal);
+        Assert.Contains("--allowed-root '${{ steps.capture-path.outputs.path }}'", workflow, StringComparison.Ordinal);
         Assert.Contains("--source-commit '${{ inputs.source_ref }}'", workflow, StringComparison.Ordinal);
         Assert.Contains("--approved-by 'GitHub protected environment:", workflow, StringComparison.Ordinal);
         Assert.Contains("--initiated-by '${{ github.actor }}'", workflow, StringComparison.Ordinal);

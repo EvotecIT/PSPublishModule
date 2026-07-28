@@ -478,7 +478,11 @@ internal sealed partial class PowerForgeReleaseService
         {
             try
             {
-                cleanup = MergeCleanup(cleanup, _appleArtifactService.RemoveCurrentArtifacts(plan));
+                cleanup = MergeCleanup(
+                    cleanup,
+                    _appleArtifactService.RemoveCurrentArtifacts(
+                        plan,
+                        appStoreConnectResults.Select(static result => result.Plan)));
             }
             catch (Exception exception)
             {

@@ -210,29 +210,87 @@ public sealed class AppleNotarizationService
         using var sha256 = SHA256.Create();
         if (File.Exists(artifactPath))
         {
-            AppendFile(sha256, artifactPath);
+            AppendFileSystemEntry(
+                sha256,
+                new FileInfo(artifactPath),
+                Path.GetFileName(artifactPath),
+                includeContents: true);
         }
         else
         {
-            var files = Directory.EnumerateFiles(artifactPath, "*", SearchOption.AllDirectories)
-                .Select(path => new
-                {
-                    FullPath = path,
-                    RelativePath = FrameworkCompatibility.GetRelativePath(artifactPath, path).Replace('\\', '/')
-                })
-                .OrderBy(static item => item.RelativePath, StringComparer.Ordinal)
-                .ToArray();
-            foreach (var file in files)
+            var root = new DirectoryInfo(artifactPath);
+            AppendFileSystemEntry(sha256, root, ".", includeContents: false);
+            var entries = new List<(FileSystemInfo Info, string RelativePath)>();
+            var pending = new Stack<DirectoryInfo>();
+            pending.Push(root);
+            while (pending.Count > 0)
             {
-                AppendBytes(sha256, Encoding.UTF8.GetBytes(file.RelativePath));
-                AppendBytes(sha256, new byte[] { 0 });
-                AppendFile(sha256, file.FullPath);
-                AppendBytes(sha256, new byte[] { 0 });
+                var directory = pending.Pop();
+                foreach (var entry in directory.EnumerateFileSystemInfos())
+                {
+                    var relativePath = FrameworkCompatibility.GetRelativePath(artifactPath, entry.FullName)
+                        .Replace('\\', '/');
+                    entries.Add((entry, relativePath));
+                    if ((entry.Attributes & FileAttributes.Directory) != 0 &&
+                        (entry.Attributes & FileAttributes.ReparsePoint) == 0)
+                    {
+                        pending.Push((DirectoryInfo)entry);
+                    }
+                }
+            }
+
+            foreach (var entry in entries.OrderBy(static item => item.RelativePath, StringComparer.Ordinal))
+            {
+                var includeContents = (entry.Info.Attributes & FileAttributes.Directory) == 0 &&
+                                      (entry.Info.Attributes & FileAttributes.ReparsePoint) == 0;
+                AppendFileSystemEntry(
+                    sha256,
+                    entry.Info,
+                    entry.RelativePath,
+                    includeContents);
             }
         }
 
         sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
         return BitConverter.ToString(sha256.Hash!).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static void AppendFileSystemEntry(
+        HashAlgorithm hash,
+        FileSystemInfo entry,
+        string relativePath,
+        bool includeContents)
+    {
+        AppendValue(hash, relativePath);
+        AppendValue(hash, ((int)entry.Attributes).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AppendValue(hash, entry.LastWriteTimeUtc.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture));
+#if NET8_0_OR_GREATER
+        if (OperatingSystem.IsWindows())
+        {
+            AppendValue(hash, string.Empty);
+        }
+        else
+        {
+            AppendValue(
+                hash,
+                ((int)File.GetUnixFileMode(entry.FullName))
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        AppendValue(hash, entry.LinkTarget ?? string.Empty);
+#else
+        AppendValue(hash, string.Empty);
+        AppendValue(hash, string.Empty);
+#endif
+        if (includeContents)
+            AppendFile(hash, entry.FullName);
+        AppendBytes(hash, new byte[] { 0xff });
+    }
+
+    private static void AppendValue(HashAlgorithm hash, string value)
+    {
+        AppendBytes(hash, Encoding.UTF8.GetBytes(value));
+        AppendBytes(hash, new byte[] { 0 });
     }
 
     private static void AppendFile(HashAlgorithm hash, string path)

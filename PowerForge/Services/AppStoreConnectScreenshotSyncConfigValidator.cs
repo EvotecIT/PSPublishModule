@@ -89,8 +89,8 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
             return new[] { "Screenshot approval manifest could not be read." };
 
         var messages = new List<string>();
-        if (manifest.SchemaVersion != 1)
-            messages.Add($"Screenshot approval manifest SchemaVersion must be 1, not {manifest.SchemaVersion}.");
+        if (manifest.SchemaVersion != 2)
+            messages.Add($"Screenshot approval manifest SchemaVersion must be 2, not {manifest.SchemaVersion}.");
         if (manifest.ApprovedAt == default)
             messages.Add("Screenshot approval manifest ApprovedAt is required.");
         if (string.IsNullOrWhiteSpace(manifest.ApprovedBy))
@@ -106,6 +106,10 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
         {
             messages.Add($"Screenshot approval manifest version '{manifest.VersionString}' does not match release version '{spec.VersionString}'.");
         }
+        if (!string.Equals(manifest.AppId, spec.AppId, StringComparison.Ordinal))
+            messages.Add($"Screenshot approval manifest app id '{manifest.AppId}' does not match config app id '{spec.AppId}'.");
+        if (manifest.Platform != spec.Platform)
+            messages.Add($"Screenshot approval manifest platform '{manifest.Platform}' does not match config platform '{spec.Platform}'.");
         if (!string.Equals(manifest.Locale, spec.Locale, StringComparison.OrdinalIgnoreCase))
             messages.Add($"Screenshot approval manifest locale '{manifest.Locale}' does not match config locale '{spec.Locale}'.");
 

@@ -42,6 +42,9 @@ public sealed class AppStoreConnectScreenshotApprovalTests
             Assert.Equal("release-owner", manifest.ApprovedBy);
             Assert.Equal("workflow-initiator", manifest.InitiatedBy);
             Assert.Equal("https://github.example/actions/runs/123", manifest.ApprovalEvidence);
+            Assert.Equal(2, manifest.SchemaVersion);
+            Assert.Equal("6778025328", manifest.AppId);
+            Assert.Equal(ApplePlatform.iOS, manifest.Platform);
         }
         finally
         {
@@ -93,6 +96,8 @@ public sealed class AppStoreConnectScreenshotApprovalTests
             var manifestPath = Path.Combine(root.FullName, "approval.json");
             File.WriteAllText(manifestPath, JsonSerializer.Serialize(new AppStoreConnectScreenshotApprovalManifest
             {
+                AppId = "6778025328",
+                Platform = ApplePlatform.iOS,
                 VersionString = "1.5.0",
                 SourceCommit = "0123456789abcdef0123456789abcdef01234567",
                 Locale = "en-US",
@@ -118,6 +123,18 @@ public sealed class AppStoreConnectScreenshotApprovalTests
 
             var approved = new AppStoreConnectScreenshotSyncConfigValidator().Validate(spec, root.FullName);
             Assert.True(approved.IsValid);
+
+            spec.AppId = "another-app";
+            var wrongApp = new AppStoreConnectScreenshotSyncConfigValidator().Validate(spec, root.FullName);
+            Assert.False(wrongApp.IsValid);
+            Assert.Contains(wrongApp.Messages, message => message.Contains("app id", StringComparison.OrdinalIgnoreCase));
+            spec.AppId = "6778025328";
+
+            spec.Platform = ApplePlatform.macOS;
+            var wrongPlatform = new AppStoreConnectScreenshotSyncConfigValidator().Validate(spec, root.FullName);
+            Assert.False(wrongPlatform.IsValid);
+            Assert.Contains(wrongPlatform.Messages, message => message.Contains("platform", StringComparison.OrdinalIgnoreCase));
+            spec.Platform = ApplePlatform.iOS;
 
             File.AppendAllText(screenshotPath, "changed-after-approval");
             var changed = new AppStoreConnectScreenshotSyncConfigValidator().Validate(spec, root.FullName);

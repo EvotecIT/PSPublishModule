@@ -370,7 +370,9 @@ review decision is retained. This avoids incorrectly crediting the initiator as 
 
 The command writes `Quality.ApprovalManifestPath` when configured, or a sibling
 `*.approval.json` file. It runs the same local image quality gates used by upload,
-then binds only the selected files.
+then binds only the selected files. Approval manifest schema 2 also binds the
+review to the exact App Store Connect app id and platform, so identical images
+cannot be replayed to another product or store destination.
 
 ## Apple target modeling
 

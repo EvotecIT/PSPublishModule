@@ -176,6 +176,92 @@ public sealed class AppleNotarizationServiceTests
     }
 
     [Fact]
+    public async Task NotarizeAsync_ResumeRejectsChangedExecutableMode()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "Mode.app"));
+            var executableDirectory = Directory.CreateDirectory(Path.Combine(app.FullName, "Contents", "MacOS"));
+            var executable = Path.Combine(executableDirectory.FullName, "Mode");
+            await File.WriteAllTextAsync(executable, "binary");
+            File.SetUnixFileMode(executable, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+
+            var first = await new AppleNotarizationService(new NotaryProcessRunner()).NotarizeAsync(
+                new AppleNotarizationRequest
+                {
+                    ArtifactPath = app.FullName,
+                    KeychainProfile = "powerforge-notary",
+                    Staple = false,
+                    Assess = false
+                });
+
+            File.SetUnixFileMode(
+                executable,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleNotarizationService(new NotaryProcessRunner()).NotarizeAsync(
+                    new AppleNotarizationRequest
+                    {
+                        ArtifactPath = app.FullName,
+                        AcceptedSubmissionId = first.SubmissionId,
+                        ExpectedArtifactSha256 = first.ArtifactSha256,
+                        Staple = false,
+                        Assess = false
+                    }));
+
+            Assert.Contains("artifact changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NotarizeAsync_ResumeRejectsAddedEmptyBundleDirectory()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "EmptyDirectory.app"));
+            var originalWriteTime = app.LastWriteTimeUtc;
+            var first = await new AppleNotarizationService(new NotaryProcessRunner()).NotarizeAsync(
+                new AppleNotarizationRequest
+                {
+                    ArtifactPath = app.FullName,
+                    KeychainProfile = "powerforge-notary",
+                    Staple = false,
+                    Assess = false
+                });
+
+            Directory.CreateDirectory(Path.Combine(app.FullName, "Contents", "Empty"));
+            app.LastWriteTimeUtc = originalWriteTime;
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleNotarizationService(new NotaryProcessRunner()).NotarizeAsync(
+                    new AppleNotarizationRequest
+                    {
+                        ArtifactPath = app.FullName,
+                        AcceptedSubmissionId = first.SubmissionId,
+                        ExpectedArtifactSha256 = first.ArtifactSha256,
+                        Staple = false,
+                        Assess = false
+                    }));
+
+            Assert.Contains("artifact changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task NotarizeAsync_ResumeUsesPostStapleHashAndDoesNotStapleAgain()
     {
         var artifact = Path.GetTempFileName() + ".pkg";

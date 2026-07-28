@@ -53,6 +53,19 @@ internal static class AppleReleaseDoctor
                 "Set AppleApps.TeamId to the Developer ID team used for archive export and notarization."));
         }
 
+        if (app.DistributionRoute == AppleDistributionRoute.DirectNotarized &&
+            string.IsNullOrWhiteSpace(plan.DirectDistribution.KeychainProfile) &&
+            (string.IsNullOrWhiteSpace(plan.AppStoreConnectApiKeyPath) ||
+             string.IsNullOrWhiteSpace(plan.AppStoreConnectApiKeyId) ||
+             string.IsNullOrWhiteSpace(plan.AppStoreConnectApiIssuerId)))
+        {
+            diagnostics.Add(Error(
+                "notarization",
+                "APPLE_NOTARIZATION_AUTH_MISSING",
+                $"Direct-notarized target '{app.Name}' has no usable notarytool authentication.",
+                "Set AppleApps.DirectDistribution.KeychainProfile or configure the complete App Store Connect API-key path, key id, and issuer id tuple."));
+        }
+
         if (app.TestFlightPolicy == AppleTestFlightPolicy.External &&
             plan.TestFlightBetaGroupIds.Length == 0 &&
             plan.TestFlightBetaGroupNames.Length == 0)
@@ -64,7 +77,8 @@ internal static class AppleReleaseDoctor
                 "Configure the exact external beta group id or name before distributing or submitting Beta App Review."));
         }
 
-        if (usesStore && !HasConfiguredPath(plan.MetadataConfigPath, plan.MetadataConfigPaths))
+        if (app.DistributionRoute == AppleDistributionRoute.AppStore &&
+            !HasConfiguredPath(plan.MetadataConfigPath, plan.MetadataConfigPaths))
         {
             diagnostics.Add(Warning(
                 "metadata",
@@ -72,7 +86,8 @@ internal static class AppleReleaseDoctor
                 $"Version metadata for '{app.Name}' is not managed by PowerForge.",
                 "Add a release-version-bound metadata config so descriptions, keywords, URLs, and release notes are checked before review."));
         }
-        if (usesStore && !HasConfiguredPath(plan.AppInfoConfigPath, plan.AppInfoConfigPaths))
+        if (app.DistributionRoute == AppleDistributionRoute.AppStore &&
+            !HasConfiguredPath(plan.AppInfoConfigPath, plan.AppInfoConfigPaths))
         {
             diagnostics.Add(Warning(
                 "metadata",

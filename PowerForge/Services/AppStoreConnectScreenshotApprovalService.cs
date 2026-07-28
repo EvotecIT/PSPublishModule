@@ -58,6 +58,8 @@ public sealed class AppStoreConnectScreenshotApprovalService
 
         return new AppStoreConnectScreenshotApprovalManifest
         {
+            AppId = request.Spec.AppId.Trim(),
+            Platform = request.Spec.Platform,
             VersionString = request.VersionString.Trim(),
             SourceCommit = request.SourceCommit.Trim(),
             XcodeVersion = Normalize(request.XcodeVersion),

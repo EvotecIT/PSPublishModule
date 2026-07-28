@@ -73,6 +73,42 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void AppleReleaseDoctor_DiagnosesMissingDirectNotarizationAuthentication()
+    {
+        var app = new PowerForgeAppleAppReleaseTargetPlan
+        {
+            Name = "EasyControlX Agent",
+            BundleId = "com.evotecit.easycontrolx.agent",
+            TeamId = "8ZPGZ79T7J",
+            DistributionRoute = AppleDistributionRoute.DirectNotarized
+        };
+        var diagnostics = AppleReleaseDoctor.Evaluate(
+            new PowerForgeAppleReleasePlan { Apps = new[] { app } },
+            app);
+
+        Assert.Contains(diagnostics, item => item.Code == "APPLE_NOTARIZATION_AUTH_MISSING");
+    }
+
+    [Fact]
+    public void AppleReleaseDoctor_DoesNotRequirePublicMetadataForTestFlightOnlyTarget()
+    {
+        var app = new PowerForgeAppleAppReleaseTargetPlan
+        {
+            Name = "Internal Preview",
+            BundleId = "com.evotecit.preview",
+            AppStoreConnectAppId = "app-1",
+            DistributionRoute = AppleDistributionRoute.TestFlightOnly,
+            TestFlightPolicy = AppleTestFlightPolicy.Internal
+        };
+        var diagnostics = AppleReleaseDoctor.Evaluate(
+            new PowerForgeAppleReleasePlan { Apps = new[] { app } },
+            app);
+
+        Assert.DoesNotContain(diagnostics, item => item.Code == "APPLE_METADATA_UNMANAGED");
+        Assert.DoesNotContain(diagnostics, item => item.Code == "APPLE_APP_INFO_UNMANAGED");
+    }
+
+    [Fact]
     public void Execute_AppleDoctor_DiscoversAppIdAndWritesActionableReceipt()
     {
         var root = CreateSandbox();

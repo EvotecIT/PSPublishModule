@@ -87,7 +87,13 @@ public sealed class AppStoreConnectScreenshotQualitySpec
 public sealed class AppStoreConnectScreenshotApprovalManifest
 {
     /// <summary>Manifest schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
+
+    /// <summary>App Store Connect app id that may receive the reviewed screenshots.</summary>
+    public string AppId { get; set; } = string.Empty;
+
+    /// <summary>App Store Connect platform that may receive the reviewed screenshots.</summary>
+    public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
 
     /// <summary>App marketing version represented by the screenshots.</summary>
     public string VersionString { get; set; } = string.Empty;

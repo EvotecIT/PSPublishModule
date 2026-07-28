@@ -487,6 +487,90 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleUpload_RetainsDirectArtifactsWhenStoreTargetIsCleaned()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            CreateXcodeProject(root, "EasyControlXAgent.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.CleanupAfterProcessing = true;
+            spec.AppleApps.TeamId = "8ZPGZ79T7J";
+            var store = Assert.Single(spec.AppleApps.Apps);
+            spec.AppleApps.Apps = new[]
+            {
+                store,
+                new AppleAppConfiguration
+                {
+                    Name = "EasyControlX Agent",
+                    BundleId = "com.evotecit.easycontrolx.agent",
+                    Platform = ApplePlatform.macOS,
+                    ProjectPath = "EasyControlXAgent.xcodeproj",
+                    Scheme = "EasyControlXAgent",
+                    DistributionRoute = AppleDistributionRoute.DirectNotarized
+                }
+            };
+
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, "VALID"),
+                archiveAppleApp: request =>
+                {
+                    var archive = Directory.CreateDirectory(request.ArchivePath!);
+                    File.WriteAllText(Path.Combine(archive.FullName, "archive.txt"), "archive");
+                    return CreateSuccessfulArchive(request);
+                },
+                uploadAppleApp: request =>
+                {
+                    var export = Directory.CreateDirectory(request.ExportPath!);
+                    if (request.Method == "developer-id")
+                    {
+                        var app = Directory.CreateDirectory(Path.Combine(export.FullName, "EasyControlX Agent.app"));
+                        File.WriteAllText(Path.Combine(app.FullName, "agent"), "signed-agent");
+                    }
+                    else
+                    {
+                        File.WriteAllText(Path.Combine(export.FullName, "store-upload.txt"), "uploaded");
+                    }
+
+                    return CreateSuccessfulUpload(request);
+                },
+                notarizeAppleArtifact: request => new AppleNotarizationResult
+                {
+                    ArtifactPath = request.ArtifactPath,
+                    ArtifactSha256 = "direct-artifact-sha",
+                    SubmissionPath = request.ArtifactPath + ".zip",
+                    SubmissionId = "notary-1",
+                    Status = "Accepted",
+                    Submission = new ProcessRunResult(0, "accepted", string.Empty, "xcrun", TimeSpan.Zero, false),
+                    Staple = new ProcessRunResult(0, "stapled", string.Empty, "xcrun", TimeSpan.Zero, false),
+                    StapleValidation = new ProcessRunResult(0, "valid", string.Empty, "xcrun", TimeSpan.Zero, false),
+                    Assessment = new ProcessRunResult(0, "accepted", string.Empty, "spctl", TimeSpan.Zero, false)
+                });
+
+            var result = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Upload
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var storePlan = result.AppleAppPlan!.Apps.Single(app => app.Name == store.Name);
+            var directPlan = result.AppleAppPlan.Apps.Single(app => app.Name == "EasyControlX Agent");
+            Assert.False(Directory.Exists(storePlan.ArchivePath));
+            Assert.False(Directory.Exists(storePlan.ExportPath));
+            Assert.True(Directory.Exists(directPlan.ArchivePath));
+            Assert.True(Directory.Exists(directPlan.ExportPath));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleCleanup_DoesNotRequireOrRegenerateTheXcodeProject()
     {
         var root = CreateSandbox();
