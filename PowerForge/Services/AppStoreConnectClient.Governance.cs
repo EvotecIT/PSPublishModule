@@ -124,7 +124,7 @@ public sealed partial class AppStoreConnectClient
         return new AppStoreConnectAppAvailabilityInfo
         {
             Id = availabilityId,
-            AvailableInNewTerritories = GetBool(attributes, "availableInNewTerritories") == true,
+            AvailableInNewTerritories = GetBool(attributes, "availableInNewTerritories"),
             Territories = territories
         };
     }

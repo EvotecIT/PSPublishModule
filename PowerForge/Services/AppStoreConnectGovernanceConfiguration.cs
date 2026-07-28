@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace PowerForge;
 
@@ -35,7 +36,8 @@ public sealed class AppStoreConnectGovernanceConfiguration
                        {
                            PropertyNameCaseInsensitive = true,
                            ReadCommentHandling = JsonCommentHandling.Skip,
-                           AllowTrailingCommas = true
+                           AllowTrailingCommas = true,
+                           UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
                        })
                    ?? throw new InvalidOperationException("Governance config is empty.");
         }

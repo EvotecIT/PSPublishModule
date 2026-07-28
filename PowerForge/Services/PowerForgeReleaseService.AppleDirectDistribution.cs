@@ -63,10 +63,16 @@ internal sealed partial class PowerForgeReleaseService
                 : result.StapleValidation?.Succeeded == false
                     ? "ticket validation"
                     : "Gatekeeper assessment";
-        var detail = result.Assessment?.StdErr ??
-                     result.StapleValidation?.StdErr ??
-                     result.Staple?.StdErr ??
-                     result.Submission.StdErr;
+        var failedResult = failedStep switch
+        {
+            "submission" => result.Submission,
+            "ticket stapling" => result.Staple,
+            "ticket validation" => result.StapleValidation,
+            _ => result.Assessment
+        };
+        var detail = !string.IsNullOrWhiteSpace(failedResult?.StdErr)
+            ? failedResult!.StdErr
+            : failedResult?.StdOut;
         return new InvalidOperationException(
             $"Apple notarization {failedStep} failed for '{app.Name}' with notary status " +
             $"'{result.Status ?? "unknown"}' and submission '{result.SubmissionId ?? "unknown"}'. {detail}".Trim());

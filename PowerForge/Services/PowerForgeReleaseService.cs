@@ -1845,6 +1845,7 @@ internal sealed partial class PowerForgeReleaseService
             PowerForgeAppleAppReleaseTargetPlan,
             (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)?>();
         var resumedByApp = new Dictionary<PowerForgeAppleAppReleaseTargetPlan, bool>();
+        var governancePlansByAppId = new Dictionary<string, AppStoreConnectGovernancePlan>(StringComparer.OrdinalIgnoreCase);
         var preflightAttempted = new HashSet<PowerForgeAppleAppReleaseTargetPlan>();
 
         foreach (var app in releaseApps)
@@ -1924,6 +1925,25 @@ internal sealed partial class PowerForgeReleaseService
                 if (matchingMetadataSpec is not null)
                     ValidateAppleMetadataPreflight(matchingMetadataSpec.Value);
 
+                if (plan.CheckGovernance && UsesAppStoreConnect(app))
+                {
+                    if (!governanceSpecsByAppId.TryGetValue(app.AppStoreConnectAppId!, out var governanceSpec))
+                        throw new InvalidOperationException($"No governance config matches Apple app '{app.Name}' (AppStoreConnectAppId '{app.AppStoreConnectAppId}').");
+                    if (!governancePlansByAppId.TryGetValue(app.AppStoreConnectAppId!, out var governancePlan))
+                    {
+                        governancePlan = _planAppleGovernance(CreateAppStoreConnectCredential(plan), governanceSpec);
+                        governancePlansByAppId.Add(app.AppStoreConnectAppId!, governancePlan);
+                    }
+                    result.Governance = governancePlan;
+                    if (!governancePlan.IsConverged)
+                    {
+                        throw new InvalidOperationException(
+                            $"Apple governance drift blocks '{app.Name}': {governancePlan.DriftCount} change(s), " +
+                            $"{governancePlan.BlockedCount} blocked, {governancePlan.Findings.Count(finding => finding.IsError)} config error(s). " +
+                            "Review the governance plan receipt and run 'powerforge apple-governance apply --confirm'.");
+                    }
+                }
+
                 var resumedUpload = UsesAppStoreConnect(app)
                     ? TryResumeAppleUpload(plan, app, result)
                     : app.DistributionRoute == AppleDistributionRoute.DirectNotarized &&
@@ -1968,20 +1988,6 @@ internal sealed partial class PowerForgeReleaseService
             try
             {
                 var resumedUpload = resumedByApp[app];
-
-                if (plan.CheckGovernance && result.Success && UsesAppStoreConnect(app))
-                {
-                    if (!governanceSpecsByAppId.TryGetValue(app.AppStoreConnectAppId!, out var governanceSpec))
-                        throw new InvalidOperationException($"No governance config matches Apple app '{app.Name}' (AppStoreConnectAppId '{app.AppStoreConnectAppId}').");
-                    result.Governance = _planAppleGovernance(CreateAppStoreConnectCredential(plan), governanceSpec);
-                    if (!result.Governance.IsConverged)
-                    {
-                        throw new InvalidOperationException(
-                            $"Apple governance drift blocks '{app.Name}': {result.Governance.DriftCount} change(s), " +
-                            $"{result.Governance.BlockedCount} blocked, {result.Governance.Findings.Count(finding => finding.IsError)} config error(s). " +
-                            "Review the governance plan receipt and run 'powerforge apple-governance apply --confirm'.");
-                    }
-                }
 
                 if (plan.Archive && !resumedUpload)
                 {

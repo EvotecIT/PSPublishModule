@@ -64,6 +64,8 @@ public sealed partial class AppStoreConnectGovernanceService
                 plan = await PlanAsync(request.Spec, cancellationToken).ConfigureAwait(false);
                 if (plan.Findings.Any(finding => finding.IsError))
                     return Failure(request.Spec.AppId, started, applied, plan, "Correct governance configuration errors, then generate a new plan.");
+                if (!plan.CanApply)
+                    return Failure(request.Spec.AppId, started, applied, plan, "Resolve every blocked Apple API constraint shown in the plan before applying any governance mutation.");
 
                 var next = plan.Changes.FirstOrDefault(change => change.Action != AppStoreConnectGovernanceChangeAction.Blocked);
                 if (next is null)
@@ -97,6 +99,18 @@ public sealed partial class AppStoreConnectGovernanceService
             }
 
             plan = await PlanAsync(request.Spec, cancellationToken).ConfigureAwait(false);
+            if (plan.IsConverged)
+            {
+                return new AppStoreConnectGovernanceApplyResult
+                {
+                    AppId = request.Spec.AppId.Trim(),
+                    StartedAtUtc = started,
+                    CompletedAtUtc = DateTimeOffset.UtcNow,
+                    Success = true,
+                    AppliedChanges = applied.ToArray(),
+                    FinalPlan = plan
+                };
+            }
             return Failure(request.Spec.AppId, started, applied, plan, $"Stopped after the configured maximum of {request.MaximumChanges} changes. Review the receipt before continuing.");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -232,10 +246,21 @@ public sealed partial class AppStoreConnectGovernanceService
         var currentGroups = await _client.GetSubscriptionGroupsAsync(spec.AppId, cancellationToken: cancellationToken).ConfigureAwait(false);
         foreach (var desiredGroup in spec.SubscriptionGroups)
         {
-            var group = !string.IsNullOrWhiteSpace(desiredGroup.Id)
+            var hasExplicitId = !string.IsNullOrWhiteSpace(desiredGroup.Id);
+            var group = hasExplicitId
                 ? currentGroups.FirstOrDefault(item => Same(item.Id, desiredGroup.Id))
                 : currentGroups.FirstOrDefault(item => Same(item.ReferenceName, desiredGroup.ReferenceName));
             var groupKey = GroupKey(desiredGroup);
+            if (hasExplicitId && group is null)
+            {
+                var sameName = currentGroups.FirstOrDefault(item => Same(item.ReferenceName, desiredGroup.ReferenceName));
+                var detail = sameName is null
+                    ? $"No subscription group has explicit id '{desiredGroup.Id}'."
+                    : $"Reference name '{desiredGroup.ReferenceName}' belongs to group '{sameName.Id}', not explicit id '{desiredGroup.Id}'.";
+                Add(changes, "Subscriptions", "SubscriptionGroup", groupKey, AppStoreConnectGovernanceChangeAction.Blocked,
+                    $"{detail} Correct the reviewed id before applying; PowerForge will not create a duplicate group.", desiredGroup.Id);
+                continue;
+            }
             if (group is null)
             {
                 Add(changes, "Subscriptions", "SubscriptionGroup", groupKey, AppStoreConnectGovernanceChangeAction.Create,

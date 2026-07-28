@@ -19,7 +19,7 @@ on:
       release_config_path:
         description: Optional release configuration path relative to the consumer source.
         required: false
-        default: powerforge.release.json
+        default: ""
         type: string
       powerforge_ref:
         description: Exact PSPublishModule commit containing the governance engine and action.

@@ -194,6 +194,7 @@ public sealed class AppleReleaseWorkflowTests
 
         Assert.Contains("source_ref", workflow, StringComparison.Ordinal);
         Assert.Contains("powerforge_ref", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("default: powerforge.release.json", workflow, StringComparison.Ordinal);
         Assert.Contains("must be an exact 40-character commit SHA", workflow, StringComparison.Ordinal);
         Assert.Contains("environment: ${{ inputs.operation == 'Apply' && inputs.approval_environment_name || inputs.environment_name }}", workflow, StringComparison.Ordinal);
         Assert.Contains("authorized Apple governance dispatcher", workflow, StringComparison.Ordinal);

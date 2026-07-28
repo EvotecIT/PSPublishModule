@@ -223,6 +223,25 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public void GovernanceConfiguration_RejectsUnknownPropertiesInsteadOfSilentlyIgnoringIntent()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"powerforge-governance-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path,
+                """{ "schemaVersion": 1, "appId": "app-1", "pricing": { "baseTerritoryId": "USA", "prcies": [] } }""");
+
+            var error = Assert.Throws<InvalidOperationException>(() => new AppStoreConnectGovernanceConfiguration().Load(path));
+
+            Assert.Contains("prcies", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task GovernancePlan_IsReadOnlyAndConvergedForMatchingPriceSchedule()
     {
         var handler = new SequenceHandler(
@@ -324,6 +343,90 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task GovernanceApply_ReturnsSuccessWhenTheFinalAllowedChangeConverges()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+            new SequenceResponse(HttpStatusCode.Created,
+                """{ "data": { "type": "accessibilityDeclarations", "id": "a11y-1", "attributes": { "deviceFamily": "IPHONE", "state": "DRAFT", "supportsVoiceover": true } } }"""),
+            new SequenceResponse(HttpStatusCode.OK,
+                """{ "data": [ { "type": "accessibilityDeclarations", "id": "a11y-1", "attributes": { "deviceFamily": "IPHONE", "state": "DRAFT", "supportsVoiceover": true } } ] }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var result = await new AppStoreConnectGovernanceService(client).ApplyAsync(
+            new AppStoreConnectGovernanceApplyRequest
+            {
+                ConfirmApply = true,
+                MaximumChanges = 1,
+                Spec = new AppStoreConnectGovernanceSpec
+                {
+                    AppId = "app-1",
+                    Accessibility = [new AppStoreConnectAccessibilityDeclarationSpec { DeviceFamily = "IPHONE", SupportsVoiceover = true }]
+                }
+            });
+
+        Assert.True(result.Success);
+        Assert.Single(result.AppliedChanges);
+        Assert.True(result.FinalPlan.IsConverged);
+        Assert.Equal(new[] { HttpMethod.Get, HttpMethod.Post, HttpMethod.Get }, handler.Methods);
+    }
+
+    [Fact]
+    public async Task GovernanceApply_RefusesEveryMutationWhenAnyPlannedChangeIsBlocked()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """{ "data": { "type": "appAvailabilities", "id": "availability-1", "attributes": { "availableInNewTerritories": true } } }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var result = await new AppStoreConnectGovernanceService(client).ApplyAsync(
+            new AppStoreConnectGovernanceApplyRequest
+            {
+                ConfirmApply = true,
+                Spec = new AppStoreConnectGovernanceSpec
+                {
+                    AppId = "app-1",
+                    Availability = new AppStoreConnectAppAvailabilitySpec { AvailableInNewTerritories = false },
+                    Accessibility = [new AppStoreConnectAccessibilityDeclarationSpec { DeviceFamily = "IPHONE", SupportsVoiceover = true }]
+                }
+            });
+
+        Assert.False(result.Success);
+        Assert.Empty(result.AppliedChanges);
+        Assert.False(result.FinalPlan.CanApply);
+        Assert.Equal(1, result.FinalPlan.BlockedCount);
+        Assert.Equal(new[] { HttpMethod.Get, HttpMethod.Get, HttpMethod.Get }, handler.Methods);
+    }
+
+    [Fact]
+    public async Task GovernancePlan_BlocksAnUnmatchedExplicitSubscriptionGroupIdWithoutCreatingADuplicate()
+    {
+        var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.OK,
+            """{ "data": [ { "type": "subscriptionGroups", "id": "group-current", "attributes": { "referenceName": "Pro" } } ] }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var plan = await new AppStoreConnectGovernanceService(client).PlanAsync(
+            new AppStoreConnectGovernanceSpec
+            {
+                AppId = "app-1",
+                SubscriptionGroups =
+                [
+                    new AppStoreConnectSubscriptionGroupSpec { Id = "group-stale", ReferenceName = "Pro" }
+                ]
+            });
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(AppStoreConnectGovernanceChangeAction.Blocked, change.Action);
+        Assert.Contains("group-current", change.Summary, StringComparison.Ordinal);
+        Assert.Equal(HttpMethod.Get, Assert.Single(handler.Methods));
+    }
+
+    [Fact]
     public async Task GovernanceSnapshot_ExportsObservedFactsWithoutInventingMissingSections()
     {
         var handler = new GovernanceSnapshotHandler();
@@ -344,6 +447,22 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal(5, handler.RequestCount);
     }
 
+    [Fact]
+    public async Task GovernanceSnapshot_RejectsOmittedLegalAndAvailabilityBooleans()
+    {
+        using var http = new HttpClient(new IncompleteGovernanceSnapshotHandler())
+        {
+            BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/")
+        };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new AppStoreConnectGovernanceService(client).SnapshotAsync("app-1"));
+
+        Assert.Contains("containsProprietaryCryptography", error.Message, StringComparison.Ordinal);
+        Assert.Contains("incomplete governance declaration", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class GovernanceSnapshotHandler : HttpMessageHandler
     {
         public int RequestCount { get; private set; }
@@ -356,6 +475,25 @@ public sealed partial class AppStoreConnectClientTests
                 return Response(HttpStatusCode.NotFound, "{}");
             if (path.EndsWith("/accessibilityDeclarations", StringComparison.Ordinal))
                 return Response(HttpStatusCode.OK, """{ "data": [ { "type": "accessibilityDeclarations", "id": "a11y-1", "attributes": { "deviceFamily": "IPHONE", "state": "PUBLISHED", "supportsVoiceover": true } } ] }""");
+            return Response(HttpStatusCode.OK, """{ "data": [] }""");
+        }
+
+        private static Task<HttpResponseMessage> Response(HttpStatusCode status, string body) => Task.FromResult(
+            new HttpResponseMessage(status) { Content = new StringContent(body) });
+    }
+
+    private sealed class IncompleteGovernanceSnapshotHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/appPriceSchedule", StringComparison.Ordinal) || path.EndsWith("/appAvailabilityV2", StringComparison.Ordinal))
+                return Response(HttpStatusCode.NotFound, "{}");
+            if (path.EndsWith("/appEncryptionDeclarations", StringComparison.Ordinal))
+            {
+                return Response(HttpStatusCode.OK,
+                    """{ "data": [ { "type": "appEncryptionDeclarations", "id": "encryption-1", "attributes": { "appDescription": "Reviewed description", "containsThirdPartyCryptography": false, "availableOnFrenchStore": false } } ] }""");
+            }
             return Response(HttpStatusCode.OK, """{ "data": [] }""");
         }
 

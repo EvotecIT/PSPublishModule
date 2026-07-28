@@ -38,11 +38,11 @@ public sealed partial class AppStoreConnectGovernanceService
             },
             Availability = availability is null ? null : new AppStoreConnectAppAvailabilitySpec
             {
-                AvailableInNewTerritories = availability.AvailableInNewTerritories,
+                AvailableInNewTerritories = RequireObserved(availability.AvailableInNewTerritories, "app availability availableInNewTerritories"),
                 Territories = availability.Territories.Select(item => new AppStoreConnectTerritoryAvailabilitySpec
                 {
                     TerritoryId = RequireObserved(item.TerritoryId, $"territory availability '{item.Id}' territory"),
-                    Available = item.Available == true,
+                    Available = RequireObserved(item.Available, $"territory availability '{item.Id}' available"),
                     ReleaseDate = NormalizeObserved(item.ReleaseDate),
                     PreOrderEnabled = item.PreOrderEnabled
                 }).ToArray()
@@ -50,7 +50,7 @@ public sealed partial class AppStoreConnectGovernanceService
             Accessibility = accessibilityTask.Result.Select(item => new AppStoreConnectAccessibilityDeclarationSpec
             {
                 DeviceFamily = RequireObserved(item.DeviceFamily, $"accessibility declaration '{item.Id}' device family"),
-                Publish = Same(item.State, "PUBLISHED"),
+                Publish = Same(RequireObserved(item.State, $"accessibility declaration '{item.Id}' state"), "PUBLISHED"),
                 SupportsAudioDescriptions = item.SupportsAudioDescriptions,
                 SupportsCaptions = item.SupportsCaptions,
                 SupportsDarkInterface = item.SupportsDarkInterface,
@@ -64,9 +64,9 @@ public sealed partial class AppStoreConnectGovernanceService
             EncryptionDeclarations = encryptionTask.Result.Select(item => new AppStoreConnectEncryptionDeclarationSpec
             {
                 AppDescription = RequireObserved(item.AppDescription, $"encryption declaration '{item.Id}' app description"),
-                ContainsProprietaryCryptography = item.ContainsProprietaryCryptography == true,
-                ContainsThirdPartyCryptography = item.ContainsThirdPartyCryptography == true,
-                AvailableOnFrenchStore = item.AvailableOnFrenchStore == true
+                ContainsProprietaryCryptography = RequireObserved(item.ContainsProprietaryCryptography, $"encryption declaration '{item.Id}' containsProprietaryCryptography"),
+                ContainsThirdPartyCryptography = RequireObserved(item.ContainsThirdPartyCryptography, $"encryption declaration '{item.Id}' containsThirdPartyCryptography"),
+                AvailableOnFrenchStore = RequireObserved(item.AvailableOnFrenchStore, $"encryption declaration '{item.Id}' availableOnFrenchStore")
             }).ToArray(),
             SubscriptionGroups = groups.ToArray()
         };
@@ -129,7 +129,7 @@ public sealed partial class AppStoreConnectGovernanceService
             Availabilities = availabilitiesTask.Result.Select(item => new AppStoreConnectSubscriptionAvailabilitySpec
             {
                 PlanType = RequireObserved(item.PlanType, $"subscription plan availability '{item.Id}' plan type"),
-                AvailableInNewTerritories = item.AvailableInNewTerritories == true,
+                AvailableInNewTerritories = RequireObserved(item.AvailableInNewTerritories, $"subscription plan availability '{item.Id}' availableInNewTerritories"),
                 TerritoryIds = item.TerritoryIds
             }).ToArray()
         };
@@ -139,6 +139,9 @@ public sealed partial class AppStoreConnectGovernanceService
         !string.IsNullOrWhiteSpace(value)
             ? value!.Trim()
             : throw new InvalidOperationException($"App Store Connect omitted {field}; refusing to export an incomplete governance declaration.");
+
+    private static bool RequireObserved(bool? value, string field) =>
+        value ?? throw new InvalidOperationException($"App Store Connect omitted {field}; refusing to export an incomplete governance declaration.");
 
     private static string? NormalizeObserved(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();

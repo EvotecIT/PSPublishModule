@@ -200,7 +200,7 @@ public sealed class AppStoreConnectAppPriceInfo
 public sealed class AppStoreConnectAppAvailabilityInfo
 {
     public string Id { get; set; } = string.Empty;
-    public bool AvailableInNewTerritories { get; set; }
+    public bool? AvailableInNewTerritories { get; set; }
     public AppStoreConnectTerritoryAvailabilityInfo[] Territories { get; set; } = Array.Empty<AppStoreConnectTerritoryAvailabilityInfo>();
 }
 
