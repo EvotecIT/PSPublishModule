@@ -1,0 +1,193 @@
+name: PowerForge Apple Screenshot Approval
+
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        description: Exact source commit represented by the reviewed capture.
+        required: true
+        type: string
+      capture_run_id:
+        description: GitHub Actions run id containing the reviewed capture artifact.
+        required: true
+        type: string
+      powerforge_ref:
+        description: Exact PSPublishModule commit containing the shared approval workflow.
+        required: true
+        type: string
+      release_config_path:
+        description: PowerForge release configuration path.
+        required: false
+        default: powerforge.release.json
+        type: string
+      capture_artifact_path:
+        description: Repository-relative capture folder restored from the reviewed run.
+        required: false
+        default: build/appstore-screenshots
+        type: string
+      screenshot_configs_json:
+        description: JSON array of repository-relative screenshot sync configurations.
+        required: true
+        type: string
+      marketing_version:
+        description: Exact x.y.z marketing version represented by the captures.
+        required: true
+        type: string
+      allowed_approvers_json:
+        description: JSON array of GitHub logins authorized to approve exact screenshot artifacts.
+        required: true
+        type: string
+      target:
+        description: Optional comma-separated release target selection.
+        required: false
+        default: ""
+        type: string
+      runner_labels_json:
+        description: JSON array of trusted Apple runner labels.
+        required: false
+        default: '["self-hosted","macOS","ARM64"]'
+        type: string
+      tool_runtime:
+        description: Runtime identifier for the trusted Apple runner.
+        required: false
+        default: osx-arm64
+        type: string
+      device:
+        description: Device matrix identity recorded in approval manifests.
+        required: false
+        default: configured Apple screenshot matrix
+        type: string
+      theme:
+        description: Appearance matrix recorded in approval manifests.
+        required: false
+        default: light-and-dark
+        type: string
+      scenario:
+        description: Stable scenario identity recorded in approval manifests.
+        required: false
+        default: app-store-publication
+        type: string
+    secrets:
+      app_store_connect_issuer_id:
+        required: true
+      app_store_connect_key_id:
+        required: true
+      app_store_connect_private_key:
+        required: true
+
+concurrency:
+  group: powerforge-apple-screenshot-approval-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  approve-and-sync:
+    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Verify manual approver and immutable evidence
+        shell: pwsh
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+          POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+          CAPTURE_RUN_ID: ${{ inputs.capture_run_id }}
+          APPROVERS_JSON: ${{ inputs.allowed_approvers_json }}
+          APPROVER: ${{ github.actor }}
+        run: |
+          foreach ($entry in @{ source_ref = $env:SOURCE_REF; powerforge_ref = $env:POWERFORGE_REF }.GetEnumerator()) {
+            if ($entry.Value -notmatch '^[0-9A-Fa-f]{40}$') { throw "$($entry.Key) must be an exact 40-character commit SHA." }
+          }
+          if ($env:CAPTURE_RUN_ID -notmatch '^\d+$') { throw 'capture_run_id must be a numeric GitHub Actions run id.' }
+          if ('${{ inputs.marketing_version }}' -notmatch '^\d+\.\d+\.\d+$') { throw 'marketing_version must use x.y.z.' }
+          $approvers = @($env:APPROVERS_JSON | ConvertFrom-Json -Depth 5)
+          if ($approvers.Count -eq 0 -or $env:APPROVER -notin $approvers) {
+            throw "GitHub actor '$($env:APPROVER)' is not an authorized screenshot approver."
+          }
+
+      - name: Checkout exact approved source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 1
+          path: source
+          persist-credentials: false
+
+      - name: Checkout pinned PowerForge approval workflow
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: EvotecIT/PSPublishModule
+          ref: ${{ inputs.powerforge_ref }}
+          fetch-depth: 1
+          path: powerforge-shared
+          persist-credentials: false
+
+      - name: Restore the exact reviewed capture artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: powerforge-apple-screenshots-${{ inputs.source_ref }}
+          path: source/${{ inputs.capture_artifact_path }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.capture_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Build exact PowerForge source
+        id: build-powerforge
+        uses: ./powerforge-shared/.github/actions/build-powerforge
+        with:
+          source-root: ${{ github.workspace }}/powerforge-shared
+          runtime: ${{ inputs.tool_runtime }}
+
+      - name: Bind manual approval to exact screenshot bytes
+        shell: pwsh
+        env:
+          SCREENSHOT_CONFIGS_JSON: ${{ inputs.screenshot_configs_json }}
+          POWERFORGE_TOOL: ${{ steps.build-powerforge.outputs.tool-path }}
+        run: |
+          $configs = @($env:SCREENSHOT_CONFIGS_JSON | ConvertFrom-Json -Depth 10)
+          if ($configs.Count -eq 0) { throw 'screenshot_configs_json must contain at least one config path.' }
+          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source')
+          $prefix = $sourceRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+          $xcodeVersion = (& xcodebuild -version) -join ' '
+          $evidence = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}; capture: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs.capture_run_id }}'
+          foreach ($config in $configs) {
+            $configPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot ([string] $config)))
+            if (-not $configPath.StartsWith($prefix, [StringComparison]::Ordinal)) { throw "Screenshot config escapes source: $config" }
+            & $env:POWERFORGE_TOOL apple-screenshots manifest `
+              --config $configPath `
+              --version '${{ inputs.marketing_version }}' `
+              --source-commit '${{ inputs.source_ref }}' `
+              --approved-by '${{ github.actor }}' `
+              --approval-evidence $evidence `
+              --xcode-version $xcodeVersion `
+              --runtime '${{ inputs.tool_runtime }}' `
+              --device '${{ inputs.device }}' `
+              --theme '${{ inputs.theme }}' `
+              --scenario '${{ inputs.scenario }}'
+            if ($LASTEXITCODE -ne 0) { throw "Screenshot approval manifest failed for $config." }
+          }
+
+      - name: Sync manually approved screenshots to App Store Connect
+        uses: ./powerforge-shared/.github/actions/apple-release
+        with:
+          action: Screenshots
+          config-path: ${{ github.workspace }}/source/${{ inputs.release_config_path }}
+          tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
+          target: ${{ inputs.target }}
+          plan-only: "false"
+          confirm: "true"
+          issuer-id: ${{ secrets.app_store_connect_issuer_id }}
+          key-id: ${{ secrets.app_store_connect_key_id }}
+          private-key: ${{ secrets.app_store_connect_private_key }}
+
+      - name: Retain approved captures and manifests
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: powerforge-apple-screenshots-approved-${{ inputs.source_ref }}
+          path: |
+            source/${{ inputs.capture_artifact_path }}
+            source/**/*.approval.json
+          if-no-files-found: error
+          retention-days: 90

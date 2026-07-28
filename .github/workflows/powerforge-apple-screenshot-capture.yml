@@ -1,0 +1,87 @@
+name: PowerForge Apple Screenshot Capture
+
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        description: Exact source commit to capture.
+        required: true
+        type: string
+      capture_script:
+        description: Repository-relative deterministic capture script.
+        required: true
+        type: string
+      capture_shell:
+        description: Capture script host (bash or pwsh).
+        required: false
+        default: bash
+        type: string
+      capture_artifact_path:
+        description: Repository-relative folder produced by the capture script.
+        required: false
+        default: build/appstore-screenshots
+        type: string
+      runner_labels_json:
+        description: JSON array of trusted Apple runner labels.
+        required: false
+        default: '["self-hosted","macOS","ARM64"]'
+        type: string
+
+concurrency:
+  group: powerforge-apple-screenshot-capture-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Require immutable source and supported shell
+        shell: pwsh
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+          CAPTURE_SHELL: ${{ inputs.capture_shell }}
+        run: |
+          if ($env:SOURCE_REF -notmatch '^[0-9A-Fa-f]{40}$') { throw 'source_ref must be an exact 40-character commit SHA.' }
+          if ($env:CAPTURE_SHELL -notin @('bash', 'pwsh')) { throw 'capture_shell must be bash or pwsh.' }
+
+      - name: Checkout exact screenshot source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 1
+          path: source
+          persist-credentials: false
+
+      - name: Capture deterministic App Store screenshots
+        shell: pwsh
+        env:
+          CAPTURE_SCRIPT: ${{ inputs.capture_script }}
+          CAPTURE_SHELL: ${{ inputs.capture_shell }}
+          CAPTURE_ARTIFACT_PATH: ${{ inputs.capture_artifact_path }}
+        run: |
+          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source')
+          $scriptPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_SCRIPT))
+          $artifactPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_ARTIFACT_PATH))
+          $prefix = $sourceRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+          foreach ($entry in @{ capture_script = $scriptPath; capture_artifact_path = $artifactPath }.GetEnumerator()) {
+            if (-not $entry.Value.StartsWith($prefix, [StringComparison]::Ordinal)) { throw "$($entry.Key) escapes the checked-out source." }
+          }
+          if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) { throw "Capture script was not found: $scriptPath" }
+          Push-Location $sourceRoot
+          try {
+            if ($env:CAPTURE_SHELL -eq 'bash') { & bash $scriptPath } else { & pwsh -NoLogo -NoProfile -File $scriptPath }
+            if ($LASTEXITCODE -ne 0) { throw "Screenshot capture failed with exit code $LASTEXITCODE." }
+          } finally { Pop-Location }
+          if (-not (Test-Path -LiteralPath $artifactPath -PathType Container)) { throw "Capture artifact folder was not created: $artifactPath" }
+          if (@(Get-ChildItem -LiteralPath $artifactPath -Filter '*.png' -File -Recurse).Count -eq 0) { throw 'Capture produced no PNG screenshots.' }
+
+      - name: Retain exact captures for manual review
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: powerforge-apple-screenshots-${{ inputs.source_ref }}
+          path: source/${{ inputs.capture_artifact_path }}
+          if-no-files-found: error
+          retention-days: 30

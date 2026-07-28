@@ -180,6 +180,23 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("tool-path=$toolPath", action, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ManualScreenshotApprovalBindsReviewedRunToAuthorizedActor()
+    {
+        var root = FindRepoRoot();
+        var capture = Read(root, ".github", "workflows", "powerforge-apple-screenshot-capture.yml");
+        var approval = Read(root, ".github", "workflows", "powerforge-apple-screenshot-approve.yml");
+
+        Assert.Contains("Exact source commit to capture", capture, StringComparison.Ordinal);
+        Assert.Contains("powerforge-apple-screenshots-${{ inputs.source_ref }}", capture, StringComparison.Ordinal);
+        Assert.Contains("allowed_approvers_json", approval, StringComparison.Ordinal);
+        Assert.Contains("${{ github.actor }}", approval, StringComparison.Ordinal);
+        Assert.Contains("run-id: ${{ inputs.capture_run_id }}", approval, StringComparison.Ordinal);
+        Assert.Contains("approval-evidence", approval, StringComparison.Ordinal);
+        Assert.Contains("target: ${{ inputs.target }}", approval, StringComparison.Ordinal);
+        Assert.DoesNotContain("environment:", approval, StringComparison.Ordinal);
+    }
+
     private static string Read(string root, params string[] parts)
         => File.ReadAllText(Path.Combine(new[] { root }.Concat(parts).ToArray()));
 

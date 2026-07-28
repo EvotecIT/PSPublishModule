@@ -267,6 +267,11 @@ The reusable workflow boundary mirrors the human approval boundary:
 - `powerforge-apple-screenshots.yml` captures from an exact source commit, retains the
   PNG artifact for review, waits at a protected environment, binds the reviewer to
   exact image hashes, and then performs the confirmed screenshot sync.
+- `powerforge-apple-screenshot-capture.yml` plus
+  `powerforge-apple-screenshot-approve.yml` provide the same exact-byte boundary on
+  repositories whose GitHub plan cannot enforce environment reviewers. Capture and
+  approval are separate runs; the second run verifies an allow-listed GitHub actor and
+  binds both run IDs into the manifest before sync.
 
 Callers must pass 40-character commit SHAs for `powerforge_ref` and release
 `source_ref`; the workflows reject branches and tags and verify both checked-out
@@ -278,7 +283,8 @@ capture cannot cancel a release and two publication captures cannot overlap.
 
 The workflows upload the exact configured plan and actual receipt paths and fail if
 a required receipt is absent. Successful logs contain only the short step summary,
-while failure logs retain the PowerForge error envelope. A partially completed
+while failure logs retain only stable diagnostic codes and actions; private evidence
+remains in the receipt artifact. A partially completed
 version workflow reuses an identical remote release branch and creates or returns its
 open pull request; it refuses to overwrite different remote content.
 
