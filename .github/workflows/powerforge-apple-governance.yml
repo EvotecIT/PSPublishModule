@@ -68,10 +68,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  govern:
+  plan:
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: 45
-    environment: ${{ inputs.operation == 'Apply' && inputs.approval_environment_name || inputs.environment_name }}
+    environment: ${{ inputs.environment_name }}
     permissions:
       contents: read
     steps:
@@ -178,7 +178,7 @@ jobs:
           tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
 
       - name: Plan Apple governance drift
-        id: plan
+        id: governance_plan
         uses: ./powerforge-shared/.github/actions/apple-governance
         with:
           operation: Plan
@@ -190,14 +190,119 @@ jobs:
           key-id: ${{ secrets.app_store_connect_key_id }}
           private-key: ${{ secrets.app_store_connect_private_key }}
 
-      - name: Apply reviewed Apple governance drift
-        id: apply
-        if: inputs.operation == 'Apply'
+      - name: Upload governance plan for review
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: powerforge-apple-governance-${{ inputs.source_ref }}-plan
+          path: ${{ steps.governance_plan.outputs.receipt-path }}
+          if-no-files-found: error
+          retention-days: 90
+
+  apply:
+    if: inputs.operation == 'Apply'
+    needs: plan
+    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    timeout-minutes: 45
+    environment: ${{ inputs.approval_environment_name }}
+    permissions:
+      contents: read
+    steps:
+      - name: Revalidate authorized dispatcher
+        shell: pwsh
+        env:
+          DISPATCHERS_JSON: ${{ inputs.allowed_dispatchers_json }}
+          DISPATCHER: ${{ github.actor }}
+        run: |
+          $dispatchers = @($env:DISPATCHERS_JSON | ConvertFrom-Json -Depth 5)
+          if ($dispatchers.Count -gt 0 -and $env:DISPATCHER -notin $dispatchers) {
+            throw "GitHub actor '$($env:DISPATCHER)' is not an authorized Apple governance dispatcher."
+          }
+
+      - name: Checkout exact consumer source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 1
+          path: source
+          persist-credentials: false
+
+      - name: Checkout exact shared governance source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: EvotecIT/PSPublishModule
+          ref: ${{ inputs.powerforge_ref }}
+          fetch-depth: 1
+          path: powerforge-shared
+          persist-credentials: false
+
+      - name: Reverify exact commits and declaration paths
+        id: paths
+        shell: pwsh
+        env:
+          EXPECTED_SOURCE_REF: ${{ inputs.source_ref }}
+          EXPECTED_POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+          CONFIG_PATH: ${{ inputs.config_path }}
+          RELEASE_CONFIG_PATH: ${{ inputs.release_config_path }}
+        run: |
+          $source = (git -C source rev-parse HEAD).Trim()
+          $shared = (git -C powerforge-shared rev-parse HEAD).Trim()
+          if ($source -ine $env:EXPECTED_SOURCE_REF) { throw "Expected source '$($env:EXPECTED_SOURCE_REF)', received '$source'." }
+          if ($shared -ine $env:EXPECTED_POWERFORGE_REF) { throw "Expected shared '$($env:EXPECTED_POWERFORGE_REF)', received '$shared'." }
+
+          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source').TrimEnd([IO.Path]::DirectorySeparatorChar)
+          function Resolve-TrackedSourceFile([string] $relativePath, [string] $name, [bool] $required) {
+            if ([string]::IsNullOrWhiteSpace($relativePath)) {
+              if ($required) { throw "$name is required." }
+              return ''
+            }
+            if ([IO.Path]::IsPathRooted($relativePath)) { throw "$name must be relative to the checked-out source." }
+            $fullPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $relativePath))
+            $prefix = $sourceRoot + [IO.Path]::DirectorySeparatorChar
+            if (-not $fullPath.StartsWith($prefix, [StringComparison]::Ordinal)) { throw "$name must resolve to a child of the checked-out source." }
+            $current = $fullPath
+            while ($current -ne $sourceRoot) {
+              if (Test-Path -LiteralPath $current) {
+                $item = Get-Item -LiteralPath $current -Force
+                if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "$name must not traverse a symbolic link or reparse point: $current" }
+              }
+              $current = Split-Path -Parent $current
+            }
+            if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) { throw "$name was not found: $relativePath" }
+            $normalized = [IO.Path]::GetRelativePath($sourceRoot, $fullPath).Replace('\', '/')
+            & git -C $sourceRoot ls-files --error-unmatch -- $normalized *> $null
+            if ($LASTEXITCODE -ne 0) { throw "$name must be tracked at the exact source commit: $normalized" }
+            & git -C $sourceRoot diff --quiet -- $normalized
+            if ($LASTEXITCODE -ne 0) { throw "$name differs from the exact source commit: $normalized" }
+            return $fullPath
+          }
+
+          $governancePath = Resolve-TrackedSourceFile $env:CONFIG_PATH 'config_path' $true
+          $releasePath = Resolve-TrackedSourceFile $env:RELEASE_CONFIG_PATH 'release_config_path' $false
+          "governance-path=$governancePath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "release-path=$releasePath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Download reviewed governance plan
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: powerforge-apple-governance-${{ inputs.source_ref }}-plan
+          path: ${{ runner.temp }}/reviewed-governance-plan
+
+      - name: Build exact PowerForge source
+        id: build-powerforge
+        uses: ./powerforge-shared/.github/actions/build-powerforge
+        with:
+          source-root: ${{ github.workspace }}/powerforge-shared
+          runtime: ${{ inputs.tool_runtime }}
+
+      - name: Apply only the reviewed Apple governance plan
+        id: governance_apply
         uses: ./powerforge-shared/.github/actions/apple-governance
         with:
           operation: Apply
           config-path: ${{ steps.paths.outputs.governance-path }}
           release-config-path: ${{ steps.paths.outputs.release-path }}
+          reviewed-plan-path: ${{ runner.temp }}/reviewed-governance-plan/powerforge-apple-governance-plan.json
           receipt-path: ${{ runner.temp }}/powerforge-apple-governance-actual.json
           tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           confirm: "true"
@@ -206,20 +311,11 @@ jobs:
           key-id: ${{ secrets.app_store_connect_key_id }}
           private-key: ${{ secrets.app_store_connect_private_key }}
 
-      - name: Upload compact governance plan receipt
+      - name: Upload compact governance apply receipt
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: powerforge-apple-governance-${{ inputs.source_ref }}-plan
-          path: ${{ steps.plan.outputs.receipt-path }}
-          if-no-files-found: error
-          retention-days: 90
-
-      - name: Upload compact governance apply receipt
-        if: always() && inputs.operation == 'Apply'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
           name: powerforge-apple-governance-${{ inputs.source_ref }}-actual
-          path: ${{ steps.apply.outputs.receipt-path }}
+          path: ${{ steps.governance_apply.outputs.receipt-path }}
           if-no-files-found: error
           retention-days: 90

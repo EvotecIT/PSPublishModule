@@ -140,7 +140,17 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("ls-files --error-unmatch", advance, StringComparison.Ordinal);
         Assert.Contains("diff --quiet", advance, StringComparison.Ordinal);
         Assert.Contains("& $scriptPath", advance, StringComparison.Ordinal);
-        Assert.Contains("must not modify tracked release source", advance, StringComparison.Ordinal);
+        Assert.Contains("must not modify tracked or untracked release source", advance, StringComparison.Ordinal);
+        Assert.Contains("source_bootstrap_script must not modify the pinned shared checkout", advance, StringComparison.Ordinal);
+        Assert.Contains("status --porcelain=v1 --untracked-files=all", advance, StringComparison.Ordinal);
+        Assert.Contains("Restore pinned shared checkout after source bootstrap", advance, StringComparison.Ordinal);
+        Assert.Contains("Reverify pinned shared checkout after source bootstrap", advance, StringComparison.Ordinal);
+        Assert.True(
+            advance.IndexOf("& $scriptPath", StringComparison.Ordinal) <
+            advance.IndexOf("source_bootstrap_script must not modify the pinned shared checkout", StringComparison.Ordinal));
+        Assert.True(
+            advance.IndexOf("Restore pinned shared checkout after source bootstrap", StringComparison.Ordinal) <
+            advance.IndexOf("Build exact PowerForge source", StringComparison.Ordinal));
         Assert.True(
             advance.IndexOf("Prepare tracked source dependencies", StringComparison.Ordinal) <
             advance.IndexOf("Plan safe release advancement", StringComparison.Ordinal));
@@ -187,7 +197,10 @@ public sealed class AppleReleaseWorkflowTests
 
         Assert.Contains("Snapshot, Validate, Plan, or Apply", action, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgeAppleGovernance.ps1", action, StringComparison.Ordinal);
+        Assert.Contains("reviewed-plan-path", action, StringComparison.Ordinal);
         Assert.Contains("Apply requires confirm=true", script, StringComparison.Ordinal);
+        Assert.Contains("Apply requires reviewed-plan-path", script, StringComparison.Ordinal);
+        Assert.Contains("@('--reviewed-plan', $env:INPUT_REVIEWED_PLAN_PATH)", script, StringComparison.Ordinal);
         Assert.Contains("--fail-on-drift", script, StringComparison.Ordinal);
         Assert.Contains("@('--summary', '--output', 'json')", script, StringComparison.Ordinal);
         Assert.Contains("[redacted]", script, StringComparison.Ordinal);
@@ -197,7 +210,9 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("powerforge_ref", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("default: powerforge.release.json", workflow, StringComparison.Ordinal);
         Assert.Contains("must be an exact 40-character commit SHA", workflow, StringComparison.Ordinal);
-        Assert.Contains("environment: ${{ inputs.operation == 'Apply' && inputs.approval_environment_name || inputs.environment_name }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("environment: ${{ inputs.environment_name }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("needs: plan", workflow, StringComparison.Ordinal);
+        Assert.Contains("environment: ${{ inputs.approval_environment_name }}", workflow, StringComparison.Ordinal);
         Assert.Contains("authorized Apple governance dispatcher", workflow, StringComparison.Ordinal);
         Assert.Contains("$name must resolve to a child", workflow, StringComparison.Ordinal);
         Assert.Contains("must not traverse a symbolic link or reparse point", workflow, StringComparison.Ordinal);
@@ -207,8 +222,13 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("operation: Plan", workflow, StringComparison.Ordinal);
         Assert.Contains("operation: Apply", workflow, StringComparison.Ordinal);
         Assert.True(
-            workflow.IndexOf("operation: Plan", StringComparison.Ordinal) <
-            workflow.IndexOf("operation: Apply", StringComparison.Ordinal));
+            workflow.IndexOf("Upload governance plan for review", StringComparison.Ordinal) <
+            workflow.IndexOf("  apply:", StringComparison.Ordinal));
+        Assert.True(
+            workflow.IndexOf("  apply:", StringComparison.Ordinal) <
+            workflow.IndexOf("environment: ${{ inputs.approval_environment_name }}", StringComparison.Ordinal));
+        Assert.Contains("actions/download-artifact@", workflow, StringComparison.Ordinal);
+        Assert.Contains("reviewed-plan-path: ${{ runner.temp }}/reviewed-governance-plan/powerforge-apple-governance-plan.json", workflow, StringComparison.Ordinal);
         Assert.Contains("confirm: \"true\"", workflow, StringComparison.Ordinal);
         Assert.Contains("powerforge-apple-governance-plan.json", workflow, StringComparison.Ordinal);
         Assert.Contains("powerforge-apple-governance-actual.json", workflow, StringComparison.Ordinal);

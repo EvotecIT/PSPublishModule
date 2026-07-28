@@ -212,10 +212,13 @@ public sealed class AppStoreConnectSubscriptionIntroductoryOfferSpec
 public sealed class AppStoreConnectSubscriptionAvailabilitySpec
 {
     /// <summary>MONTHLY or UPFRONT.</summary>
+    [JsonRequired]
     public string PlanType { get; set; } = "MONTHLY";
 
     [JsonRequired]
     public bool AvailableInNewTerritories { get; set; }
+
+    [JsonRequired]
     public string[] TerritoryIds { get; set; } = Array.Empty<string>();
 }
 
@@ -362,6 +365,11 @@ public sealed class AppStoreConnectGovernanceApplyRequest
     public AppStoreConnectGovernanceSpec Spec { get; set; } = new();
     public bool ConfirmApply { get; set; }
     public int MaximumChanges { get; set; } = 500;
+
+    /// <summary>
+    /// Optional previously generated plan that must still match current Apple state before the first mutation.
+    /// </summary>
+    public AppStoreConnectGovernancePlan? ReviewedPlan { get; set; }
 }
 
 /// <summary>Compact receipt for an approved governance convergence run.</summary>

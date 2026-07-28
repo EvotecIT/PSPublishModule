@@ -34,6 +34,11 @@ if ($operation -in @('Plan', 'Apply')) {
 }
 if ($operation -eq 'Apply') {
     if ($env:INPUT_CONFIRM -ne 'true') { throw 'Apply requires confirm=true.' }
+    if ([string]::IsNullOrWhiteSpace($env:INPUT_REVIEWED_PLAN_PATH)) { throw 'Apply requires reviewed-plan-path.' }
+    if (-not (Test-Path -LiteralPath $env:INPUT_REVIEWED_PLAN_PATH -PathType Leaf)) {
+        throw "Reviewed governance plan was not found: $($env:INPUT_REVIEWED_PLAN_PATH)"
+    }
+    $arguments += @('--reviewed-plan', $env:INPUT_REVIEWED_PLAN_PATH)
     $arguments += @('--confirm', '--max-changes', $env:INPUT_MAXIMUM_CHANGES)
 }
 if ($operation -eq 'Plan' -and $env:INPUT_FAIL_ON_DRIFT -eq 'true') { $arguments += '--fail-on-drift' }

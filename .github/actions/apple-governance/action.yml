@@ -25,6 +25,10 @@ inputs:
     description: Explicit compact Plan or Apply receipt path.
     required: false
     default: ""
+  reviewed-plan-path:
+    description: Approved full Plan receipt that Apply must match before the first mutation.
+    required: false
+    default: ""
   tool-manifest-path:
     description: Checked-in PowerForge tool manifest path.
     required: false
@@ -119,6 +123,7 @@ runs:
         INPUT_OUTPUT_PATH: ${{ inputs.output-path }}
         INPUT_RELEASE_CONFIG_PATH: ${{ inputs.release-config-path }}
         INPUT_RECEIPT_PATH: ${{ inputs.receipt-path }}
+        INPUT_REVIEWED_PLAN_PATH: ${{ inputs.reviewed-plan-path }}
         INPUT_CONFIRM: ${{ inputs.confirm }}
         INPUT_FAIL_ON_DRIFT: ${{ inputs.fail-on-drift }}
         INPUT_MAXIMUM_CHANGES: ${{ inputs.maximum-changes }}

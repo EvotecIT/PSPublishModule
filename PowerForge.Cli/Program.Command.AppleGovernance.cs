@@ -8,7 +8,7 @@ internal static partial class Program
         "Usage: powerforge apple-governance <snapshot|validate|plan|apply> [--config <governance.json>] " +
         "[--app-id <id> --out <governance.json> [--force]] " +
         "[--release-config <release.json>] [--key-path <AuthKey.p8> --key-id <id> --issuer-id <id>] " +
-        "[--receipt <path>] [--confirm] [--max-changes <N>] [--fail-on-drift] [--summary] [--output json]";
+        "[--receipt <path>] [--reviewed-plan <path>] [--confirm] [--max-changes <N>] [--fail-on-drift] [--summary] [--output json]";
 
     private static int CommandAppleGovernance(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
@@ -65,6 +65,18 @@ internal static partial class Program
             if (operation == "apply" && !argv.Any(value => value.Equals("--confirm", StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("apple-governance apply requires --confirm after reviewing a plan receipt.");
 
+            AppStoreConnectGovernancePlan? reviewedPlan = null;
+            if (operation == "apply")
+            {
+                var reviewedPlanPath = TryGetOptionValue(argv, "--reviewed-plan")
+                    ?? throw new InvalidOperationException("apple-governance apply requires --reviewed-plan pointing to the approved plan receipt.");
+                var fullReviewedPlanPath = ResolveExistingFilePath(reviewedPlanPath);
+                reviewedPlan = JsonSerializer.Deserialize(
+                    File.ReadAllText(fullReviewedPlanPath),
+                    CliJson.Context.AppStoreConnectGovernancePlan)
+                    ?? throw new InvalidOperationException("The reviewed governance plan receipt is empty or invalid.");
+            }
+
             var credential = ResolveAppleGovernanceCredential(argv, fullConfigPath);
             using var client = new AppStoreConnectClient(credential);
             var service = new AppStoreConnectGovernanceService(client);
@@ -83,7 +95,8 @@ internal static partial class Program
             {
                 Spec = spec,
                 ConfirmApply = true,
-                MaximumChanges = maximumChanges
+                MaximumChanges = maximumChanges,
+                ReviewedPlan = reviewedPlan
             }).GetAwaiter().GetResult();
             var applyReceiptPath = ResolveGovernanceReceiptPath(argv, fullConfigPath, "governance-receipt.json");
             WriteGovernanceReceipt(applyReceiptPath, JsonSerializer.Serialize(result, CliJson.Context.AppStoreConnectGovernanceApplyResult));
@@ -248,7 +261,7 @@ internal static partial class Program
         var flags = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "--confirm", "--fail-on-drift", "--force", "--summary" };
         var options = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "--config", "--app-id", "--out", "--release-config", "--key-path", "--key-id", "--issuer-id", "--receipt", "--max-changes", "--output"
+            "--config", "--app-id", "--out", "--release-config", "--key-path", "--key-id", "--issuer-id", "--receipt", "--reviewed-plan", "--max-changes", "--output"
         };
         for (var index = 0; index < argv.Length; index++)
         {

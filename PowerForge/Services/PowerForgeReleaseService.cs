@@ -1805,6 +1805,12 @@ internal sealed partial class PowerForgeReleaseService
         var releaseApps = plan.Apps
             .Where(app => ShouldExecuteAppleTarget(plan.Action, app))
             .ToArray();
+        if (releaseApps.Length == 0 && IsNamedAppleMutationAction(plan.Action))
+        {
+            throw new InvalidOperationException(
+                $"Apple action '{plan.Action}' cannot execute for any selected target. " +
+                "Choose a target whose distribution route and TestFlight policy support the requested transition.");
+        }
         var needsScreenshotSpecs = plan.SyncScreenshots ||
                                    plan.CheckReleaseReadiness ||
                                    (plan.SubmitForReview && !plan.SkipReviewReadinessCheck);
@@ -1940,7 +1946,7 @@ internal sealed partial class PowerForgeReleaseService
                         throw new InvalidOperationException(
                             $"Apple governance drift blocks '{app.Name}': {governancePlan.DriftCount} change(s), " +
                             $"{governancePlan.BlockedCount} blocked, {governancePlan.Findings.Count(finding => finding.IsError)} config error(s). " +
-                            "Review the governance plan receipt and run 'powerforge apple-governance apply --confirm'.");
+                            "Review the governance plan receipt and run 'powerforge apple-governance apply --reviewed-plan <plan-receipt> --confirm'.");
                     }
                 }
 

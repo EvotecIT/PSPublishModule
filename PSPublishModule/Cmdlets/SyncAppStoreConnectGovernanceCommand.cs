@@ -55,7 +55,8 @@ public sealed class SyncAppStoreConnectGovernanceCommand : AsyncPSCmdlet
         {
             Spec = spec,
             ConfirmApply = true,
-            MaximumChanges = MaximumChanges
+            MaximumChanges = MaximumChanges,
+            ReviewedPlan = plan
         }, CancelToken));
     }
 }

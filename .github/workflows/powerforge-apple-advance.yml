@@ -146,9 +146,45 @@ jobs:
             throw "source_bootstrap_script differs from the exact source commit: $relativePath"
           }
           & $scriptPath
-          & git -C $sourceRoot diff --quiet
-          if ($LASTEXITCODE -ne 0) {
-            throw 'source_bootstrap_script must not modify tracked release source.'
+          $sourceStatus = @(& git -C $sourceRoot status --porcelain=v1 --untracked-files=all)
+          if ($LASTEXITCODE -ne 0 -or $sourceStatus.Count -gt 0) {
+            throw 'source_bootstrap_script must not modify tracked or untracked release source outside ignored dependency roots.'
+          }
+
+          $sharedRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/powerforge-shared')
+          $shared = (& git -C $sharedRoot rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $shared -ine '${{ inputs.powerforge_ref }}') {
+            throw "source_bootstrap_script changed the pinned shared checkout identity: $shared"
+          }
+          $sharedStatus = @(& git -C $sharedRoot status --porcelain=v1 --untracked-files=all)
+          if ($LASTEXITCODE -ne 0 -or $sharedStatus.Count -gt 0) {
+            throw 'source_bootstrap_script must not modify the pinned shared checkout.'
+          }
+
+      - name: Restore pinned shared checkout after source bootstrap
+        if: inputs.source_bootstrap_script != ''
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: EvotecIT/PSPublishModule
+          ref: ${{ inputs.powerforge_ref }}
+          fetch-depth: 1
+          path: powerforge-shared
+          persist-credentials: false
+          clean: true
+
+      - name: Reverify pinned shared checkout after source bootstrap
+        if: inputs.source_bootstrap_script != ''
+        shell: pwsh
+        env:
+          EXPECTED_POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+        run: |
+          $shared = (git -C powerforge-shared rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $shared -ine $env:EXPECTED_POWERFORGE_REF) {
+            throw "Expected restored shared '$($env:EXPECTED_POWERFORGE_REF)', received '$shared'."
+          }
+          $sharedStatus = @(& git -C powerforge-shared status --porcelain=v1 --untracked-files=all)
+          if ($LASTEXITCODE -ne 0 -or $sharedStatus.Count -gt 0) {
+            throw 'Restored shared checkout is not clean.'
           }
 
       - name: Build exact PowerForge source

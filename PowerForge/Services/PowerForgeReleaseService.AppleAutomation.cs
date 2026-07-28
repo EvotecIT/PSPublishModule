@@ -174,6 +174,18 @@ internal sealed partial class PowerForgeReleaseService
         };
     }
 
+    private static bool IsNamedAppleMutationAction(PowerForgeAppleReleaseAction action)
+        => action is PowerForgeAppleReleaseAction.Archive or
+            PowerForgeAppleReleaseAction.Upload or
+            PowerForgeAppleReleaseAction.UploadExisting or
+            PowerForgeAppleReleaseAction.Prepare or
+            PowerForgeAppleReleaseAction.Screenshots or
+            PowerForgeAppleReleaseAction.TestFlight or
+            PowerForgeAppleReleaseAction.Advance or
+            PowerForgeAppleReleaseAction.SubmitTestFlightReview or
+            PowerForgeAppleReleaseAction.SubmitAppReview or
+            PowerForgeAppleReleaseAction.Release;
+
     private static void ValidateAppleAutomation(PowerForgeAppleReleaseAutomationOptions automation)
     {
         if (string.IsNullOrWhiteSpace(automation.ReceiptPath))
@@ -725,7 +737,7 @@ internal sealed partial class PowerForgeReleaseService
                 Code = code,
                 Summary = $"Declared Apple commerce/compliance state has {plan.DriftCount} change(s), {plan.BlockedCount} blocked change(s), and {plan.Findings.Count(finding => finding.IsError)} configuration error(s).",
                 Evidence = string.Join("; ", plan.Changes.Take(5).Select(change => $"{change.Action} {change.ResourceType} {change.Key}")),
-                Action = "Review the compact governance plan receipt, correct blocked/configuration items, then run powerforge apple-governance apply --confirm.",
+                Action = "Review the compact governance plan receipt, correct blocked/configuration items, then run powerforge apple-governance apply --reviewed-plan <plan-receipt> --confirm.",
                 Retryable = plan.BlockedCount == 0 && plan.Findings.All(finding => !finding.IsError)
             }
         };

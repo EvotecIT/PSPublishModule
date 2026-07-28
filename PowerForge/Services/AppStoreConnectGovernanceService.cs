@@ -56,6 +56,7 @@ public sealed partial class AppStoreConnectGovernanceService
         var started = DateTimeOffset.UtcNow;
         var applied = new List<AppStoreConnectGovernanceChange>();
         var executed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var reviewedPlanVerified = false;
         AppStoreConnectGovernancePlan plan = new();
         try
         {
@@ -64,6 +65,19 @@ public sealed partial class AppStoreConnectGovernanceService
                 plan = await PlanAsync(request.Spec, cancellationToken).ConfigureAwait(false);
                 if (plan.Findings.Any(finding => finding.IsError))
                     return Failure(request.Spec.AppId, started, applied, plan, "Correct governance configuration errors, then generate a new plan.");
+                if (!reviewedPlanVerified && request.ReviewedPlan is not null)
+                {
+                    reviewedPlanVerified = true;
+                    if (!MatchesReviewedPlan(plan, request.ReviewedPlan))
+                    {
+                        return Failure(
+                            request.Spec.AppId,
+                            started,
+                            applied,
+                            plan,
+                            "Current App Store Connect state no longer matches the reviewed governance plan. Generate and approve a new plan before applying any mutation.");
+                    }
+                }
                 if (!plan.CanApply)
                     return Failure(request.Spec.AppId, started, applied, plan, "Resolve every blocked Apple API constraint shown in the plan before applying any governance mutation.");
 
@@ -122,6 +136,49 @@ public sealed partial class AppStoreConnectGovernanceService
                 plan,
                 $"Apple rejected or failed the next governance change: {ex.Message} Run governance plan/Doctor again after correcting the reported cause.");
         }
+    }
+
+    private static bool MatchesReviewedPlan(
+        AppStoreConnectGovernancePlan current,
+        AppStoreConnectGovernancePlan reviewed)
+    {
+        if (!string.Equals(current.AppId, reviewed.AppId, StringComparison.Ordinal) ||
+            current.Changes.Length != reviewed.Changes.Length ||
+            current.Findings.Length != reviewed.Findings.Length)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < current.Changes.Length; index++)
+        {
+            var left = current.Changes[index];
+            var right = reviewed.Changes[index];
+            if (!string.Equals(left.Section, right.Section, StringComparison.Ordinal) ||
+                !string.Equals(left.ResourceType, right.ResourceType, StringComparison.Ordinal) ||
+                !string.Equals(left.Key, right.Key, StringComparison.Ordinal) ||
+                !string.Equals(left.ResourceId, right.ResourceId, StringComparison.Ordinal) ||
+                !string.Equals(left.ParentId, right.ParentId, StringComparison.Ordinal) ||
+                left.Action != right.Action ||
+                !string.Equals(left.Summary, right.Summary, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        for (var index = 0; index < current.Findings.Length; index++)
+        {
+            var left = current.Findings[index];
+            var right = reviewed.Findings[index];
+            if (!string.Equals(left.Code, right.Code, StringComparison.Ordinal) ||
+                !string.Equals(left.Path, right.Path, StringComparison.Ordinal) ||
+                !string.Equals(left.Message, right.Message, StringComparison.Ordinal) ||
+                left.IsError != right.IsError)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private async Task PlanPricingAsync(

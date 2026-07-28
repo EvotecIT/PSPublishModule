@@ -274,6 +274,26 @@ public sealed class PowerForgeCliAppleReleaseTests
             Assert.Equal(2, apply.ExitCode);
             using var rejected = JsonDocument.Parse(apply.StdOut);
             Assert.Contains("requires --confirm", rejected.RootElement.GetProperty("error").GetString(), StringComparison.OrdinalIgnoreCase);
+
+            var confirmedWithoutPlan = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-governance apply --config \"{configPath}\" --confirm --output json");
+            Assert.Equal(2, confirmedWithoutPlan.ExitCode);
+            using (var missingPlan = JsonDocument.Parse(confirmedWithoutPlan.StdOut))
+            {
+                Assert.Contains("requires --reviewed-plan", missingPlan.RootElement.GetProperty("error").GetString(), StringComparison.OrdinalIgnoreCase);
+            }
+
+            var reviewedPlanPath = Path.Combine(tempRoot, "reviewed-plan.json");
+            File.WriteAllText(reviewedPlanPath,
+                """{ "appId": "1234567890", "checkedAtUtc": "2026-07-28T00:00:00Z", "changes": [], "findings": [], "driftCount": 0, "blockedCount": 0, "isConverged": true, "canApply": true }""");
+            var missingKeyPath = Path.Combine(tempRoot, "missing-auth-key.p8");
+            var confirmedWithPlan = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-governance apply --config \"{configPath}\" --reviewed-plan \"{reviewedPlanPath}\" --confirm --key-path \"{missingKeyPath}\" --key-id TEST --issuer-id TEST --output json");
+            Assert.Equal(2, confirmedWithPlan.ExitCode);
+            using var parsedPlan = JsonDocument.Parse(confirmedWithPlan.StdOut);
+            Assert.Contains("private key was not found", parsedPlan.RootElement.GetProperty("error").GetString(), StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

@@ -147,6 +147,41 @@ public sealed partial class PowerForgeReleaseServiceTests
         Assert.DoesNotContain(diagnostics, item => item.Code == "APPLE_METADATA_UNMANAGED");
         Assert.DoesNotContain(diagnostics, item => item.Code == "APPLE_APP_INFO_UNMANAGED");
         Assert.DoesNotContain(diagnostics, item => item.Code == "APPLE_ACCESSIBILITY_UNDECLARED");
+        Assert.DoesNotContain(diagnostics, item => item.Code == "APPLE_AGE_RATING_MISSING");
+    }
+
+    [Fact]
+    public void Execute_NamedAppleMutationFailsWhenNoSelectedTargetCanExecuteIt()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.0.0", "1");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var app = Assert.Single(spec.AppleApps!.Apps);
+            app.DistributionRoute = AppleDistributionRoute.TestFlightOnly;
+            app.TestFlightPolicy = AppleTestFlightPolicy.Internal;
+
+            var result = CreateAppleAutomationService(_ => throw new InvalidOperationException("Remote state must not be read."))
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.SubmitAppReview,
+                        AppleActionConfirmed = true
+                    });
+
+            Assert.False(result.Success);
+            Assert.Contains("cannot execute for any selected target", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.All(result.AppleApps, target => Assert.False(target.Success));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
     }
 
     [Fact]

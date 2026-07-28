@@ -175,7 +175,7 @@ internal static class AppleReleaseDoctor
                 $"App Review is not ready for '{app.Name}': {reason}.",
                 "Configure App Store Review Details for the selected version before submission."));
         }
-        if (!state.AgeRatingDeclared)
+        if (app.DistributionRoute == AppleDistributionRoute.AppStore && !state.AgeRatingDeclared)
         {
             diagnostics.Add(Error(
                 "compliance",

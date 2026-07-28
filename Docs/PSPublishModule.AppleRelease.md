@@ -325,13 +325,15 @@ Validate locally, read Apple and write a drift receipt, then apply only after re
 ```text
 powerforge apple-governance snapshot --app-id 1234567890 --out build/appstore-governance.json --release-config powerforge.release.json
 powerforge apple-governance validate --config build/appstore-governance.json
-powerforge apple-governance plan --config build/appstore-governance.json --release-config powerforge.release.json --fail-on-drift --summary --output json
-powerforge apple-governance apply --config build/appstore-governance.json --release-config powerforge.release.json --confirm --summary --output json
+powerforge apple-governance plan --config build/appstore-governance.json --release-config powerforge.release.json --receipt build/governance-plan.json --fail-on-drift --summary --output json
+powerforge apple-governance apply --config build/appstore-governance.json --release-config powerforge.release.json --reviewed-plan build/governance-plan.json --confirm --summary --output json
 ```
 
 `snapshot` bootstraps a declaration from existing Apple state and refuses to overwrite
 reviewed configuration unless `--force` is supplied. Review it before committing.
-`validate` needs no credentials. `plan` is read-only. `apply` requires `--confirm`,
+`validate` needs no credentials. `plan` is read-only. `apply` requires `--confirm`
+and the exact reviewed Plan receipt through `--reviewed-plan`. Before changing Apple,
+it regenerates the plan and stops if current state no longer matches that receipt. It
 converges one dependency-aware change at a time, replans after every Apple mutation,
 and writes a compact receipt by default under `.powerforge/apple/`. It creates and
 updates declared resources but never performs implicit deletions. A safety limit
