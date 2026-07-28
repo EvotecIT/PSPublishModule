@@ -49,9 +49,26 @@ public sealed partial class PowerForgeReleaseServiceTests
             CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
             File.WriteAllText(keyPath, "private-key");
-            var processingState = "VALID";
+            var readinessReady = false;
             var service = CreateAppleAutomationService(
-                request => CreateReleaseState(request, processingState));
+                request => CreateReleaseState(request, "VALID"),
+                checkAppleReleaseReadiness: (_, request) => new AppStoreConnectReleaseReadinessResult
+                {
+                    AppId = request.AppId,
+                    VersionString = request.VersionString,
+                    BuildNumber = request.BuildNumber,
+                    Platform = request.Platform,
+                    IsReady = readinessReady,
+                    Checks =
+                    [
+                        new AppStoreConnectReleaseReadinessCheck
+                        {
+                            Name = "metadata",
+                            Passed = readinessReady,
+                            Message = readinessReady ? "Metadata is ready." : "Metadata is incomplete."
+                        }
+                    ]
+                });
             var spec = CreateAppleAutomationSpec(root, keyPath);
             var request = new PowerForgeReleaseRequest
             {
@@ -62,7 +79,7 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             var first = service.Execute(spec, request);
             var second = service.Execute(spec, request);
-            processingState = "PROCESSING";
+            readinessReady = true;
             var changed = service.Execute(spec, request);
 
             Assert.True(first.Success, first.ErrorMessage);
@@ -73,6 +90,10 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("build-id", target.BuildId);
             Assert.Equal("VALID", target.BuildProcessingState);
             Assert.Equal("version-id", target.DistributionVersionId);
+            Assert.True(target.ReadinessChecked);
+            Assert.False(target.ReadyForSubmission);
+            Assert.Matches("^[0-9A-F]{64}$", target.ReadinessSha256!);
+            Assert.False(Assert.Single(target.ReadinessChecks!).Passed);
         }
         finally
         {
@@ -739,7 +760,8 @@ public sealed partial class PowerForgeReleaseServiceTests
         Func<AppStoreConnectApiCredential, string, ApplePlatform, long>? getHighestAppleBuildNumber = null,
         Func<AppStoreConnectApiCredential, string, AppStoreConnectAppInfo[]>? findAppleApps = null,
         Func<AppleNotarizationRequest, AppleNotarizationResult>? notarizeAppleArtifact = null,
-        Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan>? planAppleGovernance = null)
+        Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan>? planAppleGovernance = null,
+        Func<AppStoreConnectApiCredential, AppStoreConnectReleaseReadinessRequest, AppStoreConnectReleaseReadinessResult>? checkAppleReleaseReadiness = null)
         => new(
             new NullLogger(),
             executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
@@ -761,7 +783,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             getHighestAppleBuildNumber: getHighestAppleBuildNumber,
             findAppleApps: findAppleApps,
             notarizeAppleArtifact: notarizeAppleArtifact,
-            planAppleGovernance: planAppleGovernance);
+            planAppleGovernance: planAppleGovernance,
+            checkAppleReleaseReadiness: checkAppleReleaseReadiness);
 
     private static AppStoreConnectReleaseStateResult CreateReleaseState(
         AppStoreConnectReleaseStateRequest request,

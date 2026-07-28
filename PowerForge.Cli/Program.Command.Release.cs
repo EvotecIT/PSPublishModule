@@ -569,6 +569,7 @@ internal static partial class Program
             ReceiptPath = Path.GetRelativePath(
                 plan.ProjectRoot,
                 request.PlanOnly ? plan.PlanReceiptPath : plan.ReceiptPath).Replace('\\', '/'),
+            PlanSha256 = result.AppleReceipt?.PlanSha256,
             Resume = plan.Automation.Resume,
             WaitForProcessing = plan.Automation.WaitForProcessing,
             ProcessingTimeoutSeconds = plan.Automation.ProcessingTimeoutSeconds,

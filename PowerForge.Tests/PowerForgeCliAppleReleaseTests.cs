@@ -44,6 +44,7 @@ public sealed class PowerForgeCliAppleReleaseTests
                 Assert.True(root.GetProperty("success").GetBoolean());
                 var result = root.GetProperty("result");
                 Assert.Equal("Status", result.GetProperty("action").GetString());
+                Assert.Matches("^[0-9A-F]{64}$", result.GetProperty("planSha256").GetString()!);
                 Assert.False(result.GetProperty("requiresConfirmation").GetBoolean());
                 Assert.Equal("status", Assert.Single(result.GetProperty("enabledSteps").EnumerateArray()).GetString());
             }

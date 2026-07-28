@@ -320,6 +320,11 @@ editors completion and catches misspelled fields before a release:
 }
 ```
 
+Accessibility publication is always a distinct reviewed change, including when the
+same apply operation creates or updates the declaration facts. A publish-enabled
+request cannot make reviewed facts public without that publication effect appearing
+in the plan and receipt.
+
 Validate locally, read Apple and write a drift receipt, then apply only after review:
 
 ```text
@@ -438,9 +443,10 @@ The reusable workflow boundary mirrors the human approval boundary:
   `SubmitAppReview`, or `Release`, verifies an optional dispatcher allow-list, and first
   publishes a read-only plan from the non-approval environment. The protected job starts
   only after that plan can be inspected, replans after approval, and executes only when
-  the exact source, action, and observed Apple state still produce the reviewed SHA-256.
+  the exact source, action, observed Apple state, and App Review readiness evidence still
+  produce the reviewed SHA-256.
 - `powerforge-apple-monitor.yml` runs scheduled `Doctor`, retains the compact receipt,
-  and maintains one GitHub incident until errors and warnings are cleared.
+  and maintains one marker-owned GitHub incident until errors and warnings are cleared.
 - `powerforge-apple-screenshots.yml` captures from an exact source commit, retains the
   PNG artifact for review, waits at a protected environment, binds the reviewer to
   exact image hashes, and then performs the confirmed screenshot sync.
@@ -625,7 +631,8 @@ Run `Doctor` on a schedule as well as before a release. The reusable
 `powerforge-apple-monitor.yml` workflow checks out exact 40-character source and
 PowerForge commits, builds that exact shared source, runs Doctor on a trusted Apple
 runner, retains the compact receipt, and maintains one stable GitHub incident. Errors
-and warnings open the issue; a clean later run closes it. This catches upload/build
+and warnings open the issue; a clean later run closes only incidents carrying the
+PowerForge monitor ownership marker, never an unrelated same-title issue. This catches upload/build
 state, review, metadata, screenshot, compliance, observability, and TestFlight feedback
 gaps without waiting for an Apple email.
 

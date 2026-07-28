@@ -203,6 +203,8 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("gh issue close", workflow, StringComparison.Ordinal);
         Assert.Contains("gh api --paginate --slurp", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("gh issue list --state open --limit 100", workflow, StringComparison.Ordinal);
+        Assert.Contains("powerforge-apple-monitor-incident:v1", workflow, StringComparison.Ordinal);
+        Assert.Contains("([string] $_.body).Contains($monitorMarker)", workflow, StringComparison.Ordinal);
         Assert.Contains("Unable to enumerate all open repository issues", workflow, StringComparison.Ordinal);
         Assert.Contains("Unable to close recovered Apple incident", workflow, StringComparison.Ordinal);
         Assert.Contains("Unable to create the proactive Apple incident", workflow, StringComparison.Ordinal);

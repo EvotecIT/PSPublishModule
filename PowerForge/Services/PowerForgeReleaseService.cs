@@ -66,6 +66,7 @@ internal sealed partial class PowerForgeReleaseService
     private readonly Func<AppStoreConnectTestFlightDistributionRequest, AppStoreConnectTestFlightDistributionResult> _distributeTestFlight;
     private readonly Func<AppStoreConnectBetaAppReviewSubmissionRequest, AppStoreConnectBetaAppReviewSubmissionResult> _submitTestFlightBetaReview;
     private readonly Func<AppStoreConnectReviewSubmissionRequest, AppStoreConnectReviewSubmissionResult> _submitAppleReview;
+    private readonly Func<AppStoreConnectApiCredential, AppStoreConnectReleaseReadinessRequest, AppStoreConnectReleaseReadinessResult> _checkAppleReleaseReadiness;
     private readonly Func<AppStoreConnectVersionReleaseRequest, AppStoreConnectVersionReleaseResult> _releaseAppleVersion;
     private readonly Func<AppStoreConnectReleaseStateRequest, AppStoreConnectReleaseStateResult> _getAppleReleaseState;
     private readonly Func<AppStoreConnectApiCredential, string, AppStoreConnectBuildUploadInfo?> _getAppleBuildUpload;
@@ -170,7 +171,8 @@ internal sealed partial class PowerForgeReleaseService
         Func<AppStoreConnectApiCredential, string, ApplePlatform, long>? getHighestAppleBuildNumber = null,
         Func<AppStoreConnectApiCredential, string, AppStoreConnectAppInfo[]>? findAppleApps = null,
         Func<AppleNotarizationRequest, AppleNotarizationResult>? notarizeAppleArtifact = null,
-        Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan>? planAppleGovernance = null)
+        Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan>? planAppleGovernance = null,
+        Func<AppStoreConnectApiCredential, AppStoreConnectReleaseReadinessRequest, AppStoreConnectReleaseReadinessResult>? checkAppleReleaseReadiness = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
@@ -202,6 +204,7 @@ internal sealed partial class PowerForgeReleaseService
         _distributeTestFlight = distributeTestFlight ?? DistributeTestFlight;
         _submitTestFlightBetaReview = submitTestFlightBetaReview ?? SubmitTestFlightBetaReview;
         _submitAppleReview = submitAppleReview ?? SubmitAppleReview;
+        _checkAppleReleaseReadiness = checkAppleReleaseReadiness ?? CheckAppleReleaseReadiness;
         _releaseAppleVersion = releaseAppleVersion ?? ReleaseAppleVersion;
         _getAppleReleaseState = getAppleReleaseState ?? GetAppleReleaseState;
         _getAppleBuildUpload = getAppleBuildUpload ?? GetAppleBuildUpload;
@@ -2321,6 +2324,19 @@ internal sealed partial class PowerForgeReleaseService
 
         using var client = new AppStoreConnectClient(request.Credential);
         return new AppStoreConnectReviewSubmissionService(client).SubmitAsync(request).GetAwaiter().GetResult();
+    }
+
+    private static AppStoreConnectReleaseReadinessResult CheckAppleReleaseReadiness(
+        AppStoreConnectApiCredential credential,
+        AppStoreConnectReleaseReadinessRequest request)
+    {
+        if (credential is null)
+            throw new ArgumentNullException(nameof(credential));
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+
+        using var client = new AppStoreConnectClient(credential);
+        return new AppStoreConnectReleaseReadinessService(client).CheckAsync(request).GetAwaiter().GetResult();
     }
 
     private static AppStoreConnectVersionReleaseResult ReleaseAppleVersion(AppStoreConnectVersionReleaseRequest request)

@@ -12,6 +12,8 @@ internal sealed class AppleReleaseCliPlanSummary
 
     public string ReceiptPath { get; set; } = string.Empty;
 
+    public string? PlanSha256 { get; set; }
+
     public bool Resume { get; set; }
 
     public bool WaitForProcessing { get; set; }

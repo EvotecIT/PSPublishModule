@@ -238,7 +238,21 @@ public sealed partial class AppStoreConnectGovernanceService
         AppStoreConnectGovernanceChange next)
     {
         if (!string.Equals(next.ResourceType, "AppPriceSchedule", StringComparison.Ordinal))
-            return new[] { next };
+        {
+            if (!string.Equals(next.ResourceType, "AccessibilityDeclaration", StringComparison.Ordinal) ||
+                next.Action is not (AppStoreConnectGovernanceChangeAction.Create or AppStoreConnectGovernanceChangeAction.Update))
+            {
+                return new[] { next };
+            }
+
+            return changes
+                .TakeWhile(change =>
+                    ReferenceEquals(change, next) ||
+                    (string.Equals(change.ResourceType, "AccessibilityDeclaration", StringComparison.Ordinal) &&
+                     string.Equals(change.Key, next.Key, StringComparison.Ordinal) &&
+                     change.Action == AppStoreConnectGovernanceChangeAction.Publish))
+                .ToArray();
+        }
 
         return changes
             .TakeWhile(change =>
@@ -346,6 +360,11 @@ public sealed partial class AppStoreConnectGovernanceService
             {
                 Add(changes, "Accessibility", "AccessibilityDeclaration", desired.DeviceFamily, AppStoreConnectGovernanceChangeAction.Create,
                     $"Create reviewed accessibility facts for '{desired.DeviceFamily}'.");
+                if (desired.Publish)
+                {
+                    Add(changes, "Accessibility", "AccessibilityDeclaration", desired.DeviceFamily, AppStoreConnectGovernanceChangeAction.Publish,
+                        $"Publish the reviewed accessibility declaration for '{desired.DeviceFamily}' as part of creation.");
+                }
                 continue;
             }
             if (!AccessibilityMatches(existing, desired))
@@ -353,7 +372,7 @@ public sealed partial class AppStoreConnectGovernanceService
                 Add(changes, "Accessibility", "AccessibilityDeclaration", desired.DeviceFamily, AppStoreConnectGovernanceChangeAction.Update,
                     $"Update reviewed accessibility facts for '{desired.DeviceFamily}'.", existing.Id);
             }
-            else if (desired.Publish && !Same(existing.State, "PUBLISHED"))
+            if (desired.Publish && !Same(existing.State, "PUBLISHED"))
             {
                 Add(changes, "Accessibility", "AccessibilityDeclaration", desired.DeviceFamily, AppStoreConnectGovernanceChangeAction.Publish,
                     $"Publish the reviewed accessibility declaration for '{desired.DeviceFamily}'.", existing.Id);

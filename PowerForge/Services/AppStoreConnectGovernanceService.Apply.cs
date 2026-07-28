@@ -55,7 +55,11 @@ public sealed partial class AppStoreConnectGovernanceService
     {
         var declaration = spec.Accessibility.Single(item => Same(item.DeviceFamily, change.Key));
         if (change.Action == AppStoreConnectGovernanceChangeAction.Create)
-            _ = await _client.CreateAccessibilityDeclarationAsync(spec.AppId, declaration, cancellationToken).ConfigureAwait(false);
+        {
+            var created = await _client.CreateAccessibilityDeclarationAsync(spec.AppId, declaration, cancellationToken).ConfigureAwait(false);
+            if (declaration.Publish)
+                _ = await _client.UpdateAccessibilityDeclarationAsync(created.Id, declaration, cancellationToken).ConfigureAwait(false);
+        }
         else
             _ = await _client.UpdateAccessibilityDeclarationAsync(RequiredId(change), declaration, cancellationToken).ConfigureAwait(false);
     }

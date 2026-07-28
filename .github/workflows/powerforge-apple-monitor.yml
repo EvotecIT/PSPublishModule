@@ -139,7 +139,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Unable to enumerate all open repository issues.' }
           $pages = @($pagesJson | ConvertFrom-Json -Depth 20)
           $open = @($pages | ForEach-Object { @($_) } | Where-Object { $null -eq $_.pull_request })
-          $issues = @($open | Where-Object { $_.title -eq $env:ISSUE_TITLE } | Sort-Object number)
+          $monitorMarker = '<!-- powerforge-apple-monitor-incident:v1 -->'
+          $issues = @($open | Where-Object {
+            $_.title -eq $env:ISSUE_TITLE -and ([string] $_.body).Contains($monitorMarker)
+          } | Sort-Object number)
           $issue = $issues | Select-Object -First 1
           $structured = if ([string]::IsNullOrWhiteSpace($env:STRUCTURED_DIAGNOSTICS)) {
             @()
@@ -165,6 +168,7 @@ jobs:
             "- **$($_.code)** [$($_.severity)]: $($_.summary)`n  - Action: $($_.action)"
           })
           $body = @(
+            $monitorMarker,
             'PowerForge Apple Doctor detected a release, upload, signing, metadata, screenshot, review, or observability problem before relying on Apple email.',
             '',
             "Run: $env:RUN_URL",
