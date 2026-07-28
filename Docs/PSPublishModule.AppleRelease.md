@@ -200,7 +200,7 @@ Use the same entry point for each transition:
 | `Prepare` | Creates/updates versions, metadata, app information, build selection, and readiness. |
 | `Screenshots` | Validates and syncs configured screenshot sets as a separate, deliberate transition. |
 | `TestFlight` | Assigns the processed build to configured groups and testers. |
-| `Advance` | Resumes versioning, archive, upload, preparation, metadata, screenshots, readiness, and configured TestFlight distribution, then stops before any review or public-release action. |
+| `Advance` | Resumes versioning, archive, upload, preparation, metadata, readiness, configured TestFlight distribution, and screenshots only when `SyncScreenshots` is explicitly enabled; then stops before any review or public-release action. |
 | `SubmitTestFlightReview` | Submits external TestFlight distribution for Beta App Review. |
 | `SubmitAppReview` | Submits a ready App Store version for App Review. |
 | `Release` | Publishes a version waiting for developer release. |
@@ -226,6 +226,8 @@ powerforge apple-release Advance --config powerforge.release.json --confirm-appl
 `Advance` is intentionally safe to resume. It acquires the configured operation lock,
 uses a separate plan receipt, checks the exact version/build remotely, and stops before
 `SubmitTestFlightReview`, `SubmitAppReview`, or `Release`.
+Screenshot replacement is opt-in during `Advance`. Keep `SyncScreenshots=false` when the
+protected `powerforge-apple-screenshots.yml` lane owns capture, approval, and immediate sync.
 
 ## Reusable GitHub workflows
 

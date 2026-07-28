@@ -134,6 +134,42 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public void Execute_AppleAdvancePlan_RequiresExplicitScreenshotOptIn(
+        bool configuredSync,
+        bool expectedSync)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            File.WriteAllText(Path.Combine(root, "screenshots.json"), "{}");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.ScreenshotConfigPath = "screenshots.json";
+            spec.AppleApps.SyncScreenshots = configuredSync;
+
+            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    AppleAction = PowerForgeAppleReleaseAction.Advance
+                });
+
+            var plan = Assert.IsType<PowerForgeAppleReleasePlan>(result.AppleAppPlan);
+            Assert.Equal(expectedSync, plan.SyncScreenshots);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Fact]
     public void Execute_AppleScreenshotReplacementPlan_IsIsolatedAndRequiresConfirmation()
     {

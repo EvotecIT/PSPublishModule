@@ -25,6 +25,7 @@ internal sealed partial class PowerForgeReleaseService
         if (request.AppleAction == PowerForgeAppleReleaseAction.Configured)
             return;
 
+        var syncScreenshotsOnAdvance = options.SyncScreenshots;
         options.Archive = false;
         options.Upload = false;
         options.PrepareDistribution = false;
@@ -76,7 +77,8 @@ internal sealed partial class PowerForgeReleaseService
                 options.SelectBuildForDistribution = true;
                 options.SyncMetadata = HasConfiguredPath(options.MetadataConfigPath, options.MetadataConfigPaths);
                 options.SyncAppInfo = HasConfiguredPath(options.AppInfoConfigPath, options.AppInfoConfigPaths);
-                options.SyncScreenshots = HasConfiguredPath(options.ScreenshotConfigPath, options.ScreenshotConfigPaths);
+                options.SyncScreenshots = syncScreenshotsOnAdvance &&
+                                          HasConfiguredPath(options.ScreenshotConfigPath, options.ScreenshotConfigPaths);
                 options.CheckReleaseReadiness = true;
                 options.DistributeTestFlight =
                     (options.TestFlightBetaGroupIds?.Length ?? 0) > 0 ||
