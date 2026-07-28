@@ -351,6 +351,7 @@ powerforge apple-screenshots manifest \
   --version 1.6.0 \
   --source-commit 0123456789abcdef0123456789abcdef01234567 \
   --approved-by release-owner \
+  --allowed-root build/appstore-screenshots \
   --runtime "iOS 26.0" \
   --device "iPhone 17 Pro Max" \
   --theme light \

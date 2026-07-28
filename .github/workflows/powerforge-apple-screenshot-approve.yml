@@ -33,8 +33,8 @@ on:
         description: Exact x.y.z marketing version represented by the captures.
         required: true
         type: string
-      allowed_approvers_json:
-        description: JSON array of GitHub logins authorized to approve exact screenshot artifacts.
+      allowed_dispatchers_json:
+        description: JSON array of GitHub logins authorized to dispatch exact screenshot publication; environment review remains enforced by GitHub.
         required: true
         type: string
       target:
@@ -67,13 +67,18 @@ on:
         required: false
         default: app-store-publication
         type: string
+      environment_name:
+        description: GitHub environment protecting screenshot publication credentials.
+        required: false
+        default: apple-production
+        type: string
     secrets:
       app_store_connect_issuer_id:
-        required: true
+        required: false
       app_store_connect_key_id:
-        required: true
+        required: false
       app_store_connect_private_key:
-        required: true
+        required: false
 
 concurrency:
   group: powerforge-apple-screenshot-approval-${{ github.repository }}
@@ -83,27 +88,28 @@ jobs:
   approve-and-sync:
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: 60
+    environment: ${{ inputs.environment_name }}
     permissions:
       actions: read
       contents: read
     steps:
-      - name: Verify manual approver and immutable evidence
+      - name: Verify authorized dispatcher and immutable evidence
         shell: pwsh
         env:
           SOURCE_REF: ${{ inputs.source_ref }}
           POWERFORGE_REF: ${{ inputs.powerforge_ref }}
           CAPTURE_RUN_ID: ${{ inputs.capture_run_id }}
-          APPROVERS_JSON: ${{ inputs.allowed_approvers_json }}
-          APPROVER: ${{ github.actor }}
+          DISPATCHERS_JSON: ${{ inputs.allowed_dispatchers_json }}
+          DISPATCHER: ${{ github.actor }}
         run: |
           foreach ($entry in @{ source_ref = $env:SOURCE_REF; powerforge_ref = $env:POWERFORGE_REF }.GetEnumerator()) {
             if ($entry.Value -notmatch '^[0-9A-Fa-f]{40}$') { throw "$($entry.Key) must be an exact 40-character commit SHA." }
           }
           if ($env:CAPTURE_RUN_ID -notmatch '^\d+$') { throw 'capture_run_id must be a numeric GitHub Actions run id.' }
           if ('${{ inputs.marketing_version }}' -notmatch '^\d+\.\d+\.\d+$') { throw 'marketing_version must use x.y.z.' }
-          $approvers = @($env:APPROVERS_JSON | ConvertFrom-Json -Depth 5)
-          if ($approvers.Count -eq 0 -or $env:APPROVER -notin $approvers) {
-            throw "GitHub actor '$($env:APPROVER)' is not an authorized screenshot approver."
+          $dispatchers = @($env:DISPATCHERS_JSON | ConvertFrom-Json -Depth 5)
+          if ($dispatchers.Count -eq 0 -or $env:DISPATCHER -notin $dispatchers) {
+            throw "GitHub actor '$($env:DISPATCHER)' is not an authorized screenshot publication dispatcher."
           }
 
       - name: Checkout exact approved source
@@ -158,7 +164,9 @@ jobs:
               --config $configPath `
               --version '${{ inputs.marketing_version }}' `
               --source-commit '${{ inputs.source_ref }}' `
-              --approved-by '${{ github.actor }}' `
+              --approved-by 'GitHub protected environment: ${{ inputs.environment_name }}' `
+              --allowed-root '${{ github.workspace }}/source/${{ inputs.capture_artifact_path }}' `
+              --initiated-by '${{ github.actor }}' `
               --approval-evidence $evidence `
               --xcode-version $xcodeVersion `
               --runtime '${{ inputs.tool_runtime }}' `

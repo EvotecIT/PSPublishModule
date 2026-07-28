@@ -20,6 +20,15 @@ public sealed class AppStoreConnectScreenshotApprovalService
         }
         if (string.IsNullOrWhiteSpace(request.ApprovedBy))
             throw new ArgumentException("ApprovedBy is required.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.AllowedRoot))
+            throw new ArgumentException("AllowedRoot is required.", nameof(request));
+
+        var allowedRoot = Path.GetFullPath(request.AllowedRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (!Directory.Exists(allowedRoot))
+            throw new DirectoryNotFoundException($"Reviewed screenshot root does not exist: {allowedRoot}");
+        if ((File.GetAttributes(allowedRoot) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException($"Reviewed screenshot root must not be a symbolic link or reparse point: {allowedRoot}");
 
         var spec = CloneWithoutApprovalRequirement(request.Spec);
         var validation = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
@@ -34,6 +43,7 @@ public sealed class AppStoreConnectScreenshotApprovalService
 
         var entries = validation.ScreenshotSets.SelectMany(set => set.Files.Select(file =>
         {
+            EnsureWithinAllowedRoot(file, allowedRoot);
             if (!AppStoreConnectScreenshotSyncConfigValidator.TryReadPngDimensions(file, out var width, out var height))
                 throw new InvalidOperationException($"Screenshot is not a readable PNG: {file}");
             return new AppStoreConnectScreenshotApprovalEntry
@@ -62,6 +72,32 @@ public sealed class AppStoreConnectScreenshotApprovalService
             ApprovalEvidence = Normalize(request.ApprovalEvidence),
             Screenshots = entries
         };
+    }
+
+    private static void EnsureWithinAllowedRoot(string file, string allowedRoot)
+    {
+        var candidate = Path.GetFullPath(file);
+        var comparison = Path.DirectorySeparatorChar == '\\'
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (!candidate.StartsWith(allowedRoot + Path.DirectorySeparatorChar, comparison) &&
+            !candidate.StartsWith(allowedRoot + Path.AltDirectorySeparatorChar, comparison))
+        {
+            throw new InvalidOperationException(
+                $"Screenshot is outside the reviewed capture root '{allowedRoot}': {candidate}");
+        }
+
+        var current = candidate;
+        while (!current.Equals(allowedRoot, comparison))
+        {
+            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Screenshot path must not traverse a symbolic link or reparse point: {current}");
+            }
+            current = Path.GetDirectoryName(current)
+                ?? throw new InvalidOperationException("Screenshot path could not be validated against the reviewed capture root.");
+        }
     }
 
     private static AppStoreConnectScreenshotSyncSpec CloneWithoutApprovalRequirement(

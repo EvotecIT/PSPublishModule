@@ -2,6 +2,46 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests
 {
+    [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.Status, true)]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor, true)]
+    [InlineData(PowerForgeAppleReleaseAction.TestFlight, true)]
+    [InlineData(PowerForgeAppleReleaseAction.Prepare, false)]
+    [InlineData(PowerForgeAppleReleaseAction.Screenshots, false)]
+    [InlineData(PowerForgeAppleReleaseAction.SubmitAppReview, false)]
+    [InlineData(PowerForgeAppleReleaseAction.Release, false)]
+    public void TestFlightOnlyRoute_ExecutesOnlyItsSupportedControlPlaneActions(
+        PowerForgeAppleReleaseAction action,
+        bool expected)
+    {
+        var app = new PowerForgeAppleAppReleaseTargetPlan
+        {
+            DistributionRoute = AppleDistributionRoute.TestFlightOnly,
+            TestFlightPolicy = AppleTestFlightPolicy.Internal
+        };
+
+        Assert.Equal(expected, PowerForgeReleaseService.ShouldExecuteAppleTarget(action, app));
+    }
+
+    [Theory]
+    [InlineData(AppleTestFlightPolicy.Disabled, false)]
+    [InlineData(AppleTestFlightPolicy.Internal, false)]
+    [InlineData(AppleTestFlightPolicy.External, true)]
+    public void TestFlightReview_ExecutesOnlyForExternalAudience(AppleTestFlightPolicy policy, bool expected)
+    {
+        var app = new PowerForgeAppleAppReleaseTargetPlan
+        {
+            DistributionRoute = AppleDistributionRoute.TestFlightOnly,
+            TestFlightPolicy = policy
+        };
+
+        Assert.Equal(
+            expected,
+            PowerForgeReleaseService.ShouldExecuteAppleTarget(
+                PowerForgeAppleReleaseAction.SubmitTestFlightReview,
+                app));
+    }
+
     [Fact]
     public void AppleReleaseDoctor_FindsControlPlaneFailuresBeforeSubmission()
     {

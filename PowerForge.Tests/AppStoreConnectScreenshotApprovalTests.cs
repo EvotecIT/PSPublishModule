@@ -21,6 +21,7 @@ public sealed class AppStoreConnectScreenshotApprovalTests
                 {
                     Spec = CreateSpec(),
                     BaseDirectory = root.FullName,
+                    AllowedRoot = screenshotFolder.FullName,
                     VersionString = "1.5.0",
                     SourceCommit = "0123456789abcdef0123456789abcdef01234567",
                     ApprovedBy = "release-owner",
@@ -41,6 +42,37 @@ public sealed class AppStoreConnectScreenshotApprovalTests
             Assert.Equal("release-owner", manifest.ApprovedBy);
             Assert.Equal("workflow-initiator", manifest.InitiatedBy);
             Assert.Equal("https://github.example/actions/runs/123", manifest.ApprovalEvidence);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Create_RejectsScreenshotOutsideReviewedCaptureRoot()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.ScreenshotApproval", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var reviewedFolder = Directory.CreateDirectory(Path.Combine(root.FullName, "reviewed"));
+            var screenshotFolder = Directory.CreateDirectory(Path.Combine(root.FullName, "screenshots"));
+            File.WriteAllBytes(Path.Combine(screenshotFolder.FullName, "01-home.png"), Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII="));
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new AppStoreConnectScreenshotApprovalService().Create(
+                    new AppStoreConnectScreenshotApprovalRequest
+                    {
+                        Spec = CreateSpec(),
+                        BaseDirectory = root.FullName,
+                        AllowedRoot = reviewedFolder.FullName,
+                        VersionString = "1.5.0",
+                        SourceCommit = "0123456789abcdef0123456789abcdef01234567",
+                        ApprovedBy = "release-owner"
+                    }));
+
+            Assert.Contains("outside the reviewed capture root", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

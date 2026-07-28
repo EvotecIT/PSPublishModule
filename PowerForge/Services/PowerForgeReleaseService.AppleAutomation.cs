@@ -144,25 +144,24 @@ internal sealed partial class PowerForgeReleaseService
     private static bool UsesExternalTestFlight(PowerForgeAppleAppReleaseTargetPlan app)
         => UsesTestFlight(app) && app.TestFlightPolicy != AppleTestFlightPolicy.Internal;
 
-    private static bool ShouldExecuteAppleTarget(
+    internal static bool ShouldExecuteAppleTarget(
         PowerForgeAppleReleaseAction action,
         PowerForgeAppleAppReleaseTargetPlan app)
     {
         if (!IsIndependentReleaseTarget(app))
             return false;
-        if (action == PowerForgeAppleReleaseAction.Status ||
-            action == PowerForgeAppleReleaseAction.Doctor ||
-            action == PowerForgeAppleReleaseAction.Prepare ||
-            action == PowerForgeAppleReleaseAction.Screenshots ||
-            action == PowerForgeAppleReleaseAction.TestFlight ||
-            action == PowerForgeAppleReleaseAction.SubmitTestFlightReview ||
-            action == PowerForgeAppleReleaseAction.SubmitAppReview ||
-            action == PowerForgeAppleReleaseAction.Release)
+        return action switch
         {
-            return UsesAppStoreConnect(app);
-        }
-
-        return true;
+            PowerForgeAppleReleaseAction.Status or
+            PowerForgeAppleReleaseAction.Doctor => UsesAppStoreConnect(app),
+            PowerForgeAppleReleaseAction.TestFlight => UsesTestFlight(app),
+            PowerForgeAppleReleaseAction.SubmitTestFlightReview => UsesExternalTestFlight(app),
+            PowerForgeAppleReleaseAction.Prepare or
+            PowerForgeAppleReleaseAction.Screenshots or
+            PowerForgeAppleReleaseAction.SubmitAppReview or
+            PowerForgeAppleReleaseAction.Release => app.DistributionRoute == AppleDistributionRoute.AppStore,
+            _ => true
+        };
     }
 
     private static void ValidateAppleAutomation(PowerForgeAppleReleaseAutomationOptions automation)

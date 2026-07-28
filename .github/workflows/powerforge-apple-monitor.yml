@@ -36,13 +36,18 @@ on:
         required: false
         default: Apple release monitor detected a failure
         type: string
+      environment_name:
+        description: GitHub environment containing Apple monitoring credentials.
+        required: false
+        default: apple-release
+        type: string
     secrets:
       app_store_connect_issuer_id:
-        required: true
+        required: false
       app_store_connect_key_id:
-        required: true
+        required: false
       app_store_connect_private_key:
-        required: true
+        required: false
 
 concurrency:
   group: powerforge-apple-monitor-${{ github.repository }}
@@ -52,6 +57,7 @@ jobs:
   doctor:
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: 30
+    environment: ${{ inputs.environment_name }}
     permissions:
       contents: read
       issues: write

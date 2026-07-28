@@ -21,7 +21,7 @@ Updates an App Store Connect webhook.
 
 ### EXAMPLE 1
 ```powershell
-Set-AppStoreConnectWebhook -IssuerId 'Value' -KeyId 'Value' -WebhookId 'Value' -Name 'Name' -Url 'Value'
+Set-AppStoreConnectWebhook -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath './AuthKey.p8' -WebhookId 'webhook-id' -Name 'Build status' -Url 'https://releases.example.com/apple/webhook' -Secret 'a-strong-webhook-secret' -EventType 'BUILD_UPLOAD_STATE_UPDATED'
 ```
 
 

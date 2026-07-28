@@ -160,6 +160,9 @@ public sealed class AppStoreConnectScreenshotApprovalRequest
     /// <summary>Base directory used to resolve screenshot paths.</summary>
     public string BaseDirectory { get; set; } = Directory.GetCurrentDirectory();
 
+    /// <summary>Reviewed capture root that must contain every selected screenshot.</summary>
+    public string AllowedRoot { get; set; } = string.Empty;
+
     /// <summary>Marketing version represented by the captures.</summary>
     public string VersionString { get; set; } = string.Empty;
 

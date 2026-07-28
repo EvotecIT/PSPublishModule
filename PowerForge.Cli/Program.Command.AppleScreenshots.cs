@@ -6,7 +6,7 @@ internal static partial class Program
 {
     private const string AppleScreenshotsUsage =
         "Usage: powerforge apple-screenshots manifest --config <screenshots.json> --version <x.y.z> " +
-        "--source-commit <sha> --approved-by <identity> [--out <manifest.json>] " +
+        "--source-commit <sha> --approved-by <identity> --allowed-root <reviewed-capture-root> [--out <manifest.json>] " +
         "[--initiated-by <identity>] [--approval-evidence <url-or-id>] " +
         "[--xcode-version <value>] [--runtime <value>] [--device <value>] [--theme <value>] [--scenario <value>] [--output json]";
 
@@ -35,6 +35,7 @@ internal static partial class Program
                 {
                     Spec = spec,
                     BaseDirectory = baseDirectory,
+                    AllowedRoot = Path.GetFullPath(RequiredOption(argv, "--allowed-root")),
                     VersionString = RequiredOption(argv, "--version"),
                     SourceCommit = RequiredOption(argv, "--source-commit"),
                     ApprovedBy = RequiredOption(argv, "--approved-by"),

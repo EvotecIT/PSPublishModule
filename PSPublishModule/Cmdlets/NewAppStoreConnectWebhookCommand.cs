@@ -6,6 +6,9 @@ using PowerForge;
 namespace PSPublishModule;
 
 /// <summary>Creates an App Store Connect webhook.</summary>
+/// <example>
+/// <code>New-AppStoreConnectWebhook -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath './AuthKey.p8' -AppId '6778025328' -Name 'Build status' -Url 'https://releases.example.com/apple/webhook' -Secret 'a-strong-webhook-secret' -EventType 'BUILD_UPLOAD_STATE_UPDATED'</code>
+/// </example>
 [Cmdlet(VerbsCommon.New, "AppStoreConnectWebhook", SupportsShouldProcess = true)]
 [OutputType(typeof(AppStoreConnectWebhookInfo))]
 public sealed class NewAppStoreConnectWebhookCommand : AsyncPSCmdlet

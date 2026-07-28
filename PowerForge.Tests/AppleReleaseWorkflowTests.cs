@@ -96,6 +96,10 @@ public sealed class AppleReleaseWorkflowTests
         Assert.DoesNotContain("gh pr merge", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("SubmitAppReview", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("ReleaseApprovedVersion", workflow, StringComparison.Ordinal);
+        Assert.Contains("version_pr_token", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("|| github.token", workflow, StringComparison.Ordinal);
+        Assert.Contains("GH_TOKEN: ${{ secrets.version_pr_token }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("version_pr_token must not be the repository GITHUB_TOKEN", workflow, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -110,7 +114,8 @@ public sealed class AppleReleaseWorkflowTests
         Assert.DoesNotContain("SubmitAppReview", advance, StringComparison.Ordinal);
         Assert.DoesNotContain("action: Release", advance, StringComparison.Ordinal);
         Assert.Contains("environment: ${{ inputs.environment_name }}", approval, StringComparison.Ordinal);
-        Assert.Contains("allowed_approvers_json", approval, StringComparison.Ordinal);
+        Assert.Contains("allowed_dispatchers_json", approval, StringComparison.Ordinal);
+        Assert.Contains("authorized Apple release dispatcher", approval, StringComparison.Ordinal);
         Assert.Contains("${{ github.actor }}", approval, StringComparison.Ordinal);
         Assert.Contains("@('SubmitTestFlightReview', 'SubmitAppReview', 'Release')", approval, StringComparison.Ordinal);
         Assert.Contains("plan-only: \"true\"", approval, StringComparison.Ordinal);
@@ -140,6 +145,7 @@ public sealed class AppleReleaseWorkflowTests
         var script = Read(root, ".github", "actions", "apple-release", "Invoke-PowerForgeAppleRelease.ps1");
 
         Assert.Contains("action: Doctor", workflow, StringComparison.Ordinal);
+        Assert.Contains("environment: ${{ inputs.environment_name }}", workflow, StringComparison.Ordinal);
         Assert.Contains("Build the exact monitored PowerForge source", workflow, StringComparison.Ordinal);
         Assert.Contains("./powerforge-shared/.github/actions/build-powerforge", workflow, StringComparison.Ordinal);
         Assert.Contains("runtime: ${{ inputs.tool_runtime }}", workflow, StringComparison.Ordinal);
@@ -168,6 +174,7 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("escapes the checked-out source", workflow, StringComparison.Ordinal);
         Assert.Contains("environment: ${{ inputs.approval_environment }}", workflow, StringComparison.Ordinal);
         Assert.Contains("apple-screenshots manifest", workflow, StringComparison.Ordinal);
+        Assert.Contains("--allowed-root '${{ github.workspace }}/source/${{ inputs.capture_artifact_path }}'", workflow, StringComparison.Ordinal);
         Assert.Contains("--source-commit '${{ inputs.source_ref }}'", workflow, StringComparison.Ordinal);
         Assert.Contains("--approved-by 'GitHub protected environment:", workflow, StringComparison.Ordinal);
         Assert.Contains("--initiated-by '${{ github.actor }}'", workflow, StringComparison.Ordinal);
@@ -200,12 +207,30 @@ public sealed class AppleReleaseWorkflowTests
 
         Assert.Contains("Exact source commit to capture", capture, StringComparison.Ordinal);
         Assert.Contains("powerforge-apple-screenshots-${{ inputs.source_ref }}", capture, StringComparison.Ordinal);
-        Assert.Contains("allowed_approvers_json", approval, StringComparison.Ordinal);
+        Assert.Contains("allowed_dispatchers_json", approval, StringComparison.Ordinal);
         Assert.Contains("${{ github.actor }}", approval, StringComparison.Ordinal);
+        Assert.Contains("--approved-by 'GitHub protected environment: ${{ inputs.environment_name }}'", approval, StringComparison.Ordinal);
         Assert.Contains("run-id: ${{ inputs.capture_run_id }}", approval, StringComparison.Ordinal);
         Assert.Contains("approval-evidence", approval, StringComparison.Ordinal);
         Assert.Contains("target: ${{ inputs.target }}", approval, StringComparison.Ordinal);
-        Assert.DoesNotContain("environment:", approval, StringComparison.Ordinal);
+        Assert.Contains("environment: ${{ inputs.environment_name }}", approval, StringComparison.Ordinal);
+        Assert.Contains("--allowed-root '${{ github.workspace }}/source/${{ inputs.capture_artifact_path }}'", approval, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WebhookCommandExamplesIncludeEveryMandatoryMutationParameter()
+    {
+        var root = FindRepoRoot();
+        foreach (var command in new[] { "New", "Set" })
+        {
+            var source = Read(root, "PSPublishModule", "Cmdlets", $"{command}AppStoreConnectWebhookCommand.cs");
+            var generated = Read(root, "Module", "Docs", $"{command}-AppStoreConnectWebhook.md");
+
+            Assert.Contains("-Secret 'a-strong-webhook-secret'", source, StringComparison.Ordinal);
+            Assert.Contains("-EventType 'BUILD_UPLOAD_STATE_UPDATED'", source, StringComparison.Ordinal);
+            Assert.Contains("-Secret 'a-strong-webhook-secret'", generated, StringComparison.Ordinal);
+            Assert.Contains("-EventType 'BUILD_UPLOAD_STATE_UPDATED'", generated, StringComparison.Ordinal);
+        }
     }
 
     private static string Read(string root, params string[] parts)

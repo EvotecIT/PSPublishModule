@@ -36,14 +36,20 @@ on:
         required: false
         default: osx-arm64
         type: string
+      environment_name:
+        description: GitHub environment containing version-PR credentials.
+        required: false
+        default: apple-release
+        type: string
     secrets:
       app_store_connect_issuer_id:
-        required: true
+        required: false
       app_store_connect_key_id:
-        required: true
+        required: false
       app_store_connect_private_key:
-        required: true
-      github-token:
+        required: false
+      version_pr_token:
+        description: GitHub App or PAT token that can create a PR and trigger downstream workflows. The repository GITHUB_TOKEN is intentionally unsupported.
         required: false
 
 concurrency:
@@ -54,6 +60,7 @@ jobs:
   version:
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: 20
+    environment: ${{ inputs.environment_name }}
     permissions:
       contents: write
       pull-requests: write
@@ -66,9 +73,17 @@ jobs:
         shell: pwsh
         env:
           POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+          VERSION_PR_TOKEN: ${{ secrets.version_pr_token }}
+          DEFAULT_GITHUB_TOKEN: ${{ github.token }}
         run: |
           if ($env:POWERFORGE_REF -notmatch '^[0-9A-Fa-f]{40}$') {
             throw 'powerforge_ref must be an exact 40-character commit SHA.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:VERSION_PR_TOKEN)) {
+            throw 'The apple-release environment must provide version_pr_token from a GitHub App or PAT.'
+          }
+          if ($env:VERSION_PR_TOKEN -eq $env:DEFAULT_GITHUB_TOKEN) {
+            throw 'version_pr_token must not be the repository GITHUB_TOKEN because GitHub suppresses downstream workflow runs from that token.'
           }
 
       - name: Checkout the trusted default branch
@@ -137,7 +152,7 @@ jobs:
         shell: pwsh
         working-directory: source
         env:
-          GH_TOKEN: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
+          GH_TOKEN: ${{ secrets.version_pr_token }}
           DEFAULT_BRANCH: ${{ inputs.default_branch }}
           MARKETING_VERSION: ${{ steps.version.outputs.marketing-version }}
           BUILD_NUMBER: ${{ steps.version.outputs.build-number }}

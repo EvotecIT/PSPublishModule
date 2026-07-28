@@ -40,18 +40,18 @@ on:
         required: false
         default: apple-release-approval
         type: string
-      allowed_approvers_json:
-        description: Optional JSON array of GitHub logins allowed to authorize the protected transition.
+      allowed_dispatchers_json:
+        description: Optional JSON array of GitHub logins allowed to dispatch the protected transition; environment review remains enforced by GitHub.
         required: false
         default: '[]'
         type: string
     secrets:
       app_store_connect_issuer_id:
-        required: true
+        required: false
       app_store_connect_key_id:
-        required: true
+        required: false
       app_store_connect_private_key:
-        required: true
+        required: false
 
 concurrency:
   group: powerforge-apple-${{ github.repository }}
@@ -71,8 +71,8 @@ jobs:
           ACTION: ${{ inputs.action }}
           SOURCE_REF: ${{ inputs.source_ref }}
           POWERFORGE_REF: ${{ inputs.powerforge_ref }}
-          APPROVERS_JSON: ${{ inputs.allowed_approvers_json }}
-          APPROVER: ${{ github.actor }}
+          DISPATCHERS_JSON: ${{ inputs.allowed_dispatchers_json }}
+          DISPATCHER: ${{ github.actor }}
         run: |
           if ($env:ACTION -notin @('SubmitTestFlightReview', 'SubmitAppReview', 'Release')) {
             throw "Approval workflow accepts only SubmitTestFlightReview, SubmitAppReview, or Release."
@@ -80,9 +80,9 @@ jobs:
           foreach ($entry in @{ source_ref = $env:SOURCE_REF; powerforge_ref = $env:POWERFORGE_REF }.GetEnumerator()) {
             if ($entry.Value -notmatch '^[0-9A-Fa-f]{40}$') { throw "$($entry.Key) must be an exact 40-character commit SHA." }
           }
-          $approvers = @($env:APPROVERS_JSON | ConvertFrom-Json -Depth 5)
-          if ($approvers.Count -gt 0 -and $env:APPROVER -notin $approvers) {
-            throw "GitHub actor '$($env:APPROVER)' is not an authorized Apple release approver."
+          $dispatchers = @($env:DISPATCHERS_JSON | ConvertFrom-Json -Depth 5)
+          if ($dispatchers.Count -gt 0 -and $env:DISPATCHER -notin $dispatchers) {
+            throw "GitHub actor '$($env:DISPATCHER)' is not an authorized Apple release dispatcher."
           }
 
       - name: Checkout the exact approved source
