@@ -41,6 +41,7 @@ internal sealed partial class PowerForgeReleaseService
         switch (request.AppleAction)
         {
             case PowerForgeAppleReleaseAction.Status:
+            case PowerForgeAppleReleaseAction.Doctor:
             case PowerForgeAppleReleaseAction.Version:
             case PowerForgeAppleReleaseAction.Cleanup:
                 break;
@@ -118,6 +119,41 @@ internal sealed partial class PowerForgeReleaseService
         => action == PowerForgeAppleReleaseAction.Upload ||
            action == PowerForgeAppleReleaseAction.UploadExisting ||
            action == PowerForgeAppleReleaseAction.Advance;
+
+    private static bool UsesAppStoreConnect(PowerForgeAppleAppReleaseTargetPlan app)
+        => app.DistributionRoute == AppleDistributionRoute.AppStore ||
+           app.DistributionRoute == AppleDistributionRoute.TestFlightOnly;
+
+    private static bool IsIndependentReleaseTarget(PowerForgeAppleAppReleaseTargetPlan app)
+        => app.DistributionRoute != AppleDistributionRoute.EmbeddedCompanion &&
+           app.DistributionRoute != AppleDistributionRoute.DevelopmentOnly;
+
+    private static bool UsesTestFlight(PowerForgeAppleAppReleaseTargetPlan app)
+        => UsesAppStoreConnect(app) && app.TestFlightPolicy != AppleTestFlightPolicy.Disabled;
+
+    private static bool UsesExternalTestFlight(PowerForgeAppleAppReleaseTargetPlan app)
+        => UsesTestFlight(app) && app.TestFlightPolicy != AppleTestFlightPolicy.Internal;
+
+    private static bool ShouldExecuteAppleTarget(
+        PowerForgeAppleReleaseAction action,
+        PowerForgeAppleAppReleaseTargetPlan app)
+    {
+        if (!IsIndependentReleaseTarget(app))
+            return false;
+        if (action == PowerForgeAppleReleaseAction.Status ||
+            action == PowerForgeAppleReleaseAction.Doctor ||
+            action == PowerForgeAppleReleaseAction.Prepare ||
+            action == PowerForgeAppleReleaseAction.Screenshots ||
+            action == PowerForgeAppleReleaseAction.TestFlight ||
+            action == PowerForgeAppleReleaseAction.SubmitTestFlightReview ||
+            action == PowerForgeAppleReleaseAction.SubmitAppReview ||
+            action == PowerForgeAppleReleaseAction.Release)
+        {
+            return UsesAppStoreConnect(app);
+        }
+
+        return true;
+    }
 
     private static void ValidateAppleAutomation(PowerForgeAppleReleaseAutomationOptions automation)
     {
@@ -219,6 +255,66 @@ internal sealed partial class PowerForgeReleaseService
         return true;
     }
 
+    private bool TryResumeDirectAppleNotarization(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        PowerForgeAppleAppReleaseResult result)
+    {
+        if (!IsUploadAction(plan.Action) || !plan.Automation.Resume || !File.Exists(plan.ReceiptPath))
+            return false;
+
+        PowerForgeAppleReleaseReceipt? priorReceipt;
+        try
+        {
+            priorReceipt = JsonSerializer.Deserialize<PowerForgeAppleReleaseReceipt>(
+                File.ReadAllText(plan.ReceiptPath),
+                CreateJsonOptions());
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        if (priorReceipt is null || priorReceipt.Success)
+            return false;
+
+        var prior = priorReceipt.Targets.SingleOrDefault(target =>
+            target.Name.Equals(app.Name, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(target.BundleId, app.BundleId, StringComparison.OrdinalIgnoreCase) &&
+            target.Platform == app.Platform &&
+            target.DistributionRoute == AppleDistributionRoute.DirectNotarized &&
+            string.Equals(target.Version, app.MarketingVersion, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(target.Build, app.BuildNumber, StringComparison.OrdinalIgnoreCase));
+        if (prior is null ||
+            string.IsNullOrWhiteSpace(prior.ErrorMessage) ||
+            (prior.Stapled == true && prior.StapleValidated == true && prior.GatekeeperAccepted == true) ||
+            !string.Equals(prior.NotarizationStatus, "Accepted", StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(prior.NotarizationSubmissionId) ||
+            string.IsNullOrWhiteSpace(prior.DirectArtifactPath) ||
+            string.IsNullOrWhiteSpace(prior.DirectArtifactSha256) ||
+            (!File.Exists(prior.DirectArtifactPath) && !Directory.Exists(prior.DirectArtifactPath)))
+        {
+            return false;
+        }
+
+        result.Notarization = NotarizeDirectAppleExport(
+            plan,
+            app,
+            Path.GetFullPath(prior.DirectArtifactPath),
+            prior.NotarizationSubmissionId,
+            prior.DirectArtifactSha256);
+        result.ResumedAcceptedNotarization = true;
+        result.SkippedSteps = MergeAppleSkippedSteps(
+            result.SkippedSteps,
+            new[] { "archive", "export", "notarySubmission" });
+        if (!result.Notarization.Succeeded)
+        {
+            throw CreateAppleNotarizationFailure(app, result.Notarization);
+        }
+
+        return true;
+    }
+
     private AppStoreConnectReleaseStateResult ReadAppleReleaseState(
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app)
@@ -233,7 +329,8 @@ internal sealed partial class PowerForgeReleaseService
             Platforms = new[] { app.Platform },
             BetaGroupIds = plan.TestFlightBetaGroupIds,
             BetaGroupNames = plan.TestFlightBetaGroupNames,
-            IncludeAllBetaGroups = false
+            IncludeAllBetaGroups = false,
+            IncludeControlPlane = plan.Action == PowerForgeAppleReleaseAction.Doctor
         });
     }
 
@@ -328,9 +425,11 @@ internal sealed partial class PowerForgeReleaseService
         var remoteAction = plan.Action != PowerForgeAppleReleaseAction.Archive &&
                            plan.Action != PowerForgeAppleReleaseAction.Version &&
                            plan.Action != PowerForgeAppleReleaseAction.Cleanup;
-        foreach (var app in plan.Apps)
+        foreach (var app in plan.Apps.Where(UsesAppStoreConnect))
         {
             if (!resultByName.TryGetValue(app.Name, out var result))
+                continue;
+            if (string.IsNullOrWhiteSpace(app.AppStoreConnectAppId))
                 continue;
             if (remoteAction && (!result.Success || result.RemoteState is null))
             {
@@ -353,7 +452,10 @@ internal sealed partial class PowerForgeReleaseService
         if (IsUploadAction(plan.Action) &&
             plan.Automation.CleanupAfterProcessing &&
             results.Length == plan.Apps.Length &&
-            results.All(result => IsAppleBuildValid(result.RemoteState, result.Plan)))
+            results.Length > 0 &&
+            results.All(result => UsesAppStoreConnect(result.Plan)) &&
+            results.Where(result => UsesAppStoreConnect(result.Plan))
+                .All(result => IsAppleBuildValid(result.RemoteState, result.Plan)))
         {
             try
             {
@@ -413,15 +515,41 @@ internal sealed partial class PowerForgeReleaseService
                 }
             }
             var readiness = result?.Distribution?.Readiness;
-            var betaGroupsConfigured = plan.TestFlightBetaGroupIds.Length > 0 ||
-                                       plan.TestFlightBetaGroupNames.Length > 0;
+            var betaGroupsConfigured = UsesTestFlight(app) &&
+                                       (plan.TestFlightBetaGroupIds.Length > 0 ||
+                                        plan.TestFlightBetaGroupNames.Length > 0);
+            var diagnostics = AppleReleaseFailureClassifier.Classify(
+                    result?.ErrorMessage,
+                    build?.ProcessingState,
+                    result?.Upload?.ProcessResult.StdOut,
+                    result?.Upload?.ProcessResult.StdErr)
+                .Concat(plan.Action == PowerForgeAppleReleaseAction.Doctor
+                    ? AppleReleaseDoctor.Evaluate(plan, app, result?.RemoteState?.ControlPlane)
+                    : Array.Empty<PowerForgeAppleReleaseDiagnostic>())
+                .GroupBy(static diagnostic => diagnostic.Code, StringComparer.OrdinalIgnoreCase)
+                .Select(static group => group.First())
+                .ToArray();
+            var nextActions = BuildAppleReceiptNextActions(
+                    platform?.NextActions,
+                    betaGroupsConfigured,
+                    app.TestFlightPolicy,
+                    app.AppStoreConnectAppIdDiscovered)
+                .Concat(diagnostics.Select(static diagnostic => diagnostic.Action))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
             return new PowerForgeAppleReleaseTargetReceipt
             {
                 Name = app.Name,
                 ErrorMessage = result?.ErrorMessage,
                 BundleId = app.BundleId,
                 Platform = app.Platform,
+                DistributionRoute = app.DistributionRoute,
+                ProductRole = app.ProductRole,
+                ParentTarget = app.ParentTarget,
+                Capabilities = app.Capabilities,
+                TestFlightPolicy = app.TestFlightPolicy,
                 AppId = app.AppStoreConnectAppId,
+                AppIdDiscovered = app.AppStoreConnectAppIdDiscovered,
                 Version = state?.VersionString ?? values.MarketingVersion,
                 Build = state?.BuildNumber ?? values.BuildNumber,
                 BuildId = build?.Id,
@@ -443,12 +571,22 @@ internal sealed partial class PowerForgeReleaseService
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray(),
                 TestFlightBetaGroupsConfigured = betaGroupsConfigured,
+                ControlPlane = result?.RemoteState?.ControlPlane,
                 ArchiveCreated = result?.Archive?.Succeeded == true,
                 ProjectGenerated = result?.ProjectGenerated == true,
                 UploadPerformed = result?.Upload?.Succeeded == true,
+                DirectArtifactPath = result?.Notarization?.ArtifactPath,
+                DirectArtifactSha256 = result?.Notarization?.ArtifactSha256,
+                NotarizationSubmissionId = result?.Notarization?.SubmissionId,
+                NotarizationStatus = result?.Notarization?.Status,
+                Stapled = result?.Notarization?.Staple?.Succeeded,
+                StapleValidated = result?.Notarization?.StapleValidation?.Succeeded,
+                GatekeeperAccepted = result?.Notarization?.Assessment?.Succeeded,
+                ResumedAcceptedNotarization = result?.ResumedAcceptedNotarization == true,
                 ResumedExistingBuild = result?.ResumedExistingBuild == true,
                 SkippedSteps = result?.SkippedSteps ?? Array.Empty<string>(),
-                NextActions = BuildAppleReceiptNextActions(platform?.NextActions, betaGroupsConfigured)
+                Diagnostics = diagnostics,
+                NextActions = nextActions
             };
         }).ToArray();
         var errors = results
@@ -456,18 +594,29 @@ internal sealed partial class PowerForgeReleaseService
             .Select(static result => result.ErrorMessage!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var doctorErrors = plan.Action == PowerForgeAppleReleaseAction.Doctor
+            ? targets.SelectMany(static target => target.Diagnostics)
+                .Where(static diagnostic => diagnostic.Severity.Equals("error", StringComparison.OrdinalIgnoreCase))
+                .ToArray()
+            : Array.Empty<PowerForgeAppleReleaseDiagnostic>();
         var receipt = new PowerForgeAppleReleaseReceipt
         {
             Action = plan.Action,
             PlanOnly = false,
             CheckedAt = DateTimeOffset.UtcNow,
             Success = results.Length == plan.Apps.Length &&
-                      results.All(static result => result.Success),
-            ErrorMessage = errors.Length == 0 ? null : string.Join(" ", errors),
+                      results.All(static result => result.Success) &&
+                      doctorErrors.Length == 0,
+            ErrorMessage = errors.Length > 0
+                ? string.Join(" ", errors)
+                : doctorErrors.Length == 0
+                    ? null
+                    : string.Join(" ", doctorErrors.Select(static diagnostic => diagnostic.Summary)),
             ReceiptPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, plan.ReceiptPath).Replace('\\', '/'),
             Versioning = versioning,
             Targets = targets,
             Cleanup = cleanup,
+            Diagnostics = targets.SelectMany(static target => target.Diagnostics).ToArray(),
             NextActions = targets
                 .SelectMany(target => target.NextActions.Select(action => $"{target.Name}: {action}"))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -481,20 +630,29 @@ internal sealed partial class PowerForgeReleaseService
 
     private static string[] BuildAppleReceiptNextActions(
         string[]? actions,
-        bool betaGroupsConfigured)
+        bool betaGroupsConfigured,
+        AppleTestFlightPolicy testFlightPolicy,
+        bool appIdDiscovered)
     {
         const string submitBetaReview = "Submit the TestFlight build to Beta App Review.";
         const string configureBetaGroup =
             "External TestFlight is eligible; configure the intended beta group before explicitly requesting Beta App Review.";
+        var allowsExternalTestFlight = testFlightPolicy == AppleTestFlightPolicy.Automatic ||
+                                       testFlightPolicy == AppleTestFlightPolicy.External;
 
-        return (actions ?? Array.Empty<string>())
+        var filtered = (actions ?? Array.Empty<string>())
+            .Where(action => allowsExternalTestFlight ||
+                             !action.Contains("external TestFlight", StringComparison.OrdinalIgnoreCase) &&
+                             !action.Contains("Beta App Review", StringComparison.OrdinalIgnoreCase))
             .Select(action =>
                 !betaGroupsConfigured &&
                 string.Equals(action, submitBetaReview, StringComparison.OrdinalIgnoreCase)
                     ? configureBetaGroup
                     : action)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        if (appIdDiscovered)
+            filtered = filtered.Append("Persist the discovered App Store Connect app id in powerforge.release.json.");
+        return filtered.ToArray();
     }
 
     private static bool IsAppleBuildValid(
@@ -567,6 +725,14 @@ internal sealed partial class PowerForgeReleaseService
     {
         using var client = new AppStoreConnectClient(credential);
         return client.GetBuildUploadAsync(buildUploadId).GetAwaiter().GetResult();
+    }
+
+    private static AppStoreConnectAppInfo[] FindAppleApps(
+        AppStoreConnectApiCredential credential,
+        string bundleId)
+    {
+        using var client = new AppStoreConnectClient(credential);
+        return client.FindAppsAsync(bundleId: bundleId, limit: 20).GetAwaiter().GetResult();
     }
 
     private sealed class AppleBuildProcessingException : InvalidOperationException

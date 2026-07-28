@@ -33,9 +33,21 @@ internal sealed class AppleReleaseCliTargetSummary
 
     public ApplePlatform Platform { get; set; }
 
+    public AppleDistributionRoute DistributionRoute { get; set; }
+
+    public AppleProductRole ProductRole { get; set; }
+
+    public string? ParentTarget { get; set; }
+
+    public string[] Capabilities { get; set; } = Array.Empty<string>();
+
+    public AppleTestFlightPolicy TestFlightPolicy { get; set; }
+
     public string? BundleId { get; set; }
 
     public string? AppId { get; set; }
+
+    public bool AppIdDiscovered { get; set; }
 
     public string Scheme { get; set; } = string.Empty;
 

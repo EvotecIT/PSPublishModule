@@ -348,3 +348,52 @@ public enum AppleBuildNumberPolicy
     /// <summary>Read CURRENT_PROJECT_VERSION and increment it by one.</summary>
     IncrementExisting
 }
+
+/// <summary>
+/// Describes how an Apple product surface is delivered to users.
+/// </summary>
+public enum AppleDistributionRoute
+{
+    /// <summary>Ship through App Store Connect and the public App Store.</summary>
+    AppStore,
+    /// <summary>Ship only through TestFlight without a public App Store release.</summary>
+    TestFlightOnly,
+    /// <summary>Ship a Developer ID signed and Apple-notarized macOS artifact outside the App Store.</summary>
+    DirectNotarized,
+    /// <summary>Ship inside another target's archive, such as a Watch app, widget, extension, or helper.</summary>
+    EmbeddedCompanion,
+    /// <summary>Build for development or internal validation, but do not distribute it.</summary>
+    DevelopmentOnly
+}
+
+/// <summary>
+/// Identifies the role a configured target plays in the complete Apple product.
+/// </summary>
+public enum AppleProductRole
+{
+    /// <summary>Primary independently distributed application.</summary>
+    PrimaryApp,
+    /// <summary>Companion application embedded in or associated with a primary app.</summary>
+    CompanionApp,
+    /// <summary>App extension, widget, App Clip, notification service, or similar embedded surface.</summary>
+    Extension,
+    /// <summary>Embedded executable such as a helper, agent, or local backend.</summary>
+    EmbeddedExecutable,
+    /// <summary>Capability carried by another target rather than a separately built product.</summary>
+    Capability
+}
+
+/// <summary>
+/// Explicit TestFlight intent for an Apple release target.
+/// </summary>
+public enum AppleTestFlightPolicy
+{
+    /// <summary>Preserve legacy behavior by deriving intent from configured beta groups.</summary>
+    Automatic,
+    /// <summary>Do not distribute or recommend this target through TestFlight.</summary>
+    Disabled,
+    /// <summary>Use internal TestFlight distribution only.</summary>
+    Internal,
+    /// <summary>Use external TestFlight distribution and Beta App Review when required.</summary>
+    External
+}

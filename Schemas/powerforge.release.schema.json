@@ -344,6 +344,20 @@
             "ArtifactRetentionDays": { "type": "integer", "minimum": 0 }
           }
         },
+        "DirectDistribution": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ExportMethod": { "type": "string", "minLength": 1 },
+            "XcrunExecutable": { "type": "string", "minLength": 1 },
+            "DittoExecutable": { "type": "string", "minLength": 1 },
+            "SpctlExecutable": { "type": "string", "minLength": 1 },
+            "KeychainProfile": { "type": [ "string", "null" ] },
+            "TimeoutSeconds": { "type": "integer", "minimum": 1 },
+            "Staple": { "type": "boolean" },
+            "Assess": { "type": "boolean" }
+          }
+        },
         "AppStoreConnectApiKeyPath": { "type": [ "string", "null" ] },
         "AppStoreConnectApiKeyId": { "type": [ "string", "null" ] },
         "AppStoreConnectApiIssuerId": { "type": [ "string", "null" ] },

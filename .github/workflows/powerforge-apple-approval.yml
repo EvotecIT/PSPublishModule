@@ -30,6 +30,11 @@ on:
         required: false
         default: '["self-hosted","macOS","ARM64"]'
         type: string
+      tool_runtime:
+        description: Runtime identifier for the trusted Apple runner.
+        required: false
+        default: osx-arm64
+        type: string
       environment_name:
         description: GitHub environment with required reviewers.
         required: false
@@ -97,6 +102,13 @@ jobs:
           if ($source -ine $env:EXPECTED_SOURCE_REF) { throw "Expected source '$($env:EXPECTED_SOURCE_REF)', received '$source'." }
           if ($shared -ine $env:EXPECTED_POWERFORGE_REF) { throw "Expected shared '$($env:EXPECTED_POWERFORGE_REF)', received '$shared'." }
 
+      - name: Build exact PowerForge source
+        id: build-powerforge
+        uses: ./powerforge-shared/.github/actions/build-powerforge
+        with:
+          source-root: ${{ github.workspace }}/powerforge-shared
+          runtime: ${{ inputs.tool_runtime }}
+
       - name: Plan the protected transition
         id: plan
         uses: ./powerforge-shared/.github/actions/apple-release
@@ -104,6 +116,7 @@ jobs:
           action: ${{ inputs.action }}
           config-path: ${{ github.workspace }}/source/${{ inputs.config_path }}
           tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
+          tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           plan-only: "true"
           issuer-id: ${{ secrets.app_store_connect_issuer_id }}
           key-id: ${{ secrets.app_store_connect_key_id }}
@@ -116,6 +129,7 @@ jobs:
           action: ${{ inputs.action }}
           config-path: ${{ github.workspace }}/source/${{ inputs.config_path }}
           tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
+          tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           plan-only: "false"
           confirm: "true"
           issuer-id: ${{ secrets.app_store_connect_issuer_id }}

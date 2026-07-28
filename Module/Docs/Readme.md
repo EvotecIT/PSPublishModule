@@ -118,6 +118,9 @@ Reads App Store version information from App Store Connect.
 ### [Get-AppStoreConnectVersionLocalization](Get-AppStoreConnectVersionLocalization.md)
 Reads App Store version localizations from App Store Connect.
 
+### [Get-AppStoreConnectWebhook](Get-AppStoreConnectWebhook.md)
+Lists App Store Connect webhooks for an app.
+
 ### [Get-BenchmarkInput](Get-BenchmarkInput.md)
 Gets a caller-supplied benchmark input variable.
 
@@ -254,6 +257,9 @@ Creates an App Store Connect screenshot set for an App Store version localizatio
 
 ### [New-AppStoreConnectSubscriptionIntroductoryOffer](New-AppStoreConnectSubscriptionIntroductoryOffer.md)
 Creates an App Store Connect introductory offer for an auto-renewable subscription.
+
+### [New-AppStoreConnectWebhook](New-AppStoreConnectWebhook.md)
+Creates an App Store Connect webhook.
 
 ### [New-BenchmarkSuite](New-BenchmarkSuite.md)
 Declares a PowerShell benchmark suite.
@@ -489,6 +495,9 @@ Creates or finds an App Store version and selects a processed build for Distribu
 ### [Set-AppStoreConnectVersionLocalization](Set-AppStoreConnectVersionLocalization.md)
 Updates localized metadata fields on an App Store version localization.
 
+### [Set-AppStoreConnectWebhook](Set-AppStoreConnectWebhook.md)
+Updates an App Store Connect webhook.
+
 ### [Set-BenchmarkArtifacts](Set-BenchmarkArtifacts.md)
 Sets requested benchmark artifacts.
 
@@ -558,6 +567,9 @@ Checks whether an App Store Connect Distribution version is ready for submission
 
 ### [Test-AppStoreConnectScreenshotSyncConfig](Test-AppStoreConnectScreenshotSyncConfig.md)
 Validates an App Store Connect screenshot sync configuration against local files.
+
+### [Test-AppStoreConnectWebhook](Test-AppStoreConnectWebhook.md)
+Sends a test delivery to an App Store Connect webhook.
 
 ### [Test-BenchmarkGate](Test-BenchmarkGate.md)
 Tests normalized benchmark summaries against a JSON baseline.

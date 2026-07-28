@@ -31,6 +31,11 @@ on:
         required: false
         default: '["self-hosted","macOS","ARM64"]'
         type: string
+      tool_runtime:
+        description: Runtime identifier for the trusted Apple runner.
+        required: false
+        default: osx-arm64
+        type: string
     secrets:
       app_store_connect_issuer_id:
         required: true
@@ -91,6 +96,13 @@ jobs:
           $actual = (git -C powerforge-shared rev-parse HEAD).Trim()
           if ($actual -ine $env:EXPECTED_REF) { throw "Expected shared commit '$($env:EXPECTED_REF)', received '$actual'." }
 
+      - name: Build exact PowerForge source
+        id: build-powerforge
+        uses: ./powerforge-shared/.github/actions/build-powerforge
+        with:
+          source-root: ${{ github.workspace }}/powerforge-shared
+          runtime: ${{ inputs.tool_runtime }}
+
       - name: Plan the version update
         id: plan
         uses: ./powerforge-shared/.github/actions/apple-release
@@ -98,6 +110,7 @@ jobs:
           action: Version
           config-path: ${{ github.workspace }}/source/${{ inputs.config_path }}
           tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
+          tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           marketing-version: ${{ inputs.version }}
           plan-only: "true"
           issuer-id: ${{ secrets.app_store_connect_issuer_id }}
@@ -111,6 +124,7 @@ jobs:
           action: Version
           config-path: ${{ github.workspace }}/source/${{ inputs.config_path }}
           tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
+          tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           marketing-version: ${{ inputs.version }}
           plan-only: "false"
           confirm: "true"

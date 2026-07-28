@@ -79,7 +79,7 @@ Selects one explicit Apple release operation. Configured preserves legacy JSON a
 Type: PowerForgeAppleReleaseAction
 Parameter Sets: Config, Project
 Aliases: None
-Possible values: Configured, Status, Version, Archive, Upload, UploadExisting, Prepare, Screenshots, TestFlight, Advance, SubmitTestFlightReview, SubmitAppReview, Release, Cleanup
+Possible values: Configured, Status, Doctor, Version, Archive, Upload, UploadExisting, Prepare, Screenshots, TestFlight, Advance, SubmitTestFlightReview, SubmitAppReview, Release, Cleanup
 
 Required: False
 Position: named

@@ -205,6 +205,28 @@ public sealed class AppleAppConfiguration
     /// <summary>Optional archive destination variant, such as Mac Catalyst.</summary>
     public AppleArchiveVariant ArchiveVariant { get; set; } = AppleArchiveVariant.Default;
 
+    /// <summary>How this target is delivered. Existing configurations default to public App Store distribution.</summary>
+    public AppleDistributionRoute DistributionRoute { get; set; } = AppleDistributionRoute.AppStore;
+
+    /// <summary>Role this target plays in the complete product.</summary>
+    public AppleProductRole ProductRole { get; set; } = AppleProductRole.PrimaryApp;
+
+    /// <summary>Name of the primary target that embeds or owns this surface.</summary>
+    public string? ParentTarget { get; set; }
+
+    /// <summary>
+    /// Open-ended Apple capabilities carried by this target, for example CarPlay, AppleIntelligence,
+    /// AppIntents, LiveActivities, Widgets, or Watch. Strings keep the config forward-compatible
+    /// with capabilities Apple introduces after this PowerForge version.
+    /// </summary>
+    public string[] Capabilities { get; set; } = Array.Empty<string>();
+
+    /// <summary>Explicit TestFlight distribution intent for this target.</summary>
+    public AppleTestFlightPolicy TestFlightPolicy { get; set; } = AppleTestFlightPolicy.Automatic;
+
+    /// <summary>Bundle identifiers that must be present inside the independently distributed archive.</summary>
+    public string[] RequiredEmbeddedBundleIds { get; set; } = Array.Empty<string>();
+
     /// <summary>Path to a .xcodeproj directory or project.pbxproj file. Relative paths resolve from the pipeline project root.</summary>
     public string ProjectPath { get; set; } = string.Empty;
 

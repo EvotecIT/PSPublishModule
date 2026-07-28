@@ -379,6 +379,8 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public PowerForgeAppleReleaseAutomationOptions Automation { get; set; } = new();
 
+    public PowerForgeAppleDirectDistributionOptions DirectDistribution { get; set; } = new();
+
     public string? AppStoreConnectApiKeyPath { get; set; }
 
     public string? AppStoreConnectApiKeyId { get; set; }
@@ -453,6 +455,8 @@ internal sealed class PowerForgeAppleReleasePlan
     public PowerForgeAppleReleaseAction Action { get; set; }
 
     public PowerForgeAppleReleaseAutomationOptions Automation { get; set; } = new();
+
+    public PowerForgeAppleDirectDistributionOptions DirectDistribution { get; set; } = new();
 
     public string ReceiptPath { get; set; } = string.Empty;
 
@@ -555,7 +559,21 @@ internal sealed class PowerForgeAppleAppReleaseTargetPlan
 
     public AppleArchiveVariant ArchiveVariant { get; set; }
 
+    public AppleDistributionRoute DistributionRoute { get; set; } = AppleDistributionRoute.AppStore;
+
+    public AppleProductRole ProductRole { get; set; } = AppleProductRole.PrimaryApp;
+
+    public string? ParentTarget { get; set; }
+
+    public string[] Capabilities { get; set; } = Array.Empty<string>();
+
+    public AppleTestFlightPolicy TestFlightPolicy { get; set; } = AppleTestFlightPolicy.Automatic;
+
+    public string[] RequiredEmbeddedBundleIds { get; set; } = Array.Empty<string>();
+
     public string? AppStoreConnectAppId { get; set; }
+
+    public bool AppStoreConnectAppIdDiscovered { get; set; }
 
     public string ProjectPath { get; set; } = string.Empty;
 
@@ -600,6 +618,8 @@ internal sealed class PowerForgeAppleAppReleaseResult
 
     public AppleAppArchiveUploadResult? Upload { get; set; }
 
+    public AppleNotarizationResult? Notarization { get; set; }
+
     public XcodeProjectVersionUpdateResult? VersionUpdate { get; set; }
 
     public AppStoreConnectReleasePreparationResult? Distribution { get; set; }
@@ -615,6 +635,8 @@ internal sealed class PowerForgeAppleAppReleaseResult
     public AppStoreConnectReleaseStateResult? RemoteState { get; set; }
 
     public bool ResumedExistingBuild { get; set; }
+
+    public bool ResumedAcceptedNotarization { get; set; }
 
     public bool ProjectGenerated { get; set; }
 

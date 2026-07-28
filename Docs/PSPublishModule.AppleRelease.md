@@ -1,11 +1,12 @@
 # Apple App Release Helpers
 
-PowerForge includes reusable Apple app release helpers for native Apple projects.
-The first supported slice wraps the signed binary path that Apple expects:
+PowerForge owns the repeatable Apple release path for native Apple projects:
 
 1. create an `.xcarchive` with `xcodebuild archive`
 2. upload that archive to App Store Connect with `xcodebuild -exportArchive`
-3. use existing App Store Connect read-only cmdlets to verify app, version, and build state
+3. wait for the exact build and report upload/processing failures with stable diagnostic codes
+4. prepare metadata, app information, screenshots, TestFlight, review, and public release through explicit actions
+5. notarize and assess Developer ID macOS artifacts when the product ships outside the Mac App Store
 
 The helpers live in shared `PowerForge` services first and are exposed through thin
 PowerShell cmdlets, so the same release logic can be reused by scripts, tests, CLI,
@@ -191,6 +192,7 @@ Use the same entry point for each transition:
 | Action | Result |
 | --- | --- |
 | `Status` | Reads the exact configured version/build and recommends the next action; it may generate an explicitly configured missing Xcode project locally. |
+| `Doctor` | Reads release state plus local topology, embedded-product evidence, metadata ownership, App Review details, age rating, pricing, availability, accessibility, encryption, monetization, webhook coverage, and TestFlight feedback. It does not mutate Apple state. |
 | `Version` | Updates the configured XcodeGen version source and chooses one build number above both local state and every configured App Store Connect platform. |
 | `Archive` | Creates signed archives without uploading. |
 | `Upload` | Archives, uploads, waits for processing, and resumes an exact remote build when possible. |
@@ -227,8 +229,10 @@ uses a separate plan receipt, checks the exact version/build remotely, and stops
 
 ## Reusable GitHub workflows
 
-Commit one tool lock in each Apple app repository so CI downloads an exact standalone
-PowerForge release asset and verifies it before execution:
+The reusable workflows build the exact 40-character `powerforge_ref` through the
+canonical PowerForge release builder, so consumer repositories do not wait for package
+publication or reimplement build logic. The composite action also supports a checked-in
+tool lock when a repository prefers downloading a published standalone asset:
 
 ```json
 {
@@ -256,14 +260,19 @@ The reusable workflow boundary mirrors the human approval boundary:
   an exact merged commit. It stops before every review and public-release action.
 - `powerforge-apple-approval.yml` accepts only `SubmitTestFlightReview`,
   `SubmitAppReview`, or `Release` and runs inside a protected GitHub environment.
+- `powerforge-apple-monitor.yml` runs scheduled `Doctor`, retains the compact receipt,
+  and maintains one GitHub incident until errors and warnings are cleared.
+- `powerforge-apple-screenshots.yml` captures from an exact source commit, retains the
+  PNG artifact for review, waits at a protected environment, binds the reviewer to
+  exact image hashes, and then performs the confirmed screenshot sync.
 
 Callers must pass 40-character commit SHAs for `powerforge_ref` and release
 `source_ref`; the workflows reject branches and tags and verify both checked-out
 commits. Pass App Store Connect credentials through GitHub secrets. The composite
 action writes the private key to a permission-restricted temporary file and removes
-it after every plan or action. All three workflows share one repository-scoped
-concurrency group, so version selection, draft mutation, review submission, and
-release cannot overlap.
+it after every plan or action. Mutating release workflows share one repository-scoped
+concurrency group; monitoring and screenshot capture have dedicated groups so a long
+capture cannot cancel a release and two publication captures cannot overlap.
 
 The workflows upload the exact configured plan and actual receipt paths and fail if
 a required receipt is absent. Successful logs contain only the short step summary,
@@ -288,7 +297,8 @@ Invoke-PowerForgeRelease `
 
 The receipt is the handoff between people, CI, and agents. It records the target,
 version/build, processing and review states, selected-build state, performed/skipped
-steps, bounded cleanup, and policy-aware next actions. `readinessChecked=false` means
+steps, bounded cleanup, stable diagnostics, the control-plane inventory, and
+policy-aware next actions. `readinessChecked=false` means
 the read-only status action did not query metadata or screenshot readiness; run
 `Prepare` or `Screenshots` for those checks. The persisted receipt uses its configured
 project-relative path and never contains API credentials. A rerun with `Resume=true`
@@ -308,6 +318,45 @@ For screenshot-enabled releases, run `Prepare` once after upload to create the
 Distribution draft, run the separately reviewed `Screenshots` action, then run
 `Prepare` again as the final readiness gate.
 
+Screenshot configs can require an approval manifest. The manifest binds every upload
+file to its SHA-256 digest, PNG dimensions, release version, source commit, locale,
+device/runtime, appearance, scenario, approver, and approval time. Any changed or
+unapproved image fails before App Store Connect mutation. Product repositories remain
+responsible for deterministic UI navigation and capture because only the product knows
+its useful screens; PowerForge owns validation, approval integrity, upload, delivery
+state, and the receipt.
+
+The reusable screenshot workflow standardizes that product-specific boundary. Its
+`capture_script` is repository code pinned by `source_ref`; the shared workflow rejects
+path traversal, requires PNG output, retains it before requesting environment approval,
+and never accepts a branch or tag as capture evidence. This lets CasaRay keep its rich
+simulator routes while Tactra, EasyControlX, and EmailIMO add small capture scripts with
+the same approval and upload contract.
+
+After reviewing the captured images, generate the manifest without hand-copying file
+hashes or dimensions:
+
+```text
+powerforge apple-screenshots manifest \
+  --config scripts/appstoreconnect-screenshots-ios.json \
+  --version 1.6.0 \
+  --source-commit 0123456789abcdef0123456789abcdef01234567 \
+  --approved-by release-owner \
+  --runtime "iOS 26.0" \
+  --device "iPhone 17 Pro Max" \
+  --theme light \
+  --scenario app-store
+```
+
+In GitHub Actions, `ApprovedBy` names the protected environment boundary—not the
+workflow initiator. `InitiatedBy` records who started the run, while
+`ApprovalEvidence` links to GitHub's deployment record where the actual environment
+review decision is retained. This avoids incorrectly crediting the initiator as the reviewer.
+
+The command writes `Quality.ApprovalManifestPath` when configured, or a sibling
+`*.approval.json` file. It runs the same local image quality gates used by upload,
+then binds only the selected files.
+
 ## Apple target modeling
 
 Configure store targets by archive and App Store Connect platform, not by every device
@@ -318,11 +367,73 @@ that can run the product:
 - Mac Catalyst is a macOS App Store Connect target with
   `ArchiveVariant=MacCatalyst`.
 - A companion Watch app shipped inside the iOS archive stays with that iOS target.
-  An independently archived Watch app can use a `watchOS` archive target, but
+- An independently archived Watch app can use a `watchOS` archive target, but
   PowerForge maps it to Apple's `IOS` App Store Connect platform because Apple does
   not expose a separate `WATCH_OS` store-platform value.
 - CarPlay is an iOS capability and entitlement, not a separate App Store platform.
   Its scenes and entitlement checks belong in the iOS build and validation lane.
+
+Model every product in `AppleApps.Apps`, including surfaces that are not independent
+uploads. The routing fields prevent a widget, Watch app, helper, or development probe
+from becoming an accidental release lane:
+
+| Field | Purpose |
+| --- | --- |
+| `DistributionRoute` | `AppStore`, `TestFlightOnly`, `DirectNotarized`, `EmbeddedCompanion`, or `DevelopmentOnly`. |
+| `ProductRole` | Primary app, companion app, extension, embedded executable, or capability-only surface. |
+| `ParentTarget` | Names the archive owner for an embedded or development surface. |
+| `RequiredEmbeddedBundleIds` | Fails Doctor when the parent project no longer contains a required companion/helper bundle. |
+| `Capabilities` | Open-ended product facts such as `Widgets`, `Watch`, `CarPlay`, `AppIntents`, `LiveActivities`, or `AppleIntelligence`. |
+| `TestFlightPolicy` | Disables TestFlight or limits a target to internal/external distribution without inferring intent from beta groups. |
+
+Apple does not permit app-record creation through the App Store Connect API. If
+`AppStoreConnectAppId` is omitted, PowerForge looks up the exact bundle identifier and
+persists the discovered ID in the receipt. Zero matches becomes an onboarding
+diagnostic in `Doctor`; mutating actions stop until the app is created in the App Store
+Connect website.
+
+## Direct macOS distribution
+
+Set `DistributionRoute` to `DirectNotarized` for a Developer ID lane. `Upload` and
+`Advance` then export with `method=developer-id`, submit the one exported `.app`,
+`.dmg`, or signed flat `.pkg` with `notarytool --wait`, staple and validate the accepted
+ticket, and run the artifact-appropriate `spctl` Gatekeeper assessment. ZIP is not
+accepted as the distribution artifact because Apple cannot staple a ticket directly to
+a ZIP; `.app` bundles are zipped internally only for submission. The receipt records the
+submission ID, notarization state, stapling result, and Gatekeeper result. If submission
+is accepted but stapling or assessment fails, a retry reuses the accepted submission and
+reruns only local post-processing. Resume requires that exact target to have failed,
+matches version and build, and verifies a deterministic SHA-256 of the original artifact;
+a successful sibling or changed artifact is never reused. Authentication can use
+`DirectDistribution.KeychainProfile` or the same App Store Connect API key supplied to
+the release.
+
+Keep privileged helpers and embedded executables as `EmbeddedCompanion` entries under
+the direct parent, then list their bundle identifiers in the parent
+`RequiredEmbeddedBundleIds`.
+
+## Proactive monitoring
+
+Run `Doctor` on a schedule as well as before a release. The reusable
+`powerforge-apple-monitor.yml` workflow checks out exact 40-character source and
+PowerForge commits, builds that exact shared source, runs Doctor on a trusted Apple
+runner, retains the compact receipt, and maintains one stable GitHub incident. Errors
+and warnings open the issue; a clean later run closes it. This catches upload/build
+state, review, metadata, screenshot, compliance, observability, and TestFlight feedback
+gaps without waiting for an Apple email.
+
+App Store Connect webhooks complement scheduled polling. `AppStoreConnectClient` can
+list, create, update, and ping webhooks, while `AppStoreConnectWebhookVerifier`
+validates Apple's `x-apple-signature` with fixed-time HMAC-SHA256 comparison before
+parsing the event. A receiver should refresh the compact release state for version,
+build-upload, Beta App Review, and feedback events; scheduled Doctor remains the
+fallback for missed delivery or receiver downtime.
+
+Doctor intentionally reports human attestations instead of guessing them. Age-rating
+answers, export-compliance facts, accessibility claims, reviewer credentials, pricing,
+territory availability, subscription/IAP policy, and privacy declarations must be
+reviewed by the product owner. PowerForge can detect missing or drifting state and stop
+publication, but it must not invent legal, commercial, or accessibility claims.
 
 All configured store targets share the marketing version chosen by `Version`. The
 build-number resolver checks every configured remote platform before assigning the
@@ -330,11 +441,13 @@ next number, so retries do not reuse a build already uploaded by another lane.
 
 ## Current Boundary
 
-PowerForge owns archive/upload, bounded build processing waits, Distribution
-preparation, metadata and screenshot sync, build selection, TestFlight distribution,
-review submission, approved-version release, status receipts, and local artifact
-cleanup. Apple still owns processing and review decisions. Pricing and phased-release
-configuration remain explicit App Store Connect operations.
+PowerForge owns archive/upload, direct notarization, bounded build processing waits,
+Distribution preparation, metadata and screenshot sync, build selection, TestFlight
+distribution, review submission, approved-version release, compact diagnostics, and
+local artifact cleanup. It reads pricing, availability, phased-release, monetization,
+compliance, accessibility, webhook, customer-review, and beta-feedback state for
+Doctor. Apple still owns processing and review decisions, and human-reviewed
+commercial or compliance changes remain explicit App Store Connect operations.
 
 Keep every mutating action flag disabled in committed consumer configuration. Named
 actions override those flags for one run, and the three review/release transitions stay
@@ -418,8 +531,8 @@ Get-ChildItem '.\build\appstore-screenshots\upload\iphone-6-5' -Filter *.png |
         -ScreenshotSetId $set.Id
 ```
 
-The current screenshot commands intentionally work at the set/file level. A higher-level
-folder sync command can layer on top once each app defines its folder-to-display-type map.
+Use the config-driven sync below for normal releases. The lower-level commands remain
+available for recovery of one set or file.
 
 ## Config-Driven Screenshot Sync
 

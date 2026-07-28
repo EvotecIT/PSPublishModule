@@ -1,0 +1,52 @@
+name: Build pinned PowerForge source
+description: Build one immutable standalone PowerForge executable through the repository release pipeline.
+
+inputs:
+  source-root:
+    description: Absolute path to the exact PSPublishModule checkout.
+    required: true
+  runtime:
+    description: macOS runtime identifier (osx-arm64 or osx-x64).
+    required: false
+    default: osx-arm64
+
+outputs:
+  tool-path:
+    description: Absolute path to the standalone PowerForge executable.
+    value: ${{ steps.build.outputs.tool-path }}
+  runtime:
+    description: Validated runtime identifier.
+    value: ${{ steps.build.outputs.runtime }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup .NET 10
+      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Build immutable standalone PowerForge
+      id: build
+      shell: pwsh
+      env:
+        SOURCE_ROOT: ${{ inputs.source-root }}
+        TOOL_RUNTIME: ${{ inputs.runtime }}
+      run: |
+        if ($env:TOOL_RUNTIME -notin @('osx-arm64', 'osx-x64')) { throw 'runtime must be osx-arm64 or osx-x64.' }
+        $sourceRoot = [IO.Path]::GetFullPath($env:SOURCE_ROOT)
+        $buildScript = Join-Path $sourceRoot 'Build/Build-Project.ps1'
+        if (-not (Test-Path -LiteralPath $buildScript -PathType Leaf)) { throw "PowerForge build script was not found: $buildScript" }
+        & $buildScript `
+          -ToolsOnly `
+          -Target PowerForge `
+          -Runtimes $env:TOOL_RUNTIME `
+          -Frameworks net10.0 `
+          -Flavors SingleContained `
+          -Configuration Release
+        if ($LASTEXITCODE -ne 0) { throw "PowerForge source build failed with exit code $LASTEXITCODE." }
+        $toolPath = Join-Path $sourceRoot "Artifacts/PowerForge/$($env:TOOL_RUNTIME)/net10.0/SingleContained/PowerForge"
+        if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) { throw "PowerForge executable was not produced: $toolPath" }
+        if (-not $IsWindows) { & chmod +x $toolPath }
+        "tool-path=$toolPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "runtime=$($env:TOOL_RUNTIME)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append

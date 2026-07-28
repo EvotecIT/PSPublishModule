@@ -21,7 +21,13 @@ internal sealed partial class PowerForgeReleaseService
                 Name = app.Name,
                 BundleId = app.BundleId,
                 Platform = app.Platform,
+                DistributionRoute = app.DistributionRoute,
+                ProductRole = app.ProductRole,
+                ParentTarget = app.ParentTarget,
+                Capabilities = app.Capabilities,
+                TestFlightPolicy = app.TestFlightPolicy,
                 AppId = app.AppStoreConnectAppId,
+                AppIdDiscovered = app.AppStoreConnectAppIdDiscovered,
                 Version = versioning?.MarketingVersion ?? app.MarketingVersion,
                 Build = versioning?.BuildNumber ?? app.BuildNumber,
                 SkippedSteps = new[] { "plan-only" }
@@ -89,11 +95,16 @@ internal sealed partial class PowerForgeReleaseService
         if (!long.TryParse(current.BuildNumber, out var currentBuild) || currentBuild < 0)
             throw new InvalidOperationException($"Apple version source build number '{current.BuildNumber}' is not a non-negative integer.");
 
-        var credential = CreateAppStoreConnectCredential(plan);
-        var highestRemote = plan.Apps
-            .Select(app => _getHighestAppleBuildNumber(credential, app.AppStoreConnectAppId!, app.Platform))
-            .DefaultIfEmpty(0)
-            .Max();
+        var storeApps = plan.Apps.Where(UsesAppStoreConnect).ToArray();
+        var highestRemote = 0L;
+        if (storeApps.Length > 0)
+        {
+            var credential = CreateAppStoreConnectCredential(plan);
+            highestRemote = storeApps
+                .Select(app => _getHighestAppleBuildNumber(credential, app.AppStoreConnectAppId!, app.Platform))
+                .DefaultIfEmpty(0)
+                .Max();
+        }
         var requestedVersion = plan.RequestedMarketingVersion!.Trim();
         var nextBuild = string.Equals(current.MarketingVersion, requestedVersion, StringComparison.OrdinalIgnoreCase) &&
                         currentBuild > highestRemote

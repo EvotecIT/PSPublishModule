@@ -11,6 +11,9 @@ public enum PowerForgeAppleReleaseAction
     /// <summary>Read App Store Connect state without changing it.</summary>
     Status,
 
+    /// <summary>Run local topology, capability, artifact, credential, and remote release-state diagnostics without changing Apple state.</summary>
+    Doctor,
+
     /// <summary>Set the requested marketing version and the next available build number in the configured version source.</summary>
     Version,
 
@@ -93,12 +96,40 @@ internal sealed class PowerForgeAppleReleaseAutomationOptions
     public int ArtifactRetentionDays { get; set; } = 7;
 }
 
+/// <summary>Developer ID export and Apple notarization settings for direct macOS distribution.</summary>
+internal sealed class PowerForgeAppleDirectDistributionOptions
+{
+    /// <summary>Export method passed to xcodebuild.</summary>
+    public string ExportMethod { get; set; } = "developer-id";
+
+    /// <summary>xcrun executable used for notarytool and stapler.</summary>
+    public string XcrunExecutable { get; set; } = "xcrun";
+
+    /// <summary>ditto executable used to create a notarization zip for .app bundles.</summary>
+    public string DittoExecutable { get; set; } = "ditto";
+
+    /// <summary>spctl executable used for final Gatekeeper assessment.</summary>
+    public string SpctlExecutable { get; set; } = "spctl";
+
+    /// <summary>Optional notarytool keychain profile. When omitted, App Store Connect API-key credentials are used.</summary>
+    public string? KeychainProfile { get; set; }
+
+    /// <summary>Maximum notarization wait in seconds.</summary>
+    public int TimeoutSeconds { get; set; } = 1800;
+
+    /// <summary>Staple and validate accepted tickets on supported artifacts.</summary>
+    public bool Staple { get; set; } = true;
+
+    /// <summary>Run Gatekeeper assessment after notarization.</summary>
+    public bool Assess { get; set; } = true;
+}
+
 /// <summary>
 /// Compact, resumable receipt for one Apple release run.
 /// </summary>
 internal sealed class PowerForgeAppleReleaseReceipt
 {
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
 
     public PowerForgeAppleReleaseAction Action { get; set; }
 
@@ -117,6 +148,8 @@ internal sealed class PowerForgeAppleReleaseReceipt
     public PowerForgeAppleReleaseTargetReceipt[] Targets { get; set; } = Array.Empty<PowerForgeAppleReleaseTargetReceipt>();
 
     public PowerForgeAppleReleaseCleanupReceipt Cleanup { get; set; } = new();
+
+    public PowerForgeAppleReleaseDiagnostic[] Diagnostics { get; set; } = Array.Empty<PowerForgeAppleReleaseDiagnostic>();
 
     public string[] NextActions { get; set; } = Array.Empty<string>();
 }
@@ -154,7 +187,19 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public ApplePlatform Platform { get; set; }
 
+    public AppleDistributionRoute DistributionRoute { get; set; }
+
+    public AppleProductRole ProductRole { get; set; }
+
+    public string? ParentTarget { get; set; }
+
+    public string[] Capabilities { get; set; } = Array.Empty<string>();
+
+    public AppleTestFlightPolicy TestFlightPolicy { get; set; }
+
     public string? AppId { get; set; }
+
+    public bool AppIdDiscovered { get; set; }
 
     public string? Version { get; set; }
 
@@ -192,17 +237,57 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public bool TestFlightBetaGroupsConfigured { get; set; }
 
+    public AppStoreConnectControlPlaneState? ControlPlane { get; set; }
+
     public bool ArchiveCreated { get; set; }
 
     public bool ProjectGenerated { get; set; }
 
     public bool UploadPerformed { get; set; }
 
+    public string? DirectArtifactPath { get; set; }
+
+    public string? DirectArtifactSha256 { get; set; }
+
+    public string? NotarizationSubmissionId { get; set; }
+
+    public string? NotarizationStatus { get; set; }
+
+    public bool? Stapled { get; set; }
+
+    public bool? StapleValidated { get; set; }
+
+    public bool? GatekeeperAccepted { get; set; }
+
+    public bool ResumedAcceptedNotarization { get; set; }
+
     public bool ResumedExistingBuild { get; set; }
 
     public string[] SkippedSteps { get; set; } = Array.Empty<string>();
 
+    public PowerForgeAppleReleaseDiagnostic[] Diagnostics { get; set; } = Array.Empty<PowerForgeAppleReleaseDiagnostic>();
+
     public string[] NextActions { get; set; } = Array.Empty<string>();
+}
+
+/// <summary>
+/// Actionable, machine-readable Apple release diagnostic retained in the compact receipt.
+/// </summary>
+internal sealed class PowerForgeAppleReleaseDiagnostic
+{
+    public string Severity { get; set; } = "error";
+
+    public string Category { get; set; } = "unknown";
+
+    public string Code { get; set; } = "APPLE_UNKNOWN";
+
+    public string Summary { get; set; } = string.Empty;
+
+    public string? Evidence { get; set; }
+
+    public string Action { get; set; } = string.Empty;
+
+    public bool Retryable { get; set; }
 }
 
 /// <summary>

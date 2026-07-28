@@ -25,7 +25,7 @@ function Write-ReleaseOutput {
 }
 
 $allowedActions = @(
-    'Status', 'Version', 'Archive', 'Upload', 'UploadExisting', 'Prepare',
+    'Status', 'Doctor', 'Version', 'Archive', 'Upload', 'UploadExisting', 'Prepare',
     'Screenshots', 'TestFlight', 'Advance', 'SubmitTestFlightReview',
     'SubmitAppReview', 'Release', 'Cleanup'
 )
@@ -103,17 +103,34 @@ if (-not [string]::IsNullOrWhiteSpace($reportedReceiptPath)) {
 }
 
 if ($exitCode -ne 0) {
-    $json | Write-Host
-    $detail = if ($envelope -and -not [string]::IsNullOrWhiteSpace([string] $envelope.error)) {
-        ": $($envelope.error)"
+    # Never echo the complete CLI envelope here. The receipt can contain compact
+    # tester feedback and diagnostic evidence that belongs in the retained artifact,
+    # not the public Actions log.
+    $safeDiagnostics = @($result.diagnostics | ForEach-Object {
+        [ordered]@{
+            severity = [string] $_.severity
+            category = [string] $_.category
+            code = [string] $_.code
+            action = [string] $_.action
+            retryable = [bool] $_.retryable
+        }
+    })
+    [ordered]@{
+        success = $false
+        action = $action
+        exitCode = $exitCode
+        diagnostics = $safeDiagnostics
+    } | ConvertTo-Json -Depth 8 | Write-Host
+    $receiptHint = if (Test-Path -LiteralPath $receiptPath -PathType Leaf) {
+        " The complete failure receipt is retained at '$receiptPath'."
     } else {
-        '.'
+        ''
     }
-    throw "PowerForge Apple action '$action' failed with exit code $exitCode$detail"
+    throw "PowerForge Apple action '$action' failed with exit code $exitCode.$receiptHint"
 }
 
 if (-not $envelope.success) {
-    throw "PowerForge Apple action '$action' failed: $($envelope.error)"
+    throw "PowerForge Apple action '$action' reported failure. Inspect the retained receipt for private diagnostic details."
 }
 if ([string] $result.action -ine $action) {
     throw "PowerForge returned action '$($result.action)' instead of '$action'."
@@ -136,6 +153,17 @@ $readiness = @($result.targets | Where-Object { $null -ne $_.readyForSubmission 
 $readyForSubmission = if ($readiness.Count -eq 0) { '' } else { [string] (-not ($readiness.readyForSubmission -contains $false)) }
 $reportedNextActions = @($result.nextActions | Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) })
 $nextActions = $reportedNextActions | ConvertTo-Json -Compress -AsArray
+$reportedDiagnostics = @($result.diagnostics | ForEach-Object {
+    [ordered]@{
+        severity = [string] $_.severity
+        category = [string] $_.category
+        code = [string] $_.code
+        summary = [string] $_.summary
+        action = [string] $_.action
+        retryable = [bool] $_.retryable
+    }
+})
+$diagnostics = $reportedDiagnostics | ConvertTo-Json -Compress -AsArray
 
 if ($env:GITHUB_OUTPUT) {
     "action=$action" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -144,6 +172,7 @@ if ($env:GITHUB_OUTPUT) {
     "build-number=$buildNumber" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
     "ready-for-submission=$readyForSubmission" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
     "next-actions=$nextActions" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+    "diagnostics=$diagnostics" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 }
 
 if ($env:GITHUB_STEP_SUMMARY) {
@@ -163,6 +192,9 @@ if ($env:GITHUB_STEP_SUMMARY) {
         $targetLines,
         '',
         '### Next actions',
-        ($reportedNextActions | ForEach-Object { "- $_" })
+        ($reportedNextActions | ForEach-Object { "- $_" }),
+        '',
+        '### Diagnostics',
+        ($reportedDiagnostics | ForEach-Object { "- **$($_.code)** [$($_.severity)]: $($_.summary) — $($_.action)" })
     ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 }

@@ -45,6 +45,13 @@ public sealed class AppStoreConnectReleaseStateService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
+        var controlPlaneVersionId = platformStates
+            .Select(static state => state.Version?.Id)
+            .FirstOrDefault(static id => !string.IsNullOrWhiteSpace(id));
+        var controlPlane = request.IncludeControlPlane
+            ? await _client.GetControlPlaneStateAsync(appId, controlPlaneVersionId, cancellationToken).ConfigureAwait(false)
+            : null;
+
         return new AppStoreConnectReleaseStateResult
         {
             AppId = appId,
@@ -53,6 +60,7 @@ public sealed class AppStoreConnectReleaseStateService
             CheckedAt = DateTimeOffset.UtcNow,
             Platforms = platformStates.ToArray(),
             BetaGroups = betaGroups,
+            ControlPlane = controlPlane,
             NextActions = nextActions,
             Messages = messages.ToArray()
         };

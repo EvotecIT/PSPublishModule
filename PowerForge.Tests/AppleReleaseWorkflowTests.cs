@@ -56,6 +56,16 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("instead of '$action'", script, StringComparison.Ordinal);
         Assert.Contains("marketing-version must use x.y.z", script, StringComparison.Ordinal);
         Assert.Contains("did not write its required receipt", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("$json | Write-Host", script, StringComparison.Ordinal);
+        Assert.Contains("safeDiagnostics", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("$envelope.error", script, StringComparison.Ordinal);
+        var failureStart = script.IndexOf("if ($exitCode -ne 0)", StringComparison.Ordinal);
+        var failureEnd = script.IndexOf("if (-not $envelope.success)", failureStart, StringComparison.Ordinal);
+        Assert.True(failureStart >= 0 && failureEnd > failureStart);
+        Assert.DoesNotContain(
+            "summary = [string] $_.summary",
+            script.Substring(failureStart, failureEnd - failureStart),
+            StringComparison.Ordinal);
         Assert.Contains("IsPathRooted($projectRootSetting)", script, StringComparison.Ordinal);
         Assert.True(
             script.IndexOf("Write-ReleaseOutput -Name 'receipt-path'", StringComparison.Ordinal) <
@@ -104,6 +114,69 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Equal(2, Count(approval, "if-no-files-found: error"));
         Assert.Contains("-plan", advance, StringComparison.Ordinal);
         Assert.Contains("-actual", advance, StringComparison.Ordinal);
+        Assert.Contains("./powerforge-shared/.github/actions/build-powerforge", advance, StringComparison.Ordinal);
+        Assert.Contains("./powerforge-shared/.github/actions/build-powerforge", approval, StringComparison.Ordinal);
+        Assert.Equal(2, Count(advance, "tool-path: ${{ steps.build-powerforge.outputs.tool-path }}"));
+        Assert.Equal(2, Count(approval, "tool-path: ${{ steps.build-powerforge.outputs.tool-path }}"));
+    }
+
+    [Fact]
+    public void MonitorWorkflowRunsDoctorAndMaintainsOneProactiveIncident()
+    {
+        var root = FindRepoRoot();
+        var workflow = Read(root, ".github", "workflows", "powerforge-apple-monitor.yml");
+        var action = Read(root, ".github", "actions", "apple-release", "action.yml");
+        var script = Read(root, ".github", "actions", "apple-release", "Invoke-PowerForgeAppleRelease.ps1");
+
+        Assert.Contains("action: Doctor", workflow, StringComparison.Ordinal);
+        Assert.Contains("Build the exact monitored PowerForge source", workflow, StringComparison.Ordinal);
+        Assert.Contains("./powerforge-shared/.github/actions/build-powerforge", workflow, StringComparison.Ordinal);
+        Assert.Contains("runtime: ${{ inputs.tool_runtime }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("tool-path:", workflow, StringComparison.Ordinal);
+        Assert.Contains("continue-on-error: true", workflow, StringComparison.Ordinal);
+        Assert.Contains("issues: write", workflow, StringComparison.Ordinal);
+        Assert.Contains("gh issue create", workflow, StringComparison.Ordinal);
+        Assert.Contains("gh issue comment", workflow, StringComparison.Ordinal);
+        Assert.Contains("gh issue close", workflow, StringComparison.Ordinal);
+        Assert.Contains("Fail when Apple Doctor found a problem", workflow, StringComparison.Ordinal);
+        Assert.Contains("diagnostics:", action, StringComparison.Ordinal);
+        Assert.Contains("'Status', 'Doctor'", script, StringComparison.Ordinal);
+        Assert.Contains("reportedDiagnostics", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ScreenshotWorkflowRequiresPinnedCaptureProtectedApprovalAndExactByteManifests()
+    {
+        var root = FindRepoRoot();
+        var workflow = Read(root, ".github", "workflows", "powerforge-apple-screenshots.yml");
+
+        Assert.Contains("source_ref", workflow, StringComparison.Ordinal);
+        Assert.Contains("powerforge_ref", workflow, StringComparison.Ordinal);
+        Assert.Contains("must be an exact 40-character commit SHA", workflow, StringComparison.Ordinal);
+        Assert.Contains("Capture deterministic App Store screenshots", workflow, StringComparison.Ordinal);
+        Assert.Contains("escapes the checked-out source", workflow, StringComparison.Ordinal);
+        Assert.Contains("environment: ${{ inputs.approval_environment }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("apple-screenshots manifest", workflow, StringComparison.Ordinal);
+        Assert.Contains("--source-commit '${{ inputs.source_ref }}'", workflow, StringComparison.Ordinal);
+        Assert.Contains("--approved-by 'GitHub protected environment:", workflow, StringComparison.Ordinal);
+        Assert.Contains("--initiated-by '${{ github.actor }}'", workflow, StringComparison.Ordinal);
+        Assert.Contains("--approval-evidence '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'", workflow, StringComparison.Ordinal);
+        Assert.Contains("action: Screenshots", workflow, StringComparison.Ordinal);
+        Assert.Contains("confirm: \"true\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("retention-days: 90", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SourceBuildActionUsesCanonicalReleaseBuilderAndPinnedDotNetSetup()
+    {
+        var root = FindRepoRoot();
+        var action = Read(root, ".github", "actions", "build-powerforge", "action.yml");
+
+        Assert.Contains("actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7", action, StringComparison.Ordinal);
+        Assert.Contains("Build/Build-Project.ps1", action, StringComparison.Ordinal);
+        Assert.Contains("-Target PowerForge", action, StringComparison.Ordinal);
+        Assert.Contains("runtime must be osx-arm64 or osx-x64", action, StringComparison.Ordinal);
+        Assert.Contains("tool-path=$toolPath", action, StringComparison.Ordinal);
     }
 
     private static string Read(string root, params string[] parts)

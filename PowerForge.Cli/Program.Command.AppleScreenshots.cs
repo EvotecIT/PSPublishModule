@@ -1,0 +1,89 @@
+using System.Text.Json;
+using PowerForge;
+using PowerForge.Cli;
+
+internal static partial class Program
+{
+    private const string AppleScreenshotsUsage =
+        "Usage: powerforge apple-screenshots manifest --config <screenshots.json> --version <x.y.z> " +
+        "--source-commit <sha> --approved-by <identity> [--out <manifest.json>] " +
+        "[--initiated-by <identity>] [--approval-evidence <url-or-id>] " +
+        "[--xcode-version <value>] [--runtime <value>] [--device <value>] [--theme <value>] [--scenario <value>] [--output json]";
+
+    private static int CommandAppleScreenshots(string[] filteredArgs, CliOptions cli, ILogger logger)
+    {
+        var argv = filteredArgs.Skip(1).ToArray();
+        var outputJson = IsJsonOutput(argv);
+        if (argv.Length == 0 || IsHelpArg(argv[0]))
+        {
+            Console.WriteLine(AppleScreenshotsUsage);
+            return argv.Length == 0 ? 2 : 0;
+        }
+
+        try
+        {
+            if (!argv[0].Equals("manifest", StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Apple screenshot command must be 'manifest'.");
+            var configPath = Path.GetFullPath(RequiredOption(argv, "--config"));
+            var baseDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
+            var spec = CliJson.DeserializeOrThrow(
+                File.ReadAllText(configPath),
+                CliJson.Context.AppStoreConnectScreenshotSyncSpec,
+                configPath);
+            var manifest = new AppStoreConnectScreenshotApprovalService().Create(
+                new AppStoreConnectScreenshotApprovalRequest
+                {
+                    Spec = spec,
+                    BaseDirectory = baseDirectory,
+                    VersionString = RequiredOption(argv, "--version"),
+                    SourceCommit = RequiredOption(argv, "--source-commit"),
+                    ApprovedBy = RequiredOption(argv, "--approved-by"),
+                    InitiatedBy = TryGetOptionValue(argv, "--initiated-by"),
+                    ApprovalEvidence = TryGetOptionValue(argv, "--approval-evidence"),
+                    XcodeVersion = TryGetOptionValue(argv, "--xcode-version"),
+                    Runtime = TryGetOptionValue(argv, "--runtime"),
+                    Device = TryGetOptionValue(argv, "--device"),
+                    Theme = TryGetOptionValue(argv, "--theme"),
+                    Scenario = TryGetOptionValue(argv, "--scenario")
+                });
+            var configuredOutput = spec.Quality?.ApprovalManifestPath;
+            var outputPath = ResolvePathFromBase(
+                baseDirectory,
+                TryGetOptionValue(argv, "--out") ??
+                configuredOutput ??
+                Path.GetFileNameWithoutExtension(configPath) + ".approval.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            File.WriteAllText(
+                outputPath,
+                JsonSerializer.Serialize(manifest, CliJson.Context.AppStoreConnectScreenshotApprovalManifest) + Environment.NewLine);
+
+            if (outputJson)
+            {
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "apple-screenshots.manifest",
+                    Success = true,
+                    ExitCode = 0,
+                    Result = JsonSerializer.SerializeToElement(new
+                    {
+                        outputPath,
+                        screenshotCount = manifest.Screenshots.Length,
+                        manifest.VersionString,
+                        manifest.SourceCommit,
+                        manifest.ApprovedBy
+                    })
+                });
+            }
+            else
+            {
+                logger.Success($"Approved {manifest.Screenshots.Length} screenshot(s): {outputPath}");
+            }
+            return 0;
+        }
+        catch (Exception exception)
+        {
+            return WriteReleaseError(outputJson, "apple-screenshots.manifest", 1, exception.Message, logger);
+        }
+    }
+}
