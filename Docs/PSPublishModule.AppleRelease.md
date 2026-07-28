@@ -275,8 +275,10 @@ The reusable workflow boundary mirrors the human approval boundary:
   `powerforge-apple-screenshot-approve.yml` provide the same exact-byte boundary on
   repositories whose GitHub plan cannot enforce environment reviewers. Capture and
   approval are separate runs; the second run resolves the exact source commit from the
-  retained capture artifact, rejects an optional mismatched source assertion, verifies
-  an allow-listed GitHub actor, and binds both run IDs into the manifest before sync.
+  retained capture artifact, verifies a compact provenance artifact against a successful
+  dedicated default-branch capture workflow, rejects an optional mismatched source
+  assertion, verifies an allow-listed GitHub actor, and binds both run IDs into the
+  manifest before sync.
 
 Callers must pass 40-character commit SHAs for `powerforge_ref` and release
 `source_ref`; the workflows reject branches and tags and verify both checked-out
@@ -356,6 +358,8 @@ hashes or dimensions:
 ```text
 powerforge apple-screenshots manifest \
   --config scripts/appstoreconnect-screenshots-ios.json \
+  --release-config powerforge.release.json \
+  --target "Primary iOS App" \
   --version 1.6.0 \
   --source-commit 0123456789abcdef0123456789abcdef01234567 \
   --approved-by release-owner \
@@ -376,6 +380,10 @@ The command writes `Quality.ApprovalManifestPath` when configured, or a sibling
 then binds only the selected files. Approval manifest schema 2 also binds the
 review to the exact App Store Connect app id and platform, so identical images
 cannot be replayed to another product or store destination.
+When a reusable screenshot map intentionally leaves `AppId` blank, `--release-config`
+resolves and binds exactly one enabled destination for the map platform; `--target`
+disambiguates products with multiple destinations. `--app-id` remains available for
+recovery tooling that already resolved the destination explicitly.
 Every upload also supplies the expected release source commit and requires it to
 match the manifest. Direct `Sync-AppStoreConnectScreenshots` recovery runs must pass
 that exact commit through `-SourceCommit` when approval manifests are required.

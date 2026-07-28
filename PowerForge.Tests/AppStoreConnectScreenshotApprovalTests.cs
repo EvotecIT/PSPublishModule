@@ -86,6 +86,42 @@ public sealed class AppStoreConnectScreenshotApprovalTests
     }
 
     [Fact]
+    public void Create_BindsReusableBlankAppIdToExactApprovalDestination()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.ScreenshotApproval", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var screenshotFolder = Directory.CreateDirectory(Path.Combine(root.FullName, "screenshots"));
+            File.WriteAllBytes(Path.Combine(screenshotFolder.FullName, "01-home.png"), Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII="));
+            var spec = CreateSpec();
+            spec.AppId = string.Empty;
+            spec.VersionString = null;
+            spec.UseReleaseVersion = true;
+
+            var manifest = new AppStoreConnectScreenshotApprovalService().Create(
+                new AppStoreConnectScreenshotApprovalRequest
+                {
+                    Spec = spec,
+                    AppId = "6778025328",
+                    BaseDirectory = root.FullName,
+                    AllowedRoot = screenshotFolder.FullName,
+                    VersionString = "1.5.0",
+                    SourceCommit = ApprovedSourceCommit,
+                    ApprovedBy = "release-owner"
+                });
+
+            Assert.Equal("6778025328", manifest.AppId);
+            Assert.Equal("1.5.0", manifest.VersionString);
+            Assert.Single(manifest.Screenshots);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Validate_RequiresExactApprovedScreenshotBytes()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.ScreenshotApproval", Guid.NewGuid().ToString("N")));

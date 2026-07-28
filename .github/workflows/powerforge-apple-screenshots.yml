@@ -215,28 +215,46 @@ jobs:
         env:
           SCREENSHOT_CONFIGS_JSON: ${{ inputs.screenshot_configs_json }}
           POWERFORGE_TOOL: ${{ steps.build-powerforge.outputs.tool-path }}
+          RELEASE_CONFIG_RELATIVE: ${{ inputs.release_config_path }}
+          MARKETING_VERSION: ${{ inputs.marketing_version }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          APPROVAL_ENVIRONMENT: ${{ inputs.approval_environment }}
+          TARGET_INPUT: ${{ inputs.target }}
+          TOOL_RUNTIME: ${{ inputs.tool_runtime }}
+          CAPTURE_DEVICE: ${{ inputs.device }}
+          CAPTURE_THEME: ${{ inputs.theme }}
+          CAPTURE_SCENARIO: ${{ inputs.scenario }}
         run: |
           $configs = @($env:SCREENSHOT_CONFIGS_JSON | ConvertFrom-Json -Depth 10)
           if ($configs.Count -eq 0) { throw 'screenshot_configs_json must contain at least one config path.' }
           $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source')
           $prefix = $sourceRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+          $releaseConfigPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:RELEASE_CONFIG_RELATIVE))
+          if (-not $releaseConfigPath.StartsWith($prefix, [StringComparison]::Ordinal)) { throw 'release_config_path escapes source.' }
           $xcodeVersion = (& xcodebuild -version) -join ' '
           foreach ($config in $configs) {
             $configPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot ([string] $config)))
             if (-not $configPath.StartsWith($prefix, [StringComparison]::Ordinal)) { throw "Screenshot config escapes source: $config" }
-            & $env:POWERFORGE_TOOL apple-screenshots manifest `
-              --config $configPath `
-              --version '${{ inputs.marketing_version }}' `
-              --source-commit '${{ inputs.source_ref }}' `
-              --approved-by 'GitHub protected environment: ${{ inputs.approval_environment }}' `
-              --allowed-root '${{ steps.capture-path.outputs.path }}' `
-              --initiated-by '${{ github.actor }}' `
-              --approval-evidence '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}' `
-              --xcode-version $xcodeVersion `
-              --runtime '${{ inputs.tool_runtime }}' `
-              --device '${{ inputs.device }}' `
-              --theme '${{ inputs.theme }}' `
-              --scenario '${{ inputs.scenario }}'
+            $manifestArguments = @(
+              'apple-screenshots', 'manifest',
+              '--config', $configPath,
+              '--release-config', $releaseConfigPath,
+              '--version', $env:MARKETING_VERSION,
+              '--source-commit', $env:SOURCE_REF,
+              '--approved-by', "GitHub protected environment: $($env:APPROVAL_ENVIRONMENT)",
+              '--allowed-root', '${{ steps.capture-path.outputs.path }}',
+              '--initiated-by', '${{ github.actor }}',
+              '--approval-evidence', '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}',
+              '--xcode-version', $xcodeVersion,
+              '--runtime', $env:TOOL_RUNTIME,
+              '--device', $env:CAPTURE_DEVICE,
+              '--theme', $env:CAPTURE_THEME,
+              '--scenario', $env:CAPTURE_SCENARIO
+            )
+            if (-not [string]::IsNullOrWhiteSpace($env:TARGET_INPUT)) {
+              $manifestArguments += @('--target', $env:TARGET_INPUT)
+            }
+            & $env:POWERFORGE_TOOL @manifestArguments
             if ($LASTEXITCODE -ne 0) { throw "Screenshot approval manifest failed for $config." }
           }
 

@@ -38,6 +38,7 @@ internal static partial class Program
                         [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>]
                         [--target <Name[,Name...]>] [--summary] [--output json]
       powerforge apple-screenshots manifest --config <screenshots.json> --version <x.y.z> --source-commit <sha> --approved-by <reviewer-or-boundary> --allowed-root <reviewed-capture-root>
+                        [--app-id <asc-app-id> | --release-config <release.json> [--target <name-or-scheme>]]
                         [--out <manifest.json>] [--xcode-version <value>] [--runtime <value>] [--device <value>]
                         [--theme <value>] [--scenario <value>] [--output json]
       powerforge store submit [--config <powerforge.store.submit.json>] [--list] [--list-assets] [--target <Name>] [--submission-id <id>] [--plan] [--validate] [--no-commit] [--no-wait] [--output json]

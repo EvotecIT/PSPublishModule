@@ -5,6 +5,8 @@ namespace PowerForge.Tests;
 
 public sealed class PowerForgeCliAppleReleaseTests
 {
+    private const string ApprovedSourceCommit = "0123456789abcdef0123456789abcdef01234567";
+
     [Fact]
     public async Task AppleRelease_CliUsesDedicatedEnvelopeAndReportsLegacyConfirmation()
     {
@@ -102,6 +104,73 @@ public sealed class PowerForgeCliAppleReleaseTests
             var configuredResult = configuredRoot.GetProperty("result");
             Assert.Equal("Configured", configuredResult.GetProperty("action").GetString());
             Assert.True(configuredResult.GetProperty("requiresConfirmation").GetBoolean());
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AppleScreenshots_ManifestResolvesBlankAppIdFromSelectedReleaseTarget()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = CreateTempDirectory();
+
+        try
+        {
+            var screenshotDirectory = Directory.CreateDirectory(Path.Combine(tempRoot, "screenshots"));
+            File.WriteAllBytes(
+                Path.Combine(screenshotDirectory.FullName, "01-home.png"),
+                Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII="));
+            var screenshotConfigPath = Path.Combine(tempRoot, "screenshots.json");
+            File.WriteAllText(
+                screenshotConfigPath,
+                """
+                {
+                  "AppId": "",
+                  "UseReleaseVersion": true,
+                  "Platform": "iOS",
+                  "Locale": "en-US",
+                  "ScreenshotSets": [
+                    {
+                      "ScreenshotDisplayType": "APP_IPHONE_67",
+                      "Path": "screenshots",
+                      "AllowedDimensions": [ "1x1" ]
+                    }
+                  ],
+                  "Quality": {
+                    "Enabled": true,
+                    "MinimumFileBytes": 1,
+                    "MinimumKilobytesPerMegapixel": 0,
+                    "RequireApprovalManifest": true,
+                    "ApprovalManifestPath": "approval.json"
+                  }
+                }
+                """);
+            var releaseConfigPath = Path.Combine(tempRoot, "powerforge.release.json");
+            WriteReleaseConfig(releaseConfigPath, submitForReview: false, includeInvalidModule: false);
+            var manifestPath = Path.Combine(tempRoot, "approval.json");
+
+            var result = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-screenshots manifest --config \"{screenshotConfigPath}\" --release-config \"{releaseConfigPath}\" --target Sample --version 1.5.0 --source-commit {ApprovedSourceCommit} --approved-by release-owner --allowed-root \"{screenshotDirectory.FullName}\" --out \"{manifestPath}\" --output json");
+
+            Assert.True(
+                result.ExitCode == 0,
+                $"CLI exit code {result.ExitCode}\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
+            var manifest = JsonSerializer.Deserialize<AppStoreConnectScreenshotApprovalManifest>(
+                File.ReadAllText(manifestPath),
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true,
+                    Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+                });
+            Assert.NotNull(manifest);
+            Assert.Equal("1234567890", manifest!.AppId);
+            Assert.Equal("1.5.0", manifest.VersionString);
+            Assert.Equal(ApprovedSourceCommit, manifest.SourceCommit);
         }
         finally
         {

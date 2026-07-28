@@ -12,6 +12,11 @@ on:
         description: GitHub Actions run id containing the reviewed capture artifact.
         required: true
         type: string
+      capture_workflow_path:
+        description: Dedicated caller workflow path allowed to produce reviewed captures.
+        required: false
+        default: .github/workflows/apple-screenshots.yml
+        type: string
       powerforge_ref:
         description: Exact PSPublishModule commit containing the shared approval workflow.
         required: true
@@ -100,6 +105,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CAPTURE_RUN_ID: ${{ inputs.capture_run_id }}
+          CAPTURE_WORKFLOW_PATH: ${{ inputs.capture_workflow_path }}
           EXPECTED_SOURCE_REF: ${{ inputs.source_ref }}
         run: |
           set -euo pipefail
@@ -108,24 +114,77 @@ jobs:
             exit 1
           }
 
+          [[ "$CAPTURE_WORKFLOW_PATH" =~ ^\.github/workflows/[A-Za-z0-9._/-]+\.ya?ml$ ]] || {
+            echo 'capture_workflow_path must identify one repository workflow under .github/workflows.' >&2
+            exit 1
+          }
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${CAPTURE_RUN_ID}")"
+          default_branch="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.default_branch')"
+          [[ "$(jq -r '.status' <<< "$run_json")" == 'completed' && "$(jq -r '.conclusion' <<< "$run_json")" == 'success' ]] || {
+            echo "Capture run ${CAPTURE_RUN_ID} must be completed successfully." >&2
+            exit 1
+          }
+          [[ "$(jq -r '.event' <<< "$run_json")" == 'workflow_dispatch' ]] || {
+            echo "Capture run ${CAPTURE_RUN_ID} must be a workflow_dispatch run." >&2
+            exit 1
+          }
+          [[ "$(jq -r '.path' <<< "$run_json")" == "$CAPTURE_WORKFLOW_PATH" ]] || {
+            echo "Capture run ${CAPTURE_RUN_ID} was not produced by ${CAPTURE_WORKFLOW_PATH}." >&2
+            exit 1
+          }
+          [[ "$(jq -r '.head_repository.full_name' <<< "$run_json")" == "$GITHUB_REPOSITORY" && "$(jq -r '.head_branch' <<< "$run_json")" == "$default_branch" ]] || {
+            echo "Capture run ${CAPTURE_RUN_ID} must use the repository default-branch workflow definition." >&2
+            exit 1
+          }
+
           artifact_prefix='powerforge-apple-screenshots-'
+          provenance_prefix='powerforge-apple-screenshot-provenance-'
           mapfile -t artifact_names < <(
             gh api --paginate \
               "repos/${GITHUB_REPOSITORY}/actions/runs/${CAPTURE_RUN_ID}/artifacts" \
               --jq '.artifacts[] | select(.expired == false) | .name'
           )
           source_refs=()
+          provenance_refs=()
           for artifact_name in "${artifact_names[@]}"; do
             if [[ "$artifact_name" =~ ^${artifact_prefix}([0-9A-Fa-f]{40})$ ]]; then
               source_refs+=("${BASH_REMATCH[1],,}")
+            fi
+            if [[ "$artifact_name" =~ ^${provenance_prefix}([0-9A-Fa-f]{40})$ ]]; then
+              provenance_refs+=("${BASH_REMATCH[1],,}")
             fi
           done
           [[ ${#source_refs[@]} -eq 1 ]] || {
             echo "Capture run ${CAPTURE_RUN_ID} must contain exactly one unexpired ${artifact_prefix}<sha> artifact; found ${#source_refs[@]}." >&2
             exit 1
           }
+          [[ ${#provenance_refs[@]} -eq 1 && "${provenance_refs[0]}" == "${source_refs[0]}" ]] || {
+            echo "Capture run ${CAPTURE_RUN_ID} must contain exactly one matching ${provenance_prefix}<sha> artifact." >&2
+            exit 1
+          }
 
           resolved_source_ref="${source_refs[0]}"
+          provenance_root="$RUNNER_TEMP/powerforge-apple-screenshot-provenance"
+          gh run download "$CAPTURE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "${provenance_prefix}${resolved_source_ref}" \
+            --dir "$provenance_root"
+          provenance_path="$provenance_root/powerforge-apple-screenshot-provenance.json"
+          [[ -f "$provenance_path" ]] || {
+            echo 'Capture provenance document is missing.' >&2
+            exit 1
+          }
+          expected_workflow_ref="${GITHUB_REPOSITORY}/${CAPTURE_WORKFLOW_PATH}@refs/heads/${default_branch}"
+          jq -e \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg run_id "$CAPTURE_RUN_ID" \
+            --arg source "$resolved_source_ref" \
+            --arg workflow_ref "$expected_workflow_ref" \
+            '.schemaVersion == 1 and .repository == $repository and (.captureRunId | tostring) == $run_id and .sourceCommit == $source and .workflowRef == $workflow_ref' \
+            "$provenance_path" >/dev/null || {
+              echo 'Capture provenance does not match the successful dedicated workflow run and resolved source commit.' >&2
+              exit 1
+            }
           if [[ -n "$EXPECTED_SOURCE_REF" ]]; then
             [[ "$EXPECTED_SOURCE_REF" =~ ^[0-9A-Fa-f]{40}$ ]] || {
               echo 'source_ref must be blank or an exact 40-character commit SHA.' >&2
@@ -229,29 +288,47 @@ jobs:
         env:
           SCREENSHOT_CONFIGS_JSON: ${{ inputs.screenshot_configs_json }}
           POWERFORGE_TOOL: ${{ steps.build-powerforge.outputs.tool-path }}
+          RELEASE_CONFIG_RELATIVE: ${{ inputs.release_config_path }}
+          MARKETING_VERSION: ${{ inputs.marketing_version }}
+          SOURCE_REF: ${{ needs.resolve-source.outputs.source_ref }}
+          APPROVAL_ENVIRONMENT: ${{ inputs.environment_name }}
+          TARGET_INPUT: ${{ inputs.target }}
+          TOOL_RUNTIME: ${{ inputs.tool_runtime }}
+          CAPTURE_DEVICE: ${{ inputs.device }}
+          CAPTURE_THEME: ${{ inputs.theme }}
+          CAPTURE_SCENARIO: ${{ inputs.scenario }}
         run: |
           $configs = @($env:SCREENSHOT_CONFIGS_JSON | ConvertFrom-Json -Depth 10)
           if ($configs.Count -eq 0) { throw 'screenshot_configs_json must contain at least one config path.' }
           $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source')
           $prefix = $sourceRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+          $releaseConfigPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:RELEASE_CONFIG_RELATIVE))
+          if (-not $releaseConfigPath.StartsWith($prefix, [StringComparison]::Ordinal)) { throw 'release_config_path escapes source.' }
           $xcodeVersion = (& xcodebuild -version) -join ' '
           $evidence = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}; capture: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs.capture_run_id }}'
           foreach ($config in $configs) {
             $configPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot ([string] $config)))
             if (-not $configPath.StartsWith($prefix, [StringComparison]::Ordinal)) { throw "Screenshot config escapes source: $config" }
-            & $env:POWERFORGE_TOOL apple-screenshots manifest `
-              --config $configPath `
-              --version '${{ inputs.marketing_version }}' `
-              --source-commit '${{ needs.resolve-source.outputs.source_ref }}' `
-              --approved-by 'GitHub protected environment: ${{ inputs.environment_name }}' `
-              --allowed-root '${{ steps.capture-path.outputs.path }}' `
-              --initiated-by '${{ github.actor }}' `
-              --approval-evidence $evidence `
-              --xcode-version $xcodeVersion `
-              --runtime '${{ inputs.tool_runtime }}' `
-              --device '${{ inputs.device }}' `
-              --theme '${{ inputs.theme }}' `
-              --scenario '${{ inputs.scenario }}'
+            $manifestArguments = @(
+              'apple-screenshots', 'manifest',
+              '--config', $configPath,
+              '--release-config', $releaseConfigPath,
+              '--version', $env:MARKETING_VERSION,
+              '--source-commit', $env:SOURCE_REF,
+              '--approved-by', "GitHub protected environment: $($env:APPROVAL_ENVIRONMENT)",
+              '--allowed-root', '${{ steps.capture-path.outputs.path }}',
+              '--initiated-by', '${{ github.actor }}',
+              '--approval-evidence', $evidence,
+              '--xcode-version', $xcodeVersion,
+              '--runtime', $env:TOOL_RUNTIME,
+              '--device', $env:CAPTURE_DEVICE,
+              '--theme', $env:CAPTURE_THEME,
+              '--scenario', $env:CAPTURE_SCENARIO
+            )
+            if (-not [string]::IsNullOrWhiteSpace($env:TARGET_INPUT)) {
+              $manifestArguments += @('--target', $env:TARGET_INPUT)
+            }
+            & $env:POWERFORGE_TOOL @manifestArguments
             if ($LASTEXITCODE -ne 0) { throw "Screenshot approval manifest failed for $config." }
           }
 

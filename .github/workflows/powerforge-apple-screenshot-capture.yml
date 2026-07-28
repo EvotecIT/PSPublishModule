@@ -78,6 +78,29 @@ jobs:
           if (-not (Test-Path -LiteralPath $artifactPath -PathType Container)) { throw "Capture artifact folder was not created: $artifactPath" }
           if (@(Get-ChildItem -LiteralPath $artifactPath -Filter '*.png' -File -Recurse).Count -eq 0) { throw 'Capture produced no PNG screenshots.' }
 
+      - name: Record capture provenance
+        shell: pwsh
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          $provenance = [ordered]@{
+            schemaVersion = 1
+            repository = $env:GITHUB_REPOSITORY
+            captureRunId = $env:GITHUB_RUN_ID
+            sourceCommit = $env:SOURCE_REF.ToLowerInvariant()
+            workflowRef = $env:GITHUB_WORKFLOW_REF
+          }
+          $provenance | ConvertTo-Json -Depth 5 -Compress |
+            Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-screenshot-provenance.json') -Encoding utf8
+
+      - name: Retain compact capture provenance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: powerforge-apple-screenshot-provenance-${{ inputs.source_ref }}
+          path: ${{ runner.temp }}/powerforge-apple-screenshot-provenance.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Retain exact captures for manual review
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

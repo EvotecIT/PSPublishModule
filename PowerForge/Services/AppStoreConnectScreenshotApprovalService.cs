@@ -30,7 +30,8 @@ public sealed class AppStoreConnectScreenshotApprovalService
         if ((File.GetAttributes(allowedRoot) & FileAttributes.ReparsePoint) != 0)
             throw new InvalidOperationException($"Reviewed screenshot root must not be a symbolic link or reparse point: {allowedRoot}");
 
-        var spec = CloneWithoutApprovalRequirement(request.Spec);
+        var appId = ResolveAppId(request.Spec.AppId, request.AppId);
+        var spec = CloneForApproval(request.Spec, appId, request.VersionString);
         var validation = new AppStoreConnectScreenshotSyncConfigValidator().Validate(
             spec,
             request.BaseDirectory);
@@ -58,7 +59,7 @@ public sealed class AppStoreConnectScreenshotApprovalService
 
         return new AppStoreConnectScreenshotApprovalManifest
         {
-            AppId = request.Spec.AppId.Trim(),
+            AppId = appId,
             Platform = request.Spec.Platform,
             VersionString = request.VersionString.Trim(),
             SourceCommit = request.SourceCommit.Trim(),
@@ -102,14 +103,31 @@ public sealed class AppStoreConnectScreenshotApprovalService
         }
     }
 
-    private static AppStoreConnectScreenshotSyncSpec CloneWithoutApprovalRequirement(
-        AppStoreConnectScreenshotSyncSpec spec)
+    private static string ResolveAppId(string? configuredAppId, string? requestedAppId)
+    {
+        var configured = Normalize(configuredAppId);
+        var requested = Normalize(requestedAppId);
+        if (configured is not null && requested is not null &&
+            !string.Equals(configured, requested, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Screenshot approval destination app id '{requested}' does not match config app id '{configured}'.");
+        }
+
+        return requested ?? configured ?? throw new InvalidOperationException(
+            "Screenshot approval requires an exact destination AppId when the reusable screenshot config leaves AppId blank.");
+    }
+
+    private static AppStoreConnectScreenshotSyncSpec CloneForApproval(
+        AppStoreConnectScreenshotSyncSpec spec,
+        string appId,
+        string versionString)
         => new()
         {
-            AppId = spec.AppId,
-            VersionString = spec.VersionString,
-            VersionId = spec.VersionId,
-            UseReleaseVersion = spec.UseReleaseVersion,
+            AppId = appId,
+            VersionString = versionString.Trim(),
+            VersionId = null,
+            UseReleaseVersion = false,
             Platform = spec.Platform,
             Locale = spec.Locale,
             ScreenshotSets = spec.ScreenshotSets,

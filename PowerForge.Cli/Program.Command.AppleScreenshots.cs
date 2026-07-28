@@ -7,6 +7,7 @@ internal static partial class Program
     private const string AppleScreenshotsUsage =
         "Usage: powerforge apple-screenshots manifest --config <screenshots.json> --version <x.y.z> " +
         "--source-commit <sha> --approved-by <identity> --allowed-root <reviewed-capture-root> [--out <manifest.json>] " +
+        "[--app-id <asc-app-id> | --release-config <powerforge.release.json> [--target <name-or-scheme>]] " +
         "[--initiated-by <identity>] [--approval-evidence <url-or-id>] " +
         "[--xcode-version <value>] [--runtime <value>] [--device <value>] [--theme <value>] [--scenario <value>] [--output json]";
 
@@ -30,10 +31,12 @@ internal static partial class Program
                 File.ReadAllText(configPath),
                 CliJson.Context.AppStoreConnectScreenshotSyncSpec,
                 configPath);
+            var appId = ResolveScreenshotApprovalAppId(argv, spec);
             var manifest = new AppStoreConnectScreenshotApprovalService().Create(
                 new AppStoreConnectScreenshotApprovalRequest
                 {
                     Spec = spec,
+                    AppId = appId,
                     BaseDirectory = baseDirectory,
                     AllowedRoot = Path.GetFullPath(RequiredOption(argv, "--allowed-root")),
                     VersionString = RequiredOption(argv, "--version"),
@@ -87,4 +90,54 @@ internal static partial class Program
             return WriteReleaseError(outputJson, "apple-screenshots.manifest", 1, exception.Message, logger);
         }
     }
+
+    private static string? ResolveScreenshotApprovalAppId(
+        string[] argv,
+        AppStoreConnectScreenshotSyncSpec spec)
+    {
+        var explicitAppId = TryGetOptionValue(argv, "--app-id");
+        if (!string.IsNullOrWhiteSpace(explicitAppId) || !string.IsNullOrWhiteSpace(spec.AppId))
+            return explicitAppId;
+
+        var releaseConfigPath = TryGetOptionValue(argv, "--release-config");
+        if (string.IsNullOrWhiteSpace(releaseConfigPath))
+            return null;
+
+        var (releaseSpec, _) = LoadPowerForgeReleaseSpecWithPath(releaseConfigPath);
+        var candidates = (releaseSpec.AppleApps?.Apps ?? Array.Empty<AppleAppConfiguration>())
+            .Where(app => app.Enabled &&
+                          app.Platform == spec.Platform &&
+                          !string.IsNullOrWhiteSpace(app.AppStoreConnectAppId))
+            .ToArray();
+        var selectedTargets = (TryGetOptionValue(argv, "--target") ?? string.Empty)
+            .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static value => value.Trim())
+            .Where(static value => value.Length > 0)
+            .ToArray();
+        if (selectedTargets.Length > 0)
+        {
+            candidates = candidates
+                .Where(app => selectedTargets.Any(selected => ScreenshotApprovalTargetMatches(app, selected)))
+                .ToArray();
+        }
+
+        var appIds = candidates
+            .Select(app => app.AppStoreConnectAppId!.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (appIds.Length != 1)
+        {
+            throw new InvalidOperationException(
+                $"Screenshot approval could not resolve exactly one App Store Connect app id for platform '{spec.Platform}'" +
+                (selectedTargets.Length == 0 ? "." : $" and target '{string.Join(",", selectedTargets)}'.") +
+                " Set AppId in the screenshot config, select one release target, or pass --app-id explicitly.");
+        }
+
+        return appIds[0];
+    }
+
+    private static bool ScreenshotApprovalTargetMatches(AppleAppConfiguration app, string selected)
+        => string.Equals(app.Name?.Trim(), selected.Trim(), StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(app.Scheme?.Trim(), selected.Trim(), StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(app.BundleId?.Trim(), selected.Trim(), StringComparison.OrdinalIgnoreCase);
 }

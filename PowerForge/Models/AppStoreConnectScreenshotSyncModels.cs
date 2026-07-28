@@ -163,6 +163,12 @@ public sealed class AppStoreConnectScreenshotApprovalRequest
     /// <summary>Screenshot sync configuration whose selected files were reviewed.</summary>
     public AppStoreConnectScreenshotSyncSpec Spec { get; set; } = new();
 
+    /// <summary>
+    /// Exact App Store Connect app id receiving the reviewed screenshots. Required when
+    /// <see cref="Spec"/> intentionally leaves its reusable app id blank.
+    /// </summary>
+    public string? AppId { get; set; }
+
     /// <summary>Base directory used to resolve screenshot paths.</summary>
     public string BaseDirectory { get; set; } = Directory.GetCurrentDirectory();
 
