@@ -53,7 +53,7 @@ public sealed class AppStoreConnectControlPlaneState
     /// <summary>Number of auto-renewable subscriptions discovered for the app.</summary>
     public int SubscriptionCount { get; set; }
 
-    /// <summary>Number of App Store Connect webhooks configured for the app.</summary>
+    /// <summary>Number of enabled App Store Connect webhooks configured for the app.</summary>
     public int WebhookCount { get; set; }
 
     /// <summary>Number of recent TestFlight crash-feedback records visible to the API.</summary>

@@ -256,7 +256,7 @@ jobs:
               '--allowed-root', '${{ steps.capture-path.outputs.path }}',
               '--out', $manifestPath,
               '--write-root', $sourceRoot,
-              '--initiated-by', '${{ github.actor }}',
+              '--initiated-by', '${{ github.triggering_actor }}',
               '--approval-evidence', '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}',
               '--xcode-version', $xcodeVersion,
               '--runtime', $env:TOOL_RUNTIME,

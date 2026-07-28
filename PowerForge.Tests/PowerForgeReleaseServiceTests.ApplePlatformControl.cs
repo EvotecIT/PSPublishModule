@@ -908,4 +908,25 @@ public sealed partial class PowerForgeReleaseServiceTests
         Assert.Contains(diagnostics, item => item.Code == "APPLE_ASSET_VALIDATION");
         Assert.DoesNotContain(diagnostics, item => item.Code == "APPLE_TRANSIENT");
     }
+
+    [Theory]
+    [InlineData("Asset validation failed for build 403")]
+    [InlineData("Asset validation failed ITMS-90401")]
+    public void AppleReleaseFailureClassifier_DoesNotTreatUnscopedNumbersAsAuthenticationFailures(string message)
+    {
+        var diagnostics = AppleReleaseFailureClassifier.Classify(message);
+
+        Assert.DoesNotContain(diagnostics, item => item.Code == "APPLE_AUTH");
+    }
+
+    [Theory]
+    [InlineData("HTTP status 401")]
+    [InlineData("Response: 403")]
+    [InlineData("Unauthorized App Store Connect request")]
+    public void AppleReleaseFailureClassifier_RecognizesContextualAuthenticationFailures(string message)
+    {
+        Assert.Contains(
+            AppleReleaseFailureClassifier.Classify(message),
+            item => item.Code == "APPLE_AUTH");
+    }
 }

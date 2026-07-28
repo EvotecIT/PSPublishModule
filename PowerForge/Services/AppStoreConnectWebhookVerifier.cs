@@ -87,6 +87,7 @@ public sealed class AppStoreConnectWebhookVerifier
         => type.Contains("buildUpload", StringComparison.OrdinalIgnoreCase) ||
            type.Contains("appStoreVersion", StringComparison.OrdinalIgnoreCase) ||
            type.Contains("buildBetaDetail", StringComparison.OrdinalIgnoreCase) ||
+           type.Contains("betaFeedback", StringComparison.OrdinalIgnoreCase) ||
            type.Contains("review", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsFailureState(string? state)

@@ -59,8 +59,63 @@ public sealed partial class AppStoreConnectClientTests
 
         Assert.False(result.Success);
         Assert.Empty(result.AppliedChanges);
-        Assert.Contains("no longer matches the reviewed governance plan", Assert.Single(result.NextActions), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("no longer matches the remaining reviewed governance plan", Assert.Single(result.NextActions), StringComparison.OrdinalIgnoreCase);
         Assert.Equal(HttpMethod.Get, Assert.Single(handler.Methods));
+    }
+
+    [Fact]
+    public async Task GovernanceApply_StopsWhenReplanningRevealsUnreviewedDependentChanges()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+            new SequenceResponse(HttpStatusCode.Created,
+                """{ "data": { "type": "subscriptionGroups", "id": "group-1", "attributes": { "referenceName": "Pro" } } }"""),
+            new SequenceResponse(HttpStatusCode.OK,
+                """{ "data": [ { "type": "subscriptionGroups", "id": "group-1", "attributes": { "referenceName": "Pro" } } ] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var spec = new AppStoreConnectGovernanceSpec
+        {
+            AppId = "app-1",
+            SubscriptionGroups =
+            [
+                new AppStoreConnectSubscriptionGroupSpec
+                {
+                    ReferenceName = "Pro",
+                    Localizations = [new AppStoreConnectSubscriptionGroupLocalizationSpec { Locale = "en-US", Name = "Pro" }]
+                }
+            ]
+        };
+
+        var result = await new AppStoreConnectGovernanceService(client).ApplyAsync(
+            new AppStoreConnectGovernanceApplyRequest
+            {
+                ConfirmApply = true,
+                Spec = spec,
+                ReviewedPlan = new AppStoreConnectGovernancePlan
+                {
+                    AppId = "app-1",
+                    Changes =
+                    [
+                        new AppStoreConnectGovernanceChange
+                        {
+                            Section = "Subscriptions",
+                            ResourceType = "SubscriptionGroup",
+                            Key = "Pro",
+                            Action = AppStoreConnectGovernanceChangeAction.Create,
+                            Summary = "Create subscription group 'Pro'."
+                        }
+                    ]
+                }
+            });
+
+        Assert.False(result.Success);
+        Assert.Equal("SubscriptionGroup", Assert.Single(result.AppliedChanges).ResourceType);
+        Assert.Equal("SubscriptionGroupLocalization", Assert.Single(result.FinalPlan.Changes).ResourceType);
+        Assert.Contains("remaining reviewed governance plan", Assert.Single(result.NextActions), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, handler.Methods.Count(method => method == HttpMethod.Post));
     }
 
     [Fact]

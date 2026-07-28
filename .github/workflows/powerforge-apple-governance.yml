@@ -82,7 +82,8 @@ jobs:
           SOURCE_REF: ${{ inputs.source_ref }}
           POWERFORGE_REF: ${{ inputs.powerforge_ref }}
           DISPATCHERS_JSON: ${{ inputs.allowed_dispatchers_json }}
-          DISPATCHER: ${{ github.actor }}
+          DISPATCHER: ${{ github.triggering_actor }}
+          ORIGINAL_DISPATCHER: ${{ github.actor }}
           MAXIMUM_CHANGES: ${{ inputs.maximum_changes }}
         run: |
           if ($env:OPERATION -notin @('Plan', 'Apply')) { throw 'operation must be Plan or Apply.' }
@@ -96,8 +97,9 @@ jobs:
           if ($env:OPERATION -eq 'Apply') {
             $dispatchers = @($env:DISPATCHERS_JSON | ConvertFrom-Json -Depth 5)
             if ($dispatchers.Count -gt 0 -and $env:DISPATCHER -notin $dispatchers) {
-              throw "GitHub actor '$($env:DISPATCHER)' is not an authorized Apple governance dispatcher."
+              throw "GitHub triggering actor '$($env:DISPATCHER)' is not an authorized Apple governance dispatcher."
             }
+            Write-Host "Authorized triggering actor '$($env:DISPATCHER)' (original run actor '$($env:ORIGINAL_DISPATCHER)')."
           }
 
       - name: Checkout exact consumer source
@@ -212,12 +214,14 @@ jobs:
         shell: pwsh
         env:
           DISPATCHERS_JSON: ${{ inputs.allowed_dispatchers_json }}
-          DISPATCHER: ${{ github.actor }}
+          DISPATCHER: ${{ github.triggering_actor }}
+          ORIGINAL_DISPATCHER: ${{ github.actor }}
         run: |
           $dispatchers = @($env:DISPATCHERS_JSON | ConvertFrom-Json -Depth 5)
           if ($dispatchers.Count -gt 0 -and $env:DISPATCHER -notin $dispatchers) {
-            throw "GitHub actor '$($env:DISPATCHER)' is not an authorized Apple governance dispatcher."
+            throw "GitHub triggering actor '$($env:DISPATCHER)' is not an authorized Apple governance dispatcher."
           }
+          Write-Host "Authorized triggering actor '$($env:DISPATCHER)' (original run actor '$($env:ORIGINAL_DISPATCHER)')."
 
       - name: Checkout exact consumer source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

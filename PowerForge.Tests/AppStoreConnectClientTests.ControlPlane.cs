@@ -22,7 +22,14 @@ public sealed partial class AppStoreConnectClientTests
             One("appPriceSchedules", "price-1"),
             One("appAvailabilities", "availability-1"),
             Many(3),
-            Many(1),
+            new SequenceResponse(HttpStatusCode.OK, """
+                {
+                  "data": [
+                    { "type": "webhooks", "id": "webhook-enabled", "attributes": { "enabled": true } },
+                    { "type": "webhooks", "id": "webhook-disabled", "attributes": { "enabled": false } }
+                  ]
+                }
+                """),
             new SequenceResponse(HttpStatusCode.OK, """
                 {
                   "data": [{
@@ -69,6 +76,8 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal("iPhone17,1", crash.DeviceModel);
         Assert.Equal(5, state.BetaScreenshotFeedbackCount);
         Assert.Equal(6, state.CustomerReviewCount);
+        var webhookRequest = Assert.Single(handler.RequestUris, uri => uri.AbsolutePath.EndsWith("/webhooks", StringComparison.Ordinal));
+        Assert.Contains("limit=200", webhookRequest.Query, StringComparison.Ordinal);
         var crashRequest = Assert.Single(handler.RequestUris, uri => uri.AbsolutePath.EndsWith("/betaFeedbackCrashSubmissions", StringComparison.Ordinal));
         Assert.Contains("filter%5Bbuild%5D=build-1", crashRequest.Query, StringComparison.OrdinalIgnoreCase);
     }

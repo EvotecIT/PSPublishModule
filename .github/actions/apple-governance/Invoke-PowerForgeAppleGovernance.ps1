@@ -23,6 +23,21 @@ if ($operation -eq 'Snapshot') {
 if (-not [string]::IsNullOrWhiteSpace($env:INPUT_RELEASE_CONFIG_PATH)) {
     $arguments += @('--release-config', $env:INPUT_RELEASE_CONFIG_PATH)
 }
+$credentialInputs = @(
+    $env:APP_STORE_CONNECT_PRIVATE_KEY_PATH,
+    $env:APP_STORE_CONNECT_KEY_ID,
+    $env:APP_STORE_CONNECT_ISSUER_ID
+)
+if ($credentialInputs.Where({ -not [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
+    if ($credentialInputs.Where({ [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
+        throw 'Protected App Store Connect credentials must provide private-key, key-id, and issuer-id together.'
+    }
+    $arguments += @(
+        '--key-path', $env:APP_STORE_CONNECT_PRIVATE_KEY_PATH,
+        '--key-id', $env:APP_STORE_CONNECT_KEY_ID,
+        '--issuer-id', $env:APP_STORE_CONNECT_ISSUER_ID
+    )
+}
 if ($operation -in @('Plan', 'Apply')) {
     $receiptPath = $env:INPUT_RECEIPT_PATH
     if ([string]::IsNullOrWhiteSpace($receiptPath)) {

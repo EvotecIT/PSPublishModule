@@ -56,7 +56,7 @@ public sealed partial class AppStoreConnectGovernanceService
         var started = DateTimeOffset.UtcNow;
         var applied = new List<AppStoreConnectGovernanceChange>();
         var executed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var reviewedPlanVerified = false;
+        var remainingReviewedChanges = request.ReviewedPlan?.Changes.ToList();
         AppStoreConnectGovernancePlan plan = new();
         try
         {
@@ -65,18 +65,25 @@ public sealed partial class AppStoreConnectGovernanceService
                 plan = await PlanAsync(request.Spec, cancellationToken).ConfigureAwait(false);
                 if (plan.Findings.Any(finding => finding.IsError))
                     return Failure(request.Spec.AppId, started, applied, plan, "Correct governance configuration errors, then generate a new plan.");
-                if (!reviewedPlanVerified && request.ReviewedPlan is not null)
+                var repeated = plan.Changes.FirstOrDefault(change => executed.Contains(ChangeFingerprint(change)));
+                if (repeated is not null)
                 {
-                    reviewedPlanVerified = true;
-                    if (!MatchesReviewedPlan(plan, request.ReviewedPlan))
-                    {
-                        return Failure(
-                            request.Spec.AppId,
-                            started,
-                            applied,
-                            plan,
-                            "Current App Store Connect state no longer matches the reviewed governance plan. Generate and approve a new plan before applying any mutation.");
-                    }
+                    return Failure(
+                        request.Spec.AppId,
+                        started,
+                        applied,
+                        plan,
+                        "Apple still reports a change already applied in this run. PowerForge stopped to prevent a duplicate mutation; wait for App Store Connect consistency, then generate a new plan.");
+                }
+                if (request.ReviewedPlan is not null &&
+                    !MatchesReviewedPlan(plan, request.ReviewedPlan, remainingReviewedChanges!))
+                {
+                    return Failure(
+                        request.Spec.AppId,
+                        started,
+                        applied,
+                        plan,
+                        "Current App Store Connect state no longer matches the remaining reviewed governance plan. Generate and approve a new plan before applying any further mutation.");
                 }
                 if (!plan.CanApply)
                     return Failure(request.Spec.AppId, started, applied, plan, "Resolve every blocked Apple API constraint shown in the plan before applying any governance mutation.");
@@ -97,7 +104,7 @@ public sealed partial class AppStoreConnectGovernanceService
                     };
                 }
 
-                var fingerprint = $"{next.Action}|{next.ResourceType}|{next.Key}";
+                var fingerprint = ChangeFingerprint(next);
                 if (!executed.Add(fingerprint))
                 {
                     return Failure(
@@ -110,9 +117,21 @@ public sealed partial class AppStoreConnectGovernanceService
 
                 await ApplyChangeAsync(request.Spec, next, cancellationToken).ConfigureAwait(false);
                 applied.Add(next);
+                if (remainingReviewedChanges is not null)
+                    remainingReviewedChanges.RemoveAt(0);
             }
 
             plan = await PlanAsync(request.Spec, cancellationToken).ConfigureAwait(false);
+            if (request.ReviewedPlan is not null &&
+                !MatchesReviewedPlan(plan, request.ReviewedPlan, remainingReviewedChanges!))
+            {
+                return Failure(
+                    request.Spec.AppId,
+                    started,
+                    applied,
+                    plan,
+                    "Current App Store Connect state no longer matches the remaining reviewed governance plan. Generate and approve a new plan before applying any further mutation.");
+            }
             if (plan.IsConverged)
             {
                 return new AppStoreConnectGovernanceApplyResult
@@ -140,10 +159,11 @@ public sealed partial class AppStoreConnectGovernanceService
 
     private static bool MatchesReviewedPlan(
         AppStoreConnectGovernancePlan current,
-        AppStoreConnectGovernancePlan reviewed)
+        AppStoreConnectGovernancePlan reviewed,
+        IReadOnlyList<AppStoreConnectGovernanceChange> remainingReviewedChanges)
     {
         if (!string.Equals(current.AppId, reviewed.AppId, StringComparison.Ordinal) ||
-            current.Changes.Length != reviewed.Changes.Length ||
+            current.Changes.Length != remainingReviewedChanges.Count ||
             current.Findings.Length != reviewed.Findings.Length)
         {
             return false;
@@ -152,7 +172,7 @@ public sealed partial class AppStoreConnectGovernanceService
         for (var index = 0; index < current.Changes.Length; index++)
         {
             var left = current.Changes[index];
-            var right = reviewed.Changes[index];
+            var right = remainingReviewedChanges[index];
             if (!string.Equals(left.Section, right.Section, StringComparison.Ordinal) ||
                 !string.Equals(left.ResourceType, right.ResourceType, StringComparison.Ordinal) ||
                 !string.Equals(left.Key, right.Key, StringComparison.Ordinal) ||
@@ -180,6 +200,9 @@ public sealed partial class AppStoreConnectGovernanceService
 
         return true;
     }
+
+    private static string ChangeFingerprint(AppStoreConnectGovernanceChange change)
+        => $"{change.Action}|{change.ResourceType}|{change.Key}";
 
     private async Task PlanPricingAsync(
         AppStoreConnectGovernanceSpec spec,

@@ -220,7 +220,8 @@ jobs:
           POWERFORGE_REF: ${{ inputs.powerforge_ref }}
           CAPTURE_RUN_ID: ${{ inputs.capture_run_id }}
           DISPATCHERS_JSON: ${{ inputs.allowed_dispatchers_json }}
-          DISPATCHER: ${{ github.actor }}
+          DISPATCHER: ${{ github.triggering_actor }}
+          ORIGINAL_DISPATCHER: ${{ github.actor }}
         run: |
           foreach ($entry in @{ source_ref = $env:SOURCE_REF; powerforge_ref = $env:POWERFORGE_REF }.GetEnumerator()) {
             if ($entry.Value -notmatch '^[0-9A-Fa-f]{40}$') { throw "$($entry.Key) must be an exact 40-character commit SHA." }
@@ -229,8 +230,9 @@ jobs:
           if ('${{ inputs.marketing_version }}' -notmatch '^\d+\.\d+\.\d+$') { throw 'marketing_version must use x.y.z.' }
           $dispatchers = @($env:DISPATCHERS_JSON | ConvertFrom-Json -Depth 5)
           if ($dispatchers.Count -eq 0 -or $env:DISPATCHER -notin $dispatchers) {
-            throw "GitHub actor '$($env:DISPATCHER)' is not an authorized screenshot publication dispatcher."
+            throw "GitHub triggering actor '$($env:DISPATCHER)' is not an authorized screenshot publication dispatcher."
           }
+          Write-Host "Authorized triggering actor '$($env:DISPATCHER)' (original run actor '$($env:ORIGINAL_DISPATCHER)')."
 
       - name: Checkout exact approved source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -336,7 +338,7 @@ jobs:
               '--allowed-root', '${{ steps.capture-path.outputs.path }}',
               '--out', $manifestPath,
               '--write-root', $sourceRoot,
-              '--initiated-by', '${{ github.actor }}',
+              '--initiated-by', '${{ github.triggering_actor }}',
               '--approval-evidence', $evidence,
               '--xcode-version', $xcodeVersion,
               '--runtime', $env:TOOL_RUNTIME,

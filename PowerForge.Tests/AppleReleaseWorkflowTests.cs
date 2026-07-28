@@ -116,7 +116,8 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("environment: ${{ inputs.environment_name }}", approval, StringComparison.Ordinal);
         Assert.Contains("allowed_dispatchers_json", approval, StringComparison.Ordinal);
         Assert.Contains("authorized Apple release dispatcher", approval, StringComparison.Ordinal);
-        Assert.Contains("${{ github.actor }}", approval, StringComparison.Ordinal);
+        Assert.Contains("DISPATCHER: ${{ github.triggering_actor }}", approval, StringComparison.Ordinal);
+        Assert.Contains("ORIGINAL_DISPATCHER: ${{ github.actor }}", approval, StringComparison.Ordinal);
         Assert.Contains("@('SubmitTestFlightReview', 'SubmitAppReview', 'Release')", approval, StringComparison.Ordinal);
         Assert.Contains("plan-only: \"true\"", approval, StringComparison.Ordinal);
         Assert.Contains("confirm: \"true\"", approval, StringComparison.Ordinal);
@@ -201,6 +202,9 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("Apply requires confirm=true", script, StringComparison.Ordinal);
         Assert.Contains("Apply requires reviewed-plan-path", script, StringComparison.Ordinal);
         Assert.Contains("@('--reviewed-plan', $env:INPUT_REVIEWED_PLAN_PATH)", script, StringComparison.Ordinal);
+        Assert.Contains("'--key-path', $env:APP_STORE_CONNECT_PRIVATE_KEY_PATH", script, StringComparison.Ordinal);
+        Assert.Contains("'--key-id', $env:APP_STORE_CONNECT_KEY_ID", script, StringComparison.Ordinal);
+        Assert.Contains("'--issuer-id', $env:APP_STORE_CONNECT_ISSUER_ID", script, StringComparison.Ordinal);
         Assert.Contains("--fail-on-drift", script, StringComparison.Ordinal);
         Assert.Contains("@('--summary', '--output', 'json')", script, StringComparison.Ordinal);
         Assert.Contains("[redacted]", script, StringComparison.Ordinal);
@@ -214,6 +218,8 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("needs: plan", workflow, StringComparison.Ordinal);
         Assert.Contains("environment: ${{ inputs.approval_environment_name }}", workflow, StringComparison.Ordinal);
         Assert.Contains("authorized Apple governance dispatcher", workflow, StringComparison.Ordinal);
+        Assert.Contains("DISPATCHER: ${{ github.triggering_actor }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("ORIGINAL_DISPATCHER: ${{ github.actor }}", workflow, StringComparison.Ordinal);
         Assert.Contains("$name must resolve to a child", workflow, StringComparison.Ordinal);
         Assert.Contains("must not traverse a symbolic link or reparse point", workflow, StringComparison.Ordinal);
         Assert.Contains("ls-files --error-unmatch", workflow, StringComparison.Ordinal);
@@ -261,7 +267,7 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("Screenshot approval manifest output escapes source", workflow, StringComparison.Ordinal);
         Assert.Contains("'--source-commit', $env:SOURCE_REF", workflow, StringComparison.Ordinal);
         Assert.Contains("'--approved-by', \"GitHub protected environment:", workflow, StringComparison.Ordinal);
-        Assert.Contains("'--initiated-by', '${{ github.actor }}'", workflow, StringComparison.Ordinal);
+        Assert.Contains("'--initiated-by', '${{ github.triggering_actor }}'", workflow, StringComparison.Ordinal);
         Assert.Contains("'--approval-evidence', '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'", workflow, StringComparison.Ordinal);
         Assert.Contains("action: Screenshots", workflow, StringComparison.Ordinal);
         Assert.Contains("source-commit: ${{ inputs.source_ref }}", workflow, StringComparison.Ordinal);
@@ -296,7 +302,9 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("workflowRef = $env:GITHUB_WORKFLOW_REF", capture, StringComparison.Ordinal);
         Assert.Contains("marketingVersion = $env:MARKETING_VERSION", capture, StringComparison.Ordinal);
         Assert.Contains("allowed_dispatchers_json", approval, StringComparison.Ordinal);
-        Assert.Contains("${{ github.actor }}", approval, StringComparison.Ordinal);
+        Assert.Contains("DISPATCHER: ${{ github.triggering_actor }}", approval, StringComparison.Ordinal);
+        Assert.Contains("ORIGINAL_DISPATCHER: ${{ github.actor }}", approval, StringComparison.Ordinal);
+        Assert.Contains("'--initiated-by', '${{ github.triggering_actor }}'", approval, StringComparison.Ordinal);
         Assert.Contains("Resolve exact source from reviewed capture", approval, StringComparison.Ordinal);
         Assert.Contains("repos/${GITHUB_REPOSITORY}/actions/runs/${CAPTURE_RUN_ID}/artifacts", approval, StringComparison.Ordinal);
         Assert.Contains("Capture run ${CAPTURE_RUN_ID} was not produced by ${CAPTURE_WORKFLOW_PATH}", approval, StringComparison.Ordinal);

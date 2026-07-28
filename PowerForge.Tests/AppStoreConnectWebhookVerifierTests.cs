@@ -52,4 +52,28 @@ public sealed class AppStoreConnectWebhookVerifierTests
 
         Assert.Contains("signature validation failed", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void VerifyAndParse_RequestsStateRefreshForBetaFeedback()
+    {
+        const string secret = "a-strong-test-secret";
+        const string json = """
+            {
+              "data": {
+                "type": "betaFeedbackCrashSubmissionCreated",
+                "id": "event-feedback-1",
+                "version": 1,
+                "attributes": { "timestamp": "2026-07-28T08:30:00Z" }
+              }
+            }
+            """;
+        var payload = Encoding.UTF8.GetBytes(json);
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
+        var signature = "hmacsha256=" + Convert.ToHexString(hmac.ComputeHash(payload)).ToLowerInvariant();
+
+        var notification = new AppStoreConnectWebhookVerifier().VerifyAndParse(payload, signature, secret);
+
+        Assert.True(notification.ShouldRefreshReleaseState);
+        Assert.Contains(notification.NextActions, action => action.Contains("feedback", StringComparison.OrdinalIgnoreCase));
+    }
 }

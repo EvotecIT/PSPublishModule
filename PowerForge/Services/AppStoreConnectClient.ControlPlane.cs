@@ -75,10 +75,7 @@ public sealed partial class AppStoreConnectClient
             $"apps/{Uri.EscapeDataString(appId)}/inAppPurchasesV2?limit=1",
             cancellationToken,
             returnNullOnNotFound: true).ConfigureAwait(false);
-        using var webhooks = await GetJsonAsync(
-            $"apps/{Uri.EscapeDataString(appId)}/webhooks?limit=1",
-            cancellationToken,
-            returnNullOnNotFound: true).ConfigureAwait(false);
+        var webhooks = await GetWebhooksAsync(appId, limit: 200, cancellationToken: cancellationToken).ConfigureAwait(false);
         using var crashFeedback = buildId is null
             ? null
             : await GetJsonAsync(
@@ -116,7 +113,7 @@ public sealed partial class AppStoreConnectClient
             PhasedReleaseState = GetResourceAttribute(phasedRelease, "phasedReleaseState"),
             InAppPurchaseCount = GetResourceCount(inAppPurchases),
             SubscriptionCount = subscriptions.Length,
-            WebhookCount = GetResourceCount(webhooks),
+            WebhookCount = webhooks.Count(static webhook => webhook.Enabled == true),
             BetaCrashFeedbackCount = GetResourceCount(crashFeedback),
             BetaScreenshotFeedbackCount = GetResourceCount(screenshotFeedback),
             RecentCrashFeedback = GetFeedbackItems(crashFeedback, "crash"),

@@ -332,9 +332,10 @@ powerforge apple-governance apply --config build/appstore-governance.json --rele
 `snapshot` bootstraps a declaration from existing Apple state and refuses to overwrite
 reviewed configuration unless `--force` is supplied. Review it before committing.
 `validate` needs no credentials. `plan` is read-only. `apply` requires `--confirm`
-and the exact reviewed Plan receipt through `--reviewed-plan`. Before changing Apple,
-it regenerates the plan and stops if current state no longer matches that receipt. It
-converges one dependency-aware change at a time, replans after every Apple mutation,
+and the exact reviewed Plan receipt through `--reviewed-plan`. Before every mutation,
+it regenerates the plan and stops if the remaining work no longer matches that receipt.
+If a parent change exposes new child drift, those changes require a new reviewed Plan.
+Apply converges one dependency-aware change at a time, replans after every Apple mutation,
 and writes a compact receipt by default under `.powerforge/apple/`. It creates and
 updates declared resources but never performs implicit deletions. A safety limit
 prevents an unexpectedly large change set from running indefinitely.

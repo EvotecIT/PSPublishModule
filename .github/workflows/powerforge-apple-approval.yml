@@ -72,7 +72,8 @@ jobs:
           SOURCE_REF: ${{ inputs.source_ref }}
           POWERFORGE_REF: ${{ inputs.powerforge_ref }}
           DISPATCHERS_JSON: ${{ inputs.allowed_dispatchers_json }}
-          DISPATCHER: ${{ github.actor }}
+          DISPATCHER: ${{ github.triggering_actor }}
+          ORIGINAL_DISPATCHER: ${{ github.actor }}
         run: |
           if ($env:ACTION -notin @('SubmitTestFlightReview', 'SubmitAppReview', 'Release')) {
             throw "Approval workflow accepts only SubmitTestFlightReview, SubmitAppReview, or Release."
@@ -82,8 +83,9 @@ jobs:
           }
           $dispatchers = @($env:DISPATCHERS_JSON | ConvertFrom-Json -Depth 5)
           if ($dispatchers.Count -gt 0 -and $env:DISPATCHER -notin $dispatchers) {
-            throw "GitHub actor '$($env:DISPATCHER)' is not an authorized Apple release dispatcher."
+            throw "GitHub triggering actor '$($env:DISPATCHER)' is not an authorized Apple release dispatcher."
           }
+          Write-Host "Authorized triggering actor '$($env:DISPATCHER)' (original run actor '$($env:ORIGINAL_DISPATCHER)')."
 
       - name: Checkout the exact approved source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
