@@ -157,6 +157,47 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void AppleReleaseDoctor_InspectsProjectsReferencedByWorkspace()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var workspace = Directory.CreateDirectory(Path.Combine(root, "CasaRay.xcworkspace"));
+            File.WriteAllText(
+                Path.Combine(workspace.FullName, "contents.xcworkspacedata"),
+                """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <Workspace version="1.0">
+                  <FileRef location="group:CasaRay.xcodeproj"></FileRef>
+                </Workspace>
+                """);
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.5.0", "13");
+            var embeddedBundleId = "com.evotecit.casaray.watchkitapp";
+            var projectFile = Path.Combine(root, "CasaRay.xcodeproj", "project.pbxproj");
+            File.AppendAllText(projectFile, Environment.NewLine + $"PRODUCT_BUNDLE_IDENTIFIER = {embeddedBundleId};");
+            var app = new PowerForgeAppleAppReleaseTargetPlan
+            {
+                Name = "CasaRay Workspace",
+                BundleId = "com.evotecit.casaray",
+                AppStoreConnectAppId = "6778025328",
+                DistributionRoute = AppleDistributionRoute.AppStore,
+                ProjectPath = workspace.FullName,
+                RequiredEmbeddedBundleIds = new[] { embeddedBundleId }
+            };
+
+            var diagnostics = AppleReleaseDoctor.Evaluate(
+                new PowerForgeAppleReleasePlan { Apps = new[] { app } },
+                app);
+
+            Assert.DoesNotContain(diagnostics, diagnostic => diagnostic.Code == "APPLE_EMBEDDED_BUNDLE_MISSING");
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleStatus_DisabledTestFlightRemovesBetaAdvice()
     {
         var root = CreateSandbox();
@@ -503,7 +544,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Contains("ticket stapling", target.ErrorMessage, StringComparison.OrdinalIgnoreCase);
 
             AppleNotarizationRequest? resumedRequest = null;
-            var resumed = CreateAppleAutomationService(
+            var resumeService = CreateAppleAutomationService(
                     _ => throw new InvalidOperationException("Direct distribution must not query App Store release state."),
                     archiveAppleApp: _ => throw new InvalidOperationException("Accepted notarization resume must skip archive."),
                     uploadAppleApp: _ => throw new InvalidOperationException("Accepted notarization resume must skip export."),
@@ -523,14 +564,29 @@ public sealed partial class PowerForgeReleaseServiceTests
                             StapleValidation = new ProcessRunResult(0, "valid", string.Empty, "xcrun", TimeSpan.Zero, false),
                             Assessment = new ProcessRunResult(0, "accepted", string.Empty, "spctl", TimeSpan.Zero, false)
                         };
-                    })
-                .Execute(
+                    });
+            var configuredResumed = resumeService.Execute(
                     spec,
                     new PowerForgeReleaseRequest
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                        AppleAction = PowerForgeAppleReleaseAction.Upload
+                        AppleAction = PowerForgeAppleReleaseAction.Configured
                     });
+
+            Assert.True(configuredResumed.Success);
+            Assert.NotNull(resumedRequest);
+            var configuredTarget = Assert.Single(configuredResumed.AppleApps);
+            Assert.True(configuredTarget.ResumedAcceptedNotarization);
+            Assert.Contains("notarySubmission", configuredTarget.SkippedSteps);
+
+            resumedRequest = null;
+            var resumed = resumeService.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Upload
+                });
 
             Assert.True(resumed.Success);
             Assert.NotNull(resumedRequest);

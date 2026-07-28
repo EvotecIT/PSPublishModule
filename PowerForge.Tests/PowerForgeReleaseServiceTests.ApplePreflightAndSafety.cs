@@ -429,6 +429,64 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleUpload_CleansArtifactsWhenEmbeddedTargetsAreModeled()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            CreateXcodeProject(root, "CasaRayWatch.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.CleanupAfterProcessing = true;
+            var parent = Assert.Single(spec.AppleApps.Apps);
+            var embeddedBundleId = "com.evotecit.casaray.watchkitapp";
+            parent.RequiredEmbeddedBundleIds = new[] { embeddedBundleId };
+            spec.AppleApps.Apps = new[]
+            {
+                parent,
+                new AppleAppConfiguration
+                {
+                    Name = "CasaRay Watch",
+                    BundleId = embeddedBundleId,
+                    Platform = ApplePlatform.watchOS,
+                    ProjectPath = "CasaRayWatch.xcodeproj",
+                    Scheme = "CasaRayWatch",
+                    DistributionRoute = AppleDistributionRoute.EmbeddedCompanion,
+                    ParentTarget = parent.Name
+                }
+            };
+            var service = CreateAppleAutomationService(request => CreateReleaseState(request, "VALID"));
+            var planned = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Upload,
+                PlanOnly = true
+            });
+            var parentArchive = planned.AppleAppPlan!.Apps.Single(app => app.Name == parent.Name).ArchivePath;
+            Directory.CreateDirectory(parentArchive);
+            File.WriteAllText(Path.Combine(parentArchive, "Info.plist"), "archive");
+
+            var result = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Upload
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.False(Directory.Exists(parentArchive));
+            Assert.Contains(result.AppleReceipt!.Targets, target =>
+                target.DistributionRoute == AppleDistributionRoute.EmbeddedCompanion &&
+                target.SkippedSteps.Contains("independentRelease"));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleCleanup_DoesNotRequireOrRegenerateTheXcodeProject()
     {
         var root = CreateSandbox();

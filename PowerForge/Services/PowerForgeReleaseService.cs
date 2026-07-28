@@ -1786,7 +1786,9 @@ internal sealed partial class PowerForgeReleaseService
             ? LoadAppleAppInfoSpecs(plan)
             : Array.Empty<(AppStoreConnectAppInfoMetadataSpec Spec, string ConfigPath)>();
         var appInfoSpecsByAppId = plan.SyncAppInfo
-            ? IndexAppInfoSpecsByAppId(appInfoSpecs, plan.Apps.Where(UsesAppStoreConnect).ToArray())
+            ? IndexAppInfoSpecsByAppId(
+                appInfoSpecs,
+                plan.Apps.Where(static app => app.DistributionRoute == AppleDistributionRoute.AppStore).ToArray())
             : new Dictionary<string, AppStoreConnectAppInfoMetadataSpec[]>(StringComparer.OrdinalIgnoreCase);
         var pendingAppInfoAppIds = new HashSet<string>(appInfoSpecsByAppId.Keys, StringComparer.OrdinalIgnoreCase);
         var resultsByApp = plan.Apps.ToDictionary(
@@ -1835,7 +1837,7 @@ internal sealed partial class PowerForgeReleaseService
                 var needsReleaseIdentity =
                     plan.Action == PowerForgeAppleReleaseAction.Status ||
                     plan.Action == PowerForgeAppleReleaseAction.Doctor ||
-                    IsUploadAction(plan.Action) ||
+                    IsUploadExecution(plan) ||
                     plan.PrepareDistribution ||
                     plan.SyncScreenshots ||
                     plan.SyncMetadata ||
@@ -1852,7 +1854,7 @@ internal sealed partial class PowerForgeReleaseService
                     valuesByApp[app] = values;
                 }
 
-                var matchingScreenshotSpec = UsesAppStoreConnect(app) &&
+                var matchingScreenshotSpec = app.DistributionRoute == AppleDistributionRoute.AppStore &&
                                              (plan.SyncScreenshots ||
                                               plan.CheckReleaseReadiness ||
                                               (plan.SubmitForReview && !plan.SkipReviewReadinessCheck))
@@ -1875,7 +1877,8 @@ internal sealed partial class PowerForgeReleaseService
                 if (plan.SyncScreenshots && matchingScreenshotSpec is not null)
                     ValidateAppleScreenshotPreflight(matchingScreenshotSpec.Value);
 
-                var matchingMetadataSpec = plan.SyncMetadata && UsesAppStoreConnect(app)
+                var matchingMetadataSpec = plan.SyncMetadata &&
+                                           app.DistributionRoute == AppleDistributionRoute.AppStore
                     ? ResolveMatchingMetadataSpec(
                         metadataSpecs,
                         app,
@@ -2012,10 +2015,12 @@ internal sealed partial class PowerForgeReleaseService
                     result.RemoteState = WaitForAppleBuild(plan, app, buildUploadId: upload.BuildUploadId);
             }
 
-            var appInfoMetadataSpecs = UsesAppStoreConnect(app) && plan.SyncAppInfo && pendingAppInfoAppIds.Remove(app.AppStoreConnectAppId!)
+            var appInfoMetadataSpecs = app.DistributionRoute == AppleDistributionRoute.AppStore &&
+                                       plan.SyncAppInfo &&
+                                       pendingAppInfoAppIds.Remove(app.AppStoreConnectAppId!)
                 ? appInfoSpecsByAppId[app.AppStoreConnectAppId!]
                 : Array.Empty<AppStoreConnectAppInfoMetadataSpec>();
-            if (UsesAppStoreConnect(app) &&
+            if (app.DistributionRoute == AppleDistributionRoute.AppStore &&
                 (plan.PrepareDistribution || plan.SyncScreenshots || plan.SyncMetadata || appInfoMetadataSpecs.Length > 0 || plan.CheckReleaseReadiness) &&
                 result.Success)
             {
@@ -2092,7 +2097,9 @@ internal sealed partial class PowerForgeReleaseService
                 });
             }
 
-            if (plan.SubmitForReview && result.Success && UsesAppStoreConnect(app))
+            if (plan.SubmitForReview &&
+                result.Success &&
+                app.DistributionRoute == AppleDistributionRoute.AppStore)
             {
                 var reviewValues = valuesByApp[app];
                 var matchingScreenshotSpec = !plan.SkipReviewReadinessCheck
@@ -2118,7 +2125,9 @@ internal sealed partial class PowerForgeReleaseService
                 });
             }
 
-            if (plan.ReleaseApprovedVersion && result.Success && UsesAppStoreConnect(app))
+            if (plan.ReleaseApprovedVersion &&
+                result.Success &&
+                app.DistributionRoute == AppleDistributionRoute.AppStore)
             {
                 var releaseValues = valuesByApp[app];
                 result.VersionRelease = _releaseAppleVersion(new AppStoreConnectVersionReleaseRequest

@@ -122,6 +122,10 @@ internal sealed partial class PowerForgeReleaseService
            action == PowerForgeAppleReleaseAction.UploadExisting ||
            action == PowerForgeAppleReleaseAction.Advance;
 
+    private static bool IsUploadExecution(PowerForgeAppleReleasePlan plan)
+        => IsUploadAction(plan.Action) ||
+           (plan.Action == PowerForgeAppleReleaseAction.Configured && plan.Upload);
+
     internal static bool RequiresDirectNotarizationCredentials(
         PowerForgeAppleReleaseAction action,
         bool configuredUpload,
@@ -269,7 +273,7 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleAppReleaseTargetPlan app,
         PowerForgeAppleAppReleaseResult result)
     {
-        if (!IsUploadAction(plan.Action) || !plan.Automation.Resume || !File.Exists(plan.ReceiptPath))
+        if (!IsUploadExecution(plan) || !plan.Automation.Resume || !File.Exists(plan.ReceiptPath))
             return false;
 
         PowerForgeAppleReleaseReceipt? priorReceipt;
@@ -459,13 +463,18 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
 
-        if (IsUploadAction(plan.Action) &&
+        var independentResults = results
+            .Where(result => IsIndependentReleaseTarget(result.Plan))
+            .ToArray();
+        var appStoreConnectResults = independentResults
+            .Where(result => UsesAppStoreConnect(result.Plan))
+            .ToArray();
+        if (IsUploadExecution(plan) &&
             plan.Automation.CleanupAfterProcessing &&
             results.Length == plan.Apps.Length &&
-            results.Length > 0 &&
-            results.All(result => UsesAppStoreConnect(result.Plan)) &&
-            results.Where(result => UsesAppStoreConnect(result.Plan))
-                .All(result => IsAppleBuildValid(result.RemoteState, result.Plan)))
+            appStoreConnectResults.Length > 0 &&
+            independentResults.All(static result => result.Success) &&
+            appStoreConnectResults.All(result => IsAppleBuildValid(result.RemoteState, result.Plan)))
         {
             try
             {

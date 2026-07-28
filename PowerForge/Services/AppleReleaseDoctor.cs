@@ -1,3 +1,5 @@
+using System.Xml.Linq;
+
 namespace PowerForge;
 
 /// <summary>
@@ -247,6 +249,11 @@ internal static class AppleReleaseDoctor
             paths.AddRange(Directory.EnumerateFiles(parent, "project.yml", SearchOption.TopDirectoryOnly));
             paths.AddRange(Directory.EnumerateFiles(parent, "project.yaml", SearchOption.TopDirectoryOnly));
         }
+        if (Directory.Exists(projectPath) &&
+            projectPath.EndsWith(".xcworkspace", StringComparison.OrdinalIgnoreCase))
+        {
+            AddReferencedWorkspaceProjects(projectPath, paths);
+        }
 
         var content = new List<string>();
         foreach (var path in paths
@@ -266,6 +273,59 @@ internal static class AppleReleaseDoctor
             }
         }
         return string.Join(Environment.NewLine, content);
+    }
+
+    private static void AddReferencedWorkspaceProjects(string workspacePath, List<string> paths)
+    {
+        var workspaceParent = Directory.GetParent(workspacePath)?.FullName;
+        var contentsPath = Path.Combine(workspacePath, "contents.xcworkspacedata");
+        if (workspaceParent is null || workspaceParent.Length == 0 || !File.Exists(contentsPath))
+            return;
+
+        try
+        {
+            var document = XDocument.Load(contentsPath, LoadOptions.None);
+            foreach (var reference in document.Descendants("FileRef"))
+            {
+                var location = reference.Attribute("location")?.Value;
+                if (location is null || location.Length == 0)
+                    continue;
+                var separator = location.IndexOf(':');
+                var pathPart = separator >= 0 ? location.Substring(separator + 1) : location;
+                if (string.IsNullOrWhiteSpace(pathPart))
+                    continue;
+
+                var decoded = Uri.UnescapeDataString(pathPart);
+                var candidate = Path.GetFullPath(Path.Combine(workspaceParent, decoded));
+                if (!IsContainedPath(workspaceParent, candidate))
+                    continue;
+                if (Directory.Exists(candidate) &&
+                    candidate.EndsWith(".xcodeproj", StringComparison.OrdinalIgnoreCase))
+                {
+                    candidate = Path.Combine(candidate, "project.pbxproj");
+                }
+                if (File.Exists(candidate) && IsRelevantProjectEvidence(candidate))
+                    paths.Add(candidate);
+            }
+        }
+        catch
+        {
+            // Workspace evidence is advisory; malformed workspace XML is diagnosed by Xcode itself.
+        }
+    }
+
+    private static bool IsContainedPath(string rootPath, string candidatePath)
+    {
+        var root = Path.GetFullPath(rootPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var candidate = Path.GetFullPath(candidatePath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = Path.DirectorySeparatorChar == '\\'
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return candidate.Equals(root, comparison) ||
+               candidate.StartsWith(root + Path.DirectorySeparatorChar, comparison) ||
+               candidate.StartsWith(root + Path.AltDirectorySeparatorChar, comparison);
     }
 
     private static bool IsRelevantProjectEvidence(string path)
