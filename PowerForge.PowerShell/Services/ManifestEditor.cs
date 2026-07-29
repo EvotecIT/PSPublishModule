@@ -18,11 +18,42 @@ public static partial class ManifestEditor
     private static void WriteManifest(string filePath, string originalContent, string updatedContent)
     {
         var newLine = DetectNewLine(originalContent);
-        var normalized = updatedContent
+        var prefixLength = 0;
+        var sharedLength = Math.Min(originalContent.Length, updatedContent.Length);
+        while (prefixLength < sharedLength && originalContent[prefixLength] == updatedContent[prefixLength])
+            prefixLength++;
+        if (prefixLength > 0 &&
+            ((prefixLength < originalContent.Length && originalContent[prefixLength - 1] == '\r' && originalContent[prefixLength] == '\n') ||
+             (prefixLength < updatedContent.Length && updatedContent[prefixLength - 1] == '\r' && updatedContent[prefixLength] == '\n')))
+        {
+            prefixLength--;
+        }
+
+        var suffixLength = 0;
+        while (suffixLength < originalContent.Length - prefixLength &&
+               suffixLength < updatedContent.Length - prefixLength &&
+               originalContent[originalContent.Length - suffixLength - 1] == updatedContent[updatedContent.Length - suffixLength - 1])
+        {
+            suffixLength++;
+        }
+        var originalSuffixStart = originalContent.Length - suffixLength;
+        var updatedSuffixStart = updatedContent.Length - suffixLength;
+        if (suffixLength > 0 &&
+            ((originalSuffixStart > 0 && originalContent[originalSuffixStart - 1] == '\r' && originalContent[originalSuffixStart] == '\n') ||
+             (updatedSuffixStart > 0 && updatedContent[updatedSuffixStart - 1] == '\r' && updatedContent[updatedSuffixStart] == '\n')))
+        {
+            suffixLength--;
+        }
+
+        var changedLength = updatedContent.Length - prefixLength - suffixLength;
+        var changedContent = updatedContent.Substring(prefixLength, changedLength)
             .Replace("\r\n", "\n")
             .Replace('\r', '\n')
             .Replace("\n", newLine);
-        File.WriteAllText(filePath, normalized, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        var preserved = originalContent.Substring(0, prefixLength) +
+                        changedContent +
+                        originalContent.Substring(originalContent.Length - suffixLength);
+        File.WriteAllText(filePath, preserved, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
     }
 
     private static string DetectNewLine(string content)

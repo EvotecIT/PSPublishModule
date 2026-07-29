@@ -111,6 +111,11 @@
         "Token": { "type": [ "string", "null" ] },
         "TokenFilePath": { "type": [ "string", "null" ] },
         "TokenEnvName": { "type": [ "string", "null" ] },
+        "Commitish": {
+          "type": [ "string", "null" ],
+          "pattern": "^[0-9A-Fa-f]{40}$",
+          "description": "Exact commit SHA used to create and verify the unified GitHub release tag."
+        },
         "GenerateReleaseNotes": { "type": "boolean" },
         "IsPreRelease": { "type": "boolean" },
         "ReuseExistingRelease": {

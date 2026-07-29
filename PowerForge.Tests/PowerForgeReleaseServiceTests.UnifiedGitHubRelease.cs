@@ -453,7 +453,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                         VersionSource = PowerForgeReleaseVersionSource.Assets,
                         Owner = "EvotecIT",
                         Repository = "PSPublishModule",
-                        Token = "token"
+                        Token = "token",
+                        Commitish = "0123456789abcdef0123456789abcdef01234567"
                     }
                 },
                 new PowerForgeReleaseRequest
@@ -465,6 +466,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Empty(result.ToolGitHubReleases);
             var publish = Assert.Single(publishCalls);
             Assert.Equal("v1.0.7", publish.TagName);
+            Assert.Equal("0123456789abcdef0123456789abcdef01234567", publish.Commitish);
+            Assert.Equal("0123456789abcdef0123456789abcdef01234567", publish.ExpectedTagCommitSha);
             Assert.Equal(
                 new[] { powerForgeZip, powerForgeWebZip }.OrderBy(static path => path),
                 publish.AssetFilePaths.OrderBy(static path => path));

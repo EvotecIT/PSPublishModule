@@ -5,7 +5,7 @@ using YamlDotNet.Serialization;
 
 namespace PowerForge.Tests;
 
-public sealed class AppleReleaseWorkflowTests
+public sealed partial class AppleReleaseWorkflowTests
 {
     [Fact]
     public void SetupActionRequiresExactVersionAndChecksum()
@@ -523,7 +523,8 @@ public sealed class AppleReleaseWorkflowTests
                      "powerforge-apple-screenshot-approve.yml",
                      "powerforge-apple-monitor.yml",
                      "powerforge-apple-advance.yml",
-                     "powerforge-apple-approval.yml"
+                     "powerforge-apple-approval.yml",
+                     "pspublishmodule-public-release.yml"
                  })
         {
             var workflow = Read(root, ".github", "workflows", workflowName);
@@ -551,28 +552,6 @@ public sealed class AppleReleaseWorkflowTests
             Assert.Contains("-Secret 'a-strong-webhook-secret'", generated, StringComparison.Ordinal);
             Assert.Contains("-EventType 'BUILD_UPLOAD_STATE_UPDATED'", generated, StringComparison.Ordinal);
         }
-    }
-
-    [Fact]
-    public void PublicModuleReleaseBindsSigningAndPublicationToExactMain()
-    {
-        var root = FindRepoRoot();
-        var workflow = Read(root, ".github", "workflows", "pspublishmodule-public-release.yml");
-        var script = Read(root, "Build", "Invoke-PowerForgePublicRelease.ps1");
-        var releaseConfig = Read(root, "Build", "release.json");
-
-        Assert.Contains("runs-on: [self-hosted, windows, runner-github-runner-w]", workflow, StringComparison.Ordinal);
-        Assert.Contains("$mainCommit -ine $env:EXPECTED_COMMIT", workflow, StringComparison.Ordinal);
-        Assert.Contains("permission -notin @('admin', 'maintain', 'write')", workflow, StringComparison.Ordinal);
-        Assert.Contains("publish:<version>:<expected_commit>", workflow, StringComparison.Ordinal);
-        Assert.Contains("$expectedConfirmation = \"publish:$Version`:$ExpectedCommit\"", script, StringComparison.Ordinal);
-        Assert.Contains("-or -not $certificate.HasPrivateKey", script, StringComparison.Ordinal);
-        Assert.Contains("$certificate.NotAfter -le [DateTime]::UtcNow.AddDays(7)", script, StringComparison.Ordinal);
-        Assert.Contains("The release checkout must start clean", script, StringComparison.Ordinal);
-        Assert.Contains("Invoke-PowerForgePublicRelease.ps1", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("gh pr merge", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("pull_request:", workflow, StringComparison.Ordinal);
-        Assert.Contains("\"PlanOutputPath\": \"../Artefacts/ProjectBuild/project.build.plan.json\"", releaseConfig, StringComparison.Ordinal);
     }
 
     private static string Read(string root, params string[] parts)

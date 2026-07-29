@@ -1,0 +1,113 @@
+namespace PowerForge.Tests;
+
+public sealed partial class AppleReleaseWorkflowTests
+{
+    [Fact]
+    public void PublicModuleReleaseBindsSigningAndPublicationToExactMain()
+    {
+        var root = FindRepoRoot();
+        var workflow = Read(root, ".github", "workflows", "pspublishmodule-public-release.yml");
+        var script = Read(root, "Build", "Invoke-PowerForgePublicRelease.ps1");
+        var releaseConfig = Read(root, "Build", "release.json");
+        var releaseSchema = Read(root, "Schemas", "powerforge.release.schema.json");
+
+        Assert.Contains("runs-on: [self-hosted, windows, runner-github-runner-w]", workflow, StringComparison.Ordinal);
+        Assert.Contains("$mainCommit -ine $env:EXPECTED_COMMIT", workflow, StringComparison.Ordinal);
+        Assert.Contains("Unable to refresh origin/main", workflow, StringComparison.Ordinal);
+        Assert.Contains("permission -notin @('admin', 'maintain', 'write')", workflow, StringComparison.Ordinal);
+        Assert.Contains("publish:<version>:<expected_commit>", workflow, StringComparison.Ordinal);
+        Assert.Contains("$expectedConfirmation = \"publish:$Version`:$ExpectedCommit\"", script, StringComparison.Ordinal);
+        Assert.Contains("-or -not $certificate.HasPrivateKey", script, StringComparison.Ordinal);
+        Assert.Contains("$certificate.NotAfter -le [DateTime]::UtcNow.AddDays(7)", script, StringComparison.Ordinal);
+        Assert.Contains("The release checkout must start clean", script, StringComparison.Ordinal);
+        Assert.Contains("Assert-PowerForgeCommittedReleaseVersion", script, StringComparison.Ordinal);
+        Assert.Contains(". .\\Build\\Private\\Assert-PowerForgeCommittedReleaseVersion.ps1", workflow, StringComparison.Ordinal);
+        Assert.Contains("$releaseConfig.GitHub | Add-Member -NotePropertyName Commitish", script, StringComparison.Ordinal);
+        Assert.Contains("ExpectedTagCommitSha = gitHub.Commitish", Read(root, "PowerForge", "Services", "PowerForgeReleaseService.cs"), StringComparison.Ordinal);
+        Assert.Contains("Status         = 'Failed'", script, StringComparison.Ordinal);
+        Assert.Contains("$release.isDraft -eq $true", workflow, StringComparison.Ordinal);
+        Assert.Contains("$release.isPrerelease -eq $true", workflow, StringComparison.Ordinal);
+        Assert.Contains("[string]::IsNullOrWhiteSpace([string] $release.publishedAt)", workflow, StringComparison.Ordinal);
+        Assert.Contains("$tagCommit -ine $env:EXPECTED_COMMIT", workflow, StringComparison.Ordinal);
+        Assert.Contains("Unable to push release branch", workflow, StringComparison.Ordinal);
+        Assert.Contains("$remoteCommit -ine $preparedCommit", workflow, StringComparison.Ordinal);
+        Assert.Contains("Invoke-PowerForgePublicRelease.ps1", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("gh pr merge", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("pull_request:", workflow, StringComparison.Ordinal);
+        Assert.Contains("\"PlanOutputPath\": \"../Artefacts/ProjectBuild/project.build.plan.json\"", releaseConfig, StringComparison.Ordinal);
+        Assert.Contains("\"Commitish\"", releaseSchema, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PublicModuleReleaseRejectsPartiallyCommittedPackageVersions()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            Directory.CreateDirectory(Path.Combine(root.FullName, "PowerForge"));
+            Directory.CreateDirectory(Path.Combine(root.FullName, "PowerForge.Cli"));
+            File.WriteAllText(Path.Combine(root.FullName, "Module", "PSPublishModule.psd1"), "@{ ModuleVersion = '3.0.81' }");
+            File.WriteAllText(Path.Combine(root.FullName, "PowerForge", "PowerForge.csproj"),
+                "<Project><PropertyGroup><VersionPrefix>3.0.81</VersionPrefix></PropertyGroup></Project>");
+            var cliProject = Path.Combine(root.FullName, "PowerForge.Cli", "PowerForge.Cli.csproj");
+            File.WriteAllText(cliProject,
+                "<Project><PropertyGroup><VersionPrefix>3.0.81</VersionPrefix></PropertyGroup></Project>");
+
+            var helper = Path.Combine(FindRepoRoot(), "Build", "Private", "Assert-PowerForgeCommittedReleaseVersion.ps1");
+            var escapedHelper = helper.Replace("'", "''", StringComparison.Ordinal);
+            var escapedRoot = root.FullName.Replace("'", "''", StringComparison.Ordinal);
+            var command = $". '{escapedHelper}'; " +
+                          "$config = '{\"Packages\":{\"VersionTracks\":{\"Train\":{\"AnchorProject\":\"PowerForge\",\"Projects\":[\"PowerForge.Cli\"]}}}}' | ConvertFrom-Json; " +
+                          $"Assert-PowerForgeCommittedReleaseVersion -RepositoryRoot '{escapedRoot}' -Version '3.0.81' -ReleaseConfig $config";
+            Run("pwsh", root.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+
+            File.WriteAllText(cliProject,
+                "<Project><PropertyGroup><VersionPrefix>3.0.80</VersionPrefix></PropertyGroup></Project>");
+            var failure = Run("pwsh", root.FullName, "-NoProfile", "-Command", command);
+
+            Assert.NotEqual(0, failure.ExitCode);
+            Assert.Contains("Publish requires committed project version '3.0.81'", failure.StandardError, StringComparison.Ordinal);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void PublicModuleReleaseWritesReceiptForPreflightFailure()
+    {
+        var root = FindRepoRoot();
+        var receiptDirectory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var receiptPath = Path.Combine(receiptDirectory.FullName, "failure.json");
+            var result = Run(
+                "pwsh",
+                root,
+                "-NoProfile",
+                "-File",
+                Path.Combine(root, "Build", "Invoke-PowerForgePublicRelease.ps1"),
+                "-Operation",
+                "Plan",
+                "-Version",
+                "3.0.81",
+                "-ExpectedCommit",
+                new string('0', 40),
+                "-ReceiptPath",
+                receiptPath);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.True(File.Exists(receiptPath));
+            var receipt = File.ReadAllText(receiptPath);
+            Assert.Contains("\"Status\": \"Failed\"", receipt, StringComparison.Ordinal);
+            Assert.Contains("\"Stage\": \"Preflight\"", receipt, StringComparison.Ordinal);
+            Assert.Contains("\"Operation\": \"Plan\"", receipt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            receiptDirectory.Delete(recursive: true);
+        }
+    }
+}

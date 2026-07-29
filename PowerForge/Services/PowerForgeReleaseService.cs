@@ -3227,6 +3227,8 @@ internal sealed partial class PowerForgeReleaseService
                     Token = resolved.Token!,
                     TagName = tagName,
                     ReleaseName = releaseName,
+                    Commitish = gitHub.Commitish,
+                    ExpectedTagCommitSha = gitHub.Commitish,
                     GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
                     IsPreRelease = gitHub.IsPreRelease,
                     ReuseExistingReleaseOnConflict = gitHub.ReuseExistingRelease,

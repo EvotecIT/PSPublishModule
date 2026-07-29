@@ -42,6 +42,33 @@ public sealed class ManifestEditorStringArrayTests
     }
 
     [Fact]
+    public void ManifestEditPreservesMixedLineEndingsOutsideTargetedValue()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var path = Path.Combine(root.FullName, "MixedLineEndings.psd1");
+            const string source = "@{\r\n" +
+                                  "    ModuleVersion = '1.0.0'\n" +
+                                  "    Description = @'\r\n" +
+                                  "first line\n" +
+                                  "second line\r\n" +
+                                  "'@\n" +
+                                  "}\r\n";
+            File.WriteAllText(path, source, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+            Assert.True(ManifestEditor.TrySetTopLevelModuleVersion(path, "1.0.1"));
+
+            var updated = File.ReadAllText(path);
+            Assert.Equal(source.Replace("1.0.0", "1.0.1", StringComparison.Ordinal), updated);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void TryGetTopLevelStringArray_ReadsAtSyntaxArrays()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
