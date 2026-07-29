@@ -39,7 +39,7 @@ public static partial class ManifestEditor
             if (!string.Equals(content, newContent, StringComparison.Ordinal))
             {
                 // Save as UTF-8 with BOM for PS 5.1 compatibility
-                File.WriteAllText(filePath, newContent, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                WriteManifest(filePath, content, newContent);
                 return true;
             }
             return false;
@@ -126,7 +126,7 @@ public static partial class ManifestEditor
             var newContent = content.Substring(0, start) + arrayText + content.Substring(end);
             if (!string.Equals(content, newContent, StringComparison.Ordinal))
             {
-                File.WriteAllText(filePath, newContent, new UTF8Encoding(true));
+                WriteManifest(filePath, content, newContent);
                 return true;
             }
             return false;
@@ -236,7 +236,7 @@ public static partial class ManifestEditor
             var newContent = content.Substring(0, start) + valueExpression + content.Substring(end);
             if (!string.Equals(content, newContent, StringComparison.Ordinal))
             {
-                File.WriteAllText(filePath, newContent, new UTF8Encoding(true));
+                WriteManifest(filePath, content, newContent);
                 return true;
             }
             return false;
@@ -298,7 +298,7 @@ public static partial class ManifestEditor
             var newContent = content.Substring(0, start) + replacement + content.Substring(end);
             if (!string.Equals(content, newContent, StringComparison.Ordinal))
             {
-                File.WriteAllText(filePath, newContent, new UTF8Encoding(true));
+                WriteManifest(filePath, content, newContent);
                 return true;
             }
             return false;
@@ -364,7 +364,7 @@ public static partial class ManifestEditor
             var newContent = content.Substring(0, start) + arrayText + content.Substring(end);
             if (!string.Equals(content, newContent, StringComparison.Ordinal))
             {
-                File.WriteAllText(filePath, newContent, new UTF8Encoding(true));
+                WriteManifest(filePath, content, newContent);
                 return true;
             }
             return false;

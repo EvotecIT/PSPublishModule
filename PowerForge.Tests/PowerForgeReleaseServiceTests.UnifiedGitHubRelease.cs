@@ -389,7 +389,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void UnifiedGitHubRelease_PublishesAllZippedToolFamiliesToOneRelease()
+    public void FullUnifiedGitHubRelease_PublishesAllZippedToolFamiliesToOneRelease()
     {
         var root = CreateSandbox();
         try
@@ -458,8 +458,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 },
                 new PowerForgeReleaseRequest
                 {
-                    ConfigPath = Path.Combine(root, "release.json"),
-                    ToolsOnly = true
+                    ConfigPath = Path.Combine(root, "release.json")
                 });
 
             Assert.True(result.Success);

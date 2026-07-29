@@ -144,7 +144,7 @@ public static partial class ManifestEditor
             var newContent = content.Substring(0, start) + valueExpression + content.Substring(end);
             if (!string.Equals(content, newContent, StringComparison.Ordinal))
             {
-                File.WriteAllText(filePath, newContent, new UTF8Encoding(true));
+                WriteManifest(filePath, content, newContent);
                 return true;
             }
             return false;
@@ -223,7 +223,7 @@ public static partial class ManifestEditor
             var newContent = content.Substring(0, start) + valueExpression + content.Substring(end);
             if (!string.Equals(content, newContent, StringComparison.Ordinal))
             {
-                File.WriteAllText(filePath, newContent, new UTF8Encoding(true));
+                WriteManifest(filePath, content, newContent);
                 return true;
             }
             return false;

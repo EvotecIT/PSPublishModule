@@ -519,6 +519,22 @@ For PSPublishModule's self-build, the practical sequence is:
 .\Build\Build-Project.ps1 -Publish
 ```
 
+PSPublishModule maintainers should normally use the **PSPublishModule Public Release**
+workflow instead of running the publish command interactively. The workflow is fixed to
+the signing-capable Windows runner and has three explicit operations:
+
+1. `Plan` validates the exact `main` commit, release credentials, signing certificate,
+   coordinated version, and artifact graph without publishing.
+2. `Prepare` runs the Build gate and opens a narrow version pull request containing only
+   the generated module and package version sources.
+3. `Publish` accepts only a merged version and an exact
+   `publish:<version>:<main-commit>` confirmation, then publishes and verifies NuGet,
+   PowerShell Gallery, and the GitHub release.
+
+Every run uploads a compact JSON receipt. Release plans are written under the ignored
+repository-level `Artefacts` directory so machine-specific absolute paths no longer
+create tracked release churn.
+
 The Build gate should report the same resolved version for the primary package and module, list the local NuGet
 source added for the module build, and show the combined module/package assets under `Release.StageRoot`.
 

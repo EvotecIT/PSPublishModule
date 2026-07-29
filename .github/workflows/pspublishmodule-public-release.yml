@@ -1,0 +1,244 @@
+name: PSPublishModule Public Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Plan, prepare a version PR, or publish an already merged version.
+        required: true
+        default: Plan
+        type: choice
+        options:
+          - Plan
+          - Prepare
+          - Publish
+      version:
+        description: Exact public three-part version, for example 3.0.81.
+        required: true
+        type: string
+      expected_commit:
+        description: Exact current main commit authorized for the operation.
+        required: true
+        type: string
+      confirm:
+        description: Publish only - publish:<version>:<expected_commit>.
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: pspublishmodule-public-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, windows, runner-github-runner-w]
+    timeout-minutes: 180
+    environment: pspublishmodule-release
+    env:
+      RELEASE_RECEIPT: ${{ github.workspace }}\release-receipts\powerforge-public-release.json
+    steps:
+      - name: Checkout the authorized main commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.expected_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify actor and immutable main commit
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          REQUESTING_ACTOR: ${{ github.actor }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if ($env:EXPECTED_COMMIT -notmatch '^[0-9A-Fa-f]{40}$') {
+              throw 'expected_commit must be an exact 40-character commit SHA.'
+          }
+          $permission = gh api "repos/$($env:REPOSITORY)/collaborators/$($env:REQUESTING_ACTOR)/permission" --jq .permission
+          if ($LASTEXITCODE -ne 0 -or $permission -notin @('admin', 'maintain', 'write')) {
+              throw "Actor '$($env:REQUESTING_ACTOR)' does not have release permission."
+          }
+          git fetch origin main --no-tags
+          $mainCommit = (git rev-parse origin/main).Trim()
+          $actualCommit = (git rev-parse HEAD).Trim()
+          if ($mainCommit -ine $env:EXPECTED_COMMIT -or $actualCommit -ine $env:EXPECTED_COMMIT) {
+              throw "Release commit must equal current origin/main. Expected '$($env:EXPECTED_COMMIT)', main '$mainCommit', checkout '$actualCommit'."
+          }
+          if (git status --porcelain --untracked-files=no) {
+              throw 'The release checkout is not clean.'
+          }
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          global-json-file: global.json
+
+      - name: Plan, prepare, or publish
+        id: release
+        shell: pwsh
+        env:
+          OPERATION: ${{ inputs.operation }}
+          VERSION: ${{ inputs.version }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          CONFIRM_RELEASE: ${{ inputs.confirm }}
+        run: |
+          $result = .\Build\Invoke-PowerForgePublicRelease.ps1 `
+              -Operation $env:OPERATION `
+              -Version $env:VERSION `
+              -ExpectedCommit $env:EXPECTED_COMMIT `
+              -Confirm $env:CONFIRM_RELEASE `
+              -ReceiptPath $env:RELEASE_RECEIPT
+          $result | Format-List
+
+      - name: Create the version pull request
+        if: inputs.operation == 'Prepare'
+        id: version-pr
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          $allowed = @(
+              'Module/Docs/Readme.md'
+              'Module/PSPublishModule.psd1'
+              'Module/PSPublishModule.psm1'
+              'PowerForge/PowerForge.csproj'
+              'PowerForge.Blazor/PowerForge.Blazor.csproj'
+              'PowerForge.Cli/PowerForge.Cli.csproj'
+              'PowerForge.PowerShell/PowerForge.PowerShell.csproj'
+              'PowerForge.Web/PowerForge.Web.csproj'
+              'PowerForge.Web.Cli/PowerForge.Web.Cli.csproj'
+          )
+          $changed = @(git diff --name-only)
+          $unexpected = @($changed | Where-Object { $_ -notin $allowed })
+          if ($unexpected.Count -gt 0) {
+              throw "Release preparation changed unexpected tracked files: $($unexpected -join ', ')"
+          }
+          if ($changed.Count -eq 0) {
+              throw 'Release preparation produced no version changes.'
+          }
+          foreach ($project in @(
+              'PowerForge/PowerForge.csproj'
+              'PowerForge.Blazor/PowerForge.Blazor.csproj'
+              'PowerForge.Cli/PowerForge.Cli.csproj'
+              'PowerForge.PowerShell/PowerForge.PowerShell.csproj'
+              'PowerForge.Web/PowerForge.Web.csproj'
+              'PowerForge.Web.Cli/PowerForge.Web.Cli.csproj'
+          )) {
+              [xml] $xml = Get-Content -Raw -LiteralPath $project
+              if ([string] $xml.Project.PropertyGroup.VersionPrefix -ne $env:VERSION) {
+                  throw "$project was not aligned to $($env:VERSION)."
+              }
+          }
+          $manifest = Import-PowerShellDataFile -LiteralPath 'Module/PSPublishModule.psd1'
+          if ([string] $manifest.ModuleVersion -ne $env:VERSION) {
+              throw "The module manifest was not aligned to $($env:VERSION)."
+          }
+
+          $releaseConfig = Get-Content -Raw -LiteralPath 'Build/release.json' | ConvertFrom-Json -Depth 100
+          $tokenPath = [string] $releaseConfig.Packages.GitHubAccessTokenFilePath
+          if (-not (Test-Path -LiteralPath $tokenPath -PathType Leaf)) {
+              throw "The release GitHub token file is unavailable: $tokenPath"
+          }
+          $env:GH_TOKEN = (Get-Content -Raw -LiteralPath $tokenPath).Trim()
+          if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
+              throw 'The release GitHub token file is empty.'
+          }
+
+          $branch = "release/pspublishmodule-$($env:VERSION)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c $branch
+          git add -- $changed
+          git commit -m "Prepare PSPublishModule $($env:VERSION)"
+          gh auth setup-git
+          git push --set-upstream origin $branch
+
+          $body = @"
+          ## Summary
+
+          - align PSPublishModule and the PowerForge package train to `$($env:VERSION)`
+          - regenerate the module manifest and public help through the canonical Build gate
+          - keep signed publication in the protected public-release workflow after merge
+
+          ## Release contract
+
+          - prepared from exact main commit `$($env:EXPECTED_COMMIT)`
+          - publication confirmation will bind the merged version and exact main commit
+          - NuGet, PowerShell Gallery, GitHub assets, and checksums remain one coordinated release
+          "@
+          $url = gh pr create --repo $env:REPOSITORY --base main --head $branch --title "Prepare PSPublishModule $($env:VERSION)" --body $body
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to create the version pull request.' }
+          "url=$url" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Verify public release
+        if: inputs.operation == 'Publish'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          gh release view "v$($env:VERSION)" --repo $env:REPOSITORY --json tagName,isDraft,isPrerelease,publishedAt | Out-File -LiteralPath 'release-receipts/github-release.json' -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { throw "GitHub release v$($env:VERSION) was not found." }
+
+          $packageIds = @('PowerForge', 'PowerForge.PowerShell', 'PowerForge.Build', 'PowerForge.Blazor', 'PowerForge.Web', 'PowerForge.Web.Build')
+          $deadline = [DateTime]::UtcNow.AddMinutes(10)
+          do {
+              $missing = @()
+              foreach ($packageId in $packageIds) {
+                  $flatId = $packageId.ToLowerInvariant()
+                  $uri = "https://api.nuget.org/v3-flatcontainer/$flatId/$($env:VERSION)/$flatId.$($env:VERSION).nupkg"
+                  try { Invoke-WebRequest -Method Head -Uri $uri -UseBasicParsing | Out-Null } catch { $missing += $packageId }
+              }
+              $galleryVersion = $null
+              try { $galleryVersion = (Find-Module PSPublishModule -Repository PSGallery -ErrorAction Stop).Version.ToString() } catch { }
+              if ($missing.Count -eq 0 -and $galleryVersion -eq $env:VERSION) { break }
+              Start-Sleep -Seconds 20
+          } while ([DateTime]::UtcNow -lt $deadline)
+          if ($missing.Count -gt 0 -or $galleryVersion -ne $env:VERSION) {
+              throw "Public indexing did not converge. NuGet missing: $($missing -join ', '); PSGallery latest: $galleryVersion."
+          }
+
+          [pscustomobject]@{
+              Success = $true
+              Version = $env:VERSION
+              NuGetPackages = $packageIds
+              PowerShellGallery = 'PSPublishModule'
+              GitHubRelease = "v$($env:VERSION)"
+              VerifiedAtUtc = [DateTime]::UtcNow
+          } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath 'release-receipts/public-verification.json' -Encoding utf8
+
+      - name: Upload release receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pspublishmodule-${{ inputs.operation }}-${{ inputs.version }}
+          path: release-receipts
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Summarize
+        if: always()
+        shell: pwsh
+        env:
+          OPERATION: ${{ inputs.operation }}
+          VERSION: ${{ inputs.version }}
+          VERSION_PR_URL: ${{ steps.version-pr.outputs.url }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          @"
+          ## PSPublishModule public release
+
+          - Operation: ``$($env:OPERATION)``
+          - Version: ``$($env:VERSION)``
+          - Result: ``$($env:JOB_STATUS)``
+          - Version PR: $($env:VERSION_PR_URL)
+          "@ | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
