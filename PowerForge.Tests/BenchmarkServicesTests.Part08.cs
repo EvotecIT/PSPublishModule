@@ -238,6 +238,24 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void EvidenceCatalog_RejectsPublishWithNonzeroFailureCount()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Summary[0].FailureCount = 1;
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "failed.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("no failed measurements", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void EvidenceCatalog_RejectsPublishWithoutSourceProvenance()
     {
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
@@ -369,6 +387,20 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void EvidenceCatalog_LockFileSharesTheDestinationDirectory()
+    {
+        string root = CreateTempRoot();
+        string destination = Path.Combine(root, "nested", "index.json");
+
+        string lockPath = BenchmarkFileUpdateLock.CreateLockPath(destination);
+
+        Assert.Equal(
+            Path.GetDirectoryName(Path.GetFullPath(destination)),
+            Path.GetDirectoryName(lockPath));
+        Assert.EndsWith(".lock", lockPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void EvidenceCatalog_MarksMismatchedFixturesAsNotComparable()
     {
         var service = new BenchmarkEvidenceCatalogService();
@@ -378,6 +410,37 @@ public sealed partial class BenchmarkServicesTests
         var mac = Assert.Single(catalog.Entries, entry => entry.Platform == "macos");
         Assert.False(mac.Comparable);
         Assert.Contains(mac.CompatibilityIssues, issue => issue.Contains("benchmark.fixture.sha256", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void EvidenceCatalog_MarksMismatchedMeasuredWorkloadShapesAsNotComparable()
+    {
+        var service = new BenchmarkEvidenceCatalogService();
+        BenchmarkRunResult windows = Result("Windows", "fixture-a", 10);
+        BenchmarkRunResult linux = Result("Linux", "fixture-a", 11);
+        linux.Summary[0].Scenario = "DifferentScenario";
+
+        BenchmarkEvidenceCatalog catalog = service.Update(
+            null,
+            windows,
+            "comparison-a",
+            "windows.json",
+            "full",
+            publish: true);
+        catalog = service.Update(
+            catalog,
+            linux,
+            "comparison-a",
+            "linux.json",
+            "full",
+            publish: true);
+
+        Assert.All(catalog.Entries, entry => Assert.False(entry.Comparable));
+        Assert.All(
+            catalog.Entries,
+            entry => Assert.Contains(
+                entry.CompatibilityIssues,
+                issue => issue.Contains("benchmark.workload.shape.sha256", StringComparison.OrdinalIgnoreCase)));
     }
 
     [Fact]
@@ -540,6 +603,25 @@ public sealed partial class BenchmarkServicesTests
 
         Assert.NotNull(new FileInfo(link).LinkTarget);
         Assert.Equal("updated", BenchmarkJson.Read<Dictionary<string, string>>(target)["value"]);
+#endif
+    }
+
+    [Fact]
+    public void BenchmarkJson_WritesThroughDanglingUnixSymbolicLink()
+    {
+#if NET8_0_OR_GREATER
+        if (OperatingSystem.IsWindows())
+            return;
+
+        string root = CreateTempRoot();
+        string target = Path.Combine(root, "versioned.json");
+        string link = Path.Combine(root, "latest.json");
+        File.CreateSymbolicLink(link, Path.GetFileName(target));
+
+        BenchmarkJson.Write(link, new Dictionary<string, string> { ["value"] = "created" });
+
+        Assert.NotNull(new FileInfo(link).LinkTarget);
+        Assert.Equal("created", BenchmarkJson.Read<Dictionary<string, string>>(target)["value"]);
 #endif
     }
 

@@ -11,12 +11,11 @@ internal static class BenchmarkFileUpdateLock
 
     internal static FileStream Acquire(string destinationPath)
     {
-        string lockDirectory = Path.Combine(
-            Path.GetTempPath(),
-            "PowerForge",
-            "BenchmarkEvidenceLocks");
+        string lockDirectory = Path.GetDirectoryName(Path.GetFullPath(destinationPath))
+                               ?? throw new InvalidOperationException(
+                                   $"Unable to determine the benchmark evidence directory for '{destinationPath}'.");
         Directory.CreateDirectory(lockDirectory);
-        string lockPath = Path.Combine(lockDirectory, CreatePathHash(destinationPath) + ".lock");
+        string lockPath = CreateLockPath(destinationPath);
         var stopwatch = Stopwatch.StartNew();
         while (true)
         {
@@ -45,6 +44,17 @@ internal static class BenchmarkFileUpdateLock
                 Thread.Sleep(25);
             }
         }
+    }
+
+    internal static string CreateLockPath(string destinationPath)
+    {
+        string fullPath = Path.GetFullPath(destinationPath);
+        string directory = Path.GetDirectoryName(fullPath)
+                           ?? throw new InvalidOperationException(
+                               $"Unable to determine the benchmark evidence directory for '{destinationPath}'.");
+        return Path.Combine(
+            directory,
+            $".{Path.GetFileName(fullPath)}.{CreatePathHash(fullPath)}.lock");
     }
 
     internal static string CreatePathHash(string destinationPath, bool? caseInsensitive = null)

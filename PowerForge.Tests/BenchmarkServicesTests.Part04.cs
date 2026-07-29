@@ -304,6 +304,24 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_UsesExplicitCultureGroupSeparatorForBenchmarkDotNetCsvNumbers()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "benchmark-report.csv");
+        File.WriteAllText(
+            csv,
+            "Method;Job;Mean\n"
+            + "Grouped;Dry;1.234 ns\n");
+
+        BenchmarkRunResult result = new BenchmarkResultImporter().Import(
+            csv,
+            "demo",
+            System.Globalization.CultureInfo.GetCultureInfo("de-DE"));
+
+        Assert.Equal(0.001234, Assert.Single(result.Samples).DurationMs, precision: 9);
+    }
+
+    [Fact]
     public void Importer_KeepsRunnerVariablesNamedLikeBenchmarkDotNetStatistics()
     {
         var root = CreateTempRoot();

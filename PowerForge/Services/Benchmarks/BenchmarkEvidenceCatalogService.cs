@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace PowerForge;
 
 /// <summary>
@@ -135,6 +138,10 @@ public sealed class BenchmarkEvidenceCatalogService
         };
         AddCompatibilityDimension(dimensions, "environment.runtimeVersion", result.Environment.RuntimeVersion);
         AddCompatibilityDimension(dimensions, "environment.dotNetSdkVersion", result.Environment.DotNetSdkVersion);
+        AddCompatibilityDimension(
+            dimensions,
+            "benchmark.workload.shape.sha256",
+            ComputeWorkloadShape(result));
         foreach (var item in result.Metadata.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
         {
             if (item.Key.StartsWith("benchmark.fixture.", StringComparison.OrdinalIgnoreCase) ||
@@ -150,6 +157,66 @@ public sealed class BenchmarkEvidenceCatalogService
         }
 
         return dimensions;
+    }
+
+    private static string ComputeWorkloadShape(BenchmarkRunResult result)
+    {
+        string[] identities = result.Samples
+            .Select(sample => CreateWorkloadIdentity(
+                sample.Scenario,
+                sample.Operation,
+                sample.Engine,
+                sample.Host,
+                sample.Variables))
+            .Concat(result.Summary.Select(row => CreateWorkloadIdentity(
+                row.Scenario,
+                row.Operation,
+                row.Engine,
+                row.Host,
+                row.Variables)))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        if (identities.Length == 0)
+            return string.Empty;
+
+        string canonical = string.Join("\n", identities);
+        using var sha256 = SHA256.Create();
+        byte[] hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(canonical));
+        return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static string CreateWorkloadIdentity(
+        string scenario,
+        string operation,
+        string engine,
+        string host,
+        IReadOnlyDictionary<string, string?> variables)
+    {
+        var builder = new StringBuilder();
+        AppendIdentityPart(builder, "scenario", scenario);
+        AppendIdentityPart(builder, "operation", operation);
+        AppendIdentityPart(builder, "engine", engine);
+        AppendIdentityPart(builder, "host", host);
+        foreach (var variable in variables.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            AppendIdentityPart(builder, variable.Key.ToUpperInvariant(), variable.Value);
+        }
+
+        return builder.ToString();
+    }
+
+    private static void AppendIdentityPart(StringBuilder builder, string key, string? value)
+    {
+        string text = value ?? "<null>";
+        builder.Append(key.Length)
+            .Append(':')
+            .Append(key)
+            .Append('=')
+            .Append(text.Length)
+            .Append(':')
+            .Append(text)
+            .Append(';');
     }
 
     private static void AddCompatibilityDimension(
@@ -239,7 +306,9 @@ public sealed class BenchmarkEvidenceCatalogService
 
         bool hasFailedMeasurement =
             result.Samples.Any(sample => sample.Status == BenchmarkSampleStatus.Failed) ||
-            result.Summary.Any(row => string.Equals(row.Status, "Failed", StringComparison.OrdinalIgnoreCase));
+            result.Summary.Any(row =>
+                row.FailureCount > 0 ||
+                string.Equals(row.Status, "Failed", StringComparison.OrdinalIgnoreCase));
         bool hasSuccessfulMeasurement =
             result.Samples.Any(sample => sample.Status == BenchmarkSampleStatus.Succeeded) ||
             result.Summary.Any(row =>

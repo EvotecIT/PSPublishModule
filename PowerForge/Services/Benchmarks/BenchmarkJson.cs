@@ -86,15 +86,29 @@ public static class BenchmarkJson
     {
         string fullPath = Path.GetFullPath(path);
 #if NET8_0_OR_GREATER
-        var file = new FileInfo(fullPath);
-        if (file.Exists && !string.IsNullOrWhiteSpace(file.LinkTarget))
+        var visited = new HashSet<string>(
+            OperatingSystem.IsWindows()
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal);
+        string currentPath = fullPath;
+        while (true)
         {
-            FileSystemInfo? target = file.ResolveLinkTarget(returnFinalTarget: true);
-            if (target is not null)
-                return target.FullName;
+            if (!visited.Add(currentPath))
+                throw new IOException($"Symbolic-link cycle detected while resolving benchmark output path '{path}'.");
+
+            var file = new FileInfo(currentPath);
+            string? linkTarget = file.LinkTarget;
+            if (string.IsNullOrWhiteSpace(linkTarget))
+                return currentPath;
+
+            currentPath = Path.GetFullPath(
+                Path.IsPathRooted(linkTarget)
+                    ? linkTarget
+                    : Path.Combine(file.DirectoryName!, linkTarget));
         }
-#endif
+#else
         return fullPath;
+#endif
     }
 
     /// <summary>
