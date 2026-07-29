@@ -333,9 +333,13 @@ public sealed partial class GitHubReleasePublisher
         CancellationToken cancellationToken)
     {
         var skippedAssets = new List<string>();
+        var authorizedAssetNames = CreateAuthorizedAssetNameSet(assets);
+        var uploadedAssetIds = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         var replaceableAssets = replaceExistingAssets
             ? CreateReplaceableAssetMap(ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId, cancellationToken))
             : new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        if (replaceExistingAssets)
+            ValidateExistingAssetNamesAuthorized(replaceableAssets.Keys, authorizedAssetNames);
 
         for (var index = 0; index < assets.Length; index++)
         {
@@ -474,6 +478,7 @@ public sealed partial class GitHubReleasePublisher
                 }
             }
 
+            var uploadedAssetId = ReadUploadedAssetId(fileName, respText);
             ValidateReleaseBeforeAssetMutation(
                 owner,
                 repo,
@@ -485,6 +490,16 @@ public sealed partial class GitHubReleasePublisher
                 expectedTagCommitSha,
                 requirePublishedStableRelease,
                 cancellationToken);
+            ValidateCurrentAssetIdentity(
+                owner,
+                repo,
+                token,
+                apiBaseUrl,
+                releaseId,
+                fileName,
+                uploadedAssetId,
+                cancellationToken);
+            uploadedAssetIds.Add(fileName, uploadedAssetId);
 
             assetWatch.Stop();
             uploadedAssets.Add(fileName);
@@ -499,40 +514,41 @@ public sealed partial class GitHubReleasePublisher
             _logger.Success($"Uploaded GitHub release asset: {fileName} in {DotNetRepositoryReleaseService.FormatDuration(assetWatch.Elapsed)} ({DotNetRepositoryReleaseService.FormatBytes(assetSize)}).");
         }
 
+        if (replaceExistingAssets)
+        {
+            ValidateReleaseBeforeAssetMutation(
+                owner,
+                repo,
+                token,
+                apiBaseUrl,
+                releaseId,
+                tagName,
+                expectedReleaseBodyMarker,
+                expectedTagCommitSha,
+                requirePublishedStableRelease,
+                cancellationToken);
+            ValidateFinalAssetSet(
+                owner,
+                repo,
+                token,
+                apiBaseUrl,
+                releaseId,
+                uploadedAssetIds,
+                cancellationToken);
+            ValidateReleaseBeforeAssetMutation(
+                owner,
+                repo,
+                token,
+                apiBaseUrl,
+                releaseId,
+                tagName,
+                expectedReleaseBodyMarker,
+                expectedTagCommitSha,
+                requirePublishedStableRelease,
+                cancellationToken);
+        }
+
         return skippedAssets;
-    }
-
-    private static void ReportAssetProgress(
-        IGitHubReleaseProgressReporter? progress,
-        string assetPath,
-        int zeroBasedPosition,
-        int totalAssets,
-        GitHubReleaseAssetProgressState state,
-        long bytesTransferred = 0,
-        long totalBytes = 0,
-        string? detail = null)
-    {
-        if (progress is null)
-            return;
-
-        try
-        {
-            progress.Report(new GitHubReleaseAssetProgress
-            {
-                FilePath = assetPath,
-                FileName = Path.GetFileName(assetPath) ?? assetPath,
-                Position = zeroBasedPosition + 1,
-                TotalAssets = totalAssets,
-                State = state,
-                BytesTransferred = bytesTransferred,
-                TotalBytes = totalBytes,
-                Detail = detail
-            });
-        }
-        catch
-        {
-            // Progress is best effort and must never change release correctness.
-        }
     }
 
     private static HttpClient CreateSharedClient()

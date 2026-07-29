@@ -701,6 +701,12 @@ internal sealed class PowerForgeReleaseGitHubOptions
 
     public bool ReplaceExistingAssets { get; set; }
 
+    /// <summary>
+    /// During verified recovery, replace locally rebuilt NuGet assets with the exact bytes already
+    /// published by the configured package source before regenerating checksums and uploading.
+    /// </summary>
+    public bool RequirePublishedNuGetAssets { get; set; }
+
     public string? TagTemplate { get; set; }
 
     public string? ReleaseNameTemplate { get; set; }
@@ -1101,4 +1107,6 @@ internal sealed class PowerForgeUnifiedGitHubReleaseResult
     public string[] ReplacedExistingAssets { get; set; } = Array.Empty<string>();
 
     public string[] UploadedAssets { get; set; } = Array.Empty<string>();
+
+    public string[] RecoveredPublishedNuGetAssets { get; set; } = Array.Empty<string>();
 }

@@ -139,6 +139,10 @@
           "type": "boolean",
           "description": "When ReuseExistingRelease is true, delete same-named assets before uploading replacements."
         },
+        "RequirePublishedNuGetAssets": {
+          "type": "boolean",
+          "description": "During verified recovery, replace rebuilt .nupkg assets with the exact bytes already published by Packages.PublishSource before checksums and GitHub assets are regenerated."
+        },
         "TagTemplate": { "type": [ "string", "null" ] },
         "ReleaseNameTemplate": { "type": [ "string", "null" ] }
       }

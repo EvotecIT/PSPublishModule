@@ -78,6 +78,7 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
     $gitHub | Add-Member -NotePropertyName RequireExpectedExistingRelease -NotePropertyValue $false -Force
     $gitHub | Add-Member -NotePropertyName ExpectedExistingReleaseId -NotePropertyValue $null -Force
     $gitHub | Add-Member -NotePropertyName RequirePublishedStableRelease -NotePropertyValue $false -Force
+    $gitHub | Add-Member -NotePropertyName RequirePublishedNuGetAssets -NotePropertyValue $false -Force
 
     if ($null -eq $GetReleaseByTag) {
         $GetReleaseByTag = {
@@ -130,6 +131,7 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
     $gitHub.RequireExpectedExistingRelease = $true
     $gitHub.ExpectedExistingReleaseId = [long] $release.id
     $gitHub.RequirePublishedStableRelease = $true
+    $gitHub.RequirePublishedNuGetAssets = $true
     [pscustomobject]@{
         ReuseEnabled = $true
         TagName       = $tagName

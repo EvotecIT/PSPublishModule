@@ -404,6 +404,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(powerForgeWebExecutable, "exe");
 
             var publishCalls = new List<GitHubReleasePublishRequest>();
+            var publishedNuGetRecoveryCalls = 0;
             var service = new PowerForgeReleaseService(
                 new NullLogger(),
                 executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
@@ -438,6 +439,15 @@ public sealed partial class PowerForgeReleaseServiceTests
                         ReusedExistingRelease = true,
                         HtmlUrl = "https://github.com/EvotecIT/PSPublishModule/releases/tag/v1.0.7"
                     };
+                },
+                restorePublishedNuGetAssets: (_, version, paths, _) =>
+                {
+                    publishedNuGetRecoveryCalls++;
+                    Assert.Equal("1.0.7", version);
+                    Assert.Equal(
+                        new[] { powerForgeZip, powerForgeWebZip }.OrderBy(static path => path),
+                        paths.OrderBy(static path => path));
+                    return ["PowerForge.1.0.7.nupkg"];
                 });
 
             var result = service.Execute(
@@ -459,7 +469,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                         RequireExpectedExistingRelease = true,
                         ExpectedExistingReleaseId = 42,
                         RequirePublishedStableRelease = true,
-                        ReplaceExistingAssets = true
+                        ReplaceExistingAssets = true,
+                        RequirePublishedNuGetAssets = true
                     }
                 },
                 new PowerForgeReleaseRequest
@@ -468,6 +479,10 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
 
             Assert.True(result.Success);
+            Assert.Equal(1, publishedNuGetRecoveryCalls);
+            Assert.Equal(
+                "PowerForge.1.0.7.nupkg",
+                Assert.Single(result.UnifiedGitHubRelease!.RecoveredPublishedNuGetAssets));
             Assert.Empty(result.ToolGitHubReleases);
             var publish = Assert.Single(publishCalls);
             Assert.Equal("v1.0.7", publish.TagName);

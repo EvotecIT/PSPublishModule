@@ -103,7 +103,9 @@ publish configuration.
 For direct `Build-Module` GitHub publishing, an X-pattern version also skips occupied GitHub tags/releases during
 publish planning. The publish row switches to determinate byte progress and shows the active asset. Existing releases
 are not reused by default. Use `-ReuseExistingRelease` only for a deliberate recovery run, and add
-`-ReplaceExistingAssets` only when that recovery should replace same-name assets.
+`-ReplaceExistingAssets` only when that recovery should replace same-name assets. Protected recovery should also
+bind the exact existing release, authorize the complete asset-name set, and verify the server-assigned identity of
+every uploaded asset before reporting success.
 
 ### PowerShell-authored package configuration
 
@@ -537,9 +539,13 @@ the signing-capable Windows runner and has three explicit operations:
    recovery run cannot advance a partially published release train. If the exact stable
    GitHub release already exists after a partial asset upload, recovery first binds its
    release ID and tag commit to the authorized source, revalidates both immediately before
-   every deletion/upload, and replaces same-named assets from that exact rebuild. Asset IDs
-   are bound to the verified snapshot; late same-name collisions are never treated as a
-   successful skip. Drafts, prereleases, missing tags, mismatched commits, changed release
+   every deletion/upload, and replaces same-named assets. Rebuilt NuGet packages are replaced
+   locally with the exact bytes already published by the configured NuGet source before the
+   manifest and checksums are regenerated, so timestamped signatures cannot diverge between
+   NuGet and GitHub. Existing asset names must be a subset of the authorized rebuilt set.
+   Asset IDs are bound both to the verified pre-delete snapshot and the upload response, and
+   the complete final name-to-ID set is reconciled before success. Late same-name collisions,
+   leftover assets, drafts, prereleases, missing tags, mismatched commits, changed release
    identities, and changed asset identities fail closed.
 
 Every run uploads a compact JSON receipt. Release plans are written under the ignored

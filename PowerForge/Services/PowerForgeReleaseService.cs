@@ -58,6 +58,7 @@ internal sealed partial class PowerForgeReleaseService
     private readonly Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, ISet<PowerForgeReleaseToolOutputKind>, DotNetPublishPlan> _planDotNetTools;
     private readonly Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult> _runDotNetTools;
     private readonly Func<GitHubReleasePublishRequest, CancellationToken, GitHubReleasePublishResult> _publishGitHubRelease;
+    private readonly Func<string, string, IEnumerable<string>, CancellationToken, string[]> _restorePublishedNuGetAssets;
     private readonly Func<string, string, string, string, GitHubReleaseVersionOccupancy> _probeGitHubReleaseVersion;
     private readonly Func<PowerForgeWingetSubmissionPlan, PowerForgeWingetSubmissionResult> _submitWinget;
     private readonly Func<AppleAppArchiveRequest, AppleAppArchiveResult> _archiveAppleApp;
@@ -122,7 +123,8 @@ internal sealed partial class PowerForgeReleaseService
         Func<ProjectBuildHostRequest, ProjectBuildConfiguration, string, ProjectBuildHostExecutionResult> executePackages,
         Func<PowerForgeToolReleaseSpec, string, PowerForgeReleaseRequest, PowerForgeToolReleasePlan> planTools,
         Func<PowerForgeToolReleasePlan, PowerForgeToolReleaseResult> runTools,
-        Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> publishGitHubRelease)
+        Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> publishGitHubRelease,
+        Func<string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedNuGetAssets = null)
         : this(
             logger,
             executePackages,
@@ -135,7 +137,8 @@ internal sealed partial class PowerForgeReleaseService
             plan => new WingetSubmissionService(logger).Run(plan),
             request => new AppleAppArchiveService().CreateArchiveAsync(request).GetAwaiter().GetResult(),
             request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult(),
-            null)
+            null,
+            restorePublishedNuGetAssets: restorePublishedNuGetAssets)
     {
     }
 
@@ -172,7 +175,8 @@ internal sealed partial class PowerForgeReleaseService
         Func<AppStoreConnectApiCredential, string, AppStoreConnectAppInfo[]>? findAppleApps = null,
         Func<AppleNotarizationRequest, AppleNotarizationResult>? notarizeAppleArtifact = null,
         Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan>? planAppleGovernance = null,
-        Func<AppStoreConnectApiCredential, AppStoreConnectReleaseReadinessRequest, AppStoreConnectReleaseReadinessResult>? checkAppleReleaseReadiness = null)
+        Func<AppStoreConnectApiCredential, AppStoreConnectReleaseReadinessRequest, AppStoreConnectReleaseReadinessResult>? checkAppleReleaseReadiness = null,
+        Func<string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedNuGetAssets = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
@@ -195,6 +199,13 @@ internal sealed partial class PowerForgeReleaseService
             throw new ArgumentNullException(nameof(publishGitHubRelease));
         _publishGitHubRelease = publishGitHubReleaseWithCancellation
             ?? ((publishRequest, _) => publishGitHubRelease(publishRequest));
+        _restorePublishedNuGetAssets = restorePublishedNuGetAssets
+            ?? ((source, version, paths, cancellationToken) =>
+                new PublishedNuGetAssetRecoveryService(logger).Restore(
+                    source,
+                    version,
+                    paths,
+                    cancellationToken));
         _probeGitHubReleaseVersion = probeGitHubReleaseVersion
             ?? GitHubReleaseVersionAvailabilityService.Probe;
         _submitWinget = submitWinget ?? (plan => new WingetSubmissionService(logger).Run(plan));
@@ -3150,6 +3161,18 @@ internal sealed partial class PowerForgeReleaseService
         if (resolved.Error is not null)
             return resolved.Error;
 
+        var recoveryError = RestorePublishedNuGetAssetsForGitHubRecovery(
+            spec,
+            gitHub,
+            result,
+            resolved.Owner ?? string.Empty,
+            resolved.Repository ?? string.Empty,
+            version!,
+            cancellationToken,
+            out var recoveredPublishedNuGetAssets);
+        if (recoveryError is not null)
+            return recoveryError;
+
         var expectedAssets = result.ReleaseAssets
             .Concat(new[]
             {
@@ -3257,7 +3280,8 @@ internal sealed partial class PowerForgeReleaseService
                 ErrorMessage = publishResult.Succeeded ? null : "Unified GitHub release publish failed.",
                 SkippedExistingAssets = publishResult.SkippedExistingAssets?.ToArray() ?? Array.Empty<string>(),
                 ReplacedExistingAssets = publishResult.ReplacedExistingAssets?.ToArray() ?? Array.Empty<string>(),
-                UploadedAssets = publishResult.UploadedAssets?.ToArray() ?? Array.Empty<string>()
+                UploadedAssets = publishResult.UploadedAssets?.ToArray() ?? Array.Empty<string>(),
+                RecoveredPublishedNuGetAssets = recoveredPublishedNuGetAssets
             };
         }
         catch (OperationCanceledException)

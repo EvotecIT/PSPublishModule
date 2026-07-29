@@ -84,8 +84,21 @@ public sealed class GitHubReleasePublisherTests
 
             var upload = await listener.GetContextAsync();
             await upload.Request.InputStream.CopyToAsync(Stream.Null);
+            var assetName = Path.GetFileName(assetPath);
+            var uploadBody = Encoding.UTF8.GetBytes($"{{\"id\":99,\"name\":\"{assetName}\"}}");
             upload.Response.StatusCode = 201;
+            upload.Response.ContentType = "application/json";
+            upload.Response.ContentLength64 = uploadBody.Length;
+            await upload.Response.OutputStream.WriteAsync(uploadBody);
             upload.Response.Close();
+
+            var assets = await listener.GetContextAsync();
+            var assetsBody = Encoding.UTF8.GetBytes($"[{{\"id\":99,\"name\":\"{assetName}\"}}]");
+            assets.Response.StatusCode = 200;
+            assets.Response.ContentType = "application/json";
+            assets.Response.ContentLength64 = assetsBody.Length;
+            await assets.Response.OutputStream.WriteAsync(assetsBody);
+            assets.Response.Close();
         });
 
         try
@@ -194,7 +207,13 @@ public sealed class GitHubReleasePublisherTests
             await Respond(await listener.GetContextAsync(), string.Empty, 204);
             await Respond(await listener.GetContextAsync(), releaseJson);
             await Respond(await listener.GetContextAsync(), $"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
-            await Respond(await listener.GetContextAsync(), "{}", 201);
+            await Respond(await listener.GetContextAsync(), $"{{\"id\":100,\"name\":\"{Path.GetFileName(assetPath)}\"}}", 201);
+            await Respond(await listener.GetContextAsync(), releaseJson);
+            await Respond(await listener.GetContextAsync(), $"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
+            await Respond(await listener.GetContextAsync(), $"[{{\"id\":100,\"name\":\"{Path.GetFileName(assetPath)}\"}}]");
+            await Respond(await listener.GetContextAsync(), releaseJson);
+            await Respond(await listener.GetContextAsync(), $"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
+            await Respond(await listener.GetContextAsync(), $"[{{\"id\":100,\"name\":\"{Path.GetFileName(assetPath)}\"}}]");
             await Respond(await listener.GetContextAsync(), releaseJson);
             await Respond(await listener.GetContextAsync(), $"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
         });
@@ -234,9 +253,151 @@ public sealed class GitHubReleasePublisherTests
                     "GET /repos/EvotecIT/example/git/ref/tags/v1.2.3",
                     "POST /uploads",
                     "GET /repos/EvotecIT/example/releases/tags/v1.2.3",
+                    "GET /repos/EvotecIT/example/git/ref/tags/v1.2.3",
+                    "GET /repos/EvotecIT/example/releases/42/assets",
+                    "GET /repos/EvotecIT/example/releases/tags/v1.2.3",
+                    "GET /repos/EvotecIT/example/git/ref/tags/v1.2.3",
+                    "GET /repos/EvotecIT/example/releases/42/assets",
+                    "GET /repos/EvotecIT/example/releases/tags/v1.2.3",
                     "GET /repos/EvotecIT/example/git/ref/tags/v1.2.3"
                 ],
                 requests);
+        }
+        finally
+        {
+            listener.Stop();
+            listener.Close();
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
+    public async Task PublishRelease_RecoveryRejectsUnauthorizedExistingAssetBeforeMutation()
+    {
+        var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(assetPath, "asset");
+        var releaseJson = $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}","draft":false,"prerelease":false,"published_at":"2026-07-29T00:00:00Z"}""";
+        var requests = new List<string>();
+
+        async Task Respond(string json)
+        {
+            var context = await listener.GetContextAsync();
+            requests.Add($"{context.Request.HttpMethod} {context.Request.Url!.AbsolutePath}");
+            var bytes = Encoding.UTF8.GetBytes(json);
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = bytes.Length;
+            await context.Response.OutputStream.WriteAsync(bytes);
+            context.Response.Close();
+        }
+
+        var server = Task.Run(async () =>
+        {
+            await Respond(releaseJson);
+            await Respond("[{\"id\":91,\"name\":\"obsolete-unreviewed.zip\"}]");
+        });
+
+        try
+        {
+            var request = new GitHubReleasePublishRequest
+            {
+                Owner = "EvotecIT",
+                Repository = "example",
+                Token = "token",
+                ApiBaseUrl = apiBaseUrl,
+                TagName = "v1.2.3",
+                ReuseExistingReleaseOnConflict = true,
+                RequireExpectedExistingRelease = true,
+                ExpectedExistingReleaseId = 42,
+                RequirePublishedStableRelease = true,
+                ReplaceExistingAssets = true,
+                AssetFilePaths = [assetPath]
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new GitHubReleasePublisher(new NullLogger()).PublishRelease(request));
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("outside the authorized recovery set", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(
+                [
+                    "GET /repos/EvotecIT/example/releases/tags/v1.2.3",
+                    "GET /repos/EvotecIT/example/releases/42/assets"
+                ],
+                requests);
+        }
+        finally
+        {
+            listener.Stop();
+            listener.Close();
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
+    public async Task PublishRelease_RejectsUploadedAssetIdentityReplacedBeforeSuccess()
+    {
+        var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(assetPath, "asset");
+        const string commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var fileName = Path.GetFileName(assetPath);
+        var releaseJson = $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}","draft":false,"prerelease":false,"published_at":"2026-07-29T00:00:00Z"}""";
+
+        async Task Respond(string json, int statusCode = 200)
+        {
+            var context = await listener.GetContextAsync();
+            await context.Request.InputStream.CopyToAsync(Stream.Null);
+            var bytes = Encoding.UTF8.GetBytes(json);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = bytes.Length;
+            await context.Response.OutputStream.WriteAsync(bytes);
+            context.Response.Close();
+        }
+
+        var server = Task.Run(async () =>
+        {
+            await Respond(releaseJson);
+            await Respond("[]");
+            await Respond(releaseJson);
+            await Respond($"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
+            await Respond($"{{\"id\":100,\"name\":\"{fileName}\"}}", 201);
+            await Respond(releaseJson);
+            await Respond($"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
+            await Respond($"[{{\"id\":101,\"name\":\"{fileName}\"}}]");
+        });
+
+        try
+        {
+            var request = new GitHubReleasePublishRequest
+            {
+                Owner = "EvotecIT",
+                Repository = "example",
+                Token = "token",
+                ApiBaseUrl = apiBaseUrl,
+                TagName = "v1.2.3",
+                ReuseExistingReleaseOnConflict = true,
+                RequireExpectedExistingRelease = true,
+                ExpectedExistingReleaseId = 42,
+                RequirePublishedStableRelease = true,
+                ExpectedTagCommitSha = commit,
+                ReplaceExistingAssets = true,
+                AssetFilePaths = [assetPath]
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new GitHubReleasePublisher(new NullLogger()).PublishRelease(request));
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("changed from id 100 to 101", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

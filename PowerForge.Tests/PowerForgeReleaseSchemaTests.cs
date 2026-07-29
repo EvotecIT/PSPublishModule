@@ -60,7 +60,8 @@ public sealed class PowerForgeReleaseSchemaTests
               "RequireExpectedExistingRelease": true,
               "ExpectedExistingReleaseId": 42,
               "RequirePublishedStableRelease": true,
-              "ReplaceExistingAssets": true
+              "ReplaceExistingAssets": true,
+              "RequirePublishedNuGetAssets": true
             }
             """)!;
 
@@ -81,7 +82,8 @@ public sealed class PowerForgeReleaseSchemaTests
                     "RequireExpectedExistingRelease": true,
                     "ExpectedExistingReleaseId": 42,
                     "RequirePublishedStableRelease": true,
-                    "ReplaceExistingAssets": true
+                    "ReplaceExistingAssets": true,
+                    "RequirePublishedNuGetAssets": true
                   }
                 }
                 """);
@@ -93,6 +95,7 @@ public sealed class PowerForgeReleaseSchemaTests
             Assert.Equal(42, gitHub.ExpectedExistingReleaseId);
             Assert.True(gitHub.RequirePublishedStableRelease);
             Assert.True(gitHub.ReplaceExistingAssets);
+            Assert.True(gitHub.RequirePublishedNuGetAssets);
         }
         finally
         {

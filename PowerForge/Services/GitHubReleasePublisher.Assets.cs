@@ -9,6 +9,66 @@ using System.Threading;
 namespace PowerForge;
 
 public sealed partial class GitHubReleasePublisher {
+    private static void ReportAssetProgress(
+        IGitHubReleaseProgressReporter? progress,
+        string assetPath,
+        int zeroBasedPosition,
+        int totalAssets,
+        GitHubReleaseAssetProgressState state,
+        long bytesTransferred = 0,
+        long totalBytes = 0,
+        string? detail = null) {
+        if (progress is null)
+            return;
+
+        try {
+            progress.Report(new GitHubReleaseAssetProgress {
+                FilePath = assetPath,
+                FileName = Path.GetFileName(assetPath) ?? assetPath,
+                Position = zeroBasedPosition + 1,
+                TotalAssets = totalAssets,
+                State = state,
+                BytesTransferred = bytesTransferred,
+                TotalBytes = totalBytes,
+                Detail = detail
+            });
+        }
+        catch {
+            // Progress is best effort and must never change release correctness.
+        }
+    }
+
+    internal static HashSet<string> CreateAuthorizedAssetNameSet(IEnumerable<string> assetPaths) {
+        if (assetPaths is null) throw new ArgumentNullException(nameof(assetPaths));
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var assetPath in assetPaths) {
+            var fileName = Path.GetFileName(assetPath);
+            if (string.IsNullOrWhiteSpace(fileName))
+                throw new InvalidOperationException($"GitHub release asset path has no file name: '{assetPath}'.");
+            if (!names.Add(fileName!))
+                throw new InvalidOperationException($"GitHub release asset name '{fileName}' is duplicated.");
+        }
+
+        return names;
+    }
+
+    internal static void ValidateExistingAssetNamesAuthorized(
+        IEnumerable<string> existingAssetNames,
+        ISet<string> authorizedAssetNames) {
+        if (existingAssetNames is null) throw new ArgumentNullException(nameof(existingAssetNames));
+        if (authorizedAssetNames is null) throw new ArgumentNullException(nameof(authorizedAssetNames));
+
+        var unauthorized = existingAssetNames
+            .Where(name => !string.IsNullOrWhiteSpace(name) && !authorizedAssetNames.Contains(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (unauthorized.Length > 0)
+            throw new InvalidOperationException(
+                "The existing GitHub release contains asset names outside the authorized recovery set: " +
+                string.Join(", ", unauthorized));
+    }
+
     internal static bool TryReserveExistingAssetForReplacement(
         IDictionary<string, long> replaceableAssets,
         string fileName,
@@ -38,6 +98,62 @@ public sealed partial class GitHubReleasePublisher {
         if (actualAssetId == expectedAssetId) return;
         throw new InvalidOperationException(
             $"GitHub release asset '{fileName}' changed from id {expectedAssetId} to {actualAssetId} after the verified replacement snapshot.");
+    }
+
+    private static long ReadUploadedAssetId(string fileName, string responseText) {
+        var uploaded = Deserialize<GitHubReleaseAssetResponse>(responseText);
+        if (uploaded is null ||
+            uploaded.Id <= 0 ||
+            !string.Equals(uploaded.Name, fileName, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"GitHub upload response did not bind '{fileName}' to an exact asset identity.");
+        }
+
+        return uploaded.Id;
+    }
+
+    private static void ValidateCurrentAssetIdentity(
+        string owner,
+        string repo,
+        string token,
+        string apiBaseUrl,
+        long releaseId,
+        string fileName,
+        long expectedAssetId,
+        CancellationToken cancellationToken) {
+        var current = ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId, cancellationToken)
+            .Where(asset => string.Equals(asset.Name, fileName, StringComparison.Ordinal))
+            .ToArray();
+        if (current.Length != 1)
+            throw new InvalidOperationException(
+                $"GitHub release asset '{fileName}' was not uniquely present after upload.");
+        ValidateExpectedAssetId(fileName, expectedAssetId, current[0].Id);
+    }
+
+    private static void ValidateFinalAssetSet(
+        string owner,
+        string repo,
+        string token,
+        string apiBaseUrl,
+        long releaseId,
+        IReadOnlyDictionary<string, long> expectedAssets,
+        CancellationToken cancellationToken) {
+        var current = CreateReplaceableAssetMap(
+            ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId, cancellationToken));
+        ValidateExistingAssetNamesAuthorized(current.Keys, new HashSet<string>(
+            expectedAssets.Keys,
+            StringComparer.OrdinalIgnoreCase));
+        if (current.Count != expectedAssets.Count)
+            throw new InvalidOperationException(
+                $"GitHub release asset reconciliation returned {current.Count} asset(s), expected {expectedAssets.Count}.");
+
+        foreach (var expected in expectedAssets) {
+            if (!current.TryGetValue(expected.Key, out var actualId))
+                throw new InvalidOperationException(
+                    $"GitHub release asset '{expected.Key}' disappeared before recovery completed.");
+            ValidateExpectedAssetId(expected.Key, expected.Value, actualId);
+        }
     }
 
     private static HttpResponseMessage UploadAsset(
