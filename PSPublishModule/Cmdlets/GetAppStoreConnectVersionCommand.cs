@@ -36,7 +36,7 @@ public sealed class GetAppStoreConnectVersionCommand : AsyncPSCmdlet
     [Parameter] public ApplePlatform? Platform { get; set; }
 
     /// <summary>Maximum result count.</summary>
-    [Parameter] public int Limit { get; set; } = 20;
+    [Parameter] [ValidateRange(1, 200)] public int Limit { get; set; } = 20;
 
     /// <summary>Reads App Store version information from App Store Connect.</summary>
     protected override async Task ProcessRecordAsync()
@@ -45,6 +45,6 @@ public sealed class GetAppStoreConnectVersionCommand : AsyncPSCmdlet
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
         var versions = await client.GetVersionsAsync(AppId, VersionString, Platform, Limit, CancelToken);
-        WriteObject(versions, enumerateCollection: true);
+        WriteObject(AppStoreConnectCommandSupport.LimitResults(versions, Limit), enumerateCollection: true);
     }
 }

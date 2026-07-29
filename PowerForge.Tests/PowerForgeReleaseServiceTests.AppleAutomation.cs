@@ -102,6 +102,78 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleProtectedMutationRejectsStateChangedAfterPlanApproval()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var readinessReady = false;
+            var submitCalls = 0;
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, "VALID"),
+                submitAppleReview: request =>
+                {
+                    submitCalls++;
+                    return new AppStoreConnectReviewSubmissionResult
+                    {
+                        AppId = request.AppId,
+                        VersionString = request.VersionString,
+                        BuildNumber = request.BuildNumber,
+                        Platform = request.Platform
+                    };
+                },
+                checkAppleReleaseReadiness: (_, request) => new AppStoreConnectReleaseReadinessResult
+                {
+                    AppId = request.AppId,
+                    VersionString = request.VersionString,
+                    BuildNumber = request.BuildNumber,
+                    Platform = request.Platform,
+                    IsReady = readinessReady,
+                    Checks =
+                    [
+                        new AppStoreConnectReleaseReadinessCheck
+                        {
+                            Name = "metadata",
+                            Passed = readinessReady,
+                            Message = readinessReady ? "Metadata is ready." : "Metadata is incomplete."
+                        }
+                    ]
+                });
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var plan = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    AppleAction = PowerForgeAppleReleaseAction.SubmitAppReview
+                });
+            readinessReady = true;
+
+            var execution = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.SubmitAppReview,
+                    AppleActionConfirmed = true,
+                    AppleExpectedPlanSha256 = plan.AppleReceipt!.PlanSha256
+                });
+
+            Assert.False(execution.Success);
+            Assert.Equal(0, submitCalls);
+            Assert.Contains("changed after plan approval", execution.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_ExplicitAppleAction_IgnoresEveryNonAppleReleaseSection()
     {
         var root = CreateSandbox();
@@ -761,6 +833,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         Func<AppStoreConnectApiCredential, string, AppStoreConnectAppInfo[]>? findAppleApps = null,
         Func<AppleNotarizationRequest, AppleNotarizationResult>? notarizeAppleArtifact = null,
         Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan>? planAppleGovernance = null,
+        Func<AppStoreConnectReviewSubmissionRequest, AppStoreConnectReviewSubmissionResult>? submitAppleReview = null,
         Func<AppStoreConnectApiCredential, AppStoreConnectReleaseReadinessRequest, AppStoreConnectReleaseReadinessResult>? checkAppleReleaseReadiness = null)
         => new(
             new NullLogger(),
@@ -784,6 +857,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             findAppleApps: findAppleApps,
             notarizeAppleArtifact: notarizeAppleArtifact,
             planAppleGovernance: planAppleGovernance,
+            submitAppleReview: submitAppleReview,
             checkAppleReleaseReadiness: checkAppleReleaseReadiness);
 
     private static AppStoreConnectReleaseStateResult CreateReleaseState(

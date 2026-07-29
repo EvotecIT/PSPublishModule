@@ -39,7 +39,7 @@ public sealed class GetAppStoreConnectAppCommand : AsyncPSCmdlet
     [Parameter(ParameterSetName = "Find")] public ApplePlatform? Platform { get; set; }
 
     /// <summary>Maximum result count for filtered searches.</summary>
-    [Parameter(ParameterSetName = "Find")] public int Limit { get; set; } = 20;
+    [Parameter(ParameterSetName = "Find")] [ValidateRange(1, 200)] public int Limit { get; set; } = 20;
 
     /// <summary>Reads app information from App Store Connect.</summary>
     protected override async Task ProcessRecordAsync()
@@ -56,6 +56,6 @@ public sealed class GetAppStoreConnectAppCommand : AsyncPSCmdlet
         }
 
         var apps = await client.FindAppsAsync(BundleId, Name, Platform, Limit, CancelToken);
-        WriteObject(apps, enumerateCollection: true);
+        WriteObject(AppStoreConnectCommandSupport.LimitResults(apps, Limit), enumerateCollection: true);
     }
 }

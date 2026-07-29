@@ -25,6 +25,10 @@ inputs:
     description: Exact source commit whose reviewed release assets may be used.
     required: false
     default: ""
+  expected-plan-sha256:
+    description: Exact reviewed plan SHA-256 that execution must revalidate immediately before mutation.
+    required: false
+    default: ""
   target:
     description: Optional comma-separated recovery target selection.
     required: false
@@ -140,6 +144,7 @@ runs:
         INPUT_CONFIG_PATH: ${{ inputs.config-path }}
         INPUT_MARKETING_VERSION: ${{ inputs.marketing-version }}
         INPUT_SOURCE_COMMIT: ${{ inputs.source-commit }}
+        INPUT_EXPECTED_PLAN_SHA256: ${{ inputs.expected-plan-sha256 }}
         INPUT_TARGET: ${{ inputs.target }}
         INPUT_PLAN_ONLY: ${{ inputs.plan-only }}
         INPUT_CONFIRM: ${{ inputs.confirm }}

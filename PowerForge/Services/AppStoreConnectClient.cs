@@ -556,7 +556,8 @@ public sealed partial class AppStoreConnectClient : IDisposable
         string relativeUrl,
         Func<JsonElement, T> parse,
         CancellationToken cancellationToken,
-        bool returnEmptyOnNotFound = false)
+        bool returnEmptyOnNotFound = false,
+        int? maxResults = null)
     {
         var list = new List<T>();
         var visitedPages = new HashSet<string>(StringComparer.Ordinal);
@@ -578,7 +579,11 @@ public sealed partial class AppStoreConnectClient : IDisposable
             if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
             {
                 foreach (var item in data.EnumerateArray())
+                {
                     list.Add(parse(item));
+                    if (maxResults.HasValue && list.Count >= maxResults.Value)
+                        return list.ToArray();
+                }
             }
 
             nextPage = GetNextPageLink(doc.RootElement);

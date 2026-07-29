@@ -34,7 +34,7 @@ internal static partial class Program
                         [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <Tool|Portable|Installer|Store>[,<...>]]
                         [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]
       powerforge apple-release <Status|Doctor|Version|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|Advance|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>
-                        [--config <release.json>] [--plan] [--validate] [--confirm-apple-action] [--apple-resume|--no-apple-resume]
+                        [--config <release.json>] [--plan] [--validate] [--confirm-apple-action] [--apple-expected-plan-sha256 <sha256>] [--apple-resume|--no-apple-resume]
                         [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>]
                         [--target <Name[,Name...]>] [--summary] [--output json]
       powerforge apple-screenshots manifest --config <screenshots.json> --version <x.y.z> --source-commit <sha> --approved-by <reviewer-or-boundary> --allowed-root <reviewed-capture-root>

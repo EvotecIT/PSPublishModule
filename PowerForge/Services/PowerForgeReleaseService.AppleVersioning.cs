@@ -6,6 +6,25 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
+    private void AssertApplePlanStillApproved(
+        PowerForgeAppleReleasePlan plan,
+        string? expectedPlanSha256)
+    {
+        if (string.IsNullOrWhiteSpace(expectedPlanSha256))
+            return;
+
+        var expected = expectedPlanSha256!.Trim();
+        if (expected.Length != 64 || expected.Any(static value => !Uri.IsHexDigit(value)))
+            throw new InvalidOperationException("The expected Apple plan SHA-256 must contain exactly 64 hexadecimal characters.");
+
+        var current = CreateApplePlanReceipt(plan).PlanSha256;
+        if (!string.Equals(expected, current, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Apple state or release inputs changed after plan approval. Review a new exact plan before allowing mutation.");
+        }
+    }
+
     private PowerForgeAppleReleaseReceipt CreateApplePlanReceipt(PowerForgeAppleReleasePlan plan)
     {
         PowerForgeAppleVersionReceipt? versioning = null;

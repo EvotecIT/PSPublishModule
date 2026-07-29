@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -7,6 +9,16 @@ namespace PSPublishModule;
 
 internal static class AppStoreConnectCommandSupport
 {
+    internal static T[] LimitResults<T>(IEnumerable<T> results, int limit)
+    {
+        if (results is null)
+            throw new ArgumentNullException(nameof(results));
+        if (limit < 1)
+            throw new ArgumentOutOfRangeException(nameof(limit), "Result limit must be at least one.");
+
+        return results.Take(limit).ToArray();
+    }
+
     internal static AppStoreConnectApiCredential CreateCredential(
         string issuerId,
         string keyId,

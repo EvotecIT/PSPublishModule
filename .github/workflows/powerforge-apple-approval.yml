@@ -255,6 +255,7 @@ jobs:
           tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           plan-only: "false"
           confirm: "true"
+          expected-plan-sha256: ${{ needs.plan.outputs.plan_sha256 }}
           issuer-id: ${{ secrets.app_store_connect_issuer_id }}
           key-id: ${{ secrets.app_store_connect_key_id }}
           private-key: ${{ secrets.app_store_connect_private_key }}

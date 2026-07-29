@@ -224,6 +224,8 @@ internal sealed class PowerForgeReleaseRequest
 
     public string? AppleSourceCommit { get; set; }
 
+    public string? AppleExpectedPlanSha256 { get; set; }
+
     public bool AppleActionConfirmed { get; set; }
 
     public bool? AppleResume { get; set; }

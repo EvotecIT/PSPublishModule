@@ -447,7 +447,8 @@ The reusable workflow boundary mirrors the human approval boundary:
   publishes a read-only plan from the non-approval environment. The protected job starts
   only after that plan can be inspected, replans after approval, and executes only when
   the exact source, action, observed Apple state, and App Review readiness evidence still
-  produce the reviewed SHA-256.
+  produce the reviewed SHA-256. The reviewed hash is also passed into the release engine,
+  which recomputes and rejects drift immediately before the first Apple mutation.
 - `powerforge-apple-monitor.yml` runs scheduled `Doctor`, retains the compact receipt,
   and maintains one marker-owned GitHub incident until errors and warnings are cleared.
 - `powerforge-apple-screenshots.yml` captures from an exact source commit, retains the

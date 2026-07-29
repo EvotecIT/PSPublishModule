@@ -85,6 +85,15 @@ if (-not [string]::IsNullOrWhiteSpace($env:INPUT_SOURCE_COMMIT)) {
     }
     $arguments += @('--apple-source-commit', $env:INPUT_SOURCE_COMMIT)
 }
+if (-not [string]::IsNullOrWhiteSpace($env:INPUT_EXPECTED_PLAN_SHA256)) {
+    if ($planOnly) {
+        throw 'expected-plan-sha256 is valid only for an executing Apple transition.'
+    }
+    if ($env:INPUT_EXPECTED_PLAN_SHA256 -notmatch '^[0-9A-Fa-f]{64}$') {
+        throw 'expected-plan-sha256 must contain exactly 64 hexadecimal characters.'
+    }
+    $arguments += @('--apple-expected-plan-sha256', $env:INPUT_EXPECTED_PLAN_SHA256)
+}
 if (-not [string]::IsNullOrWhiteSpace($env:INPUT_TARGET)) {
     $arguments += @('--target', $env:INPUT_TARGET)
 }

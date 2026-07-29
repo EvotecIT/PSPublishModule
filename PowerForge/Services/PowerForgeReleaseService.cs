@@ -725,6 +725,7 @@ internal sealed partial class PowerForgeReleaseService
                 PowerForgeAppleVersionReceipt? appleVersioning = null;
                 try
                 {
+                    AssertApplePlanStillApproved(applePlan, request.AppleExpectedPlanSha256);
                     if (applePlan.Action == PowerForgeAppleReleaseAction.Version)
                     {
                         appleVersioning = SelectAppleVersion(applePlan);

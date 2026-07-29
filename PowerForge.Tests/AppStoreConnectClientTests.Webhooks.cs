@@ -5,6 +5,29 @@ namespace PowerForge.Tests;
 public sealed partial class AppStoreConnectClientTests
 {
     [Fact]
+    public async Task WebhookClient_LimitStopsPaginationAtTheRequestedMaximum()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK, """
+                {
+                  "data": [{
+                    "type": "webhooks",
+                    "id": "webhook-1",
+                    "attributes": { "name": "First", "enabled": true, "eventTypes": [] }
+                  }],
+                  "links": { "next": "https://api.appstoreconnect.apple.com/v1/apps/app-1/webhooks?cursor=next" }
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var listed = await client.GetWebhooksAsync("app-1", limit: 1);
+
+        Assert.Equal("webhook-1", Assert.Single(listed).Id);
+        Assert.Single(handler.RequestUris);
+    }
+
+    [Fact]
     public async Task WebhookClient_ListsCreatesUpdatesAndPings()
     {
         const string webhookJson = """

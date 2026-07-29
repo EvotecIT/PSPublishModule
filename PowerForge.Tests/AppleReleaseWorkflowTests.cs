@@ -55,6 +55,7 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("plan-only", action, StringComparison.Ordinal);
         Assert.Contains("confirm", action, StringComparison.Ordinal);
         Assert.Contains("plan-sha256", action, StringComparison.Ordinal);
+        Assert.Contains("expected-plan-sha256", action, StringComparison.Ordinal);
         Assert.Contains("Assert-TrackedAppleReleaseInputs.ps1", action, StringComparison.Ordinal);
         Assert.Contains("valid exact plan SHA-256", script, StringComparison.Ordinal);
         Assert.Contains("FileAttributes]::ReparsePoint", trackedInputs, StringComparison.Ordinal);
@@ -65,6 +66,7 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("AppleApps.ProjectRoot must not traverse a symbolic link or reparse point", trackedInputs, StringComparison.Ordinal);
         Assert.Contains("if ($planOnly -and $confirm)", script, StringComparison.Ordinal);
         Assert.Contains("--confirm-apple-action", script, StringComparison.Ordinal);
+        Assert.Contains("--apple-expected-plan-sha256", script, StringComparison.Ordinal);
         Assert.Contains("--summary", script, StringComparison.Ordinal);
         Assert.Contains("--output', 'json", script, StringComparison.Ordinal);
         Assert.Contains("instead of '$action'", script, StringComparison.Ordinal);
@@ -114,6 +116,7 @@ public sealed class AppleReleaseWorkflowTests
         Assert.DoesNotContain("|| github.token", workflow, StringComparison.Ordinal);
         Assert.Contains("GH_TOKEN: ${{ secrets.version_pr_token }}", workflow, StringComparison.Ordinal);
         Assert.Contains("version_pr_token must not be the repository GITHUB_TOKEN", workflow, StringComparison.Ordinal);
+        Assert.Contains("expected-plan-sha256: ${{ steps.plan.outputs.plan-sha256 }}", workflow, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -133,6 +136,8 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("plan_sha256: ${{ steps.plan.outputs.plan-sha256 }}", approval, StringComparison.Ordinal);
         Assert.Contains("REVIEWED_PLAN_SHA256: ${{ needs.plan.outputs.plan_sha256 }}", approval, StringComparison.Ordinal);
         Assert.Contains("CURRENT_PLAN_SHA256: ${{ steps.replan.outputs.plan-sha256 }}", approval, StringComparison.Ordinal);
+        Assert.Contains("expected-plan-sha256: ${{ needs.plan.outputs.plan_sha256 }}", approval, StringComparison.Ordinal);
+        Assert.Contains("expected-plan-sha256: ${{ steps.plan.outputs.plan-sha256 }}", advance, StringComparison.Ordinal);
         Assert.Contains("Apple state or release inputs changed after review", approval, StringComparison.Ordinal);
         Assert.Contains("allowed_dispatchers_json", approval, StringComparison.Ordinal);
         Assert.Contains("authorized Apple release dispatcher", approval, StringComparison.Ordinal);

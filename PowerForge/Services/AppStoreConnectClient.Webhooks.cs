@@ -16,7 +16,8 @@ public sealed partial class AppStoreConnectClient
         return GetArrayAsync(
             $"apps/{Uri.EscapeDataString(appId.Trim())}/webhooks?limit={ClampLimit(limit)}",
             ParseWebhook,
-            cancellationToken);
+            cancellationToken,
+            maxResults: ClampLimit(limit));
     }
 
     /// <summary>Creates a webhook configuration for an app.</summary>

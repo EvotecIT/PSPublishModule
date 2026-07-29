@@ -30,6 +30,7 @@ public sealed class GetAppStoreConnectWebhookCommand : AsyncPSCmdlet
         var keyPath = AppStoreConnectCommandSupport.ResolvePrivateKeyPath(SessionState, PrivateKeyPath);
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, keyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
-        WriteObject(await client.GetWebhooksAsync(AppId, Limit, CancelToken), enumerateCollection: true);
+        var webhooks = await client.GetWebhooksAsync(AppId, Limit, CancelToken);
+        WriteObject(AppStoreConnectCommandSupport.LimitResults(webhooks, Limit), enumerateCollection: true);
     }
 }
