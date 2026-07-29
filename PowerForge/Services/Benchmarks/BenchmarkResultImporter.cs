@@ -49,11 +49,19 @@ public sealed class BenchmarkResultImporter
     private BenchmarkRunResult ImportDirectory(string path, string? suite, CultureInfo? culture)
     {
         var defaultSuite = suite ?? new DirectoryInfo(path).Name;
-        var runReport = Directory.GetFiles(path, "run-report.json", SearchOption.AllDirectories)
+        var runReports = Directory.GetFiles(path, "run-report.json", SearchOption.AllDirectories)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(File.GetLastWriteTimeUtc)
-            .FirstOrDefault();
-        if (runReport is not null)
-            return ImportJson(runReport, suite);
+            .ThenBy(file => file, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (runReports.Length > 0)
+        {
+            BenchmarkRunResult[] importedReports = runReports
+                .Select(file => ImportJson(file, suite))
+                .ToArray();
+            EnsureSingleOperatingSystem(importedReports);
+            return importedReports[0];
+        }
 
         var sampleFiles = Directory.GetFiles(path, "samples.csv", SearchOption.AllDirectories)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -61,8 +69,15 @@ public sealed class BenchmarkResultImporter
             .ToArray();
         if (sampleFiles.Length > 0)
         {
-            var runnerSamples = ImportCsvSamples(sampleFiles[0], suite, defaultSuite, culture);
-            return BuildImportedResult(suite ?? runnerSamples.FirstOrDefault()?.Suite ?? defaultSuite, runnerSamples);
+            BenchmarkRunResult[] importedSamples = sampleFiles
+                .Select(file =>
+                {
+                    BenchmarkSample[] samples = ImportCsvSamples(file, suite, defaultSuite, culture);
+                    return BuildImportedResult(suite ?? samples.FirstOrDefault()?.Suite ?? defaultSuite, samples);
+                })
+                .ToArray();
+            EnsureSingleOperatingSystem(importedSamples);
+            return importedSamples[0];
         }
 
         var benchmarkDotNetJsonFiles = Directory.GetFiles(path, "*-report*.json", SearchOption.AllDirectories)
@@ -510,7 +525,7 @@ public sealed class BenchmarkResultImporter
                 Scenario = method,
                 Operation = "Run",
                 Engine = engine,
-                Host = GetBenchmarkDotNetHost(root),
+                Host = string.Empty,
                 Os = environment.OsFamily,
                 RunMode = "import",
                 Iteration = 0,
@@ -596,30 +611,6 @@ public sealed class BenchmarkResultImporter
         }
 
         return "BenchmarkDotNet";
-    }
-
-    private static string GetBenchmarkDotNetHost(JsonElement root)
-    {
-        var host = GetString(root, "HostEnvironmentInfo");
-        if (!string.IsNullOrWhiteSpace(host))
-            return host!;
-        if (!BenchmarkJson.TryGetPropertyIgnoreCase(root, "HostEnvironmentInfo", out var hostNode) || hostNode.ValueKind != JsonValueKind.Object)
-            return string.Empty;
-
-        var parts = new[]
-        {
-            GetString(hostNode, "BenchmarkDotNetCaption"),
-            GetString(hostNode, "RuntimeVersion"),
-            GetString(hostNode, "Runtime"),
-            GetString(hostNode, "Jit"),
-            GetString(hostNode, "Platform"),
-            GetString(hostNode, "Architecture"),
-            GetString(hostNode, "OperatingSystem")
-        }
-        .Where(part => !string.IsNullOrWhiteSpace(part))
-        .Distinct(StringComparer.OrdinalIgnoreCase)
-        .ToArray();
-        return parts.Length == 0 ? hostNode.GetRawText() : string.Join("; ", parts);
     }
 
     private static BenchmarkEnvironmentInfo GetBenchmarkDotNetEnvironment(JsonElement root)
@@ -1186,14 +1177,21 @@ public sealed class BenchmarkResultImporter
 
     private static bool? InferDecimalComma(string text)
     {
-        int comma = text.LastIndexOf(',');
-        int dot = text.LastIndexOf('.');
+        string numeric = text.Trim();
+        int exponentIndex = numeric.IndexOfAny(new[] { 'e', 'E' });
+        bool hasExponent = exponentIndex >= 0;
+        if (hasExponent)
+            numeric = numeric.Substring(0, exponentIndex);
+
+        int comma = numeric.LastIndexOf(',');
+        int dot = numeric.LastIndexOf('.');
         if (comma >= 0 && dot >= 0)
             return comma > dot;
         if (comma < 0 && dot < 0)
             return false;
+        if (hasExponent)
+            return comma >= 0;
 
-        string numeric = text.Trim();
         char separator = comma >= 0 ? ',' : '.';
         string[] groups = numeric.Split(separator);
         if (groups.Length == 2 &&

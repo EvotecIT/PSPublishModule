@@ -423,6 +423,22 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_ParsesInvariantScientificNotationWithoutExplicitCulture()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(
+            csv,
+            "Suite,Scenario,Operation,Engine,Host,Iteration,Status,DurationMs\n"
+            + "suite,scientific,Run,Managed,Current,0,Succeeded,1.234E-10\n");
+
+        BenchmarkSample sample = Assert.Single(new BenchmarkResultImporter().Import(csv).Samples);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+        Assert.Equal(1.234E-10, sample.DurationMs);
+    }
+
+    [Fact]
     public void Importer_MarksSummaryWithoutDurationAsFailed()
     {
         var root = CreateTempRoot();
@@ -528,6 +544,30 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal("suite", result.Suite);
         Assert.Equal("New", sample.Scenario);
         Assert.Equal("2", sample.Variables["Rows"]);
+    }
+
+    [Fact]
+    public void Importer_DirectoryRejectsMixedPlatformsBeforeSelectingLatestRunnerSamples()
+    {
+        var root = CreateTempRoot();
+        var older = Path.Combine(root, "windows");
+        var newer = Path.Combine(root, "linux");
+        Directory.CreateDirectory(older);
+        Directory.CreateDirectory(newer);
+        var olderSamples = Path.Combine(older, "samples.csv");
+        var newerSamples = Path.Combine(newer, "samples.csv");
+        const string header = "Suite,Scenario,Operation,Engine,Host,OS,Iteration,Status,DurationMs\n";
+        File.WriteAllText(olderSamples, header + "suite,case,Run,Managed,Current,Windows,0,Succeeded,1\n");
+        File.WriteAllText(newerSamples, header + "suite,case,Run,Managed,Current,Linux,0,Succeeded,2\n");
+        File.SetLastWriteTimeUtc(olderSamples, DateTime.UtcNow.AddMinutes(-5));
+        File.SetLastWriteTimeUtc(newerSamples, DateTime.UtcNow);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => new BenchmarkResultImporter().Import(root));
+
+        Assert.Contains("one operating system", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Windows", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Linux", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -104,6 +104,39 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_DirectoryRejectsMixedPlatformsBeforeSelectingLatestRunReport()
+    {
+        var root = CreateTempRoot();
+        var older = Path.Combine(root, "windows");
+        var newer = Path.Combine(root, "linux");
+        Directory.CreateDirectory(older);
+        Directory.CreateDirectory(newer);
+        var olderReport = Path.Combine(older, "run-report.json");
+        var newerReport = Path.Combine(newer, "run-report.json");
+        BenchmarkJson.Write(olderReport, new BenchmarkRunResult
+        {
+            Suite = "suite",
+            Environment = new BenchmarkEnvironmentInfo { OsFamily = "Windows" },
+            Samples = new[] { Sample("suite", "case", "Run", "Managed", 1) }
+        });
+        BenchmarkJson.Write(newerReport, new BenchmarkRunResult
+        {
+            Suite = "suite",
+            Environment = new BenchmarkEnvironmentInfo { OsFamily = "Linux" },
+            Samples = new[] { Sample("suite", "case", "Run", "Managed", 2) }
+        });
+        File.SetLastWriteTimeUtc(olderReport, DateTime.UtcNow.AddMinutes(-5));
+        File.SetLastWriteTimeUtc(newerReport, DateTime.UtcNow);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => new BenchmarkResultImporter().Import(root));
+
+        Assert.Contains("one operating system", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Windows", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Linux", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Importer_ReadsBenchmarkDotNetJson()
     {
         var root = CreateTempRoot();
@@ -304,7 +337,7 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
-    public void Importer_PreservesBenchmarkDotNetHostAndSplitsParameters()
+    public void Importer_SeparatesBenchmarkDotNetEnvironmentFromSemanticHostAndSplitsParameters()
     {
         var root = CreateTempRoot();
         var path = Path.Combine(root, "Demo-report-full-compressed.json");
@@ -332,7 +365,8 @@ public sealed partial class BenchmarkServicesTests
         var result = new BenchmarkResultImporter().Import(path);
         var sample = Assert.Single(result.Samples);
 
-        Assert.Contains(".NET 10.0", sample.Host, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(sample.Host);
+        Assert.Equal(".NET 10.0", result.Environment.RuntimeVersion);
         Assert.Equal("10", sample.Variables["Rows"]);
         Assert.Equal("Fast", sample.Variables["Profile"]);
         Assert.DoesNotContain("Parameters", sample.Variables.Keys);

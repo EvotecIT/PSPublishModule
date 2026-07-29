@@ -391,6 +391,24 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void EvidenceCatalog_TreatsImportedRunModeAsUnspecified()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Metadata["runMode"] = "import";
+        result.Summary[0].RunMode = "import";
+
+        BenchmarkEvidenceCatalog catalog = new BenchmarkEvidenceCatalogService().Update(
+            null,
+            result,
+            "comparison-a",
+            "imported.json",
+            "full",
+            publish: true);
+
+        Assert.Single(catalog.Entries);
+    }
+
+    [Fact]
     public void EvidenceCatalog_RejectsSucceededSummaryWithoutDuration()
     {
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
@@ -410,6 +428,34 @@ public sealed partial class BenchmarkServicesTests
                 result,
                 "comparison-a",
                 "missing-duration.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("no failed measurements", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RejectsDefaultSucceededSampleWithoutMeasurement()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Samples =
+        [
+            new BenchmarkSample
+            {
+                Suite = result.Suite,
+                Scenario = "Broken",
+                Operation = "Read",
+                Engine = "OfficeIMO",
+                RunMode = "full"
+            }
+        ];
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "missing-measurement.json",
                 "full",
                 publish: true));
 
@@ -594,13 +640,13 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
-    public void EvidenceCatalog_IgnoresPlatformSpecificHostLabelsInWorkloadShape()
+    public void EvidenceCatalog_MarksDifferentSemanticHostsAsNotComparable()
     {
         var service = new BenchmarkEvidenceCatalogService();
         BenchmarkRunResult windows = Result("Windows", "fixture-a", 10);
         BenchmarkRunResult macos = Result("macOS", "fixture-a", 11);
-        windows.Summary[0].Host = "BenchmarkDotNet Windows X64 host";
-        macos.Summary[0].Host = "BenchmarkDotNet macOS Arm64 host";
+        windows.Summary[0].Host = "Core";
+        macos.Summary[0].Host = "Desktop";
 
         BenchmarkEvidenceCatalog catalog = service.Update(
             null,
@@ -617,8 +663,12 @@ public sealed partial class BenchmarkServicesTests
             "full",
             publish: true);
 
-        Assert.All(catalog.Entries, entry => Assert.True(entry.Comparable));
-        Assert.All(catalog.Entries, entry => Assert.Empty(entry.CompatibilityIssues));
+        Assert.All(catalog.Entries, entry => Assert.False(entry.Comparable));
+        Assert.All(
+            catalog.Entries,
+            entry => Assert.Contains(
+                entry.CompatibilityIssues,
+                issue => issue.Contains("benchmark.workload.shape.sha256", StringComparison.OrdinalIgnoreCase)));
     }
 
     [Fact]

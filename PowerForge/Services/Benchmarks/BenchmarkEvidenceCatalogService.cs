@@ -187,11 +187,13 @@ public sealed class BenchmarkEvidenceCatalogService
                 sample.Scenario,
                 sample.Operation,
                 sample.Engine,
+                sample.Host,
                 sample.Variables))
             .Concat(result.Summary.Select(row => CreateWorkloadIdentity(
                 row.Scenario,
                 row.Operation,
                 row.Engine,
+                row.Host,
                 row.Variables)))
             .Distinct(StringComparer.Ordinal)
             .OrderBy(value => value, StringComparer.Ordinal)
@@ -209,12 +211,14 @@ public sealed class BenchmarkEvidenceCatalogService
         string scenario,
         string operation,
         string engine,
+        string host,
         IReadOnlyDictionary<string, string?> variables)
     {
         var builder = new StringBuilder();
         AppendIdentityPart(builder, "scenario", scenario);
         AppendIdentityPart(builder, "operation", operation);
         AppendIdentityPart(builder, "engine", engine);
+        AppendIdentityPart(builder, "host", host);
         foreach (var variable in variables.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
         {
             AppendIdentityPart(builder, variable.Key.ToUpperInvariant(), variable.Value);
@@ -335,18 +339,22 @@ public sealed class BenchmarkEvidenceCatalogService
         }
 
         bool hasFailedMeasurement =
-            result.Samples.Any(sample => sample.Status == BenchmarkSampleStatus.Failed) ||
+            result.Samples.Any(sample =>
+                sample.Status == BenchmarkSampleStatus.Failed ||
+                (sample.Status == BenchmarkSampleStatus.Succeeded && !IsValidDuration(sample.DurationMs))) ||
             result.Summary.Any(row =>
                 row.FailureCount > 0 ||
                 string.Equals(row.Status, "Failed", StringComparison.OrdinalIgnoreCase) ||
                 (string.Equals(row.Status, "Succeeded", StringComparison.OrdinalIgnoreCase) &&
-                 !row.MedianMs.HasValue &&
-                 !row.MeanMs.HasValue));
+                 !IsValidDuration(row.MedianMs) &&
+                 !IsValidDuration(row.MeanMs)));
         bool hasSuccessfulMeasurement =
-            result.Samples.Any(sample => sample.Status == BenchmarkSampleStatus.Succeeded) ||
+            result.Samples.Any(sample =>
+                sample.Status == BenchmarkSampleStatus.Succeeded &&
+                IsValidDuration(sample.DurationMs)) ||
             result.Summary.Any(row =>
                 string.Equals(row.Status, "Succeeded", StringComparison.OrdinalIgnoreCase) &&
-                (row.MedianMs.HasValue || row.MeanMs.HasValue));
+                (IsValidDuration(row.MedianMs) || IsValidDuration(row.MeanMs)));
         if (hasFailedMeasurement || !hasSuccessfulMeasurement)
         {
             throw new InvalidOperationException(
@@ -400,9 +408,19 @@ public sealed class BenchmarkEvidenceCatalogService
 
     private static void AddRunMode(ICollection<string> modes, string? value)
     {
-        if (!string.IsNullOrWhiteSpace(value))
-            modes.Add(value!.Trim().ToLowerInvariant());
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        string normalized = value!.Trim().ToLowerInvariant();
+        if (!string.Equals(normalized, "import", StringComparison.Ordinal))
+            modes.Add(normalized);
     }
+
+    private static bool IsValidDuration(double value)
+        => value > 0 && !double.IsNaN(value) && !double.IsInfinity(value);
+
+    private static bool IsValidDuration(double? value)
+        => value.HasValue && IsValidDuration(value.Value);
 
     private static bool IsFullGitObjectId(string? value)
     {
