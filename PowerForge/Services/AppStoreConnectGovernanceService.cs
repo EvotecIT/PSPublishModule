@@ -80,7 +80,7 @@ public sealed partial class AppStoreConnectGovernanceService
                         "Apple still reports a change already applied in this run. PowerForge stopped to prevent a duplicate mutation; wait for App Store Connect consistency, then generate a new plan.");
                 }
                 if (request.ReviewedPlan is not null &&
-                    !MatchesReviewedPlan(plan, request.ReviewedPlan, remainingReviewedChanges!))
+                    !MatchesReviewedPlan(plan, request.ReviewedPlan, remainingReviewedChanges!, applied))
                 {
                     return Failure(
                         request.Spec.AppId,
@@ -108,6 +108,17 @@ public sealed partial class AppStoreConnectGovernanceService
                     };
                 }
 
+                var mutationEffects = GetMutationEffects(plan.Changes, next);
+                if (applied.Count + mutationEffects.Length > request.MaximumChanges)
+                {
+                    return Failure(
+                        request.Spec.AppId,
+                        started,
+                        applied,
+                        plan,
+                        $"The next Apple mutation represents {mutationEffects.Length} reviewed changes and would exceed the configured maximum of {request.MaximumChanges}. Increase the limit only after reviewing the full plan.");
+                }
+
                 var fingerprint = ChangeFingerprint(next);
                 if (!executed.Add(fingerprint))
                 {
@@ -119,7 +130,6 @@ public sealed partial class AppStoreConnectGovernanceService
                         "Apple still reports a change already applied in this run. PowerForge stopped to prevent a duplicate mutation; wait for App Store Connect consistency, then generate a new plan.");
                 }
 
-                var mutationEffects = GetMutationEffects(plan.Changes, next);
                 await ApplyChangeAsync(request.Spec, next, cancellationToken).ConfigureAwait(false);
                 foreach (var effect in mutationEffects)
                 {
@@ -132,7 +142,7 @@ public sealed partial class AppStoreConnectGovernanceService
 
             plan = await PlanAsync(request.Spec, cancellationToken).ConfigureAwait(false);
             if (request.ReviewedPlan is not null &&
-                !MatchesReviewedPlan(plan, request.ReviewedPlan, remainingReviewedChanges!))
+                !MatchesReviewedPlan(plan, request.ReviewedPlan, remainingReviewedChanges!, applied))
             {
                 return Failure(
                     request.Spec.AppId,
@@ -169,7 +179,8 @@ public sealed partial class AppStoreConnectGovernanceService
     private static bool MatchesReviewedPlan(
         AppStoreConnectGovernancePlan current,
         AppStoreConnectGovernancePlan reviewed,
-        IReadOnlyList<AppStoreConnectGovernanceChange> remainingReviewedChanges)
+        IReadOnlyList<AppStoreConnectGovernanceChange> remainingReviewedChanges,
+        IReadOnlyList<AppStoreConnectGovernanceChange> appliedChanges)
     {
         if (!string.Equals(current.AppId, reviewed.AppId, StringComparison.Ordinal) ||
             string.IsNullOrWhiteSpace(current.SpecSha256) ||
@@ -187,7 +198,7 @@ public sealed partial class AppStoreConnectGovernanceService
             if (!string.Equals(left.Section, right.Section, StringComparison.Ordinal) ||
                 !string.Equals(left.ResourceType, right.ResourceType, StringComparison.Ordinal) ||
                 !string.Equals(left.Key, right.Key, StringComparison.Ordinal) ||
-                !string.Equals(left.ResourceId, right.ResourceId, StringComparison.Ordinal) ||
+                !MatchesReviewedResourceId(left, right, appliedChanges) ||
                 !string.Equals(left.ParentId, right.ParentId, StringComparison.Ordinal) ||
                 left.Action != right.Action ||
                 !string.Equals(left.Summary, right.Summary, StringComparison.Ordinal))
@@ -210,6 +221,25 @@ public sealed partial class AppStoreConnectGovernanceService
         }
 
         return true;
+    }
+
+    private static bool MatchesReviewedResourceId(
+        AppStoreConnectGovernanceChange current,
+        AppStoreConnectGovernanceChange reviewed,
+        IReadOnlyList<AppStoreConnectGovernanceChange> appliedChanges)
+    {
+        if (string.Equals(current.ResourceId, reviewed.ResourceId, StringComparison.Ordinal))
+            return true;
+
+        return string.IsNullOrWhiteSpace(reviewed.ResourceId) &&
+               !string.IsNullOrWhiteSpace(current.ResourceId) &&
+               string.Equals(current.ResourceType, "AccessibilityDeclaration", StringComparison.Ordinal) &&
+               current.Action == AppStoreConnectGovernanceChangeAction.Publish &&
+               reviewed.Action == AppStoreConnectGovernanceChangeAction.Publish &&
+               appliedChanges.Any(change =>
+                   string.Equals(change.ResourceType, "AccessibilityDeclaration", StringComparison.Ordinal) &&
+                   string.Equals(change.Key, current.Key, StringComparison.Ordinal) &&
+                   change.Action == AppStoreConnectGovernanceChangeAction.Create);
     }
 
     internal static string ComputeSpecSha256(AppStoreConnectGovernanceSpec spec)
@@ -240,7 +270,7 @@ public sealed partial class AppStoreConnectGovernanceService
         if (!string.Equals(next.ResourceType, "AppPriceSchedule", StringComparison.Ordinal))
         {
             if (!string.Equals(next.ResourceType, "AccessibilityDeclaration", StringComparison.Ordinal) ||
-                next.Action is not (AppStoreConnectGovernanceChangeAction.Create or AppStoreConnectGovernanceChangeAction.Update))
+                next.Action != AppStoreConnectGovernanceChangeAction.Update)
             {
                 return new[] { next };
             }
@@ -363,7 +393,7 @@ public sealed partial class AppStoreConnectGovernanceService
                 if (desired.Publish)
                 {
                     Add(changes, "Accessibility", "AccessibilityDeclaration", desired.DeviceFamily, AppStoreConnectGovernanceChangeAction.Publish,
-                        $"Publish the reviewed accessibility declaration for '{desired.DeviceFamily}' as part of creation.");
+                        $"Publish the reviewed accessibility declaration for '{desired.DeviceFamily}'.");
                 }
                 continue;
             }

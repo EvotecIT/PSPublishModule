@@ -61,15 +61,32 @@ public sealed partial class AppStoreConnectGovernanceService
                 SupportsVoiceControl = item.SupportsVoiceControl,
                 SupportsVoiceover = item.SupportsVoiceover
             }).ToArray(),
-            EncryptionDeclarations = encryptionTask.Result.Select(item => new AppStoreConnectEncryptionDeclarationSpec
-            {
-                AppDescription = RequireObserved(item.AppDescription, $"encryption declaration '{item.Id}' app description"),
-                ContainsProprietaryCryptography = RequireObserved(item.ContainsProprietaryCryptography, $"encryption declaration '{item.Id}' containsProprietaryCryptography"),
-                ContainsThirdPartyCryptography = RequireObserved(item.ContainsThirdPartyCryptography, $"encryption declaration '{item.Id}' containsThirdPartyCryptography"),
-                AvailableOnFrenchStore = RequireObserved(item.AvailableOnFrenchStore, $"encryption declaration '{item.Id}' availableOnFrenchStore")
-            }).ToArray(),
+            EncryptionDeclarations = SnapshotEncryptionDeclarations(encryptionTask.Result),
             SubscriptionGroups = groups.ToArray()
         };
+    }
+
+    private static AppStoreConnectEncryptionDeclarationSpec[] SnapshotEncryptionDeclarations(
+        IEnumerable<AppStoreConnectEncryptionDeclarationInfo> declarations)
+    {
+        return declarations
+            .Select(item => new
+            {
+                Source = item,
+                Spec = new AppStoreConnectEncryptionDeclarationSpec
+                {
+                    AppDescription = RequireObserved(item.AppDescription, $"encryption declaration '{item.Id}' app description"),
+                    ContainsProprietaryCryptography = RequireObserved(item.ContainsProprietaryCryptography, $"encryption declaration '{item.Id}' containsProprietaryCryptography"),
+                    ContainsThirdPartyCryptography = RequireObserved(item.ContainsThirdPartyCryptography, $"encryption declaration '{item.Id}' containsThirdPartyCryptography"),
+                    AvailableOnFrenchStore = RequireObserved(item.AvailableOnFrenchStore, $"encryption declaration '{item.Id}' availableOnFrenchStore")
+                }
+            })
+            .GroupBy(item => EncryptionKey(item.Spec), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group
+                .OrderByDescending(item => IsUsableEncryptionDeclaration(item.Source))
+                .First()
+                .Spec)
+            .ToArray();
     }
 
     private async Task<AppStoreConnectSubscriptionGroupSpec> SnapshotGroupAsync(

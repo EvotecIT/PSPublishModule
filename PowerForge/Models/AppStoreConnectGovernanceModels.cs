@@ -366,6 +366,7 @@ public sealed class AppStoreConnectGovernanceApplyRequest
 {
     public AppStoreConnectGovernanceSpec Spec { get; set; } = new();
     public bool ConfirmApply { get; set; }
+    /// <summary>Maximum reviewed change effects that may be applied, including effects combined into one Apple request.</summary>
     public int MaximumChanges { get; set; } = 500;
 
     /// <summary>
