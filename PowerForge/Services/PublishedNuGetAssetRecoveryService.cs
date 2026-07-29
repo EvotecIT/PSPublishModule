@@ -34,12 +34,31 @@ internal sealed class PublishedNuGetAssetRecoveryService
         if (releaseAssetPaths is null)
             throw new ArgumentNullException(nameof(releaseAssetPaths));
 
-        var packagePaths = releaseAssetPaths
+        var normalizedAssetPaths = releaseAssetPaths
             .Where(path =>
-                !string.IsNullOrWhiteSpace(path) &&
-                string.Equals(Path.GetExtension(path), ".nupkg", StringComparison.OrdinalIgnoreCase))
+                !string.IsNullOrWhiteSpace(path))
             .Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var symbolPackagePaths = normalizedAssetPaths
+            .Where(path => string.Equals(
+                Path.GetExtension(path),
+                ".snupkg",
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (symbolPackagePaths.Length > 0)
+        {
+            throw new InvalidOperationException(
+                "Verified GitHub recovery cannot prove byte identity for published symbol packages. " +
+                "Remove symbol assets from the release contract or resume from the original signed payload: " +
+                string.Join(", ", symbolPackagePaths.Select(Path.GetFileName)));
+        }
+
+        var packagePaths = normalizedAssetPaths
+            .Where(path => string.Equals(
+                Path.GetExtension(path),
+                ".nupkg",
+                StringComparison.OrdinalIgnoreCase))
             .ToArray();
         var restored = new List<string>(packagePaths.Length);
 

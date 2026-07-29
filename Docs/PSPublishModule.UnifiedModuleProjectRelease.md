@@ -542,7 +542,11 @@ the signing-capable Windows runner and has three explicit operations:
    every deletion/upload, and replaces same-named assets. Rebuilt NuGet packages are replaced
    locally with the exact bytes already published by the configured NuGet source before the
    manifest and checksums are regenerated, so timestamped signatures cannot diverge between
-   NuGet and GitHub. Existing asset names must be a subset of the authorized rebuilt set.
+   NuGet and GitHub. Because NuGet does not expose a matching byte-retrieval contract for
+   `.snupkg` files, recovery fails before mutation when symbol-package assets are present.
+   Registry publication is skipped during this verified GitHub-only recovery because the
+   stable partial GitHub release proves the earlier NuGet and PowerShell Gallery lanes already
+   completed. Existing asset names must be a subset of the authorized rebuilt set.
    Asset IDs are bound both to the verified pre-delete snapshot and the upload response, and
    the complete final name-to-ID set is reconciled before success. Late same-name collisions,
    leftover assets, drafts, prereleases, missing tags, mismatched commits, changed release

@@ -250,6 +250,8 @@ internal sealed class PowerForgeReleaseResult
 
     public string ConfigPath { get; set; } = string.Empty;
 
+    public bool RegistryPublishingSkippedForVerifiedGitHubRecovery { get; set; }
+
     public PowerForgeModuleReleasePlanSummary? ModulePlan { get; set; }
 
     public ModuleBuildHostExecutionResult? Module { get; set; }

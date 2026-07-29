@@ -251,6 +251,8 @@ internal sealed partial class PowerForgeReleaseService
             throw new ArgumentException("ConfigPath is required.", nameof(request));
 
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
+        var registryPublishingSkippedForVerifiedGitHubRecovery =
+            ApplyVerifiedGitHubRecoveryPublishingOverrides(spec, request);
         ApplyAppleAction(spec.AppleApps, request);
         var explicitAppleAction = request.AppleAction != PowerForgeAppleReleaseAction.Configured;
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
@@ -365,7 +367,9 @@ internal sealed partial class PowerForgeReleaseService
         var result = new PowerForgeReleaseResult
         {
             Success = true,
-            ConfigPath = configPath
+            ConfigPath = configPath,
+            RegistryPublishingSkippedForVerifiedGitHubRecovery =
+                registryPublishingSkippedForVerifiedGitHubRecovery
         };
 
         if (runWorkspaceValidation)

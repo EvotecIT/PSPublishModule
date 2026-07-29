@@ -2,6 +2,28 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
+    internal static bool ApplyVerifiedGitHubRecoveryPublishingOverrides(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request)
+    {
+        var gitHub = spec.GitHub;
+        if (gitHub is null ||
+            request.ModuleRunMode != ConfigurationGateMode.Publish ||
+            request.PublishProjectGitHub == false ||
+            !gitHub.Publish ||
+            !gitHub.ReuseExistingRelease ||
+            !gitHub.RequireExpectedExistingRelease ||
+            gitHub.ExpectedExistingReleaseId.GetValueOrDefault() <= 0 ||
+            !gitHub.RequirePublishedStableRelease)
+        {
+            return false;
+        }
+
+        request.PublishNuget = false;
+        request.ModuleIncludePublishing = false;
+        return true;
+    }
+
     private PowerForgeUnifiedGitHubReleaseResult? RestorePublishedNuGetAssetsForGitHubRecovery(
         PowerForgeReleaseSpec spec,
         PowerForgeReleaseGitHubOptions gitHub,

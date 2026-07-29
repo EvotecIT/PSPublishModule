@@ -3,6 +3,87 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void Execute_verified_github_recovery_skips_completed_registry_publication()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var scriptPath = Path.Combine(root, "Build-Module.ps1");
+            var releasePath = Path.Combine(root, "release.json");
+            var toolZip = Path.Combine(root, "SampleTool-1.2.3.zip");
+            var toolExecutable = Path.Combine(root, "SampleTool");
+            File.WriteAllText(scriptPath, "# module build");
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(toolZip, "tool zip");
+            File.WriteAllText(toolExecutable, "tool");
+
+            var moduleCalls = new List<ModuleExecutionSnapshot>();
+            var publishCalls = new List<GitHubReleasePublishRequest>();
+            var service = CreateReleaseService(
+                root,
+                moduleCalls,
+                new PowerForgeToolReleaseResult
+                {
+                    Success = true,
+                    Artefacts =
+                    [
+                        new PowerForgeToolReleaseArtifactResult
+                        {
+                            Target = "SampleTool",
+                            Version = "1.2.3",
+                            ExecutablePath = toolExecutable,
+                            ZipPath = toolZip
+                        }
+                    ]
+                },
+                publishGitHubRelease: request =>
+                {
+                    publishCalls.Add(request);
+                    return new GitHubReleasePublishResult
+                    {
+                        Succeeded = true,
+                        ReusedExistingRelease = true,
+                        HtmlUrl = "https://github.com/EvotecIT/example/releases/tag/v1.2.3"
+                    };
+                });
+            var spec = CreateReleaseSpec(root, scriptPath);
+            spec.GitHub = new PowerForgeReleaseGitHubOptions
+            {
+                Publish = true,
+                VersionSource = PowerForgeReleaseVersionSource.Assets,
+                Owner = "EvotecIT",
+                Repository = "example",
+                Token = "token",
+                ReuseExistingRelease = true,
+                RequireExpectedExistingRelease = true,
+                ExpectedExistingReleaseId = 42,
+                RequirePublishedStableRelease = true
+            };
+            var request = new PowerForgeReleaseRequest
+            {
+                ConfigPath = releasePath,
+                ModuleRunMode = ConfigurationGateMode.Publish,
+                PublishNuget = true
+            };
+
+            var result = service.Execute(spec, request);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.True(result.RegistryPublishingSkippedForVerifiedGitHubRecovery);
+            Assert.False(request.PublishNuget);
+            var module = Assert.Single(moduleCalls);
+            Assert.Equal(ConfigurationGateMode.Publish, module.RunMode);
+            Assert.False(module.IncludeModulePublishing);
+            Assert.Single(publishCalls);
+            Assert.Null(result.ModulePublication);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_defers_module_publication_until_tool_build_succeeds()
     {
         var root = CreateSandbox();
@@ -259,7 +340,8 @@ public sealed partial class PowerForgeReleaseServiceTests
         string root,
         ICollection<ModuleExecutionSnapshot> moduleCalls,
         PowerForgeToolReleaseResult toolResult,
-        Action<ModuleBuildHostBuildRequest>? onModuleExecution = null)
+        Action<ModuleBuildHostBuildRequest>? onModuleExecution = null,
+        Func<GitHubReleasePublishRequest, GitHubReleasePublishResult>? publishGitHubRelease = null)
         => new(
             new NullLogger(),
             executePackages: (_, _, _) =>
@@ -280,8 +362,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 throw new InvalidOperationException("DotNet tools should not run."),
             runDotNetTools: _ =>
                 throw new InvalidOperationException("DotNet tools should not run."),
-            publishGitHubRelease: _ =>
-                throw new InvalidOperationException("GitHub should not run."),
+            publishGitHubRelease: publishGitHubRelease ?? (_ =>
+                throw new InvalidOperationException("GitHub should not run.")),
             executeModuleBuild: (request, cancellationToken) =>
             {
                 cancellationToken.ThrowIfCancellationRequested();

@@ -50,6 +50,42 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
         }
     }
 
+    [Fact]
+    public void Restore_RejectsSymbolPackageBeforeDownloadingOrReplacingAnything()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var packagePath = Path.Combine(root.FullName, "PowerForge.3.0.81.nupkg");
+            var symbolPath = Path.Combine(root.FullName, "PowerForge.3.0.81.snupkg");
+            var packageBytes = CreatePackage("PowerForge", "3.0.81", "rebuilt");
+            File.WriteAllBytes(packagePath, packageBytes);
+            File.WriteAllText(symbolPath, "symbol-package");
+            var handler = new NuGetRecoveryHandler(CreatePackage("PowerForge", "3.0.81", "published"));
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(handler));
+
+            var exception = Assert.Throws<InvalidOperationException>(() => service.Restore(
+                "https://packages.example/v3/index.json",
+                "3.0.81",
+                [packagePath, symbolPath],
+                CancellationToken.None));
+
+            Assert.Contains("cannot prove byte identity", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(handler.RequestUris);
+            Assert.Equal(packageBytes, File.ReadAllBytes(packagePath));
+            Assert.Equal("symbol-package", File.ReadAllText(symbolPath));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     private static byte[] CreatePackage(string packageId, string version, string signatureMarker)
     {
         using var memory = new MemoryStream();
