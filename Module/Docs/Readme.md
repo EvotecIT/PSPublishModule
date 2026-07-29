@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.80
+Help Version: 3.0.81
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -600,6 +600,9 @@ Unregisters a saved managed module repository profile.
 
 ### [Update-BenchmarkDocument](Update-BenchmarkDocument.md)
 Updates a marker-delimited benchmark block in a Markdown document.
+
+### [Update-BenchmarkEvidenceCatalog](Update-BenchmarkEvidenceCatalog.md)
+Adds one normalized benchmark result to a platform-aware evidence catalog.
 
 ### [Update-ManagedModule](Update-ManagedModule.md)
 Updates installed PowerShell modules through the managed C# module engine.

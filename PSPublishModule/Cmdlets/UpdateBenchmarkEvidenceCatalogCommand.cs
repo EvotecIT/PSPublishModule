@@ -1,0 +1,69 @@
+using System.IO;
+using System.Management.Automation;
+using PowerForge;
+
+namespace PSPublishModule;
+
+/// <summary>
+/// Adds one normalized benchmark result to a platform-aware evidence catalog.
+/// </summary>
+/// <example>
+/// <summary>Record a Windows publish lane</summary>
+/// <code>Import-BenchmarkResult .\BenchmarkDotNet.Artifacts | Update-BenchmarkEvidenceCatalog -Path .\Website\data\benchmark-index.json -ComparisonId tabular-65k-v1 -ResultPath .\Website\data\windows-full.json -RunMode full -Publish</code>
+/// </example>
+[Cmdlet(VerbsData.Update, "BenchmarkEvidenceCatalog", SupportsShouldProcess = true)]
+[OutputType(typeof(BenchmarkEvidenceCatalog))]
+public sealed class UpdateBenchmarkEvidenceCatalogCommand : PSCmdlet
+{
+    /// <summary>Normalized benchmark result, usually supplied by <c>Import-BenchmarkResult</c>.</summary>
+    [Parameter(Mandatory = true, ValueFromPipeline = true)]
+    [ValidateNotNull]
+    public BenchmarkRunResult InputObject { get; set; } = null!;
+
+    /// <summary>Evidence catalog JSON path.</summary>
+    [Parameter(Mandatory = true, Position = 0)]
+    [ValidateNotNullOrEmpty]
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>Stable identifier shared only by equivalent workloads and fixture versions.</summary>
+    [Parameter(Mandatory = true)]
+    [ValidateNotNullOrEmpty]
+    public string ComparisonId { get; set; } = string.Empty;
+
+    /// <summary>Portable path or URL to the normalized result consumed by the website.</summary>
+    [Parameter(Mandatory = true)]
+    [ValidateNotNullOrEmpty]
+    public string ResultPath { get; set; } = string.Empty;
+
+    /// <summary>Run mode such as quick or full.</summary>
+    [Parameter(Mandatory = true)]
+    [ValidateNotNullOrEmpty]
+    public string RunMode { get; set; } = string.Empty;
+
+    /// <summary>Marks this lane as suitable for public benchmark claims.</summary>
+    [Parameter]
+    public SwitchParameter Publish { get; set; }
+
+    /// <summary>Platforms expected before the public comparison is complete.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string[] ExpectedPlatform { get; set; } = { "windows", "linux", "macos" };
+
+    /// <summary>Updates the catalog.</summary>
+    protected override void ProcessRecord()
+    {
+        var catalogPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path);
+        if (!ShouldProcess(catalogPath, $"Record {ComparisonId}/{RunMode} benchmark evidence"))
+            return;
+
+        var result = new BenchmarkEvidenceCatalogService().UpdateFile(
+            catalogPath,
+            InputObject,
+            ComparisonId,
+            ResultPath,
+            RunMode,
+            Publish.IsPresent,
+            ExpectedPlatform);
+        WriteObject(result);
+    }
+}

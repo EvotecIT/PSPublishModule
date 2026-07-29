@@ -91,15 +91,19 @@ public abstract partial class AsyncPSCmdlet
 
     private bool ShouldDropClosedCanceledStreamWrite()
     {
-        if (!_cancelSource.IsCancellationRequested ||
-            Volatile.Read(ref _currentOutPipe) is not null)
+        if (!_cancelSource.IsCancellationRequested)
         {
             return false;
         }
 
         var originatingGeneration = _hookGeneration.Value;
-        return originatingGeneration == 0 ||
-               originatingGeneration != Volatile.Read(ref _activeHookGeneration);
+        if (originatingGeneration == 0)
+        {
+            return true;
+        }
+
+        return originatingGeneration != Volatile.Read(ref _activeHookGeneration) ||
+               Volatile.Read(ref _currentOutPipe) is null;
     }
 
     /// <inheritdoc />

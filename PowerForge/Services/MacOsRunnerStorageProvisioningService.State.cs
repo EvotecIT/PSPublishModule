@@ -186,7 +186,7 @@ public sealed partial class MacOsRunnerStorageProvisioningService
         }
         foreach (var key in remaining.OrderBy(value => value, StringComparer.Ordinal))
             lines.Add(key + "=" + requiredValues[key]);
-        return string.Join(Environment.NewLine, lines) + Environment.NewLine;
+        return string.Join("\n", lines) + "\n";
     }
 
     private static string ReadRunnerWorkFolder(string runnerConfigPath)

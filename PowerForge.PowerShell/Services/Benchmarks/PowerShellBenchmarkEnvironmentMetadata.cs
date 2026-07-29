@@ -47,6 +47,24 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
         return metadata;
     }
 
+    /// <summary>
+    /// Captures the typed environment identity used by cross-platform evidence catalogs.
+    /// </summary>
+    /// <returns>Normalized environment identity.</returns>
+    public static BenchmarkEnvironmentInfo BuildEnvironment()
+        => new()
+        {
+            OsFamily = GetOperatingSystemLabel(),
+            OsDescription = RuntimeInformation.OSDescription,
+            OsArchitecture = RuntimeInformation.OSArchitecture.ToString(),
+            ProcessArchitecture = RuntimeInformation.ProcessArchitecture.ToString(),
+            ProcessorName = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER") ?? string.Empty,
+            LogicalCoreCount = Environment.ProcessorCount,
+            RuntimeVersion = RuntimeInformation.FrameworkDescription,
+            Runner = $"PowerShell {PSVersionInfo()}",
+            MachineName = Environment.MachineName
+        };
+
     private static void AddMetadata(Dictionary<string, string> metadata, string key, string? value)
     {
         if (!string.IsNullOrWhiteSpace(value))

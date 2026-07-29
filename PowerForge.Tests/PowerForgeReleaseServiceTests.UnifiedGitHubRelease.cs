@@ -458,8 +458,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 },
                 new PowerForgeReleaseRequest
                 {
-                    ConfigPath = Path.Combine(root, "release.json"),
-                    ToolsOnly = true
+                    ConfigPath = Path.Combine(root, "release.json")
                 });
 
             Assert.True(result.Success);

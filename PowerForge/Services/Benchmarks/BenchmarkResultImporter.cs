@@ -18,18 +18,28 @@ public sealed class BenchmarkResultImporter
     {
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Input path is required.", nameof(path));
         var fullPath = Path.GetFullPath(path);
+        BenchmarkRunResult result;
         if (Directory.Exists(fullPath))
-            return ImportDirectory(fullPath, suite);
-        if (!File.Exists(fullPath))
+        {
+            result = ImportDirectory(fullPath, suite);
+        }
+        else if (!File.Exists(fullPath))
+        {
             throw new FileNotFoundException($"Benchmark input was not found: {path}", path);
+        }
+        else
+        {
+            var extension = Path.GetExtension(fullPath);
+            if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
+                result = ImportJson(fullPath, suite);
+            else if (extension.Equals(".csv", StringComparison.OrdinalIgnoreCase))
+                result = ImportCsv(fullPath, suite);
+            else
+                throw new NotSupportedException($"Unsupported benchmark input extension: {extension}");
+        }
 
-        var extension = Path.GetExtension(fullPath);
-        if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
-            return ImportJson(fullPath, suite);
-        if (extension.Equals(".csv", StringComparison.OrdinalIgnoreCase))
-            return ImportCsv(fullPath, suite);
-
-        throw new NotSupportedException($"Unsupported benchmark input extension: {extension}");
+        EnsureSingleOperatingSystem(new[] { result });
+        return result;
     }
 
     private BenchmarkRunResult ImportDirectory(string path, string? suite)
@@ -63,8 +73,16 @@ public sealed class BenchmarkResultImporter
             .ToArray();
         if (benchmarkDotNetJsonFiles.Length > 0)
         {
-            var benchmarkDotNetSamples = benchmarkDotNetJsonFiles.SelectMany(file => ImportJson(file, suite ?? defaultSuite).Samples).ToArray();
-            return BuildImportedResult(suite ?? defaultSuite, benchmarkDotNetSamples);
+            var importedReports = benchmarkDotNetJsonFiles
+                .Select(file => ImportJson(file, suite ?? defaultSuite))
+                .ToArray();
+            EnsureSingleOperatingSystem(importedReports);
+            var benchmarkDotNetSamples = importedReports.SelectMany(result => result.Samples).ToArray();
+            var combined = BuildImportedResult(suite ?? defaultSuite, benchmarkDotNetSamples);
+            combined.Environment = CopyEnvironment(
+                importedReports.Select(result => result.Environment).FirstOrDefault(HasEnvironment)
+                ?? new BenchmarkEnvironmentInfo());
+            return combined;
         }
 
         var benchmarkDotNetFiles = Directory.GetFiles(path, "*-report.csv", SearchOption.AllDirectories)
@@ -206,6 +224,47 @@ public sealed class BenchmarkResultImporter
         };
     }
 
+    private static bool HasEnvironment(BenchmarkEnvironmentInfo environment)
+        => !string.IsNullOrWhiteSpace(environment.OsFamily)
+           || !string.IsNullOrWhiteSpace(environment.RuntimeVersion)
+           || !string.IsNullOrWhiteSpace(environment.ProcessorName);
+
+    private static BenchmarkEnvironmentInfo CopyEnvironment(BenchmarkEnvironmentInfo environment)
+        => new()
+        {
+            OsFamily = environment.OsFamily,
+            OsDescription = environment.OsDescription,
+            OsArchitecture = environment.OsArchitecture,
+            ProcessArchitecture = environment.ProcessArchitecture,
+            ProcessorName = environment.ProcessorName,
+            PhysicalProcessorCount = environment.PhysicalProcessorCount,
+            PhysicalCoreCount = environment.PhysicalCoreCount,
+            LogicalCoreCount = environment.LogicalCoreCount,
+            RuntimeVersion = environment.RuntimeVersion,
+            DotNetSdkVersion = environment.DotNetSdkVersion,
+            Runner = environment.Runner,
+            MachineName = environment.MachineName
+        };
+
+    private static void EnsureSingleOperatingSystem(IEnumerable<BenchmarkRunResult> reports)
+    {
+        var platforms = reports
+            .SelectMany(result =>
+                new[] { result.Environment.OsFamily }
+                    .Concat(result.Samples.Select(sample => sample.Os))
+                    .Concat(result.Summary.Select(row => row.Os)))
+            .Select(NormalizeOperatingSystemFamily)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (platforms.Length > 1)
+        {
+            throw new InvalidOperationException(
+                $"Benchmark report directories must contain results from one operating system; found {string.Join(", ", platforms)}. Import each platform independently.");
+        }
+    }
+
     private static BenchmarkSample[] ImportCsvSamples(string path, string? suiteOverride, string defaultSuite)
     {
         var records = ReadCsvRecords(path);
@@ -323,6 +382,7 @@ public sealed class BenchmarkResultImporter
         if (!BenchmarkJson.TryGetPropertyIgnoreCase(root, "Benchmarks", out var benchmarks) || benchmarks.ValueKind != JsonValueKind.Array)
             return false;
 
+        var environment = GetBenchmarkDotNetEnvironment(root);
         var samples = new List<BenchmarkSample>();
         foreach (var benchmark in benchmarks.EnumerateArray())
         {
@@ -353,7 +413,7 @@ public sealed class BenchmarkResultImporter
                 Operation = "Run",
                 Engine = engine,
                 Host = GetBenchmarkDotNetHost(root),
-                Os = string.Empty,
+                Os = environment.OsFamily,
                 RunMode = "import",
                 Iteration = 0,
                 Status = mean.HasValue ? BenchmarkSampleStatus.Succeeded : BenchmarkSampleStatus.Failed,
@@ -368,6 +428,7 @@ public sealed class BenchmarkResultImporter
             return false;
 
         result = BuildImportedResult(suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path), samples);
+        result.Environment = environment;
         return true;
     }
 
@@ -461,6 +522,64 @@ public sealed class BenchmarkResultImporter
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToArray();
         return parts.Length == 0 ? hostNode.GetRawText() : string.Join("; ", parts);
+    }
+
+    private static BenchmarkEnvironmentInfo GetBenchmarkDotNetEnvironment(JsonElement root)
+    {
+        if (!BenchmarkJson.TryGetPropertyIgnoreCase(root, "HostEnvironmentInfo", out var hostNode) || hostNode.ValueKind != JsonValueKind.Object)
+            return new BenchmarkEnvironmentInfo();
+
+        var osDescription = GetString(hostNode, "OsVersion")
+                            ?? GetString(hostNode, "OperatingSystem")
+                            ?? string.Empty;
+        return new BenchmarkEnvironmentInfo
+        {
+            OsFamily = NormalizeOperatingSystemFamily(osDescription),
+            OsDescription = osDescription,
+            OsArchitecture = GetString(hostNode, "Architecture") ?? GetString(hostNode, "OsArchitecture") ?? string.Empty,
+            ProcessArchitecture = GetString(hostNode, "Architecture") ?? GetString(hostNode, "ProcessArchitecture") ?? string.Empty,
+            ProcessorName = GetString(hostNode, "ProcessorName") ?? string.Empty,
+            PhysicalProcessorCount = GetInt32(hostNode, "PhysicalProcessorCount"),
+            PhysicalCoreCount = GetInt32(hostNode, "PhysicalCoreCount"),
+            LogicalCoreCount = GetInt32(hostNode, "LogicalCoreCount"),
+            RuntimeVersion = GetString(hostNode, "RuntimeVersion") ?? GetString(hostNode, "Runtime") ?? string.Empty,
+            DotNetSdkVersion = GetString(hostNode, "DotNetCliVersion") ?? string.Empty,
+            Runner = GetString(hostNode, "BenchmarkDotNetCaption")
+                     ?? GetString(hostNode, "BenchmarkDotNetVersion")
+                     ?? "BenchmarkDotNet"
+        };
+    }
+
+    private static string NormalizeOperatingSystemFamily(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var nonNullValue = value!;
+        if (nonNullValue.IndexOf("windows", StringComparison.OrdinalIgnoreCase) >= 0) return "Windows";
+        if (nonNullValue.IndexOf("linux", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            nonNullValue.IndexOf("ubuntu", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            nonNullValue.IndexOf("debian", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            nonNullValue.IndexOf("fedora", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            nonNullValue.IndexOf("red hat", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            nonNullValue.IndexOf("rhel", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            nonNullValue.IndexOf("suse", StringComparison.OrdinalIgnoreCase) >= 0)
+            return "Linux";
+        if (nonNullValue.IndexOf("mac", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            nonNullValue.IndexOf("osx", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            nonNullValue.IndexOf("darwin", StringComparison.OrdinalIgnoreCase) >= 0)
+            return "macOS";
+        return nonNullValue.Trim();
+    }
+
+    private static int? GetInt32(JsonElement node, string propertyName)
+    {
+        if (!BenchmarkJson.TryGetPropertyIgnoreCase(node, propertyName, out var value))
+            return null;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number))
+            return number;
+        return value.ValueKind == JsonValueKind.String &&
+               int.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out number)
+            ? number
+            : null;
     }
 
     private static Dictionary<string, string?> ParseBenchmarkDotNetParameters(string? parameterText)

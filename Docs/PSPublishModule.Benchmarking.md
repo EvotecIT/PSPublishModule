@@ -14,6 +14,7 @@ metadata with any table that is committed or shared.
 | --- | --- |
 | `Invoke-BenchmarkSuite` | Runs a `.benchmark.ps1` suite, writes artifacts, updates declared README blocks, and returns a `BenchmarkRunResult`. |
 | `Import-BenchmarkResult` | Imports BenchmarkDotNet CSV/JSON artifacts or normalized benchmark JSON/CSV into the common result schema. |
+| `Update-BenchmarkEvidenceCatalog` | Records an independent Windows, Linux, or macOS result lane and exposes missing or incompatible platform evidence. |
 | `Update-BenchmarkDocument` | Replaces one marker-delimited Markdown block from a normalized summary or comparison file. |
 | `Test-BenchmarkGate` | Verifies benchmark summary metrics against a JSON baseline with tolerance rules. |
 
@@ -288,8 +289,50 @@ Import-BenchmarkResult `
 ```
 
 The importer preserves BenchmarkDotNet method/job identity, timing units,
-memory/statistical metrics, and user parameters where they do not conflict with
-the normalized benchmark schema.
+memory/statistical metrics, user parameters, and typed host details such as the
+operating system, CPU, architecture, runtime, SDK, and core counts. Directory
+imports retain that environment instead of flattening it into an unidentified
+combined result.
+
+## Cross-Platform Evidence
+
+Do not merge benchmark measurements from different operating systems into one
+number. Import each run, attach exact workload provenance, and update the shared
+catalog:
+
+```powershell
+$result = Import-BenchmarkResult `
+    -Path .\BenchmarkDotNet.Artifacts `
+    -Suite tabular-65k
+
+$result.Metadata['benchmark.workload.id'] = 'markpflug-65k-sales-v1'
+$result.Metadata['benchmark.fixture.csv'] = 'AC959F43...'
+$result.Metadata['benchmark.package.officeimo'] = '3.0.4'
+$result.Metadata['benchmark.package.sylvan'] = '0.5.7'
+
+[PowerForge.BenchmarkJson]::Write(
+    '.\Website\static\data\benchmarks\tabular\windows-full.json',
+    $result)
+
+Update-BenchmarkEvidenceCatalog `
+    -InputObject $result `
+    -Path .\Website\static\data\benchmarks\tabular\index.json `
+    -ComparisonId markpflug-65k-sales-v1-net10.0 `
+    -ResultPath /data/benchmarks/tabular/windows-full.json `
+    -RunMode full `
+    -ExpectedPlatform windows,linux,macos `
+    -Publish
+```
+
+Directory imports reject reports that identify more than one operating system.
+Catalog updates use a cross-process lease and an atomic same-directory replace,
+so concurrent platform jobs cannot silently discard or truncate another lane.
+The catalog replaces only the matching comparison/platform/run-mode lane.
+Windows, Linux, and macOS remain separate entries. `availability` lists missing
+platforms explicitly. Publishable lanes with different `gitSha` values or
+different `benchmark.fixture.*`, `benchmark.package.*`, or
+`benchmark.workload.*` metadata are marked non-comparable and carry the exact
+conflicting dimensions.
 
 ## Markdown Blocks
 

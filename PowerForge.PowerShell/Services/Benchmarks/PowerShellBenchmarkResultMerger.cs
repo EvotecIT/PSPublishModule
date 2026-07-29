@@ -20,7 +20,8 @@ internal static class PowerShellBenchmarkResultMerger
             Samples = samples,
             Summary = summary,
             Comparison = PowerShellBenchmarkComparisonEvaluator.Build(suite, summary),
-            Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite)
+            Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite),
+            Environment = PowerShellBenchmarkEnvironmentMetadata.BuildEnvironment()
         };
 
         return result;

@@ -290,6 +290,9 @@ public sealed class BenchmarkRunResult
 
     /// <summary>Environment and runner metadata.</summary>
     public Dictionary<string, string> Metadata { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Typed environment identity used to keep platform evidence separate and auditable.</summary>
+    public BenchmarkEnvironmentInfo Environment { get; set; } = new();
 }
 
 /// <summary>
