@@ -70,6 +70,11 @@ try {
     $releaseConfig = Get-Content -Raw -LiteralPath $ConfigPath | ConvertFrom-Json -Depth 100
     $moduleConfigPath = Join-Path $repositoryRoot 'powerforge.json'
     $moduleConfig = Get-Content -Raw -LiteralPath $moduleConfigPath | ConvertFrom-Json -Depth 100
+    . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Set-PowerForgeAuthorizedReleaseVersion.ps1')
+    $releaseConfig = Set-PowerForgeAuthorizedReleaseVersion `
+        -ReleaseConfig $releaseConfig `
+        -Version $Version `
+        -DisableVersionUpdates:($Operation -eq 'Publish')
     $releaseConfig.GitHub | Add-Member -NotePropertyName Commitish -NotePropertyValue $ExpectedCommit -Force
     $effectiveConfigPath = Join-Path (Split-Path -Parent $ConfigPath) ".release.authorized.$PID.json"
     $releaseConfig | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $effectiveConfigPath -Encoding utf8

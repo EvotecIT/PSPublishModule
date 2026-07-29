@@ -526,10 +526,15 @@ the signing-capable Windows runner and has three explicit operations:
 1. `Plan` validates the exact `main` commit, release credentials, signing certificate,
    coordinated version, and artifact graph without publishing.
 2. `Prepare` runs the Build gate and opens a narrow version pull request containing only
-   the generated module and package version sources.
+   the generated module and package version sources. A retry reuses an existing open
+   release pull request only when its remote branch is based on the authorized commit and
+   its complete tracked tree matches the newly prepared result; stale or divergent refs
+   require explicit reconciliation.
 3. `Publish` accepts only a merged version and an exact
    `publish:<version>:<main-commit>` confirmation, then publishes and verifies NuGet,
-   PowerShell Gallery, and the GitHub release.
+   PowerShell Gallery, and the GitHub release. Its effective configuration replaces every
+   X-pattern with the authorized exact version and disables source-version mutation, so a
+   recovery run cannot advance a partially published release train.
 
 Every run uploads a compact JSON receipt. Release plans are written under the ignored
 repository-level `Artefacts` directory so machine-specific absolute paths no longer

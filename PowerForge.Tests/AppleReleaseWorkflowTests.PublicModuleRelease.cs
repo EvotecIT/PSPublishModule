@@ -21,6 +21,8 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("$certificate.NotAfter -le [DateTime]::UtcNow.AddDays(7)", script, StringComparison.Ordinal);
         Assert.Contains("The release checkout must start clean", script, StringComparison.Ordinal);
         Assert.Contains("Assert-PowerForgeCommittedReleaseVersion", script, StringComparison.Ordinal);
+        Assert.Contains("Set-PowerForgeAuthorizedReleaseVersion", script, StringComparison.Ordinal);
+        Assert.Contains("-DisableVersionUpdates:($Operation -eq 'Publish')", script, StringComparison.Ordinal);
         Assert.Contains(". .\\Build\\Private\\Assert-PowerForgeCommittedReleaseVersion.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("$releaseConfig.GitHub | Add-Member -NotePropertyName Commitish", script, StringComparison.Ordinal);
         Assert.Contains("ExpectedTagCommitSha = gitHub.Commitish", Read(root, "PowerForge", "Services", "PowerForgeReleaseService.cs"), StringComparison.Ordinal);
@@ -31,11 +33,32 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("$tagCommit -ine $env:EXPECTED_COMMIT", workflow, StringComparison.Ordinal);
         Assert.Contains("Unable to push release branch", workflow, StringComparison.Ordinal);
         Assert.Contains("$remoteCommit -ine $preparedCommit", workflow, StringComparison.Ordinal);
+        Assert.Contains("gh pr list --repo $env:REPOSITORY --state all", workflow, StringComparison.Ordinal);
+        Assert.Contains("git merge-base --is-ancestor $env:EXPECTED_COMMIT $remoteCommit", workflow, StringComparison.Ordinal);
+        Assert.Contains("git diff --quiet \"origin/$branch\" --", workflow, StringComparison.Ordinal);
+        Assert.Contains("git branch -D $branch", workflow, StringComparison.Ordinal);
+        Assert.Contains("url=$($existingPullRequest.url)", workflow, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgePublicRelease.ps1", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("gh pr merge", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("pull_request:", workflow, StringComparison.Ordinal);
         Assert.Contains("\"PlanOutputPath\": \"../Artefacts/ProjectBuild/project.build.plan.json\"", releaseConfig, StringComparison.Ordinal);
         Assert.Contains("\"Commitish\"", releaseSchema, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PublicModuleReleasePinsEffectiveConfigurationToAuthorizedVersion()
+    {
+        var root = FindRepoRoot();
+        var helper = Path.Combine(root, "Build", "Private", "Set-PowerForgeAuthorizedReleaseVersion.ps1");
+        var escapedHelper = helper.Replace("'", "''", StringComparison.Ordinal);
+        var command = $". '{escapedHelper}'; " +
+                      "$config = '{\"Module\":{\"ModuleVersion\":\"3.0.X\"},\"Packages\":{\"UpdateVersions\":true,\"VersionTracks\":{\"Main\":{\"ExpectedVersion\":\"3.0.X\"},\"Tools\":{\"ExpectedVersion\":\"4.0.X\"}}}}' | ConvertFrom-Json; " +
+                      "$result = Set-PowerForgeAuthorizedReleaseVersion -ReleaseConfig $config -Version '3.0.81' -DisableVersionUpdates; " +
+                      "if ($result.Module.ModuleVersion -ne '3.0.81') { throw 'Module version was not pinned.' }; " +
+                      "if (@($result.Packages.VersionTracks.PSObject.Properties | Where-Object { $_.Value.ExpectedVersion -ne '3.0.81' }).Count -ne 0) { throw 'A package track was not pinned.' }; " +
+                      "if ($result.Packages.UpdateVersions -ne $false) { throw 'Version mutation remained enabled.' }";
+
+        Run("pwsh", root, "-NoProfile", "-Command", command).EnsureSuccess();
     }
 
     [Fact]

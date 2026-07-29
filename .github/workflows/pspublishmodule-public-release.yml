@@ -150,25 +150,79 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Unable to configure the release Git user name.' }
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           if ($LASTEXITCODE -ne 0) { throw 'Unable to configure the release Git user email.' }
-          git switch -c $branch
-          if ($LASTEXITCODE -ne 0) { throw "Unable to create release branch '$branch'." }
-          git add -- $changed
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to stage prepared release changes.' }
-          git commit -m "Prepare PSPublishModule $($env:VERSION)"
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to commit prepared release changes.' }
-          $preparedCommit = (git rev-parse HEAD).Trim()
-          if ($LASTEXITCODE -ne 0 -or $preparedCommit -notmatch '^[0-9A-Fa-f]{40}$') {
-              throw 'Unable to resolve the prepared release commit.'
+
+          $pullRequestJson = gh pr list --repo $env:REPOSITORY --state all --base main --head $branch --limit 2 --json number,url,state,headRefOid
+          if ($LASTEXITCODE -ne 0) { throw "Unable to inspect existing pull requests for '$branch'." }
+          $pullRequests = @($pullRequestJson | ConvertFrom-Json)
+          if ($pullRequests.Count -gt 1) {
+              throw "Multiple pull requests already use release branch '$branch'; manual reconciliation is required."
           }
-          gh auth setup-git
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to configure authenticated Git transport.' }
-          git push --set-upstream origin $branch
-          if ($LASTEXITCODE -ne 0) { throw "Unable to push release branch '$branch'." }
+          $existingPullRequest = $pullRequests | Select-Object -First 1
+          if ($null -ne $existingPullRequest -and $existingPullRequest.state -ne 'OPEN') {
+              throw "Release branch '$branch' belongs to $($existingPullRequest.state.ToLowerInvariant()) pull request $($existingPullRequest.url); manual reconciliation is required."
+          }
+
           $remoteLine = [string] (git ls-remote --heads origin "refs/heads/$branch")
-          if ($LASTEXITCODE -ne 0) { throw "Unable to verify remote release branch '$branch'." }
-          $remoteCommit = @($remoteLine -split '\s+')[0]
-          if ($remoteCommit -ine $preparedCommit) {
-              throw "Remote release branch '$branch' resolved to '$remoteCommit', expected '$preparedCommit'."
+          if ($LASTEXITCODE -ne 0) { throw "Unable to inspect remote release branch '$branch'." }
+          $remoteExists = -not [string]::IsNullOrWhiteSpace($remoteLine)
+          if ($remoteExists) {
+              git fetch origin "refs/heads/$branch`:refs/remotes/origin/$branch" --no-tags
+              if ($LASTEXITCODE -ne 0) { throw "Unable to refresh remote release branch '$branch'." }
+              $remoteCommit = (git rev-parse "origin/$branch").Trim()
+              if ($LASTEXITCODE -ne 0 -or $remoteCommit -notmatch '^[0-9A-Fa-f]{40}$') {
+                  throw "Unable to resolve remote release branch '$branch'."
+              }
+              git merge-base --is-ancestor $env:EXPECTED_COMMIT $remoteCommit
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Remote release branch '$branch' is not based on authorized commit '$($env:EXPECTED_COMMIT)'; manual reconciliation is required."
+              }
+              git diff --quiet "origin/$branch" --
+              $treeDifference = $LASTEXITCODE
+              if ($treeDifference -eq 1) {
+                  throw "Remote release branch '$branch' does not match the newly prepared release tree; manual reconciliation is required."
+              }
+              if ($treeDifference -ne 0) {
+                  throw "Unable to compare the prepared release tree with remote branch '$branch'."
+              }
+              $preparedCommit = $remoteCommit
+          } else {
+              if ($null -ne $existingPullRequest) {
+                  throw "Open pull request $($existingPullRequest.url) has no remote release branch '$branch'."
+              }
+              $localBranch = @(git branch --list $branch)
+              if ($LASTEXITCODE -ne 0) { throw "Unable to inspect local release branch '$branch'." }
+              if ($localBranch.Count -gt 0) {
+                  git branch -D $branch
+                  if ($LASTEXITCODE -ne 0) { throw "Unable to remove stale local release branch '$branch'." }
+              }
+              git switch -c $branch
+              if ($LASTEXITCODE -ne 0) { throw "Unable to create release branch '$branch'." }
+              git add -- $changed
+              if ($LASTEXITCODE -ne 0) { throw 'Unable to stage prepared release changes.' }
+              git commit -m "Prepare PSPublishModule $($env:VERSION)"
+              if ($LASTEXITCODE -ne 0) { throw 'Unable to commit prepared release changes.' }
+              $preparedCommit = (git rev-parse HEAD).Trim()
+              if ($LASTEXITCODE -ne 0 -or $preparedCommit -notmatch '^[0-9A-Fa-f]{40}$') {
+                  throw 'Unable to resolve the prepared release commit.'
+              }
+              gh auth setup-git
+              if ($LASTEXITCODE -ne 0) { throw 'Unable to configure authenticated Git transport.' }
+              git push --set-upstream origin $branch
+              if ($LASTEXITCODE -ne 0) { throw "Unable to push release branch '$branch'." }
+              $remoteLine = [string] (git ls-remote --heads origin "refs/heads/$branch")
+              if ($LASTEXITCODE -ne 0) { throw "Unable to verify remote release branch '$branch'." }
+              $remoteCommit = @($remoteLine -split '\s+')[0]
+              if ($remoteCommit -ine $preparedCommit) {
+                  throw "Remote release branch '$branch' resolved to '$remoteCommit', expected '$preparedCommit'."
+              }
+          }
+
+          if ($null -ne $existingPullRequest) {
+              if ($existingPullRequest.headRefOid -ine $preparedCommit) {
+                  throw "Pull request $($existingPullRequest.url) resolves to '$($existingPullRequest.headRefOid)', expected '$preparedCommit'."
+              }
+              "url=$($existingPullRequest.url)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+              return
           }
 
           $body = @"
