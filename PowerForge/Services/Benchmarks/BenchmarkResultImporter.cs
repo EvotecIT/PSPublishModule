@@ -308,8 +308,9 @@ public sealed class BenchmarkResultImporter
 
     private static BenchmarkSample[] ImportCsvSamples(string path, string? suiteOverride, string defaultSuite)
     {
-        var records = ReadCsvRecords(path);
+        var records = ReadCsvRecords(path, out var delimiter);
         if (records.Length < 2) return Array.Empty<BenchmarkSample>();
+        var usesDecimalComma = delimiter == ';';
         var headers = records[0];
         var samples = new List<BenchmarkSample>();
         for (var i = 1; i < records.Length; i++)
@@ -324,7 +325,10 @@ public sealed class BenchmarkResultImporter
             var metricHeaders = SampleMetricColumnsFor(headers, isBenchmarkDotNetCsv);
             var metadataColumns = SampleMetadataColumnsFor(map, isBenchmarkDotNetCsv);
             var method = GetCsvScenarioName(map, isBenchmarkDotNetCsv) ?? Path.GetFileNameWithoutExtension(path);
-            var mean = ParseDuration(GetCsvSampleDuration(map, isBenchmarkDotNetCsv, out var durationHeader), durationHeader);
+            var mean = ParseDuration(
+                GetCsvSampleDuration(map, isBenchmarkDotNetCsv, usesDecimalComma, out var durationHeader),
+                durationHeader,
+                usesDecimalComma);
             var status = isBenchmarkDotNetCsv
                 ? ParseSampleStatus(null, mean.HasValue)
                 : ParseSampleStatus(Get(map, "Status"), mean.HasValue);
@@ -343,10 +347,10 @@ public sealed class BenchmarkResultImporter
                 DurationMs = mean ?? 0,
                 AllocatedBytes = ParseLong(Get(map, "AllocatedBytes")),
                 WorkingSetDeltaBytes = ParseLong(Get(map, "WorkingSetDeltaBytes")),
-                OutputMetric = ParseNumericMetric(Get(map, "OutputMetric")),
+                OutputMetric = ParseNumericMetric(Get(map, "OutputMetric"), usesDecimalComma: usesDecimalComma),
                 Reason = Get(map, "Reason") ?? (mean.HasValue ? string.Empty : "Duration column could not be parsed."),
-                Variables = ExtractVariables(map, metadataColumns, metricHeaders, isBenchmarkDotNetCsv),
-                Metrics = ExtractMetrics(map, metricHeaders, isBenchmarkDotNetCsv)
+                Variables = ExtractVariables(map, metadataColumns, metricHeaders, isBenchmarkDotNetCsv, usesDecimalComma),
+                Metrics = ExtractMetrics(map, metricHeaders, isBenchmarkDotNetCsv, usesDecimalComma)
             });
         }
 
@@ -355,8 +359,9 @@ public sealed class BenchmarkResultImporter
 
     private static BenchmarkSummaryRow[] ImportCsvSummary(string path, string? suiteOverride, string defaultSuite)
     {
-        var records = ReadCsvRecords(path);
+        var records = ReadCsvRecords(path, out var delimiter);
         if (records.Length < 2) return Array.Empty<BenchmarkSummaryRow>();
+        var usesDecimalComma = delimiter == ';';
         var headers = records[0];
         var rows = new List<BenchmarkSummaryRow>();
         for (var i = 1; i < records.Length; i++)
@@ -380,21 +385,21 @@ public sealed class BenchmarkResultImporter
                 Host = GetCsvHost(map, isBenchmarkDotNetCsv),
                 Os = Get(map, "OS") ?? string.Empty,
                 RunMode = Get(map, "RunMode") ?? string.Empty,
-                Variables = ExtractVariables(map, metadataColumns, metricHeaders, isBenchmarkDotNetCsv),
+                Variables = ExtractVariables(map, metadataColumns, metricHeaders, isBenchmarkDotNetCsv, usesDecimalComma),
                 SampleCount = ParseInt(Get(map, "SampleCount")) ?? 0,
                 FailureCount = failureCount,
                 OutlierCount = ParseInt(Get(map, "OutlierCount")) ?? 0,
                 Status = Get(map, "Status") ?? (failureCount > 0 ? "Failed" : "Succeeded"),
-                MedianMs = ParseDuration(GetWithHeader(map, out var medianHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Median"), medianHeader),
-                MeanMs = ParseDuration(GetWithHeader(map, out var meanHeader, "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]", "Mean"), meanHeader),
-                MinMs = ParseDuration(GetWithHeader(map, out var minHeader, "MinMs", "Min [ns]", "Min [us]", "Min [ms]", "Min [s]", "Min"), minHeader),
-                MaxMs = ParseDuration(GetWithHeader(map, out var maxHeader, "MaxMs", "Max [ns]", "Max [us]", "Max [ms]", "Max [s]", "Max"), maxHeader),
-                P95Ms = ParseDuration(GetWithHeader(map, out var p95Header, "P95Ms", "P95 [ns]", "P95 [us]", "P95 [ms]", "P95 [s]", "P95"), p95Header),
-                P99Ms = ParseDuration(GetWithHeader(map, out var p99Header, "P99Ms", "P99 [ns]", "P99 [us]", "P99 [ms]", "P99 [s]", "P99"), p99Header),
-                StdDevMs = ParseDuration(GetWithHeader(map, out var stdDevHeader, "StdDevMs", "StdDev [ns]", "StdDev [us]", "StdDev [ms]", "StdDev [s]", "StdDev"), stdDevHeader),
-                StdErrMs = ParseDuration(GetWithHeader(map, out var stdErrHeader, "StdErrMs", "StdErr [ns]", "StdErr [us]", "StdErr [ms]", "StdErr [s]", "StdErr"), stdErrHeader),
+                MedianMs = ParseDuration(GetWithHeader(map, out var medianHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Median"), medianHeader, usesDecimalComma),
+                MeanMs = ParseDuration(GetWithHeader(map, out var meanHeader, "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]", "Mean"), meanHeader, usesDecimalComma),
+                MinMs = ParseDuration(GetWithHeader(map, out var minHeader, "MinMs", "Min [ns]", "Min [us]", "Min [ms]", "Min [s]", "Min"), minHeader, usesDecimalComma),
+                MaxMs = ParseDuration(GetWithHeader(map, out var maxHeader, "MaxMs", "Max [ns]", "Max [us]", "Max [ms]", "Max [s]", "Max"), maxHeader, usesDecimalComma),
+                P95Ms = ParseDuration(GetWithHeader(map, out var p95Header, "P95Ms", "P95 [ns]", "P95 [us]", "P95 [ms]", "P95 [s]", "P95"), p95Header, usesDecimalComma),
+                P99Ms = ParseDuration(GetWithHeader(map, out var p99Header, "P99Ms", "P99 [ns]", "P99 [us]", "P99 [ms]", "P99 [s]", "P99"), p99Header, usesDecimalComma),
+                StdDevMs = ParseDuration(GetWithHeader(map, out var stdDevHeader, "StdDevMs", "StdDev [ns]", "StdDev [us]", "StdDev [ms]", "StdDev [s]", "StdDev"), stdDevHeader, usesDecimalComma),
+                StdErrMs = ParseDuration(GetWithHeader(map, out var stdErrHeader, "StdErrMs", "StdErr [ns]", "StdErr [us]", "StdErr [ms]", "StdErr [s]", "StdErr"), stdErrHeader, usesDecimalComma),
                 FailureReasons = ParseFailureReasons(Get(map, "FailureReasons")),
-                Metrics = ExtractMetrics(map, metricHeaders, isBenchmarkDotNetCsv)
+                Metrics = ExtractMetrics(map, metricHeaders, isBenchmarkDotNetCsv, usesDecimalComma)
             });
         }
 
@@ -848,12 +853,19 @@ public sealed class BenchmarkResultImporter
     private static string GetCsvHost(IReadOnlyDictionary<string, string> values, bool isBenchmarkDotNetCsv)
         => isBenchmarkDotNetCsv ? string.Empty : Get(values, "Host") ?? string.Empty;
 
-    private static string? GetCsvSampleDuration(IReadOnlyDictionary<string, string> values, bool isBenchmarkDotNetCsv, out string? matchedHeader)
+    private static string? GetCsvSampleDuration(
+        IReadOnlyDictionary<string, string> values,
+        bool isBenchmarkDotNetCsv,
+        bool usesDecimalComma,
+        out string? matchedHeader)
         => isBenchmarkDotNetCsv
-            ? GetBenchmarkDotNetDuration(values, out matchedHeader)
+            ? GetBenchmarkDotNetDuration(values, usesDecimalComma, out matchedHeader)
             : GetWithHeader(values, out matchedHeader, "DurationMs", "MedianMs", "MeanMs");
 
-    private static string? GetBenchmarkDotNetDuration(IReadOnlyDictionary<string, string> values, out string? matchedHeader)
+    private static string? GetBenchmarkDotNetDuration(
+        IReadOnlyDictionary<string, string> values,
+        bool usesDecimalComma,
+        out string? matchedHeader)
     {
         var names = new[]
         {
@@ -867,7 +879,7 @@ public sealed class BenchmarkResultImporter
                 continue;
 
             var trimmed = value.Trim();
-            if (ParseDuration(trimmed, name).HasValue)
+            if (ParseDuration(trimmed, name, usesDecimalComma).HasValue)
             {
                 matchedHeader = name;
                 return trimmed;
@@ -927,16 +939,16 @@ public sealed class BenchmarkResultImporter
         return null;
     }
 
-    private static double? ParseDuration(string? raw, string? header = null)
+    private static double? ParseDuration(string? raw, string? header = null, bool usesDecimalComma = false)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
-        var text = raw!.Trim().Replace(",", string.Empty);
+        var text = raw!.Trim();
         var factor = DurationFactor(text);
         if (Math.Abs(factor - 1.0) < double.Epsilon && !HasDurationSuffix(text))
             factor = HeaderDurationFactor(header);
 
         text = RemoveUnitSuffix(text).Trim();
-        if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+        if (!TryParseMetricNumber(text, usesDecimalComma, out var value))
             return null;
 
         var duration = value * factor;
@@ -946,19 +958,22 @@ public sealed class BenchmarkResultImporter
     private static bool IsFinite(double value)
         => !double.IsNaN(value) && !double.IsInfinity(value);
 
-    private static double? ParseNumericMetric(string? raw, string? header = null)
-        => ParseByteSize(raw) ?? ParseDuration(raw, header);
+    private static double? ParseNumericMetric(
+        string? raw,
+        string? header = null,
+        bool usesDecimalComma = false)
+        => ParseByteSize(raw, usesDecimalComma) ?? ParseDuration(raw, header, usesDecimalComma);
 
-    private static double? ParseByteSize(string? raw)
+    private static double? ParseByteSize(string? raw, bool usesDecimalComma = false)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
-        var text = raw!.Trim().Replace(",", string.Empty);
+        var text = raw!.Trim();
         foreach (var unit in ByteUnits)
         {
             if (!text.EndsWith(unit.Suffix, StringComparison.OrdinalIgnoreCase))
                 continue;
             var numberText = text.Substring(0, text.Length - unit.Suffix.Length).Trim();
-            if (double.TryParse(numberText, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+            if (TryParseMetricNumber(numberText, usesDecimalComma, out var value))
             {
                 var bytes = value * unit.Factor;
                 return IsFinite(bytes) ? bytes : null;
@@ -968,45 +983,29 @@ public sealed class BenchmarkResultImporter
         return null;
     }
 
-    private static string[] ParseCsvLine(string line)
+    private static bool TryParseMetricNumber(string text, bool usesDecimalComma, out double value)
     {
-        var source = line ?? string.Empty;
-        var values = new List<string>();
-        var current = new System.Text.StringBuilder();
-        var quoted = false;
-        for (var i = 0; i < source.Length; i++)
+        var normalized = text.Trim();
+        if (usesDecimalComma && normalized.Contains(','))
         {
-            var ch = source[i];
-            if (ch == '"')
-            {
-                if (quoted && i + 1 < source.Length && source[i + 1] == '"')
-                {
-                    current.Append('"');
-                    i++;
-                }
-                else
-                {
-                    quoted = !quoted;
-                }
-            }
-            else if (ch == ',' && !quoted)
-            {
-                values.Add(current.ToString());
-                current.Clear();
-            }
-            else
-            {
-                current.Append(ch);
-            }
+            var lastComma = normalized.LastIndexOf(',');
+            var lastDot = normalized.LastIndexOf('.');
+            normalized = lastDot > lastComma
+                ? normalized.Replace(",", string.Empty)
+                : normalized.Replace(".", string.Empty).Replace(',', '.');
+        }
+        else
+        {
+            normalized = normalized.Replace(",", string.Empty);
         }
 
-        values.Add(current.ToString());
-        return values.ToArray();
+        return double.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
     }
 
-    private static string[][] ReadCsvRecords(string path)
+    private static string[][] ReadCsvRecords(string path, out char delimiter)
     {
         var source = File.ReadAllText(path);
+        delimiter = DetectCsvDelimiter(source);
         var records = new List<string[]>();
         var values = new List<string>();
         var current = new System.Text.StringBuilder();
@@ -1026,7 +1025,7 @@ public sealed class BenchmarkResultImporter
                     quoted = !quoted;
                 }
             }
-            else if (ch == ',' && !quoted)
+            else if (ch == delimiter && !quoted)
             {
                 values.Add(current.ToString());
                 current.Clear();
@@ -1055,6 +1054,49 @@ public sealed class BenchmarkResultImporter
         if (records.Count > 0)
             records[0] = records[0].Select(NormalizeCsvHeader).ToArray();
         return records.ToArray();
+    }
+
+    private static char DetectCsvDelimiter(string source)
+    {
+        if (string.IsNullOrEmpty(source))
+            return ',';
+
+        var counts = new Dictionary<char, int>
+        {
+            [','] = 0,
+            [';'] = 0,
+            ['\t'] = 0
+        };
+        var quoted = false;
+        for (var i = 0; i < source.Length; i++)
+        {
+            var ch = source[i];
+            if (ch == '"')
+            {
+                if (quoted && i + 1 < source.Length && source[i + 1] == '"')
+                {
+                    i++;
+                }
+                else
+                {
+                    quoted = !quoted;
+                }
+            }
+            else if (!quoted && (ch == '\r' || ch == '\n'))
+            {
+                break;
+            }
+            else if (!quoted && counts.ContainsKey(ch))
+            {
+                counts[ch]++;
+            }
+        }
+
+        var best = counts
+            .OrderByDescending(static pair => pair.Value)
+            .ThenBy(static pair => pair.Key == ',' ? 0 : pair.Key == ';' ? 1 : 2)
+            .First();
+        return best.Value > 0 ? best.Key : ',';
     }
 
     private static string NormalizeCsvHeader(string header)
@@ -1098,7 +1140,7 @@ public sealed class BenchmarkResultImporter
 
     private static bool LooksLikeSummaryCsv(string path)
     {
-        var firstRecord = ReadCsvRecords(path).FirstOrDefault();
+        var firstRecord = ReadCsvRecords(path, out _).FirstOrDefault();
         if (firstRecord is null) return false;
         if (LooksLikeBenchmarkDotNetCsv(firstRecord))
             return false;
@@ -1168,17 +1210,22 @@ public sealed class BenchmarkResultImporter
         IReadOnlyDictionary<string, string> values,
         HashSet<string> excludedColumns,
         HashSet<string>? metricColumns = null,
-        bool isBenchmarkDotNetCsv = false)
+        bool isBenchmarkDotNetCsv = false,
+        bool usesDecimalComma = false)
         => values
-            .Where(k => !IsExcludedVariableColumn(k.Key, k.Value, excludedColumns, metricColumns, isBenchmarkDotNetCsv))
+            .Where(k => !IsExcludedVariableColumn(k.Key, k.Value, excludedColumns, metricColumns, isBenchmarkDotNetCsv, usesDecimalComma))
             .ToDictionary(k => k.Key, k => (string?)k.Value, StringComparer.OrdinalIgnoreCase);
 
-    private static Dictionary<string, double> ExtractMetrics(IReadOnlyDictionary<string, string> values, HashSet<string> metricColumns, bool normalizeBenchmarkDotNetMetrics)
+    private static Dictionary<string, double> ExtractMetrics(
+        IReadOnlyDictionary<string, string> values,
+        HashSet<string> metricColumns,
+        bool normalizeBenchmarkDotNetMetrics,
+        bool usesDecimalComma = false)
     {
         var metrics = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         foreach (var name in metricColumns.Where(values.ContainsKey))
         {
-            var value = ParseNumericMetric(values[name], name);
+            var value = ParseNumericMetric(values[name], name, usesDecimalComma);
             if (!value.HasValue)
                 continue;
 
@@ -1298,7 +1345,8 @@ public sealed class BenchmarkResultImporter
         string value,
         HashSet<string> excludedColumns,
         HashSet<string>? metricColumns,
-        bool isBenchmarkDotNetCsv)
+        bool isBenchmarkDotNetCsv,
+        bool usesDecimalComma)
     {
         if (excludedColumns.Contains(key))
             return true;
@@ -1306,7 +1354,7 @@ public sealed class BenchmarkResultImporter
         if (metricColumns is null || !metricColumns.Contains(key))
             return false;
 
-        return !isBenchmarkDotNetCsv || ParseNumericMetric(value, key).HasValue;
+        return !isBenchmarkDotNetCsv || ParseNumericMetric(value, key, usesDecimalComma).HasValue;
     }
 
     private static bool LooksLikeBenchmarkDotNetCsv(string[] headers)

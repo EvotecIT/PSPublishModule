@@ -247,6 +247,38 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_ReadsLocaleDelimitedBenchmarkDotNetCsv()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "benchmark-report.csv");
+        File.WriteAllText(
+            csv,
+            "Method;Job;Mean;Allocated\n"
+            + "OfficeIMO;Dry;54,90 ms;36,46 MB\n"
+            + "Sep;Dry;28,67 ms;34,22 MB\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+
+        Assert.Collection(
+            result.Samples.OrderBy(sample => sample.Scenario),
+            sample =>
+            {
+                Assert.Equal("OfficeIMO", sample.Scenario);
+                Assert.Equal(54.9, sample.DurationMs);
+                Assert.Equal(36.46 * 1024 * 1024, sample.Metrics["Allocated"], precision: 3);
+                Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+            },
+            sample =>
+            {
+                Assert.Equal("Sep", sample.Scenario);
+                Assert.Equal(28.67, sample.DurationMs);
+                Assert.Equal(34.22 * 1024 * 1024, sample.Metrics["Allocated"], precision: 3);
+                Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+            });
+        Assert.All(result.Summary, row => Assert.True(row.Metrics.ContainsKey("Allocated")));
+    }
+
+    [Fact]
     public void Importer_KeepsRunnerVariablesNamedLikeBenchmarkDotNetStatistics()
     {
         var root = CreateTempRoot();

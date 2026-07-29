@@ -28,7 +28,7 @@
 
   <ItemGroup>
     <!-- DbaClientX.SQLite exposes Microsoft.Data.Sqlite types in its public async API. -->
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
   </ItemGroup>
 </Project>
 
