@@ -9,6 +9,18 @@ namespace PowerForge;
 public sealed class BenchmarkEvidenceCatalogService
 {
     private static readonly string[] DefaultExpectedPlatforms = { "windows", "linux", "macos" };
+    private static readonly string[] ExecutionPolicyMetadataKeys =
+    {
+        "profile",
+        "cleanup",
+        "warmupCount",
+        "iterationCount",
+        "runOrder",
+        "memoryCleanup",
+        "cooldownMilliseconds",
+        "outlierMode",
+        "runMode"
+    };
 
     /// <summary>
     /// Adds or replaces one platform/run-mode lane and recomputes comparison and availability state.
@@ -138,6 +150,7 @@ public sealed class BenchmarkEvidenceCatalogService
         };
         AddCompatibilityDimension(dimensions, "environment.runtimeVersion", result.Environment.RuntimeVersion);
         AddCompatibilityDimension(dimensions, "environment.dotNetSdkVersion", result.Environment.DotNetSdkVersion);
+        AddCompatibilityDimension(dimensions, "environment.runner", result.Environment.Runner);
         AddCompatibilityDimension(
             dimensions,
             "benchmark.workload.shape.sha256",
@@ -147,6 +160,9 @@ public sealed class BenchmarkEvidenceCatalogService
             if (item.Key.StartsWith("benchmark.fixture.", StringComparison.OrdinalIgnoreCase) ||
                 item.Key.StartsWith("benchmark.package.", StringComparison.OrdinalIgnoreCase) ||
                 item.Key.StartsWith("benchmark.workload.", StringComparison.OrdinalIgnoreCase) ||
+                item.Key.StartsWith("benchmark.execution.", StringComparison.OrdinalIgnoreCase) ||
+                item.Key.StartsWith("benchmark.runner.", StringComparison.OrdinalIgnoreCase) ||
+                ExecutionPolicyMetadataKeys.Contains(item.Key, StringComparer.OrdinalIgnoreCase) ||
                 item.Key.Equals("gitSha", StringComparison.OrdinalIgnoreCase) ||
                 item.Key.Equals("pwsh", StringComparison.OrdinalIgnoreCase) ||
                 item.Key.Equals("psEdition", StringComparison.OrdinalIgnoreCase) ||
@@ -300,6 +316,17 @@ public sealed class BenchmarkEvidenceCatalogService
             throw new InvalidOperationException(
                 "Publishable benchmark evidence requires exact source provenance in metadata key 'gitSha' " +
                 "as a full 40- or 64-character hexadecimal Git object ID.");
+        }
+
+        bool hasSkippedMeasurement =
+            result.Samples.Any(sample => sample.Status == BenchmarkSampleStatus.Skipped) ||
+            result.Summary.Any(row =>
+                string.Equals(row.Status, "Skipped", StringComparison.OrdinalIgnoreCase));
+        if (hasSkippedMeasurement)
+        {
+            throw new InvalidOperationException(
+                "Publishable benchmark evidence cannot contain skipped measurements. " +
+                "Use a diagnostic, non-publishable lane for incomplete work.");
         }
 
         bool hasFailedMeasurement =

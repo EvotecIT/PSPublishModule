@@ -256,6 +256,51 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void EvidenceCatalog_RejectsPublishWithSkippedSample()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Samples =
+        [
+            new BenchmarkSample
+            {
+                Status = BenchmarkSampleStatus.Skipped,
+                Scenario = "CsvTyped",
+                Operation = "Read",
+                Engine = "OptionalEngine"
+            }
+        ];
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "skipped-sample.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("skipped measurements", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RejectsPublishWithSkippedSummary()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Summary[0].Status = "Skipped";
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "skipped-summary.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("skipped measurements", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void EvidenceCatalog_RejectsPublishWithoutSourceProvenance()
     {
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
@@ -597,6 +642,70 @@ public sealed partial class BenchmarkServicesTests
             entry => Assert.Contains(
                 entry.CompatibilityIssues,
                 issue => issue.Contains("environment.runtimeVersion", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
+    public void EvidenceCatalog_MarksMismatchedExecutionPolicyAsNotComparable()
+    {
+        var service = new BenchmarkEvidenceCatalogService();
+        BenchmarkRunResult windows = Result("Windows", "fixture-a", 10);
+        BenchmarkRunResult linux = Result("Linux", "fixture-a", 11);
+        windows.Metadata["warmupCount"] = "1";
+        linux.Metadata["warmupCount"] = "3";
+
+        BenchmarkEvidenceCatalog catalog = service.Update(
+            null,
+            windows,
+            "comparison-a",
+            "windows.json",
+            "full",
+            true);
+        catalog = service.Update(
+            catalog,
+            linux,
+            "comparison-a",
+            "linux.json",
+            "full",
+            true);
+
+        Assert.All(catalog.Entries, entry => Assert.False(entry.Comparable));
+        Assert.All(
+            catalog.Entries,
+            entry => Assert.Contains(
+                entry.CompatibilityIssues,
+                issue => issue.Contains("warmupCount", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
+    public void EvidenceCatalog_MarksMismatchedRunnerIdentityAsNotComparable()
+    {
+        var service = new BenchmarkEvidenceCatalogService();
+        BenchmarkRunResult windows = Result("Windows", "fixture-a", 10);
+        BenchmarkRunResult macos = Result("macOS", "fixture-a", 11);
+        windows.Environment.Runner = "PowerShell 7.6.0";
+        macos.Environment.Runner = "PowerShell 7.7.0";
+
+        BenchmarkEvidenceCatalog catalog = service.Update(
+            null,
+            windows,
+            "comparison-a",
+            "windows.json",
+            "full",
+            true);
+        catalog = service.Update(
+            catalog,
+            macos,
+            "comparison-a",
+            "macos.json",
+            "full",
+            true);
+
+        Assert.All(catalog.Entries, entry => Assert.False(entry.Comparable));
+        Assert.All(
+            catalog.Entries,
+            entry => Assert.Contains(
+                entry.CompatibilityIssues,
+                issue => issue.Contains("environment.runner", StringComparison.OrdinalIgnoreCase)));
     }
 
     [Fact]
