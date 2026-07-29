@@ -33,7 +33,7 @@ public sealed class GetAppStoreConnectBetaGroupCommand : AsyncPSCmdlet
     [Parameter] public string? Name { get; set; }
 
     /// <summary>Maximum result count.</summary>
-    [Parameter] public int Limit { get; set; } = 200;
+    [Parameter] [ValidateRange(1, 200)] public int Limit { get; set; } = 200;
 
     /// <summary>Reads TestFlight beta groups.</summary>
     protected override async Task ProcessRecordAsync()
@@ -42,6 +42,6 @@ public sealed class GetAppStoreConnectBetaGroupCommand : AsyncPSCmdlet
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
         var groups = await client.GetBetaGroupsAsync(AppId, Name, Limit, CancelToken);
-        WriteObject(groups, enumerateCollection: true);
+        WriteObject(AppStoreConnectCommandSupport.LimitResults(groups, Limit), enumerateCollection: true);
     }
 }

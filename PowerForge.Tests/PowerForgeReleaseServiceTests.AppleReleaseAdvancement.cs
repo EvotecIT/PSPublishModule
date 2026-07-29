@@ -216,6 +216,58 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleAdvance_DoesNotPrepareTestFlightOnlyTargetForPublicStore()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.6.0", "14");
+            CreateXcodeProject(root, "CasaRayWatch.xcodeproj", "1.6.0", "14");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Apps = new[]
+            {
+                Assert.Single(spec.AppleApps.Apps),
+                new AppleAppConfiguration
+                {
+                    Name = "CasaRay watchOS",
+                    BundleId = "com.evotecit.casaray.watch",
+                    Platform = ApplePlatform.watchOS,
+                    ProjectPath = "CasaRayWatch.xcodeproj",
+                    Scheme = "CasaRayWatch",
+                    AppStoreConnectAppId = "watch-app-id",
+                    DistributionRoute = AppleDistributionRoute.TestFlightOnly,
+                    TestFlightPolicy = AppleTestFlightPolicy.Internal
+                }
+            };
+            var preparedAppIds = new List<string>();
+
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, "VALID"),
+                    prepareAppleDistribution: request =>
+                    {
+                        preparedAppIds.Add(request.AppId);
+                        return CreateSuccessfulPreparation(request);
+                    })
+                .Execute(spec, new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Advance,
+                    AppleActionConfirmed = true
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(new[] { "6778025328" }, preparedAppIds);
+            Assert.True(result.AppleReceipt!.Success);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleScreenshots_BindsVersionAtRuntimeWhenMappingOmitsVersionAndId()
     {
         var root = CreateSandbox();

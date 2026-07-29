@@ -110,6 +110,9 @@ public sealed class AppStoreConnectTestFlightDistributionRequest
     /// <summary>Beta group names to resolve and receive the build.</summary>
     public string[] BetaGroupNames { get; set; } = Array.Empty<string>();
 
+    /// <summary>Target policy used to reject beta groups from the wrong TestFlight audience.</summary>
+    public AppleTestFlightPolicy TestFlightPolicy { get; set; } = AppleTestFlightPolicy.Automatic;
+
     /// <summary>Optional testers to create or resolve and add to the target groups.</summary>
     public AppStoreConnectBetaTesterSpec[] Testers { get; set; } = Array.Empty<AppStoreConnectBetaTesterSpec>();
 

@@ -1,0 +1,441 @@
+name: PowerForge Apple Screenshots
+
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        description: Exact source commit to capture and publish.
+        required: true
+        type: string
+      powerforge_ref:
+        description: Exact PSPublishModule commit containing the shared screenshot workflow.
+        required: true
+        type: string
+      release_config_path:
+        description: PowerForge release configuration path.
+        required: false
+        default: powerforge.release.json
+        type: string
+      capture_script:
+        description: Repository-relative deterministic capture script.
+        required: true
+        type: string
+      capture_shell:
+        description: Capture script host (bash or pwsh).
+        required: false
+        default: bash
+        type: string
+      capture_artifact_path:
+        description: Repository-relative folder produced by the capture script.
+        required: false
+        default: build/appstore-screenshots
+        type: string
+      screenshot_configs_json:
+        description: JSON array of repository-relative screenshot sync configurations.
+        required: true
+        type: string
+      marketing_version:
+        description: Exact x.y.z marketing version represented by the captures.
+        required: true
+        type: string
+      approval_environment:
+        description: Protected GitHub environment whose reviewer approves the captured artifact.
+        required: false
+        default: apple-production
+        type: string
+      runner_labels_json:
+        description: JSON array of trusted Apple runner labels.
+        required: false
+        default: '["self-hosted","macOS","ARM64"]'
+        type: string
+      tool_runtime:
+        description: Runtime identifier for the trusted Apple runner.
+        required: false
+        default: osx-arm64
+        type: string
+      device:
+        description: Device matrix identity recorded in approval manifests.
+        required: false
+        default: configured Apple screenshot matrix
+        type: string
+      theme:
+        description: Appearance matrix recorded in approval manifests.
+        required: false
+        default: light-and-dark
+        type: string
+      scenario:
+        description: Stable scenario identity recorded in approval manifests.
+        required: false
+        default: app-store-publication
+        type: string
+      target:
+        description: Optional comma-separated release target selection for partial platform capture lanes.
+        required: false
+        default: ""
+        type: string
+    secrets:
+      app_store_connect_issuer_id:
+        required: false
+      app_store_connect_key_id:
+        required: false
+      app_store_connect_private_key:
+        required: false
+
+jobs:
+  capture:
+    concurrency:
+      group: powerforge-apple-screenshot-capture-${{ github.repository }}
+      cancel-in-progress: false
+    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Require immutable refs and supported inputs
+        shell: pwsh
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+          POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+          CAPTURE_SHELL: ${{ inputs.capture_shell }}
+          TOOL_RUNTIME: ${{ inputs.tool_runtime }}
+          MARKETING_VERSION: ${{ inputs.marketing_version }}
+        run: |
+          foreach ($entry in @{ source_ref = $env:SOURCE_REF; powerforge_ref = $env:POWERFORGE_REF }.GetEnumerator()) {
+            if ($entry.Value -notmatch '^[0-9A-Fa-f]{40}$') { throw "$($entry.Key) must be an exact 40-character commit SHA." }
+          }
+          if ($env:CAPTURE_SHELL -notin @('bash', 'pwsh')) { throw 'capture_shell must be bash or pwsh.' }
+          if ($env:TOOL_RUNTIME -notin @('osx-arm64', 'osx-x64')) { throw 'tool_runtime must be osx-arm64 or osx-x64.' }
+          if ($env:MARKETING_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'marketing_version must use x.y.z.' }
+
+      - name: Checkout exact screenshot source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 1
+          path: source
+          persist-credentials: false
+
+      - name: Capture deterministic App Store screenshots
+        shell: pwsh
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+          CAPTURE_SCRIPT: ${{ inputs.capture_script }}
+          CAPTURE_SHELL: ${{ inputs.capture_shell }}
+          CAPTURE_ARTIFACT_PATH: ${{ inputs.capture_artifact_path }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source').TrimEnd([IO.Path]::DirectorySeparatorChar)
+          $scriptPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_SCRIPT))
+          $artifactPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_ARTIFACT_PATH))
+          $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+          $prefix = $sourceRoot + [IO.Path]::DirectorySeparatorChar
+          if (((Get-Item -LiteralPath $sourceRoot -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Checked-out source must not be a symbolic link or reparse point: $sourceRoot"
+          }
+
+          function Assert-UnlinkedSourcePath {
+            param(
+              [Parameter(Mandatory)] [string] $Path,
+              [Parameter(Mandatory)] [string] $Name
+            )
+
+            $current = $Path
+            while (-not $current.Equals($sourceRoot, $comparison)) {
+              if (Test-Path -LiteralPath $current) {
+                $item = Get-Item -LiteralPath $current -Force
+                if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                  throw "$Name must not traverse a symbolic link or reparse point: $current"
+                }
+              }
+              $parent = Split-Path -Parent $current
+              if ([string]::IsNullOrWhiteSpace($parent) -or $parent.Equals($current, $comparison)) {
+                throw "$Name could not be validated inside the checked-out source."
+              }
+              $current = $parent
+            }
+          }
+
+          foreach ($entry in @{ capture_script = $scriptPath; capture_artifact_path = $artifactPath }.GetEnumerator()) {
+            if (-not $entry.Value.StartsWith($prefix, $comparison)) { throw "$($entry.Key) escapes the checked-out source." }
+          }
+          $actualCommit = (& git -C $sourceRoot rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or -not $actualCommit.Equals($env:SOURCE_REF, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Capture source '$actualCommit' does not match source_ref '$($env:SOURCE_REF)'."
+          }
+          Assert-UnlinkedSourcePath -Path $scriptPath -Name 'Capture script'
+          Assert-UnlinkedSourcePath -Path $artifactPath -Name 'Capture artifact'
+          if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) { throw "Capture script was not found: $scriptPath" }
+          $relativeScript = [IO.Path]::GetRelativePath($sourceRoot, $scriptPath).Replace('\', '/')
+          & git -C $sourceRoot ls-files --error-unmatch -- $relativeScript *> $null
+          if ($LASTEXITCODE -ne 0) { throw "Capture script must be tracked at the exact source commit: $relativeScript" }
+          & git -C $sourceRoot diff --quiet HEAD -- $relativeScript
+          if ($LASTEXITCODE -ne 0) { throw "Capture script differs from the exact source commit: $relativeScript" }
+
+          Push-Location $sourceRoot
+          try {
+            if ($env:CAPTURE_SHELL -eq 'bash') { & bash $scriptPath } else { & pwsh -NoLogo -NoProfile -File $scriptPath }
+            if ($LASTEXITCODE -ne 0) { throw "Screenshot capture failed with exit code $LASTEXITCODE." }
+          } finally { Pop-Location }
+
+          if (-not (Test-Path -LiteralPath $artifactPath -PathType Container)) { throw "Capture artifact folder was not created: $artifactPath" }
+          Assert-UnlinkedSourcePath -Path $artifactPath -Name 'Capture artifact'
+          $artifactItems = @(Get-ChildItem -LiteralPath $artifactPath -Force -Recurse)
+          $linkedArtifact = $artifactItems | Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 } | Select-Object -First 1
+          if ($null -ne $linkedArtifact) {
+            throw "Capture artifact must not traverse a symbolic link or reparse point: $($linkedArtifact.FullName)"
+          }
+          if (@($artifactItems | Where-Object { -not $_.PSIsContainer -and $_.Extension -ieq '.png' }).Count -eq 0) {
+            throw 'Capture produced no PNG screenshots.'
+          }
+
+      - name: Record capture provenance
+        shell: pwsh
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+          MARKETING_VERSION: ${{ inputs.marketing_version }}
+          CAPTURE_DEVICE: ${{ inputs.device }}
+          CAPTURE_THEME: ${{ inputs.theme }}
+          CAPTURE_SCENARIO: ${{ inputs.scenario }}
+        run: |
+          $xcodeVersion = (& xcodebuild -version) -join ' '
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($xcodeVersion)) { throw 'Unable to record the capture Xcode version.' }
+          $captureRuntime = "$(& sw_vers -productName) $(& sw_vers -productVersion) ($([Runtime.InteropServices.RuntimeInformation]::OSArchitecture))"
+          $provenance = [ordered]@{
+            schemaVersion = 2
+            repository = $env:GITHUB_REPOSITORY
+            captureRunId = $env:GITHUB_RUN_ID
+            sourceCommit = $env:SOURCE_REF.ToLowerInvariant()
+            marketingVersion = $env:MARKETING_VERSION
+            workflowRef = $env:GITHUB_WORKFLOW_REF
+            xcodeVersion = $xcodeVersion
+            runtime = $captureRuntime
+            device = $env:CAPTURE_DEVICE
+            theme = $env:CAPTURE_THEME
+            scenario = $env:CAPTURE_SCENARIO
+          }
+          $provenance | ConvertTo-Json -Depth 5 -Compress |
+            Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-screenshot-provenance.json') -Encoding utf8
+
+      - name: Retain compact capture provenance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: powerforge-apple-screenshot-provenance-${{ inputs.source_ref }}
+          path: ${{ runner.temp }}/powerforge-apple-screenshot-provenance.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Retain captures for protected review
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: powerforge-apple-screenshots-${{ inputs.source_ref }}
+          path: source/${{ inputs.capture_artifact_path }}/**/*.png
+          if-no-files-found: error
+          retention-days: 30
+
+  approve-and-sync:
+    needs: capture
+    concurrency:
+      group: powerforge-apple-${{ github.repository }}
+      cancel-in-progress: false
+    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    timeout-minutes: 60
+    environment: ${{ inputs.approval_environment }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact approved source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 1
+          path: source
+          persist-credentials: false
+
+      - name: Checkout pinned PowerForge screenshot workflow
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: EvotecIT/PSPublishModule
+          ref: ${{ inputs.powerforge_ref }}
+          fetch-depth: 1
+          path: powerforge-shared
+          persist-credentials: false
+
+      - name: Prepare isolated reviewed capture paths
+        id: capture-path
+        shell: pwsh
+        env:
+          CAPTURE_ARTIFACT_PATH: ${{ inputs.capture_artifact_path }}
+        run: |
+          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source').TrimEnd([IO.Path]::DirectorySeparatorChar)
+          $destination = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_ARTIFACT_PATH))
+          $reviewPath = [IO.Path]::GetFullPath((Join-Path $env:RUNNER_TEMP 'powerforge-apple-reviewed-captures'))
+          $prefix = $sourceRoot + [IO.Path]::DirectorySeparatorChar
+          if (-not $destination.StartsWith($prefix, [StringComparison]::Ordinal)) {
+            throw 'capture_artifact_path must resolve to a child of the checked-out source.'
+          }
+          $current = $destination
+          while ($current -ne $sourceRoot) {
+            if (Test-Path -LiteralPath $current) {
+              $item = Get-Item -LiteralPath $current -Force
+              if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "capture_artifact_path must not traverse a symbolic link or reparse point: $current"
+              }
+            }
+            $current = Split-Path -Parent $current
+          }
+          "path=$destination" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "review_path=$reviewPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Restore reviewed captures outside source
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: powerforge-apple-screenshots-${{ inputs.source_ref }}
+          path: ${{ steps.capture-path.outputs.review_path }}
+
+      - name: Restore exact capture provenance outside source
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: powerforge-apple-screenshot-provenance-${{ inputs.source_ref }}
+          path: ${{ runner.temp }}/powerforge-apple-screenshot-provenance
+
+      - name: Materialize only reviewed PNG files
+        shell: pwsh
+        run: |
+          $reviewRoot = [IO.Path]::GetFullPath('${{ steps.capture-path.outputs.review_path }}').TrimEnd([IO.Path]::DirectorySeparatorChar)
+          $destination = [IO.Path]::GetFullPath('${{ steps.capture-path.outputs.path }}').TrimEnd([IO.Path]::DirectorySeparatorChar)
+          $items = @(Get-ChildItem -LiteralPath $reviewRoot -Recurse -Force)
+          if (@($items | Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 }).Count -gt 0) {
+            throw 'Reviewed capture artifacts must not contain symbolic links or reparse points.'
+          }
+          $files = @($items | Where-Object { -not $_.PSIsContainer })
+          if ($files.Count -eq 0 -or @($files | Where-Object { $_.Extension -ine '.png' }).Count -gt 0) {
+            throw 'Reviewed capture artifacts must contain only PNG files.'
+          }
+          $destinationItems = if (Test-Path -LiteralPath $destination) {
+            @(Get-ChildItem -LiteralPath $destination -Recurse -Force)
+          } else { @() }
+          if (@($destinationItems | Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 }).Count -gt 0) {
+            throw 'Screenshot destination must not contain symbolic links or reparse points.'
+          }
+          @($destinationItems | Where-Object { -not $_.PSIsContainer -and $_.Extension -ieq '.png' }) |
+            Remove-Item -Force
+          foreach ($file in $files) {
+            $relative = [IO.Path]::GetRelativePath($reviewRoot, $file.FullName)
+            $target = [IO.Path]::GetFullPath((Join-Path $destination $relative))
+            $targetPrefix = $destination + [IO.Path]::DirectorySeparatorChar
+            if (-not $target.StartsWith($targetPrefix, [StringComparison]::Ordinal)) { throw "Reviewed capture escapes destination: $relative" }
+            New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($target)) -Force | Out-Null
+            Copy-Item -LiteralPath $file.FullName -Destination $target -Force
+          }
+          $expected = @($files | ForEach-Object {
+            [IO.Path]::GetRelativePath($reviewRoot, $_.FullName).Replace('\', '/')
+          } | Sort-Object)
+          $actual = @(Get-ChildItem -LiteralPath $destination -Recurse -Force -File |
+            Where-Object { $_.Extension -ieq '.png' } |
+            ForEach-Object { [IO.Path]::GetRelativePath($destination, $_.FullName).Replace('\', '/') } |
+            Sort-Object)
+          if (@(Compare-Object -ReferenceObject $expected -DifferenceObject $actual).Count -gt 0) {
+            throw 'Materialized screenshot set does not exactly match the reviewed PNG set.'
+          }
+
+      - name: Build exact PowerForge source
+        id: build-powerforge
+        uses: ./powerforge-shared/.github/actions/build-powerforge
+        with:
+          source-root: ${{ github.workspace }}/powerforge-shared
+          runtime: ${{ inputs.tool_runtime }}
+
+      - name: Bind protected approval to exact screenshot bytes
+        shell: pwsh
+        env:
+          SCREENSHOT_CONFIGS_JSON: ${{ inputs.screenshot_configs_json }}
+          POWERFORGE_TOOL: ${{ steps.build-powerforge.outputs.tool-path }}
+          RELEASE_CONFIG_RELATIVE: ${{ inputs.release_config_path }}
+          MARKETING_VERSION: ${{ inputs.marketing_version }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          APPROVAL_ENVIRONMENT: ${{ inputs.approval_environment }}
+          TARGET_INPUT: ${{ inputs.target }}
+        run: |
+          $configs = @($env:SCREENSHOT_CONFIGS_JSON | ConvertFrom-Json -Depth 10)
+          if ($configs.Count -eq 0) { throw 'screenshot_configs_json must contain at least one config path.' }
+          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source')
+          $prefix = $sourceRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+          $releaseConfigPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:RELEASE_CONFIG_RELATIVE))
+          if (-not $releaseConfigPath.StartsWith($prefix, [StringComparison]::Ordinal)) { throw 'release_config_path escapes source.' }
+          $trackedInputValidator = '${{ github.workspace }}/powerforge-shared/.github/actions/apple-release/Assert-TrackedAppleReleaseInputs.ps1'
+          & $trackedInputValidator -ConfigPath $releaseConfigPath -SourceCommit $env:SOURCE_REF -SkipToolManifest
+          $captureProvenance = Get-Content -LiteralPath '${{ runner.temp }}/powerforge-apple-screenshot-provenance/powerforge-apple-screenshot-provenance.json' -Raw | ConvertFrom-Json -Depth 10
+          if ($captureProvenance.schemaVersion -ne 2 -or
+              -not ([string] $captureProvenance.sourceCommit).Equals($env:SOURCE_REF, [StringComparison]::OrdinalIgnoreCase) -or
+              ([string] $captureProvenance.marketingVersion) -ne $env:MARKETING_VERSION) {
+            throw 'Capture provenance does not match the approved source and marketing version.'
+          }
+          $xcodeVersion = [string] $captureProvenance.xcodeVersion
+          $captureRuntime = [string] $captureProvenance.runtime
+          $captureDevice = [string] $captureProvenance.device
+          $captureTheme = [string] $captureProvenance.theme
+          $captureScenario = [string] $captureProvenance.scenario
+          foreach ($config in $configs) {
+            $configPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot ([string] $config)))
+            if (-not $configPath.StartsWith($prefix, [StringComparison]::Ordinal)) { throw "Screenshot config escapes source: $config" }
+            & $trackedInputValidator -ConfigPath $configPath -SourceCommit $env:SOURCE_REF -SkipToolManifest
+            $screenshotConfig = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -Depth 20
+            $configuredManifestPath = [string] $screenshotConfig.quality.approvalManifestPath
+            $manifestRelative = if ([string]::IsNullOrWhiteSpace($configuredManifestPath)) {
+              [IO.Path]::GetFileNameWithoutExtension($configPath) + '.approval.json'
+            } else { $configuredManifestPath }
+            $manifestPath = if ([IO.Path]::IsPathRooted($manifestRelative)) {
+              [IO.Path]::GetFullPath($manifestRelative)
+            } else {
+              [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetDirectoryName($configPath)) $manifestRelative))
+            }
+            if (-not $manifestPath.StartsWith($prefix, [StringComparison]::Ordinal)) { throw "Screenshot approval manifest output escapes source: $manifestRelative" }
+            $manifestArguments = @(
+              'apple-screenshots', 'manifest',
+              '--config', $configPath,
+              '--release-config', $releaseConfigPath,
+              '--version', $env:MARKETING_VERSION,
+              '--source-commit', $env:SOURCE_REF,
+              '--approved-by', "GitHub protected environment: $($env:APPROVAL_ENVIRONMENT)",
+              '--allowed-root', '${{ steps.capture-path.outputs.path }}',
+              '--out', $manifestPath,
+              '--write-root', $sourceRoot,
+              '--initiated-by', '${{ github.triggering_actor }}',
+              '--approval-evidence', '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}',
+              '--xcode-version', $xcodeVersion,
+              '--runtime', $captureRuntime,
+              '--device', $captureDevice,
+              '--theme', $captureTheme,
+              '--scenario', $captureScenario
+            )
+            if (-not [string]::IsNullOrWhiteSpace($env:TARGET_INPUT)) {
+              $manifestArguments += @('--target', $env:TARGET_INPUT)
+            }
+            & $env:POWERFORGE_TOOL @manifestArguments
+            if ($LASTEXITCODE -ne 0) { throw "Screenshot approval manifest failed for $config." }
+          }
+
+      - name: Sync approved screenshots to App Store Connect
+        uses: ./powerforge-shared/.github/actions/apple-release
+        with:
+          action: Screenshots
+          config-path: ${{ github.workspace }}/source/${{ inputs.release_config_path }}
+          source-commit: ${{ inputs.source_ref }}
+          tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
+          target: ${{ inputs.target }}
+          plan-only: "false"
+          confirm: "true"
+          issuer-id: ${{ secrets.app_store_connect_issuer_id }}
+          key-id: ${{ secrets.app_store_connect_key_id }}
+          private-key: ${{ secrets.app_store_connect_private_key }}
+
+      - name: Retain approved captures and manifests
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: powerforge-apple-screenshots-approved-${{ inputs.source_ref }}
+          path: |
+            source/${{ inputs.capture_artifact_path }}
+            source/**/*.approval.json
+          if-no-files-found: error
+          retention-days: 90

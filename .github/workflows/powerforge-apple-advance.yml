@@ -12,6 +12,11 @@ on:
         required: false
         default: powerforge.release.json
         type: string
+      source_bootstrap_script:
+        description: Optional tracked PowerShell script that prepares source dependencies before planning and advancing.
+        required: false
+        default: ''
+        type: string
       tool_manifest_path:
         description: Checked-in PowerForge tool manifest path.
         required: false
@@ -26,6 +31,11 @@ on:
         required: false
         default: '["self-hosted","macOS","ARM64"]'
         type: string
+      tool_runtime:
+        description: Runtime identifier for the trusted Apple runner.
+        required: false
+        default: osx-arm64
+        type: string
       environment_name:
         description: Protected GitHub environment for Apple draft/TestFlight mutation.
         required: false
@@ -33,11 +43,11 @@ on:
         type: string
     secrets:
       app_store_connect_issuer_id:
-        required: true
+        required: false
       app_store_connect_key_id:
-        required: true
+        required: false
       app_store_connect_private_key:
-        required: true
+        required: false
 
 concurrency:
   group: powerforge-apple-${{ github.repository }}
@@ -94,13 +104,106 @@ jobs:
           if ($source -ine $env:EXPECTED_SOURCE_REF) { throw "Expected source '$($env:EXPECTED_SOURCE_REF)', received '$source'." }
           if ($shared -ine $env:EXPECTED_POWERFORGE_REF) { throw "Expected shared '$($env:EXPECTED_POWERFORGE_REF)', received '$shared'." }
 
+      - name: Prepare tracked source dependencies
+        if: inputs.source_bootstrap_script != ''
+        shell: pwsh
+        env:
+          SOURCE_BOOTSTRAP_SCRIPT: ${{ inputs.source_bootstrap_script }}
+          EXPECTED_POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source').TrimEnd([IO.Path]::DirectorySeparatorChar)
+          if ([IO.Path]::IsPathRooted($env:SOURCE_BOOTSTRAP_SCRIPT)) {
+            throw 'source_bootstrap_script must be relative to the checked-out source.'
+          }
+          $scriptPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:SOURCE_BOOTSTRAP_SCRIPT))
+          $prefix = $sourceRoot + [IO.Path]::DirectorySeparatorChar
+          if (-not $scriptPath.StartsWith($prefix, [StringComparison]::Ordinal)) {
+            throw 'source_bootstrap_script must resolve to a child of the checked-out source.'
+          }
+          if ([IO.Path]::GetExtension($scriptPath) -ine '.ps1') {
+            throw 'source_bootstrap_script must identify a PowerShell .ps1 file.'
+          }
+          $current = $scriptPath
+          while ($current -ne $sourceRoot) {
+            if (Test-Path -LiteralPath $current) {
+              $item = Get-Item -LiteralPath $current -Force
+              if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "source_bootstrap_script must not traverse a symbolic link or reparse point: $current"
+              }
+            }
+            $current = Split-Path -Parent $current
+          }
+          if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {
+            throw "source_bootstrap_script was not found: $scriptPath"
+          }
+          $relativePath = [IO.Path]::GetRelativePath($sourceRoot, $scriptPath).Replace('\', '/')
+          & git -C $sourceRoot ls-files --error-unmatch -- $relativePath *> $null
+          if ($LASTEXITCODE -ne 0) {
+            throw "source_bootstrap_script must be tracked at the exact source commit: $relativePath"
+          }
+          & git -C $sourceRoot diff --quiet -- $relativePath
+          if ($LASTEXITCODE -ne 0) {
+            throw "source_bootstrap_script differs from the exact source commit: $relativePath"
+          }
+          & $scriptPath
+          $sourceStatus = @(& git -C $sourceRoot status --porcelain=v1 --untracked-files=all)
+          if ($LASTEXITCODE -ne 0 -or $sourceStatus.Count -gt 0) {
+            throw 'source_bootstrap_script must not modify tracked or untracked release source outside ignored dependency roots.'
+          }
+
+          $sharedRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/powerforge-shared')
+          $shared = (& git -C $sharedRoot rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $shared -ine $env:EXPECTED_POWERFORGE_REF) {
+            throw "source_bootstrap_script changed the pinned shared checkout identity: $shared"
+          }
+          $sharedStatus = @(& git -C $sharedRoot status --porcelain=v1 --untracked-files=all)
+          if ($LASTEXITCODE -ne 0 -or $sharedStatus.Count -gt 0) {
+            throw 'source_bootstrap_script must not modify the pinned shared checkout.'
+          }
+
+      - name: Restore pinned shared checkout after source bootstrap
+        if: inputs.source_bootstrap_script != ''
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: EvotecIT/PSPublishModule
+          ref: ${{ inputs.powerforge_ref }}
+          fetch-depth: 1
+          path: powerforge-shared
+          persist-credentials: false
+          clean: true
+
+      - name: Reverify pinned shared checkout after source bootstrap
+        if: inputs.source_bootstrap_script != ''
+        shell: pwsh
+        env:
+          EXPECTED_POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+        run: |
+          $shared = (git -C powerforge-shared rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $shared -ine $env:EXPECTED_POWERFORGE_REF) {
+            throw "Expected restored shared '$($env:EXPECTED_POWERFORGE_REF)', received '$shared'."
+          }
+          $sharedStatus = @(& git -C powerforge-shared status --porcelain=v1 --untracked-files=all)
+          if ($LASTEXITCODE -ne 0 -or $sharedStatus.Count -gt 0) {
+            throw 'Restored shared checkout is not clean.'
+          }
+
+      - name: Build exact PowerForge source
+        id: build-powerforge
+        uses: ./powerforge-shared/.github/actions/build-powerforge
+        with:
+          source-root: ${{ github.workspace }}/powerforge-shared
+          runtime: ${{ inputs.tool_runtime }}
+
       - name: Plan safe release advancement
         id: plan
         uses: ./powerforge-shared/.github/actions/apple-release
         with:
           action: Advance
           config-path: ${{ github.workspace }}/source/${{ inputs.config_path }}
+          source-commit: ${{ inputs.source_ref }}
           tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
+          tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           plan-only: "true"
           issuer-id: ${{ secrets.app_store_connect_issuer_id }}
           key-id: ${{ secrets.app_store_connect_key_id }}
@@ -112,9 +215,12 @@ jobs:
         with:
           action: Advance
           config-path: ${{ github.workspace }}/source/${{ inputs.config_path }}
+          source-commit: ${{ inputs.source_ref }}
           tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
+          tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           plan-only: "false"
           confirm: "true"
+          expected-plan-sha256: ${{ steps.plan.outputs.plan-sha256 }}
           issuer-id: ${{ secrets.app_store_connect_issuer_id }}
           key-id: ${{ secrets.app_store_connect_key_id }}
           private-key: ${{ secrets.app_store_connect_private_key }}

@@ -73,6 +73,140 @@ public sealed class AppStoreConnectScreenshotQualitySpec
     /// without depending on platform image frameworks. Set to zero to disable the heuristic.
     /// </summary>
     public double MinimumKilobytesPerMegapixel { get; set; } = 12;
+
+    /// <summary>Require a reviewed approval manifest whose hashes match every screenshot selected for upload.</summary>
+    public bool RequireApprovalManifest { get; set; }
+
+    /// <summary>Approval manifest path relative to the screenshot configuration file.</summary>
+    public string? ApprovalManifestPath { get; set; }
+}
+
+/// <summary>
+/// Review receipt binding an approved screenshot set to its source, runtime, device, locale, and exact bytes.
+/// </summary>
+public sealed class AppStoreConnectScreenshotApprovalManifest
+{
+    /// <summary>Manifest schema version.</summary>
+    public int SchemaVersion { get; set; } = 2;
+
+    /// <summary>App Store Connect app id that may receive the reviewed screenshots.</summary>
+    public string AppId { get; set; } = string.Empty;
+
+    /// <summary>App Store Connect platform that may receive the reviewed screenshots.</summary>
+    public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
+
+    /// <summary>App marketing version represented by the screenshots.</summary>
+    public string VersionString { get; set; } = string.Empty;
+
+    /// <summary>Source commit used by the capture.</summary>
+    public string SourceCommit { get; set; } = string.Empty;
+
+    /// <summary>Xcode version used for capture.</summary>
+    public string? XcodeVersion { get; set; }
+
+    /// <summary>Simulator/device runtime used for capture.</summary>
+    public string? Runtime { get; set; }
+
+    /// <summary>Device or simulator model used for capture.</summary>
+    public string? Device { get; set; }
+
+    /// <summary>Locale used for capture.</summary>
+    public string Locale { get; set; } = string.Empty;
+
+    /// <summary>Appearance used for capture, such as light or dark.</summary>
+    public string? Theme { get; set; }
+
+    /// <summary>Stable capture scenario or route name.</summary>
+    public string? Scenario { get; set; }
+
+    /// <summary>UTC approval timestamp.</summary>
+    public DateTimeOffset ApprovedAt { get; set; }
+
+    /// <summary>Human reviewer or protected approval boundary that approved the exact images.</summary>
+    public string ApprovedBy { get; set; } = string.Empty;
+
+    /// <summary>Identity that initiated the approval workflow, when distinct from the reviewer.</summary>
+    public string? InitiatedBy { get; set; }
+
+    /// <summary>Durable URL or identifier for the external approval evidence.</summary>
+    public string? ApprovalEvidence { get; set; }
+
+    /// <summary>Exact approved screenshot entries.</summary>
+    public AppStoreConnectScreenshotApprovalEntry[] Screenshots { get; set; } = Array.Empty<AppStoreConnectScreenshotApprovalEntry>();
+}
+
+/// <summary>Exact screenshot approved for App Store Connect upload.</summary>
+public sealed class AppStoreConnectScreenshotApprovalEntry
+{
+    /// <summary>App Store Connect screenshot display type.</summary>
+    public string ScreenshotDisplayType { get; set; } = string.Empty;
+
+    /// <summary>File name or config-relative path.</summary>
+    public string File { get; set; } = string.Empty;
+
+    /// <summary>Upper- or lower-case SHA-256 digest of the exact file.</summary>
+    public string Sha256 { get; set; } = string.Empty;
+
+    /// <summary>PNG width.</summary>
+    public int Width { get; set; }
+
+    /// <summary>PNG height.</summary>
+    public int Height { get; set; }
+
+    /// <summary>Optional perceptual hash emitted by the capture pipeline for visual-diff tooling.</summary>
+    public string? PerceptualHash { get; set; }
+}
+
+/// <summary>Request to bind reviewed screenshot files to an approval manifest.</summary>
+public sealed class AppStoreConnectScreenshotApprovalRequest
+{
+    /// <summary>Screenshot sync configuration whose selected files were reviewed.</summary>
+    public AppStoreConnectScreenshotSyncSpec Spec { get; set; } = new();
+
+    /// <summary>
+    /// Exact App Store Connect app id receiving the reviewed screenshots. Required when
+    /// <see cref="Spec"/> intentionally leaves its reusable app id blank.
+    /// </summary>
+    public string? AppId { get; set; }
+
+    /// <summary>Base directory used to resolve screenshot paths.</summary>
+    public string BaseDirectory { get; set; } = Directory.GetCurrentDirectory();
+
+    /// <summary>Reviewed capture root that must contain every selected screenshot.</summary>
+    public string AllowedRoot { get; set; } = string.Empty;
+
+    /// <summary>Marketing version represented by the captures.</summary>
+    public string VersionString { get; set; } = string.Empty;
+
+    /// <summary>Exact source commit used by capture automation.</summary>
+    public string SourceCommit { get; set; } = string.Empty;
+
+    /// <summary>Human reviewer or protected approval boundary.</summary>
+    public string ApprovedBy { get; set; } = string.Empty;
+
+    /// <summary>Identity that initiated the approval workflow, when distinct from the reviewer.</summary>
+    public string? InitiatedBy { get; set; }
+
+    /// <summary>Durable URL or identifier for the external approval evidence.</summary>
+    public string? ApprovalEvidence { get; set; }
+
+    /// <summary>Approval time. Defaults to the current UTC time.</summary>
+    public DateTimeOffset? ApprovedAt { get; set; }
+
+    /// <summary>Xcode version used for capture.</summary>
+    public string? XcodeVersion { get; set; }
+
+    /// <summary>Simulator or device runtime used for capture.</summary>
+    public string? Runtime { get; set; }
+
+    /// <summary>Simulator or device model used for capture.</summary>
+    public string? Device { get; set; }
+
+    /// <summary>Appearance used for capture.</summary>
+    public string? Theme { get; set; }
+
+    /// <summary>Stable capture scenario or suite name.</summary>
+    public string? Scenario { get; set; }
 }
 
 /// <summary>
@@ -88,6 +222,9 @@ public sealed class AppStoreConnectScreenshotSyncRequest
 
     /// <summary>Base directory for resolving relative screenshot paths.</summary>
     public string BaseDirectory { get; set; } = Directory.GetCurrentDirectory();
+
+    /// <summary>Exact source commit whose reviewed screenshots may be uploaded.</summary>
+    public string? ExpectedSourceCommit { get; set; }
 }
 
 /// <summary>

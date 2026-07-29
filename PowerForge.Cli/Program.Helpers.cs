@@ -33,10 +33,18 @@ internal static partial class Program
                         [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>]
                         [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <Tool|Portable|Installer|Store>[,<...>]]
                         [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]
-      powerforge apple-release <Status|Version|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|Advance|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>
-                        [--config <release.json>] [--plan] [--validate] [--confirm-apple-action] [--apple-resume|--no-apple-resume]
+      powerforge apple-release <Status|Doctor|Version|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|Advance|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>
+                        [--config <release.json>] [--plan] [--validate] [--confirm-apple-action] [--apple-expected-plan-sha256 <sha256>] [--apple-resume|--no-apple-resume]
                         [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>]
                         [--target <Name[,Name...]>] [--summary] [--output json]
+      powerforge apple-screenshots manifest --config <screenshots.json> --version <x.y.z> --source-commit <sha> --approved-by <reviewer-or-boundary> --allowed-root <reviewed-capture-root>
+                        [--app-id <asc-app-id> | --release-config <release.json> [--target <name-or-scheme>]]
+                        [--out <manifest.json>] [--xcode-version <value>] [--runtime <value>] [--device <value>]
+                        [--theme <value>] [--scenario <value>] [--output json]
+      powerforge apple-governance snapshot --app-id <id> --out <governance.json> [--force] [--release-config <release.json>]
+      powerforge apple-governance <validate|plan|apply> --config <governance.json> [--release-config <release.json>]
+                        [--key-path <AuthKey.p8> --key-id <id> --issuer-id <id>] [--receipt <path>]
+                        [--confirm] [--max-changes <N>] [--fail-on-drift] [--output json]
       powerforge store submit [--config <powerforge.store.submit.json>] [--list] [--list-assets] [--target <Name>] [--submission-id <id>] [--plan] [--validate] [--no-commit] [--no-wait] [--output json]
       powerforge run [--config <run.profiles.json>] [--list] [--target <Name>] [--configuration <Release|Debug>] [--framework <tfm>] [--no-build] [--no-restore]
                      [--allow-root <path[,path...]>] [--include-private-tool-packs] [--testimox-root <path>] [--extra-arg <value>] [--output json]

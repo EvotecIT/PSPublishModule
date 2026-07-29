@@ -32,7 +32,7 @@ public sealed class GetAppStoreConnectScreenshotSetCommand : AsyncPSCmdlet
     public string VersionLocalizationId { get; set; } = string.Empty;
 
     /// <summary>Maximum result count.</summary>
-    [Parameter] public int Limit { get; set; } = 20;
+    [Parameter] [ValidateRange(1, 200)] public int Limit { get; set; } = 20;
 
     /// <summary>Reads screenshot sets.</summary>
     protected override async Task ProcessRecordAsync()
@@ -41,6 +41,6 @@ public sealed class GetAppStoreConnectScreenshotSetCommand : AsyncPSCmdlet
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
         var sets = await client.GetScreenshotSetsAsync(VersionLocalizationId, Limit, CancelToken);
-        WriteObject(sets, enumerateCollection: true);
+        WriteObject(AppStoreConnectCommandSupport.LimitResults(sets, Limit), enumerateCollection: true);
     }
 }

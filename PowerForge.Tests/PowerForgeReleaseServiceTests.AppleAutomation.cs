@@ -41,6 +41,139 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleProtectedPlan_BindsExactObservedAppleState()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var readinessReady = false;
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, "VALID"),
+                checkAppleReleaseReadiness: (_, request) => new AppStoreConnectReleaseReadinessResult
+                {
+                    AppId = request.AppId,
+                    VersionString = request.VersionString,
+                    BuildNumber = request.BuildNumber,
+                    Platform = request.Platform,
+                    IsReady = readinessReady,
+                    Checks =
+                    [
+                        new AppStoreConnectReleaseReadinessCheck
+                        {
+                            Name = "metadata",
+                            Passed = readinessReady,
+                            Message = readinessReady ? "Metadata is ready." : "Metadata is incomplete."
+                        }
+                    ]
+                });
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var request = new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                PlanOnly = true,
+                AppleAction = PowerForgeAppleReleaseAction.SubmitAppReview
+            };
+
+            var first = service.Execute(spec, request);
+            var second = service.Execute(spec, request);
+            readinessReady = true;
+            var changed = service.Execute(spec, request);
+
+            Assert.True(first.Success, first.ErrorMessage);
+            Assert.Matches("^[0-9A-F]{64}$", first.AppleReceipt!.PlanSha256!);
+            Assert.Equal(first.AppleReceipt.PlanSha256, second.AppleReceipt!.PlanSha256);
+            Assert.NotEqual(first.AppleReceipt.PlanSha256, changed.AppleReceipt!.PlanSha256);
+            var target = Assert.Single(first.AppleReceipt.Targets);
+            Assert.Equal("build-id", target.BuildId);
+            Assert.Equal("VALID", target.BuildProcessingState);
+            Assert.Equal("version-id", target.DistributionVersionId);
+            Assert.True(target.ReadinessChecked);
+            Assert.False(target.ReadyForSubmission);
+            Assert.Matches("^[0-9A-F]{64}$", target.ReadinessSha256!);
+            Assert.False(Assert.Single(target.ReadinessChecks!).Passed);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleProtectedMutationRejectsStateChangedAfterPlanApproval()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var readinessReady = false;
+            var submitCalls = 0;
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, "VALID"),
+                submitAppleReview: request =>
+                {
+                    submitCalls++;
+                    return new AppStoreConnectReviewSubmissionResult
+                    {
+                        AppId = request.AppId,
+                        VersionString = request.VersionString,
+                        BuildNumber = request.BuildNumber,
+                        Platform = request.Platform
+                    };
+                },
+                checkAppleReleaseReadiness: (_, request) => new AppStoreConnectReleaseReadinessResult
+                {
+                    AppId = request.AppId,
+                    VersionString = request.VersionString,
+                    BuildNumber = request.BuildNumber,
+                    Platform = request.Platform,
+                    IsReady = readinessReady,
+                    Checks =
+                    [
+                        new AppStoreConnectReleaseReadinessCheck
+                        {
+                            Name = "metadata",
+                            Passed = readinessReady,
+                            Message = readinessReady ? "Metadata is ready." : "Metadata is incomplete."
+                        }
+                    ]
+                });
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var plan = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    AppleAction = PowerForgeAppleReleaseAction.SubmitAppReview
+                });
+            readinessReady = true;
+
+            var execution = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.SubmitAppReview,
+                    AppleActionConfirmed = true,
+                    AppleExpectedPlanSha256 = plan.AppleReceipt!.PlanSha256
+                });
+
+            Assert.False(execution.Success);
+            Assert.Equal(0, submitCalls);
+            Assert.Contains("changed after plan approval", execution.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_ExplicitAppleAction_IgnoresEveryNonAppleReleaseSection()
     {
         var root = CreateSandbox();
@@ -127,6 +260,42 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(plan.CheckReleaseReadiness);
             Assert.False(plan.Archive);
             Assert.False(plan.Upload);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public void Execute_AppleAdvancePlan_RequiresExplicitScreenshotOptIn(
+        bool configuredSync,
+        bool expectedSync)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            File.WriteAllText(Path.Combine(root, "screenshots.json"), "{}");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.ScreenshotConfigPath = "screenshots.json";
+            spec.AppleApps.SyncScreenshots = configuredSync;
+
+            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    AppleAction = PowerForgeAppleReleaseAction.Advance
+                });
+
+            var plan = Assert.IsType<PowerForgeAppleReleasePlan>(result.AppleAppPlan);
+            Assert.Equal(expectedSync, plan.SyncScreenshots);
         }
         finally
         {
@@ -660,7 +829,12 @@ public sealed partial class PowerForgeReleaseServiceTests
         Func<AppStoreConnectTestFlightDistributionRequest, AppStoreConnectTestFlightDistributionResult>? distributeTestFlight = null,
         Func<AppStoreConnectApiCredential, string, AppStoreConnectBuildUploadInfo?>? getAppleBuildUpload = null,
         Func<PowerForgeAppleAppReleaseTargetPlan, bool>? generateAppleProject = null,
-        Func<AppStoreConnectApiCredential, string, ApplePlatform, long>? getHighestAppleBuildNumber = null)
+        Func<AppStoreConnectApiCredential, string, ApplePlatform, long>? getHighestAppleBuildNumber = null,
+        Func<AppStoreConnectApiCredential, string, AppStoreConnectAppInfo[]>? findAppleApps = null,
+        Func<AppleNotarizationRequest, AppleNotarizationResult>? notarizeAppleArtifact = null,
+        Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan>? planAppleGovernance = null,
+        Func<AppStoreConnectReviewSubmissionRequest, AppStoreConnectReviewSubmissionResult>? submitAppleReview = null,
+        Func<AppStoreConnectApiCredential, AppStoreConnectReleaseReadinessRequest, AppStoreConnectReleaseReadinessResult>? checkAppleReleaseReadiness = null)
         => new(
             new NullLogger(),
             executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
@@ -679,7 +853,12 @@ public sealed partial class PowerForgeReleaseServiceTests
             generateAppleProject: generateAppleProject,
             delay: delay,
             appleArtifactService: new AppleReleaseArtifactService(getAvailableBytes ?? (_ => long.MaxValue)),
-            getHighestAppleBuildNumber: getHighestAppleBuildNumber);
+            getHighestAppleBuildNumber: getHighestAppleBuildNumber,
+            findAppleApps: findAppleApps,
+            notarizeAppleArtifact: notarizeAppleArtifact,
+            planAppleGovernance: planAppleGovernance,
+            submitAppleReview: submitAppleReview,
+            checkAppleReleaseReadiness: checkAppleReleaseReadiness);
 
     private static AppStoreConnectReleaseStateResult CreateReleaseState(
         AppStoreConnectReleaseStateRequest request,

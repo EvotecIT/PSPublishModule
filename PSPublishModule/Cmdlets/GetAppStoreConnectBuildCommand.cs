@@ -39,7 +39,7 @@ public sealed class GetAppStoreConnectBuildCommand : AsyncPSCmdlet
     [Parameter] public ApplePlatform? Platform { get; set; }
 
     /// <summary>Maximum result count.</summary>
-    [Parameter] public int Limit { get; set; } = 20;
+    [Parameter] [ValidateRange(1, 200)] public int Limit { get; set; } = 20;
 
     /// <summary>Reads build information from App Store Connect.</summary>
     protected override async Task ProcessRecordAsync()
@@ -54,6 +54,6 @@ public sealed class GetAppStoreConnectBuildCommand : AsyncPSCmdlet
             MarketingVersion,
             Platform,
             CancelToken);
-        WriteObject(builds, enumerateCollection: true);
+        WriteObject(AppStoreConnectCommandSupport.LimitResults(builds, Limit), enumerateCollection: true);
     }
 }

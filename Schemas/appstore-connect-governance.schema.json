@@ -1,0 +1,191 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PowerForge App Store Connect Governance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [ "schemaVersion", "appId" ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "type": "integer", "enum": [ 1 ] },
+    "appId": { "type": "string", "minLength": 1 },
+    "pricing": { "$ref": "#/definitions/pricing" },
+    "availability": { "$ref": "#/definitions/availability" },
+    "accessibility": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/accessibility" }
+    },
+    "encryptionDeclarations": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/encryption" }
+    },
+    "subscriptionGroups": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/subscriptionGroup" }
+    }
+  },
+  "definitions": {
+    "date": { "type": [ "string", "null" ], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "pricing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "baseTerritoryId" ],
+      "properties": {
+        "baseTerritoryId": { "type": "string", "minLength": 1 },
+        "prices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [ "appPricePointId", "territoryId" ],
+            "properties": {
+              "appPricePointId": { "type": "string", "minLength": 1 },
+              "territoryId": { "type": "string", "minLength": 1 },
+              "startDate": { "$ref": "#/definitions/date" },
+              "endDate": { "$ref": "#/definitions/date" }
+            }
+          }
+        }
+      }
+    },
+    "availability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "availableInNewTerritories" ],
+      "properties": {
+        "availableInNewTerritories": { "type": "boolean" },
+        "territories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [ "territoryId", "available" ],
+            "properties": {
+              "territoryId": { "type": "string", "minLength": 1 },
+              "available": { "type": "boolean" },
+              "releaseDate": { "$ref": "#/definitions/date" },
+              "preOrderEnabled": { "type": [ "boolean", "null" ] }
+            }
+          }
+        }
+      }
+    },
+    "accessibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "deviceFamily" ],
+      "properties": {
+        "deviceFamily": { "enum": [ "IPHONE", "IPAD", "APPLE_TV", "APPLE_WATCH", "MAC", "VISION" ] },
+        "publish": { "type": "boolean" },
+        "supportsAudioDescriptions": { "type": [ "boolean", "null" ] },
+        "supportsCaptions": { "type": [ "boolean", "null" ] },
+        "supportsDarkInterface": { "type": [ "boolean", "null" ] },
+        "supportsDifferentiateWithoutColorAlone": { "type": [ "boolean", "null" ] },
+        "supportsLargerText": { "type": [ "boolean", "null" ] },
+        "supportsReducedMotion": { "type": [ "boolean", "null" ] },
+        "supportsSufficientContrast": { "type": [ "boolean", "null" ] },
+        "supportsVoiceControl": { "type": [ "boolean", "null" ] },
+        "supportsVoiceover": { "type": [ "boolean", "null" ] }
+      }
+    },
+    "encryption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "appDescription", "containsProprietaryCryptography", "containsThirdPartyCryptography", "availableOnFrenchStore" ],
+      "properties": {
+        "appDescription": { "type": "string", "minLength": 1 },
+        "containsProprietaryCryptography": { "type": "boolean" },
+        "containsThirdPartyCryptography": { "type": "boolean" },
+        "availableOnFrenchStore": { "type": "boolean" }
+      }
+    },
+    "groupLocalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "locale", "name" ],
+      "properties": {
+        "locale": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "customAppName": { "type": [ "string", "null" ] }
+      }
+    },
+    "subscriptionLocalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "locale", "name" ],
+      "properties": {
+        "locale": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": [ "string", "null" ] }
+      }
+    },
+    "subscriptionPrice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "territoryId", "subscriptionPricePointId" ],
+      "properties": {
+        "territoryId": { "type": "string", "minLength": 1 },
+        "subscriptionPricePointId": { "type": "string", "minLength": 1 },
+        "startDate": { "$ref": "#/definitions/date" },
+        "preserveCurrentPrice": { "type": [ "boolean", "null" ] },
+        "planType": { "type": [ "string", "null" ], "enum": [ "MONTHLY", "UPFRONT", null ] }
+      }
+    },
+    "subscriptionIntroductoryOffer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "duration", "offerMode", "numberOfPeriods" ],
+      "oneOf": [
+        { "required": [ "territoryIds" ] },
+        { "required": [ "territoriesFromPlanType" ] }
+      ],
+      "properties": {
+        "duration": { "enum": [ "THREE_DAYS", "ONE_WEEK", "TWO_WEEKS", "ONE_MONTH", "TWO_MONTHS", "THREE_MONTHS", "SIX_MONTHS", "ONE_YEAR" ] },
+        "offerMode": { "enum": [ "FREE_TRIAL", "PAY_AS_YOU_GO", "PAY_UP_FRONT" ] },
+        "numberOfPeriods": { "type": "integer", "minimum": 1 },
+        "territoryIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "territoriesFromPlanType": { "enum": [ "MONTHLY", "UPFRONT" ] },
+        "startDate": { "$ref": "#/definitions/date" },
+        "endDate": { "$ref": "#/definitions/date" },
+        "subscriptionPricePointId": { "type": [ "string", "null" ] }
+      }
+    },
+    "subscriptionAvailability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "planType", "availableInNewTerritories", "territoryIds" ],
+      "properties": {
+        "planType": { "enum": [ "MONTHLY", "UPFRONT" ] },
+        "availableInNewTerritories": { "type": "boolean" },
+        "territoryIds": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "subscription": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "productId", "name", "subscriptionPeriod" ],
+      "properties": {
+        "productId": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "familySharable": { "type": [ "boolean", "null" ] },
+        "subscriptionPeriod": { "enum": [ "ONE_WEEK", "ONE_MONTH", "TWO_MONTHS", "THREE_MONTHS", "SIX_MONTHS", "ONE_YEAR" ] },
+        "reviewNote": { "type": [ "string", "null" ] },
+        "groupLevel": { "type": [ "integer", "null" ], "minimum": 1 },
+        "localizations": { "type": "array", "items": { "$ref": "#/definitions/subscriptionLocalization" } },
+        "prices": { "type": "array", "items": { "$ref": "#/definitions/subscriptionPrice" } },
+        "introductoryOffers": { "type": "array", "items": { "$ref": "#/definitions/subscriptionIntroductoryOffer" } },
+        "availabilities": { "type": "array", "items": { "$ref": "#/definitions/subscriptionAvailability" } }
+      }
+    },
+    "subscriptionGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "referenceName" ],
+      "properties": {
+        "id": { "type": [ "string", "null" ] },
+        "referenceName": { "type": "string", "minLength": 1 },
+        "localizations": { "type": "array", "items": { "$ref": "#/definitions/groupLocalization" } },
+        "subscriptions": { "type": "array", "items": { "$ref": "#/definitions/subscription" } }
+      }
+    }
+  }
+}

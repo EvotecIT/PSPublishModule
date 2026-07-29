@@ -87,6 +87,22 @@ public sealed class PSPublishModuleManifestContractTests
         "Show-Documentation"
     };
 
+    private static readonly string[] AppleWebhookCmdlets =
+    {
+        "Get-AppStoreConnectWebhook",
+        "New-AppStoreConnectWebhook",
+        "Set-AppStoreConnectWebhook",
+        "Test-AppStoreConnectWebhook"
+    };
+
+    private static readonly string[] AppleGovernanceCmdlets =
+    {
+        "Export-AppStoreConnectGovernance",
+        "Get-AppStoreConnectGovernancePlan",
+        "Sync-AppStoreConnectGovernance",
+        "Test-AppStoreConnectGovernanceConfig"
+    };
+
     [Fact]
     public void Manifest_does_not_require_feature_specific_tool_modules_at_import_time()
     {
@@ -249,6 +265,34 @@ public sealed class PSPublishModuleManifestContractTests
         var bootstrapperText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psm1"));
 
         foreach (var cmdlet in EmbeddedDependencyCmdlets)
+        {
+            Assert.Contains($"'{cmdlet}'", manifestText, StringComparison.Ordinal);
+            Assert.Contains($"'{cmdlet}'", bootstrapperText, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Module_exports_app_store_connect_webhook_cmdlets()
+    {
+        var repoRoot = RepoRootLocator.Find();
+        var manifestText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psd1"));
+        var bootstrapperText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psm1"));
+
+        foreach (var cmdlet in AppleWebhookCmdlets)
+        {
+            Assert.Contains($"'{cmdlet}'", manifestText, StringComparison.Ordinal);
+            Assert.Contains($"'{cmdlet}'", bootstrapperText, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Module_exports_app_store_connect_governance_cmdlets()
+    {
+        var repoRoot = RepoRootLocator.Find();
+        var manifestText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psd1"));
+        var bootstrapperText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psm1"));
+
+        foreach (var cmdlet in AppleGovernanceCmdlets)
         {
             Assert.Contains($"'{cmdlet}'", manifestText, StringComparison.Ordinal);
             Assert.Contains($"'{cmdlet}'", bootstrapperText, StringComparison.Ordinal);

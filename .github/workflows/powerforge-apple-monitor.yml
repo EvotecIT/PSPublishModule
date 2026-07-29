@@ -1,0 +1,195 @@
+name: PowerForge Apple Monitor
+
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        description: Exact source commit to inspect.
+        required: true
+        type: string
+      config_path:
+        description: PowerForge release configuration path.
+        required: false
+        default: powerforge.release.json
+        type: string
+      tool_manifest_path:
+        description: Checked-in PowerForge tool manifest path.
+        required: false
+        default: .powerforge/powerforge.tool.json
+        type: string
+      powerforge_ref:
+        description: Exact PSPublishModule commit containing the shared monitor.
+        required: true
+        type: string
+      runner_labels_json:
+        description: JSON array of trusted Apple runner labels.
+        required: false
+        default: '["self-hosted","macOS","ARM64"]'
+        type: string
+      tool_runtime:
+        description: Runtime identifier for the trusted Apple runner.
+        required: false
+        default: osx-arm64
+        type: string
+      issue_title:
+        description: Stable issue title used for proactive incident tracking.
+        required: false
+        default: Apple release monitor detected a failure
+        type: string
+      environment_name:
+        description: GitHub environment containing Apple monitoring credentials.
+        required: false
+        default: apple-release
+        type: string
+    secrets:
+      app_store_connect_issuer_id:
+        required: false
+      app_store_connect_key_id:
+        required: false
+      app_store_connect_private_key:
+        required: false
+
+concurrency:
+  group: powerforge-apple-monitor-${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+  doctor:
+    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    timeout-minutes: 30
+    environment: ${{ inputs.environment_name }}
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Require immutable source and shared refs
+        shell: pwsh
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+          POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+        run: |
+          foreach ($entry in @{ source_ref = $env:SOURCE_REF; powerforge_ref = $env:POWERFORGE_REF }.GetEnumerator()) {
+            if ($entry.Value -notmatch '^[0-9A-Fa-f]{40}$') { throw "$($entry.Key) must be an exact 40-character commit SHA." }
+          }
+
+      - name: Checkout exact monitored source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 1
+          path: source
+          persist-credentials: false
+
+      - name: Checkout pinned PowerForge monitor
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: EvotecIT/PSPublishModule
+          ref: ${{ inputs.powerforge_ref }}
+          fetch-depth: 1
+          path: powerforge-shared
+          persist-credentials: false
+
+      - name: Build the exact monitored PowerForge source
+        id: build-powerforge
+        uses: ./powerforge-shared/.github/actions/build-powerforge
+        with:
+          source-root: ${{ github.workspace }}/powerforge-shared
+          runtime: ${{ inputs.tool_runtime }}
+
+      - name: Run deep Apple doctor
+        id: doctor
+        continue-on-error: true
+        uses: ./powerforge-shared/.github/actions/apple-release
+        with:
+          action: Doctor
+          config-path: ${{ github.workspace }}/source/${{ inputs.config_path }}
+          source-commit: ${{ inputs.source_ref }}
+          tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
+          tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
+          plan-only: "false"
+          issuer-id: ${{ secrets.app_store_connect_issuer_id }}
+          key-id: ${{ secrets.app_store_connect_key_id }}
+          private-key: ${{ secrets.app_store_connect_private_key }}
+
+      - name: Retain compact doctor receipt
+        if: always() && steps.doctor.outputs.receipt-path != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: powerforge-apple-doctor-${{ inputs.source_ref }}
+          path: ${{ steps.doctor.outputs.receipt-path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Open or close the proactive Apple incident
+        id: incident
+        if: always()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_TITLE: ${{ inputs.issue_title }}
+          DOCTOR_OUTCOME: ${{ steps.doctor.outcome }}
+          STRUCTURED_DIAGNOSTICS: ${{ steps.doctor.outputs.diagnostics }}
+          RECEIPT_PATH: ${{ steps.doctor.outputs.receipt-path }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pagesJson = gh api --paginate --slurp "repos/$env:GH_REPO/issues?state=open&per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to enumerate all open repository issues.' }
+          $pages = @($pagesJson | ConvertFrom-Json -Depth 20)
+          $open = @($pages | ForEach-Object { @($_) } | Where-Object { $null -eq $_.pull_request })
+          $monitorMarker = '<!-- powerforge-apple-monitor-incident:v1 -->'
+          $issues = @($open | Where-Object {
+            $_.title -eq $env:ISSUE_TITLE -and ([string] $_.body).Contains($monitorMarker)
+          } | Sort-Object number)
+          $issue = $issues | Select-Object -First 1
+          $structured = if ([string]::IsNullOrWhiteSpace($env:STRUCTURED_DIAGNOSTICS)) {
+            @()
+          } else {
+            @($env:STRUCTURED_DIAGNOSTICS | ConvertFrom-Json -Depth 20)
+          }
+          $unhealthy = $env:DOCTOR_OUTCOME -ne 'success' -or
+            @($structured | Where-Object { $_.severity -in @('error', 'warning') }).Count -gt 0
+          $healthyOutput = (!$unhealthy).ToString().ToLowerInvariant()
+          "healthy=$healthyOutput" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          if (-not $unhealthy) {
+            foreach ($openIssue in $issues) {
+              gh issue close $openIssue.number --comment "Apple Doctor recovered on $env:RUN_URL."
+              if ($LASTEXITCODE -ne 0) { throw "Unable to close recovered Apple incident #$($openIssue.number)." }
+            }
+            exit 0
+          }
+
+          $receipt = if (Test-Path -LiteralPath $env:RECEIPT_PATH) {
+            Get-Content -LiteralPath $env:RECEIPT_PATH -Raw | ConvertFrom-Json -Depth 100
+          } else { $null }
+          $diagnostics = @($receipt.diagnostics | Select-Object -First 10 | ForEach-Object {
+            "- **$($_.code)** [$($_.severity)]: $($_.summary)`n  - Action: $($_.action)"
+          })
+          $body = @(
+            $monitorMarker,
+            'PowerForge Apple Doctor detected a release, upload, signing, metadata, screenshot, review, or observability problem before relying on Apple email.',
+            '',
+            "Run: $env:RUN_URL",
+            "Source: $env:SOURCE_REF",
+            '',
+            '## Diagnostics',
+            ($diagnostics.Count -gt 0 ? $diagnostics : '- The action failed before a structured receipt was available; inspect the linked run.')
+          ) -join "`n"
+          if (-not $issue) {
+            gh issue create --title $env:ISSUE_TITLE --body $body
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to create the proactive Apple incident.' }
+          } else {
+            gh issue comment $issue.number --body $body
+            if ($LASTEXITCODE -ne 0) { throw "Unable to update proactive Apple incident #$($issue.number)." }
+            foreach ($duplicate in @($issues | Select-Object -Skip 1)) {
+              gh issue close $duplicate.number --comment "Consolidated into #$($issue.number) by the Apple release monitor."
+              if ($LASTEXITCODE -ne 0) { throw "Unable to close duplicate Apple incident #$($duplicate.number)." }
+            }
+          }
+
+      - name: Fail when Apple Doctor found a problem
+        if: steps.incident.outputs.healthy != 'true'
+        shell: pwsh
+        run: throw 'Apple Doctor failed; the proactive incident contains the actionable receipt.'

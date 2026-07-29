@@ -1,11 +1,12 @@
 # Apple App Release Helpers
 
-PowerForge includes reusable Apple app release helpers for native Apple projects.
-The first supported slice wraps the signed binary path that Apple expects:
+PowerForge owns the repeatable Apple release path for native Apple projects:
 
 1. create an `.xcarchive` with `xcodebuild archive`
 2. upload that archive to App Store Connect with `xcodebuild -exportArchive`
-3. use existing App Store Connect read-only cmdlets to verify app, version, and build state
+3. wait for the exact build and report upload/processing failures with stable diagnostic codes
+4. prepare metadata, app information, screenshots, TestFlight, review, and public release through explicit actions
+5. notarize and assess Developer ID macOS artifacts when the product ships outside the Mac App Store
 
 The helpers live in shared `PowerForge` services first and are exposed through thin
 PowerShell cmdlets, so the same release logic can be reused by scripts, tests, CLI,
@@ -150,6 +151,8 @@ submitting a version.
       "ArtifactRetentionDays": 7
     },
     "AppInfoConfigPath": "build/appstore-metadata/app-info.json",
+    "GovernanceConfigPath": "build/appstore-governance.json",
+    "CheckGovernance": true,
     "ScreenshotConfigPaths": [
       "build/appstore-screenshots/ios.json",
       "build/appstore-screenshots/macos.json"
@@ -191,6 +194,7 @@ Use the same entry point for each transition:
 | Action | Result |
 | --- | --- |
 | `Status` | Reads the exact configured version/build and recommends the next action; it may generate an explicitly configured missing Xcode project locally. |
+| `Doctor` | Reads release state plus local topology, embedded-product evidence, metadata ownership, App Review details, age rating, pricing, availability, accessibility, encryption, monetization, webhook coverage, and TestFlight feedback. It does not mutate Apple state. |
 | `Version` | Updates the configured XcodeGen version source and chooses one build number above both local state and every configured App Store Connect platform. |
 | `Archive` | Creates signed archives without uploading. |
 | `Upload` | Archives, uploads, waits for processing, and resumes an exact remote build when possible. |
@@ -198,7 +202,7 @@ Use the same entry point for each transition:
 | `Prepare` | Creates/updates versions, metadata, app information, build selection, and readiness. |
 | `Screenshots` | Validates and syncs configured screenshot sets as a separate, deliberate transition. |
 | `TestFlight` | Assigns the processed build to configured groups and testers. |
-| `Advance` | Resumes versioning, archive, upload, preparation, metadata, screenshots, readiness, and configured TestFlight distribution, then stops before any review or public-release action. |
+| `Advance` | Resumes versioning, archive, upload, preparation, metadata, readiness, configured TestFlight distribution, and screenshots only when `SyncScreenshots` is explicitly enabled; then stops before any review or public-release action. |
 | `SubmitTestFlightReview` | Submits external TestFlight distribution for Beta App Review. |
 | `SubmitAppReview` | Submits a ready App Store version for App Review. |
 | `Release` | Publishes a version waiting for developer release. |
@@ -224,11 +228,189 @@ powerforge apple-release Advance --config powerforge.release.json --confirm-appl
 `Advance` is intentionally safe to resume. It acquires the configured operation lock,
 uses a separate plan receipt, checks the exact version/build remotely, and stops before
 `SubmitTestFlightReview`, `SubmitAppReview`, or `Release`.
+Screenshot replacement is opt-in during `Advance`. Keep `SyncScreenshots=false` when the
+protected `powerforge-apple-screenshots.yml` lane owns capture, approval, and immediate sync.
+
+## Commercial and compliance governance
+
+Use one checked-in governance file per App Store Connect app. The file declares only
+facts that a product owner has reviewed; PowerForge never derives prices, countries,
+encryption answers, or accessibility claims from source code. The bundled schema gives
+editors completion and catches misspelled fields before a release:
+
+```json
+{
+  "$schema": "../../Schemas/appstore-connect-governance.schema.json",
+  "schemaVersion": 1,
+  "appId": "1234567890",
+  "pricing": {
+    "baseTerritoryId": "USA",
+    "prices": [
+      {
+        "territoryId": "USA",
+        "appPricePointId": "eyJzIjoi...",
+        "startDate": "2026-08-01"
+      }
+    ]
+  },
+  "availability": {
+    "availableInNewTerritories": false,
+    "territories": [
+      { "territoryId": "USA", "available": true },
+      { "territoryId": "POL", "available": true }
+    ]
+  },
+  "accessibility": [
+    {
+      "deviceFamily": "IPHONE",
+      "supportsVoiceover": true,
+      "supportsLargerText": true,
+      "publish": true
+    }
+  ],
+  "encryptionDeclarations": [
+    {
+      "appDescription": "Human-reviewed description of the app and its cryptography",
+      "containsProprietaryCryptography": false,
+      "containsThirdPartyCryptography": true,
+      "availableOnFrenchStore": true
+    }
+  ],
+  "subscriptionGroups": [
+    {
+      "referenceName": "Pro",
+      "localizations": [
+        { "locale": "en-US", "name": "Pro" }
+      ],
+      "subscriptions": [
+        {
+          "productId": "com.example.product.pro.monthly",
+          "name": "Pro Monthly",
+          "subscriptionPeriod": "ONE_MONTH",
+          "groupLevel": 1,
+          "localizations": [
+            { "locale": "en-US", "name": "Pro Monthly", "description": "Monthly Pro access" }
+          ],
+          "prices": [
+            {
+              "territoryId": "USA",
+              "subscriptionPricePointId": "eyJzIjoi...",
+              "planType": "MONTHLY"
+            }
+          ],
+          "introductoryOffers": [
+            {
+              "duration": "TWO_WEEKS",
+              "offerMode": "FREE_TRIAL",
+              "numberOfPeriods": 1,
+              "territoriesFromPlanType": "MONTHLY"
+            }
+          ],
+          "availabilities": [
+            {
+              "planType": "MONTHLY",
+              "availableInNewTerritories": false,
+              "territoryIds": [ "USA", "POL" ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+Accessibility publication is always a distinct reviewed change, including when the
+same apply operation creates or updates the declaration facts. A publish-enabled
+request cannot make reviewed facts public without that publication effect appearing
+in the plan and receipt.
+
+Validate locally, read Apple and write a drift receipt, then apply only after review:
+
+```text
+powerforge apple-governance snapshot --app-id 1234567890 --out build/appstore-governance.json --release-config powerforge.release.json
+powerforge apple-governance validate --config build/appstore-governance.json
+powerforge apple-governance plan --config build/appstore-governance.json --release-config powerforge.release.json --receipt build/governance-plan.json --fail-on-drift --summary --output json
+powerforge apple-governance apply --config build/appstore-governance.json --release-config powerforge.release.json --reviewed-plan build/governance-plan.json --confirm --summary --output json
+```
+
+`snapshot` bootstraps a declaration from existing Apple state and refuses to overwrite
+reviewed configuration unless `--force` is supplied. Review it before committing.
+`validate` needs no credentials. `plan` is read-only. `apply` requires `--confirm`
+and the exact reviewed Plan receipt through `--reviewed-plan`. Before every mutation,
+it regenerates the plan and stops if the remaining work no longer matches that receipt.
+If a parent change exposes new child drift, those changes require a new reviewed Plan.
+Apply converges one dependency-aware change at a time, replans after every Apple mutation,
+and writes a compact receipt by default under `.powerforge/apple/`. It creates and
+updates declared resources but never performs implicit deletions. A safety limit
+prevents an unexpectedly large change set from running indefinitely.
+
+Use `--summary` for automation and agent-facing output. It reports counts, grouped
+resource types, at most ten representative changes or findings, and the full receipt
+path; the complete machine-readable plan remains in that receipt for deliberate review.
+
+Introductory offers may declare explicit `territoryIds`, or use
+`territoriesFromPlanType` to reuse the same reviewed `MONTHLY` or `UPFRONT` plan
+availability without repeating a large storefront list. The protected workflow allows
+500 confirmed mutations by default so a first global trial rollout can converge in one
+reviewed run; lower `maximum_changes` when a narrower safety boundary is appropriate.
+
+The equivalent PowerShell surface is:
+
+```powershell
+Test-AppStoreConnectGovernanceConfig '.\build\appstore-governance.json'
+
+Export-AppStoreConnectGovernance `
+    -AppId '1234567890' -Path '.\build\appstore-governance.json' `
+    -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath $keyPath
+
+Get-AppStoreConnectGovernancePlan `
+    -ConfigPath '.\build\appstore-governance.json' `
+    -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath $keyPath
+
+Sync-AppStoreConnectGovernance `
+    -ConfigPath '.\build\appstore-governance.json' `
+    -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath $keyPath `
+    -Confirm
+```
+
+When `GovernanceConfigPath` or `GovernanceConfigPaths` is present, named `Doctor`,
+`Prepare`, and `Advance` actions automatically enable `CheckGovernance`. Drift becomes
+a stable `APPLE_GOVERNANCE_*` diagnostic in the normal Apple release receipt and blocks
+the transition before review. A configured workflow can also set
+`CheckGovernance=true` explicitly.
+
+For GitHub-hosted control, call `powerforge-apple-governance.yml` with exact consumer
+and PowerForge commit SHAs. `Plan` uses the normal `apple-release` environment and is
+read-only. `Apply` always replans first, requires an authorized dispatcher, enters the
+separate `apple-release-approval` protected environment, passes the explicit confirmation
+flag, and uploads both compact receipts. App Store Connect secrets are declared
+individually; the workflow does not inherit the caller's complete secret set.
+
+```yaml
+jobs:
+  governance:
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-apple-governance.yml@<exact-40-character-sha>
+    with:
+      operation: Plan # change to Apply only after reviewing the plan
+      source_ref: ${{ github.sha }}
+      powerforge_ref: <exact-40-character-sha>
+      config_path: scripts/appstoreconnect-governance.json
+      allowed_dispatchers_json: '["authorized-login"]'
+```
+
+Apple's API is intentionally asymmetric. PowerForge reports a blocked change when the
+published API cannot safely mutate an existing property, such as
+`availableInNewTerritories` on an already-created app availability resource. Resolve
+that exact item in App Store Connect, then rerun the plan. A blocked receipt is never
+reported as successful convergence.
 
 ## Reusable GitHub workflows
 
-Commit one tool lock in each Apple app repository so CI downloads an exact standalone
-PowerForge release asset and verifies it before execution:
+The reusable workflows build the exact 40-character `powerforge_ref` through the
+canonical PowerForge release builder, so consumer repositories do not wait for package
+publication or reimplement build logic. The composite action also supports a checked-in
+tool lock when a repository prefers downloading a published standalone asset:
 
 ```json
 {
@@ -254,20 +436,52 @@ The reusable workflow boundary mirrors the human approval boundary:
   version source, and opens a release-ready pull request. It never merges it.
 - `powerforge-apple-advance.yml` runs a plan and confirmed resumable `Advance` from
   an exact merged commit. It stops before every review and public-release action.
+  Consumers that need source-only dependencies can pass `source_bootstrap_script`;
+  the workflow accepts only a tracked, unchanged, non-symlinked `.ps1` file beneath
+  that exact checkout and runs it before both the plan and confirmed transition.
+  The shared action then rejects an `AppleApps.ProjectRoot` or app project path outside
+  that checkout, so bootstrap output cannot redirect protected release inputs to a
+  persistent path on the runner.
 - `powerforge-apple-approval.yml` accepts only `SubmitTestFlightReview`,
-  `SubmitAppReview`, or `Release` and runs inside a protected GitHub environment.
+  `SubmitAppReview`, or `Release`, verifies an optional dispatcher allow-list, and first
+  publishes a read-only plan from the non-approval environment. The protected job starts
+  only after that plan can be inspected, replans after approval, and executes only when
+  the exact source, action, observed Apple state, and App Review readiness evidence still
+  produce the reviewed SHA-256. The reviewed hash is also passed into the release engine,
+  which recomputes and rejects drift immediately before the first Apple mutation.
+- `powerforge-apple-monitor.yml` runs scheduled `Doctor`, retains the compact receipt,
+  and maintains one marker-owned GitHub incident until errors and warnings are cleared.
+- `powerforge-apple-screenshots.yml` captures from an exact source commit, retains the
+  PNG artifact for review, waits at a protected environment, binds the reviewer to
+  exact image hashes, and then performs the confirmed screenshot sync.
+- `powerforge-apple-screenshot-capture.yml` plus
+  `powerforge-apple-screenshot-approve.yml` provide the same exact-byte boundary on
+  repositories whose GitHub plan cannot enforce environment reviewers. Capture and
+  approval are separate runs; the second run resolves the exact source commit from the
+  retained capture artifact, verifies a compact provenance artifact against a successful
+  dedicated default-branch capture workflow, rejects an optional mismatched source
+  assertion, verifies an allow-listed GitHub actor, and binds both run IDs into the
+  manifest before sync.
 
 Callers must pass 40-character commit SHAs for `powerforge_ref` and release
 `source_ref`; the workflows reject branches and tags and verify both checked-out
-commits. Pass App Store Connect credentials through GitHub secrets. The composite
+commits. The reusable jobs select the caller repository's protected environment and
+resolve its environment-scoped App Store Connect secrets there. Approval callers also
+provide a non-protected planning environment with read-only App Store Connect credentials.
+Release configs and tool manifests must be tracked, unchanged files beneath the exact
+checkout and must not traverse symbolic links or reparse points. Do not add
+repository-wide `secrets: inherit`; that would weaken the environment boundary. The composite
 action writes the private key to a permission-restricted temporary file and removes
-it after every plan or action. All three workflows share one repository-scoped
-concurrency group, so version selection, draft mutation, review submission, and
-release cannot overlap.
+it after every plan or action. Mutating release workflows, including both screenshot
+approve-and-sync variants, share one repository-scoped concurrency group. Monitoring
+and screenshot capture have dedicated groups so a long capture cannot cancel a release,
+two publication captures cannot overlap, and App Review never observes a partially
+replaced screenshot set.
 
 The workflows upload the exact configured plan and actual receipt paths and fail if
 a required receipt is absent. Successful logs contain only the short step summary,
-while failure logs retain the PowerForge error envelope. A partially completed
+while failure logs retain only stable diagnostic codes and actions; private evidence
+remains in the receipt artifact. A partially completed
 version workflow reuses an identical remote release branch and creates or returns its
 open pull request; it refuses to overwrite different remote content.
 
@@ -288,7 +502,8 @@ Invoke-PowerForgeRelease `
 
 The receipt is the handoff between people, CI, and agents. It records the target,
 version/build, processing and review states, selected-build state, performed/skipped
-steps, bounded cleanup, and policy-aware next actions. `readinessChecked=false` means
+steps, bounded cleanup, stable diagnostics, the control-plane inventory, and
+policy-aware next actions. `readinessChecked=false` means
 the read-only status action did not query metadata or screenshot readiness; run
 `Prepare` or `Screenshots` for those checks. The persisted receipt uses its configured
 project-relative path and never contains API credentials. A rerun with `Resume=true`
@@ -308,6 +523,58 @@ For screenshot-enabled releases, run `Prepare` once after upload to create the
 Distribution draft, run the separately reviewed `Screenshots` action, then run
 `Prepare` again as the final readiness gate.
 
+Screenshot configs can require an approval manifest. The manifest binds every upload
+file to its SHA-256 digest, PNG dimensions, release version, source commit, locale,
+device/runtime, appearance, scenario, approver, and approval time. Any changed or
+unapproved image fails before App Store Connect mutation. Product repositories remain
+responsible for deterministic UI navigation and capture because only the product knows
+its useful screens; PowerForge owns validation, approval integrity, upload, delivery
+state, and the receipt.
+
+The reusable screenshot workflow standardizes that product-specific boundary. Its
+`capture_script` is repository code pinned by `source_ref`; the shared workflow rejects
+path traversal and linked paths, verifies that the script is tracked and unchanged at
+the exact commit, requires PNG output, retains it before requesting environment approval,
+and never accepts a branch or tag as capture evidence. This lets CasaRay keep its rich
+simulator routes while Tactra, EasyControlX, and EmailIMO add small capture scripts with
+the same approval and upload contract.
+
+After reviewing the captured images, generate the manifest without hand-copying file
+hashes or dimensions:
+
+```text
+powerforge apple-screenshots manifest \
+  --config scripts/appstoreconnect-screenshots-ios.json \
+  --release-config powerforge.release.json \
+  --target "Primary iOS App" \
+  --version 1.6.0 \
+  --source-commit 0123456789abcdef0123456789abcdef01234567 \
+  --approved-by release-owner \
+  --allowed-root build/appstore-screenshots \
+  --runtime "iOS 26.0" \
+  --device "iPhone 17 Pro Max" \
+  --theme light \
+  --scenario app-store
+```
+
+In GitHub Actions, `ApprovedBy` names the protected environment boundary—not the
+workflow initiator. `InitiatedBy` records who started the run, while
+`ApprovalEvidence` links to GitHub's deployment record where the actual environment
+review decision is retained. This avoids incorrectly crediting the initiator as the reviewer.
+
+The command writes `Quality.ApprovalManifestPath` when configured, or a sibling
+`*.approval.json` file. It runs the same local image quality gates used by upload,
+then binds only the selected files. Approval manifest schema 2 also binds the
+review to the exact App Store Connect app id and platform, so identical images
+cannot be replayed to another product or store destination.
+When a reusable screenshot map intentionally leaves `AppId` blank, `--release-config`
+resolves and binds exactly one enabled destination for the map platform; `--target`
+disambiguates products with multiple destinations. `--app-id` remains available for
+recovery tooling that already resolved the destination explicitly.
+Every upload also supplies the expected release source commit and requires it to
+match the manifest. Direct `Sync-AppStoreConnectScreenshots` recovery runs must pass
+that exact commit through `-SourceCommit` when approval manifests are required.
+
 ## Apple target modeling
 
 Configure store targets by archive and App Store Connect platform, not by every device
@@ -318,11 +585,74 @@ that can run the product:
 - Mac Catalyst is a macOS App Store Connect target with
   `ArchiveVariant=MacCatalyst`.
 - A companion Watch app shipped inside the iOS archive stays with that iOS target.
-  An independently archived Watch app can use a `watchOS` archive target, but
+- An independently archived Watch app can use a `watchOS` archive target, but
   PowerForge maps it to Apple's `IOS` App Store Connect platform because Apple does
   not expose a separate `WATCH_OS` store-platform value.
 - CarPlay is an iOS capability and entitlement, not a separate App Store platform.
   Its scenes and entitlement checks belong in the iOS build and validation lane.
+
+Model every product in `AppleApps.Apps`, including surfaces that are not independent
+uploads. The routing fields prevent a widget, Watch app, helper, or development probe
+from becoming an accidental release lane:
+
+| Field | Purpose |
+| --- | --- |
+| `DistributionRoute` | `AppStore`, `TestFlightOnly`, `DirectNotarized`, `EmbeddedCompanion`, or `DevelopmentOnly`. |
+| `ProductRole` | Primary app, companion app, extension, embedded executable, or capability-only surface. |
+| `ParentTarget` | Names the archive owner for an embedded or development surface. |
+| `RequiredEmbeddedBundleIds` | Fails Doctor when the parent project no longer contains a required companion/helper bundle. |
+| `Capabilities` | Open-ended product facts such as `Widgets`, `Watch`, `CarPlay`, `AppIntents`, `LiveActivities`, or `AppleIntelligence`. |
+| `TestFlightPolicy` | Disables TestFlight or limits a target to internal/external distribution. `Automatic` preserves legacy distribution behavior, but the protected `SubmitTestFlightReview` mutation requires explicit `External` intent. |
+
+Apple does not permit app-record creation through the App Store Connect API. If
+`AppStoreConnectAppId` is omitted, PowerForge looks up the exact bundle identifier and
+persists the discovered ID in the receipt. Zero matches becomes an onboarding
+diagnostic in `Doctor`; mutating actions stop until the app is created in the App Store
+Connect website.
+
+## Direct macOS distribution
+
+Set `DistributionRoute` to `DirectNotarized` for a Developer ID lane. `Upload` and
+`Advance` then export with `method=developer-id`, submit the one exported `.app`,
+`.dmg`, or signed flat `.pkg` with `notarytool --wait`, staple and validate the accepted
+ticket, and run the artifact-appropriate `spctl` Gatekeeper assessment. ZIP is not
+accepted as the distribution artifact because Apple cannot staple a ticket directly to
+a ZIP; `.app` bundles are zipped internally only for submission. The receipt records the
+submission ID, notarization state, stapling result, and Gatekeeper result. If submission
+is accepted but stapling or assessment fails, a retry reuses the accepted submission and
+reruns only local post-processing. Resume requires that exact target to have failed,
+matches version and build, and verifies a deterministic SHA-256 of the original artifact;
+a successful sibling or changed artifact is never reused. Authentication can use
+`DirectDistribution.KeychainProfile` or the same App Store Connect API key supplied to
+the release.
+
+Keep privileged helpers and embedded executables as `EmbeddedCompanion` entries under
+the direct parent, then list their bundle identifiers in the parent
+`RequiredEmbeddedBundleIds`.
+
+## Proactive monitoring
+
+Run `Doctor` on a schedule as well as before a release. The reusable
+`powerforge-apple-monitor.yml` workflow checks out exact 40-character source and
+PowerForge commits, builds that exact shared source, runs Doctor on a trusted Apple
+runner, retains the compact receipt, and maintains one stable GitHub incident. Errors
+and warnings open the issue; a clean later run closes only incidents carrying the
+PowerForge monitor ownership marker, never an unrelated same-title issue. This catches upload/build
+state, review, metadata, screenshot, compliance, observability, and TestFlight feedback
+gaps without waiting for an Apple email.
+
+App Store Connect webhooks complement scheduled polling. `AppStoreConnectClient` can
+list, create, update, and ping webhooks, while `AppStoreConnectWebhookVerifier`
+validates Apple's `x-apple-signature` with fixed-time HMAC-SHA256 comparison before
+parsing the event. A receiver should refresh the compact release state for version,
+build-upload, Beta App Review, and feedback events; scheduled Doctor remains the
+fallback for missed delivery or receiver downtime.
+
+Doctor intentionally reports human attestations instead of guessing them. Age-rating
+answers, export-compliance facts, accessibility claims, reviewer credentials, pricing,
+territory availability, subscription/IAP policy, and privacy declarations must be
+reviewed by the product owner. PowerForge can detect missing or drifting state and stop
+publication, but it must not invent legal, commercial, or accessibility claims.
 
 All configured store targets share the marketing version chosen by `Version`. The
 build-number resolver checks every configured remote platform before assigning the
@@ -330,11 +660,15 @@ next number, so retries do not reuse a build already uploaded by another lane.
 
 ## Current Boundary
 
-PowerForge owns archive/upload, bounded build processing waits, Distribution
-preparation, metadata and screenshot sync, build selection, TestFlight distribution,
-review submission, approved-version release, status receipts, and local artifact
-cleanup. Apple still owns processing and review decisions. Pricing and phased-release
-configuration remain explicit App Store Connect operations.
+PowerForge owns archive/upload, direct notarization, bounded build processing waits,
+Distribution preparation, metadata and screenshot sync, build selection, TestFlight
+distribution, review submission, approved-version release, compact diagnostics, and
+local artifact cleanup. Declarative governance adds plan/diff/apply control for app
+pricing schedules, territory availability, accessibility declarations, export-
+compliance declarations, subscription groups and products, localizations, prices,
+introductory offers, and plan availability. Doctor also reads phased release, webhooks, customer reviews, and
+beta feedback. Apple still owns processing and review decisions, and a person must
+supply and approve every legal, commercial, and accessibility fact before apply.
 
 Keep every mutating action flag disabled in committed consumer configuration. Named
 actions override those flags for one run, and the three review/release transitions stay
@@ -418,8 +752,8 @@ Get-ChildItem '.\build\appstore-screenshots\upload\iphone-6-5' -Filter *.png |
         -ScreenshotSetId $set.Id
 ```
 
-The current screenshot commands intentionally work at the set/file level. A higher-level
-folder sync command can layer on top once each app defines its folder-to-display-type map.
+Use the config-driven sync below for normal releases. The lower-level commands remain
+available for recovery of one set or file.
 
 ## Config-Driven Screenshot Sync
 

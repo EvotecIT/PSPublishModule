@@ -7,7 +7,7 @@ using System.Text.Json;
 internal static partial class Program
 {
     private const string ReleaseUsageBase =
-        "Usage: powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--module-only] [--tools-only] [--apple-action <Configured|Status|Version|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|Advance|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>] [--apple-version <marketing-version>] [--confirm-apple-action] [--apple-resume|--no-apple-resume] [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>] [--summary] [--configuration <Release|Debug>] [--module-framework <auto|net10.0|net8.0>] [--module-run-mode <Manifest|Documentation|Build|Publish>] [--module-timeout-seconds <seconds>] [--module-no-dotnet-build] [--module-version <version>] [--module-prerelease-tag <tag>] [--module-no-sign] [--module-sign] [--module-certificate-thumbprint <sha1>] [--module-sign-include-binaries|--module-no-sign-include-binaries] [--module-sign-include-internals|--module-no-sign-include-internals] [--module-sign-include-exe|--module-no-sign-include-exe] [--module-diagnostics-baseline <path>] [--module-diagnostics-baseline-generate|--module-no-diagnostics-baseline-generate] [--module-diagnostics-baseline-update|--module-no-diagnostics-baseline-update] [--module-fail-on-new-diagnostics|--module-no-fail-on-new-diagnostics] [--module-fail-on-diagnostics-severity <Warning|Error>] [--skip-workspace-validation] [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>] [--publish-nuget] [--publish-project-github] [--publish-tool-github] [--submit-winget] [--skip-winget-submit] [--winget-submit-mode <Manifest|Update>] [--winget-tool-path <path>] [--winget-token-env <name>] [--winget-token-file <path>] [--winget-pr-title <text>] [--winget-open-browser] [--winget-replace [version]] [--winget-allow-interactive-auth] [--winget-timeout-seconds <seconds>] [--skip-restore] [--skip-build] [--output-root <path>] [--stage-root <path>] [--manifest-json <path>] [--allow-output-outside-project-root] [--allow-manifest-outside-project-root] [--checksums-path <path>] [--skip-release-checksums] [--keep-symbols] [--sign] [--sign-profile <name>] [--sign-tool-path <path>] [--sign-thumbprint <sha1>] [--sign-subject-name <name>] [--sign-on-missing-tool <Warn|Fail|Skip>] [--sign-on-failure <Warn|Fail|Skip>] [--sign-timeout-seconds <seconds>] [--sign-timestamp-url <url>] [--sign-description <text>] [--sign-url <url>] [--sign-csp <name>] [--sign-key-container <name>] [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>] [--installer-property <Name=Value>] [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <...>] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]";
+        "Usage: powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--module-only] [--tools-only] [--apple-action <Configured|Status|Doctor|Version|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|Advance|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>] [--apple-version <marketing-version>] [--apple-source-commit <sha>] [--apple-expected-plan-sha256 <sha256>] [--confirm-apple-action] [--apple-resume|--no-apple-resume] [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>] [--summary] [--configuration <Release|Debug>] [--module-framework <auto|net10.0|net8.0>] [--module-run-mode <Manifest|Documentation|Build|Publish>] [--module-timeout-seconds <seconds>] [--module-no-dotnet-build] [--module-version <version>] [--module-prerelease-tag <tag>] [--module-no-sign] [--module-sign] [--module-certificate-thumbprint <sha1>] [--module-sign-include-binaries|--module-no-sign-include-binaries] [--module-sign-include-internals|--module-no-sign-include-internals] [--module-sign-include-exe|--module-no-sign-include-exe] [--module-diagnostics-baseline <path>] [--module-diagnostics-baseline-generate|--module-no-diagnostics-baseline-generate] [--module-diagnostics-baseline-update|--module-no-diagnostics-baseline-update] [--module-fail-on-new-diagnostics|--module-no-fail-on-new-diagnostics] [--module-fail-on-diagnostics-severity <Warning|Error>] [--skip-workspace-validation] [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>] [--publish-nuget] [--publish-project-github] [--publish-tool-github] [--submit-winget] [--skip-winget-submit] [--winget-submit-mode <Manifest|Update>] [--winget-tool-path <path>] [--winget-token-env <name>] [--winget-token-file <path>] [--winget-pr-title <text>] [--winget-open-browser] [--winget-replace [version]] [--winget-allow-interactive-auth] [--winget-timeout-seconds <seconds>] [--skip-restore] [--skip-build] [--output-root <path>] [--stage-root <path>] [--manifest-json <path>] [--allow-output-outside-project-root] [--allow-manifest-outside-project-root] [--checksums-path <path>] [--skip-release-checksums] [--keep-symbols] [--sign] [--sign-profile <name>] [--sign-tool-path <path>] [--sign-thumbprint <sha1>] [--sign-subject-name <name>] [--sign-on-missing-tool <Warn|Fail|Skip>] [--sign-on-failure <Warn|Fail|Skip>] [--sign-timeout-seconds <seconds>] [--sign-timestamp-url <url>] [--sign-description <text>] [--sign-url <url>] [--sign-csp <name>] [--sign-key-container <name>] [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>] [--installer-property <Name=Value>] [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <...>] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]";
 
     private const string ReleaseUsage = ReleaseUsageBase + " Tool-only version override: --release-version <x.y.z>.";
 
@@ -313,10 +313,12 @@ internal static partial class Program
         foreach (var target in receipt.Targets)
         {
             logger.Info(
-                $" -> {target.Name} {target.Platform} {target.Version} ({target.Build}): " +
+                $" -> {target.Name} {target.Platform}/{target.DistributionRoute} {target.Version} ({target.Build}): " +
                 $"build={target.BuildProcessingState ?? "not found"}, " +
                 $"distribution={target.DistributionState ?? "not found"}, " +
                 $"testflight={target.TestFlightExternalState ?? target.TestFlightInternalState ?? "not available"}");
+            if (target.Governance is not null)
+                logger.Info($"    governance: drift={target.Governance.DriftCount}, blocked={target.Governance.BlockedCount}, converged={target.Governance.IsConverged}");
         }
         if (receipt.Cleanup.RemovedPaths.Length > 0)
             logger.Info($"Cleanup: {receipt.Cleanup.RemovedPaths.Length} path(s), {receipt.Cleanup.ReclaimedBytes} byte(s) reclaimed.");
@@ -324,6 +326,8 @@ internal static partial class Program
             logger.Info($"Receipt: {receipt.ReceiptPath}");
         foreach (var action in receipt.NextActions.Take(5))
             logger.Info($"Next: {action}");
+        foreach (var diagnostic in receipt.Diagnostics.Take(5))
+            logger.Warn($"{diagnostic.Code}: {diagnostic.Summary} Next: {diagnostic.Action}");
     }
 
     internal static PowerForgeReleaseRequest BuildReleaseRequestFromArgs(
@@ -362,6 +366,8 @@ internal static partial class Program
         request.ToolsOnly = request.ToolsOnly || toolsOnly;
         request.AppleAction = ParseAppleReleaseAction(TryGetOptionValue(argv, "--apple-action"));
         request.AppleMarketingVersion = ChooseString(request.AppleMarketingVersion, TryGetOptionValue(argv, "--apple-version"));
+        request.AppleSourceCommit = ChooseString(request.AppleSourceCommit, TryGetOptionValue(argv, "--apple-source-commit"));
+        request.AppleExpectedPlanSha256 = ChooseString(request.AppleExpectedPlanSha256, TryGetOptionValue(argv, "--apple-expected-plan-sha256"));
         request.AppleActionConfirmed = argv.Any(a => a.Equals("--confirm-apple-action", StringComparison.OrdinalIgnoreCase));
         request.AppleResume = ResolveBooleanOverride(argv, "--apple-resume", "--no-apple-resume", request.AppleResume);
         request.AppleWaitForProcessing = ResolveBooleanOverride(argv, "--apple-wait", "--no-apple-wait", request.AppleWaitForProcessing);
@@ -539,6 +545,7 @@ internal static partial class Program
         AddEnabledStep(enabledSteps, plan.SyncMetadata, "syncMetadata");
         AddEnabledStep(enabledSteps, plan.SyncAppInfo, "syncAppInfo");
         AddEnabledStep(enabledSteps, plan.SyncScreenshots, "syncScreenshots");
+        AddEnabledStep(enabledSteps, plan.CheckGovernance, "checkGovernance");
         AddEnabledStep(enabledSteps, plan.CheckReleaseReadiness, "checkReadiness");
         AddEnabledStep(enabledSteps, plan.DistributeTestFlight, "testFlight");
         AddEnabledStep(enabledSteps, plan.SubmitTestFlightBetaReview, "submitTestFlightReview");
@@ -546,6 +553,8 @@ internal static partial class Program
         AddEnabledStep(enabledSteps, plan.ReleaseApprovedVersion, "release");
         if (plan.Action == PowerForgeAppleReleaseAction.Status)
             enabledSteps.Add("status");
+        if (plan.Action == PowerForgeAppleReleaseAction.Doctor)
+            enabledSteps.Add("doctor");
         if (plan.Action == PowerForgeAppleReleaseAction.Version)
             enabledSteps.Add("version");
         if (plan.Action == PowerForgeAppleReleaseAction.Advance)
@@ -561,6 +570,7 @@ internal static partial class Program
             ReceiptPath = Path.GetRelativePath(
                 plan.ProjectRoot,
                 request.PlanOnly ? plan.PlanReceiptPath : plan.ReceiptPath).Replace('\\', '/'),
+            PlanSha256 = result.AppleReceipt?.PlanSha256,
             Resume = plan.Automation.Resume,
             WaitForProcessing = plan.Automation.WaitForProcessing,
             ProcessingTimeoutSeconds = plan.Automation.ProcessingTimeoutSeconds,
@@ -571,8 +581,14 @@ internal static partial class Program
             {
                 Name = app.Name,
                 Platform = app.Platform,
+                DistributionRoute = app.DistributionRoute,
+                ProductRole = app.ProductRole,
+                ParentTarget = app.ParentTarget,
+                Capabilities = app.Capabilities,
+                TestFlightPolicy = app.TestFlightPolicy,
                 BundleId = app.BundleId,
                 AppId = app.AppStoreConnectAppId,
+                AppIdDiscovered = app.AppStoreConnectAppIdDiscovered,
                 Scheme = app.Scheme,
                 MarketingVersion = result.AppleReceipt?.Versioning?.MarketingVersion ?? app.MarketingVersion,
                 BuildNumber = result.AppleReceipt?.Versioning?.BuildNumber ?? app.BuildNumber,

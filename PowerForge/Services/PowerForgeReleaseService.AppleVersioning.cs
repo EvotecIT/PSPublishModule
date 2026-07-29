@@ -1,37 +1,208 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
+    private void AssertApplePlanStillApproved(
+        PowerForgeAppleReleasePlan plan,
+        string? expectedPlanSha256)
+    {
+        if (string.IsNullOrWhiteSpace(expectedPlanSha256))
+            return;
+
+        var expected = expectedPlanSha256!.Trim();
+        if (expected.Length != 64 || expected.Any(static value => !Uri.IsHexDigit(value)))
+            throw new InvalidOperationException("The expected Apple plan SHA-256 must contain exactly 64 hexadecimal characters.");
+
+        var current = CreateApplePlanReceipt(plan).PlanSha256;
+        if (!string.Equals(expected, current, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Apple state or release inputs changed after plan approval. Review a new exact plan before allowing mutation.");
+        }
+    }
+
     private PowerForgeAppleReleaseReceipt CreateApplePlanReceipt(PowerForgeAppleReleasePlan plan)
     {
         PowerForgeAppleVersionReceipt? versioning = null;
         if (plan.Action == PowerForgeAppleReleaseAction.Version)
             versioning = PlanAppleVersion(plan, whatIf: true);
 
+        var screenshotSpecs = plan.Action == PowerForgeAppleReleaseAction.SubmitAppReview &&
+                              !plan.SkipReviewReadinessCheck
+            ? LoadAppleScreenshotSpecs(plan)
+            : Array.Empty<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
+        var targets = plan.Apps
+            .Select(app => CreateApplePlanTarget(plan, app, versioning, screenshotSpecs))
+            .ToArray();
         var receipt = new PowerForgeAppleReleaseReceipt
         {
             Action = plan.Action,
+            SourceCommit = plan.SourceCommit,
             PlanOnly = true,
             CheckedAt = DateTimeOffset.UtcNow,
             Success = true,
             ReceiptPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, plan.PlanReceiptPath).Replace('\\', '/'),
             Versioning = versioning,
-            Targets = plan.Apps.Select(app => new PowerForgeAppleReleaseTargetReceipt
-            {
-                Name = app.Name,
-                BundleId = app.BundleId,
-                Platform = app.Platform,
-                AppId = app.AppStoreConnectAppId,
-                Version = versioning?.MarketingVersion ?? app.MarketingVersion,
-                Build = versioning?.BuildNumber ?? app.BuildNumber,
-                SkippedSteps = new[] { "plan-only" }
-            }).ToArray(),
+            Targets = targets,
             NextActions = new[] { $"Run Apple action '{plan.Action}' without --plan after reviewing this plan receipt." }
         };
+        receipt.PlanSha256 = ComputeApplePlanSha256(receipt);
 
         if (plan.Automation.WriteReceipt)
             WriteAppleReceipt(plan.ProjectRoot, plan.PlanReceiptPath, receipt);
         return receipt;
+    }
+
+    private PowerForgeAppleReleaseTargetReceipt CreateApplePlanTarget(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        PowerForgeAppleVersionReceipt? versioning,
+        (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)[] screenshotSpecs)
+    {
+        var target = new PowerForgeAppleReleaseTargetReceipt
+        {
+            Name = app.Name,
+            BundleId = app.BundleId,
+            Platform = app.Platform,
+            DistributionRoute = app.DistributionRoute,
+            ProductRole = app.ProductRole,
+            ParentTarget = app.ParentTarget,
+            Capabilities = app.Capabilities,
+            TestFlightPolicy = app.TestFlightPolicy,
+            AppId = app.AppStoreConnectAppId,
+            AppIdDiscovered = app.AppStoreConnectAppIdDiscovered,
+            Version = versioning?.MarketingVersion ?? app.MarketingVersion,
+            Build = versioning?.BuildNumber ?? app.BuildNumber,
+            SkippedSteps = new[] { "plan-only" }
+        };
+        if (plan.Action is not (PowerForgeAppleReleaseAction.SubmitTestFlightReview or
+            PowerForgeAppleReleaseAction.SubmitAppReview or
+            PowerForgeAppleReleaseAction.Release) ||
+            !ShouldExecuteAppleTarget(plan.Action, app))
+        {
+            return target;
+        }
+
+        var state = ReadAppleReleaseState(plan, app);
+        var platform = AssertSinglePlatformState(state, app);
+        var reviewSubmission = platform.ReviewSubmissions.FirstOrDefault(static value => value.IsSubmitted == true) ??
+                               platform.ReviewSubmissions.FirstOrDefault();
+        target.Version = state.VersionString ?? target.Version;
+        target.Build = state.BuildNumber ?? target.Build;
+        target.BuildId = platform.MatchedBuild?.Id;
+        target.BuildProcessingState = platform.MatchedBuild?.ProcessingState;
+        target.DistributionVersionId = platform.Version?.Id;
+        target.DistributionState = platform.Version?.AppStoreState ?? platform.Version?.AppVersionState;
+        target.BuildSelected = platform.MatchedBuildSelected;
+        target.TestFlightInternalState = platform.BetaDetail?.InternalBuildState;
+        target.TestFlightExternalState = platform.BetaDetail?.ExternalBuildState;
+        target.TestFlightReviewState = platform.BetaReviewSubmission?.BetaReviewState;
+        target.AppReviewSubmissionId = reviewSubmission?.Id;
+        target.AppReviewState = reviewSubmission?.State;
+        target.NextActions = platform.NextActions;
+        if (plan.Action == PowerForgeAppleReleaseAction.SubmitAppReview &&
+            !plan.SkipReviewReadinessCheck)
+        {
+            var values = ResolveAppleDistributionValues(app, versionUpdate: null);
+            var matchingScreenshotSpec = ResolveMatchingScreenshotSpec(
+                screenshotSpecs,
+                app,
+                values.MarketingVersion,
+                required: screenshotSpecs.Length > 0);
+            var boundScreenshotSpec = matchingScreenshotSpec is null
+                ? null
+                : BindScreenshotSpec(matchingScreenshotSpec.Value.Spec, app, values.MarketingVersion);
+            var readiness = _checkAppleReleaseReadiness(
+                CreateAppStoreConnectCredential(plan),
+                new AppStoreConnectReleaseReadinessRequest
+                {
+                    AppId = app.AppStoreConnectAppId!,
+                    VersionString = values.MarketingVersion,
+                    BuildNumber = values.BuildNumber,
+                    Platform = app.Platform,
+                    ScreenshotSpec = boundScreenshotSpec
+                });
+            target.ReadinessChecked = true;
+            target.ReadyForSubmission = readiness.IsReady;
+            target.ScreenshotCount = readiness.ScreenshotSets.Sum(static set => set.Count);
+            target.ScreenshotDeliveryStates = readiness.ScreenshotSets
+                .SelectMany(static set => set.AssetDeliveryStates)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static stateValue => stateValue, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            target.ReadinessChecks = readiness.Checks
+                .OrderBy(static check => check.Name, StringComparer.Ordinal)
+                .ThenBy(static check => check.Message, StringComparer.Ordinal)
+                .ToArray();
+            target.ReadinessSha256 = ComputeReadinessSha256(readiness);
+        }
+        return target;
+    }
+
+    private static string ComputeApplePlanSha256(PowerForgeAppleReleaseReceipt receipt)
+    {
+        var canonical = new
+        {
+            receipt.SchemaVersion,
+            receipt.Action,
+            receipt.SourceCommit,
+            receipt.PlanOnly,
+            receipt.Success,
+            receipt.ErrorMessage,
+            receipt.Versioning,
+            receipt.Targets,
+            receipt.Cleanup,
+            receipt.Diagnostics,
+            receipt.NextActions
+        };
+        return ComputeStableSha256(canonical);
+    }
+
+    private static string ComputeStableSha256<T>(T value)
+    {
+        var options = CreateJsonOptions();
+        options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+        options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+        var payload = JsonSerializer.SerializeToUtf8Bytes(value, options);
+        using var sha256 = SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(payload)).Replace("-", string.Empty);
+    }
+
+    private static string ComputeReadinessSha256(AppStoreConnectReleaseReadinessResult readiness)
+    {
+        var canonical = new
+        {
+            readiness.AppId,
+            readiness.VersionString,
+            readiness.BuildNumber,
+            readiness.Platform,
+            readiness.IsReady,
+            readiness.Version,
+            readiness.Build,
+            readiness.SelectedBuildId,
+            readiness.Localization,
+            ScreenshotSets = readiness.ScreenshotSets
+                .OrderBy(static set => set.ScreenshotDisplayType, StringComparer.Ordinal)
+                .Select(static set => new
+                {
+                    set.ScreenshotDisplayType,
+                    set.ScreenshotSetId,
+                    set.Count,
+                    AssetDeliveryStates = set.AssetDeliveryStates.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+                    FileNames = set.FileNames.OrderBy(static value => value, StringComparer.Ordinal).ToArray()
+                })
+                .ToArray(),
+            Checks = readiness.Checks
+                .OrderBy(static check => check.Name, StringComparer.Ordinal)
+                .ThenBy(static check => check.Message, StringComparer.Ordinal)
+                .Select(static check => new { check.Name, check.Passed, check.Message })
+                .ToArray()
+        };
+        return ComputeStableSha256(canonical);
     }
 
     private PowerForgeAppleVersionReceipt SelectAppleVersion(PowerForgeAppleReleasePlan plan)
@@ -89,11 +260,16 @@ internal sealed partial class PowerForgeReleaseService
         if (!long.TryParse(current.BuildNumber, out var currentBuild) || currentBuild < 0)
             throw new InvalidOperationException($"Apple version source build number '{current.BuildNumber}' is not a non-negative integer.");
 
-        var credential = CreateAppStoreConnectCredential(plan);
-        var highestRemote = plan.Apps
-            .Select(app => _getHighestAppleBuildNumber(credential, app.AppStoreConnectAppId!, app.Platform))
-            .DefaultIfEmpty(0)
-            .Max();
+        var storeApps = plan.Apps.Where(UsesAppStoreConnect).ToArray();
+        var highestRemote = 0L;
+        if (storeApps.Length > 0)
+        {
+            var credential = CreateAppStoreConnectCredential(plan);
+            highestRemote = storeApps
+                .Select(app => _getHighestAppleBuildNumber(credential, app.AppStoreConnectAppId!, app.Platform))
+                .DefaultIfEmpty(0)
+                .Max();
+        }
         var requestedVersion = plan.RequestedMarketingVersion!.Trim();
         var nextBuild = string.Equals(current.MarketingVersion, requestedVersion, StringComparison.OrdinalIgnoreCase) &&
                         currentBuild > highestRemote

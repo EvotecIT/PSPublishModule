@@ -32,7 +32,7 @@ public sealed class GetAppStoreConnectAppInformationCommand : AsyncPSCmdlet
     public string AppId { get; set; } = string.Empty;
 
     /// <summary>Maximum result count.</summary>
-    [Parameter] public int Limit { get; set; } = 50;
+    [Parameter] [ValidateRange(1, 200)] public int Limit { get; set; } = 50;
 
     /// <summary>Reads App Information resources.</summary>
     protected override async Task ProcessRecordAsync()
@@ -41,6 +41,6 @@ public sealed class GetAppStoreConnectAppInformationCommand : AsyncPSCmdlet
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
         var appInfos = await client.GetAppInfosAsync(AppId, Limit, CancelToken);
-        WriteObject(appInfos, enumerateCollection: true);
+        WriteObject(AppStoreConnectCommandSupport.LimitResults(appInfos, Limit), enumerateCollection: true);
     }
 }

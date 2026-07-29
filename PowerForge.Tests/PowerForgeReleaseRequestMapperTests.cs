@@ -3,6 +3,16 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeReleaseRequestMapperTests
 {
     [Fact]
+    public void AppStoreConnectResultLimiterHonorsTheCmdletMaximum()
+    {
+        var limited = PSPublishModule.AppStoreConnectCommandSupport.LimitResults(
+            new[] { "first", "second", "third" },
+            limit: 2);
+
+        Assert.Equal(new[] { "first", "second" }, limited);
+    }
+
+    [Fact]
     public void Build_AllowsToolsOnlyOverrideToDisableDefaults()
     {
         var defaults = new PowerForgeReleaseRequest

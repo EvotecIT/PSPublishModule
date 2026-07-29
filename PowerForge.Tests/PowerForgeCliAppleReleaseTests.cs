@@ -5,6 +5,8 @@ namespace PowerForge.Tests;
 
 public sealed class PowerForgeCliAppleReleaseTests
 {
+    private const string ApprovedSourceCommit = "0123456789abcdef0123456789abcdef01234567";
+
     [Fact]
     public async Task AppleRelease_CliUsesDedicatedEnvelopeAndReportsLegacyConfirmation()
     {
@@ -24,8 +26,9 @@ public sealed class PowerForgeCliAppleReleaseTests
                 """);
             var apiKeyDirectory = Directory.CreateDirectory(Path.Combine(tempRoot, ".appstoreconnect"));
             File.WriteAllText(Path.Combine(apiKeyDirectory.FullName, "AuthKey_TEST123456.p8"), "test-private-key");
+            File.WriteAllText(Path.Combine(tempRoot, "governance.json"), """{ "schemaVersion": 1, "appId": "1234567890", "accessibility": [ { "deviceFamily": "IPHONE", "supportsVoiceover": true } ] }""");
             var configPath = Path.Combine(tempRoot, "powerforge.release.json");
-            WriteReleaseConfig(configPath, submitForReview: false, includeInvalidModule: true);
+            WriteReleaseConfig(configPath, submitForReview: false, includeInvalidModule: true, includeGovernance: true);
 
             var status = await RunCliAsync(
                 repoRoot,
@@ -41,8 +44,20 @@ public sealed class PowerForgeCliAppleReleaseTests
                 Assert.True(root.GetProperty("success").GetBoolean());
                 var result = root.GetProperty("result");
                 Assert.Equal("Status", result.GetProperty("action").GetString());
+                Assert.Matches("^[0-9A-F]{64}$", result.GetProperty("planSha256").GetString()!);
                 Assert.False(result.GetProperty("requiresConfirmation").GetBoolean());
                 Assert.Equal("status", Assert.Single(result.GetProperty("enabledSteps").EnumerateArray()).GetString());
+            }
+
+            var doctor = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-release Doctor --config \"{configPath}\" --plan --summary --output json");
+            Assert.Equal(0, doctor.ExitCode);
+            using (var doctorDocument = JsonDocument.Parse(doctor.StdOut))
+            {
+                var steps = doctorDocument.RootElement.GetProperty("result").GetProperty("enabledSteps").EnumerateArray().Select(step => step.GetString()).ToArray();
+                Assert.Contains("doctor", steps);
+                Assert.Contains("checkGovernance", steps);
             }
 
             var advance = await RunCliAsync(
@@ -110,10 +125,188 @@ public sealed class PowerForgeCliAppleReleaseTests
         }
     }
 
+    [Fact]
+    public async Task AppleScreenshots_ManifestResolvesBlankAppIdFromSelectedReleaseTarget()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = CreateTempDirectory();
+
+        try
+        {
+            var screenshotDirectory = Directory.CreateDirectory(Path.Combine(tempRoot, "screenshots"));
+            File.WriteAllBytes(
+                Path.Combine(screenshotDirectory.FullName, "01-home.png"),
+                Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII="));
+            var screenshotConfigPath = Path.Combine(tempRoot, "screenshots.json");
+            File.WriteAllText(
+                screenshotConfigPath,
+                """
+                {
+                  "AppId": "",
+                  "UseReleaseVersion": true,
+                  "Platform": "iOS",
+                  "Locale": "en-US",
+                  "ScreenshotSets": [
+                    {
+                      "ScreenshotDisplayType": "APP_IPHONE_67",
+                      "Path": "screenshots",
+                      "AllowedDimensions": [ "1x1" ]
+                    }
+                  ],
+                  "Quality": {
+                    "Enabled": true,
+                    "MinimumFileBytes": 1,
+                    "MinimumKilobytesPerMegapixel": 0,
+                    "RequireApprovalManifest": true,
+                    "ApprovalManifestPath": "approval.json"
+                  }
+                }
+                """);
+            var releaseConfigPath = Path.Combine(tempRoot, "powerforge.release.json");
+            WriteReleaseConfig(releaseConfigPath, submitForReview: false, includeInvalidModule: false);
+            var manifestPath = Path.Combine(tempRoot, "approval.json");
+
+            var result = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-screenshots manifest --config \"{screenshotConfigPath}\" --release-config \"{releaseConfigPath}\" --target Sample --version 1.5.0 --source-commit {ApprovedSourceCommit} --approved-by release-owner --allowed-root \"{screenshotDirectory.FullName}\" --out \"{manifestPath}\" --write-root \"{tempRoot}\" --output json");
+
+            Assert.True(
+                result.ExitCode == 0,
+                $"CLI exit code {result.ExitCode}\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
+            var manifest = JsonSerializer.Deserialize<AppStoreConnectScreenshotApprovalManifest>(
+                File.ReadAllText(manifestPath),
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true,
+                    Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+                });
+            Assert.NotNull(manifest);
+            Assert.Equal("1234567890", manifest!.AppId);
+            Assert.Equal("1.5.0", manifest.VersionString);
+            Assert.Equal(ApprovedSourceCommit, manifest.SourceCommit);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AppleScreenshots_ManifestRejectsSymlinkOutputEscapeFromTrustedWriteRoot()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = CreateTempDirectory();
+        var outsideRoot = CreateTempDirectory();
+        var linkPath = Path.Combine(tempRoot, "manifest-link");
+
+        try
+        {
+            var screenshotDirectory = Directory.CreateDirectory(Path.Combine(tempRoot, "screenshots"));
+            File.WriteAllBytes(Path.Combine(screenshotDirectory.FullName, "01-home.png"),
+                Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII="));
+            var screenshotConfigPath = Path.Combine(tempRoot, "screenshots.json");
+            File.WriteAllText(screenshotConfigPath,
+                """{ "AppId": "1234567890", "Platform": "iOS", "Locale": "en-US", "ScreenshotSets": [ { "ScreenshotDisplayType": "APP_IPHONE_67", "Path": "screenshots", "AllowedDimensions": [ "1x1" ] } ] }""");
+            Directory.CreateSymbolicLink(linkPath, outsideRoot);
+            var manifestPath = Path.Combine(linkPath, "approval.json");
+
+            var result = await RunCliAsync(repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-screenshots manifest --config \"{screenshotConfigPath}\" --version 1.5.0 --source-commit {ApprovedSourceCommit} --approved-by release-owner --allowed-root \"{screenshotDirectory.FullName}\" --out \"{manifestPath}\" --write-root \"{tempRoot}\" --output json");
+
+            Assert.Equal(1, result.ExitCode);
+            Assert.Contains("link or reparse point", result.StdOut + result.StdErr, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(Path.Combine(outsideRoot, "approval.json")));
+        }
+        finally
+        {
+            if (Directory.Exists(linkPath)) Directory.Delete(linkPath);
+            if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
+            if (Directory.Exists(outsideRoot)) Directory.Delete(outsideRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AppleGovernance_ValidatesOfflineAndBlocksUnconfirmedApplyBeforeCredentials()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = CreateTempDirectory();
+        try
+        {
+            var configPath = Path.Combine(tempRoot, "governance.json");
+            File.WriteAllText(configPath,
+                """
+                {
+                  "schemaVersion": 1,
+                  "appId": "1234567890",
+                  "accessibility": [
+                    { "deviceFamily": "IPHONE", "supportsVoiceover": true }
+                  ]
+                }
+                """);
+
+            var validation = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-governance validate --config \"{configPath}\" --output json");
+            Assert.Equal(0, validation.ExitCode);
+            using (var document = JsonDocument.Parse(validation.StdOut))
+            {
+                Assert.Equal("apple-governance validate", document.RootElement.GetProperty("command").GetString());
+                Assert.True(document.RootElement.GetProperty("success").GetBoolean());
+                Assert.Empty(document.RootElement.GetProperty("result").GetProperty("findings").EnumerateArray());
+            }
+
+            var compactValidation = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-governance validate --config \"{configPath}\" --summary --output json");
+            Assert.Equal(0, compactValidation.ExitCode);
+            using (var document = JsonDocument.Parse(compactValidation.StdOut))
+            {
+                var result = document.RootElement.GetProperty("result");
+                Assert.Equal(0, result.GetProperty("driftCount").GetInt32());
+                Assert.Equal(0, result.GetProperty("findingCount").GetInt32());
+                Assert.False(result.TryGetProperty("changes", out _));
+            }
+
+            var apply = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-governance apply --config \"{configPath}\" --output json");
+            Assert.Equal(2, apply.ExitCode);
+            using var rejected = JsonDocument.Parse(apply.StdOut);
+            Assert.Contains("requires --confirm", rejected.RootElement.GetProperty("error").GetString(), StringComparison.OrdinalIgnoreCase);
+
+            var confirmedWithoutPlan = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-governance apply --config \"{configPath}\" --confirm --output json");
+            Assert.Equal(2, confirmedWithoutPlan.ExitCode);
+            using (var missingPlan = JsonDocument.Parse(confirmedWithoutPlan.StdOut))
+            {
+                Assert.Contains("requires --reviewed-plan", missingPlan.RootElement.GetProperty("error").GetString(), StringComparison.OrdinalIgnoreCase);
+            }
+
+            var reviewedPlanPath = Path.Combine(tempRoot, "reviewed-plan.json");
+            File.WriteAllText(reviewedPlanPath,
+                """{ "appId": "1234567890", "checkedAtUtc": "2026-07-28T00:00:00Z", "changes": [], "findings": [], "driftCount": 0, "blockedCount": 0, "isConverged": true, "canApply": true }""");
+            var missingKeyPath = Path.Combine(tempRoot, "missing-auth-key.p8");
+            var confirmedWithPlan = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-governance apply --config \"{configPath}\" --reviewed-plan \"{reviewedPlanPath}\" --confirm --key-path \"{missingKeyPath}\" --key-id TEST --issuer-id TEST --output json");
+            Assert.Equal(2, confirmedWithPlan.ExitCode);
+            using var parsedPlan = JsonDocument.Parse(confirmedWithPlan.StdOut);
+            Assert.Contains("private key was not found", parsedPlan.RootElement.GetProperty("error").GetString(), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
     private static void WriteReleaseConfig(
         string path,
         bool submitForReview,
-        bool includeInvalidModule)
+        bool includeInvalidModule,
+        bool includeGovernance = false)
         => File.WriteAllText(
             path,
             $$"""
@@ -129,6 +322,7 @@ public sealed class PowerForgeCliAppleReleaseTests
                 "AppStoreConnectApiKeyPath": ".appstoreconnect/AuthKey_TEST123456.p8",
                 "AppStoreConnectApiKeyId": "TEST123456",
                 "AppStoreConnectApiIssuerId": "00000000-0000-0000-0000-000000000000",
+                {{(includeGovernance ? "\"GovernanceConfigPath\": \"governance.json\"," : string.Empty)}}
                 "Archive": false,
                 "Upload": false,
                 "SubmitForReview": {{submitForReview.ToString().ToLowerInvariant()}},

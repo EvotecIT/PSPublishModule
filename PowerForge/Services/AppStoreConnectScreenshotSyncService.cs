@@ -54,7 +54,7 @@ public sealed class AppStoreConnectScreenshotSyncService
             throw new ArgumentException($"Duplicate screenshot display type mapping: {string.Join(", ", duplicateDisplayTypes)}", nameof(request));
 
         var validation = new AppStoreConnectScreenshotSyncConfigValidator()
-            .Validate(spec, request.BaseDirectory);
+            .Validate(spec, request.BaseDirectory, expectedSourceCommit: request.ExpectedSourceCommit);
         if (!validation.IsValid)
         {
             var messages = validation.Messages

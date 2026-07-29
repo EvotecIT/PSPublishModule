@@ -28,6 +28,9 @@ public sealed class AppStoreConnectReleaseStateRequest
 
     /// <summary>Include all beta groups when no group filters are supplied.</summary>
     public bool IncludeAllBetaGroups { get; set; }
+
+    /// <summary>Read release-critical app configuration, monetization, feedback, and webhook inventory.</summary>
+    public bool IncludeControlPlane { get; set; }
 }
 
 /// <summary>
@@ -52,6 +55,9 @@ public sealed class AppStoreConnectReleaseStateResult
 
     /// <summary>Included beta group state.</summary>
     public AppStoreConnectBetaGroupReleaseState[] BetaGroups { get; set; } = Array.Empty<AppStoreConnectBetaGroupReleaseState>();
+
+    /// <summary>Deep control-plane inventory, when requested.</summary>
+    public AppStoreConnectControlPlaneState? ControlPlane { get; set; }
 
     /// <summary>Flattened next actions across platforms and beta groups.</summary>
     public string[] NextActions { get; set; } = Array.Empty<string>();

@@ -64,6 +64,9 @@ Compresses a managed PowerShell resource folder into a NuGet package.
 ### [Convert-ProjectConsistency](Convert-ProjectConsistency.md)
 Converts a project to a consistent encoding/line ending policy and reports the results.
 
+### [Export-AppStoreConnectGovernance](Export-AppStoreConnectGovernance.md)
+Exports current Apple commerce and compliance state as a reviewable governance declaration.
+
 ### [Export-CertificateForNuGet](Export-CertificateForNuGet.md)
 Exports a code-signing certificate to DER format for NuGet.org registration.
 
@@ -94,6 +97,9 @@ Reads App Store Connect TestFlight beta testers.
 ### [Get-AppStoreConnectBuild](Get-AppStoreConnectBuild.md)
 Reads build information from App Store Connect.
 
+### [Get-AppStoreConnectGovernancePlan](Get-AppStoreConnectGovernancePlan.md)
+Reads Apple state and produces a non-mutating commerce and compliance drift plan.
+
 ### [Get-AppStoreConnectReleaseState](Get-AppStoreConnectReleaseState.md)
 Reads a compact App Store Connect release state summary for App Store and TestFlight release work.
 
@@ -117,6 +123,9 @@ Reads App Store version information from App Store Connect.
 
 ### [Get-AppStoreConnectVersionLocalization](Get-AppStoreConnectVersionLocalization.md)
 Reads App Store version localizations from App Store Connect.
+
+### [Get-AppStoreConnectWebhook](Get-AppStoreConnectWebhook.md)
+Lists App Store Connect webhooks for an app.
 
 ### [Get-BenchmarkInput](Get-BenchmarkInput.md)
 Gets a caller-supplied benchmark input variable.
@@ -254,6 +263,9 @@ Creates an App Store Connect screenshot set for an App Store version localizatio
 
 ### [New-AppStoreConnectSubscriptionIntroductoryOffer](New-AppStoreConnectSubscriptionIntroductoryOffer.md)
 Creates an App Store Connect introductory offer for an auto-renewable subscription.
+
+### [New-AppStoreConnectWebhook](New-AppStoreConnectWebhook.md)
+Creates an App Store Connect webhook.
 
 ### [New-BenchmarkSuite](New-BenchmarkSuite.md)
 Declares a PowerShell benchmark suite.
@@ -489,6 +501,9 @@ Creates or finds an App Store version and selects a processed build for Distribu
 ### [Set-AppStoreConnectVersionLocalization](Set-AppStoreConnectVersionLocalization.md)
 Updates localized metadata fields on an App Store version localization.
 
+### [Set-AppStoreConnectWebhook](Set-AppStoreConnectWebhook.md)
+Updates an App Store Connect webhook.
+
 ### [Set-BenchmarkArtifacts](Set-BenchmarkArtifacts.md)
 Sets requested benchmark artifacts.
 
@@ -544,6 +559,9 @@ Submits a prepared App Store Connect Distribution version to App Review.
 ### [Sync-AppStoreConnectAppInfoMetadata](Sync-AppStoreConnectAppInfoMetadata.md)
 Syncs localized app-level App Store information from a JSON configuration file.
 
+### [Sync-AppStoreConnectGovernance](Sync-AppStoreConnectGovernance.md)
+Converges reviewed App Store commerce and compliance state through an approval-gated plan.
+
 ### [Sync-AppStoreConnectScreenshots](Sync-AppStoreConnectScreenshots.md)
 Syncs local screenshot folders to App Store Connect screenshot sets.
 
@@ -553,11 +571,17 @@ Syncs localized App Store version metadata from a JSON configuration file.
 ### [Test-AppleAppReleaseDrift](Test-AppleAppReleaseDrift.md)
 Tests local Xcode project version values against App Store Connect.
 
+### [Test-AppStoreConnectGovernanceConfig](Test-AppStoreConnectGovernanceConfig.md)
+Validates declarative App Store commercial and compliance state without contacting Apple.
+
 ### [Test-AppStoreConnectReleaseReadiness](Test-AppStoreConnectReleaseReadiness.md)
 Checks whether an App Store Connect Distribution version is ready for submission.
 
 ### [Test-AppStoreConnectScreenshotSyncConfig](Test-AppStoreConnectScreenshotSyncConfig.md)
 Validates an App Store Connect screenshot sync configuration against local files.
+
+### [Test-AppStoreConnectWebhook](Test-AppStoreConnectWebhook.md)
+Sends a test delivery to an App Store Connect webhook.
 
 ### [Test-BenchmarkGate](Test-BenchmarkGate.md)
 Tests normalized benchmark summaries against a JSON baseline.

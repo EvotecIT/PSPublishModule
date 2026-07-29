@@ -13,8 +13,20 @@ inputs:
     description: Checked-in PowerForge tool manifest path.
     required: false
     default: .powerforge/powerforge.tool.json
+  tool-path:
+    description: Optional already-built immutable PowerForge executable. When set, manifest installation is skipped.
+    required: false
+    default: ""
   marketing-version:
     description: Marketing version required by Version.
+    required: false
+    default: ""
+  source-commit:
+    description: Exact source commit whose reviewed release assets may be used.
+    required: false
+    default: ""
+  expected-plan-sha256:
+    description: Exact reviewed plan SHA-256 that execution must revalidate immediately before mutation.
     required: false
     default: ""
   target:
@@ -46,6 +58,9 @@ outputs:
   receipt-path:
     description: Actual or plan receipt path.
     value: ${{ steps.release.outputs.receipt-path }}
+  plan-sha256:
+    description: Stable SHA-256 of an exact read-only Apple transition plan.
+    value: ${{ steps.release.outputs.plan-sha256 }}
   version-source-path:
     description: Version source changed by Version, when applicable.
     value: ${{ steps.release.outputs.version-source-path }}
@@ -61,17 +76,49 @@ outputs:
   next-actions:
     description: Compact JSON array of recommended next actions.
     value: ${{ steps.release.outputs.next-actions }}
+  diagnostics:
+    description: Compact JSON array of structured Apple diagnostics.
+    value: ${{ steps.release.outputs.diagnostics }}
 
 runs:
   using: composite
   steps:
+    - name: Validate exact tracked release inputs
+      shell: pwsh
+      env:
+        CONFIG_PATH: ${{ inputs.config-path }}
+        TOOL_MANIFEST_PATH: ${{ inputs.tool-manifest-path }}
+        SOURCE_COMMIT: ${{ inputs.source-commit }}
+        TOOL_PATH: ${{ inputs.tool-path }}
+      run: >-
+        & '${{ github.action_path }}/Assert-TrackedAppleReleaseInputs.ps1'
+        -ConfigPath $env:CONFIG_PATH
+        -ToolManifestPath $env:TOOL_MANIFEST_PATH
+        -SourceCommit $env:SOURCE_COMMIT
+        -SkipToolManifest:(-not [string]::IsNullOrWhiteSpace($env:TOOL_PATH))
+
     - name: Setup pinned PowerForge
       id: setup
+      if: inputs.tool-path == ''
       shell: pwsh
       env:
         MANIFEST_PATH: ${{ inputs.tool-manifest-path }}
       run: |
         & '${{ github.action_path }}/../setup-powerforge/Install-PinnedPowerForge.ps1' -ManifestPath $env:MANIFEST_PATH
+
+    - name: Select immutable PowerForge executable
+      id: tool
+      shell: pwsh
+      env:
+        INPUT_TOOL_PATH: ${{ inputs.tool-path }}
+        INSTALLED_TOOL_PATH: ${{ steps.setup.outputs.tool-path }}
+        INSTALLED_VERSION: ${{ steps.setup.outputs.version }}
+      run: |
+        $toolPath = if ([string]::IsNullOrWhiteSpace($env:INPUT_TOOL_PATH)) { $env:INSTALLED_TOOL_PATH } else { $env:INPUT_TOOL_PATH }
+        if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) { throw "PowerForge executable was not found: $toolPath" }
+        if (-not $IsWindows) { & chmod +x $toolPath }
+        "path=$toolPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "version=$($env:INSTALLED_VERSION)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
     - name: Write the temporary App Store Connect key
       id: credential
@@ -79,8 +126,13 @@ runs:
       env:
         PRIVATE_KEY: ${{ inputs.private-key }}
       run: |
+        if ([string]::IsNullOrWhiteSpace($env:PRIVATE_KEY)) {
+          "path=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          exit 0
+        }
         $path = Join-Path $env:RUNNER_TEMP "AuthKey_PowerForge_$PID.p8"
-        [System.IO.File]::WriteAllText($path, $env:PRIVATE_KEY, [System.Text.UTF8Encoding]::new($false))
+        $privateKey = $env:PRIVATE_KEY -replace '\\n', "`n"
+        [System.IO.File]::WriteAllText($path, $privateKey, [System.Text.UTF8Encoding]::new($false))
         if (-not $IsWindows) { & chmod 600 $path }
         "path=$path" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
@@ -91,11 +143,13 @@ runs:
         INPUT_ACTION: ${{ inputs.action }}
         INPUT_CONFIG_PATH: ${{ inputs.config-path }}
         INPUT_MARKETING_VERSION: ${{ inputs.marketing-version }}
+        INPUT_SOURCE_COMMIT: ${{ inputs.source-commit }}
+        INPUT_EXPECTED_PLAN_SHA256: ${{ inputs.expected-plan-sha256 }}
         INPUT_TARGET: ${{ inputs.target }}
         INPUT_PLAN_ONLY: ${{ inputs.plan-only }}
         INPUT_CONFIRM: ${{ inputs.confirm }}
-        POWERFORGE_TOOL_PATH: ${{ steps.setup.outputs.tool-path }}
-        POWERFORGE_VERSION: ${{ steps.setup.outputs.version }}
+        POWERFORGE_TOOL_PATH: ${{ steps.tool.outputs.path }}
+        POWERFORGE_VERSION: ${{ steps.tool.outputs.version }}
         APP_STORE_CONNECT_ISSUER_ID: ${{ inputs.issuer-id }}
         APP_STORE_CONNECT_KEY_ID: ${{ inputs.key-id }}
         APP_STORE_CONNECT_PRIVATE_KEY_PATH: ${{ steps.credential.outputs.path }}

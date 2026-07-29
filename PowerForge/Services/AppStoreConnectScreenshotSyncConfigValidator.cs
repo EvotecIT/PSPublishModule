@@ -1,6 +1,8 @@
 namespace PowerForge;
 
 using System.Security.Cryptography;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 /// <summary>
 /// Validates App Store Connect screenshot sync configuration against local files.
@@ -13,11 +15,13 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
     /// <param name="spec">Screenshot sync configuration.</param>
     /// <param name="baseDirectory">Base directory used to resolve relative screenshot paths.</param>
     /// <param name="configPath">Optional configuration path used in the result.</param>
+    /// <param name="expectedSourceCommit">Exact release source commit expected by a required approval manifest.</param>
     /// <returns>Local validation result.</returns>
     public AppStoreConnectScreenshotSyncValidationResult Validate(
         AppStoreConnectScreenshotSyncSpec spec,
         string baseDirectory,
-        string? configPath = null)
+        string? configPath = null,
+        string? expectedSourceCommit = null)
     {
         if (spec is null)
             throw new ArgumentNullException(nameof(spec));
@@ -39,6 +43,7 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
             setResults.Add(ValidateSet(set, spec.Quality ?? new AppStoreConnectScreenshotQualitySpec(), baseDirectory));
 
         messages.AddRange(FindDuplicateDisplayTypes(spec.ScreenshotSets));
+        messages.AddRange(ValidateApprovalManifest(spec, baseDirectory, setResults, expectedSourceCommit));
         var isValid = messages.Count == 0 && setResults.All(static set => set.IsValid);
 
         return new AppStoreConnectScreenshotSyncValidationResult
@@ -48,6 +53,116 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
             Messages = messages.ToArray(),
             ScreenshotSets = setResults.ToArray()
         };
+    }
+
+    private static string[] ValidateApprovalManifest(
+        AppStoreConnectScreenshotSyncSpec spec,
+        string baseDirectory,
+        IReadOnlyCollection<AppStoreConnectScreenshotSetSyncValidationResult> sets,
+        string? expectedSourceCommit)
+    {
+        var quality = spec.Quality ?? new AppStoreConnectScreenshotQualitySpec();
+        if (!quality.RequireApprovalManifest)
+            return Array.Empty<string>();
+        if (string.IsNullOrWhiteSpace(quality.ApprovalManifestPath))
+            return new[] { "Screenshot approval manifest is required but ApprovalManifestPath is missing." };
+
+        if (string.IsNullOrWhiteSpace(spec.VersionString))
+        {
+            return new[]
+            {
+                "VersionString is required when a screenshot approval manifest is enforced; VersionId alone cannot bind reviewed bytes to an App Store version."
+            };
+        }
+
+        var path = ResolvePath(baseDirectory, quality.ApprovalManifestPath!);
+        if (!File.Exists(path))
+            return new[] { $"Screenshot approval manifest was not found: {path}" };
+
+        AppStoreConnectScreenshotApprovalManifest? manifest;
+        try
+        {
+            manifest = JsonSerializer.Deserialize<AppStoreConnectScreenshotApprovalManifest>(
+                File.ReadAllText(path),
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true,
+                    ReadCommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true,
+                    Converters = { new JsonStringEnumConverter() }
+                });
+        }
+        catch (Exception exception)
+        {
+            return new[] { $"Screenshot approval manifest is invalid JSON: {exception.Message}" };
+        }
+        if (manifest is null)
+            return new[] { "Screenshot approval manifest could not be read." };
+
+        var messages = new List<string>();
+        if (manifest.SchemaVersion != 2)
+            messages.Add($"Screenshot approval manifest SchemaVersion must be 2, not {manifest.SchemaVersion}.");
+        if (manifest.ApprovedAt == default)
+            messages.Add("Screenshot approval manifest ApprovedAt is required.");
+        if (string.IsNullOrWhiteSpace(manifest.ApprovedBy))
+            messages.Add("Screenshot approval manifest ApprovedBy is required.");
+        if (string.IsNullOrWhiteSpace(manifest.SourceCommit) ||
+            manifest.SourceCommit.Trim().Length != 40 ||
+            !manifest.SourceCommit.Trim().All(Uri.IsHexDigit))
+        {
+            messages.Add("Screenshot approval manifest SourceCommit must be an exact 40-character Git commit SHA.");
+        }
+        var normalizedExpectedSourceCommit = expectedSourceCommit?.Trim() ?? string.Empty;
+        if (normalizedExpectedSourceCommit.Length != 40 ||
+            !normalizedExpectedSourceCommit.All(Uri.IsHexDigit))
+        {
+            messages.Add("ExpectedSourceCommit must be an exact 40-character Git commit SHA when an approval manifest is required.");
+        }
+        else if (!string.Equals(manifest.SourceCommit, normalizedExpectedSourceCommit, StringComparison.OrdinalIgnoreCase))
+        {
+            messages.Add(
+                $"Screenshot approval manifest source commit '{manifest.SourceCommit}' does not match release source commit '{normalizedExpectedSourceCommit}'.");
+        }
+        if (!string.IsNullOrWhiteSpace(spec.VersionString) &&
+            !string.Equals(manifest.VersionString, spec.VersionString, StringComparison.OrdinalIgnoreCase))
+        {
+            messages.Add($"Screenshot approval manifest version '{manifest.VersionString}' does not match release version '{spec.VersionString}'.");
+        }
+        if (!string.Equals(manifest.AppId, spec.AppId, StringComparison.Ordinal))
+            messages.Add($"Screenshot approval manifest app id '{manifest.AppId}' does not match config app id '{spec.AppId}'.");
+        if (manifest.Platform != spec.Platform)
+            messages.Add($"Screenshot approval manifest platform '{manifest.Platform}' does not match config platform '{spec.Platform}'.");
+        if (!string.Equals(manifest.Locale, spec.Locale, StringComparison.OrdinalIgnoreCase))
+            messages.Add($"Screenshot approval manifest locale '{manifest.Locale}' does not match config locale '{spec.Locale}'.");
+
+        var entries = manifest.Screenshots ?? Array.Empty<AppStoreConnectScreenshotApprovalEntry>();
+        foreach (var set in sets)
+        {
+            foreach (var file in set.Files)
+            {
+                var entry = entries.FirstOrDefault(candidate =>
+                    string.Equals(candidate.ScreenshotDisplayType, set.ScreenshotDisplayType, StringComparison.OrdinalIgnoreCase) &&
+                    (string.Equals(Path.GetFileName(candidate.File), Path.GetFileName(file), StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(ResolvePath(baseDirectory, candidate.File), Path.GetFullPath(file), StringComparison.OrdinalIgnoreCase)));
+                if (entry is null)
+                {
+                    messages.Add($"Screenshot '{Path.GetFileName(file)}' in '{set.ScreenshotDisplayType}' is not present in the approval manifest.");
+                    continue;
+                }
+
+                var sha256 = ComputeSha256(file);
+                if (!string.Equals(entry.Sha256, sha256, StringComparison.OrdinalIgnoreCase))
+                    messages.Add($"Screenshot '{Path.GetFileName(file)}' changed after approval (SHA-256 mismatch).");
+                if (TryReadPngDimensions(file, out var width, out var height) &&
+                    (entry.Width != width || entry.Height != height))
+                {
+                    messages.Add(
+                        $"Screenshot '{Path.GetFileName(file)}' dimensions {width}x{height} do not match approved {entry.Width}x{entry.Height}.");
+                }
+            }
+        }
+
+        return messages.ToArray();
     }
 
     private static AppStoreConnectScreenshotSetSyncValidationResult ValidateSet(
@@ -163,7 +278,7 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
         return dimensions.ToArray();
     }
 
-    private static bool TryReadPngDimensions(string path, out int width, out int height)
+    internal static bool TryReadPngDimensions(string path, out int width, out int height)
     {
         width = 0;
         height = 0;
@@ -192,7 +307,7 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
            value[offset + 2] << 8 |
            value[offset + 3];
 
-    private static string ComputeSha256(string path)
+    internal static string ComputeSha256(string path)
     {
         using var sha256 = SHA256.Create();
         using var stream = File.OpenRead(path);

@@ -1,0 +1,141 @@
+name: PowerForge Apple governance action
+description: Snapshot, validate, plan, or apply declarative App Store commerce and compliance state.
+
+inputs:
+  operation:
+    description: Snapshot, Validate, Plan, or Apply.
+    required: true
+  config-path:
+    description: Governance declaration path for Validate, Plan, or Apply.
+    required: false
+    default: ""
+  app-id:
+    description: Exact App Store Connect app id for Snapshot.
+    required: false
+    default: ""
+  output-path:
+    description: Snapshot destination path.
+    required: false
+    default: ""
+  release-config-path:
+    description: Optional release config used to resolve credentials.
+    required: false
+    default: ""
+  receipt-path:
+    description: Explicit compact Plan or Apply receipt path.
+    required: false
+    default: ""
+  reviewed-plan-path:
+    description: Approved full Plan receipt that Apply must match before the first mutation.
+    required: false
+    default: ""
+  tool-manifest-path:
+    description: Checked-in PowerForge tool manifest path.
+    required: false
+    default: .powerforge/powerforge.tool.json
+  tool-path:
+    description: Optional already-built immutable PowerForge executable.
+    required: false
+    default: ""
+  confirm:
+    description: Confirm Apply.
+    required: false
+    default: "false"
+  fail-on-drift:
+    description: Return a failing exit code when Plan finds drift.
+    required: false
+    default: "false"
+  maximum-changes:
+    description: Maximum changes in one Apply run.
+    required: false
+    default: "500"
+  issuer-id:
+    description: App Store Connect issuer id.
+    required: false
+  key-id:
+    description: App Store Connect key id.
+    required: false
+  private-key:
+    description: App Store Connect private key content.
+    required: false
+
+outputs:
+  receipt-path:
+    description: Snapshot, plan, or apply receipt path.
+    value: ${{ steps.governance.outputs.receipt-path }}
+  drift-count:
+    description: Planned or remaining drift count.
+    value: ${{ steps.governance.outputs.drift-count }}
+  blocked-count:
+    description: Planned or remaining blocked count.
+    value: ${{ steps.governance.outputs.blocked-count }}
+  converged:
+    description: Whether declared state is converged.
+    value: ${{ steps.governance.outputs.converged }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup pinned PowerForge
+      id: setup
+      if: inputs.tool-path == ''
+      shell: pwsh
+      env:
+        MANIFEST_PATH: ${{ inputs.tool-manifest-path }}
+      run: |
+        & '${{ github.action_path }}/../setup-powerforge/Install-PinnedPowerForge.ps1' -ManifestPath $env:MANIFEST_PATH
+
+    - name: Select immutable PowerForge executable
+      id: tool
+      shell: pwsh
+      env:
+        INPUT_TOOL_PATH: ${{ inputs.tool-path }}
+        INSTALLED_TOOL_PATH: ${{ steps.setup.outputs.tool-path }}
+      run: |
+        $toolPath = if ([string]::IsNullOrWhiteSpace($env:INPUT_TOOL_PATH)) { $env:INSTALLED_TOOL_PATH } else { $env:INPUT_TOOL_PATH }
+        if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) { throw "PowerForge executable was not found: $toolPath" }
+        if (-not $IsWindows) { & chmod +x $toolPath }
+        "path=$toolPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+    - name: Write temporary App Store Connect key
+      id: credential
+      shell: pwsh
+      env:
+        PRIVATE_KEY: ${{ inputs.private-key }}
+      run: |
+        if ([string]::IsNullOrWhiteSpace($env:PRIVATE_KEY)) {
+          "path=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          exit 0
+        }
+        $path = Join-Path $env:RUNNER_TEMP "AuthKey_PowerForge_Governance_$PID.p8"
+        [System.IO.File]::WriteAllText($path, ($env:PRIVATE_KEY -replace '\\n', "`n"), [System.Text.UTF8Encoding]::new($false))
+        if (-not $IsWindows) { & chmod 600 $path }
+        "path=$path" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+    - name: Run Apple governance operation
+      id: governance
+      shell: pwsh
+      env:
+        POWERFORGE_TOOL_PATH: ${{ steps.tool.outputs.path }}
+        INPUT_OPERATION: ${{ inputs.operation }}
+        INPUT_CONFIG_PATH: ${{ inputs.config-path }}
+        INPUT_APP_ID: ${{ inputs.app-id }}
+        INPUT_OUTPUT_PATH: ${{ inputs.output-path }}
+        INPUT_RELEASE_CONFIG_PATH: ${{ inputs.release-config-path }}
+        INPUT_RECEIPT_PATH: ${{ inputs.receipt-path }}
+        INPUT_REVIEWED_PLAN_PATH: ${{ inputs.reviewed-plan-path }}
+        INPUT_CONFIRM: ${{ inputs.confirm }}
+        INPUT_FAIL_ON_DRIFT: ${{ inputs.fail-on-drift }}
+        INPUT_MAXIMUM_CHANGES: ${{ inputs.maximum-changes }}
+        APP_STORE_CONNECT_ISSUER_ID: ${{ inputs.issuer-id }}
+        APP_STORE_CONNECT_KEY_ID: ${{ inputs.key-id }}
+        APP_STORE_CONNECT_PRIVATE_KEY_PATH: ${{ steps.credential.outputs.path }}
+      run: |
+        & '${{ github.action_path }}/Invoke-PowerForgeAppleGovernance.ps1'
+
+    - name: Remove temporary App Store Connect key
+      if: always() && steps.credential.outputs.path != ''
+      shell: pwsh
+      env:
+        PRIVATE_KEY_PATH: ${{ steps.credential.outputs.path }}
+      run: Remove-Item -LiteralPath $env:PRIVATE_KEY_PATH -Force -ErrorAction SilentlyContinue

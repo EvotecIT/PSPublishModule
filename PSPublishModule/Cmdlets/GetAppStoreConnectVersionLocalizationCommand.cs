@@ -35,7 +35,7 @@ public sealed class GetAppStoreConnectVersionLocalizationCommand : AsyncPSCmdlet
     [Parameter] public string? Locale { get; set; }
 
     /// <summary>Maximum result count.</summary>
-    [Parameter] public int Limit { get; set; } = 20;
+    [Parameter] [ValidateRange(1, 200)] public int Limit { get; set; } = 20;
 
     /// <summary>Reads App Store version localizations.</summary>
     protected override async Task ProcessRecordAsync()
@@ -44,6 +44,6 @@ public sealed class GetAppStoreConnectVersionLocalizationCommand : AsyncPSCmdlet
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
         var localizations = await client.GetVersionLocalizationsAsync(VersionId, Locale, Limit, CancelToken);
-        WriteObject(localizations, enumerateCollection: true);
+        WriteObject(AppStoreConnectCommandSupport.LimitResults(localizations, Limit), enumerateCollection: true);
     }
 }

@@ -114,6 +114,18 @@
     "AppleBuildNumberPolicy": {
       "type": "string",
       "enum": ["Explicit", "KeepExisting", "IncrementExisting"]
+    },
+    "AppleDistributionRoute": {
+      "type": "string",
+      "enum": ["AppStore", "TestFlightOnly", "DirectNotarized", "EmbeddedCompanion", "DevelopmentOnly"]
+    },
+    "AppleProductRole": {
+      "type": "string",
+      "enum": ["PrimaryApp", "CompanionApp", "Extension", "EmbeddedExecutable", "Capability"]
+    },
+    "AppleTestFlightPolicy": {
+      "type": "string",
+      "enum": ["Automatic", "Disabled", "Internal", "External"]
     }
   }
 }

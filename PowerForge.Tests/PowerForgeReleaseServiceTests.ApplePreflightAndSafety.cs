@@ -313,6 +313,55 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleInputConfig_RejectsSymlinkEscape()
+    {
+        var root = CreateSandbox();
+        var outside = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var outsideConfig = Path.Combine(outside, "screenshots.json");
+            File.WriteAllText(outsideConfig, "{}");
+            var configLink = Path.Combine(root, "screenshots.json");
+            try
+            {
+                File.CreateSymbolicLink(configLink, outsideConfig);
+            }
+            catch (Exception linkCreationException) when (
+                linkCreationException is PlatformNotSupportedException ||
+                linkCreationException is UnauthorizedAccessException ||
+                linkCreationException is IOException)
+            {
+                return;
+            }
+
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.ScreenshotConfigPath = "screenshots.json";
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new PowerForgeReleaseService(new NullLogger()).Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Screenshots,
+                        PlanOnly = true
+                    }));
+
+            Assert.Contains("symbolic link", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            var configLink = Path.Combine(root, "screenshots.json");
+            if (File.Exists(configLink))
+                File.Delete(configLink);
+            TryDelete(root);
+            TryDelete(outside);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleReceipt_RejectsParentSymlinkEscape()
     {
         var root = CreateSandbox();
@@ -425,6 +474,148 @@ public sealed partial class PowerForgeReleaseServiceTests
                 Directory.Delete(archiveLink);
             TryDelete(root);
             TryDelete(outside);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleUpload_CleansArtifactsWhenEmbeddedTargetsAreModeled()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            CreateXcodeProject(root, "CasaRayWatch.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.CleanupAfterProcessing = true;
+            var parent = Assert.Single(spec.AppleApps.Apps);
+            var embeddedBundleId = "com.evotecit.casaray.watchkitapp";
+            parent.RequiredEmbeddedBundleIds = new[] { embeddedBundleId };
+            spec.AppleApps.Apps = new[]
+            {
+                parent,
+                new AppleAppConfiguration
+                {
+                    Name = "CasaRay Watch",
+                    BundleId = embeddedBundleId,
+                    Platform = ApplePlatform.watchOS,
+                    ProjectPath = "CasaRayWatch.xcodeproj",
+                    Scheme = "CasaRayWatch",
+                    DistributionRoute = AppleDistributionRoute.EmbeddedCompanion,
+                    ParentTarget = parent.Name
+                }
+            };
+            var service = CreateAppleAutomationService(request => CreateReleaseState(request, "VALID"));
+            var planned = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Upload,
+                PlanOnly = true
+            });
+            var parentArchive = planned.AppleAppPlan!.Apps.Single(app => app.Name == parent.Name).ArchivePath;
+            Directory.CreateDirectory(parentArchive);
+            File.WriteAllText(Path.Combine(parentArchive, "Info.plist"), "archive");
+
+            var result = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Upload
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.False(Directory.Exists(parentArchive));
+            Assert.Contains(result.AppleReceipt!.Targets, target =>
+                target.DistributionRoute == AppleDistributionRoute.EmbeddedCompanion &&
+                target.SkippedSteps.Contains("independentRelease"));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleUpload_RetainsDirectArtifactsWhenStoreTargetIsCleaned()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            CreateXcodeProject(root, "EasyControlXAgent.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.CleanupAfterProcessing = true;
+            spec.AppleApps.TeamId = "8ZPGZ79T7J";
+            var store = Assert.Single(spec.AppleApps.Apps);
+            spec.AppleApps.Apps = new[]
+            {
+                store,
+                new AppleAppConfiguration
+                {
+                    Name = "EasyControlX Agent",
+                    BundleId = "com.evotecit.easycontrolx.agent",
+                    Platform = ApplePlatform.macOS,
+                    ProjectPath = "EasyControlXAgent.xcodeproj",
+                    Scheme = "EasyControlXAgent",
+                    DistributionRoute = AppleDistributionRoute.DirectNotarized
+                }
+            };
+
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, "VALID"),
+                archiveAppleApp: request =>
+                {
+                    var archive = Directory.CreateDirectory(request.ArchivePath!);
+                    File.WriteAllText(Path.Combine(archive.FullName, "archive.txt"), "archive");
+                    return CreateSuccessfulArchive(request);
+                },
+                uploadAppleApp: request =>
+                {
+                    var export = Directory.CreateDirectory(request.ExportPath!);
+                    if (request.Method == "developer-id")
+                    {
+                        var app = Directory.CreateDirectory(Path.Combine(export.FullName, "EasyControlX Agent.app"));
+                        File.WriteAllText(Path.Combine(app.FullName, "agent"), "signed-agent");
+                    }
+                    else
+                    {
+                        File.WriteAllText(Path.Combine(export.FullName, "store-upload.txt"), "uploaded");
+                    }
+
+                    return CreateSuccessfulUpload(request);
+                },
+                notarizeAppleArtifact: request => new AppleNotarizationResult
+                {
+                    ArtifactPath = request.ArtifactPath,
+                    ArtifactSha256 = "direct-artifact-sha",
+                    SubmissionPath = request.ArtifactPath + ".zip",
+                    SubmissionId = "notary-1",
+                    Status = "Accepted",
+                    Submission = new ProcessRunResult(0, "accepted", string.Empty, "xcrun", TimeSpan.Zero, false),
+                    Staple = new ProcessRunResult(0, "stapled", string.Empty, "xcrun", TimeSpan.Zero, false),
+                    StapleValidation = new ProcessRunResult(0, "valid", string.Empty, "xcrun", TimeSpan.Zero, false),
+                    Assessment = new ProcessRunResult(0, "accepted", string.Empty, "spctl", TimeSpan.Zero, false)
+                });
+
+            var result = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Upload
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var storePlan = result.AppleAppPlan!.Apps.Single(app => app.Name == store.Name);
+            var directPlan = result.AppleAppPlan.Apps.Single(app => app.Name == "EasyControlX Agent");
+            Assert.False(Directory.Exists(storePlan.ArchivePath));
+            Assert.False(Directory.Exists(storePlan.ExportPath));
+            Assert.True(Directory.Exists(directPlan.ArchivePath));
+            Assert.True(Directory.Exists(directPlan.ExportPath));
+        }
+        finally
+        {
+            TryDelete(root);
         }
     }
 

@@ -200,6 +200,70 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleArchive_SkippedEmbeddedWorkspaceDoesNotRequireReleaseIdentity()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            Directory.CreateDirectory(Path.Combine(root, "CasaRayWatch.xcworkspace"));
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var parent = Assert.Single(spec.AppleApps!.Apps);
+            spec.AppleApps.Apps = new[]
+            {
+                parent,
+                new AppleAppConfiguration
+                {
+                    Name = "CasaRay Watch",
+                    BundleId = "com.evotecit.casaray.watchkitapp",
+                    Platform = ApplePlatform.watchOS,
+                    ProjectPath = "CasaRayWatch.xcworkspace",
+                    Scheme = "CasaRayWatch",
+                    DistributionRoute = AppleDistributionRoute.EmbeddedCompanion,
+                    ProductRole = AppleProductRole.CompanionApp,
+                    ParentTarget = parent.Name
+                }
+            };
+
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Archive action should not query App Store Connect."),
+                    archiveAppleApp: CreateSuccessfulArchive)
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Archive
+                    });
+
+            Assert.True(result.Success);
+            Assert.Collection(
+                Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt).Targets,
+                primary =>
+                {
+                    Assert.Equal(parent.Name, primary.Name);
+                    Assert.True(primary.ArchiveCreated);
+                    Assert.Equal("1.2.0", primary.Version);
+                    Assert.Equal("9", primary.Build);
+                },
+                companion =>
+                {
+                    Assert.Equal("CasaRay Watch", companion.Name);
+                    Assert.Null(companion.Version);
+                    Assert.Null(companion.Build);
+                    Assert.Null(companion.ErrorMessage);
+                    Assert.Contains("independentRelease", companion.SkippedSteps);
+                });
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleArchive_ProjectIdentityIsRetainedInReceipt()
     {
         var root = CreateSandbox();

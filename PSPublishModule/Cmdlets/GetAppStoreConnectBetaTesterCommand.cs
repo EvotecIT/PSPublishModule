@@ -30,7 +30,7 @@ public sealed class GetAppStoreConnectBetaTesterCommand : AsyncPSCmdlet
     [Parameter] public string? Email { get; set; }
 
     /// <summary>Maximum result count.</summary>
-    [Parameter] public int Limit { get; set; } = 200;
+    [Parameter] [ValidateRange(1, 200)] public int Limit { get; set; } = 200;
 
     /// <summary>Reads TestFlight beta testers.</summary>
     protected override async Task ProcessRecordAsync()
@@ -39,6 +39,6 @@ public sealed class GetAppStoreConnectBetaTesterCommand : AsyncPSCmdlet
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
         var testers = await client.GetBetaTestersAsync(Email, Limit, CancelToken);
-        WriteObject(testers, enumerateCollection: true);
+        WriteObject(AppStoreConnectCommandSupport.LimitResults(testers, Limit), enumerateCollection: true);
     }
 }

@@ -11,7 +11,7 @@ Syncs local screenshot folders to App Store Connect screenshot sets.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Sync-AppStoreConnectScreenshots [-ConfigPath] <string> -IssuerId <string> -KeyId <string> [-PrivateKey <string>] [-PrivateKeyPath <string>] [-TokenLifetimeMinutes <int>] [-ReplaceExisting] [-WhatIf] [-Confirm] [<CommonParameters>]
+Sync-AppStoreConnectScreenshots [-ConfigPath] <string> -IssuerId <string> -KeyId <string> [-PrivateKey <string>] [-PrivateKeyPath <string>] [-TokenLifetimeMinutes <int>] [-ReplaceExisting] [-SourceCommit <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -112,6 +112,22 @@ Deletes existing screenshots in each matched set before uploading local files.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SourceCommit
+Exact source commit expected by the reviewed approval manifest.
+
+```yaml
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

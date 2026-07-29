@@ -149,6 +149,12 @@ public sealed class AppStoreConnectSubscriptionInfo
     /// <summary>Family sharing flag when available.</summary>
     public bool? FamilySharable { get; set; }
 
+    /// <summary>Private review note when available.</summary>
+    public string? ReviewNote { get; set; }
+
+    /// <summary>Upgrade and downgrade rank inside the subscription group.</summary>
+    public int? GroupLevel { get; set; }
+
     /// <summary>Subscription group id that owns the product.</summary>
     public string? SubscriptionGroupId { get; set; }
 
