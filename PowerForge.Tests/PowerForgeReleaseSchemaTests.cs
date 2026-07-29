@@ -109,6 +109,37 @@ public sealed class PowerForgeReleaseSchemaTests
         }
     }
 
+    [Fact]
+    public void Release_runtime_loads_pre_github_registry_recovery_binding()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            File.WriteAllText(path, """
+                {
+                  "GitHub": {
+                    "Publish": true,
+                    "Commitish": "0123456789abcdef0123456789abcdef01234567",
+                    "RequirePublishedNuGetAssets": true,
+                    "RequirePublishedModuleAssets": true,
+                    "PublishedModuleSource": "https://www.powershellgallery.com/api/v2",
+                    "RecoverPublishedRegistryAssetsBeforeGitHubRelease": true,
+                    "PublishedModuleAlreadyExists": true
+                  }
+                }
+                """);
+
+            var gitHub = Assert.IsType<PowerForgeReleaseGitHubOptions>(
+                PowerForgeReleaseService.LoadConfiguration(path).GitHub);
+            Assert.True(gitHub.RecoverPublishedRegistryAssetsBeforeGitHubRelease);
+            Assert.True(gitHub.PublishedModuleAlreadyExists);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static string GetSchemaPath(string fileName) => Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory,
         "..", "..", "..", "..",

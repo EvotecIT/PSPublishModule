@@ -1,3 +1,6 @@
+. (Join-Path $PSScriptRoot 'Test-PowerForgePublicPackageVersion.ps1')
+. (Join-Path $PSScriptRoot 'Get-PowerForgePublicRegistryState.ps1')
+
 function Invoke-PowerForgeGitHubReleaseProbe {
     [CmdletBinding()]
     param(
@@ -51,9 +54,17 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
         [ValidatePattern('^https://')]
         [string] $PublishedModuleSource = 'https://www.powershellgallery.com/api/v2',
 
+        [string[]] $PackageIds = @(),
+
+        [string] $NuGetSource = 'https://api.nuget.org/v3/index.json',
+
+        [string] $ModuleName = 'PSPublishModule',
+
         [scriptblock] $GetReleaseByTag,
 
-        [scriptblock] $GetTagCommit
+        [scriptblock] $GetTagCommit,
+
+        [scriptblock] $GetRegistryState
     )
 
     $gitHub = $ReleaseConfig.GitHub
@@ -84,6 +95,8 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
     $gitHub | Add-Member -NotePropertyName RequirePublishedNuGetAssets -NotePropertyValue $false -Force
     $gitHub | Add-Member -NotePropertyName RequirePublishedModuleAssets -NotePropertyValue $false -Force
     $gitHub | Add-Member -NotePropertyName PublishedModuleSource -NotePropertyValue $null -Force
+    $gitHub | Add-Member -NotePropertyName RecoverPublishedRegistryAssetsBeforeGitHubRelease -NotePropertyValue $false -Force
+    $gitHub | Add-Member -NotePropertyName PublishedModuleAlreadyExists -NotePropertyValue $false -Force
 
     if ($null -eq $GetReleaseByTag) {
         $GetReleaseByTag = {
@@ -109,10 +122,33 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
     $release = & $GetReleaseByTag $owner $repository $tagName $Token
     $tagCommit = & $GetTagCommit $owner $repository $tagName $Token
     if ($null -eq $release -and [string]::IsNullOrWhiteSpace([string] $tagCommit)) {
+        if ($null -eq $GetRegistryState) {
+            $GetRegistryState = {
+                param($probePackageIds, $probeNuGetSource, $probeModuleName, $probeModuleSource, $probeVersion)
+                Get-PowerForgePublicRegistryState `
+                    -PackageIds $probePackageIds `
+                    -NuGetSource $probeNuGetSource `
+                    -ModuleName $probeModuleName `
+                    -ModuleSource $probeModuleSource `
+                    -Version $probeVersion
+            }
+        }
+        $registryState = & $GetRegistryState $PackageIds $NuGetSource $ModuleName $PublishedModuleSource $Version
+        if ($null -eq $registryState) {
+            throw 'Public registry recovery probe returned no state.'
+        }
+        $gitHub.RequirePublishedNuGetAssets = $true
+        $gitHub.RequirePublishedModuleAssets = $true
+        $gitHub.PublishedModuleSource = $PublishedModuleSource
+        $gitHub.RecoverPublishedRegistryAssetsBeforeGitHubRelease = $true
+        $gitHub.PublishedModuleAlreadyExists = $registryState.ModulePublished -eq $true
         return [pscustomobject]@{
-            ReuseEnabled = $false
-            TagName       = $tagName
-            ReleaseId     = $null
+            ReuseEnabled       = $false
+            RegistryRecovery   = $true
+            TagName            = $tagName
+            ReleaseId          = $null
+            PublishedPackages  = @($registryState.PublishedPackageIds)
+            ModulePublished    = $registryState.ModulePublished -eq $true
         }
     }
     if ($null -eq $release) {
@@ -140,8 +176,11 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
     $gitHub.RequirePublishedModuleAssets = $true
     $gitHub.PublishedModuleSource = $PublishedModuleSource
     [pscustomobject]@{
-        ReuseEnabled = $true
-        TagName       = $tagName
-        ReleaseId     = [long] $release.id
+        ReuseEnabled       = $true
+        RegistryRecovery   = $true
+        TagName            = $tagName
+        ReleaseId          = [long] $release.id
+        PublishedPackages  = @()
+        ModulePublished    = $true
     }
 }

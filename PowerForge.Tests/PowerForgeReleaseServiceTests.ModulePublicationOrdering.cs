@@ -156,6 +156,74 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void ApplyVerifiedGitHubRecoveryPublishingOverrides_preserves_missing_registry_publication_before_first_github_release()
+    {
+        var request = new PowerForgeReleaseRequest
+        {
+            ModuleRunMode = ConfigurationGateMode.Publish,
+            PublishProjectGitHub = true,
+            PublishNuget = true
+        };
+        var gitHub = new PowerForgeReleaseGitHubOptions
+        {
+            Publish = true,
+            Commitish = "0123456789abcdef0123456789abcdef01234567",
+            RequirePublishedNuGetAssets = true,
+            RequirePublishedModuleAssets = true,
+            PublishedModuleSource = "https://www.powershellgallery.com/api/v2",
+            RecoverPublishedRegistryAssetsBeforeGitHubRelease = true,
+            PublishedModuleAlreadyExists = true
+        };
+
+        var allRegistriesSkipped = PowerForgeReleaseService.ApplyVerifiedGitHubRecoveryPublishingOverrides(
+            new PowerForgeReleaseSpec { GitHub = gitHub },
+            request);
+
+        Assert.False(allRegistriesSkipped);
+        Assert.True(request.PublishNuget);
+        Assert.False(request.ModuleIncludePublishing);
+
+        gitHub.PublishedModuleAlreadyExists = false;
+        request.ModuleIncludePublishing = null;
+        allRegistriesSkipped = PowerForgeReleaseService.ApplyVerifiedGitHubRecoveryPublishingOverrides(
+            new PowerForgeReleaseSpec { GitHub = gitHub },
+            request);
+
+        Assert.False(allRegistriesSkipped);
+        Assert.True(request.PublishNuget);
+        Assert.Null(request.ModuleIncludePublishing);
+    }
+
+    [Fact]
+    public void ApplyVerifiedGitHubRecoveryPublishingOverrides_rejects_incomplete_new_mode_flags()
+    {
+        var request = new PowerForgeReleaseRequest
+        {
+            ModuleRunMode = ConfigurationGateMode.Publish,
+            PublishProjectGitHub = true,
+            PublishNuget = true
+        };
+        var gitHub = new PowerForgeReleaseGitHubOptions
+        {
+            Publish = true,
+            Commitish = "0123456789abcdef0123456789abcdef01234567",
+            RecoverPublishedRegistryAssetsBeforeGitHubRelease = true
+        };
+
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ApplyVerifiedGitHubRecoveryPublishingOverrides(
+                new PowerForgeReleaseSpec { GitHub = gitHub },
+                request));
+
+        gitHub.RecoverPublishedRegistryAssetsBeforeGitHubRelease = false;
+        gitHub.PublishedModuleAlreadyExists = true;
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ApplyVerifiedGitHubRecoveryPublishingOverrides(
+                new PowerForgeReleaseSpec { GitHub = gitHub },
+                request));
+    }
+
+    [Fact]
     public void Execute_rejects_unbound_direct_recovery_before_any_release_lane_runs()
     {
         var root = CreateSandbox();
@@ -234,6 +302,121 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.True(result.Success, result.ErrorMessage);
             Assert.Equal(2, moduleCalls.Count);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void PublishBuiltReleaseOutputs_recovers_registry_payloads_before_creating_first_github_release()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var releasePath = Path.Combine(root, "release.json");
+            var packagePath = Path.Combine(root, "PowerForge.1.2.3.nupkg");
+            var modulePath = Path.Combine(root, "SampleModule.v1.2.3.zip");
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(packagePath, "rebuilt package");
+            File.WriteAllText(modulePath, "rebuilt module");
+            var publishCalls = new List<GitHubReleasePublishRequest>();
+            var nugetRecoveryCalls = 0;
+            var moduleRecoveryCalls = 0;
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages must not rebuild."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools must not plan."),
+                runTools: _ => throw new InvalidOperationException("Tools must not run."),
+                publishGitHubRelease: request =>
+                {
+                    publishCalls.Add(request);
+                    return new GitHubReleasePublishResult
+                    {
+                        Succeeded = true,
+                        HtmlUrl = "https://github.com/EvotecIT/example/releases/tag/v1.2.3"
+                    };
+                },
+                restorePublishedNuGetAssets: (_, version, paths, _) =>
+                {
+                    nugetRecoveryCalls++;
+                    Assert.Equal("1.2.3", version);
+                    Assert.Contains(packagePath, paths);
+                    return [packagePath];
+                },
+                restorePublishedModuleAssets: (source, name, version, paths, _) =>
+                {
+                    moduleRecoveryCalls++;
+                    Assert.Equal("https://www.powershellgallery.com/api/v2", source);
+                    Assert.Equal("SampleModule", name);
+                    Assert.Equal("1.2.3", version);
+                    Assert.Equal(modulePath, Assert.Single(paths));
+                    return [modulePath];
+                });
+            var built = new PowerForgeReleaseResult
+            {
+                Success = true,
+                ModulePlan = new PowerForgeModuleReleasePlanSummary
+                {
+                    ModuleName = "SampleModule",
+                    ModuleVersion = "1.2.3"
+                },
+                ReleaseAssets = [packagePath, modulePath],
+                ReleaseAssetEntries =
+                [
+                    new PowerForgeReleaseAssetEntry
+                    {
+                        Path = packagePath,
+                        Version = "1.2.3",
+                        Category = PowerForgeReleaseAssetCategory.Package
+                    },
+                    new PowerForgeReleaseAssetEntry
+                    {
+                        Path = modulePath,
+                        Version = "1.2.3",
+                        Category = PowerForgeReleaseAssetCategory.Module
+                    }
+                ]
+            };
+            var spec = new PowerForgeReleaseSpec
+            {
+                Packages = new ProjectBuildConfiguration
+                {
+                    PublishSource = "https://api.nuget.org/v3/index.json"
+                },
+                GitHub = new PowerForgeReleaseGitHubOptions
+                {
+                    Publish = true,
+                    VersionSource = PowerForgeReleaseVersionSource.Assets,
+                    Owner = "EvotecIT",
+                    Repository = "example",
+                    Token = "token",
+                    Commitish = "0123456789abcdef0123456789abcdef01234567",
+                    RequirePublishedNuGetAssets = true,
+                    RequirePublishedModuleAssets = true,
+                    PublishedModuleSource = "https://www.powershellgallery.com/api/v2",
+                    RecoverPublishedRegistryAssetsBeforeGitHubRelease = true,
+                    PublishedModuleAlreadyExists = true
+                }
+            };
+
+            var result = service.PublishBuiltReleaseOutputs(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ResolvedReleaseVersion = "1.2.3"
+                },
+                built);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(1, nugetRecoveryCalls);
+            Assert.Equal(1, moduleRecoveryCalls);
+            var publish = Assert.Single(publishCalls);
+            Assert.False(publish.ReuseExistingReleaseOnConflict);
+            Assert.False(publish.ReplaceExistingAssets);
+            Assert.Equal("0123456789abcdef0123456789abcdef01234567", publish.ExpectedTagCommitSha);
         }
         finally
         {

@@ -553,6 +553,14 @@ the signing-capable Windows runner and has three explicit operations:
    recovery, and exact module-payload recovery are all bound to the verified release. Because
    NuGet does not expose a matching byte-retrieval contract for
    `.snupkg` files, recovery fails before mutation when symbol-package assets are present.
+   When no GitHub release or tag exists yet, recovery also inspects the exact public package
+   and module versions. Every first-release publish reconstructs its GitHub payloads from the
+   registries after publication, so a late `SkipDuplicate` result cannot leave GitHub with
+   different rebuilt bytes. If an earlier attempt published only part of the registry train,
+   the retry keeps NuGet publication enabled so `SkipDuplicate` can complete missing packages
+   and suppresses module publication only when that exact gallery version already exists.
+   Project release ZIP recovery supports both `lib/<tfm>/...` library packages and
+   `tools/<tfm>/any/...` .NET tool packages.
    Registry publication is skipped during this verified GitHub-only recovery because the
    stable partial GitHub release proves the earlier NuGet and PowerShell Gallery lanes already
    completed. Existing asset names must be a subset of the authorized rebuilt set.

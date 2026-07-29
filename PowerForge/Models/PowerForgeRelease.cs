@@ -718,6 +718,12 @@ internal sealed class PowerForgeReleaseGitHubOptions
     /// <summary>NuGet repository source containing the already-published module package used for recovery.</summary>
     public string? PublishedModuleSource { get; set; }
 
+    /// <summary>Restore registry-published payloads before creating the first GitHub release for the exact commit.</summary>
+    public bool RecoverPublishedRegistryAssetsBeforeGitHubRelease { get; set; }
+
+    /// <summary>The exact module version was already present in the public gallery at recovery preflight.</summary>
+    public bool PublishedModuleAlreadyExists { get; set; }
+
     public string? TagTemplate { get; set; }
 
     public string? ReleaseNameTemplate { get; set; }

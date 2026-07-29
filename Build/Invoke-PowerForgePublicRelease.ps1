@@ -118,12 +118,19 @@ try {
             throw 'Build/release.json must configure the unified GitHub release token file.'
         }
         $gitHubToken = (Get-Content -Raw -LiteralPath $gitHubTokenPath).Trim()
+        . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Get-PowerForgeReleasePackageIds.ps1')
+        $packageIds = Get-PowerForgeReleasePackageIds `
+            -ReleaseConfig $releaseConfig `
+            -RepositoryRoot $repositoryRoot
         . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Enable-PowerForgeVerifiedGitHubReleaseRecovery.ps1')
         $releaseRecovery = Enable-PowerForgeVerifiedGitHubReleaseRecovery `
             -ReleaseConfig $releaseConfig `
             -Version $Version `
             -ExpectedCommit $ExpectedCommit `
-            -Token $gitHubToken
+            -Token $gitHubToken `
+            -PackageIds $packageIds `
+            -NuGetSource ([string] $releaseConfig.Packages.PublishSource) `
+            -ModuleName ([string] $releaseConfig.Module.ModuleName)
 
         $expectedConfirmation = "publish:$Version`:$ExpectedCommit"
         if ($Confirm -cne $expectedConfirmation) {

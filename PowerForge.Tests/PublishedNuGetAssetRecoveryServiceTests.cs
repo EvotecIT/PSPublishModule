@@ -101,6 +101,52 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
         }
     }
 
+    [Fact]
+    public void Restore_MapsPublishedDotNetToolPayloadIntoReleaseZip()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string packageId = "PowerForge.Build";
+            const string version = "3.0.81";
+            var packagePath = Path.Combine(root.FullName, $"{packageId}.{version}.nupkg");
+            var releaseZipPath = Path.Combine(root.FullName, $"{packageId}.{version}.zip");
+            var rebuiltBytes = CreateToolPackage(packageId, version, "rebuilt-tool-payload");
+            var publishedBytes = CreateToolPackage(packageId, version, "published-tool-payload");
+            File.WriteAllBytes(packagePath, rebuiltBytes);
+            using (var releaseZip = ZipFile.Open(releaseZipPath, ZipArchiveMode.Create))
+            {
+                WriteTextEntry(releaseZip, "net10.0/PowerForge.Cli.dll", "rebuilt-tool-payload");
+                WriteTextEntry(releaseZip, "net10.0/PowerForge.dll", "rebuilt-tool-payload");
+            }
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(new NuGetRecoveryHandler(publishedBytes)));
+
+            var restored = service.Restore(
+                "https://packages.example/v3/index.json",
+                version,
+                [packagePath, releaseZipPath],
+                CancellationToken.None);
+
+            Assert.Equal(new[] { packagePath, releaseZipPath }, restored);
+            using var recoveredZip = ZipFile.OpenRead(releaseZipPath);
+            Assert.Equal(
+                "published-tool-payload",
+                ReadText(Assert.Single(recoveredZip.Entries, entry => entry.FullName == "net10.0/PowerForge.Cli.dll")));
+            Assert.Equal(
+                "published-tool-payload",
+                ReadText(Assert.Single(recoveredZip.Entries, entry => entry.FullName == "net10.0/PowerForge.dll")));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     private static byte[] CreatePackage(string packageId, string version, string signatureMarker)
     {
         using var memory = new MemoryStream();
@@ -123,6 +169,29 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
         }
 
         return memory.ToArray();
+    }
+
+    private static byte[] CreateToolPackage(string packageId, string version, string payload)
+    {
+        using var memory = new MemoryStream();
+        using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            WriteTextEntry(
+                archive,
+                $"{packageId}.nuspec",
+                $"<package><metadata><id>{packageId}</id><version>{version}</version></metadata></package>");
+            WriteTextEntry(archive, "tools/net10.0/any/DotnetToolSettings.xml", "package-only metadata");
+            WriteTextEntry(archive, "tools/net10.0/any/PowerForge.Cli.dll", payload);
+            WriteTextEntry(archive, "tools/net10.0/any/PowerForge.dll", payload);
+        }
+        return memory.ToArray();
+    }
+
+    private static void WriteTextEntry(ZipArchive archive, string name, string value)
+    {
+        var entry = archive.CreateEntry(name);
+        using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false));
+        writer.Write(value);
     }
 
     private static void CreateReleaseZip(string path, string packageId, string payload)

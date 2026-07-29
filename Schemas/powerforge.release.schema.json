@@ -151,6 +151,14 @@
           "type": [ "string", "null" ],
           "description": "NuGet repository source containing the already-published module package used for exact-payload recovery. PowerShell Gallery recovery should use its supported v2 read endpoint."
         },
+        "RecoverPublishedRegistryAssetsBeforeGitHubRelease": {
+          "type": "boolean",
+          "description": "Restore exact registry-published payloads before creating the first GitHub release for the commit."
+        },
+        "PublishedModuleAlreadyExists": {
+          "type": "boolean",
+          "description": "The exact module version was already present in the public gallery at recovery preflight and must not be published again."
+        },
         "TagTemplate": { "type": [ "string", "null" ] },
         "ReleaseNameTemplate": { "type": [ "string", "null" ] }
       }

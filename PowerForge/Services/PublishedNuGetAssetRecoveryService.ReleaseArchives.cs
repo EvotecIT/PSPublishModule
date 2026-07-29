@@ -16,8 +16,8 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
                 $"The rebuilt release ZIP required for recovery was not found: {releaseZipPath}",
                 releaseZipPath);
 
-        var payload = ReadPublishedLibraryPayload(publishedPackagePaths);
-        var requiredPayload = ReadPublishedLibraryPayload([owningPublishedPackagePath]);
+        var payload = ReadPublishedReleasePayload(publishedPackagePaths);
+        var requiredPayload = ReadPublishedReleasePayload([owningPublishedPackagePath]);
         using var source = ZipFile.OpenRead(releaseZipPath);
         var matched = new Dictionary<string, PublishedPackageEntry>(StringComparer.OrdinalIgnoreCase);
         using (var destination = ZipFile.Open(destinationPath, ZipArchiveMode.Create))
@@ -46,7 +46,7 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
         ValidateReleaseZipPayload(destinationPath, matched);
     }
 
-    private static IReadOnlyDictionary<string, PublishedPackageEntry> ReadPublishedLibraryPayload(
+    private static IReadOnlyDictionary<string, PublishedPackageEntry> ReadPublishedReleasePayload(
         IEnumerable<string> packagePaths)
     {
         var payload = new Dictionary<string, PublishedPackageEntry>(StringComparer.OrdinalIgnoreCase);
@@ -58,9 +58,9 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
                 if (string.IsNullOrEmpty(entry.Name))
                     continue;
                 var name = NormalizeArchivePath(entry.FullName);
-                if (!name.StartsWith("lib/", StringComparison.OrdinalIgnoreCase))
+                var releasePath = MapPublishedPackageEntryToReleasePath(name);
+                if (releasePath is null)
                     continue;
-                var releasePath = NormalizeArchivePath(name.Substring("lib/".Length));
                 var published = new PublishedPackageEntry(ReadAllBytes(entry), entry.LastWriteTime, entry.ExternalAttributes);
                 if (payload.TryGetValue(releasePath, out var existing))
                 {
@@ -76,8 +76,30 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
         }
 
         if (payload.Count == 0)
-            throw new InvalidOperationException("Published NuGet package contains no lib payload for release ZIP recovery.");
+            throw new InvalidOperationException("Published NuGet package contains no library or tool payload for release ZIP recovery.");
         return payload;
+    }
+
+    private static string? MapPublishedPackageEntryToReleasePath(string name)
+    {
+        if (name.StartsWith("lib/", StringComparison.OrdinalIgnoreCase))
+            return NormalizeArchivePath(name.Substring("lib/".Length));
+
+        if (!name.StartsWith("tools/", StringComparison.OrdinalIgnoreCase))
+            return null;
+        var segments = name.Split('/');
+        if (segments.Length < 4 ||
+            !string.Equals(segments[2], "any", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+        if (segments.Length == 4 &&
+            string.Equals(segments[3], "DotnetToolSettings.xml", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return NormalizeArchivePath(string.Join("/", segments.Skip(1).Take(1).Concat(segments.Skip(3))));
     }
 
     private static void ValidateReleaseZipPayload(

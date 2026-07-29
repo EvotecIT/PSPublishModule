@@ -17,6 +17,13 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         ValidateVerifiedGitHubRecoveryConfiguration(gitHub);
+        if (gitHub.RecoverPublishedRegistryAssetsBeforeGitHubRelease)
+        {
+            if (gitHub.PublishedModuleAlreadyExists)
+                request.ModuleIncludePublishing = false;
+            return false;
+        }
+
         request.PublishNuget = false;
         request.ModuleIncludePublishing = false;
         return true;
@@ -33,22 +40,38 @@ internal sealed partial class PowerForgeReleaseService
     {
         if (!IsExactGitCommitSha(gitHub.Commitish))
             return "Verified GitHub recovery requires GitHub.Commitish to be an exact 40-character commit SHA.";
+        if (!gitHub.RequirePublishedNuGetAssets)
+            return "Verified GitHub recovery requires exact published NuGet-byte restoration.";
+        if (!gitHub.RequirePublishedModuleAssets || string.IsNullOrWhiteSpace(gitHub.PublishedModuleSource))
+            return "Verified GitHub recovery requires exact published module-payload restoration and its repository source.";
+        if (gitHub.RecoverPublishedRegistryAssetsBeforeGitHubRelease)
+        {
+            if (gitHub.ReuseExistingRelease ||
+                gitHub.RequireExpectedExistingRelease ||
+                gitHub.ExpectedExistingReleaseId.HasValue ||
+                gitHub.RequirePublishedStableRelease ||
+                gitHub.ReplaceExistingAssets)
+            {
+                return "Pre-GitHub registry recovery requires a new release and cannot enable existing-release reuse or replacement.";
+            }
+            return null;
+        }
+        if (gitHub.PublishedModuleAlreadyExists)
+            return "PublishedModuleAlreadyExists is valid only for pre-GitHub registry recovery.";
         if (!gitHub.RequireExpectedExistingRelease || gitHub.ExpectedExistingReleaseId.GetValueOrDefault() <= 0)
             return "Verified GitHub recovery requires an exact preflight-bound existing release ID.";
         if (!gitHub.RequirePublishedStableRelease)
             return "Verified GitHub recovery requires the existing release to remain published and stable.";
         if (!gitHub.ReplaceExistingAssets)
             return "Verified GitHub recovery requires same-name asset replacement mode.";
-        if (!gitHub.RequirePublishedNuGetAssets)
-            return "Verified GitHub recovery requires exact published NuGet-byte restoration.";
-        if (!gitHub.RequirePublishedModuleAssets || string.IsNullOrWhiteSpace(gitHub.PublishedModuleSource))
-            return "Verified GitHub recovery requires exact published module-payload restoration and its repository source.";
         return null;
     }
 
     private static bool IsVerifiedGitHubRecoveryRequested(PowerForgeReleaseGitHubOptions gitHub)
         => gitHub.RequirePublishedNuGetAssets ||
-           gitHub.RequirePublishedModuleAssets;
+           gitHub.RequirePublishedModuleAssets ||
+           gitHub.RecoverPublishedRegistryAssetsBeforeGitHubRelease ||
+           gitHub.PublishedModuleAlreadyExists;
 
     private PowerForgeUnifiedGitHubReleaseResult? RestorePublishedNuGetAssetsForGitHubRecovery(
         PowerForgeReleaseSpec spec,
@@ -66,15 +89,17 @@ internal sealed partial class PowerForgeReleaseService
         if (!gitHub.RequirePublishedNuGetAssets)
             return null;
 
-        if (!gitHub.ReuseExistingRelease ||
-            !gitHub.RequireExpectedExistingRelease ||
-            gitHub.ExpectedExistingReleaseId.GetValueOrDefault() <= 0)
+        var exactExistingReleaseBound = gitHub.ReuseExistingRelease &&
+                                        gitHub.RequireExpectedExistingRelease &&
+                                        gitHub.ExpectedExistingReleaseId.GetValueOrDefault() > 0;
+        if (!exactExistingReleaseBound &&
+            !gitHub.RecoverPublishedRegistryAssetsBeforeGitHubRelease)
         {
             return CreateNuGetRecoveryError(
                 owner,
                 repository,
                 version,
-                "Published NuGet byte recovery requires an exact preflight-bound existing GitHub release.");
+                "Published NuGet byte recovery requires either an exact existing GitHub release or pre-GitHub registry recovery binding.");
         }
 
         try

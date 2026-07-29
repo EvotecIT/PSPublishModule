@@ -24,6 +24,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("Set-PowerForgeAuthorizedReleaseVersion", script, StringComparison.Ordinal);
         Assert.Contains("-DisableVersionUpdates:($Operation -eq 'Publish')", script, StringComparison.Ordinal);
         Assert.Contains("Enable-PowerForgeVerifiedGitHubReleaseRecovery", script, StringComparison.Ordinal);
+        Assert.Contains("Get-PowerForgeReleasePackageIds", script, StringComparison.Ordinal);
         Assert.Contains(". .\\Build\\Private\\Assert-PowerForgeCommittedReleaseVersion.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("$releaseConfig.GitHub | Add-Member -NotePropertyName Commitish", script, StringComparison.Ordinal);
         Assert.Contains("ExpectedTagCommitSha = gitHub.Commitish", Read(root, "PowerForge", "Services", "PowerForgeReleaseService.cs"), StringComparison.Ordinal);
@@ -78,8 +79,13 @@ public sealed partial class AppleReleaseWorkflowTests
                       "if (-not $config.GitHub.ReuseExistingRelease -or -not $config.GitHub.ReplaceExistingAssets -or -not $config.GitHub.RequireExpectedExistingRelease -or $config.GitHub.ExpectedExistingReleaseId -ne 42 -or -not $config.GitHub.RequirePublishedStableRelease -or -not $config.GitHub.RequirePublishedNuGetAssets -or -not $config.GitHub.RequirePublishedModuleAssets -or $config.GitHub.PublishedModuleSource -ne 'https://www.powershellgallery.com/api/v2') { throw 'Effective recovery binding is incomplete.' }; " +
                       "$fresh = '{\"GitHub\":{\"Publish\":true,\"Owner\":\"EvotecIT\",\"Repository\":\"PSPublishModule\",\"TagTemplate\":\"v{Version}\",\"ReuseExistingRelease\":true,\"ReplaceExistingAssets\":true}}' | ConvertFrom-Json; " +
                       "$missingProbe = { $null }; " +
-                      $"$freshResult = Enable-PowerForgeVerifiedGitHubReleaseRecovery -ReleaseConfig $fresh -Version '3.0.81' -ExpectedCommit '{commit}' -Token 'test' -GetReleaseByTag $missingProbe -GetTagCommit $missingProbe; " +
-                      "if ($freshResult.ReuseEnabled -or $fresh.GitHub.ReuseExistingRelease -or $fresh.GitHub.ReplaceExistingAssets -or $fresh.GitHub.RequireExpectedExistingRelease -or $null -ne $fresh.GitHub.ExpectedExistingReleaseId -or $fresh.GitHub.RequirePublishedStableRelease -or $fresh.GitHub.RequirePublishedNuGetAssets -or $fresh.GitHub.RequirePublishedModuleAssets -or $null -ne $fresh.GitHub.PublishedModuleSource) { throw 'Fresh release did not remain non-reuse.' }";
+                      "$emptyRegistry = { [pscustomobject]@{ AnyPublished = $false; PublishedPackageIds = @(); ModulePublished = $false } }; " +
+                      $"$freshResult = Enable-PowerForgeVerifiedGitHubReleaseRecovery -ReleaseConfig $fresh -Version '3.0.81' -ExpectedCommit '{commit}' -Token 'test' -PackageIds @('PowerForge') -GetReleaseByTag $missingProbe -GetTagCommit $missingProbe -GetRegistryState $emptyRegistry; " +
+                      "if ($freshResult.ReuseEnabled -or -not $freshResult.RegistryRecovery -or $fresh.GitHub.ReuseExistingRelease -or $fresh.GitHub.ReplaceExistingAssets -or $fresh.GitHub.RequireExpectedExistingRelease -or $null -ne $fresh.GitHub.ExpectedExistingReleaseId -or $fresh.GitHub.RequirePublishedStableRelease -or -not $fresh.GitHub.RequirePublishedNuGetAssets -or -not $fresh.GitHub.RequirePublishedModuleAssets -or $fresh.GitHub.PublishedModuleSource -ne 'https://www.powershellgallery.com/api/v2' -or -not $fresh.GitHub.RecoverPublishedRegistryAssetsBeforeGitHubRelease -or $fresh.GitHub.PublishedModuleAlreadyExists) { throw 'Fresh release did not enable exact post-publication recovery.' }; " +
+                      "$partial = '{\"GitHub\":{\"Publish\":true,\"Owner\":\"EvotecIT\",\"Repository\":\"PSPublishModule\",\"TagTemplate\":\"v{Version}\"}}' | ConvertFrom-Json; " +
+                      "$partialRegistry = { [pscustomobject]@{ AnyPublished = $true; PublishedPackageIds = @('PowerForge'); ModulePublished = $true } }; " +
+                      $"$partialResult = Enable-PowerForgeVerifiedGitHubReleaseRecovery -ReleaseConfig $partial -Version '3.0.81' -ExpectedCommit '{commit}' -Token 'test' -PackageIds @('PowerForge','PowerForge.Build') -GetReleaseByTag $missingProbe -GetTagCommit $missingProbe -GetRegistryState $partialRegistry; " +
+                      "if ($partialResult.ReuseEnabled -or -not $partialResult.RegistryRecovery -or $partial.GitHub.ReuseExistingRelease -or $partial.GitHub.ReplaceExistingAssets -or -not $partial.GitHub.RequirePublishedNuGetAssets -or -not $partial.GitHub.RequirePublishedModuleAssets -or -not $partial.GitHub.RecoverPublishedRegistryAssetsBeforeGitHubRelease -or -not $partial.GitHub.PublishedModuleAlreadyExists) { throw 'Partial registry recovery binding is incomplete.' }";
 
         Run("pwsh", root, "-NoProfile", "-Command", command).EnsureSuccess();
 
@@ -89,6 +95,23 @@ public sealed partial class AppleReleaseWorkflowTests
             StringComparison.Ordinal);
         var mismatchResult = Run("pwsh", root, "-NoProfile", "-Command", mismatch);
         Assert.NotEqual(0, mismatchResult.ExitCode);
+    }
+
+    [Fact]
+    public void PublicModuleReleaseResolvesEveryConfiguredPackageId()
+    {
+        var root = FindRepoRoot();
+        var helper = Path.Combine(root, "Build", "Private", "Get-PowerForgeReleasePackageIds.ps1");
+        var escapedHelper = helper.Replace("'", "''", StringComparison.Ordinal);
+        var escapedConfig = Path.Combine(root, "Build", "release.json").Replace("'", "''", StringComparison.Ordinal);
+        var escapedRoot = root.Replace("'", "''", StringComparison.Ordinal);
+        var command = $". '{escapedHelper}'; " +
+                      $"$config = Get-Content -Raw -LiteralPath '{escapedConfig}' | ConvertFrom-Json; " +
+                      $"$ids = @(Get-PowerForgeReleasePackageIds -ReleaseConfig $config -RepositoryRoot '{escapedRoot}'); " +
+                      "$expected = @('PowerForge','PowerForge.PowerShell','PowerForge.Build','PowerForge.Blazor','PowerForge.Web','PowerForge.Web.Build'); " +
+                      "if (Compare-Object $expected $ids) { throw \"Resolved package IDs differ: $($ids -join ', ')\" }";
+
+        Run("pwsh", root, "-NoProfile", "-Command", command).EnsureSuccess();
     }
 
     [Fact]
