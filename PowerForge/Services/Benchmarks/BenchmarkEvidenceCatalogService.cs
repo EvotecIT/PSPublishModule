@@ -166,13 +166,11 @@ public sealed class BenchmarkEvidenceCatalogService
                 sample.Scenario,
                 sample.Operation,
                 sample.Engine,
-                sample.Host,
                 sample.Variables))
             .Concat(result.Summary.Select(row => CreateWorkloadIdentity(
                 row.Scenario,
                 row.Operation,
                 row.Engine,
-                row.Host,
                 row.Variables)))
             .Distinct(StringComparer.Ordinal)
             .OrderBy(value => value, StringComparer.Ordinal)
@@ -190,14 +188,12 @@ public sealed class BenchmarkEvidenceCatalogService
         string scenario,
         string operation,
         string engine,
-        string host,
         IReadOnlyDictionary<string, string?> variables)
     {
         var builder = new StringBuilder();
         AppendIdentityPart(builder, "scenario", scenario);
         AppendIdentityPart(builder, "operation", operation);
         AppendIdentityPart(builder, "engine", engine);
-        AppendIdentityPart(builder, "host", host);
         foreach (var variable in variables.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
         {
             AppendIdentityPart(builder, variable.Key.ToUpperInvariant(), variable.Value);
@@ -298,10 +294,12 @@ public sealed class BenchmarkEvidenceCatalogService
 
     private static void ValidatePublishableResult(BenchmarkRunResult result)
     {
-        if (string.IsNullOrWhiteSpace(MetadataValue(result.Metadata, "gitSha")))
+        string? gitSha = MetadataValue(result.Metadata, "gitSha");
+        if (!IsFullGitObjectId(gitSha))
         {
             throw new InvalidOperationException(
-                "Publishable benchmark evidence requires exact source provenance in metadata key 'gitSha'.");
+                "Publishable benchmark evidence requires exact source provenance in metadata key 'gitSha' " +
+                "as a full 40- or 64-character hexadecimal Git object ID.");
         }
 
         bool hasFailedMeasurement =
@@ -319,6 +317,16 @@ public sealed class BenchmarkEvidenceCatalogService
             throw new InvalidOperationException(
                 "Publishable benchmark evidence requires at least one successful measurement and no failed measurements.");
         }
+    }
+
+    private static bool IsFullGitObjectId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        string candidate = value!.Trim();
+        return (candidate.Length == 40 || candidate.Length == 64) &&
+               candidate.All(Uri.IsHexDigit);
     }
 
     private static bool TryGetValueIgnoreCase(

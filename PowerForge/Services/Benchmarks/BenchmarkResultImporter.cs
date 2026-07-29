@@ -354,8 +354,8 @@ public sealed class BenchmarkResultImporter
                 Iteration = ParseInt(Get(map, "Iteration")) ?? 0,
                 Status = status,
                 DurationMs = mean ?? 0,
-                AllocatedBytes = ParseLong(Get(map, "AllocatedBytes")),
-                WorkingSetDeltaBytes = ParseLong(Get(map, "WorkingSetDeltaBytes")),
+                AllocatedBytes = ParseLong(Get(map, "AllocatedBytes"), culture),
+                WorkingSetDeltaBytes = ParseLong(Get(map, "WorkingSetDeltaBytes"), culture),
                 OutputMetric = ParseNumericMetric(
                     Get(map, "OutputMetric"),
                     usesDecimalComma: usesDecimalComma,
@@ -1368,8 +1368,14 @@ public sealed class BenchmarkResultImporter
         return reasons;
     }
 
-    private static long? ParseLong(string? value)
-        => long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+    private static long? ParseLong(string? value, CultureInfo? culture = null)
+        => long.TryParse(
+            value,
+            NumberStyles.Integer | NumberStyles.AllowThousands,
+            culture ?? CultureInfo.InvariantCulture,
+            out var parsed)
+            ? parsed
+            : null;
 
     private static Dictionary<string, string?> ExtractVariables(
         IReadOnlyDictionary<string, string> values,

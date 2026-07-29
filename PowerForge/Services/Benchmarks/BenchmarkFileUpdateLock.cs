@@ -21,13 +21,8 @@ internal static class BenchmarkFileUpdateLock
         {
             try
             {
-                return new FileStream(
-                    lockPath,
-                    FileMode.OpenOrCreate,
-                    FileAccess.ReadWrite,
-                    FileShare.None,
-                    bufferSize: 1,
-                    FileOptions.None);
+                FileStream stream = OpenLockFile(lockPath, lockDirectory);
+                return stream;
             }
             catch (IOException)
             {
@@ -45,6 +40,62 @@ internal static class BenchmarkFileUpdateLock
             }
         }
     }
+
+    private static FileStream OpenLockFile(string lockPath, string lockDirectory)
+    {
+#if NET8_0_OR_GREATER
+        if (!OperatingSystem.IsWindows())
+        {
+            UnixFileMode requestedMode = GetUnixLockMode(lockDirectory);
+            var stream = new FileStream(
+                lockPath,
+                new FileStreamOptions
+                {
+                    Mode = FileMode.OpenOrCreate,
+                    Access = FileAccess.ReadWrite,
+                    Share = FileShare.None,
+                    BufferSize = 1,
+                    Options = FileOptions.None,
+                    UnixCreateMode = requestedMode
+                });
+            try
+            {
+                UnixFileMode currentMode = File.GetUnixFileMode(lockPath);
+                if ((currentMode & requestedMode) != requestedMode)
+                    File.SetUnixFileMode(lockPath, currentMode | requestedMode);
+                return stream;
+            }
+            catch
+            {
+                stream.Dispose();
+                throw;
+            }
+        }
+#endif
+        return new FileStream(
+            lockPath,
+            FileMode.OpenOrCreate,
+            FileAccess.ReadWrite,
+            FileShare.None,
+            bufferSize: 1,
+            FileOptions.None);
+    }
+
+#if NET8_0_OR_GREATER
+    private static UnixFileMode GetUnixLockMode(string lockDirectory)
+    {
+        if (OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("Unix lock modes are not available on Windows.");
+
+        UnixFileMode directoryMode = File.GetUnixFileMode(lockDirectory);
+        UnixFileMode lockMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        if ((directoryMode & UnixFileMode.GroupWrite) != 0)
+            lockMode |= UnixFileMode.GroupRead | UnixFileMode.GroupWrite;
+        if ((directoryMode & UnixFileMode.OtherWrite) != 0)
+            lockMode |= UnixFileMode.OtherRead | UnixFileMode.OtherWrite;
+        return lockMode;
+    }
+#endif
 
     internal static string CreateLockPath(string destinationPath)
     {

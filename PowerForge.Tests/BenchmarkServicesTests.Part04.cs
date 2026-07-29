@@ -173,6 +173,25 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_UsesExplicitCultureForGroupedNormalizedMemoryFields()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(
+            csv,
+            "Suite;Scenario;Operation;Engine;Host;Iteration;Status;DurationMs;AllocatedBytes;WorkingSetDeltaBytes;Reason\n"
+            + "suite;case;Run;Managed;Current;0;Succeeded;12,5;1.234;-2.345;\n");
+
+        BenchmarkSample sample = Assert.Single(
+            new BenchmarkResultImporter().Import(
+                csv,
+                culture: System.Globalization.CultureInfo.GetCultureInfo("de-DE")).Samples);
+
+        Assert.Equal(1234, sample.AllocatedBytes);
+        Assert.Equal(-2345, sample.WorkingSetDeltaBytes);
+    }
+
+    [Fact]
     public void Importer_PreservesCsvCustomMetrics()
     {
         var root = CreateTempRoot();

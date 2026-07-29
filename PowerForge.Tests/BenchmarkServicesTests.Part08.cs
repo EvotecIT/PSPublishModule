@@ -273,6 +273,43 @@ public sealed partial class BenchmarkServicesTests
         Assert.Contains("gitSha", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("abc123")]
+    [InlineData("012345678901234567890123456789012345678g")]
+    public void EvidenceCatalog_RejectsPublishWithoutFullGitObjectId(string gitSha)
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Metadata["gitSha"] = gitSha;
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "invalid-source.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("full 40- or 64-character", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_AcceptsFullSha256GitObjectId()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Metadata["gitSha"] = new string('b', 64);
+
+        BenchmarkEvidenceCatalog catalog = new BenchmarkEvidenceCatalogService().Update(
+            null,
+            result,
+            "comparison-a",
+            "sha256-source.json",
+            "full",
+            publish: true);
+
+        Assert.Single(catalog.Entries);
+    }
+
     [Fact]
     public void EvidenceCatalog_RejectsPublishingQuickRuns()
     {
@@ -440,7 +477,35 @@ public sealed partial class BenchmarkServicesTests
             catalog.Entries,
             entry => Assert.Contains(
                 entry.CompatibilityIssues,
-                issue => issue.Contains("benchmark.workload.shape.sha256", StringComparison.OrdinalIgnoreCase)));
+                    issue => issue.Contains("benchmark.workload.shape.sha256", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
+    public void EvidenceCatalog_IgnoresPlatformSpecificHostLabelsInWorkloadShape()
+    {
+        var service = new BenchmarkEvidenceCatalogService();
+        BenchmarkRunResult windows = Result("Windows", "fixture-a", 10);
+        BenchmarkRunResult macos = Result("macOS", "fixture-a", 11);
+        windows.Summary[0].Host = "BenchmarkDotNet Windows X64 host";
+        macos.Summary[0].Host = "BenchmarkDotNet macOS Arm64 host";
+
+        BenchmarkEvidenceCatalog catalog = service.Update(
+            null,
+            windows,
+            "comparison-a",
+            "windows.json",
+            "full",
+            publish: true);
+        catalog = service.Update(
+            catalog,
+            macos,
+            "comparison-a",
+            "macos.json",
+            "full",
+            publish: true);
+
+        Assert.All(catalog.Entries, entry => Assert.True(entry.Comparable));
+        Assert.All(catalog.Entries, entry => Assert.Empty(entry.CompatibilityIssues));
     }
 
     [Fact]
@@ -626,6 +691,53 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void BenchmarkJson_ResolvesUnixParentDirectoryAliasesToOneWritePath()
+    {
+#if NET8_0_OR_GREATER
+        if (OperatingSystem.IsWindows())
+            return;
+
+        string root = CreateTempRoot();
+        string realDirectory = Path.Combine(root, "real");
+        string aliasDirectory = Path.Combine(root, "alias");
+        Directory.CreateDirectory(realDirectory);
+        Directory.CreateSymbolicLink(aliasDirectory, realDirectory);
+
+        string realPath = BenchmarkJson.ResolveWritePath(Path.Combine(realDirectory, "index.json"));
+        string aliasPath = BenchmarkJson.ResolveWritePath(Path.Combine(aliasDirectory, "index.json"));
+
+        Assert.Equal(realPath, aliasPath);
+        Assert.Equal(
+            BenchmarkFileUpdateLock.CreateLockPath(realPath),
+            BenchmarkFileUpdateLock.CreateLockPath(aliasPath));
+#endif
+    }
+
+    [Fact]
+    public void EvidenceCatalog_UnixLockGrantsAccessToDirectoryAuthorizedGroup()
+    {
+#if NET8_0_OR_GREATER
+        if (OperatingSystem.IsWindows())
+            return;
+
+        string root = CreateTempRoot();
+        const UnixFileMode directoryMode =
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute;
+        File.SetUnixFileMode(root, directoryMode);
+        string destination = Path.Combine(root, "index.json");
+
+        using (BenchmarkFileUpdateLock.Acquire(destination))
+        {
+        }
+
+        UnixFileMode lockMode = File.GetUnixFileMode(BenchmarkFileUpdateLock.CreateLockPath(destination));
+        Assert.True((lockMode & UnixFileMode.GroupRead) != 0);
+        Assert.True((lockMode & UnixFileMode.GroupWrite) != 0);
+#endif
+    }
+
+    [Fact]
     public void EvidenceCatalog_ReplacesOnlyTheSamePlatformAndRunModeLane()
     {
         var service = new BenchmarkEvidenceCatalogService();
@@ -730,7 +842,7 @@ public sealed partial class BenchmarkServicesTests
             },
             Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["gitSha"] = "abc123",
+                ["gitSha"] = "0123456789abcdef0123456789abcdef01234567",
                 ["benchmark.fixture.sha256"] = fixture,
                 ["benchmark.package.officeimo"] = "3.0.3",
                 ["benchmark.package.sylvan"] = "0.5.7"

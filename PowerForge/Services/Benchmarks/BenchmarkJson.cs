@@ -90,26 +90,60 @@ public static class BenchmarkJson
             OperatingSystem.IsWindows()
                 ? StringComparer.OrdinalIgnoreCase
                 : StringComparer.Ordinal);
-        string currentPath = fullPath;
-        while (true)
-        {
-            if (!visited.Add(currentPath))
-                throw new IOException($"Symbolic-link cycle detected while resolving benchmark output path '{path}'.");
-
-            var file = new FileInfo(currentPath);
-            string? linkTarget = file.LinkTarget;
-            if (string.IsNullOrWhiteSpace(linkTarget))
-                return currentPath;
-
-            currentPath = Path.GetFullPath(
-                Path.IsPathRooted(linkTarget)
-                    ? linkTarget
-                    : Path.Combine(file.DirectoryName!, linkTarget));
-        }
+        return ResolvePathComponents(fullPath, path, visited);
 #else
         return fullPath;
 #endif
     }
+
+#if NET8_0_OR_GREATER
+    private static string ResolvePathComponents(
+        string fullPath,
+        string originalPath,
+        ISet<string> visitedLinks)
+    {
+        string root = Path.GetPathRoot(fullPath)
+                      ?? throw new IOException(
+                          $"Unable to determine the root while resolving benchmark output path '{originalPath}'.");
+        char[] separators = Path.DirectorySeparatorChar == Path.AltDirectorySeparatorChar
+            ? [Path.DirectorySeparatorChar]
+            : [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
+        string[] components = fullPath.Substring(root.Length)
+            .Split(separators, StringSplitOptions.RemoveEmptyEntries);
+        string currentPath = root;
+        foreach (string component in components)
+        {
+            string candidate = Path.Combine(currentPath, component);
+            string? linkTarget = GetLinkTarget(candidate);
+            if (string.IsNullOrWhiteSpace(linkTarget))
+            {
+                currentPath = candidate;
+                continue;
+            }
+
+            string normalizedLink = Path.GetFullPath(candidate);
+            if (!visitedLinks.Add(normalizedLink))
+                throw new IOException(
+                    $"Symbolic-link cycle detected while resolving benchmark output path '{originalPath}'.");
+
+            string targetPath = Path.GetFullPath(
+                Path.IsPathRooted(linkTarget)
+                    ? linkTarget
+                    : Path.Combine(Path.GetDirectoryName(normalizedLink)!, linkTarget));
+            currentPath = ResolvePathComponents(targetPath, originalPath, visitedLinks);
+        }
+
+        return Path.GetFullPath(currentPath);
+    }
+
+    private static string? GetLinkTarget(string path)
+    {
+        FileSystemInfo entry = Directory.Exists(path)
+            ? new DirectoryInfo(path)
+            : new FileInfo(path);
+        return entry.LinkTarget;
+    }
+#endif
 
     /// <summary>
     /// Reads a JSON artifact.
