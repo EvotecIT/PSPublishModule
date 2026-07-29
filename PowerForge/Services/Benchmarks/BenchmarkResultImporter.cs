@@ -316,9 +316,9 @@ public sealed class BenchmarkResultImporter
         string defaultSuite,
         CultureInfo? culture)
     {
-        var records = ReadCsvRecords(path, out _);
+        var records = ReadCsvRecords(path, out var delimiter);
         if (records.Length < 2) return Array.Empty<BenchmarkSample>();
-        bool? usesDecimalComma = DetectDecimalComma(records, culture);
+        bool? usesDecimalComma = DetectDecimalComma(records, delimiter, culture);
         var headers = records[0];
         var samples = new List<BenchmarkSample>();
         for (var i = 1; i < records.Length; i++)
@@ -386,9 +386,9 @@ public sealed class BenchmarkResultImporter
         string defaultSuite,
         CultureInfo? culture)
     {
-        var records = ReadCsvRecords(path, out _);
+        var records = ReadCsvRecords(path, out var delimiter);
         if (records.Length < 2) return Array.Empty<BenchmarkSummaryRow>();
-        bool? usesDecimalComma = DetectDecimalComma(records, culture);
+        bool? usesDecimalComma = DetectDecimalComma(records, delimiter, culture);
         var headers = records[0];
         var rows = new List<BenchmarkSummaryRow>();
         for (var i = 1; i < records.Length; i++)
@@ -402,7 +402,7 @@ public sealed class BenchmarkResultImporter
             var isBenchmarkDotNetCsv = LooksLikeBenchmarkDotNetCsv(headers);
             var metricHeaders = SummaryMetricColumnsFor(headers, isBenchmarkDotNetCsv);
             var metadataColumns = SummaryMetadataColumnsFor(map, isBenchmarkDotNetCsv);
-            var failureCount = ParseInt(Get(map, "FailureCount")) ?? 0;
+            var failureCount = ParseInt(Get(map, "FailureCount"), culture) ?? 0;
             rows.Add(new BenchmarkSummaryRow
             {
                 Suite = GetCsvSuite(map, suiteOverride, defaultSuite, isBenchmarkDotNetCsv),
@@ -419,9 +419,9 @@ public sealed class BenchmarkResultImporter
                     isBenchmarkDotNetCsv,
                     usesDecimalComma,
                     culture),
-                SampleCount = ParseInt(Get(map, "SampleCount")) ?? 0,
+                SampleCount = ParseInt(Get(map, "SampleCount"), culture) ?? 0,
                 FailureCount = failureCount,
-                OutlierCount = ParseInt(Get(map, "OutlierCount")) ?? 0,
+                OutlierCount = ParseInt(Get(map, "OutlierCount"), culture) ?? 0,
                 Status = Get(map, "Status") ?? (failureCount > 0 ? "Failed" : "Succeeded"),
                 MedianMs = ParseDuration(GetWithHeader(map, out var medianHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Median"), medianHeader, usesDecimalComma, culture),
                 MeanMs = ParseDuration(GetWithHeader(map, out var meanHeader, "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]", "Mean"), meanHeader, usesDecimalComma, culture),
@@ -1074,7 +1074,7 @@ public sealed class BenchmarkResultImporter
         return double.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
     }
 
-    private static bool? DetectDecimalComma(string[][] records, CultureInfo? culture)
+    private static bool? DetectDecimalComma(string[][] records, char delimiter, CultureInfo? culture)
     {
         if (culture is not null)
             return string.Equals(culture.NumberFormat.NumberDecimalSeparator, ",", StringComparison.Ordinal);
@@ -1108,6 +1108,8 @@ public sealed class BenchmarkResultImporter
         if (sawDecimalComma)
             return true;
         if (sawDecimalPoint)
+            return false;
+        if (delimiter == ',' && LooksLikeBenchmarkDotNetCsv(headers))
             return false;
         return null;
     }
@@ -1145,23 +1147,24 @@ public sealed class BenchmarkResultImporter
         int dot = text.LastIndexOf('.');
         if (comma >= 0 && dot >= 0)
             return comma > dot;
-        if (comma < 0)
+        if (comma < 0 && dot < 0)
             return false;
 
         string numeric = text.Trim();
-        string[] groups = numeric.Split(',');
+        char separator = comma >= 0 ? ',' : '.';
+        string[] groups = numeric.Split(separator);
         if (groups.Length == 2 &&
             groups[0].Any(char.IsDigit) &&
             groups[1].All(char.IsDigit) &&
             groups[1].Length != 3)
         {
-            return true;
+            return separator == ',';
         }
 
         if (groups.Length > 2 &&
             groups.Skip(1).Any(group => group.Length != 3 || !group.All(char.IsDigit)))
         {
-            return true;
+            return separator == ',';
         }
 
         return null;
@@ -1333,8 +1336,14 @@ public sealed class BenchmarkResultImporter
         return hasDuration ? BenchmarkSampleStatus.Succeeded : BenchmarkSampleStatus.Failed;
     }
 
-    private static int? ParseInt(string? value)
-        => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+    private static int? ParseInt(string? value, CultureInfo? culture = null)
+        => int.TryParse(
+            value,
+            NumberStyles.Integer | NumberStyles.AllowThousands,
+            culture ?? CultureInfo.InvariantCulture,
+            out var parsed)
+            ? parsed
+            : null;
 
     private static Dictionary<string, int> ParseFailureReasons(string? value)
     {

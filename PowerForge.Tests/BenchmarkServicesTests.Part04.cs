@@ -341,6 +341,52 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_RejectsAmbiguousDotGroupedBenchmarkDotNetCsvNumbersWithoutCulture()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "benchmark-report.csv");
+        File.WriteAllText(
+            csv,
+            "Method;Job;Mean\n"
+            + "Ambiguous;Dry;1.234 ns\n");
+
+        BenchmarkRunResult ambiguous = new BenchmarkResultImporter().Import(csv, "demo");
+        BenchmarkRunResult decimalPoint = new BenchmarkResultImporter().Import(
+            csv,
+            "demo",
+            System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+        BenchmarkRunResult grouped = new BenchmarkResultImporter().Import(
+            csv,
+            "demo",
+            System.Globalization.CultureInfo.GetCultureInfo("de-DE"));
+
+        Assert.Equal(BenchmarkSampleStatus.Failed, Assert.Single(ambiguous.Samples).Status);
+        Assert.Equal(0.000001234, Assert.Single(decimalPoint.Samples).DurationMs, precision: 12);
+        Assert.Equal(0.001234, Assert.Single(grouped.Samples).DurationMs, precision: 9);
+    }
+
+    [Fact]
+    public void Importer_UsesExplicitCultureForGroupedSummaryCounts()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "summary.csv");
+        File.WriteAllText(
+            csv,
+            "Suite;Scenario;Operation;Engine;Host;SampleCount;FailureCount;OutlierCount;MedianMs\n"
+            + "suite;case;Run;Managed;Current;1.234;1.000;2.345;12,5\n");
+
+        BenchmarkSummaryRow row = Assert.Single(
+            new BenchmarkResultImporter().Import(
+                csv,
+                culture: System.Globalization.CultureInfo.GetCultureInfo("de-DE")).Summary);
+
+        Assert.Equal(1234, row.SampleCount);
+        Assert.Equal(1000, row.FailureCount);
+        Assert.Equal(2345, row.OutlierCount);
+        Assert.Equal("Failed", row.Status);
+    }
+
+    [Fact]
     public void Importer_KeepsRunnerVariablesNamedLikeBenchmarkDotNetStatistics()
     {
         var root = CreateTempRoot();
