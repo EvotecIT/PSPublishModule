@@ -11,7 +11,7 @@ Imports BenchmarkDotNet or normalized benchmark artifacts into the common benchm
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Import-BenchmarkResult [-Path] <string> [-Suite <string>] [-OutputPath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Import-BenchmarkResult [-Path] <string> [-Suite <string>] [-Culture <string>] [-OutputPath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -26,6 +26,23 @@ Import-BenchmarkResult -Path .\BenchmarkDotNet.Artifacts -OutputPath .\Build\Ben
 
 
 ## PARAMETERS
+
+### -Culture
+Optional numeric culture used by the producing CSV report, for example de-DE.
+Supply it when punctuation such as 1,234 would otherwise be ambiguous.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
 
 ### -OutputPath
 Optional output path for normalized JSON.
