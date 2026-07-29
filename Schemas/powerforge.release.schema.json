@@ -122,6 +122,19 @@
           "type": "boolean",
           "description": "Explicit recovery mode. When true, a release with the same tag may be reused. Auto-versioned normal releases should leave this false so an occupied GitHub tag selects a new version."
         },
+        "RequireExpectedExistingRelease": {
+          "type": "boolean",
+          "description": "Require recovery to reuse the exact preflight-verified release identifier instead of creating or selecting another release."
+        },
+        "ExpectedExistingReleaseId": {
+          "type": [ "integer", "null" ],
+          "minimum": 1,
+          "description": "Exact GitHub release identifier authorized by recovery preflight."
+        },
+        "RequirePublishedStableRelease": {
+          "type": "boolean",
+          "description": "Require a reused release to remain published, non-draft, and non-prerelease before asset mutation."
+        },
         "ReplaceExistingAssets": {
           "type": "boolean",
           "description": "When ReuseExistingRelease is true, delete same-named assets before uploading replacements."

@@ -159,6 +159,81 @@ public sealed class GitHubReleasePublisherTests
     }
 
     [Fact]
+    public async Task PublishRelease_ReusesOnlyPreflightBoundStableReleaseAndRevalidatesTagBeforeUpload()
+    {
+        var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(assetPath, "asset");
+        const string commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var requests = new List<string>();
+
+        async Task Respond(HttpListenerContext context, string json, int statusCode = 200)
+        {
+            requests.Add($"{context.Request.HttpMethod} {context.Request.Url!.AbsolutePath}");
+            await context.Request.InputStream.CopyToAsync(Stream.Null);
+            var bytes = Encoding.UTF8.GetBytes(json);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = bytes.Length;
+            await context.Response.OutputStream.WriteAsync(bytes);
+            context.Response.Close();
+        }
+
+        var releaseJson = $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}","body":"generated","draft":false,"prerelease":false,"published_at":"2026-07-29T00:00:00Z"}""";
+        var server = Task.Run(async () =>
+        {
+            await Respond(await listener.GetContextAsync(), releaseJson);
+            await Respond(await listener.GetContextAsync(), releaseJson);
+            await Respond(await listener.GetContextAsync(), $"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
+            await Respond(await listener.GetContextAsync(), "[]");
+            await Respond(await listener.GetContextAsync(), "{}", 201);
+        });
+
+        try
+        {
+            var result = new GitHubReleasePublisher(new NullLogger()).PublishRelease(
+                new GitHubReleasePublishRequest
+                {
+                    Owner = "EvotecIT",
+                    Repository = "example",
+                    Token = "token",
+                    ApiBaseUrl = apiBaseUrl,
+                    TagName = "v1.2.3",
+                    ReuseExistingReleaseOnConflict = true,
+                    RequireExpectedExistingRelease = true,
+                    ExpectedExistingReleaseId = 42,
+                    RequirePublishedStableRelease = true,
+                    ExpectedTagCommitSha = commit,
+                    ReplaceExistingAssets = true,
+                    AssetFilePaths = [assetPath]
+                });
+
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(result.ReusedExistingRelease);
+            Assert.Equal(Path.GetFileName(assetPath), Assert.Single(result.UploadedAssets));
+            Assert.Equal(
+                [
+                    "GET /repos/EvotecIT/example/releases/tags/v1.2.3",
+                    "GET /repos/EvotecIT/example/releases/tags/v1.2.3",
+                    "GET /repos/EvotecIT/example/git/ref/tags/v1.2.3",
+                    "GET /repos/EvotecIT/example/releases/42/assets",
+                    "POST /uploads"
+                ],
+                requests);
+        }
+        finally
+        {
+            listener.Stop();
+            listener.Close();
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
     public void TryReserveExistingAssetNameForReplacement_AllowsOnlyAssetsFromOriginalSnapshot()
     {
         var replaceableAssetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -181,6 +256,20 @@ public sealed class GitHubReleasePublisherTests
         Assert.Contains("not preflight-verified", missing.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("not preflight-verified", mismatch.Message, StringComparison.OrdinalIgnoreCase);
         GitHubReleasePublisher.ValidateExpectedExistingRelease("v1.2.3", true, 99, 99);
+    }
+
+    [Fact]
+    public void ValidatePublishedStableRelease_RejectsUnsafeRecoveryStates()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            GitHubReleasePublisher.ValidatePublishedStableRelease("v1.2.3", true, true, false, "2026-07-29T00:00:00Z"));
+        Assert.Throws<InvalidOperationException>(() =>
+            GitHubReleasePublisher.ValidatePublishedStableRelease("v1.2.3", true, false, true, "2026-07-29T00:00:00Z"));
+        Assert.Throws<InvalidOperationException>(() =>
+            GitHubReleasePublisher.ValidatePublishedStableRelease("v1.2.3", true, false, false, null));
+
+        GitHubReleasePublisher.ValidatePublishedStableRelease(
+            "v1.2.3", true, false, false, "2026-07-29T00:00:00Z");
     }
 
     [Fact]

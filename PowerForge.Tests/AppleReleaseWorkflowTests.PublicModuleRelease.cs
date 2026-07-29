@@ -23,6 +23,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("Assert-PowerForgeCommittedReleaseVersion", script, StringComparison.Ordinal);
         Assert.Contains("Set-PowerForgeAuthorizedReleaseVersion", script, StringComparison.Ordinal);
         Assert.Contains("-DisableVersionUpdates:($Operation -eq 'Publish')", script, StringComparison.Ordinal);
+        Assert.Contains("Enable-PowerForgeVerifiedGitHubReleaseRecovery", script, StringComparison.Ordinal);
         Assert.Contains(". .\\Build\\Private\\Assert-PowerForgeCommittedReleaseVersion.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("$releaseConfig.GitHub | Add-Member -NotePropertyName Commitish", script, StringComparison.Ordinal);
         Assert.Contains("ExpectedTagCommitSha = gitHub.Commitish", Read(root, "PowerForge", "Services", "PowerForgeReleaseService.cs"), StringComparison.Ordinal);
@@ -59,6 +60,35 @@ public sealed partial class AppleReleaseWorkflowTests
                       "if ($result.Packages.UpdateVersions -ne $false) { throw 'Version mutation remained enabled.' }";
 
         Run("pwsh", root, "-NoProfile", "-Command", command).EnsureSuccess();
+    }
+
+    [Fact]
+    public void PublicModuleReleaseEnablesOnlyExactVerifiedGitHubRecovery()
+    {
+        var root = FindRepoRoot();
+        var helper = Path.Combine(root, "Build", "Private", "Enable-PowerForgeVerifiedGitHubReleaseRecovery.ps1");
+        var escapedHelper = helper.Replace("'", "''", StringComparison.Ordinal);
+        const string commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var command = $". '{escapedHelper}'; " +
+                      "$config = '{\"GitHub\":{\"Publish\":true,\"Owner\":\"EvotecIT\",\"Repository\":\"PSPublishModule\",\"TagTemplate\":\"v{Version}\",\"ReuseExistingRelease\":false,\"ReplaceExistingAssets\":false}}' | ConvertFrom-Json; " +
+                      "$releaseProbe = { [pscustomobject]@{ id = 42; tag_name = 'v3.0.81'; draft = $false; prerelease = $false; published_at = '2026-07-29T00:00:00Z' } }; " +
+                      $"$tagProbe = {{ '{commit}' }}; " +
+                      $"$result = Enable-PowerForgeVerifiedGitHubReleaseRecovery -ReleaseConfig $config -Version '3.0.81' -ExpectedCommit '{commit}' -Token 'test' -GetReleaseByTag $releaseProbe -GetTagCommit $tagProbe; " +
+                      "if (-not $result.ReuseEnabled -or $result.ReleaseId -ne 42) { throw 'Verified recovery was not enabled.' }; " +
+                      "if (-not $config.GitHub.ReuseExistingRelease -or -not $config.GitHub.ReplaceExistingAssets -or -not $config.GitHub.RequireExpectedExistingRelease -or $config.GitHub.ExpectedExistingReleaseId -ne 42 -or -not $config.GitHub.RequirePublishedStableRelease) { throw 'Effective recovery binding is incomplete.' }; " +
+                      "$fresh = '{\"GitHub\":{\"Publish\":true,\"Owner\":\"EvotecIT\",\"Repository\":\"PSPublishModule\",\"TagTemplate\":\"v{Version}\",\"ReuseExistingRelease\":true,\"ReplaceExistingAssets\":true}}' | ConvertFrom-Json; " +
+                      "$missingProbe = { $null }; " +
+                      $"$freshResult = Enable-PowerForgeVerifiedGitHubReleaseRecovery -ReleaseConfig $fresh -Version '3.0.81' -ExpectedCommit '{commit}' -Token 'test' -GetReleaseByTag $missingProbe -GetTagCommit $missingProbe; " +
+                      "if ($freshResult.ReuseEnabled -or $fresh.GitHub.ReuseExistingRelease -or $fresh.GitHub.ReplaceExistingAssets -or $fresh.GitHub.RequireExpectedExistingRelease -or $null -ne $fresh.GitHub.ExpectedExistingReleaseId -or $fresh.GitHub.RequirePublishedStableRelease) { throw 'Fresh release did not remain non-reuse.' }";
+
+        Run("pwsh", root, "-NoProfile", "-Command", command).EnsureSuccess();
+
+        var mismatch = command.Replace(
+            $"-ExpectedCommit '{commit}'",
+            "-ExpectedCommit 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'",
+            StringComparison.Ordinal);
+        var mismatchResult = Run("pwsh", root, "-NoProfile", "-Command", mismatch);
+        Assert.NotEqual(0, mismatchResult.ExitCode);
     }
 
     [Fact]

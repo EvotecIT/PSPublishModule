@@ -3232,6 +3232,9 @@ internal sealed partial class PowerForgeReleaseService
                     GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
                     IsPreRelease = gitHub.IsPreRelease,
                     ReuseExistingReleaseOnConflict = gitHub.ReuseExistingRelease,
+                    RequireExpectedExistingRelease = gitHub.RequireExpectedExistingRelease,
+                    ExpectedExistingReleaseId = gitHub.ExpectedExistingReleaseId,
+                    RequirePublishedStableRelease = gitHub.RequirePublishedStableRelease,
                     ReplaceExistingAssets = gitHub.ReuseExistingRelease && gitHub.ReplaceExistingAssets,
                     AssetFilePaths = assets,
                     Progress = progress is IPowerForgeReleaseProgressReporterV2 detailedProgress

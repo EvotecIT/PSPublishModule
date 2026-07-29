@@ -454,7 +454,12 @@ public sealed partial class PowerForgeReleaseServiceTests
                         Owner = "EvotecIT",
                         Repository = "PSPublishModule",
                         Token = "token",
-                        Commitish = "0123456789abcdef0123456789abcdef01234567"
+                        Commitish = "0123456789abcdef0123456789abcdef01234567",
+                        ReuseExistingRelease = true,
+                        RequireExpectedExistingRelease = true,
+                        ExpectedExistingReleaseId = 42,
+                        RequirePublishedStableRelease = true,
+                        ReplaceExistingAssets = true
                     }
                 },
                 new PowerForgeReleaseRequest
@@ -468,6 +473,11 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("v1.0.7", publish.TagName);
             Assert.Equal("0123456789abcdef0123456789abcdef01234567", publish.Commitish);
             Assert.Equal("0123456789abcdef0123456789abcdef01234567", publish.ExpectedTagCommitSha);
+            Assert.True(publish.ReuseExistingReleaseOnConflict);
+            Assert.True(publish.RequireExpectedExistingRelease);
+            Assert.Equal(42, publish.ExpectedExistingReleaseId);
+            Assert.True(publish.RequirePublishedStableRelease);
+            Assert.True(publish.ReplaceExistingAssets);
             Assert.Equal(
                 new[] { powerForgeZip, powerForgeWebZip }.OrderBy(static path => path),
                 publish.AssetFilePaths.OrderBy(static path => path));

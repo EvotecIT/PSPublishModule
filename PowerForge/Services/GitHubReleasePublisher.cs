@@ -56,6 +56,7 @@ public sealed partial class GitHubReleasePublisher
         var reuseExistingReleaseOnConflict = request.ReuseExistingReleaseOnConflict;
         var requireExpectedExistingRelease = request.RequireExpectedExistingRelease;
         var expectedExistingReleaseId = request.ExpectedExistingReleaseId;
+        var requirePublishedStableRelease = request.RequirePublishedStableRelease;
         var expectedReleaseBodyMarker = request.ExpectedReleaseBodyMarker;
         var expectedTagCommitSha = request.ExpectedTagCommitSha;
         var replaceExistingAssets = request.ReplaceExistingAssets;
@@ -103,6 +104,7 @@ public sealed partial class GitHubReleasePublisher
             reuseExistingReleaseOnConflict,
             requireExpectedExistingRelease,
             expectedExistingReleaseId,
+            requirePublishedStableRelease,
             cancellationToken);
         releaseWatch.Stop();
         _logger.Success($"GitHub release ready in {DotNetRepositoryReleaseService.FormatDuration(releaseWatch.Elapsed)}: {release.HtmlUrl}");
@@ -132,6 +134,7 @@ public sealed partial class GitHubReleasePublisher
                 tagName,
                 expectedReleaseBodyMarker,
                 expectedTagCommitSha,
+                requirePublishedStableRelease,
                 replaceExistingAssets,
                 result.ReplacedExistingAssets,
                 result.UploadedAssets,
@@ -196,9 +199,21 @@ public sealed partial class GitHubReleasePublisher
         bool reuseExistingReleaseOnConflict,
         bool requireExpectedExistingRelease,
         long? expectedExistingReleaseId,
+        bool requirePublishedStableRelease,
         CancellationToken cancellationToken)
     {
         var uri = BuildApiUri(apiBaseUrl, $"/repos/{owner}/{repo}/releases");
+
+        if (reuseExistingReleaseOnConflict &&
+            requireExpectedExistingRelease &&
+            expectedExistingReleaseId.HasValue)
+        {
+            var expected = GetReleaseByTag(owner, repo, token, apiBaseUrl, tagName, reusedExistingRelease: true, cancellationToken);
+            ValidateExpectedExistingRelease(tagName, true, expectedExistingReleaseId, expected.Id);
+            ValidatePublishedStableRelease(tagName, requirePublishedStableRelease, expected);
+            _logger.Info($"GitHub release for tag '{tagName}' already exists; reusing preflight-verified release {expected.Id}.");
+            return expected;
+        }
 
         var normalizedCommitish = string.IsNullOrWhiteSpace(commitish) ? null : commitish!.Trim();
         var normalizedReleaseNotes =
@@ -236,6 +251,7 @@ public sealed partial class GitHubReleasePublisher
                     requireExpectedExistingRelease,
                     expectedExistingReleaseId,
                     existing.Id);
+                ValidatePublishedStableRelease(tagName, requirePublishedStableRelease, existing);
 
                 _logger.Info(requireExpectedExistingRelease
                     ? $"GitHub release for tag '{tagName}' already exists; reusing preflight-verified release {existing.Id}."
@@ -252,7 +268,15 @@ public sealed partial class GitHubReleasePublisher
         if (string.IsNullOrWhiteSpace(upload))
             throw new InvalidOperationException("GitHub release creation succeeded but upload_url was empty.");
 
-        return new GitHubReleaseApiResponse(parsed.Id, html, upload, reusedExistingRelease: false, parsed.Body);
+        return new GitHubReleaseApiResponse(
+            parsed.Id,
+            html,
+            upload,
+            reusedExistingRelease: false,
+            parsed.Body,
+            parsed.Draft,
+            parsed.Prerelease,
+            parsed.PublishedAt);
     }
 
     private GitHubReleaseApiResponse GetReleaseByTag(
@@ -279,7 +303,15 @@ public sealed partial class GitHubReleasePublisher
         if (string.IsNullOrWhiteSpace(upload))
             throw new InvalidOperationException($"GitHub get-release-by-tag succeeded for '{tagName}' but upload_url was empty.");
 
-        return new GitHubReleaseApiResponse(parsed.Id, html, upload, reusedExistingRelease, parsed.Body);
+        return new GitHubReleaseApiResponse(
+            parsed.Id,
+            html,
+            upload,
+            reusedExistingRelease,
+            parsed.Body,
+            parsed.Draft,
+            parsed.Prerelease,
+            parsed.PublishedAt);
     }
 
     private IReadOnlyList<string> UploadAssets(
@@ -293,6 +325,7 @@ public sealed partial class GitHubReleasePublisher
         string tagName,
         string? expectedReleaseBodyMarker,
         string? expectedTagCommitSha,
+        bool requirePublishedStableRelease,
         bool replaceExistingAssets,
         List<string> replacedExistingAssets,
         List<string> uploadedAssets,
@@ -308,6 +341,7 @@ public sealed partial class GitHubReleasePublisher
             tagName,
             expectedReleaseBodyMarker,
             expectedTagCommitSha,
+            requirePublishedStableRelease,
             cancellationToken);
 
         var skippedAssets = new List<string>();
@@ -433,39 +467,6 @@ public sealed partial class GitHubReleasePublisher
         }
 
         return skippedAssets;
-    }
-
-    internal static bool TryReserveExistingAssetNameForReplacement(ISet<string> replaceableAssetNames, string fileName)
-    {
-        if (replaceableAssetNames is null) throw new ArgumentNullException(nameof(replaceableAssetNames));
-        if (string.IsNullOrWhiteSpace(fileName)) return false;
-
-        return replaceableAssetNames.Remove(fileName);
-    }
-
-    internal static void ValidateExpectedExistingRelease(
-        string tagName,
-        bool requireExpectedExistingRelease,
-        long? expectedExistingReleaseId,
-        long actualExistingReleaseId)
-    {
-        if (!requireExpectedExistingRelease) return;
-        if (expectedExistingReleaseId.HasValue && expectedExistingReleaseId.Value == actualExistingReleaseId) return;
-
-        throw new InvalidOperationException(
-            $"GitHub release for tag '{tagName}' already exists, but release id {actualExistingReleaseId} was not preflight-verified for reuse.");
-    }
-
-    private static HashSet<string> CreateReplaceableAssetNameSet(IEnumerable<GitHubReleaseAssetResponse> existingAssets)
-    {
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var asset in existingAssets)
-        {
-            if (!string.IsNullOrWhiteSpace(asset.Name))
-                names.Add(asset.Name!);
-        }
-
-        return names;
     }
 
     private static HttpResponseMessage UploadAsset(
@@ -709,6 +710,15 @@ public sealed partial class GitHubReleasePublisher
 
         [DataMember(Name = "body")]
         public string? Body { get; set; }
+
+        [DataMember(Name = "draft")]
+        public bool Draft { get; set; }
+
+        [DataMember(Name = "prerelease")]
+        public bool Prerelease { get; set; }
+
+        [DataMember(Name = "published_at")]
+        public string? PublishedAt { get; set; }
     }
 
     [DataContract]
@@ -749,13 +759,24 @@ public sealed partial class GitHubReleasePublisher
 
     private sealed class GitHubReleaseApiResponse
     {
-        public GitHubReleaseApiResponse(long id, string htmlUrl, string uploadUrl, bool reusedExistingRelease, string? body = null)
+        public GitHubReleaseApiResponse(
+            long id,
+            string htmlUrl,
+            string uploadUrl,
+            bool reusedExistingRelease,
+            string? body = null,
+            bool isDraft = false,
+            bool isPreRelease = false,
+            string? publishedAt = null)
         {
             Id = id;
             HtmlUrl = htmlUrl;
             UploadUrl = uploadUrl;
             ReusedExistingRelease = reusedExistingRelease;
             Body = body;
+            IsDraft = isDraft;
+            IsPreRelease = isPreRelease;
+            PublishedAt = publishedAt;
         }
 
         public long Id { get; }
@@ -763,5 +784,8 @@ public sealed partial class GitHubReleasePublisher
         public string UploadUrl { get; }
         public bool ReusedExistingRelease { get; }
         public string? Body { get; }
+        public bool IsDraft { get; }
+        public bool IsPreRelease { get; }
+        public string? PublishedAt { get; }
     }
 }

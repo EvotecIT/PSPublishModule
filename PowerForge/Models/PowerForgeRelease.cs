@@ -693,6 +693,12 @@ internal sealed class PowerForgeReleaseGitHubOptions
 
     public bool ReuseExistingRelease { get; set; }
 
+    public bool RequireExpectedExistingRelease { get; set; }
+
+    public long? ExpectedExistingReleaseId { get; set; }
+
+    public bool RequirePublishedStableRelease { get; set; }
+
     public bool ReplaceExistingAssets { get; set; }
 
     public string? TagTemplate { get; set; }

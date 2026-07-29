@@ -34,6 +34,7 @@ $releaseStage = 'Preflight'
 $actualCommit = $null
 $releaseOutput = $null
 $effectiveConfigPath = $null
+$releaseRecovery = $null
 [pscustomobject]@{
     Success       = $false
     Status        = 'Running'
@@ -76,8 +77,6 @@ try {
         -Version $Version `
         -DisableVersionUpdates:($Operation -eq 'Publish')
     $releaseConfig.GitHub | Add-Member -NotePropertyName Commitish -NotePropertyValue $ExpectedCommit -Force
-    $effectiveConfigPath = Join-Path (Split-Path -Parent $ConfigPath) ".release.authorized.$PID.json"
-    $releaseConfig | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $effectiveConfigPath -Encoding utf8
 
     $certificateThumbprint = [string] $releaseConfig.Packages.CertificateThumbprint
     $certificateStore = [string] $releaseConfig.Packages.CertificateStore
@@ -114,11 +113,26 @@ try {
         . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Assert-PowerForgeCommittedReleaseVersion.ps1')
         Assert-PowerForgeCommittedReleaseVersion -RepositoryRoot $repositoryRoot -Version $Version -ReleaseConfig $releaseConfig
 
+        $gitHubTokenPath = [string] $releaseConfig.GitHub.TokenFilePath
+        if ([string]::IsNullOrWhiteSpace($gitHubTokenPath)) {
+            throw 'Build/release.json must configure the unified GitHub release token file.'
+        }
+        $gitHubToken = (Get-Content -Raw -LiteralPath $gitHubTokenPath).Trim()
+        . (Join-Path (Join-Path $PSScriptRoot 'Private') 'Enable-PowerForgeVerifiedGitHubReleaseRecovery.ps1')
+        $releaseRecovery = Enable-PowerForgeVerifiedGitHubReleaseRecovery `
+            -ReleaseConfig $releaseConfig `
+            -Version $Version `
+            -ExpectedCommit $ExpectedCommit `
+            -Token $gitHubToken
+
         $expectedConfirmation = "publish:$Version`:$ExpectedCommit"
         if ($Confirm -cne $expectedConfirmation) {
             throw "Publish confirmation must exactly equal '$expectedConfirmation'."
         }
     }
+
+    $effectiveConfigPath = Join-Path (Split-Path -Parent $ConfigPath) ".release.authorized.$PID.json"
+    $releaseConfig | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $effectiveConfigPath -Encoding utf8
 
     $releaseStage = 'Build'
     $buildScript = Join-Path $PSScriptRoot 'Build-Project.ps1'
@@ -166,6 +180,7 @@ try {
         Commit                = $actualCommit
         CertificateThumbprint = $certificateThumbprint
         CertificateExpiresUtc = $certificate.NotAfter.ToUniversalTime()
+        GitHubRecovery         = $releaseRecovery
         ReceiptPath           = $ReceiptPath
     }
 } catch {

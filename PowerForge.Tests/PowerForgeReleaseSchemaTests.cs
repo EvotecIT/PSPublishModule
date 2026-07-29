@@ -48,6 +48,25 @@ public sealed class PowerForgeReleaseSchemaTests
         Assert.True(appleSchema.Evaluate(node, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
     }
 
+    [Fact]
+    public void Release_schema_accepts_exact_verified_github_recovery_binding()
+    {
+        var schemaDocument = JsonNode.Parse(File.ReadAllText(GetSchemaPath("powerforge.release.schema.json")))!;
+        var gitHubSchema = JsonSchema.FromText(schemaDocument["properties"]!["GitHub"]!.ToJsonString());
+        var node = JsonNode.Parse("""
+            {
+              "Publish": true,
+              "ReuseExistingRelease": true,
+              "RequireExpectedExistingRelease": true,
+              "ExpectedExistingReleaseId": 42,
+              "RequirePublishedStableRelease": true,
+              "ReplaceExistingAssets": true
+            }
+            """)!;
+
+        Assert.True(gitHubSchema.Evaluate(node, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
+    }
+
     private static string GetSchemaPath(string fileName) => Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory,
         "..", "..", "..", "..",
