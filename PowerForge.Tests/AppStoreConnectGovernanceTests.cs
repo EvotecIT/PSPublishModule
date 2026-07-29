@@ -444,6 +444,139 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Contains("appPriceSchedules/schedule-1/manualPrices", handler.RequestUris[1].ToString(), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("INVALID")]
+    [InlineData("EXPIRED")]
+    [InlineData("IN_REVIEW")]
+    [InlineData("REJECTED")]
+    [InlineData("CREATED")]
+    [InlineData(null)]
+    public async Task GovernancePlan_BlocksMatchingEncryptionDeclarationUntilAppleApprovesIt(string? state)
+    {
+        var stateJson = state is null ? "null" : $"\"{state}\"";
+        var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.OK,
+            $$"""
+            {
+              "data": [{
+                "type": "appEncryptionDeclarations",
+                "id": "encryption-1",
+                "attributes": {
+                  "appDescription": "Reviewed encryption",
+                  "containsProprietaryCryptography": false,
+                  "containsThirdPartyCryptography": true,
+                  "availableOnFrenchStore": false,
+                  "appEncryptionDeclarationState": {{stateJson}}
+                }
+              }]
+            }
+            """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var plan = await new AppStoreConnectGovernanceService(client).PlanAsync(
+            CreateEncryptionGovernanceSpec());
+
+        var blocked = Assert.Single(plan.Changes);
+        Assert.Equal(AppStoreConnectGovernanceChangeAction.Blocked, blocked.Action);
+        Assert.Equal("EncryptionDeclaration", blocked.ResourceType);
+        Assert.Equal("encryption-1", blocked.ResourceId);
+        Assert.Contains(state ?? "UNKNOWN", blocked.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.False(plan.CanApply);
+    }
+
+    [Fact]
+    public async Task GovernancePlan_AcceptsAnyApprovedMatchingEncryptionDeclaration()
+    {
+        var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.OK,
+            """
+            {
+              "data": [
+                {
+                  "type": "appEncryptionDeclarations",
+                  "id": "encryption-expired",
+                  "attributes": {
+                    "appDescription": "Reviewed encryption",
+                    "containsProprietaryCryptography": false,
+                    "containsThirdPartyCryptography": true,
+                    "availableOnFrenchStore": false,
+                    "appEncryptionDeclarationState": "EXPIRED"
+                  }
+                },
+                {
+                  "type": "appEncryptionDeclarations",
+                  "id": "encryption-approved",
+                  "attributes": {
+                    "appDescription": "Reviewed encryption",
+                    "containsProprietaryCryptography": false,
+                    "containsThirdPartyCryptography": true,
+                    "availableOnFrenchStore": false,
+                    "appEncryptionDeclarationState": "APPROVED"
+                  }
+                }
+              ]
+            }
+            """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var plan = await new AppStoreConnectGovernanceService(client).PlanAsync(
+            CreateEncryptionGovernanceSpec());
+
+        Assert.True(plan.IsConverged);
+        Assert.Empty(plan.Changes);
+    }
+
+    [Fact]
+    public void GovernanceDocuments_ReplaceSnapshotsThroughOneAtomicService()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"powerforge-governance-documents-{Guid.NewGuid():N}");
+        var path = Path.Combine(root, "governance.json");
+        try
+        {
+            Directory.CreateDirectory(root);
+            File.WriteAllText(path, "reviewed-original");
+            var service = new AppStoreConnectGovernanceDocumentService();
+            var snapshot = new AppStoreConnectGovernanceSpec { AppId = "app-1" };
+
+            var preflightRefusal = Assert.Throws<InvalidOperationException>(
+                () => service.ValidateSnapshotDestination(path));
+            Assert.Contains("already exists", preflightRefusal.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("reviewed-original", File.ReadAllText(path));
+
+            var refusal = Assert.Throws<InvalidOperationException>(
+                () => service.WriteSnapshot(path, snapshot));
+            Assert.Contains("already exists", refusal.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("reviewed-original", File.ReadAllText(path));
+
+            var resolvedPath = service.ValidateSnapshotDestination(path, overwrite: true);
+            Assert.Equal(Path.GetFullPath(path), resolvedPath);
+            service.WriteSnapshot(resolvedPath, snapshot, overwrite: true);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            Assert.Equal("app-1", document.RootElement.GetProperty("appId").GetString());
+            Assert.Empty(Directory.GetFiles(root, "*.tmp", SearchOption.TopDirectoryOnly));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static AppStoreConnectGovernanceSpec CreateEncryptionGovernanceSpec() => new()
+    {
+        AppId = "app-1",
+        EncryptionDeclarations =
+        [
+            new AppStoreConnectEncryptionDeclarationSpec
+            {
+                AppDescription = "Reviewed encryption",
+                ContainsProprietaryCryptography = false,
+                ContainsThirdPartyCryptography = true,
+                AvailableOnFrenchStore = false
+            }
+        ]
+    };
+
     [Fact]
     public async Task GovernanceApply_BaseTerritoryReplacementPlansAndReceiptsEveryIncludedPrice()
     {

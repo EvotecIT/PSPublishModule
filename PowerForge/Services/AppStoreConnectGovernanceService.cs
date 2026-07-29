@@ -388,10 +388,19 @@ public sealed partial class AppStoreConnectGovernanceService
         var current = await _client.GetEncryptionDeclarationsAsync(spec.AppId, cancellationToken).ConfigureAwait(false);
         foreach (var desired in spec.EncryptionDeclarations)
         {
-            if (!current.Any(existing => EncryptionMatches(existing, desired)))
+            var matching = current.Where(existing => EncryptionMatches(existing, desired)).ToArray();
+            if (matching.Length == 0)
             {
                 Add(changes, "Encryption", "EncryptionDeclaration", EncryptionKey(desired), AppStoreConnectGovernanceChangeAction.Create,
                     "Create the missing human-reviewed export-compliance declaration.");
+                continue;
+            }
+            if (!matching.Any(IsUsableEncryptionDeclaration))
+            {
+                var unusable = matching[0];
+                var state = string.IsNullOrWhiteSpace(unusable.State) ? "UNKNOWN" : unusable.State!.Trim().ToUpperInvariant();
+                Add(changes, "Encryption", "EncryptionDeclaration", EncryptionKey(desired), AppStoreConnectGovernanceChangeAction.Blocked,
+                    $"Matching export-compliance declaration '{unusable.Id}' is in unusable state '{state}'. Resolve or replace it in App Store Connect, then replan.", unusable.Id);
             }
         }
     }
@@ -550,6 +559,7 @@ public sealed partial class AppStoreConnectGovernanceService
 
     private static bool PriceMatches(AppStoreConnectAppPriceInfo actual, AppStoreConnectAppPriceSpec desired) => Same(actual.AppPricePointId, desired.AppPricePointId) && Same(actual.TerritoryId, desired.TerritoryId) && SameDate(actual.StartDate, desired.StartDate) && SameDate(actual.EndDate, desired.EndDate);
     private static bool EncryptionMatches(AppStoreConnectEncryptionDeclarationInfo actual, AppStoreConnectEncryptionDeclarationSpec desired) => Same(actual.AppDescription, desired.AppDescription) && actual.ContainsProprietaryCryptography == desired.ContainsProprietaryCryptography && actual.ContainsThirdPartyCryptography == desired.ContainsThirdPartyCryptography && actual.AvailableOnFrenchStore == desired.AvailableOnFrenchStore;
+    private static bool IsUsableEncryptionDeclaration(AppStoreConnectEncryptionDeclarationInfo declaration) => Same(declaration.State, "APPROVED");
     private static bool SubscriptionMatches(AppStoreConnectSubscriptionInfo actual, AppStoreConnectSubscriptionSpec desired) => Same(actual.Name, desired.Name) && Same(actual.SubscriptionPeriod, desired.SubscriptionPeriod) && (!desired.FamilySharable.HasValue || actual.FamilySharable == desired.FamilySharable) && (desired.ReviewNote is null || SameOptional(actual.ReviewNote, desired.ReviewNote)) && (!desired.GroupLevel.HasValue || actual.GroupLevel == desired.GroupLevel);
     private static bool SubscriptionPriceMatches(AppStoreConnectSubscriptionPriceInfo actual, AppStoreConnectSubscriptionPriceSpec desired) => Same(actual.TerritoryId, desired.TerritoryId) && Same(actual.SubscriptionPricePointId, desired.SubscriptionPricePointId) && SameDate(actual.StartDate, desired.StartDate) && (desired.PlanType is null || SameOptional(actual.PlanType, desired.PlanType)) && (!desired.PreserveCurrentPrice.HasValue || actual.Preserved == desired.PreserveCurrentPrice);
     private static bool SubscriptionIntroductoryOfferMatches(AppStoreConnectSubscriptionIntroductoryOfferInfo actual, AppStoreConnectSubscriptionIntroductoryOfferSpec desired, string territoryId) => Same(actual.TerritoryId, territoryId) && Same(actual.Duration, desired.Duration) && Same(actual.OfferMode, desired.OfferMode) && actual.NumberOfPeriods == desired.NumberOfPeriods && SameDate(actual.StartDate, desired.StartDate) && SameDate(actual.EndDate, desired.EndDate) && SameOptional(actual.SubscriptionPricePointId, desired.SubscriptionPricePointId);

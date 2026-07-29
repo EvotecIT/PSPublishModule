@@ -1,8 +1,6 @@
 using System;
 using System.IO;
 using System.Management.Automation;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using PowerForge;
 
@@ -45,31 +43,16 @@ public sealed class ExportAppStoreConnectGovernanceCommand : AsyncPSCmdlet
     /// <summary>Reads Apple and writes the reviewable declaration.</summary>
     protected override async Task ProcessRecordAsync()
     {
-        var outputPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path);
-        if (File.Exists(outputPath) && !Force.IsPresent)
-            throw new InvalidOperationException($"Governance snapshot already exists: {outputPath}. Use -Force only after preserving reviewed edits.");
+        var documents = new AppStoreConnectGovernanceDocumentService();
+        var outputPath = documents.ValidateSnapshotDestination(
+            SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path),
+            Force.IsPresent);
         if (!ShouldProcess(outputPath, $"Export App Store Connect governance for app {AppId}")) return;
         var keyPath = AppStoreConnectCommandSupport.ResolvePrivateKeyPath(SessionState, PrivateKeyPath);
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, keyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
         var snapshot = await new AppStoreConnectGovernanceService(client).SnapshotAsync(AppId, CancelToken);
-        var options = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            WriteIndented = true
-        };
-        options.Converters.Add(new JsonStringEnumConverter());
-        var directory = System.IO.Path.GetDirectoryName(outputPath);
-        if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-        var temporaryPath = outputPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        File.WriteAllText(temporaryPath, JsonSerializer.Serialize(snapshot, options) + Environment.NewLine);
-#if NET472
-        if (File.Exists(outputPath)) File.Delete(outputPath);
-        File.Move(temporaryPath, outputPath);
-#else
-        File.Move(temporaryPath, outputPath, overwrite: true);
-#endif
+        documents.WriteSnapshot(outputPath, snapshot, Force.IsPresent);
         WriteObject(PassThru.IsPresent ? snapshot : new FileInfo(outputPath));
     }
 }

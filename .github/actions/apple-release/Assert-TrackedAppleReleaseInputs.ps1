@@ -90,3 +90,41 @@ while ($true) {
     if ($current.Equals($sourceRoot, $comparison)) { break }
     $current = Split-Path -Parent $current
 }
+
+$trackedInputProperties = @(
+    'ScreenshotConfigPath',
+    'ScreenshotConfigPaths',
+    'MetadataConfigPath',
+    'MetadataConfigPaths',
+    'AppInfoConfigPath',
+    'AppInfoConfigPaths',
+    'GovernanceConfigPath',
+    'GovernanceConfigPaths'
+)
+foreach ($propertyName in $trackedInputProperties) {
+    foreach ($configuredPath in @($config.AppleApps.$propertyName)) {
+        if ([string]::IsNullOrWhiteSpace([string] $configuredPath)) { continue }
+        $inputPath = if ([IO.Path]::IsPathRooted([string] $configuredPath)) {
+            [IO.Path]::GetFullPath([string] $configuredPath)
+        } else {
+            [IO.Path]::GetFullPath((Join-Path $projectRoot ([string] $configuredPath)))
+        }
+        Assert-TrackedSourceFile `
+            -SourceRoot $sourceRoot `
+            -Path $inputPath `
+            -Name "AppleApps.$propertyName"
+    }
+}
+
+$versionSourcePath = [string] $config.AppleApps.Automation.VersionSourcePath
+if (-not [string]::IsNullOrWhiteSpace($versionSourcePath)) {
+    $inputPath = if ([IO.Path]::IsPathRooted($versionSourcePath)) {
+        [IO.Path]::GetFullPath($versionSourcePath)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $projectRoot $versionSourcePath))
+    }
+    Assert-TrackedSourceFile `
+        -SourceRoot $sourceRoot `
+        -Path $inputPath `
+        -Name 'AppleApps.Automation.VersionSourcePath'
+}

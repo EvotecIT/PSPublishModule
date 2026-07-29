@@ -30,14 +30,13 @@ internal static partial class Program
             {
                 var appId = TryGetOptionValue(argv, "--app-id") ?? throw new ArgumentException("snapshot requires --app-id.");
                 var outputPath = TryGetOptionValue(argv, "--out") ?? throw new ArgumentException("snapshot requires --out.");
-                var fullOutputPath = Path.GetFullPath(outputPath);
-                if (File.Exists(fullOutputPath) && !argv.Any(value => value.Equals("--force", StringComparison.OrdinalIgnoreCase)))
-                    throw new InvalidOperationException($"Snapshot output already exists: {fullOutputPath}. Use --force to replace it after preserving any reviewed edits.");
+                var overwrite = argv.Any(value => value.Equals("--force", StringComparison.OrdinalIgnoreCase));
+                var documents = new AppStoreConnectGovernanceDocumentService();
+                var fullOutputPath = documents.ValidateSnapshotDestination(outputPath, overwrite);
                 var snapshotCredential = ResolveAppleGovernanceCredential(argv, Path.Combine(Directory.GetCurrentDirectory(), "governance.json"));
                 using var snapshotClient = new AppStoreConnectClient(snapshotCredential);
                 var snapshot = new AppStoreConnectGovernanceService(snapshotClient).SnapshotAsync(appId).GetAwaiter().GetResult();
-                var snapshotOptions = new JsonSerializerOptions(CliJson.Options) { WriteIndented = true };
-                WriteGovernanceReceipt(fullOutputPath, JsonSerializer.Serialize(snapshot, snapshotOptions));
+                documents.WriteSnapshot(fullOutputPath, snapshot, overwrite);
                 WriteAppleGovernanceOutput(operation, snapshot, true, outputJson, logger, fullOutputPath, summary);
                 return 0;
             }
@@ -84,7 +83,7 @@ internal static partial class Program
             {
                 var plan = service.PlanAsync(spec).GetAwaiter().GetResult();
                 var receiptPath = ResolveGovernanceReceiptPath(argv, fullConfigPath, "governance-plan.json");
-                WriteGovernanceReceipt(receiptPath, JsonSerializer.Serialize(plan, CliJson.Context.AppStoreConnectGovernancePlan));
+                new AppStoreConnectGovernanceDocumentService().WritePlan(receiptPath, plan);
                 WriteAppleGovernanceOutput(operation, plan, plan.Findings.All(finding => !finding.IsError), outputJson, logger, receiptPath, summary);
                 if (plan.Findings.Any(finding => finding.IsError)) return 2;
                 return argv.Any(value => value.Equals("--fail-on-drift", StringComparison.OrdinalIgnoreCase)) && !plan.IsConverged ? 3 : 0;
@@ -99,7 +98,7 @@ internal static partial class Program
                 ReviewedPlan = reviewedPlan
             }).GetAwaiter().GetResult();
             var applyReceiptPath = ResolveGovernanceReceiptPath(argv, fullConfigPath, "governance-receipt.json");
-            WriteGovernanceReceipt(applyReceiptPath, JsonSerializer.Serialize(result, CliJson.Context.AppStoreConnectGovernanceApplyResult));
+            new AppStoreConnectGovernanceDocumentService().WriteApplyResult(applyReceiptPath, result);
             WriteAppleGovernanceOutput(operation, result, result.Success, outputJson, logger, applyReceiptPath, summary);
             return result.Success ? 0 : 1;
         }
@@ -152,15 +151,6 @@ internal static partial class Program
         return Path.GetFullPath(string.IsNullOrWhiteSpace(configured)
             ? Path.Combine(baseDirectory, ".powerforge", "apple", fileName)
             : Path.IsPathRooted(configured) ? configured : Path.Combine(baseDirectory, configured));
-    }
-
-    private static void WriteGovernanceReceipt(string path, string json)
-    {
-        var directory = Path.GetDirectoryName(path);
-        if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-        var temporaryPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        File.WriteAllText(temporaryPath, json + Environment.NewLine);
-        File.Move(temporaryPath, path, overwrite: true);
     }
 
     private static void WriteAppleGovernanceOutput(string operation, object result, bool success, bool outputJson, ILogger logger, string? receiptPath = null, bool summary = false)

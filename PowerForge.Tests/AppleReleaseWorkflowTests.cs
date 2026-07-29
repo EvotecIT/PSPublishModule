@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics;
 using System.Management.Automation.Language;
 using YamlDotNet.Serialization;
 
@@ -64,6 +65,17 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("does not match source-commit", trackedInputs, StringComparison.Ordinal);
         Assert.Contains("AppleApps.ProjectRoot must resolve inside the exact checked-out source", trackedInputs, StringComparison.Ordinal);
         Assert.Contains("AppleApps.ProjectRoot must not traverse a symbolic link or reparse point", trackedInputs, StringComparison.Ordinal);
+        foreach (var property in new[]
+                 {
+                     "ScreenshotConfigPath", "ScreenshotConfigPaths",
+                     "MetadataConfigPath", "MetadataConfigPaths",
+                     "AppInfoConfigPath", "AppInfoConfigPaths",
+                     "GovernanceConfigPath", "GovernanceConfigPaths"
+                 })
+        {
+            Assert.Contains($"'{property}'", trackedInputs, StringComparison.Ordinal);
+        }
+        Assert.Contains("AppleApps.Automation.VersionSourcePath", trackedInputs, StringComparison.Ordinal);
         Assert.Contains("if ($planOnly -and $confirm)", script, StringComparison.Ordinal);
         Assert.Contains("--confirm-apple-action", script, StringComparison.Ordinal);
         Assert.Contains("--apple-expected-plan-sha256", script, StringComparison.Ordinal);
@@ -95,6 +107,74 @@ public sealed class AppleReleaseWorkflowTests
         Assert.True(
             script.IndexOf("Write-ReleaseOutput -Name 'receipt-path'", StringComparison.Ordinal) <
             script.IndexOf("& $env:POWERFORGE_TOOL_PATH", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void GovernanceSnapshotSurfacesUseTheSharedAtomicDocumentService()
+    {
+        var root = FindRepoRoot();
+        var command = Read(root, "PSPublishModule", "Cmdlets", "ExportAppStoreConnectGovernanceCommand.cs");
+        var cli = Read(root, "PowerForge.Cli", "Program.Command.AppleGovernance.cs");
+        var service = Read(root, "PowerForge", "Services", "AppStoreConnectGovernanceDocumentService.cs");
+
+        Assert.Contains("AppStoreConnectGovernanceDocumentService", command, StringComparison.Ordinal);
+        Assert.Contains("AppStoreConnectGovernanceDocumentService", cli, StringComparison.Ordinal);
+        Assert.Contains("File.Replace", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("File.Delete(outputPath)", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("WriteGovernanceReceipt", cli, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TrackedReleaseInputValidatorRejectsAnIgnoredConfiguredInput()
+    {
+        var root = FindRepoRoot();
+        var sandbox = Path.Combine(root, ".test-temp", $"powerforge-tracked-inputs-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(sandbox, ".powerforge"));
+            var configPath = Path.Combine(sandbox, "powerforge.release.json");
+            var manifestPath = Path.Combine(sandbox, ".powerforge", "powerforge.tool.json");
+            File.WriteAllText(configPath,
+                """{ "AppleApps": { "ProjectRoot": ".", "ScreenshotConfigPath": "ignored-screenshots.json" } }""");
+            File.WriteAllText(manifestPath, "{}");
+            File.WriteAllText(Path.Combine(sandbox, ".gitignore"), "ignored-screenshots.json\n");
+            File.WriteAllText(Path.Combine(sandbox, "ignored-screenshots.json"), "{}");
+            Run("git", sandbox, "init", "--quiet").EnsureSuccess();
+            Run("git", sandbox, "add", "powerforge.release.json", ".powerforge/powerforge.tool.json", ".gitignore").EnsureSuccess();
+            Run(
+                "git",
+                sandbox,
+                "-c", "user.name=PowerForge Tests",
+                "-c", "user.email=powerforge-tests@example.invalid",
+                "commit", "--quiet", "-m", "Tracked release inputs").EnsureSuccess();
+            var commit = Run("git", sandbox, "rev-parse", "HEAD").EnsureSuccess().StandardOutput.Trim();
+            var validator = Path.Combine(
+                root,
+                ".github",
+                "actions",
+                "apple-release",
+                "Assert-TrackedAppleReleaseInputs.ps1");
+
+            var result = Run(
+                "pwsh",
+                sandbox,
+                "-NoProfile",
+                "-File", validator,
+                "-ConfigPath", configPath,
+                "-ToolManifestPath", manifestPath,
+                "-SourceCommit", commit);
+
+            Assert.NotEqual(0, result.ExitCode);
+            var output = result.StandardOutput + result.StandardError;
+            Assert.True(
+                output.Contains("AppleApps.ScreenshotConfigPath", StringComparison.OrdinalIgnoreCase) &&
+                output.Contains("must be tracked at the exact source", StringComparison.OrdinalIgnoreCase),
+                output);
+        }
+        finally
+        {
+            if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+        }
     }
 
     [Fact]
@@ -477,6 +557,38 @@ public sealed class AppleReleaseWorkflowTests
 
     private static int Count(string value, string search)
         => value.Split(search, StringSplitOptions.None).Length - 1;
+
+    private static ProcessResult Run(string fileName, string workingDirectory, params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var argument in arguments)
+            startInfo.ArgumentList.Add(argument);
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException($"Unable to start '{fileName}'.");
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return new ProcessResult(process.ExitCode, standardOutput, standardError);
+    }
+
+    private sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError)
+    {
+        internal ProcessResult EnsureSuccess()
+        {
+            Assert.True(
+                ExitCode == 0,
+                $"Process failed with exit code {ExitCode}.{Environment.NewLine}{StandardOutput}{Environment.NewLine}{StandardError}");
+            return this;
+        }
+    }
 
     private static IEnumerable<string> EnumeratePowerShellRunScripts(object? node)
     {
