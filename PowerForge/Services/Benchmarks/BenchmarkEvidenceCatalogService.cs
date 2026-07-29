@@ -354,6 +354,7 @@ public sealed class BenchmarkEvidenceCatalogService
                 IsValidDuration(sample.DurationMs)) ||
             result.Summary.Any(row =>
                 string.Equals(row.Status, "Succeeded", StringComparison.OrdinalIgnoreCase) &&
+                row.SampleCount > 0 &&
                 (IsValidDuration(row.MedianMs) || IsValidDuration(row.MeanMs)));
         if (hasFailedMeasurement || !hasSuccessfulMeasurement)
         {

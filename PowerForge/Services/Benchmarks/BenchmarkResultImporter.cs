@@ -1643,6 +1643,7 @@ public sealed class BenchmarkResultImporter
         if (string.Equals(normalized, "Max", StringComparison.OrdinalIgnoreCase)) return "MaxMs";
         if (string.Equals(normalized, "StandardError", StringComparison.OrdinalIgnoreCase)) return "StdErr";
         if (string.Equals(normalized, "StandardDeviation", StringComparison.OrdinalIgnoreCase)) return "StdDev";
+        if (string.Equals(normalized, "Op/s", StringComparison.OrdinalIgnoreCase)) return "OperationsPerSecond";
         return normalized;
     }
 
@@ -1657,7 +1658,7 @@ public sealed class BenchmarkResultImporter
         "Mean", "Median", "Min", "Max", "Q1", "Q3",
         "P0", "P25", "P50", "P75", "P90", "P95", "P99", "P100",
         "Error", "StdErr", "StdDev", "StandardError", "StandardDeviation", "Ratio", "RatioSD",
-        "Gen0", "Gen1", "Gen2", "Allocated", "CodeSize", "OperationsPerSecond"
+        "Gen0", "Gen1", "Gen2", "Allocated", "CodeSize", "OperationsPerSecond", "Op/s", "Rank"
     };
 
     private static readonly HashSet<string> BenchmarkDotNetPrimaryDurationColumns = new(StringComparer.OrdinalIgnoreCase)

@@ -318,6 +318,24 @@ public sealed partial class BenchmarkServicesTests
         Assert.Contains("gitSha", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void EvidenceCatalog_RejectsSuccessfulSummaryWithoutContributingSamples()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Summary[0].SampleCount = 0;
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "empty-summary.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("successful measurement", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("abc123")]
     [InlineData("012345678901234567890123456789012345678g")]
@@ -1085,6 +1103,7 @@ public sealed partial class BenchmarkServicesTests
                     Os = platform,
                     RunMode = "full",
                     Status = "Succeeded",
+                    SampleCount = 1,
                     MedianMs = median
                 }
             ]

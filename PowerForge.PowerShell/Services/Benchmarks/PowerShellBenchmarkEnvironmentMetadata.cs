@@ -144,7 +144,7 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             timeoutMilliseconds: 3000,
             workingDirectory: workingDirectory);
 
-    private static string? ReadProcessValue(
+    internal static string? ReadProcessValue(
         string fileName,
         string arguments,
         int timeoutMilliseconds,
@@ -169,12 +169,22 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             using var process = Process.Start(startInfo);
             if (process is null)
                 return null;
-            var output = process.StandardOutput.ReadToEnd();
+
+            var output = new System.Text.StringBuilder();
+            process.OutputDataReceived += (_, eventArgs) =>
+            {
+                if (eventArgs.Data is not null)
+                    output.AppendLine(eventArgs.Data);
+            };
+            process.ErrorDataReceived += (_, _) => { };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
             if (!process.WaitForExit(timeoutMilliseconds))
             {
                 try
                 {
                     process.Kill();
+                    process.WaitForExit(1000);
                 }
                 catch
                 {
@@ -182,7 +192,10 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
                 }
                 return null;
             }
-            return process.ExitCode == 0 ? output.Trim() : null;
+
+            // Ensure asynchronous output handlers have received the final buffered lines.
+            process.WaitForExit();
+            return process.ExitCode == 0 ? output.ToString().Trim() : null;
         }
         catch
         {

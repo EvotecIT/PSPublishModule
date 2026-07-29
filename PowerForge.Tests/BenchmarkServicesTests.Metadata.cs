@@ -1,4 +1,6 @@
 using PowerForge;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace PowerForge.Tests;
 
@@ -12,6 +14,35 @@ public sealed partial class BenchmarkServicesTests
 
         Assert.Equal($"{metadata["psEdition"]}-{metadata["pwsh"]}", host, ignoreCase: true);
         Assert.False(string.IsNullOrWhiteSpace(PowerShellBenchmarkEnvironmentMetadata.BuildEnvironment().ProcessorName));
+    }
+
+    [Fact]
+    public void BenchmarkEnvironmentMetadata_EnforcesChildProcessTimeoutBeforeReadingToEnd()
+    {
+        string fileName;
+        string arguments;
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            fileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
+            arguments = "/d /s /c \"ping -n 10 127.0.0.1 > nul\"";
+        }
+        else
+        {
+            fileName = "/bin/sleep";
+            arguments = "10";
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        string? result = PowerShellBenchmarkEnvironmentMetadata.ReadProcessValue(
+            fileName,
+            arguments,
+            timeoutMilliseconds: 100);
+        stopwatch.Stop();
+
+        Assert.Null(result);
+        Assert.True(
+            stopwatch.Elapsed < TimeSpan.FromSeconds(5),
+            $"Timed process returned after {stopwatch.Elapsed}.");
     }
 
     [Fact]

@@ -468,6 +468,30 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_ExcludesBenchmarkDotNetDerivedResultColumnsFromWorkloadVariables()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "Demo-report.csv");
+        File.WriteAllText(
+            csv,
+            "Method,Rows,Mean [ms],Op/s,Rank\nWrite,10,12,83.333,1\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+        var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
+
+        Assert.Equal("10", sample.Variables["Rows"]);
+        Assert.DoesNotContain("Op/s", sample.Variables.Keys);
+        Assert.DoesNotContain("Rank", sample.Variables.Keys);
+        Assert.Equal(83.333, sample.Metrics["OperationsPerSecond"]);
+        Assert.Equal(1, sample.Metrics["Rank"]);
+        Assert.DoesNotContain("Op/s", row.Variables.Keys);
+        Assert.DoesNotContain("Rank", row.Variables.Keys);
+        Assert.Equal(83.333, row.Metrics["OperationsPerSecond"]);
+        Assert.Equal(1, row.Metrics["Rank"]);
+    }
+
+    [Fact]
     public void Importer_PreservesUnparseableBenchmarkDotNetStatisticNamedParameters()
     {
         var root = CreateTempRoot();
