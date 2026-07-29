@@ -99,6 +99,13 @@ public sealed class GitHubReleasePublisherTests
             assets.Response.ContentLength64 = assetsBody.Length;
             await assets.Response.OutputStream.WriteAsync(assetsBody);
             assets.Response.Close();
+
+            var finalAssets = await listener.GetContextAsync();
+            finalAssets.Response.StatusCode = 200;
+            finalAssets.Response.ContentType = "application/json";
+            finalAssets.Response.ContentLength64 = assetsBody.Length;
+            await finalAssets.Response.OutputStream.WriteAsync(assetsBody);
+            finalAssets.Response.Close();
         });
 
         try
@@ -133,6 +140,69 @@ public sealed class GitHubReleasePublisherTests
             listener.Stop();
             listener.Close();
             File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
+    public async Task PublishRelease_FreshUploadsRejectEarlierAssetReplacementDuringLaterUpload()
+    {
+        var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var firstAssetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        var secondAssetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(firstAssetPath, "first");
+        await File.WriteAllTextAsync(secondAssetPath, "second");
+        var firstAssetName = Path.GetFileName(firstAssetPath);
+        var secondAssetName = Path.GetFileName(secondAssetPath);
+
+        async Task Respond(string json, int statusCode = 200)
+        {
+            var context = await listener.GetContextAsync();
+            await context.Request.InputStream.CopyToAsync(Stream.Null);
+            var bytes = Encoding.UTF8.GetBytes(json);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = bytes.Length;
+            await context.Response.OutputStream.WriteAsync(bytes);
+            context.Response.Close();
+        }
+
+        var server = Task.Run(async () =>
+        {
+            await Respond($$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}"}""");
+            await Respond($$"""{"id":100,"name":"{{firstAssetName}}"}""", 201);
+            await Respond($$"""[{"id":100,"name":"{{firstAssetName}}"}]""");
+            await Respond($$"""{"id":200,"name":"{{secondAssetName}}"}""", 201);
+            await Respond($$"""[{"id":101,"name":"{{firstAssetName}}"},{"id":200,"name":"{{secondAssetName}}"}]""");
+            await Respond($$"""[{"id":101,"name":"{{firstAssetName}}"},{"id":200,"name":"{{secondAssetName}}"}]""");
+        });
+
+        try
+        {
+            var request = new GitHubReleasePublishRequest
+            {
+                Owner = "EvotecIT",
+                Repository = "example",
+                Token = "token",
+                ApiBaseUrl = apiBaseUrl,
+                TagName = "v1.2.3",
+                AssetFilePaths = [firstAssetPath, secondAssetPath]
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new GitHubReleasePublisher(new NullLogger()).PublishRelease(request));
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("changed from id 100 to 101", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            listener.Stop();
+            listener.Close();
+            File.Delete(firstAssetPath);
+            File.Delete(secondAssetPath);
         }
     }
 

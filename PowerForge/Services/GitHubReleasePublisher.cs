@@ -514,7 +514,7 @@ public sealed partial class GitHubReleasePublisher
             _logger.Success($"Uploaded GitHub release asset: {fileName} in {DotNetRepositoryReleaseService.FormatDuration(assetWatch.Elapsed)} ({DotNetRepositoryReleaseService.FormatBytes(assetSize)}).");
         }
 
-        if (replaceExistingAssets)
+        if (replaceExistingAssets || uploadedAssetIds.Count == assets.Length)
         {
             ValidateReleaseBeforeAssetMutation(
                 owner,
