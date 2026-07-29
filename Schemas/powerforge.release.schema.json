@@ -143,6 +143,14 @@
           "type": "boolean",
           "description": "During verified recovery, replace rebuilt .nupkg assets with the exact bytes already published by Packages.PublishSource before checksums and GitHub assets are regenerated."
         },
+        "RequirePublishedModuleAssets": {
+          "type": "boolean",
+          "description": "During verified recovery, replace rebuilt module archive payloads with the exact module files already published by PublishedModuleSource before checksums and GitHub assets are regenerated."
+        },
+        "PublishedModuleSource": {
+          "type": [ "string", "null" ],
+          "description": "NuGet V3 service index containing the already-published module package used for exact-payload recovery."
+        },
         "TagTemplate": { "type": [ "string", "null" ] },
         "ReleaseNameTemplate": { "type": [ "string", "null" ] }
       }

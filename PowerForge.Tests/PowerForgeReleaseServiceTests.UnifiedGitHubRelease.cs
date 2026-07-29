@@ -470,7 +470,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                         ExpectedExistingReleaseId = 42,
                         RequirePublishedStableRelease = true,
                         ReplaceExistingAssets = true,
-                        RequirePublishedNuGetAssets = true
+                        RequirePublishedNuGetAssets = true,
+                        RequirePublishedModuleAssets = true,
+                        PublishedModuleSource = "https://www.powershellgallery.com/api/v3/index.json"
                     }
                 },
                 new PowerForgeReleaseRequest
@@ -498,6 +500,76 @@ public sealed partial class PowerForgeReleaseServiceTests
                 publish.AssetFilePaths.OrderBy(static path => path));
             Assert.DoesNotContain(powerForgeExecutable, publish.AssetFilePaths);
             Assert.DoesNotContain(powerForgeWebExecutable, publish.AssetFilePaths);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void PublishBuiltReleaseOutputs_PropagatesCancellationFromPublishedAssetRecovery()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var packagePath = Path.Combine(root, "PowerForge.1.0.7.nupkg");
+            File.WriteAllText(packagePath, "rebuilt package");
+            using var cancellation = new CancellationTokenSource();
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages must not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools must not plan."),
+                runTools: _ => throw new InvalidOperationException("Tools must not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub must not run after cancellation."),
+                restorePublishedNuGetAssets: (_, _, _, cancellationToken) =>
+                {
+                    cancellation.Cancel();
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return Array.Empty<string>();
+                });
+            var built = new PowerForgeReleaseResult
+            {
+                Success = true,
+                ReleaseAssets = [packagePath],
+                ReleaseAssetEntries =
+                [
+                    new PowerForgeReleaseAssetEntry
+                    {
+                        Path = packagePath,
+                        Version = "1.0.7",
+                        Category = PowerForgeReleaseAssetCategory.Package
+                    }
+                ]
+            };
+
+            Assert.Throws<OperationCanceledException>(() => service.PublishBuiltReleaseOutputs(
+                new PowerForgeReleaseSpec
+                {
+                    Packages = new ProjectBuildConfiguration
+                    {
+                        PublishSource = "https://packages.example/v3/index.json"
+                    },
+                    GitHub = new PowerForgeReleaseGitHubOptions
+                    {
+                        Publish = true,
+                        VersionSource = PowerForgeReleaseVersionSource.Assets,
+                        Owner = "EvotecIT",
+                        Repository = "PSPublishModule",
+                        Token = "token",
+                        ReuseExistingRelease = true,
+                        RequireExpectedExistingRelease = true,
+                        ExpectedExistingReleaseId = 42,
+                        RequirePublishedStableRelease = true,
+                        RequirePublishedNuGetAssets = true
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    CancellationToken = cancellation.Token
+                },
+                built));
         }
         finally
         {

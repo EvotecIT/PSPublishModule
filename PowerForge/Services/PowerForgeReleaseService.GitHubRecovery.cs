@@ -14,7 +14,11 @@ internal sealed partial class PowerForgeReleaseService
             !gitHub.ReuseExistingRelease ||
             !gitHub.RequireExpectedExistingRelease ||
             gitHub.ExpectedExistingReleaseId.GetValueOrDefault() <= 0 ||
-            !gitHub.RequirePublishedStableRelease)
+            !gitHub.RequirePublishedStableRelease ||
+            !gitHub.ReplaceExistingAssets ||
+            !gitHub.RequirePublishedNuGetAssets ||
+            !gitHub.RequirePublishedModuleAssets ||
+            string.IsNullOrWhiteSpace(gitHub.PublishedModuleSource))
         {
             return false;
         }
@@ -56,8 +60,11 @@ internal sealed partial class PowerForgeReleaseService
                 version,
                 result.ReleaseAssets,
                 cancellationToken);
-            RewriteReleaseSummaryFiles(result);
             return null;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception exception)
         {
@@ -66,6 +73,53 @@ internal sealed partial class PowerForgeReleaseService
                 repository,
                 version,
                 "Unable to restore exact published NuGet bytes for verified GitHub recovery. " +
+                exception.Message);
+        }
+    }
+
+    private PowerForgeUnifiedGitHubReleaseResult? RestorePublishedModuleAssetsForGitHubRecovery(
+        PowerForgeReleaseGitHubOptions gitHub,
+        PowerForgeReleaseResult result,
+        string owner,
+        string repository,
+        string version,
+        CancellationToken cancellationToken,
+        out string[] recoveredAssets)
+    {
+        recoveredAssets = Array.Empty<string>();
+        if (!gitHub.RequirePublishedModuleAssets)
+            return null;
+
+        var moduleAssets = result.ReleaseAssetEntries
+            .Where(static entry => entry.Category == PowerForgeReleaseAssetCategory.Module)
+            .Select(static entry => entry.StagedPath ?? entry.Path)
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (moduleAssets.Length == 0)
+            return null;
+
+        try
+        {
+            recoveredAssets = _restorePublishedModuleAssets(
+                gitHub.PublishedModuleSource ?? string.Empty,
+                result.ModulePlan?.ModuleName ?? string.Empty,
+                version,
+                moduleAssets,
+                cancellationToken);
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            return CreateNuGetRecoveryError(
+                owner,
+                repository,
+                version,
+                "Unable to restore the published module payload for verified GitHub recovery. " +
                 exception.Message);
         }
     }

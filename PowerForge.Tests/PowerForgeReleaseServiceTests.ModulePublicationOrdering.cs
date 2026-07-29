@@ -10,10 +10,12 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             var scriptPath = Path.Combine(root, "Build-Module.ps1");
             var releasePath = Path.Combine(root, "release.json");
+            var moduleZip = Path.Combine(root, "SampleModule.v1.2.3.zip");
             var toolZip = Path.Combine(root, "SampleTool-1.2.3.zip");
             var toolExecutable = Path.Combine(root, "SampleTool");
             File.WriteAllText(scriptPath, "# module build");
             File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(moduleZip, "rebuilt module zip");
             File.WriteAllText(toolZip, "tool zip");
             File.WriteAllText(toolExecutable, "tool");
 
@@ -45,8 +47,19 @@ public sealed partial class PowerForgeReleaseServiceTests
                         ReusedExistingRelease = true,
                         HtmlUrl = "https://github.com/EvotecIT/example/releases/tag/v1.2.3"
                     };
+                },
+                restorePublishedNuGetAssets: (_, _, _, _) => Array.Empty<string>(),
+                restorePublishedModuleAssets: (source, moduleName, version, paths, _) =>
+                {
+                    Assert.Equal("https://www.powershellgallery.com/api/v3/index.json", source);
+                    Assert.Equal("SampleModule", moduleName);
+                    Assert.Equal("1.2.3", version);
+                    Assert.Equal(moduleZip, Assert.Single(paths));
+                    return [moduleZip];
                 });
             var spec = CreateReleaseSpec(root, scriptPath);
+            spec.Module!.ModuleName = "SampleModule";
+            spec.Module.ArtifactPaths = [moduleZip];
             spec.GitHub = new PowerForgeReleaseGitHubOptions
             {
                 Publish = true,
@@ -57,7 +70,11 @@ public sealed partial class PowerForgeReleaseServiceTests
                 ReuseExistingRelease = true,
                 RequireExpectedExistingRelease = true,
                 ExpectedExistingReleaseId = 42,
-                RequirePublishedStableRelease = true
+                RequirePublishedStableRelease = true,
+                ReplaceExistingAssets = true,
+                RequirePublishedNuGetAssets = true,
+                RequirePublishedModuleAssets = true,
+                PublishedModuleSource = "https://www.powershellgallery.com/api/v3/index.json"
             };
             var request = new PowerForgeReleaseRequest
             {
@@ -75,12 +92,56 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal(ConfigurationGateMode.Publish, module.RunMode);
             Assert.False(module.IncludeModulePublishing);
             Assert.Single(publishCalls);
+            Assert.Equal(
+                moduleZip,
+                Assert.Single(result.UnifiedGitHubRelease!.RecoveredPublishedModuleAssets));
             Assert.Null(result.ModulePublication);
         }
         finally
         {
             TryDelete(root);
         }
+    }
+
+    [Fact]
+    public void ApplyVerifiedGitHubRecoveryPublishingOverrides_requires_complete_exact_byte_contract()
+    {
+        var request = new PowerForgeReleaseRequest
+        {
+            ModuleRunMode = ConfigurationGateMode.Publish,
+            PublishProjectGitHub = true,
+            PublishNuget = true
+        };
+        var gitHub = new PowerForgeReleaseGitHubOptions
+        {
+            Publish = true,
+            ReuseExistingRelease = true,
+            RequireExpectedExistingRelease = true,
+            ExpectedExistingReleaseId = 42,
+            RequirePublishedStableRelease = true,
+            ReplaceExistingAssets = false,
+            RequirePublishedNuGetAssets = true,
+            RequirePublishedModuleAssets = true,
+            PublishedModuleSource = "https://www.powershellgallery.com/api/v3/index.json"
+        };
+        var spec = new PowerForgeReleaseSpec { GitHub = gitHub };
+
+        Assert.False(PowerForgeReleaseService.ApplyVerifiedGitHubRecoveryPublishingOverrides(spec, request));
+        Assert.True(request.PublishNuget);
+        Assert.Null(request.ModuleIncludePublishing);
+
+        gitHub.ReplaceExistingAssets = true;
+        gitHub.RequirePublishedModuleAssets = false;
+
+        Assert.False(PowerForgeReleaseService.ApplyVerifiedGitHubRecoveryPublishingOverrides(spec, request));
+        Assert.True(request.PublishNuget);
+        Assert.Null(request.ModuleIncludePublishing);
+
+        gitHub.RequirePublishedModuleAssets = true;
+
+        Assert.True(PowerForgeReleaseService.ApplyVerifiedGitHubRecoveryPublishingOverrides(spec, request));
+        Assert.False(request.PublishNuget);
+        Assert.False(request.ModuleIncludePublishing);
     }
 
     [Fact]
@@ -341,7 +402,9 @@ public sealed partial class PowerForgeReleaseServiceTests
         ICollection<ModuleExecutionSnapshot> moduleCalls,
         PowerForgeToolReleaseResult toolResult,
         Action<ModuleBuildHostBuildRequest>? onModuleExecution = null,
-        Func<GitHubReleasePublishRequest, GitHubReleasePublishResult>? publishGitHubRelease = null)
+        Func<GitHubReleasePublishRequest, GitHubReleasePublishResult>? publishGitHubRelease = null,
+        Func<string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedNuGetAssets = null,
+        Func<string, string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedModuleAssets = null)
         => new(
             new NullLogger(),
             executePackages: (_, _, _) =>
@@ -364,6 +427,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 throw new InvalidOperationException("DotNet tools should not run."),
             publishGitHubRelease: publishGitHubRelease ?? (_ =>
                 throw new InvalidOperationException("GitHub should not run.")),
+            restorePublishedNuGetAssets: restorePublishedNuGetAssets,
+            restorePublishedModuleAssets: restorePublishedModuleAssets,
             executeModuleBuild: (request, cancellationToken) =>
             {
                 cancellationToken.ThrowIfCancellationRequested();

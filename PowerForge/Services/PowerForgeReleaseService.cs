@@ -59,6 +59,7 @@ internal sealed partial class PowerForgeReleaseService
     private readonly Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult> _runDotNetTools;
     private readonly Func<GitHubReleasePublishRequest, CancellationToken, GitHubReleasePublishResult> _publishGitHubRelease;
     private readonly Func<string, string, IEnumerable<string>, CancellationToken, string[]> _restorePublishedNuGetAssets;
+    private readonly Func<string, string, string, IEnumerable<string>, CancellationToken, string[]> _restorePublishedModuleAssets;
     private readonly Func<string, string, string, string, GitHubReleaseVersionOccupancy> _probeGitHubReleaseVersion;
     private readonly Func<PowerForgeWingetSubmissionPlan, PowerForgeWingetSubmissionResult> _submitWinget;
     private readonly Func<AppleAppArchiveRequest, AppleAppArchiveResult> _archiveAppleApp;
@@ -124,7 +125,8 @@ internal sealed partial class PowerForgeReleaseService
         Func<PowerForgeToolReleaseSpec, string, PowerForgeReleaseRequest, PowerForgeToolReleasePlan> planTools,
         Func<PowerForgeToolReleasePlan, PowerForgeToolReleaseResult> runTools,
         Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> publishGitHubRelease,
-        Func<string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedNuGetAssets = null)
+        Func<string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedNuGetAssets = null,
+        Func<string, string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedModuleAssets = null)
         : this(
             logger,
             executePackages,
@@ -138,7 +140,8 @@ internal sealed partial class PowerForgeReleaseService
             request => new AppleAppArchiveService().CreateArchiveAsync(request).GetAwaiter().GetResult(),
             request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult(),
             null,
-            restorePublishedNuGetAssets: restorePublishedNuGetAssets)
+            restorePublishedNuGetAssets: restorePublishedNuGetAssets,
+            restorePublishedModuleAssets: restorePublishedModuleAssets)
     {
     }
 
@@ -176,7 +179,8 @@ internal sealed partial class PowerForgeReleaseService
         Func<AppleNotarizationRequest, AppleNotarizationResult>? notarizeAppleArtifact = null,
         Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan>? planAppleGovernance = null,
         Func<AppStoreConnectApiCredential, AppStoreConnectReleaseReadinessRequest, AppStoreConnectReleaseReadinessResult>? checkAppleReleaseReadiness = null,
-        Func<string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedNuGetAssets = null)
+        Func<string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedNuGetAssets = null,
+        Func<string, string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedModuleAssets = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
@@ -203,6 +207,14 @@ internal sealed partial class PowerForgeReleaseService
             ?? ((source, version, paths, cancellationToken) =>
                 new PublishedNuGetAssetRecoveryService(logger).Restore(
                     source,
+                    version,
+                    paths,
+                    cancellationToken));
+        _restorePublishedModuleAssets = restorePublishedModuleAssets
+            ?? ((source, moduleName, version, paths, cancellationToken) =>
+                new PublishedModuleAssetRecoveryService(logger).Restore(
+                    source,
+                    moduleName,
                     version,
                     paths,
                     cancellationToken));
@@ -3177,6 +3189,19 @@ internal sealed partial class PowerForgeReleaseService
         if (recoveryError is not null)
             return recoveryError;
 
+        recoveryError = RestorePublishedModuleAssetsForGitHubRecovery(
+            gitHub,
+            result,
+            resolved.Owner ?? string.Empty,
+            resolved.Repository ?? string.Empty,
+            version!,
+            cancellationToken,
+            out var recoveredPublishedModuleAssets);
+        if (recoveryError is not null)
+            return recoveryError;
+        if (recoveredPublishedNuGetAssets.Length > 0 || recoveredPublishedModuleAssets.Length > 0)
+            RewriteReleaseSummaryFiles(result);
+
         var expectedAssets = result.ReleaseAssets
             .Concat(new[]
             {
@@ -3285,7 +3310,8 @@ internal sealed partial class PowerForgeReleaseService
                 SkippedExistingAssets = publishResult.SkippedExistingAssets?.ToArray() ?? Array.Empty<string>(),
                 ReplacedExistingAssets = publishResult.ReplacedExistingAssets?.ToArray() ?? Array.Empty<string>(),
                 UploadedAssets = publishResult.UploadedAssets?.ToArray() ?? Array.Empty<string>(),
-                RecoveredPublishedNuGetAssets = recoveredPublishedNuGetAssets
+                RecoveredPublishedNuGetAssets = recoveredPublishedNuGetAssets,
+                RecoveredPublishedModuleAssets = recoveredPublishedModuleAssets
             };
         }
         catch (OperationCanceledException)

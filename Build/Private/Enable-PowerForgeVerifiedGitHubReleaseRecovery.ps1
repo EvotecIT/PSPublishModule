@@ -48,6 +48,9 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
         [Parameter(Mandatory)]
         [string] $Token,
 
+        [ValidatePattern('^https://')]
+        [string] $PublishedModuleSource = 'https://www.powershellgallery.com/api/v3/index.json',
+
         [scriptblock] $GetReleaseByTag,
 
         [scriptblock] $GetTagCommit
@@ -79,6 +82,8 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
     $gitHub | Add-Member -NotePropertyName ExpectedExistingReleaseId -NotePropertyValue $null -Force
     $gitHub | Add-Member -NotePropertyName RequirePublishedStableRelease -NotePropertyValue $false -Force
     $gitHub | Add-Member -NotePropertyName RequirePublishedNuGetAssets -NotePropertyValue $false -Force
+    $gitHub | Add-Member -NotePropertyName RequirePublishedModuleAssets -NotePropertyValue $false -Force
+    $gitHub | Add-Member -NotePropertyName PublishedModuleSource -NotePropertyValue $null -Force
 
     if ($null -eq $GetReleaseByTag) {
         $GetReleaseByTag = {
@@ -132,6 +137,8 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
     $gitHub.ExpectedExistingReleaseId = [long] $release.id
     $gitHub.RequirePublishedStableRelease = $true
     $gitHub.RequirePublishedNuGetAssets = $true
+    $gitHub.RequirePublishedModuleAssets = $true
+    $gitHub.PublishedModuleSource = $PublishedModuleSource
     [pscustomobject]@{
         ReuseEnabled = $true
         TagName       = $tagName

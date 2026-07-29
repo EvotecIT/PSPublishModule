@@ -542,7 +542,11 @@ the signing-capable Windows runner and has three explicit operations:
    every deletion/upload, and replaces same-named assets. Rebuilt NuGet packages are replaced
    locally with the exact bytes already published by the configured NuGet source before the
    manifest and checksums are regenerated, so timestamped signatures cannot diverge between
-   NuGet and GitHub. Because NuGet does not expose a matching byte-retrieval contract for
+   NuGet and GitHub. The module ZIP payloads are likewise rebuilt from the exact module files
+   downloaded from PowerShell Gallery while full-package-only examples and dependencies are
+   preserved. Registry publishing is disabled only when release replacement, exact NuGet-byte
+   recovery, and exact module-payload recovery are all bound to the verified release. Because
+   NuGet does not expose a matching byte-retrieval contract for
    `.snupkg` files, recovery fails before mutation when symbol-package assets are present.
    Registry publication is skipped during this verified GitHub-only recovery because the
    stable partial GitHub release proves the earlier NuGet and PowerShell Gallery lanes already
