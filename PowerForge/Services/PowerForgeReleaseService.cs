@@ -1538,6 +1538,12 @@ internal sealed partial class PowerForgeReleaseService
             NormalizeStrings(options.TestFlightBetaGroupIds).Length == 0 &&
             NormalizeStrings(options.TestFlightBetaGroupNames).Length == 0)
             throw new InvalidOperationException("AppleApps DistributeTestFlight requires TestFlightBetaGroupIds or TestFlightBetaGroupNames.");
+        if (options.SubmitTestFlightBetaReview && apps.All(static app => !UsesExternalTestFlight(app)))
+        {
+            throw new InvalidOperationException(
+                "AppleApps SubmitTestFlightBetaReview requires at least one target with TestFlightPolicy=External. " +
+                "Automatic and Internal policies cannot authorize the protected Beta App Review mutation.");
+        }
         if (options.SyncScreenshots && screenshotConfigPath is null && screenshotConfigPaths.Length == 0)
             throw new InvalidOperationException("AppleApps SyncScreenshots requires ScreenshotConfigPath or ScreenshotConfigPaths.");
         var appleSourceCommit = request.AppleSourceCommit?.Trim() ?? string.Empty;
@@ -1702,6 +1708,7 @@ internal sealed partial class PowerForgeReleaseService
 
         var name = string.IsNullOrWhiteSpace(app.Name) ? app.Scheme!.Trim() : app.Name!.Trim();
         var requestedProjectPath = ResolveOutputPath(projectRoot, app.ProjectPath);
+        EnsurePathWithinProjectRoot(projectRoot, requestedProjectPath, $"Apple app '{name}' ProjectPath");
         var projectExists = File.Exists(requestedProjectPath) || Directory.Exists(requestedProjectPath);
         if (!projectExists && !app.GenerateProjectIfMissing && !allowMissingProject)
             throw new FileNotFoundException($"Apple app project or workspace was not found: {requestedProjectPath}", requestedProjectPath);

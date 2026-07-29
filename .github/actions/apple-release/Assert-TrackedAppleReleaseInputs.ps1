@@ -62,3 +62,31 @@ Assert-TrackedSourceFile -SourceRoot $sourceRoot -Path $configFullPath -Name 'co
 if (-not $SkipToolManifest) {
     Assert-TrackedSourceFile -SourceRoot $sourceRoot -Path $ToolManifestPath -Name 'tool-manifest-path'
 }
+
+$config = Get-Content -LiteralPath $configFullPath -Raw | ConvertFrom-Json -Depth 100
+$projectRootSetting = [string] $config.AppleApps.ProjectRoot
+if ([string]::IsNullOrWhiteSpace($projectRootSetting)) { $projectRootSetting = '.' }
+$projectRoot = if ([IO.Path]::IsPathRooted($projectRootSetting)) {
+    [IO.Path]::GetFullPath($projectRootSetting)
+} else {
+    [IO.Path]::GetFullPath((Join-Path $configDirectory $projectRootSetting))
+}
+$comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+$sourcePrefix = $sourceRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+if (-not $projectRoot.Equals($sourceRoot, $comparison) -and
+    -not $projectRoot.StartsWith($sourcePrefix, $comparison)) {
+    throw "AppleApps.ProjectRoot must resolve inside the exact checked-out source: $projectRoot"
+}
+if (-not (Test-Path -LiteralPath $projectRoot -PathType Container)) {
+    throw "AppleApps.ProjectRoot was not found inside the exact checked-out source: $projectRoot"
+}
+
+$current = $projectRoot
+while ($true) {
+    $item = Get-Item -LiteralPath $current -Force
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "AppleApps.ProjectRoot must not traverse a symbolic link or reparse point: $current"
+    }
+    if ($current.Equals($sourceRoot, $comparison)) { break }
+    $current = Split-Path -Parent $current
+}

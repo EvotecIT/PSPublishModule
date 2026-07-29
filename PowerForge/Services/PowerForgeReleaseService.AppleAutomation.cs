@@ -152,7 +152,7 @@ internal sealed partial class PowerForgeReleaseService
         => UsesAppStoreConnect(app) && app.TestFlightPolicy != AppleTestFlightPolicy.Disabled;
 
     private static bool UsesExternalTestFlight(PowerForgeAppleAppReleaseTargetPlan app)
-        => UsesTestFlight(app) && app.TestFlightPolicy != AppleTestFlightPolicy.Internal;
+        => UsesTestFlight(app) && app.TestFlightPolicy == AppleTestFlightPolicy.External;
 
     internal static bool ShouldExecuteAppleTarget(
         PowerForgeAppleReleaseAction action,

@@ -61,6 +61,8 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("ls-files --error-unmatch", trackedInputs, StringComparison.Ordinal);
         Assert.Contains("diff --quiet HEAD", trackedInputs, StringComparison.Ordinal);
         Assert.Contains("does not match source-commit", trackedInputs, StringComparison.Ordinal);
+        Assert.Contains("AppleApps.ProjectRoot must resolve inside the exact checked-out source", trackedInputs, StringComparison.Ordinal);
+        Assert.Contains("AppleApps.ProjectRoot must not traverse a symbolic link or reparse point", trackedInputs, StringComparison.Ordinal);
         Assert.Contains("if ($planOnly -and $confirm)", script, StringComparison.Ordinal);
         Assert.Contains("--confirm-apple-action", script, StringComparison.Ordinal);
         Assert.Contains("--summary", script, StringComparison.Ordinal);
@@ -348,6 +350,9 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Contains("xcodeVersion = $xcodeVersion", capture, StringComparison.Ordinal);
         Assert.Contains("runtime = $captureRuntime", capture, StringComparison.Ordinal);
         Assert.Contains("device = $env:CAPTURE_DEVICE", capture, StringComparison.Ordinal);
+        Assert.Contains("Capture script must be tracked at the exact source commit", capture, StringComparison.Ordinal);
+        Assert.Contains("Capture script differs from the exact source commit", capture, StringComparison.Ordinal);
+        Assert.Contains("Capture artifact must not traverse a symbolic link or reparse point", capture, StringComparison.Ordinal);
         Assert.Contains("path: source/${{ inputs.capture_artifact_path }}/**/*.png", capture, StringComparison.Ordinal);
         Assert.Contains("allowed_dispatchers_json", approval, StringComparison.Ordinal);
         Assert.Contains("DISPATCHER: ${{ github.triggering_actor }}", approval, StringComparison.Ordinal);
@@ -392,6 +397,9 @@ public sealed class AppleReleaseWorkflowTests
         Assert.Equal(2, Count(approval, "& $trackedInputValidator"));
 
         var combined = Read(root, ".github", "workflows", "powerforge-apple-screenshots.yml");
+        Assert.Contains("Capture script must be tracked at the exact source commit", combined, StringComparison.Ordinal);
+        Assert.Contains("Capture script differs from the exact source commit", combined, StringComparison.Ordinal);
+        Assert.Contains("Capture artifact must not traverse a symbolic link or reparse point", combined, StringComparison.Ordinal);
         Assert.Contains("Assert-TrackedAppleReleaseInputs.ps1", combined, StringComparison.Ordinal);
         Assert.Equal(2, Count(combined, "& $trackedInputValidator"));
     }
@@ -403,6 +411,7 @@ public sealed class AppleReleaseWorkflowTests
         foreach (var workflowName in new[]
                  {
                      "powerforge-apple-screenshots.yml",
+                     "powerforge-apple-screenshot-capture.yml",
                      "powerforge-apple-screenshot-approve.yml",
                      "powerforge-apple-monitor.yml",
                      "powerforge-apple-advance.yml",
@@ -424,6 +433,7 @@ public sealed class AppleReleaseWorkflowTests
         foreach (var workflowName in new[]
                  {
                      "powerforge-apple-screenshots.yml",
+                     "powerforge-apple-screenshot-capture.yml",
                      "powerforge-apple-screenshot-approve.yml",
                      "powerforge-apple-monitor.yml",
                      "powerforge-apple-advance.yml",

@@ -1024,6 +1024,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                                 ProjectPath = "Tactra.xcodeproj",
                                 Scheme = "Tactra",
                                 Platform = ApplePlatform.iOS,
+                                TestFlightPolicy = AppleTestFlightPolicy.External,
                                 AppStoreConnectAppId = "app-1"
                             }
                         }
@@ -1106,6 +1107,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                                 ProjectPath = "Tactra.xcodeproj",
                                 Scheme = "Tactra",
                                 Platform = ApplePlatform.iOS,
+                                TestFlightPolicy = AppleTestFlightPolicy.External,
                                 AppStoreConnectAppId = "app-1"
                             }
                         }

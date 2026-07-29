@@ -24,6 +24,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Theory]
+    [InlineData(AppleTestFlightPolicy.Automatic, false)]
     [InlineData(AppleTestFlightPolicy.Disabled, false)]
     [InlineData(AppleTestFlightPolicy.Internal, false)]
     [InlineData(AppleTestFlightPolicy.External, true)]
@@ -40,6 +41,97 @@ public sealed partial class PowerForgeReleaseServiceTests
             PowerForgeReleaseService.ShouldExecuteAppleTarget(
                 PowerForgeAppleReleaseAction.SubmitTestFlightReview,
                 app));
+    }
+
+    [Fact]
+    public void Execute_AppleTargetRejectsProjectPathOutsideProjectRoot()
+    {
+        var root = CreateSandbox();
+        var externalRoot = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(externalRoot, "Outside.xcodeproj", "1.0.0", "1");
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new PowerForgeReleaseService(new NullLogger()).Execute(
+                    new PowerForgeReleaseSpec
+                    {
+                        AppleApps = new PowerForgeAppleReleaseOptions
+                        {
+                            ProjectRoot = root,
+                            Apps = new[]
+                            {
+                                new AppleAppConfiguration
+                                {
+                                    Name = "Outside",
+                                    ProjectPath = Path.Combine(externalRoot, "Outside.xcodeproj"),
+                                    Scheme = "Outside"
+                                }
+                            }
+                        }
+                    },
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Archive
+                    }));
+
+            Assert.Contains("ProjectPath must remain inside AppleApps.ProjectRoot", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+            TryDelete(externalRoot);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleApps_RequiresExplicitExternalPolicyForBetaReviewSubmission()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
+            File.WriteAllText(keyPath, "private-key");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new PowerForgeReleaseService(new NullLogger()).Execute(
+                    new PowerForgeReleaseSpec
+                    {
+                        AppleApps = new PowerForgeAppleReleaseOptions
+                        {
+                            ProjectRoot = ".",
+                            SubmitTestFlightBetaReview = true,
+                            AppStoreConnectApiKeyPath = keyPath,
+                            AppStoreConnectApiKeyId = "ABC123DEFG",
+                            AppStoreConnectApiIssuerId = "issuer-id",
+                            Apps = new[]
+                            {
+                                new AppleAppConfiguration
+                                {
+                                    Name = "Tactra",
+                                    ProjectPath = "Tactra.xcodeproj",
+                                    Scheme = "Tactra",
+                                    Platform = ApplePlatform.iOS,
+                                    TestFlightPolicy = AppleTestFlightPolicy.Automatic,
+                                    AppStoreConnectAppId = "app-1"
+                                }
+                            }
+                        }
+                    },
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.SubmitTestFlightReview,
+                        PlanOnly = true
+                    }));
+
+            Assert.Contains("TestFlightPolicy=External", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
     }
 
     [Fact]

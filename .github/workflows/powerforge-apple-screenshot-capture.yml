@@ -80,25 +80,75 @@ jobs:
       - name: Capture deterministic App Store screenshots
         shell: pwsh
         env:
+          SOURCE_REF: ${{ inputs.source_ref }}
           CAPTURE_SCRIPT: ${{ inputs.capture_script }}
           CAPTURE_SHELL: ${{ inputs.capture_shell }}
           CAPTURE_ARTIFACT_PATH: ${{ inputs.capture_artifact_path }}
         run: |
-          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source')
+          $ErrorActionPreference = 'Stop'
+          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source').TrimEnd([IO.Path]::DirectorySeparatorChar)
           $scriptPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_SCRIPT))
           $artifactPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_ARTIFACT_PATH))
-          $prefix = $sourceRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-          foreach ($entry in @{ capture_script = $scriptPath; capture_artifact_path = $artifactPath }.GetEnumerator()) {
-            if (-not $entry.Value.StartsWith($prefix, [StringComparison]::Ordinal)) { throw "$($entry.Key) escapes the checked-out source." }
+          $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+          $prefix = $sourceRoot + [IO.Path]::DirectorySeparatorChar
+          if (((Get-Item -LiteralPath $sourceRoot -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Checked-out source must not be a symbolic link or reparse point: $sourceRoot"
           }
+
+          function Assert-UnlinkedSourcePath {
+            param(
+              [Parameter(Mandatory)] [string] $Path,
+              [Parameter(Mandatory)] [string] $Name
+            )
+
+            $current = $Path
+            while (-not $current.Equals($sourceRoot, $comparison)) {
+              if (Test-Path -LiteralPath $current) {
+                $item = Get-Item -LiteralPath $current -Force
+                if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                  throw "$Name must not traverse a symbolic link or reparse point: $current"
+                }
+              }
+              $parent = Split-Path -Parent $current
+              if ([string]::IsNullOrWhiteSpace($parent) -or $parent.Equals($current, $comparison)) {
+                throw "$Name could not be validated inside the checked-out source."
+              }
+              $current = $parent
+            }
+          }
+
+          foreach ($entry in @{ capture_script = $scriptPath; capture_artifact_path = $artifactPath }.GetEnumerator()) {
+            if (-not $entry.Value.StartsWith($prefix, $comparison)) { throw "$($entry.Key) escapes the checked-out source." }
+          }
+          $actualCommit = (& git -C $sourceRoot rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or -not $actualCommit.Equals($env:SOURCE_REF, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Capture source '$actualCommit' does not match source_ref '$($env:SOURCE_REF)'."
+          }
+          Assert-UnlinkedSourcePath -Path $scriptPath -Name 'Capture script'
+          Assert-UnlinkedSourcePath -Path $artifactPath -Name 'Capture artifact'
           if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) { throw "Capture script was not found: $scriptPath" }
+          $relativeScript = [IO.Path]::GetRelativePath($sourceRoot, $scriptPath).Replace('\', '/')
+          & git -C $sourceRoot ls-files --error-unmatch -- $relativeScript *> $null
+          if ($LASTEXITCODE -ne 0) { throw "Capture script must be tracked at the exact source commit: $relativeScript" }
+          & git -C $sourceRoot diff --quiet HEAD -- $relativeScript
+          if ($LASTEXITCODE -ne 0) { throw "Capture script differs from the exact source commit: $relativeScript" }
+
           Push-Location $sourceRoot
           try {
             if ($env:CAPTURE_SHELL -eq 'bash') { & bash $scriptPath } else { & pwsh -NoLogo -NoProfile -File $scriptPath }
             if ($LASTEXITCODE -ne 0) { throw "Screenshot capture failed with exit code $LASTEXITCODE." }
           } finally { Pop-Location }
+
           if (-not (Test-Path -LiteralPath $artifactPath -PathType Container)) { throw "Capture artifact folder was not created: $artifactPath" }
-          if (@(Get-ChildItem -LiteralPath $artifactPath -Filter '*.png' -File -Recurse).Count -eq 0) { throw 'Capture produced no PNG screenshots.' }
+          Assert-UnlinkedSourcePath -Path $artifactPath -Name 'Capture artifact'
+          $artifactItems = @(Get-ChildItem -LiteralPath $artifactPath -Force -Recurse)
+          $linkedArtifact = $artifactItems | Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 } | Select-Object -First 1
+          if ($null -ne $linkedArtifact) {
+            throw "Capture artifact must not traverse a symbolic link or reparse point: $($linkedArtifact.FullName)"
+          }
+          if (@($artifactItems | Where-Object { -not $_.PSIsContainer -and $_.Extension -ieq '.png' }).Count -eq 0) {
+            throw 'Capture produced no PNG screenshots.'
+          }
 
       - name: Record capture provenance
         shell: pwsh

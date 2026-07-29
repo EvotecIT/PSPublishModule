@@ -439,6 +439,9 @@ The reusable workflow boundary mirrors the human approval boundary:
   Consumers that need source-only dependencies can pass `source_bootstrap_script`;
   the workflow accepts only a tracked, unchanged, non-symlinked `.ps1` file beneath
   that exact checkout and runs it before both the plan and confirmed transition.
+  The shared action then rejects an `AppleApps.ProjectRoot` or app project path outside
+  that checkout, so bootstrap output cannot redirect protected release inputs to a
+  persistent path on the runner.
 - `powerforge-apple-approval.yml` accepts only `SubmitTestFlightReview`,
   `SubmitAppReview`, or `Release`, verifies an optional dispatcher allow-list, and first
   publishes a read-only plan from the non-approval environment. The protected job starts
@@ -529,7 +532,8 @@ state, and the receipt.
 
 The reusable screenshot workflow standardizes that product-specific boundary. Its
 `capture_script` is repository code pinned by `source_ref`; the shared workflow rejects
-path traversal, requires PNG output, retains it before requesting environment approval,
+path traversal and linked paths, verifies that the script is tracked and unchanged at
+the exact commit, requires PNG output, retains it before requesting environment approval,
 and never accepts a branch or tag as capture evidence. This lets CasaRay keep its rich
 simulator routes while Tactra, EasyControlX, and EmailIMO add small capture scripts with
 the same approval and upload contract.
@@ -597,7 +601,7 @@ from becoming an accidental release lane:
 | `ParentTarget` | Names the archive owner for an embedded or development surface. |
 | `RequiredEmbeddedBundleIds` | Fails Doctor when the parent project no longer contains a required companion/helper bundle. |
 | `Capabilities` | Open-ended product facts such as `Widgets`, `Watch`, `CarPlay`, `AppIntents`, `LiveActivities`, or `AppleIntelligence`. |
-| `TestFlightPolicy` | Disables TestFlight or limits a target to internal/external distribution without inferring intent from beta groups. |
+| `TestFlightPolicy` | Disables TestFlight or limits a target to internal/external distribution. `Automatic` preserves legacy distribution behavior, but the protected `SubmitTestFlightReview` mutation requires explicit `External` intent. |
 
 Apple does not permit app-record creation through the App Store Connect API. If
 `AppStoreConnectAppId` is omitted, PowerForge looks up the exact bundle identifier and
