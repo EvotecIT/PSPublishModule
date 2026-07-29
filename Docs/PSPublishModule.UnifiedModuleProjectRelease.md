@@ -537,8 +537,10 @@ the signing-capable Windows runner and has three explicit operations:
    recovery run cannot advance a partially published release train. If the exact stable
    GitHub release already exists after a partial asset upload, recovery first binds its
    release ID and tag commit to the authorized source, revalidates both immediately before
-   mutation, and replaces same-named assets from that exact rebuild. Drafts, prereleases,
-   missing tags, mismatched commits, or changed release identities fail closed.
+   every deletion/upload, and replaces same-named assets from that exact rebuild. Asset IDs
+   are bound to the verified snapshot; late same-name collisions are never treated as a
+   successful skip. Drafts, prereleases, missing tags, mismatched commits, changed release
+   identities, and changed asset identities fail closed.
 
 Every run uploads a compact JSON receipt. Release plans are written under the ignored
 repository-level `Artefacts` directory so machine-specific absolute paths no longer

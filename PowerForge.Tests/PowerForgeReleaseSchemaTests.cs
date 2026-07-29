@@ -67,6 +67,39 @@ public sealed class PowerForgeReleaseSchemaTests
         Assert.True(gitHubSchema.Evaluate(node, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
     }
 
+    [Fact]
+    public void Release_runtime_loads_exact_verified_github_recovery_binding()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            File.WriteAllText(path, """
+                {
+                  "GitHub": {
+                    "Publish": true,
+                    "ReuseExistingRelease": true,
+                    "RequireExpectedExistingRelease": true,
+                    "ExpectedExistingReleaseId": 42,
+                    "RequirePublishedStableRelease": true,
+                    "ReplaceExistingAssets": true
+                  }
+                }
+                """);
+
+            var gitHub = Assert.IsType<PowerForgeReleaseGitHubOptions>(
+                PowerForgeReleaseService.LoadConfiguration(path).GitHub);
+            Assert.True(gitHub.ReuseExistingRelease);
+            Assert.True(gitHub.RequireExpectedExistingRelease);
+            Assert.Equal(42, gitHub.ExpectedExistingReleaseId);
+            Assert.True(gitHub.RequirePublishedStableRelease);
+            Assert.True(gitHub.ReplaceExistingAssets);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static string GetSchemaPath(string fileName) => Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory,
         "..", "..", "..", "..",

@@ -175,7 +175,7 @@ public sealed class GitHubReleasePublisherTests
         {
             requests.Add($"{context.Request.HttpMethod} {context.Request.Url!.AbsolutePath}");
             await context.Request.InputStream.CopyToAsync(Stream.Null);
-            var bytes = Encoding.UTF8.GetBytes(json);
+            var bytes = statusCode == 204 ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(json);
             context.Response.StatusCode = statusCode;
             context.Response.ContentType = "application/json";
             context.Response.ContentLength64 = bytes.Length;
@@ -187,10 +187,16 @@ public sealed class GitHubReleasePublisherTests
         var server = Task.Run(async () =>
         {
             await Respond(await listener.GetContextAsync(), releaseJson);
+            await Respond(await listener.GetContextAsync(), $"[{{\"id\":99,\"name\":\"{Path.GetFileName(assetPath)}\"}}]");
             await Respond(await listener.GetContextAsync(), releaseJson);
             await Respond(await listener.GetContextAsync(), $"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
-            await Respond(await listener.GetContextAsync(), "[]");
+            await Respond(await listener.GetContextAsync(), $"[{{\"id\":99,\"name\":\"{Path.GetFileName(assetPath)}\"}}]");
+            await Respond(await listener.GetContextAsync(), string.Empty, 204);
+            await Respond(await listener.GetContextAsync(), releaseJson);
+            await Respond(await listener.GetContextAsync(), $"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
             await Respond(await listener.GetContextAsync(), "{}", 201);
+            await Respond(await listener.GetContextAsync(), releaseJson);
+            await Respond(await listener.GetContextAsync(), $"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
         });
 
         try
@@ -214,14 +220,21 @@ public sealed class GitHubReleasePublisherTests
 
             await server.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.True(result.ReusedExistingRelease);
+            Assert.Equal(Path.GetFileName(assetPath), Assert.Single(result.ReplacedExistingAssets));
             Assert.Equal(Path.GetFileName(assetPath), Assert.Single(result.UploadedAssets));
             Assert.Equal(
                 [
                     "GET /repos/EvotecIT/example/releases/tags/v1.2.3",
+                    "GET /repos/EvotecIT/example/releases/42/assets",
                     "GET /repos/EvotecIT/example/releases/tags/v1.2.3",
                     "GET /repos/EvotecIT/example/git/ref/tags/v1.2.3",
                     "GET /repos/EvotecIT/example/releases/42/assets",
-                    "POST /uploads"
+                    "DELETE /repos/EvotecIT/example/releases/assets/99",
+                    "GET /repos/EvotecIT/example/releases/tags/v1.2.3",
+                    "GET /repos/EvotecIT/example/git/ref/tags/v1.2.3",
+                    "POST /uploads",
+                    "GET /repos/EvotecIT/example/releases/tags/v1.2.3",
+                    "GET /repos/EvotecIT/example/git/ref/tags/v1.2.3"
                 ],
                 requests);
         }
@@ -234,15 +247,87 @@ public sealed class GitHubReleasePublisherTests
     }
 
     [Fact]
-    public void TryReserveExistingAssetNameForReplacement_AllowsOnlyAssetsFromOriginalSnapshot()
+    public async Task PublishRelease_ReplacementFailsWhenSameNameAssetAppearsAfterVerifiedSnapshot()
     {
-        var replaceableAssetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(assetPath, "asset");
+        const string commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var releaseJson = $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}","body":"generated","draft":false,"prerelease":false,"published_at":"2026-07-29T00:00:00Z"}""";
+
+        async Task Respond(string json, int statusCode = 200)
         {
-            "PowerForge-win-x64.zip"
+            var context = await listener.GetContextAsync();
+            await context.Request.InputStream.CopyToAsync(Stream.Null);
+            var bytes = Encoding.UTF8.GetBytes(json);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = bytes.Length;
+            await context.Response.OutputStream.WriteAsync(bytes);
+            context.Response.Close();
+        }
+
+        var server = Task.Run(async () =>
+        {
+            await Respond(releaseJson);
+            await Respond("[]");
+            await Respond(releaseJson);
+            await Respond($"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
+            await Respond("{\"message\":\"Validation Failed\",\"errors\":[{\"resource\":\"ReleaseAsset\",\"code\":\"already_exists\",\"field\":\"name\"}]}", 422);
+        });
+
+        try
+        {
+            var request = new GitHubReleasePublishRequest
+            {
+                Owner = "EvotecIT",
+                Repository = "example",
+                Token = "token",
+                ApiBaseUrl = apiBaseUrl,
+                TagName = "v1.2.3",
+                ReuseExistingReleaseOnConflict = true,
+                RequireExpectedExistingRelease = true,
+                ExpectedExistingReleaseId = 42,
+                RequirePublishedStableRelease = true,
+                ExpectedTagCommitSha = commit,
+                ReplaceExistingAssets = true,
+                AssetFilePaths = [assetPath]
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new GitHubReleasePublisher(new NullLogger()).PublishRelease(request));
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("refusing to skip unverified bytes", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            listener.Stop();
+            listener.Close();
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
+    public void TryReserveExistingAssetForReplacement_BindsNameToOriginalAssetId()
+    {
+        var replaceableAssets = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["PowerForge-win-x64.zip"] = 42
         };
 
-        Assert.True(GitHubReleasePublisher.TryReserveExistingAssetNameForReplacement(replaceableAssetNames, "powerforge-win-x64.zip"));
-        Assert.False(GitHubReleasePublisher.TryReserveExistingAssetNameForReplacement(replaceableAssetNames, "PowerForge-win-x64.zip"));
+        Assert.True(GitHubReleasePublisher.TryReserveExistingAssetForReplacement(
+            replaceableAssets, "powerforge-win-x64.zip", out var assetId));
+        Assert.Equal(42, assetId);
+        Assert.False(GitHubReleasePublisher.TryReserveExistingAssetForReplacement(
+            replaceableAssets, "PowerForge-win-x64.zip", out _));
+
+        GitHubReleasePublisher.ValidateExpectedAssetId("PowerForge-win-x64.zip", 42, 42);
+        Assert.Throws<InvalidOperationException>(() =>
+            GitHubReleasePublisher.ValidateExpectedAssetId("PowerForge-win-x64.zip", 42, 99));
     }
 
     [Fact]
