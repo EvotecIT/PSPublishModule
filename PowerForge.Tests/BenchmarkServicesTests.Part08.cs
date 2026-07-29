@@ -1069,6 +1069,110 @@ public sealed partial class BenchmarkServicesTests
         }
         """;
 
+    [Fact]
+    public void EvidenceCatalog_RejectsPublishFromDirtyWorktree()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Metadata["gitWorktreeClean"] = "false";
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "windows.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("gitWorktreeClean", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RejectsPublishWithUnknownSummaryStatus()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Summary[0].Status = "Partial";
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "windows.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("unknown", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RejectsConflictingOperatingSystemAliases()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Metadata["osLabel"] = "Windows";
+        result.Metadata["os"] = "Linux";
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "windows.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("one operating-system platform", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_MarksDifferentComparisonDefinitionsAsNotComparable()
+    {
+        BenchmarkRunResult windows = Result("Windows", "fixture-a", 10);
+        BenchmarkRunResult linux = Result("Linux", "fixture-a", 11);
+        windows.Comparison = [Comparison("Windows", 0.01)];
+        linux.Comparison = [Comparison("Linux", 0.05)];
+        var service = new BenchmarkEvidenceCatalogService();
+
+        BenchmarkEvidenceCatalog catalog = service.Update(
+            null,
+            windows,
+            "comparison-a",
+            "windows.json",
+            "full",
+            publish: true);
+        catalog = service.Update(
+            catalog,
+            linux,
+            "comparison-a",
+            "linux.json",
+            "full",
+            publish: true);
+
+        Assert.All(catalog.Entries, entry => Assert.False(entry.Comparable));
+        Assert.All(
+            catalog.Entries,
+            entry => Assert.Contains(
+                entry.CompatibilityIssues,
+                issue => issue.Contains(
+                    "benchmark.comparison.shape.sha256",
+                    StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static BenchmarkComparisonRow Comparison(string platform, double tieTolerance)
+        => new()
+        {
+            Suite = "OfficeIMO.LibraryComparison",
+            Scenario = "CsvTyped",
+            Operation = "Read",
+            Host = "dotnet",
+            Os = platform,
+            RunMode = "full",
+            Engine = "OfficeIMO",
+            BaselineEngine = "Sep",
+            Metric = "MedianMs",
+            TieTolerance = tieTolerance
+        };
+
     private static BenchmarkRunResult Result(string platform, string fixture, double median)
     {
         var now = DateTimeOffset.UtcNow;
@@ -1088,6 +1192,7 @@ public sealed partial class BenchmarkServicesTests
             Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["gitSha"] = "0123456789abcdef0123456789abcdef01234567",
+                ["gitWorktreeClean"] = "true",
                 ["benchmark.fixture.sha256"] = fixture,
                 ["benchmark.package.officeimo"] = "3.0.3",
                 ["benchmark.package.sylvan"] = "0.5.7"

@@ -356,6 +356,18 @@ public sealed class BenchmarkResultImporter
             var status = isBenchmarkDotNetCsv
                 ? ParseSampleStatus(null, mean.HasValue)
                 : ParseSampleStatus(Get(map, "Status"), mean.HasValue);
+            Dictionary<string, string?> variables = ExtractVariables(
+                map,
+                metadataColumns,
+                metricHeaders,
+                isBenchmarkDotNetCsv,
+                usesDecimalComma,
+                culture);
+            if (isBenchmarkDotNetCsv)
+            {
+                variables["BenchmarkDotNetReport"] =
+                    BenchmarkDotNetCsvReportIdentity(path);
+            }
             samples.Add(new BenchmarkSample
             {
                 RunId = "import",
@@ -376,13 +388,7 @@ public sealed class BenchmarkResultImporter
                     usesDecimalComma: usesDecimalComma,
                     culture: culture),
                 Reason = Get(map, "Reason") ?? (mean.HasValue ? string.Empty : "Duration column could not be parsed."),
-                Variables = ExtractVariables(
-                    map,
-                    metadataColumns,
-                    metricHeaders,
-                    isBenchmarkDotNetCsv,
-                    usesDecimalComma,
-                    culture),
+                Variables = variables,
                 Metrics = ExtractMetrics(
                     map,
                     metricHeaders,
@@ -393,6 +399,15 @@ public sealed class BenchmarkResultImporter
         }
 
         return samples.ToArray();
+    }
+
+    private static string BenchmarkDotNetCsvReportIdentity(string path)
+    {
+        string name = Path.GetFileNameWithoutExtension(path);
+        const string reportSuffix = "-report";
+        return name.EndsWith(reportSuffix, StringComparison.OrdinalIgnoreCase)
+            ? name.Substring(0, name.Length - reportSuffix.Length)
+            : name;
     }
 
     private static BenchmarkSummaryRow[] ImportCsvSummary(

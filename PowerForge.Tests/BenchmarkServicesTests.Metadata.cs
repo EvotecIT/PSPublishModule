@@ -67,6 +67,7 @@ benchmark 'metadata' -out '{{escapedRoot}}' {
         Assert.Equal("1.2.3-beta1", result.Metadata["benchmark.ToolVersion"]);
         Assert.Equal("1.2.3-beta1", artifact["benchmark.ToolVersion"]);
         Assert.False(string.IsNullOrWhiteSpace(result.Metadata["gitSha"]));
+        Assert.True(result.Metadata.ContainsKey("gitWorktreeClean"));
         Assert.False(string.IsNullOrWhiteSpace(result.Environment.RuntimeVersion));
         Assert.False(string.IsNullOrWhiteSpace(result.Environment.Runner));
         Assert.False(string.IsNullOrWhiteSpace(result.Environment.ProcessorName));

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -160,6 +161,10 @@ public sealed class BenchmarkEvidenceCatalogService
             dimensions,
             "benchmark.workload.shape.sha256",
             ComputeWorkloadShape(result));
+        AddCompatibilityDimension(
+            dimensions,
+            "benchmark.comparison.shape.sha256",
+            ComputeComparisonShape(result));
         foreach (var item in result.Metadata.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
         {
             if (item.Key.StartsWith("benchmark.fixture.", StringComparison.OrdinalIgnoreCase) ||
@@ -195,6 +200,46 @@ public sealed class BenchmarkEvidenceCatalogService
                 row.Engine,
                 row.Host,
                 row.Variables)))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        if (identities.Length == 0)
+            return string.Empty;
+
+        string canonical = string.Join("\n", identities);
+        using var sha256 = SHA256.Create();
+        byte[] hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(canonical));
+        return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static string ComputeComparisonShape(BenchmarkRunResult result)
+    {
+        string[] identities = result.Comparison
+            .Select(row =>
+            {
+                var builder = new StringBuilder();
+                AppendIdentityPart(builder, "scenario", row.Scenario);
+                AppendIdentityPart(builder, "operation", row.Operation);
+                AppendIdentityPart(builder, "host", row.Host);
+                AppendIdentityPart(builder, "runMode", row.RunMode);
+                AppendIdentityPart(builder, "engine", row.Engine);
+                AppendIdentityPart(builder, "baselineEngine", row.BaselineEngine);
+                AppendIdentityPart(builder, "metric", row.Metric);
+                AppendIdentityPart(
+                    builder,
+                    "tieTolerance",
+                    row.TieTolerance.ToString("R", CultureInfo.InvariantCulture));
+                foreach (var variable in row.Variables
+                             .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    AppendIdentityPart(
+                        builder,
+                        variable.Key.ToUpperInvariant(),
+                        variable.Value);
+                }
+
+                return builder.ToString();
+            })
             .Distinct(StringComparer.Ordinal)
             .OrderBy(value => value, StringComparer.Ordinal)
             .ToArray();
@@ -251,7 +296,8 @@ public sealed class BenchmarkEvidenceCatalogService
 
     private static string ResolvePlatform(BenchmarkRunResult result, string? platformOverride)
     {
-        var labels = new[] { platformOverride, result.Environment.OsFamily, MetadataValue(result.Metadata, "osLabel", "os") }
+        var labels = new[] { platformOverride, result.Environment.OsFamily }
+            .Concat(MetadataValues(result.Metadata, "osLabel", "os"))
             .Concat(result.Samples.Select(sample => sample.Os))
             .Concat(result.Summary.Select(row => row.Os))
             .Where(value => !string.IsNullOrWhiteSpace(value))
@@ -325,6 +371,27 @@ public sealed class BenchmarkEvidenceCatalogService
             throw new InvalidOperationException(
                 "Publishable benchmark evidence requires exact source provenance in metadata key 'gitSha' " +
                 "as a full 40- or 64-character hexadecimal Git object ID.");
+        }
+
+        if (!string.Equals(
+                MetadataValue(result.Metadata, "gitWorktreeClean"),
+                "true",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Publishable benchmark evidence requires metadata key 'gitWorktreeClean' to be true. " +
+                "Commit or remove all tracked and untracked source changes before measuring.");
+        }
+
+        bool hasUnknownStatus =
+            result.Samples.Any(sample =>
+                !Enum.IsDefined(typeof(BenchmarkSampleStatus), sample.Status)) ||
+            result.Summary.Any(row => !IsKnownSummaryStatus(row.Status));
+        if (hasUnknownStatus)
+        {
+            throw new InvalidOperationException(
+                "Publishable benchmark evidence contains an unknown measurement status. " +
+                "Only Succeeded, Failed, and Skipped statuses are supported.");
         }
 
         bool hasSkippedMeasurement =
@@ -423,6 +490,11 @@ public sealed class BenchmarkEvidenceCatalogService
     private static bool IsValidDuration(double? value)
         => value.HasValue && IsValidDuration(value.Value);
 
+    private static bool IsKnownSummaryStatus(string? status)
+        => string.Equals(status, "Succeeded", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(status, "Failed", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(status, "Skipped", StringComparison.OrdinalIgnoreCase);
+
     private static bool IsFullGitObjectId(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -506,6 +578,20 @@ public sealed class BenchmarkEvidenceCatalogService
         }
 
         return string.Empty;
+    }
+
+    private static IEnumerable<string> MetadataValues(
+        IReadOnlyDictionary<string, string> metadata,
+        params string[] keys)
+    {
+        foreach (var item in metadata)
+        {
+            if (keys.Any(key =>
+                    string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase)))
+            {
+                yield return item.Value;
+            }
+        }
     }
 
     private static BenchmarkEnvironmentInfo CopyEnvironment(BenchmarkEnvironmentInfo value)

@@ -104,6 +104,28 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_DirectoryKeepsBenchmarkDotNetCsvReportsDistinct()
+    {
+        var root = CreateTempRoot();
+        File.WriteAllText(
+            Path.Combine(root, "First.Bench-report.csv"),
+            "Method,Mean [ms]\nWrite,1\n");
+        File.WriteAllText(
+            Path.Combine(root, "Second.Bench-report.csv"),
+            "Method,Mean [ms]\nWrite,2\n");
+
+        BenchmarkRunResult result = new BenchmarkResultImporter().Import(root);
+
+        Assert.Equal(2, result.Summary.Length);
+        Assert.Contains(
+            result.Summary,
+            row => row.Variables["BenchmarkDotNetReport"] == "First.Bench");
+        Assert.Contains(
+            result.Summary,
+            row => row.Variables["BenchmarkDotNetReport"] == "Second.Bench");
+    }
+
+    [Fact]
     public void Importer_DirectoryRejectsMixedPlatformsBeforeSelectingLatestRunReport()
     {
         var root = CreateTempRoot();

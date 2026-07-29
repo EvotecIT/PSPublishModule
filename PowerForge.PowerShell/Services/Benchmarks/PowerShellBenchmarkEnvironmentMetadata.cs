@@ -42,8 +42,20 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
         };
         foreach (var item in suite.Metadata)
             metadata["benchmark." + item.Key] = item.Value;
-        AddMetadata(metadata, "gitSha", ReadGitValue(suite.SourceRoot, "rev-parse HEAD"));
+        string? gitSha = ReadGitValue(suite.SourceRoot, "rev-parse HEAD");
+        AddMetadata(metadata, "gitSha", gitSha);
         AddMetadata(metadata, "gitBranch", ReadGitValue(suite.SourceRoot, "branch --show-current"));
+        if (!string.IsNullOrWhiteSpace(gitSha))
+        {
+            string? status = ReadGitValue(
+                suite.SourceRoot,
+                "status --porcelain --untracked-files=normal");
+            if (status is not null)
+            {
+                metadata["gitWorktreeClean"] =
+                    string.IsNullOrWhiteSpace(status) ? "true" : "false";
+            }
+        }
         return metadata;
     }
 
