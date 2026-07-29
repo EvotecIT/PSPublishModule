@@ -302,7 +302,8 @@ public sealed class PowerShellBenchmarkHostExecutor
             StartedUtc = started,
             FinishedUtc = DateTimeOffset.UtcNow,
             Samples = samples,
-            Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite)
+            Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite),
+            Environment = PowerShellBenchmarkEnvironmentMetadata.BuildEnvironment()
         };
     }
 

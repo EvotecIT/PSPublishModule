@@ -387,6 +387,60 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_UsesExplicitCultureForGroupedSampleIterations()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(
+            csv,
+            "Suite;Scenario;Operation;Engine;Host;Iteration;Status;DurationMs\n"
+            + "suite;case;Run;Managed;Current;1.234;Succeeded;12,5\n");
+
+        BenchmarkSample sample = Assert.Single(
+            new BenchmarkResultImporter().Import(
+                csv,
+                culture: System.Globalization.CultureInfo.GetCultureInfo("de-DE")).Samples);
+
+        Assert.Equal(1234, sample.Iteration);
+        Assert.Equal(12.5, sample.DurationMs);
+    }
+
+    [Fact]
+    public void Importer_UsesInferredDecimalCommaForDotGroupedDurations()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(
+            csv,
+            "Suite;Scenario;Operation;Engine;Host;Iteration;Status;DurationMs\n"
+            + "suite;decimal;Run;Managed;Current;0;Succeeded;1,5\n"
+            + "suite;grouped;Run;Managed;Current;1;Succeeded;1.234\n");
+
+        BenchmarkRunResult result = new BenchmarkResultImporter().Import(csv);
+
+        Assert.Equal(1.5, result.Samples[0].DurationMs);
+        Assert.Equal(1234, result.Samples[1].DurationMs);
+    }
+
+    [Fact]
+    public void Importer_MarksSummaryWithoutDurationAsFailed()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "summary.csv");
+        File.WriteAllText(
+            csv,
+            "Suite,Scenario,Operation,Engine,Host,FailureCount,MedianMs,MeanMs\n"
+            + "suite,broken,Run,Managed,Current,0,not-a-duration,also-invalid\n");
+
+        BenchmarkSummaryRow row = Assert.Single(
+            new BenchmarkResultImporter().Import(csv).Summary);
+
+        Assert.Equal("Failed", row.Status);
+        Assert.Null(row.MedianMs);
+        Assert.Null(row.MeanMs);
+    }
+
+    [Fact]
     public void Importer_KeepsRunnerVariablesNamedLikeBenchmarkDotNetStatistics()
     {
         var root = CreateTempRoot();

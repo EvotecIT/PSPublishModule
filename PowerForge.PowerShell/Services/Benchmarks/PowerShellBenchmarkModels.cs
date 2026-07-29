@@ -79,6 +79,8 @@ public sealed class PowerShellBenchmarkSuite
     /// <summary>Output root for benchmark artifacts.</summary>
     public string OutputRoot { get; set; } = Path.Combine("Build", "Benchmarks");
 
+    internal string? SourceRoot { get; set; }
+
     /// <summary>Warmup iteration count.</summary>
     public int WarmupCount { get; set; } = 1;
 

@@ -8,6 +8,7 @@ namespace PowerForge;
 /// </summary>
 public sealed class BenchmarkEvidenceCatalogService
 {
+    private const int SupportedSchemaVersion = 2;
     private static readonly string[] DefaultExpectedPlatforms = { "windows", "linux", "macos" };
     private static readonly string[] ExecutionPolicyMetadataKeys =
     {
@@ -55,10 +56,14 @@ public sealed class BenchmarkEvidenceCatalogService
                 "Only Full benchmark runs can be published as evidence for public claims.");
         }
         if (publish)
+        {
+            ValidateEmbeddedRunModes(result, normalizedRunMode);
             ValidatePublishableResult(result);
+        }
 
+        ValidateCatalogSchema(catalog);
         catalog ??= new BenchmarkEvidenceCatalog();
-        catalog.SchemaVersion = 2;
+        catalog.SchemaVersion = SupportedSchemaVersion;
         catalog.ExpectedPlatforms = NormalizeExpectedPlatforms(expectedPlatforms ?? catalog.ExpectedPlatforms);
 
         string resolvedPlatform = ResolvePlatform(result, platform);
@@ -333,7 +338,10 @@ public sealed class BenchmarkEvidenceCatalogService
             result.Samples.Any(sample => sample.Status == BenchmarkSampleStatus.Failed) ||
             result.Summary.Any(row =>
                 row.FailureCount > 0 ||
-                string.Equals(row.Status, "Failed", StringComparison.OrdinalIgnoreCase));
+                string.Equals(row.Status, "Failed", StringComparison.OrdinalIgnoreCase) ||
+                (string.Equals(row.Status, "Succeeded", StringComparison.OrdinalIgnoreCase) &&
+                 !row.MedianMs.HasValue &&
+                 !row.MeanMs.HasValue));
         bool hasSuccessfulMeasurement =
             result.Samples.Any(sample => sample.Status == BenchmarkSampleStatus.Succeeded) ||
             result.Summary.Any(row =>
@@ -344,6 +352,56 @@ public sealed class BenchmarkEvidenceCatalogService
             throw new InvalidOperationException(
                 "Publishable benchmark evidence requires at least one successful measurement and no failed measurements.");
         }
+    }
+
+    private static void ValidateCatalogSchema(BenchmarkEvidenceCatalog? catalog)
+    {
+        if (catalog is null)
+            return;
+        if (catalog.SchemaVersion is 1 or SupportedSchemaVersion)
+            return;
+
+        throw new InvalidOperationException(
+            $"Benchmark evidence catalog schema {catalog.SchemaVersion} is not supported by this build. " +
+            $"Supported schemas are 1 and {SupportedSchemaVersion}; use a compatible PowerForge version before updating the catalog.");
+    }
+
+    private static void ValidateEmbeddedRunModes(BenchmarkRunResult result, string expectedRunMode)
+    {
+        var modes = new List<string>();
+        foreach (var item in result.Metadata)
+        {
+            if (item.Key.Equals("runMode", StringComparison.OrdinalIgnoreCase) ||
+                item.Key.Equals("benchmark.runMode", StringComparison.OrdinalIgnoreCase) ||
+                item.Key.Equals("benchmark.execution.runMode", StringComparison.OrdinalIgnoreCase))
+            {
+                AddRunMode(modes, item.Value);
+            }
+        }
+        foreach (BenchmarkSample sample in result.Samples)
+            AddRunMode(modes, sample.RunMode);
+        foreach (BenchmarkSummaryRow row in result.Summary)
+            AddRunMode(modes, row.RunMode);
+        foreach (BenchmarkComparisonRow row in result.Comparison)
+            AddRunMode(modes, row.RunMode);
+
+        string[] conflicting = modes
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(mode => !string.Equals(mode, expectedRunMode, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(mode => mode, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (conflicting.Length == 0)
+            return;
+
+        throw new InvalidOperationException(
+            $"Publishable benchmark evidence declares embedded run mode(s) {string.Join(", ", conflicting.Select(mode => $"'{mode}'"))}, " +
+            $"which conflict with requested run mode '{expectedRunMode}'.");
+    }
+
+    private static void AddRunMode(ICollection<string> modes, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            modes.Add(value!.Trim().ToLowerInvariant());
     }
 
     private static bool IsFullGitObjectId(string? value)

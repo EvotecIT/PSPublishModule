@@ -42,8 +42,8 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
         };
         foreach (var item in suite.Metadata)
             metadata["benchmark." + item.Key] = item.Value;
-        AddMetadata(metadata, "gitSha", ReadGitValue("rev-parse HEAD"));
-        AddMetadata(metadata, "gitBranch", ReadGitValue("branch --show-current"));
+        AddMetadata(metadata, "gitSha", ReadGitValue(suite.SourceRoot, "rev-parse HEAD"));
+        AddMetadata(metadata, "gitBranch", ReadGitValue(suite.SourceRoot, "branch --show-current"));
         return metadata;
     }
 
@@ -137,17 +137,22 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
         return $"{RuntimeInformation.OSArchitecture} processor";
     }
 
-    private static string? ReadGitValue(string arguments)
-        => ReadProcessValue("git", arguments, timeoutMilliseconds: 3000);
+    private static string? ReadGitValue(string? workingDirectory, string arguments)
+        => ReadProcessValue(
+            "git",
+            arguments,
+            timeoutMilliseconds: 3000,
+            workingDirectory: workingDirectory);
 
     private static string? ReadProcessValue(
         string fileName,
         string arguments,
-        int timeoutMilliseconds)
+        int timeoutMilliseconds,
+        string? workingDirectory = null)
     {
         try
         {
-            using var process = Process.Start(new ProcessStartInfo
+            var startInfo = new ProcessStartInfo
             {
                 FileName = fileName,
                 Arguments = arguments,
@@ -155,7 +160,13 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
-            });
+            };
+            if (!string.IsNullOrWhiteSpace(workingDirectory) &&
+                Directory.Exists(workingDirectory))
+            {
+                startInfo.WorkingDirectory = Path.GetFullPath(workingDirectory!);
+            }
+            using var process = Process.Start(startInfo);
             if (process is null)
                 return null;
             var output = process.StandardOutput.ReadToEnd();

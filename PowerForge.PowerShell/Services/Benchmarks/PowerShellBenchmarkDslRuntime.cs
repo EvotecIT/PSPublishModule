@@ -82,7 +82,8 @@ public static partial class PowerShellBenchmarkDslRuntime
         var suite = new PowerShellBenchmarkSuite
         {
             Name = RequireName(name, "benchmark name"),
-            OutputRoot = string.IsNullOrWhiteSpace(outputRoot) ? Path.Combine("Build", "Benchmarks", RequireName(name, "benchmark name")) : outputRoot!.Trim()
+            OutputRoot = string.IsNullOrWhiteSpace(outputRoot) ? Path.Combine("Build", "Benchmarks", RequireName(name, "benchmark name")) : outputRoot!.Trim(),
+            SourceRoot = context.ScriptRoot
         };
         context.Suites.Add(suite);
         context.SuiteStack.Push(suite);

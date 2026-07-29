@@ -371,6 +371,74 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void EvidenceCatalog_RejectsPublishingWhenEmbeddedRunModeConflicts()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Metadata["runMode"] = "quick";
+        result.Summary[0].RunMode = "quick";
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "mismatched-mode.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("embedded run mode", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("quick", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RejectsSucceededSummaryWithoutDuration()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Summary = result.Summary.Append(new BenchmarkSummaryRow
+        {
+            Suite = result.Suite,
+            Scenario = "Broken",
+            Operation = "Read",
+            Engine = "OfficeIMO",
+            RunMode = "full",
+            Status = "Succeeded"
+        }).ToArray();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "missing-duration.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("no failed measurements", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_UpdateFileRejectsFutureSchemaWithoutRewriting()
+    {
+        string root = CreateTempRoot();
+        string path = Path.Combine(root, "index.json");
+        const string futureCatalog =
+            "{\"schemaVersion\":3,\"futureData\":{\"preserve\":true},\"entries\":[],\"availability\":[]}";
+        File.WriteAllText(path, futureCatalog);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().UpdateFile(
+                path,
+                Result("Windows", "fixture-a", 10),
+                "comparison-a",
+                "windows.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("schema 3", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(futureCatalog, File.ReadAllText(path));
+    }
+
+    [Fact]
     public void EvidenceCatalog_PreservesConfiguredPlatformsWhenUpdateOmitsThem()
     {
         var service = new BenchmarkEvidenceCatalogService();

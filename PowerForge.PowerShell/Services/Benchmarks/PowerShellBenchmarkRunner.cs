@@ -182,7 +182,8 @@ public sealed partial class PowerShellBenchmarkRunner
             Samples = samples.ToArray(),
             Summary = summary,
             Comparison = Array.Empty<BenchmarkComparisonRow>(),
-            Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite)
+            Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite),
+            Environment = PowerShellBenchmarkEnvironmentMetadata.BuildEnvironment()
         };
 
         try

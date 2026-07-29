@@ -351,7 +351,7 @@ public sealed class BenchmarkResultImporter
                 Host = GetCsvHost(map, isBenchmarkDotNetCsv),
                 Os = Get(map, "OS") ?? string.Empty,
                 RunMode = Get(map, "RunMode") ?? "import",
-                Iteration = ParseInt(Get(map, "Iteration")) ?? 0,
+                Iteration = ParseInt(Get(map, "Iteration"), culture) ?? 0,
                 Status = status,
                 DurationMs = mean ?? 0,
                 AllocatedBytes = ParseLong(Get(map, "AllocatedBytes"), culture),
@@ -403,6 +403,17 @@ public sealed class BenchmarkResultImporter
             var metricHeaders = SummaryMetricColumnsFor(headers, isBenchmarkDotNetCsv);
             var metadataColumns = SummaryMetadataColumnsFor(map, isBenchmarkDotNetCsv);
             var failureCount = ParseInt(Get(map, "FailureCount"), culture) ?? 0;
+            double? median = ParseDuration(
+                GetWithHeader(map, out var medianHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Median"),
+                medianHeader,
+                usesDecimalComma,
+                culture);
+            double? mean = ParseDuration(
+                GetWithHeader(map, out var meanHeader, "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]", "Mean"),
+                meanHeader,
+                usesDecimalComma,
+                culture);
+            string? explicitStatus = Get(map, "Status");
             rows.Add(new BenchmarkSummaryRow
             {
                 Suite = GetCsvSuite(map, suiteOverride, defaultSuite, isBenchmarkDotNetCsv),
@@ -422,9 +433,12 @@ public sealed class BenchmarkResultImporter
                 SampleCount = ParseInt(Get(map, "SampleCount"), culture) ?? 0,
                 FailureCount = failureCount,
                 OutlierCount = ParseInt(Get(map, "OutlierCount"), culture) ?? 0,
-                Status = Get(map, "Status") ?? (failureCount > 0 ? "Failed" : "Succeeded"),
-                MedianMs = ParseDuration(GetWithHeader(map, out var medianHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Median"), medianHeader, usesDecimalComma, culture),
-                MeanMs = ParseDuration(GetWithHeader(map, out var meanHeader, "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]", "Mean"), meanHeader, usesDecimalComma, culture),
+                Status = explicitStatus ??
+                         (failureCount > 0 || (!median.HasValue && !mean.HasValue)
+                             ? "Failed"
+                             : "Succeeded"),
+                MedianMs = median,
+                MeanMs = mean,
                 MinMs = ParseDuration(GetWithHeader(map, out var minHeader, "MinMs", "Min [ns]", "Min [us]", "Min [ms]", "Min [s]", "Min"), minHeader, usesDecimalComma, culture),
                 MaxMs = ParseDuration(GetWithHeader(map, out var maxHeader, "MaxMs", "Max [ns]", "Max [us]", "Max [ms]", "Max [s]", "Max"), maxHeader, usesDecimalComma, culture),
                 P95Ms = ParseDuration(GetWithHeader(map, out var p95Header, "P95Ms", "P95 [ns]", "P95 [us]", "P95 [ms]", "P95 [s]", "P95"), p95Header, usesDecimalComma, culture),
@@ -1066,12 +1080,41 @@ public sealed class BenchmarkResultImporter
                 ? normalized.Replace(",", string.Empty)
                 : normalized.Replace(".", string.Empty).Replace(',', '.');
         }
+        else if (usesDecimalComma.Value && normalized.Contains('.'))
+        {
+            if (!LooksLikeGroupedInteger(normalized, '.'))
+            {
+                value = default;
+                return false;
+            }
+            normalized = normalized.Replace(".", string.Empty);
+        }
         else
         {
             normalized = normalized.Replace(",", string.Empty);
         }
 
         return double.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+    }
+
+    private static bool LooksLikeGroupedInteger(string value, char separator)
+    {
+        string candidate = value.Trim();
+        if (candidate.StartsWith("+", StringComparison.Ordinal) ||
+            candidate.StartsWith("-", StringComparison.Ordinal))
+        {
+            candidate = candidate.Substring(1);
+        }
+
+        string[] groups = candidate.Split(separator);
+        if (groups.Length < 2 || groups[0].Length is < 1 or > 3 ||
+            groups[0].Any(ch => ch < '0' || ch > '9'))
+        {
+            return false;
+        }
+        return groups.Skip(1).All(group =>
+            group.Length == 3 &&
+            group.All(ch => ch >= '0' && ch <= '9'));
     }
 
     private static bool? DetectDecimalComma(string[][] records, char delimiter, CultureInfo? culture)

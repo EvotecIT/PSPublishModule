@@ -28,12 +28,16 @@ benchmark 'metadata' -out '{{escapedRoot}}' {
 }
 """);
 
-        var suite = Assert.Single(EvaluateBenchmarkDsl(script));
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script, RepoRootLocator.Find()));
         var result = new PowerShellBenchmarkRunner().Run(suite);
         var artifact = BenchmarkJson.Read<Dictionary<string, string>>(result.Artifacts["metadata.json"]);
 
         Assert.Equal("1.2.3-beta1", suite.Metadata["ToolVersion"]);
         Assert.Equal("1.2.3-beta1", result.Metadata["benchmark.ToolVersion"]);
         Assert.Equal("1.2.3-beta1", artifact["benchmark.ToolVersion"]);
+        Assert.False(string.IsNullOrWhiteSpace(result.Metadata["gitSha"]));
+        Assert.False(string.IsNullOrWhiteSpace(result.Environment.RuntimeVersion));
+        Assert.False(string.IsNullOrWhiteSpace(result.Environment.Runner));
+        Assert.False(string.IsNullOrWhiteSpace(result.Environment.ProcessorName));
     }
 }
