@@ -26,7 +26,7 @@ public static class BenchmarkJson
     public static void Write<T>(string path, T value)
     {
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Output path is required.", nameof(path));
-        string fullPath = Path.GetFullPath(path);
+        string fullPath = ResolveWritePath(path);
         string directory = Path.GetDirectoryName(fullPath)!;
         Directory.CreateDirectory(directory);
         var json = JsonSerializer.Serialize(value, Options);
@@ -80,6 +80,21 @@ public static class BenchmarkJson
             if (File.Exists(temporaryPath))
                 File.Delete(temporaryPath);
         }
+    }
+
+    internal static string ResolveWritePath(string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+#if NET8_0_OR_GREATER
+        var file = new FileInfo(fullPath);
+        if (file.Exists && !string.IsNullOrWhiteSpace(file.LinkTarget))
+        {
+            FileSystemInfo? target = file.ResolveLinkTarget(returnFinalTarget: true);
+            if (target is not null)
+                return target.FullName;
+        }
+#endif
+        return fullPath;
     }
 
     /// <summary>

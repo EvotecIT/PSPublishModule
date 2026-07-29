@@ -54,6 +54,14 @@ public sealed class UpdateBenchmarkEvidenceCatalogCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string[]? ExpectedPlatform { get; set; }
 
+    /// <summary>
+    /// Producing operating-system platform for artifacts, such as BenchmarkDotNet CSV, that do not
+    /// carry OS metadata. Conflicting embedded labels are rejected.
+    /// </summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? Platform { get; set; }
+
     /// <summary>Updates the catalog.</summary>
     protected override void ProcessRecord()
     {
@@ -68,7 +76,8 @@ public sealed class UpdateBenchmarkEvidenceCatalogCommand : PSCmdlet
             ResultPath,
             RunMode,
             Publish.IsPresent,
-            ExpectedPlatform);
+            ExpectedPlatform,
+            Platform);
         WriteObject(result);
     }
 }

@@ -17,6 +17,7 @@ public sealed class BenchmarkEvidenceCatalogService
     /// <param name="runMode">Run mode such as quick or full.</param>
     /// <param name="publish">Whether the lane supports public benchmark claims.</param>
     /// <param name="expectedPlatforms">Platforms expected for complete evidence.</param>
+    /// <param name="platform">Producing platform override for artifacts that do not carry OS metadata.</param>
     /// <returns>Updated catalog.</returns>
     public BenchmarkEvidenceCatalog Update(
         BenchmarkEvidenceCatalog? catalog,
@@ -25,7 +26,8 @@ public sealed class BenchmarkEvidenceCatalogService
         string resultPath,
         string runMode,
         bool publish,
-        IEnumerable<string>? expectedPlatforms = null)
+        IEnumerable<string>? expectedPlatforms = null,
+        string? platform = null)
     {
         if (result is null) throw new ArgumentNullException(nameof(result));
         if (string.IsNullOrWhiteSpace(comparisonId)) throw new ArgumentException("Comparison identifier is required.", nameof(comparisonId));
@@ -38,18 +40,12 @@ public sealed class BenchmarkEvidenceCatalogService
         catalog.SchemaVersion = 2;
         catalog.ExpectedPlatforms = NormalizeExpectedPlatforms(expectedPlatforms ?? catalog.ExpectedPlatforms);
 
-        var platform = BenchmarkPlatformNormalizer.NormalizeId(result.Environment.OsFamily);
-        if (string.IsNullOrWhiteSpace(platform))
-            platform = BenchmarkPlatformNormalizer.NormalizeId(MetadataValue(result.Metadata, "osLabel", "os"));
-        if (string.IsNullOrWhiteSpace(platform))
-            platform = BenchmarkPlatformNormalizer.NormalizeId(result.Summary.Select(row => row.Os).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)));
-        if (string.IsNullOrWhiteSpace(platform))
-            throw new InvalidOperationException("The benchmark result does not identify its operating-system platform.");
+        string resolvedPlatform = ResolvePlatform(result, platform);
 
         var entry = new BenchmarkEvidenceEntry
         {
             ComparisonId = comparisonId.Trim(),
-            Platform = platform,
+            Platform = resolvedPlatform,
             RunMode = runMode.Trim().ToLowerInvariant(),
             GeneratedUtc = result.FinishedUtc == default ? DateTimeOffset.UtcNow : result.FinishedUtc,
             Publish = publish,
@@ -59,9 +55,17 @@ public sealed class BenchmarkEvidenceCatalogService
             Compatibility = BuildCompatibility(result)
         };
 
+        BenchmarkEvidenceEntry? existingLane = catalog.Entries
+            .Where(existing => SameLane(existing, entry))
+            .OrderByDescending(existing => existing.GeneratedUtc)
+            .FirstOrDefault();
+        BenchmarkEvidenceEntry selectedEntry = existingLane is not null &&
+                                               existingLane.GeneratedUtc > entry.GeneratedUtc
+            ? existingLane
+            : entry;
         var entries = catalog.Entries
             .Where(existing => !SameLane(existing, entry))
-            .Append(entry)
+            .Append(selectedEntry)
             .OrderBy(existing => existing.ComparisonId, StringComparer.OrdinalIgnoreCase)
             .ThenBy(existing => existing.Platform, StringComparer.OrdinalIgnoreCase)
             .ThenBy(existing => existing.RunMode, StringComparer.OrdinalIgnoreCase)
@@ -84,6 +88,7 @@ public sealed class BenchmarkEvidenceCatalogService
     /// <param name="runMode">Run mode such as quick or full.</param>
     /// <param name="publish">Whether the lane supports public benchmark claims.</param>
     /// <param name="expectedPlatforms">Platforms expected for complete evidence.</param>
+    /// <param name="platform">Producing platform override for artifacts that do not carry OS metadata.</param>
     /// <returns>Updated catalog.</returns>
     public BenchmarkEvidenceCatalog UpdateFile(
         string catalogPath,
@@ -92,15 +97,16 @@ public sealed class BenchmarkEvidenceCatalogService
         string resultPath,
         string runMode,
         bool publish,
-        IEnumerable<string>? expectedPlatforms = null)
+        IEnumerable<string>? expectedPlatforms = null,
+        string? platform = null)
     {
         if (string.IsNullOrWhiteSpace(catalogPath)) throw new ArgumentException("Catalog path is required.", nameof(catalogPath));
-        string fullPath = Path.GetFullPath(catalogPath);
+        string fullPath = BenchmarkJson.ResolveWritePath(catalogPath);
         using var fileLease = BenchmarkFileUpdateLock.Acquire(fullPath);
         var catalog = File.Exists(fullPath)
             ? BenchmarkJson.Read<BenchmarkEvidenceCatalog>(fullPath)
             : null;
-        var updated = Update(catalog, result, comparisonId, resultPath, runMode, publish, expectedPlatforms);
+        var updated = Update(catalog, result, comparisonId, resultPath, runMode, publish, expectedPlatforms, platform);
         BenchmarkJson.Write(fullPath, updated);
         return updated;
     }
@@ -121,18 +127,58 @@ public sealed class BenchmarkEvidenceCatalogService
         {
             ["suite"] = result.Suite
         };
+        AddCompatibilityDimension(dimensions, "environment.runtimeVersion", result.Environment.RuntimeVersion);
+        AddCompatibilityDimension(dimensions, "environment.dotNetSdkVersion", result.Environment.DotNetSdkVersion);
         foreach (var item in result.Metadata.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
         {
             if (item.Key.StartsWith("benchmark.fixture.", StringComparison.OrdinalIgnoreCase) ||
                 item.Key.StartsWith("benchmark.package.", StringComparison.OrdinalIgnoreCase) ||
                 item.Key.StartsWith("benchmark.workload.", StringComparison.OrdinalIgnoreCase) ||
-                item.Key.Equals("gitSha", StringComparison.OrdinalIgnoreCase))
+                item.Key.Equals("gitSha", StringComparison.OrdinalIgnoreCase) ||
+                item.Key.Equals("pwsh", StringComparison.OrdinalIgnoreCase) ||
+                item.Key.Equals("psEdition", StringComparison.OrdinalIgnoreCase) ||
+                item.Key.Equals("powerShellVersion", StringComparison.OrdinalIgnoreCase))
             {
                 dimensions[item.Key] = item.Value;
             }
         }
 
         return dimensions;
+    }
+
+    private static void AddCompatibilityDimension(
+        IDictionary<string, string> dimensions,
+        string key,
+        string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            dimensions[key] = value!.Trim();
+    }
+
+    private static string ResolvePlatform(BenchmarkRunResult result, string? platformOverride)
+    {
+        var labels = new[] { platformOverride, result.Environment.OsFamily, MetadataValue(result.Metadata, "osLabel", "os") }
+            .Concat(result.Samples.Select(sample => sample.Os))
+            .Concat(result.Summary.Select(row => row.Os))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(BenchmarkPlatformNormalizer.NormalizeId)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (labels.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "The benchmark result does not identify its operating-system platform. Supply the producing platform explicitly.");
+        }
+
+        if (labels.Length > 1)
+        {
+            throw new InvalidOperationException(
+                $"Benchmark evidence must identify one operating-system platform; found {string.Join(", ", labels)}.");
+        }
+
+        return labels[0];
     }
 
     private static void ApplyCompatibility(BenchmarkEvidenceEntry[] entries)

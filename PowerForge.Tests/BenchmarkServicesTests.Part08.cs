@@ -303,6 +303,45 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void EvidenceCatalog_RejectsConflictingOperatingSystemLabels()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Summary[0].Os = "Linux";
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "mixed.json",
+                "full",
+                true));
+
+        Assert.Contains("one operating-system platform", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("windows", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("linux", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_AcceptsExplicitPlatformForMetadataFreeCsvImports()
+    {
+        BenchmarkRunResult result = Result(string.Empty, "fixture-a", 10);
+        result.Summary[0].Os = string.Empty;
+
+        BenchmarkEvidenceCatalog catalog = new BenchmarkEvidenceCatalogService().Update(
+            null,
+            result,
+            "comparison-a",
+            "linux.json",
+            "full",
+            true,
+            platform: "Ubuntu 24.04");
+
+        Assert.Equal("linux", Assert.Single(catalog.Entries).Platform);
+        Assert.Null(new PSPublishModule.UpdateBenchmarkEvidenceCatalogCommand().Platform);
+    }
+
+    [Fact]
     public void EvidenceCatalog_LockIdentityCanNormalizeCaseInsensitiveVolumes()
     {
         string root = CreateTempRoot();
@@ -324,6 +363,37 @@ public sealed partial class BenchmarkServicesTests
         var mac = Assert.Single(catalog.Entries, entry => entry.Platform == "macos");
         Assert.False(mac.Comparable);
         Assert.Contains(mac.CompatibilityIssues, issue => issue.Contains("benchmark.fixture.sha256", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void EvidenceCatalog_MarksMismatchedRuntimeIdentityAsNotComparable()
+    {
+        var service = new BenchmarkEvidenceCatalogService();
+        BenchmarkRunResult windows = Result("Windows", "fixture-a", 10);
+        BenchmarkRunResult linux = Result("Linux", "fixture-a", 11);
+        linux.Environment.RuntimeVersion = ".NET 8.0.20";
+
+        BenchmarkEvidenceCatalog catalog = service.Update(
+            null,
+            windows,
+            "comparison-a",
+            "windows.json",
+            "full",
+            true);
+        catalog = service.Update(
+            catalog,
+            linux,
+            "comparison-a",
+            "linux.json",
+            "full",
+            true);
+
+        Assert.All(catalog.Entries, entry => Assert.False(entry.Comparable));
+        Assert.All(
+            catalog.Entries,
+            entry => Assert.Contains(
+                entry.CompatibilityIssues,
+                issue => issue.Contains("environment.runtimeVersion", StringComparison.OrdinalIgnoreCase)));
     }
 
     [Fact]
@@ -379,6 +449,26 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void BenchmarkJson_PreservesUnixSymbolicLinkDuringAtomicReplacement()
+    {
+#if NET8_0_OR_GREATER
+        if (OperatingSystem.IsWindows())
+            return;
+
+        string root = CreateTempRoot();
+        string target = Path.Combine(root, "versioned.json");
+        string link = Path.Combine(root, "latest.json");
+        File.WriteAllText(target, "{}");
+        File.CreateSymbolicLink(link, target);
+
+        BenchmarkJson.Write(link, new Dictionary<string, string> { ["value"] = "updated" });
+
+        Assert.NotNull(new FileInfo(link).LinkTarget);
+        Assert.Equal("updated", BenchmarkJson.Read<Dictionary<string, string>>(target)["value"]);
+#endif
+    }
+
+    [Fact]
     public void EvidenceCatalog_ReplacesOnlyTheSamePlatformAndRunModeLane()
     {
         var service = new BenchmarkEvidenceCatalogService();
@@ -387,6 +477,33 @@ public sealed partial class BenchmarkServicesTests
 
         var entry = Assert.Single(catalog.Entries);
         Assert.Equal("new.json", entry.ResultPath);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_DoesNotReplaceNewerLaneWithLateOlderResult()
+    {
+        var service = new BenchmarkEvidenceCatalogService();
+        BenchmarkRunResult newer = Result("Windows", "fixture-a", 10);
+        BenchmarkRunResult older = Result("Windows", "fixture-a", 11);
+        newer.FinishedUtc = DateTimeOffset.UtcNow;
+        older.FinishedUtc = newer.FinishedUtc.AddMinutes(-5);
+
+        BenchmarkEvidenceCatalog catalog = service.Update(
+            null,
+            newer,
+            "comparison-a",
+            "newer.json",
+            "full",
+            true);
+        catalog = service.Update(
+            catalog,
+            older,
+            "comparison-a",
+            "older.json",
+            "full",
+            true);
+
+        Assert.Equal("newer.json", Assert.Single(catalog.Entries).ResultPath);
     }
 
     [Fact]

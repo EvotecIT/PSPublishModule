@@ -279,6 +279,31 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_UsesExplicitCultureForAmbiguousBenchmarkDotNetCsvNumbers()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "benchmark-report.csv");
+        File.WriteAllText(
+            csv,
+            "Method;Job;Mean\n"
+            + "Invariant;Dry;1,234 ns\n");
+
+        BenchmarkRunResult ambiguous = new BenchmarkResultImporter().Import(csv, "demo");
+        BenchmarkRunResult invariant = new BenchmarkResultImporter().Import(
+            csv,
+            "demo",
+            System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+        BenchmarkRunResult decimalComma = new BenchmarkResultImporter().Import(
+            csv,
+            "demo",
+            System.Globalization.CultureInfo.GetCultureInfo("de-DE"));
+
+        Assert.Equal(BenchmarkSampleStatus.Failed, Assert.Single(ambiguous.Samples).Status);
+        Assert.Equal(0.001234, Assert.Single(invariant.Samples).DurationMs, precision: 9);
+        Assert.Equal(0.000001234, Assert.Single(decimalComma.Samples).DurationMs, precision: 12);
+    }
+
+    [Fact]
     public void Importer_KeepsRunnerVariablesNamedLikeBenchmarkDotNetStatistics()
     {
         var root = CreateTempRoot();
