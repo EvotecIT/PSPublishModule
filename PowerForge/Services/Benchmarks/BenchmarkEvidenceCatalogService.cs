@@ -31,6 +31,8 @@ public sealed class BenchmarkEvidenceCatalogService
         if (string.IsNullOrWhiteSpace(comparisonId)) throw new ArgumentException("Comparison identifier is required.", nameof(comparisonId));
         if (string.IsNullOrWhiteSpace(resultPath)) throw new ArgumentException("Result path is required.", nameof(resultPath));
         if (string.IsNullOrWhiteSpace(runMode)) throw new ArgumentException("Run mode is required.", nameof(runMode));
+        if (publish)
+            ValidatePublishableResult(result);
 
         catalog ??= new BenchmarkEvidenceCatalog();
         catalog.SchemaVersion = 2;
@@ -161,7 +163,7 @@ public sealed class BenchmarkEvidenceCatalogService
         foreach (var key in keys)
         {
             var values = entries
-                .Select(entry => entry.Compatibility.TryGetValue(key, out var value) ? value : "<missing>")
+                .Select(entry => TryGetValueIgnoreCase(entry.Compatibility, key, out var value) ? value : "<missing>")
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -170,6 +172,47 @@ public sealed class BenchmarkEvidenceCatalogService
         }
 
         return issues.ToArray();
+    }
+
+    private static void ValidatePublishableResult(BenchmarkRunResult result)
+    {
+        if (string.IsNullOrWhiteSpace(MetadataValue(result.Metadata, "gitSha")))
+        {
+            throw new InvalidOperationException(
+                "Publishable benchmark evidence requires exact source provenance in metadata key 'gitSha'.");
+        }
+
+        bool hasFailedMeasurement =
+            result.Samples.Any(sample => sample.Status == BenchmarkSampleStatus.Failed) ||
+            result.Summary.Any(row => string.Equals(row.Status, "Failed", StringComparison.OrdinalIgnoreCase));
+        bool hasSuccessfulMeasurement =
+            result.Samples.Any(sample => sample.Status == BenchmarkSampleStatus.Succeeded) ||
+            result.Summary.Any(row =>
+                string.Equals(row.Status, "Succeeded", StringComparison.OrdinalIgnoreCase) &&
+                (row.MedianMs.HasValue || row.MeanMs.HasValue));
+        if (hasFailedMeasurement || !hasSuccessfulMeasurement)
+        {
+            throw new InvalidOperationException(
+                "Publishable benchmark evidence requires at least one successful measurement and no failed measurements.");
+        }
+    }
+
+    private static bool TryGetValueIgnoreCase(
+        IReadOnlyDictionary<string, string> values,
+        string key,
+        out string value)
+    {
+        foreach (var item in values)
+        {
+            if (!string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            value = item.Value;
+            return true;
+        }
+
+        value = string.Empty;
+        return false;
     }
 
     private static BenchmarkPlatformAvailability[] BuildAvailability(

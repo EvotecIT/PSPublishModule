@@ -9,7 +9,9 @@ namespace PSPublishModule;
 /// </summary>
 /// <example>
 /// <summary>Record a Windows publish lane</summary>
-/// <code>Import-BenchmarkResult .\BenchmarkDotNet.Artifacts | Update-BenchmarkEvidenceCatalog -Path .\Website\data\benchmark-index.json -ComparisonId tabular-65k-v1 -ResultPath .\Website\data\windows-full.json -RunMode full -Publish</code>
+/// <code>$result = Import-BenchmarkResult .\BenchmarkDotNet.Artifacts
+/// $result.Metadata['gitSha'] = (git rev-parse HEAD).Trim()
+/// $result | Update-BenchmarkEvidenceCatalog -Path .\Website\data\benchmark-index.json -ComparisonId tabular-65k-v1 -ResultPath .\Website\data\windows-full.json -RunMode full -Publish</code>
 /// </example>
 [Cmdlet(VerbsData.Update, "BenchmarkEvidenceCatalog", SupportsShouldProcess = true)]
 [OutputType(typeof(BenchmarkEvidenceCatalog))]
@@ -40,7 +42,10 @@ public sealed class UpdateBenchmarkEvidenceCatalogCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string RunMode { get; set; } = string.Empty;
 
-    /// <summary>Marks this lane as suitable for public benchmark claims.</summary>
+    /// <summary>
+    /// Marks this lane as suitable for public benchmark claims. Published evidence must contain
+    /// successful measurements without failures and exact source provenance in metadata key <c>gitSha</c>.
+    /// </summary>
     [Parameter]
     public SwitchParameter Publish { get; set; }
 

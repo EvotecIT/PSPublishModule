@@ -219,6 +219,43 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void EvidenceCatalog_RejectsPublishWithoutSuccessfulMeasurements()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Summary[0].Status = "Failed";
+        result.Summary[0].MedianMs = null;
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "failed.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("successful measurement", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RejectsPublishWithoutSourceProvenance()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Metadata.Remove("gitSha");
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "missing-source.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("gitSha", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void EvidenceCatalog_PreservesConfiguredPlatformsWhenUpdateOmitsThem()
     {
         var service = new BenchmarkEvidenceCatalogService();
@@ -287,6 +324,58 @@ public sealed partial class BenchmarkServicesTests
         var mac = Assert.Single(catalog.Entries, entry => entry.Platform == "macos");
         Assert.False(mac.Comparable);
         Assert.Contains(mac.CompatibilityIssues, issue => issue.Contains("benchmark.fixture.sha256", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void EvidenceCatalog_PreservesCaseInsensitiveCompatibilityAfterJsonReload()
+    {
+        string root = CreateTempRoot();
+        string path = Path.Combine(root, "index.json");
+        var service = new BenchmarkEvidenceCatalogService();
+        BenchmarkEvidenceCatalog catalog = service.Update(
+            null,
+            Result("Windows", "fixture-a", 10),
+            "comparison-a",
+            "windows.json",
+            "full",
+            publish: true);
+        BenchmarkEvidenceEntry windows = Assert.Single(catalog.Entries);
+        windows.Compatibility = windows.Compatibility
+            .ToDictionary(
+                item => item.Key.Equals("gitSha", StringComparison.OrdinalIgnoreCase) ? "GitSha" : item.Key,
+                item => item.Value,
+                StringComparer.Ordinal);
+        BenchmarkJson.Write(path, catalog);
+
+        catalog = service.UpdateFile(
+            path,
+            Result("Linux", "fixture-a", 11),
+            "comparison-a",
+            "linux.json",
+            "full",
+            publish: true);
+
+        Assert.All(catalog.Entries, entry => Assert.True(entry.Comparable));
+        Assert.All(catalog.Entries, entry => Assert.Empty(entry.CompatibilityIssues));
+    }
+
+    [Fact]
+    public void BenchmarkJson_PreservesUnixPermissionsDuringAtomicReplacement()
+    {
+#if NET8_0_OR_GREATER
+        if (OperatingSystem.IsWindows())
+            return;
+
+        string root = CreateTempRoot();
+        string path = Path.Combine(root, "result.json");
+        File.WriteAllText(path, "{}");
+        const UnixFileMode expectedMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        File.SetUnixFileMode(path, expectedMode);
+
+        BenchmarkJson.Write(path, new Dictionary<string, string> { ["value"] = "updated" });
+
+        Assert.Equal(expectedMode, File.GetUnixFileMode(path));
+#endif
     }
 
     [Fact]

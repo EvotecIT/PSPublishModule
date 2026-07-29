@@ -309,6 +309,7 @@ $result.Metadata['benchmark.workload.id'] = 'markpflug-65k-sales-v1'
 $result.Metadata['benchmark.fixture.csv'] = 'AC959F43...'
 $result.Metadata['benchmark.package.officeimo'] = '3.0.4'
 $result.Metadata['benchmark.package.sylvan'] = '0.5.7'
+$result.Metadata['gitSha'] = (git rev-parse HEAD).Trim()
 
 [PowerForge.BenchmarkJson]::Write(
     '.\Website\static\data\benchmarks\tabular\windows-full.json',
@@ -329,7 +330,9 @@ Catalog updates use a cross-process lease and an atomic same-directory replace,
 so concurrent platform jobs cannot silently discard or truncate another lane.
 The catalog replaces only the matching comparison/platform/run-mode lane.
 Windows, Linux, and macOS remain separate entries. `availability` lists missing
-platforms explicitly. Publishable lanes with different `gitSha` values or
+platforms explicitly. A publishable lane must contain successful measurements,
+no failures, and an exact `gitSha`; invalid evidence is rejected rather than
+appearing available. Publishable lanes with different `gitSha` values or
 different `benchmark.fixture.*`, `benchmark.package.*`, or
 `benchmark.workload.*` metadata are marked non-comparable and carry the exact
 conflicting dimensions.

@@ -56,7 +56,16 @@ public static class BenchmarkJson
             if (File.Exists(fullPath))
             {
 #if NET8_0_OR_GREATER
-                File.Move(temporaryPath, fullPath, overwrite: true);
+                if (OperatingSystem.IsWindows())
+                {
+                    File.Replace(temporaryPath, fullPath, destinationBackupFileName: null, ignoreMetadataErrors: false);
+                }
+                else
+                {
+                    UnixFileMode destinationMode = File.GetUnixFileMode(fullPath);
+                    File.SetUnixFileMode(temporaryPath, destinationMode);
+                    File.Move(temporaryPath, fullPath, overwrite: true);
+                }
 #else
                 File.Replace(temporaryPath, fullPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
 #endif
