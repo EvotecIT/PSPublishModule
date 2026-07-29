@@ -1029,15 +1029,24 @@ public sealed class BenchmarkResultImporter
         if (culture is not null)
             return string.Equals(culture.NumberFormat.NumberDecimalSeparator, ",", StringComparison.Ordinal);
 
+        string[] headers = records[0];
+        HashSet<string> metricColumns = DecimalConventionColumnsFor(headers);
         bool sawDecimalComma = false;
         bool sawDecimalPoint = false;
-        foreach (string value in records.Skip(1).SelectMany(record => record))
+        foreach (string[] record in records.Skip(1))
         {
-            bool? convention = InferDecimalComma(RemoveUnitSuffix(value.Trim()).Trim());
-            if (convention == true)
-                sawDecimalComma = true;
-            else if (convention == false && value.Contains('.'))
-                sawDecimalPoint = true;
+            for (var index = 0; index < record.Length && index < headers.Length; index++)
+            {
+                if (!metricColumns.Contains(headers[index]))
+                    continue;
+
+                string value = record[index];
+                bool? convention = InferDecimalComma(RemoveUnitSuffix(value.Trim()).Trim());
+                if (convention == true)
+                    sawDecimalComma = true;
+                else if (convention == false && value.Contains('.'))
+                    sawDecimalPoint = true;
+            }
         }
 
         if (sawDecimalComma && sawDecimalPoint)
@@ -1052,6 +1061,33 @@ public sealed class BenchmarkResultImporter
             return false;
         return null;
     }
+
+    private static HashSet<string> DecimalConventionColumnsFor(string[] headers)
+    {
+        bool isBenchmarkDotNetCsv = LooksLikeBenchmarkDotNetCsv(headers);
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string header in SampleMetricColumnsFor(headers, isBenchmarkDotNetCsv))
+            columns.Add(header);
+        foreach (string header in SummaryMetricColumnsFor(headers, isBenchmarkDotNetCsv))
+            columns.Add(header);
+        foreach (string header in headers.Where(IsKnownNumericCsvColumn))
+            columns.Add(header);
+        return columns;
+    }
+
+    private static bool IsKnownNumericCsvColumn(string header)
+        => header.Equals("DurationMs", StringComparison.OrdinalIgnoreCase)
+           || header.Equals("MedianMs", StringComparison.OrdinalIgnoreCase)
+           || header.Equals("MeanMs", StringComparison.OrdinalIgnoreCase)
+           || header.Equals("MinMs", StringComparison.OrdinalIgnoreCase)
+           || header.Equals("MaxMs", StringComparison.OrdinalIgnoreCase)
+           || header.Equals("P95Ms", StringComparison.OrdinalIgnoreCase)
+           || header.Equals("P99Ms", StringComparison.OrdinalIgnoreCase)
+           || header.Equals("StdDevMs", StringComparison.OrdinalIgnoreCase)
+           || header.Equals("StdErrMs", StringComparison.OrdinalIgnoreCase)
+           || header.Equals("AllocatedBytes", StringComparison.OrdinalIgnoreCase)
+           || header.Equals("WorkingSetDeltaBytes", StringComparison.OrdinalIgnoreCase)
+           || header.Equals("OutputMetric", StringComparison.OrdinalIgnoreCase);
 
     private static bool? InferDecimalComma(string text)
     {

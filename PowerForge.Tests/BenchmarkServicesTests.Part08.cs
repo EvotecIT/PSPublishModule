@@ -11,7 +11,7 @@ public sealed partial class BenchmarkServicesTests
         var report = Path.Combine(root, "Tabular-report-full.json");
         File.WriteAllText(report, """
         {
-          "Title": "OfficeIMO.Tabular",
+          "Title": "OfficeIMO.LibraryComparison",
           "HostEnvironmentInfo": {
             "BenchmarkDotNetCaption": "BenchmarkDotNet v0.15.8",
             "OsVersion": "Microsoft Windows 11 (10.0.26200.8875)",
@@ -55,7 +55,7 @@ public sealed partial class BenchmarkServicesTests
         var root = CreateTempRoot();
         string report = """
         {
-          "Title": "OfficeIMO.Tabular",
+          "Title": "OfficeIMO.LibraryComparison",
           "HostEnvironmentInfo": {
             "OsVersion": "Ubuntu 24.04.3 LTS",
             "ProcessorName": "AMD Ryzen 9 9950X3D2",
@@ -256,6 +256,21 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void EvidenceCatalog_RejectsPublishingQuickRuns()
+    {
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                Result("Windows", "fixture-a", 10),
+                "comparison-a",
+                "quick.json",
+                "quick",
+                publish: true));
+
+        Assert.Contains("Full", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void EvidenceCatalog_PreservesConfiguredPlatformsWhenUpdateOmitsThem()
     {
         var service = new BenchmarkEvidenceCatalogService();
@@ -363,6 +378,66 @@ public sealed partial class BenchmarkServicesTests
         var mac = Assert.Single(catalog.Entries, entry => entry.Platform == "macos");
         Assert.False(mac.Comparable);
         Assert.Contains(mac.CompatibilityIssues, issue => issue.Contains("benchmark.fixture.sha256", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void EvidenceCatalog_ComparesEachUnpublishedLaneAgainstPublishedEvidence()
+    {
+        var service = new BenchmarkEvidenceCatalogService();
+        BenchmarkEvidenceCatalog catalog = service.Update(
+            null,
+            Result("Linux", "fixture-a", 10),
+            "comparison-a",
+            "linux.json",
+            "full",
+            publish: true);
+        catalog = service.Update(
+            catalog,
+            Result("Windows", "fixture-b", 11),
+            "comparison-a",
+            "windows-diagnostic.json",
+            "full",
+            publish: false);
+
+        BenchmarkEvidenceEntry published = Assert.Single(catalog.Entries, entry => entry.Publish);
+        BenchmarkEvidenceEntry diagnostic = Assert.Single(catalog.Entries, entry => !entry.Publish);
+        Assert.True(published.Comparable);
+        Assert.False(diagnostic.Comparable);
+        Assert.Contains(
+            diagnostic.CompatibilityIssues,
+            issue => issue.Contains("benchmark.fixture.sha256", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void EvidenceCatalog_TreatsCaseOnlyProvenanceDifferencesAsIncompatible()
+    {
+        var service = new BenchmarkEvidenceCatalogService();
+        BenchmarkRunResult windows = Result("Windows", "fixture-a", 10);
+        BenchmarkRunResult linux = Result("Linux", "fixture-a", 11);
+        windows.Metadata["benchmark.fixture.path"] = "Cases/Foo.csv";
+        linux.Metadata["benchmark.fixture.path"] = "Cases/foo.csv";
+
+        BenchmarkEvidenceCatalog catalog = service.Update(
+            null,
+            windows,
+            "comparison-a",
+            "windows.json",
+            "full",
+            publish: true);
+        catalog = service.Update(
+            catalog,
+            linux,
+            "comparison-a",
+            "linux.json",
+            "full",
+            publish: true);
+
+        Assert.All(catalog.Entries, entry => Assert.False(entry.Comparable));
+        Assert.All(
+            catalog.Entries,
+            entry => Assert.Contains(
+                entry.CompatibilityIssues,
+                issue => issue.Contains("benchmark.fixture.path", StringComparison.OrdinalIgnoreCase)));
     }
 
     [Fact]
@@ -538,7 +613,7 @@ public sealed partial class BenchmarkServicesTests
         string processorName = "Test CPU") =>
         $$"""
         {
-          "Title": "OfficeIMO.Tabular",
+          "Title": "OfficeIMO.LibraryComparison",
           "HostEnvironmentInfo": {
             "OsVersion": "{{operatingSystem}}",
             "ProcessorName": "{{processorName}}",
@@ -561,7 +636,7 @@ public sealed partial class BenchmarkServicesTests
         return new BenchmarkRunResult
         {
             RunId = Guid.NewGuid().ToString("N"),
-            Suite = "OfficeIMO.Tabular",
+            Suite = "OfficeIMO.LibraryComparison",
             StartedUtc = now.AddMinutes(-1),
             FinishedUtc = now,
             Environment = new BenchmarkEnvironmentInfo
@@ -582,7 +657,7 @@ public sealed partial class BenchmarkServicesTests
             [
                 new BenchmarkSummaryRow
                 {
-                    Suite = "OfficeIMO.Tabular",
+                    Suite = "OfficeIMO.LibraryComparison",
                     Scenario = "CsvTyped",
                     Operation = "Read",
                     Engine = "OfficeIMO",

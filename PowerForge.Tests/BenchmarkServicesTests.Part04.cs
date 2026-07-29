@@ -247,15 +247,15 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
-    public void Importer_ReadsLocaleDelimitedBenchmarkDotNetCsv()
+    public void Importer_ReadsLocaleDelimitedBenchmarkDotNetCsvWithoutTreatingRuntimeLabelsAsMetrics()
     {
         var root = CreateTempRoot();
         var csv = Path.Combine(root, "benchmark-report.csv");
         File.WriteAllText(
             csv,
             "Method;Job;Mean;Allocated\n"
-            + "OfficeIMO;Dry;54,90 ms;36,46 MB\n"
-            + "Sep;Dry;28,67 ms;34,22 MB\n");
+            + "OfficeIMO;NET8.0;54,90 ms;36,46 MB\n"
+            + "Sep;NET8.0;28,67 ms;34,22 MB\n");
 
         var result = new BenchmarkResultImporter().Import(csv, "demo");
 

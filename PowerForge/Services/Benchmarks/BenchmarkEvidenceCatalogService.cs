@@ -33,6 +33,12 @@ public sealed class BenchmarkEvidenceCatalogService
         if (string.IsNullOrWhiteSpace(comparisonId)) throw new ArgumentException("Comparison identifier is required.", nameof(comparisonId));
         if (string.IsNullOrWhiteSpace(resultPath)) throw new ArgumentException("Result path is required.", nameof(resultPath));
         if (string.IsNullOrWhiteSpace(runMode)) throw new ArgumentException("Run mode is required.", nameof(runMode));
+        string normalizedRunMode = runMode.Trim().ToLowerInvariant();
+        if (publish && !string.Equals(normalizedRunMode, "full", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Only Full benchmark runs can be published as evidence for public claims.");
+        }
         if (publish)
             ValidatePublishableResult(result);
 
@@ -46,7 +52,7 @@ public sealed class BenchmarkEvidenceCatalogService
         {
             ComparisonId = comparisonId.Trim(),
             Platform = resolvedPlatform,
-            RunMode = runMode.Trim().ToLowerInvariant(),
+            RunMode = normalizedRunMode,
             GeneratedUtc = result.FinishedUtc == default ? DateTimeOffset.UtcNow : result.FinishedUtc,
             Publish = publish,
             ResultPath = resultPath,
@@ -187,12 +193,15 @@ public sealed class BenchmarkEvidenceCatalogService
                      entry => string.Join("\u001f", entry.ComparisonId, entry.RunMode),
                      StringComparer.OrdinalIgnoreCase))
         {
-            var candidates = group.Where(entry => entry.Publish).ToArray();
-            if (candidates.Length == 0)
-                candidates = group.ToArray();
-            var issues = CompareDimensions(candidates);
+            BenchmarkEvidenceEntry[] published = group.Where(entry => entry.Publish).ToArray();
             foreach (var entry in group)
             {
+                BenchmarkEvidenceEntry[] candidates = published.Length == 0
+                    ? group.ToArray()
+                    : entry.Publish
+                        ? published
+                        : published.Append(entry).ToArray();
+                string[] issues = CompareDimensions(candidates);
                 entry.Comparable = issues.Length == 0;
                 entry.CompatibilityIssues = issues;
             }
@@ -210,8 +219,8 @@ public sealed class BenchmarkEvidenceCatalogService
         {
             var values = entries
                 .Select(entry => TryGetValueIgnoreCase(entry.Compatibility, key, out var value) ? value : "<missing>")
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(value => value, StringComparer.Ordinal)
                 .ToArray();
             if (values.Length > 1)
                 issues.Add($"{key}: lanes contain incompatible values ({string.Join(", ", values.Select(value => $"'{value}'"))}).");
