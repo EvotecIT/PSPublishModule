@@ -11,6 +11,7 @@ public sealed partial class BenchmarkServicesTests
         var host = PowerShellBenchmarkHostRuntime.GetCurrentHostLabel();
 
         Assert.Equal($"{metadata["psEdition"]}-{metadata["pwsh"]}", host, ignoreCase: true);
+        Assert.False(string.IsNullOrWhiteSpace(PowerShellBenchmarkEnvironmentMetadata.BuildEnvironment().ProcessorName));
     }
 
     [Fact]

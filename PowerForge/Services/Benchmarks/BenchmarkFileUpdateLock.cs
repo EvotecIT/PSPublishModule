@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -46,10 +47,13 @@ internal static class BenchmarkFileUpdateLock
         }
     }
 
-    private static string CreatePathHash(string destinationPath)
+    internal static string CreatePathHash(string destinationPath, bool? caseInsensitive = null)
     {
         string normalizedPath = Path.GetFullPath(destinationPath);
-        if (Path.DirectorySeparatorChar == '\\')
+        bool normalizeCase = caseInsensitive ??
+            (Path.DirectorySeparatorChar == '\\' ||
+             RuntimeInformation.IsOSPlatform(OSPlatform.OSX));
+        if (normalizeCase)
             normalizedPath = normalizedPath.ToUpperInvariant();
         using var sha256 = SHA256.Create();
         byte[] hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(normalizedPath));

@@ -36,11 +36,11 @@ public sealed class BenchmarkEvidenceCatalogService
         catalog.SchemaVersion = 2;
         catalog.ExpectedPlatforms = NormalizeExpectedPlatforms(expectedPlatforms ?? catalog.ExpectedPlatforms);
 
-        var platform = NormalizePlatform(result.Environment.OsFamily);
+        var platform = BenchmarkPlatformNormalizer.NormalizeId(result.Environment.OsFamily);
         if (string.IsNullOrWhiteSpace(platform))
-            platform = NormalizePlatform(MetadataValue(result.Metadata, "osLabel", "os"));
+            platform = BenchmarkPlatformNormalizer.NormalizeId(MetadataValue(result.Metadata, "osLabel", "os"));
         if (string.IsNullOrWhiteSpace(platform))
-            platform = NormalizePlatform(result.Summary.Select(row => row.Os).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)));
+            platform = BenchmarkPlatformNormalizer.NormalizeId(result.Summary.Select(row => row.Os).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)));
         if (string.IsNullOrWhiteSpace(platform))
             throw new InvalidOperationException("The benchmark result does not identify its operating-system platform.");
 
@@ -106,21 +106,11 @@ public sealed class BenchmarkEvidenceCatalogService
     private static string[] NormalizeExpectedPlatforms(IEnumerable<string>? platforms)
     {
         var normalized = (platforms ?? DefaultExpectedPlatforms)
-            .Select(NormalizePlatform)
+            .Select(BenchmarkPlatformNormalizer.NormalizeId)
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         return normalized.Length == 0 ? DefaultExpectedPlatforms.ToArray() : normalized;
-    }
-
-    private static string NormalizePlatform(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
-        var normalized = value!.Trim().ToLowerInvariant();
-        if (normalized.Contains("windows")) return "windows";
-        if (normalized.Contains("linux")) return "linux";
-        if (normalized.Contains("mac") || normalized.Contains("osx") || normalized.Contains("darwin")) return "macos";
-        return normalized.Replace(" ", "-");
     }
 
     private static Dictionary<string, string> BuildCompatibility(BenchmarkRunResult result)
@@ -187,18 +177,36 @@ public sealed class BenchmarkEvidenceCatalogService
         IEnumerable<string> expectedPlatforms)
     {
         var all = entries.ToArray();
-        return expectedPlatforms
-            .Select(platform =>
+        return all
+            .GroupBy(
+                entry => string.Join("\u001f", entry.ComparisonId, entry.RunMode),
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
             {
-                var matches = all.Where(entry => string.Equals(entry.Platform, platform, StringComparison.OrdinalIgnoreCase)).ToArray();
+                BenchmarkEvidenceEntry first = group.First();
+                return (first.ComparisonId, first.RunMode);
+            })
+            .OrderBy(group => group.ComparisonId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(group => group.RunMode, StringComparer.OrdinalIgnoreCase)
+            .SelectMany(group => expectedPlatforms.Select(platform =>
+            {
+                bool requirePublishedLane = string.Equals(group.RunMode, "full", StringComparison.OrdinalIgnoreCase);
+                var matches = all.Where(entry =>
+                        string.Equals(entry.ComparisonId, group.ComparisonId, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(entry.RunMode, group.RunMode, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(entry.Platform, platform, StringComparison.OrdinalIgnoreCase) &&
+                        (!requirePublishedLane || entry.Publish))
+                    .ToArray();
                 return new BenchmarkPlatformAvailability
                 {
+                    ComparisonId = group.ComparisonId,
+                    RunMode = group.RunMode,
                     Platform = platform,
                     Available = matches.Length > 0,
-                    RunModes = matches.Select(entry => entry.RunMode).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray(),
+                    RunModes = matches.Length == 0 ? Array.Empty<string>() : new[] { group.RunMode },
                     LatestUtc = matches.Length == 0 ? null : matches.Max(entry => entry.GeneratedUtc)
                 };
-            })
+            }))
             .ToArray();
     }
 

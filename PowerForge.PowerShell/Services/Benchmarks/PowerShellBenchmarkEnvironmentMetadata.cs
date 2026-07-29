@@ -58,7 +58,7 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             OsDescription = RuntimeInformation.OSDescription,
             OsArchitecture = RuntimeInformation.OSArchitecture.ToString(),
             ProcessArchitecture = RuntimeInformation.ProcessArchitecture.ToString(),
-            ProcessorName = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER") ?? string.Empty,
+            ProcessorName = GetProcessorName(),
             LogicalCoreCount = Environment.ProcessorCount,
             RuntimeVersion = RuntimeInformation.FrameworkDescription,
             Runner = $"PowerShell {PSVersionInfo()}",
@@ -88,13 +88,68 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
         return Environment.OSVersion.Platform.ToString();
     }
 
+    private static string GetProcessorName()
+    {
+        string? environmentName = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER");
+        if (!string.IsNullOrWhiteSpace(environmentName))
+            return environmentName.Trim();
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            try
+            {
+                foreach (string line in File.ReadLines("/proc/cpuinfo"))
+                {
+                    int separator = line.IndexOf(':');
+                    if (separator <= 0)
+                        continue;
+                    string key = line.Substring(0, separator).Trim();
+                    if (!key.Equals("model name", StringComparison.OrdinalIgnoreCase) &&
+                        !key.Equals("hardware", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    string value = line.Substring(separator + 1).Trim();
+                    if (!string.IsNullOrWhiteSpace(value))
+                        return value;
+                }
+            }
+            catch (IOException)
+            {
+                // Fall through to the architecture identity.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Fall through to the architecture identity.
+            }
+        }
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            string? sysctlName = ReadProcessValue(
+                "/usr/sbin/sysctl",
+                "-n machdep.cpu.brand_string",
+                timeoutMilliseconds: 3000);
+            if (string.IsNullOrWhiteSpace(sysctlName))
+                sysctlName = ReadProcessValue("/usr/sbin/sysctl", "-n hw.model", timeoutMilliseconds: 3000);
+            if (!string.IsNullOrWhiteSpace(sysctlName))
+                return sysctlName!;
+        }
+
+        return $"{RuntimeInformation.OSArchitecture} processor";
+    }
+
     private static string? ReadGitValue(string arguments)
+        => ReadProcessValue("git", arguments, timeoutMilliseconds: 3000);
+
+    private static string? ReadProcessValue(
+        string fileName,
+        string arguments,
+        int timeoutMilliseconds)
     {
         try
         {
             using var process = Process.Start(new ProcessStartInfo
             {
-                FileName = "git",
+                FileName = fileName,
                 Arguments = arguments,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -104,7 +159,18 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             if (process is null)
                 return null;
             var output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(3000);
+            if (!process.WaitForExit(timeoutMilliseconds))
+            {
+                try
+                {
+                    process.Kill();
+                }
+                catch
+                {
+                    // The process may have exited between the timeout and cleanup.
+                }
+                return null;
+            }
             return process.ExitCode == 0 ? output.Trim() : null;
         }
         catch

@@ -77,6 +77,7 @@ public sealed class BenchmarkResultImporter
                 .Select(file => ImportJson(file, suite ?? defaultSuite))
                 .ToArray();
             EnsureSingleOperatingSystem(importedReports);
+            EnsureSingleEnvironment(importedReports);
             var benchmarkDotNetSamples = importedReports.SelectMany(result => result.Samples).ToArray();
             var combined = BuildImportedResult(suite ?? defaultSuite, benchmarkDotNetSamples);
             combined.Environment = CopyEnvironment(
@@ -253,7 +254,7 @@ public sealed class BenchmarkResultImporter
                 new[] { result.Environment.OsFamily }
                     .Concat(result.Samples.Select(sample => sample.Os))
                     .Concat(result.Summary.Select(row => row.Os)))
-            .Select(NormalizeOperatingSystemFamily)
+            .Select(BenchmarkPlatformNormalizer.NormalizeFamily)
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
@@ -263,6 +264,46 @@ public sealed class BenchmarkResultImporter
             throw new InvalidOperationException(
                 $"Benchmark report directories must contain results from one operating system; found {string.Join(", ", platforms)}. Import each platform independently.");
         }
+    }
+
+    private static void EnsureSingleEnvironment(IEnumerable<BenchmarkRunResult> reports)
+    {
+        BenchmarkEnvironmentInfo[] environments = reports
+            .Select(result => result.Environment)
+            .ToArray();
+        if (environments.Length <= 1)
+            return;
+
+        EnsureEnvironmentDimension(environments, nameof(BenchmarkEnvironmentInfo.OsFamily), value => value.OsFamily);
+        EnsureEnvironmentDimension(environments, nameof(BenchmarkEnvironmentInfo.OsDescription), value => value.OsDescription);
+        EnsureEnvironmentDimension(environments, nameof(BenchmarkEnvironmentInfo.OsArchitecture), value => value.OsArchitecture);
+        EnsureEnvironmentDimension(environments, nameof(BenchmarkEnvironmentInfo.ProcessArchitecture), value => value.ProcessArchitecture);
+        EnsureEnvironmentDimension(environments, nameof(BenchmarkEnvironmentInfo.ProcessorName), value => value.ProcessorName);
+        EnsureEnvironmentDimension(environments, nameof(BenchmarkEnvironmentInfo.PhysicalProcessorCount), value => value.PhysicalProcessorCount?.ToString(CultureInfo.InvariantCulture));
+        EnsureEnvironmentDimension(environments, nameof(BenchmarkEnvironmentInfo.PhysicalCoreCount), value => value.PhysicalCoreCount?.ToString(CultureInfo.InvariantCulture));
+        EnsureEnvironmentDimension(environments, nameof(BenchmarkEnvironmentInfo.LogicalCoreCount), value => value.LogicalCoreCount?.ToString(CultureInfo.InvariantCulture));
+        EnsureEnvironmentDimension(environments, nameof(BenchmarkEnvironmentInfo.RuntimeVersion), value => value.RuntimeVersion);
+        EnsureEnvironmentDimension(environments, nameof(BenchmarkEnvironmentInfo.DotNetSdkVersion), value => value.DotNetSdkVersion);
+        EnsureEnvironmentDimension(environments, nameof(BenchmarkEnvironmentInfo.Runner), value => value.Runner);
+        EnsureEnvironmentDimension(environments, nameof(BenchmarkEnvironmentInfo.MachineName), value => value.MachineName);
+    }
+
+    private static void EnsureEnvironmentDimension(
+        IEnumerable<BenchmarkEnvironmentInfo> environments,
+        string dimension,
+        Func<BenchmarkEnvironmentInfo, string?> valueSelector)
+    {
+        string[] values = environments
+            .Select(valueSelector)
+            .Select(value => string.IsNullOrWhiteSpace(value) ? "<missing>" : value!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (values.Length <= 1)
+            return;
+
+        throw new InvalidOperationException(
+            $"Benchmark report directories must contain results from one benchmark environment; {dimension} differs ({string.Join(", ", values)}). Import each environment independently.");
     }
 
     private static BenchmarkSample[] ImportCsvSamples(string path, string? suiteOverride, string defaultSuite)
@@ -534,10 +575,10 @@ public sealed class BenchmarkResultImporter
                             ?? string.Empty;
         return new BenchmarkEnvironmentInfo
         {
-            OsFamily = NormalizeOperatingSystemFamily(osDescription),
+            OsFamily = BenchmarkPlatformNormalizer.NormalizeFamily(osDescription),
             OsDescription = osDescription,
-            OsArchitecture = GetString(hostNode, "Architecture") ?? GetString(hostNode, "OsArchitecture") ?? string.Empty,
-            ProcessArchitecture = GetString(hostNode, "Architecture") ?? GetString(hostNode, "ProcessArchitecture") ?? string.Empty,
+            OsArchitecture = GetString(hostNode, "OsArchitecture") ?? GetString(hostNode, "Architecture") ?? string.Empty,
+            ProcessArchitecture = GetString(hostNode, "ProcessArchitecture") ?? GetString(hostNode, "Architecture") ?? string.Empty,
             ProcessorName = GetString(hostNode, "ProcessorName") ?? string.Empty,
             PhysicalProcessorCount = GetInt32(hostNode, "PhysicalProcessorCount"),
             PhysicalCoreCount = GetInt32(hostNode, "PhysicalCoreCount"),
@@ -548,26 +589,6 @@ public sealed class BenchmarkResultImporter
                      ?? GetString(hostNode, "BenchmarkDotNetVersion")
                      ?? "BenchmarkDotNet"
         };
-    }
-
-    private static string NormalizeOperatingSystemFamily(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
-        var nonNullValue = value!;
-        if (nonNullValue.IndexOf("windows", StringComparison.OrdinalIgnoreCase) >= 0) return "Windows";
-        if (nonNullValue.IndexOf("linux", StringComparison.OrdinalIgnoreCase) >= 0 ||
-            nonNullValue.IndexOf("ubuntu", StringComparison.OrdinalIgnoreCase) >= 0 ||
-            nonNullValue.IndexOf("debian", StringComparison.OrdinalIgnoreCase) >= 0 ||
-            nonNullValue.IndexOf("fedora", StringComparison.OrdinalIgnoreCase) >= 0 ||
-            nonNullValue.IndexOf("red hat", StringComparison.OrdinalIgnoreCase) >= 0 ||
-            nonNullValue.IndexOf("rhel", StringComparison.OrdinalIgnoreCase) >= 0 ||
-            nonNullValue.IndexOf("suse", StringComparison.OrdinalIgnoreCase) >= 0)
-            return "Linux";
-        if (nonNullValue.IndexOf("mac", StringComparison.OrdinalIgnoreCase) >= 0 ||
-            nonNullValue.IndexOf("osx", StringComparison.OrdinalIgnoreCase) >= 0 ||
-            nonNullValue.IndexOf("darwin", StringComparison.OrdinalIgnoreCase) >= 0)
-            return "macOS";
-        return nonNullValue.Trim();
     }
 
     private static int? GetInt32(JsonElement node, string propertyName)

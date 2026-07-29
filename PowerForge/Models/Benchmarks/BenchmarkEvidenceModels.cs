@@ -107,6 +107,12 @@ public sealed class BenchmarkEvidenceEntry
 /// </summary>
 public sealed class BenchmarkPlatformAvailability
 {
+    /// <summary>Comparison identifier whose availability is described.</summary>
+    public string ComparisonId { get; set; } = string.Empty;
+
+    /// <summary>Run mode whose availability is described.</summary>
+    public string RunMode { get; set; } = string.Empty;
+
     /// <summary>Normalized platform identifier.</summary>
     public string Platform { get; set; } = string.Empty;
 

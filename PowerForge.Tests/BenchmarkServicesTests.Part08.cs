@@ -21,6 +21,8 @@ public sealed partial class BenchmarkServicesTests
             "LogicalCoreCount": 32,
             "RuntimeVersion": ".NET 10.0.10",
             "Architecture": "X64",
+            "OsArchitecture": "Arm64",
+            "ProcessArchitecture": "X64",
             "DotNetCliVersion": "10.0.302"
           },
           "Benchmarks": [
@@ -40,6 +42,8 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal("AMD Ryzen 9 9950X3D2", result.Environment.ProcessorName);
         Assert.Equal(16, result.Environment.PhysicalCoreCount);
         Assert.Equal(32, result.Environment.LogicalCoreCount);
+        Assert.Equal("Arm64", result.Environment.OsArchitecture);
+        Assert.Equal("X64", result.Environment.ProcessArchitecture);
         Assert.Equal("10.0.302", result.Environment.DotNetSdkVersion);
         Assert.Equal("Windows", Assert.Single(result.Samples).Os);
         Assert.Equal("Windows", Assert.Single(result.Summary).Os);
@@ -93,6 +97,24 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void BenchmarkDotNetDirectoryImporter_RejectsReportsFromDifferentMachines()
+    {
+        var root = CreateTempRoot();
+        File.WriteAllText(
+            Path.Combine(root, "First-report-full.json"),
+            BenchmarkDotNetReport("Ubuntu 24.04.3 LTS", processorName: "AMD Ryzen"));
+        File.WriteAllText(
+            Path.Combine(root, "Second-report-full.json"),
+            BenchmarkDotNetReport("Ubuntu 24.04.3 LTS", processorName: "Apple M4"));
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => new BenchmarkResultImporter().Import(root));
+
+        Assert.Contains("one benchmark environment", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(nameof(BenchmarkEnvironmentInfo.ProcessorName), exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CsvDirectoryImporter_RejectsRowsFromDifferentOperatingSystems()
     {
         var root = CreateTempRoot();
@@ -128,6 +150,131 @@ public sealed partial class BenchmarkServicesTests
         Assert.Contains(catalog.Availability, lane => lane.Platform == "windows" && lane.Available);
         Assert.Contains(catalog.Availability, lane => lane.Platform == "linux" && lane.Available);
         Assert.Contains(catalog.Availability, lane => lane.Platform == "macos" && !lane.Available);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_ScopesAvailabilityToComparisonAndRunMode()
+    {
+        var service = new BenchmarkEvidenceCatalogService();
+        var catalog = service.Update(
+            null,
+            Result("Windows", "fixture-a", 10),
+            "comparison-a",
+            "a-windows.json",
+            "full",
+            true);
+        catalog = service.Update(
+            catalog,
+            Result("Linux", "fixture-a", 11),
+            "comparison-b",
+            "b-linux.json",
+            "full",
+            true);
+        catalog = service.Update(
+            catalog,
+            Result("macOS", "fixture-a", 12),
+            "comparison-b",
+            "b-macos.json",
+            "quick",
+            false);
+
+        BenchmarkPlatformAvailability comparisonAWindows = Assert.Single(
+            catalog.Availability,
+            lane => lane.ComparisonId == "comparison-a" &&
+                    lane.RunMode == "full" &&
+                    lane.Platform == "windows");
+        BenchmarkPlatformAvailability comparisonALinux = Assert.Single(
+            catalog.Availability,
+            lane => lane.ComparisonId == "comparison-a" &&
+                    lane.RunMode == "full" &&
+                    lane.Platform == "linux");
+        BenchmarkPlatformAvailability comparisonBMacQuick = Assert.Single(
+            catalog.Availability,
+            lane => lane.ComparisonId == "comparison-b" &&
+                    lane.RunMode == "quick" &&
+                    lane.Platform == "macos");
+
+        Assert.True(comparisonAWindows.Available);
+        Assert.False(comparisonALinux.Available);
+        Assert.True(comparisonBMacQuick.Available);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_FullAvailabilityRequiresPublishedLane()
+    {
+        var catalog = new BenchmarkEvidenceCatalogService().Update(
+            null,
+            Result("Windows", "fixture-a", 10),
+            "comparison-a",
+            "diagnostic.json",
+            "full",
+            publish: false);
+
+        BenchmarkPlatformAvailability windows = Assert.Single(
+            catalog.Availability,
+            lane => lane.ComparisonId == "comparison-a" &&
+                    lane.RunMode == "full" &&
+                    lane.Platform == "windows");
+        Assert.False(windows.Available);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_PreservesConfiguredPlatformsWhenUpdateOmitsThem()
+    {
+        var service = new BenchmarkEvidenceCatalogService();
+        var catalog = service.Update(
+            null,
+            Result("Windows", "fixture-a", 10),
+            "comparison-a",
+            "windows.json",
+            "full",
+            true,
+            new[] { "windows", "linux" });
+
+        catalog = service.Update(
+            catalog,
+            Result("Linux", "fixture-a", 11),
+            "comparison-a",
+            "linux.json",
+            "full",
+            true);
+
+        Assert.Equal(new[] { "windows", "linux" }, catalog.ExpectedPlatforms);
+        Assert.Null(new PSPublishModule.UpdateBenchmarkEvidenceCatalogCommand().ExpectedPlatform);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_NormalizesLinuxDistributionLabels()
+    {
+        BenchmarkRunResult result = Result("Ubuntu 24.04", "fixture-a", 10);
+        result.Environment = new BenchmarkEnvironmentInfo();
+
+        BenchmarkEvidenceCatalog catalog = new BenchmarkEvidenceCatalogService().Update(
+            null,
+            result,
+            "comparison-a",
+            "ubuntu.json",
+            "full",
+            true);
+
+        Assert.Equal("linux", Assert.Single(catalog.Entries).Platform);
+        Assert.True(Assert.Single(
+            catalog.Availability,
+            lane => lane.ComparisonId == "comparison-a" &&
+                    lane.RunMode == "full" &&
+                    lane.Platform == "linux").Available);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_LockIdentityCanNormalizeCaseInsensitiveVolumes()
+    {
+        string root = CreateTempRoot();
+        string upper = Path.Combine(root, "Index.json");
+        string lower = Path.Combine(root, "index.json");
+
+        Assert.Equal(
+            BenchmarkFileUpdateLock.CreatePathHash(upper, caseInsensitive: true),
+            BenchmarkFileUpdateLock.CreatePathHash(lower, caseInsensitive: true));
     }
 
     [Fact]
@@ -180,13 +327,15 @@ public sealed partial class BenchmarkServicesTests
         Assert.Empty(Directory.GetFiles(root, "*.tmp", SearchOption.TopDirectoryOnly));
     }
 
-    private static string BenchmarkDotNetReport(string operatingSystem) =>
+    private static string BenchmarkDotNetReport(
+        string operatingSystem,
+        string processorName = "Test CPU") =>
         $$"""
         {
           "Title": "OfficeIMO.Tabular",
           "HostEnvironmentInfo": {
             "OsVersion": "{{operatingSystem}}",
-            "ProcessorName": "Test CPU",
+            "ProcessorName": "{{processorName}}",
             "RuntimeVersion": ".NET 10.0.10",
             "Architecture": "X64"
           },

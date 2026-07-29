@@ -47,7 +47,7 @@ public sealed class UpdateBenchmarkEvidenceCatalogCommand : PSCmdlet
     /// <summary>Platforms expected before the public comparison is complete.</summary>
     [Parameter]
     [ValidateNotNullOrEmpty]
-    public string[] ExpectedPlatform { get; set; } = { "windows", "linux", "macos" };
+    public string[]? ExpectedPlatform { get; set; }
 
     /// <summary>Updates the catalog.</summary>
     protected override void ProcessRecord()
