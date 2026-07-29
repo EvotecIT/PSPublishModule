@@ -398,6 +398,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var powerForgeWebZip = Path.Combine(root, "PowerForgeWeb-1.0.7-osx-arm64.zip");
             var powerForgeExecutable = Path.Combine(root, "PowerForge");
             var powerForgeWebExecutable = Path.Combine(root, "PowerForgeWeb");
+            var recoveredPackageZip = Path.Combine(root, "PowerForge.1.0.7.zip");
             File.WriteAllText(powerForgeZip, "zip");
             File.WriteAllText(powerForgeWebZip, "zip");
             File.WriteAllText(powerForgeExecutable, "exe");
@@ -447,7 +448,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     Assert.Equal(
                         new[] { powerForgeZip, powerForgeWebZip }.OrderBy(static path => path),
                         paths.OrderBy(static path => path));
-                    return ["PowerForge.1.0.7.nupkg"];
+                    return ["PowerForge.1.0.7.nupkg", recoveredPackageZip];
                 });
 
             var result = service.Execute(
@@ -472,7 +473,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         ReplaceExistingAssets = true,
                         RequirePublishedNuGetAssets = true,
                         RequirePublishedModuleAssets = true,
-                        PublishedModuleSource = "https://www.powershellgallery.com/api/v3/index.json"
+                        PublishedModuleSource = "https://www.powershellgallery.com/api/v2"
                     }
                 },
                 new PowerForgeReleaseRequest
@@ -485,6 +486,9 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal(
                 "PowerForge.1.0.7.nupkg",
                 Assert.Single(result.UnifiedGitHubRelease!.RecoveredPublishedNuGetAssets));
+            Assert.Equal(
+                recoveredPackageZip,
+                Assert.Single(result.UnifiedGitHubRelease.RecoveredPublishedPackageReleaseZips));
             Assert.Empty(result.ToolGitHubReleases);
             var publish = Assert.Single(publishCalls);
             Assert.Equal("v1.0.7", publish.TagName);
@@ -557,11 +561,15 @@ public sealed partial class PowerForgeReleaseServiceTests
                         Owner = "EvotecIT",
                         Repository = "PSPublishModule",
                         Token = "token",
+                        Commitish = "0123456789abcdef0123456789abcdef01234567",
                         ReuseExistingRelease = true,
                         RequireExpectedExistingRelease = true,
                         ExpectedExistingReleaseId = 42,
                         RequirePublishedStableRelease = true,
-                        RequirePublishedNuGetAssets = true
+                        ReplaceExistingAssets = true,
+                        RequirePublishedNuGetAssets = true,
+                        RequirePublishedModuleAssets = true,
+                        PublishedModuleSource = "https://www.powershellgallery.com/api/v2"
                     }
                 },
                 new PowerForgeReleaseRequest

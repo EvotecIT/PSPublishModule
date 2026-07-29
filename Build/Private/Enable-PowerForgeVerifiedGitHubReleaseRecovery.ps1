@@ -49,7 +49,7 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
         [string] $Token,
 
         [ValidatePattern('^https://')]
-        [string] $PublishedModuleSource = 'https://www.powershellgallery.com/api/v3/index.json',
+        [string] $PublishedModuleSource = 'https://www.powershellgallery.com/api/v2',
 
         [scriptblock] $GetReleaseByTag,
 

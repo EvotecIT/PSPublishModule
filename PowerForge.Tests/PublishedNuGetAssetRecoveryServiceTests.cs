@@ -18,9 +18,11 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
             const string packageId = "PowerForge.Web.Build";
             const string version = "3.0.81";
             var packagePath = Path.Combine(root.FullName, $"{packageId}.{version}.nupkg");
+            var releaseZipPath = Path.Combine(root.FullName, $"{packageId}.{version}.zip");
             var rebuiltBytes = CreatePackage(packageId, version, "rebuilt-timestamped-signature");
             var publishedBytes = CreatePackage(packageId, version, "published-original-signature");
             File.WriteAllBytes(packagePath, rebuiltBytes);
+            CreateReleaseZip(releaseZipPath, packageId, "rebuilt-timestamped-signature");
 
             var handler = new NuGetRecoveryHandler(publishedBytes);
             var service = new PublishedNuGetAssetRecoveryService(
@@ -30,12 +32,25 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
             var restored = service.Restore(
                 "https://packages.example/v3/index.json",
                 version,
-                [packagePath],
+                [packagePath, releaseZipPath],
                 CancellationToken.None);
 
-            Assert.Equal(packagePath, Assert.Single(restored));
+            Assert.Equal(new[] { packagePath, releaseZipPath }, restored);
             Assert.Equal(publishedBytes, File.ReadAllBytes(packagePath));
             Assert.NotEqual(rebuiltBytes, File.ReadAllBytes(packagePath));
+            using (var releaseZip = ZipFile.OpenRead(releaseZipPath))
+            {
+                Assert.Equal(
+                    "published-original-signature",
+                    ReadText(Assert.Single(
+                        releaseZip.Entries,
+                        entry => entry.FullName == $"net10.0\\{packageId}.dll")));
+                Assert.Equal(
+                    "preserve dependency",
+                    ReadText(Assert.Single(
+                        releaseZip.Entries,
+                        entry => entry.FullName == "net10.0\\Dependency.dll")));
+            }
             Assert.Equal(
                 [
                     "https://packages.example/v3/index.json",
@@ -99,11 +114,32 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
             }
 
             var signature = archive.CreateEntry(".signature.p7s");
-            using var signatureWriter = new StreamWriter(signature.Open(), new UTF8Encoding(false));
-            signatureWriter.Write(signatureMarker);
+            using (var signatureWriter = new StreamWriter(signature.Open(), new UTF8Encoding(false)))
+                signatureWriter.Write(signatureMarker);
+
+            var payload = archive.CreateEntry($"lib/net10.0/{packageId}.dll");
+            using (var payloadWriter = new StreamWriter(payload.Open(), new UTF8Encoding(false)))
+                payloadWriter.Write(signatureMarker);
         }
 
         return memory.ToArray();
+    }
+
+    private static void CreateReleaseZip(string path, string packageId, string payload)
+    {
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Create);
+        var packageEntry = archive.CreateEntry($"net10.0\\{packageId}.dll");
+        using (var writer = new StreamWriter(packageEntry.Open(), new UTF8Encoding(false)))
+            writer.Write(payload);
+        var dependency = archive.CreateEntry("net10.0\\Dependency.dll");
+        using var dependencyWriter = new StreamWriter(dependency.Open(), new UTF8Encoding(false));
+        dependencyWriter.Write("preserve dependency");
+    }
+
+    private static string ReadText(ZipArchiveEntry entry)
+    {
+        using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
+        return reader.ReadToEnd();
     }
 
     private sealed class NuGetRecoveryHandler(byte[] packageBytes) : HttpMessageHandler

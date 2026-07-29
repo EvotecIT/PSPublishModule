@@ -539,12 +539,17 @@ the signing-capable Windows runner and has three explicit operations:
    recovery run cannot advance a partially published release train. If the exact stable
    GitHub release already exists after a partial asset upload, recovery first binds its
    release ID and tag commit to the authorized source, revalidates both immediately before
-   every deletion/upload, and replaces same-named assets. Rebuilt NuGet packages are replaced
+   every deletion/upload, and replaces same-named assets. The shared release engine requires
+   that exact 40-character commit binding even when recovery is invoked outside this workflow.
+   Rebuilt NuGet packages are replaced
    locally with the exact bytes already published by the configured NuGet source before the
    manifest and checksums are regenerated, so timestamped signatures cannot diverge between
-   NuGet and GitHub. The module ZIP payloads are likewise rebuilt from the exact module files
-   downloaded from PowerShell Gallery while full-package-only examples and dependencies are
-   preserved. Registry publishing is disabled only when release replacement, exact NuGet-byte
+   NuGet and GitHub. Every package release ZIP is also rewritten from the published packages;
+   this restores matching signed library payloads across sibling project ZIPs while preserving
+   ZIP-only dependencies and diagnostics. The module ZIP payloads are likewise rebuilt from
+   the exact module files downloaded through PowerShell Gallery's supported v2/CDN read path,
+   while full-package-only examples and dependencies are preserved. Registry publishing is
+   disabled only when release replacement, exact NuGet-byte
    recovery, and exact module-payload recovery are all bound to the verified release. Because
    NuGet does not expose a matching byte-retrieval contract for
    `.snupkg` files, recovery fails before mutation when symbol-package assets are present.

@@ -51,7 +51,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 restorePublishedNuGetAssets: (_, _, _, _) => Array.Empty<string>(),
                 restorePublishedModuleAssets: (source, moduleName, version, paths, _) =>
                 {
-                    Assert.Equal("https://www.powershellgallery.com/api/v3/index.json", source);
+                    Assert.Equal("https://www.powershellgallery.com/api/v2", source);
                     Assert.Equal("SampleModule", moduleName);
                     Assert.Equal("1.2.3", version);
                     Assert.Equal(moduleZip, Assert.Single(paths));
@@ -67,6 +67,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 Owner = "EvotecIT",
                 Repository = "example",
                 Token = "token",
+                Commitish = "0123456789abcdef0123456789abcdef01234567",
                 ReuseExistingRelease = true,
                 RequireExpectedExistingRelease = true,
                 ExpectedExistingReleaseId = 42,
@@ -74,7 +75,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 ReplaceExistingAssets = true,
                 RequirePublishedNuGetAssets = true,
                 RequirePublishedModuleAssets = true,
-                PublishedModuleSource = "https://www.powershellgallery.com/api/v3/index.json"
+                PublishedModuleSource = "https://www.powershellgallery.com/api/v2"
             };
             var request = new PowerForgeReleaseRequest
             {
@@ -122,18 +123,28 @@ public sealed partial class PowerForgeReleaseServiceTests
             ReplaceExistingAssets = false,
             RequirePublishedNuGetAssets = true,
             RequirePublishedModuleAssets = true,
-            PublishedModuleSource = "https://www.powershellgallery.com/api/v3/index.json"
+            PublishedModuleSource = "https://www.powershellgallery.com/api/v2"
         };
         var spec = new PowerForgeReleaseSpec { GitHub = gitHub };
 
-        Assert.False(PowerForgeReleaseService.ApplyVerifiedGitHubRecoveryPublishingOverrides(spec, request));
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ApplyVerifiedGitHubRecoveryPublishingOverrides(spec, request));
         Assert.True(request.PublishNuget);
         Assert.Null(request.ModuleIncludePublishing);
+
+        gitHub.Commitish = "not-a-commit";
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ApplyVerifiedGitHubRecoveryPublishingOverrides(spec, request));
+
+        gitHub.Commitish = "0123456789abcdef0123456789abcdef01234567";
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ApplyVerifiedGitHubRecoveryPublishingOverrides(spec, request));
 
         gitHub.ReplaceExistingAssets = true;
         gitHub.RequirePublishedModuleAssets = false;
 
-        Assert.False(PowerForgeReleaseService.ApplyVerifiedGitHubRecoveryPublishingOverrides(spec, request));
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ApplyVerifiedGitHubRecoveryPublishingOverrides(spec, request));
         Assert.True(request.PublishNuget);
         Assert.Null(request.ModuleIncludePublishing);
 
@@ -142,6 +153,92 @@ public sealed partial class PowerForgeReleaseServiceTests
         Assert.True(PowerForgeReleaseService.ApplyVerifiedGitHubRecoveryPublishingOverrides(spec, request));
         Assert.False(request.PublishNuget);
         Assert.False(request.ModuleIncludePublishing);
+    }
+
+    [Fact]
+    public void Execute_rejects_unbound_direct_recovery_before_any_release_lane_runs()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var scriptPath = Path.Combine(root, "Build-Module.ps1");
+            var releasePath = Path.Combine(root, "release.json");
+            File.WriteAllText(scriptPath, "# module build");
+            File.WriteAllText(releasePath, "{}");
+            var moduleCalls = new List<ModuleExecutionSnapshot>();
+            var service = CreateReleaseService(
+                root,
+                moduleCalls,
+                new PowerForgeToolReleaseResult { Success = true });
+            var spec = CreateReleaseSpec(root, scriptPath);
+            spec.GitHub = new PowerForgeReleaseGitHubOptions
+            {
+                Publish = true,
+                ReuseExistingRelease = true,
+                RequireExpectedExistingRelease = true,
+                ExpectedExistingReleaseId = 42,
+                RequirePublishedStableRelease = true,
+                ReplaceExistingAssets = true,
+                RequirePublishedNuGetAssets = true,
+                RequirePublishedModuleAssets = true,
+                PublishedModuleSource = "https://www.powershellgallery.com/api/v2"
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ModuleRunMode = ConfigurationGateMode.Publish
+                }));
+
+            Assert.Contains("40-character commit SHA", exception.Message, StringComparison.Ordinal);
+            Assert.Empty(moduleCalls);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_allows_basic_existing_release_reuse_without_registry_recovery_binding()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var scriptPath = Path.Combine(root, "Build-Module.ps1");
+            var releasePath = Path.Combine(root, "release.json");
+            File.WriteAllText(scriptPath, "# module build");
+            File.WriteAllText(releasePath, "{}");
+            var moduleCalls = new List<ModuleExecutionSnapshot>();
+            var service = CreateReleaseService(
+                root,
+                moduleCalls,
+                new PowerForgeToolReleaseResult { Success = true });
+            var spec = CreateReleaseSpec(root, scriptPath);
+            spec.GitHub = new PowerForgeReleaseGitHubOptions
+            {
+                Publish = false,
+                ReuseExistingRelease = true,
+                ReplaceExistingAssets = true
+            };
+
+            var result = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ModuleRunMode = ConfigurationGateMode.Publish
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(2, moduleCalls.Count);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
     }
 
     [Fact]

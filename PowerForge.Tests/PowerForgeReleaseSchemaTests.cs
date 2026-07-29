@@ -63,7 +63,7 @@ public sealed class PowerForgeReleaseSchemaTests
               "ReplaceExistingAssets": true,
               "RequirePublishedNuGetAssets": true,
               "RequirePublishedModuleAssets": true,
-              "PublishedModuleSource": "https://www.powershellgallery.com/api/v3/index.json"
+              "PublishedModuleSource": "https://www.powershellgallery.com/api/v2"
             }
             """)!;
 
@@ -87,7 +87,7 @@ public sealed class PowerForgeReleaseSchemaTests
                     "ReplaceExistingAssets": true,
                     "RequirePublishedNuGetAssets": true,
                     "RequirePublishedModuleAssets": true,
-                    "PublishedModuleSource": "https://www.powershellgallery.com/api/v3/index.json"
+                    "PublishedModuleSource": "https://www.powershellgallery.com/api/v2"
                   }
                 }
                 """);
@@ -101,7 +101,7 @@ public sealed class PowerForgeReleaseSchemaTests
             Assert.True(gitHub.ReplaceExistingAssets);
             Assert.True(gitHub.RequirePublishedNuGetAssets);
             Assert.True(gitHub.RequirePublishedModuleAssets);
-            Assert.Equal("https://www.powershellgallery.com/api/v3/index.json", gitHub.PublishedModuleSource);
+            Assert.Equal("https://www.powershellgallery.com/api/v2", gitHub.PublishedModuleSource);
         }
         finally
         {

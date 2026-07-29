@@ -149,7 +149,7 @@
         },
         "PublishedModuleSource": {
           "type": [ "string", "null" ],
-          "description": "NuGet V3 service index containing the already-published module package used for exact-payload recovery."
+          "description": "NuGet repository source containing the already-published module package used for exact-payload recovery. PowerShell Gallery recovery should use its supported v2 read endpoint."
         },
         "TagTemplate": { "type": [ "string", "null" ] },
         "ReleaseNameTemplate": { "type": [ "string", "null" ] }

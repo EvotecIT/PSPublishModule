@@ -9,14 +9,14 @@ namespace PowerForge;
 internal sealed class PublishedModuleAssetRecoveryService
 {
     private readonly ILogger _logger;
-    private readonly NuGetV3PackageDownloader _downloader;
+    private readonly ManagedModuleRepositoryClient _repositoryClient;
 
     internal PublishedModuleAssetRecoveryService(
         ILogger logger,
-        NuGetV3PackageDownloader? downloader = null)
+        ManagedModuleRepositoryClient? repositoryClient = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _downloader = downloader ?? new NuGetV3PackageDownloader();
+        _repositoryClient = repositoryClient ?? new ManagedModuleRepositoryClient(logger);
     }
 
     internal string[] Restore(
@@ -56,22 +56,28 @@ internal sealed class PublishedModuleAssetRecoveryService
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var packagePath = Path.Combine(
+        var packageDirectory = Path.Combine(
             Path.GetTempPath(),
-            $"powerforge-published-module-{Guid.NewGuid():N}.nupkg");
-        var rewrites = new List<ArchiveRewrite>(archivePaths.Length);
+            $"powerforge-published-module-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(packageDirectory);
+        string? packagePath = null;
+        var rewrites = new List<RecoveryFileRewrite>(archivePaths.Length);
         try
         {
-            _downloader.DownloadPackageAsync(
-                    serviceIndexUrl,
+            var repository = new ManagedModuleRepository(
+                "PublishedModuleRecovery",
+                serviceIndexUrl);
+            var download = _repositoryClient.DownloadPackageAsync(
+                    repository,
                     moduleName,
                     expectedVersion,
-                    packagePath,
-                    new PrivateGalleryIndexOptions(),
+                    packageDirectory,
+                    credential: null,
                     cancellationToken)
                 .ConfigureAwait(false)
                 .GetAwaiter()
                 .GetResult();
+            packagePath = download.PackagePath;
 
             var payload = ReadPublishedPayload(packagePath, moduleName, expectedVersion);
             foreach (var archivePath in archivePaths)
@@ -86,10 +92,10 @@ internal sealed class PublishedModuleAssetRecoveryService
 
                 var temporaryPath = archivePath + ".published-" + Guid.NewGuid().ToString("N") + ".tmp";
                 RewriteArchive(archivePath, temporaryPath, moduleName, payload, cancellationToken);
-                rewrites.Add(new ArchiveRewrite(archivePath, temporaryPath));
+                rewrites.Add(new RecoveryFileRewrite(archivePath, temporaryPath));
             }
 
-            ReplaceArchives(rewrites, cancellationToken);
+            RecoveryFileReplacementTransaction.Apply(rewrites, cancellationToken);
             foreach (var archivePath in archivePaths)
                 _logger.Info($"Restored published module payload for GitHub recovery: {Path.GetFileName(archivePath)}");
             return archivePaths;
@@ -99,9 +105,11 @@ internal sealed class PublishedModuleAssetRecoveryService
             TryDelete(packagePath);
             foreach (var rewrite in rewrites)
             {
-                TryDelete(rewrite.TemporaryPath);
-                TryDelete(rewrite.BackupPath);
+                TryDelete(rewrite.ReplacementPath);
+                if (rewrite.DeleteBackupOnCleanup)
+                    TryDelete(rewrite.BackupPath);
             }
+            TryDeleteDirectory(packageDirectory);
         }
     }
 
@@ -263,35 +271,6 @@ internal sealed class PublishedModuleAssetRecoveryService
         input.CopyTo(output);
     }
 
-    private static void ReplaceArchives(IReadOnlyList<ArchiveRewrite> rewrites, CancellationToken cancellationToken)
-    {
-        try
-        {
-            foreach (var rewrite in rewrites)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                File.Copy(rewrite.OriginalPath, rewrite.BackupPath, overwrite: false);
-                File.Replace(rewrite.TemporaryPath, rewrite.OriginalPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
-                rewrite.Replaced = true;
-            }
-        }
-        catch
-        {
-            foreach (var rewrite in rewrites.Where(static rewrite => rewrite.Replaced))
-            {
-                try
-                {
-                    File.Copy(rewrite.BackupPath, rewrite.OriginalPath, overwrite: true);
-                }
-                catch
-                {
-                    // Preserve the primary recovery failure. Backups remain until the outer cleanup.
-                }
-            }
-            throw;
-        }
-    }
-
     private static string NormalizeEntryName(string name)
     {
         var normalized = name.Replace('\\', '/');
@@ -332,22 +311,17 @@ internal sealed class PublishedModuleAssetRecoveryService
         }
     }
 
-    private sealed class ArchiveRewrite
+    private static void TryDeleteDirectory(string path)
     {
-        internal ArchiveRewrite(string originalPath, string temporaryPath)
+        try
         {
-            OriginalPath = originalPath;
-            TemporaryPath = temporaryPath;
-            BackupPath = originalPath + ".pre-recovery-" + Guid.NewGuid().ToString("N") + ".bak";
+            if (Directory.Exists(path) && !Directory.EnumerateFileSystemEntries(path).Any())
+                Directory.Delete(path);
         }
-
-        internal string OriginalPath { get; }
-
-        internal string TemporaryPath { get; }
-
-        internal string BackupPath { get; }
-
-        internal bool Replaced { get; set; }
+        catch
+        {
+            // Cleanup must not hide the recovery result.
+        }
     }
 
     private sealed class PublishedEntry

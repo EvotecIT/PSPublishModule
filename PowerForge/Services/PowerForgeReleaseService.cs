@@ -263,6 +263,12 @@ internal sealed partial class PowerForgeReleaseService
             throw new ArgumentException("ConfigPath is required.", nameof(request));
 
         var configPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
+        if (spec.GitHub is { Publish: true } configuredGitHub &&
+            request.PublishProjectGitHub != false &&
+            IsVerifiedGitHubRecoveryRequested(configuredGitHub))
+        {
+            ValidateVerifiedGitHubRecoveryConfiguration(configuredGitHub);
+        }
         var registryPublishingSkippedForVerifiedGitHubRecovery =
             ApplyVerifiedGitHubRecoveryPublishingOverrides(spec, request);
         ApplyAppleAction(spec.AppleApps, request);
@@ -3163,6 +3169,17 @@ internal sealed partial class PowerForgeReleaseService
         CancellationToken cancellationToken)
     {
         var gitHub = spec.GitHub ?? throw new InvalidOperationException("Unified GitHub release options were not configured.");
+        var recoveryConfigurationError = IsVerifiedGitHubRecoveryRequested(gitHub)
+            ? GetVerifiedGitHubRecoveryConfigurationError(gitHub)
+            : null;
+        if (recoveryConfigurationError is not null)
+        {
+            return new PowerForgeUnifiedGitHubReleaseResult
+            {
+                Success = false,
+                ErrorMessage = recoveryConfigurationError
+            };
+        }
         var version = ResolveUnifiedReleaseVersion(gitHub, result, sharedReleaseVersion);
         if (string.IsNullOrWhiteSpace(version))
         {
@@ -3185,7 +3202,8 @@ internal sealed partial class PowerForgeReleaseService
             resolved.Repository ?? string.Empty,
             version!,
             cancellationToken,
-            out var recoveredPublishedNuGetAssets);
+            out var recoveredPublishedNuGetAssets,
+            out var recoveredPublishedPackageReleaseZips);
         if (recoveryError is not null)
             return recoveryError;
 
@@ -3199,7 +3217,9 @@ internal sealed partial class PowerForgeReleaseService
             out var recoveredPublishedModuleAssets);
         if (recoveryError is not null)
             return recoveryError;
-        if (recoveredPublishedNuGetAssets.Length > 0 || recoveredPublishedModuleAssets.Length > 0)
+        if (recoveredPublishedNuGetAssets.Length > 0 ||
+            recoveredPublishedPackageReleaseZips.Length > 0 ||
+            recoveredPublishedModuleAssets.Length > 0)
             RewriteReleaseSummaryFiles(result);
 
         var expectedAssets = result.ReleaseAssets
@@ -3311,6 +3331,7 @@ internal sealed partial class PowerForgeReleaseService
                 ReplacedExistingAssets = publishResult.ReplacedExistingAssets?.ToArray() ?? Array.Empty<string>(),
                 UploadedAssets = publishResult.UploadedAssets?.ToArray() ?? Array.Empty<string>(),
                 RecoveredPublishedNuGetAssets = recoveredPublishedNuGetAssets,
+                RecoveredPublishedPackageReleaseZips = recoveredPublishedPackageReleaseZips,
                 RecoveredPublishedModuleAssets = recoveredPublishedModuleAssets
             };
         }

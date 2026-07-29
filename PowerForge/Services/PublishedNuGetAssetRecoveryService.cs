@@ -6,7 +6,7 @@ namespace PowerForge;
 /// <summary>
 /// Restores exact public NuGet package bytes before a verified GitHub release recovery.
 /// </summary>
-internal sealed class PublishedNuGetAssetRecoveryService
+internal sealed partial class PublishedNuGetAssetRecoveryService
 {
     private readonly ILogger _logger;
     private readonly NuGetV3PackageDownloader _downloader;
@@ -60,7 +60,7 @@ internal sealed class PublishedNuGetAssetRecoveryService
                 ".nupkg",
                 StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        var restored = new List<string>(packagePaths.Length);
+        var plans = new List<PackageRecoveryPlan>(packagePaths.Length);
 
         foreach (var packagePath in packagePaths)
         {
@@ -72,53 +72,104 @@ internal sealed class PublishedNuGetAssetRecoveryService
 
             var localIdentity = ReadIdentity(packagePath);
             ValidateIdentity(localIdentity, expectedVersion, packagePath, "rebuilt");
-
-            var temporaryPath = packagePath + ".published-" + Guid.NewGuid().ToString("N") + ".tmp";
-            try
+            var expectedReleaseZipName = $"{localIdentity.Id}.{expectedVersion}.zip";
+            var releaseZipMatches = normalizedAssetPaths
+                .Where(path => string.Equals(
+                    Path.GetFileName(path),
+                    expectedReleaseZipName,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (releaseZipMatches.Length > 1)
             {
+                throw new InvalidOperationException(
+                    $"Verified GitHub recovery found multiple release ZIPs for package '{localIdentity.Id}': " +
+                    string.Join(", ", releaseZipMatches));
+            }
+
+            plans.Add(new PackageRecoveryPlan(
+                packagePath,
+                localIdentity,
+                releaseZipMatches.SingleOrDefault()));
+        }
+
+        var rewrites = new List<RecoveryFileRewrite>(plans.Count * 2);
+        try
+        {
+            foreach (var plan in plans)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
                 _downloader.DownloadPackageAsync(
                         serviceIndexUrl,
-                        localIdentity.Id,
+                        plan.Identity.Id,
                         expectedVersion,
-                        temporaryPath,
+                        plan.PublishedPackagePath,
                         new PrivateGalleryIndexOptions(),
                         cancellationToken)
                     .ConfigureAwait(false)
                     .GetAwaiter()
                     .GetResult();
 
-                var publishedIdentity = ReadIdentity(temporaryPath);
-                ValidateIdentity(publishedIdentity, expectedVersion, temporaryPath, "published");
+                var publishedIdentity = ReadIdentity(plan.PublishedPackagePath);
+                ValidateIdentity(publishedIdentity, expectedVersion, plan.PublishedPackagePath, "published");
                 if (!string.Equals(
                         publishedIdentity.Id,
-                        localIdentity.Id,
+                        plan.Identity.Id,
                         StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException(
-                        $"Published NuGet recovery returned package '{publishedIdentity.Id}', expected '{localIdentity.Id}'.");
+                        $"Published NuGet recovery returned package '{publishedIdentity.Id}', expected '{plan.Identity.Id}'.");
                 }
 
-                File.Replace(temporaryPath, packagePath, destinationBackupFileName: null, ignoreMetadataErrors: true);
-                restored.Add(packagePath);
-                _logger.Info(
-                    $"Restored exact published NuGet bytes for GitHub recovery: {localIdentity.Id} {expectedVersion}");
+                rewrites.Add(new RecoveryFileRewrite(plan.PackagePath, plan.PublishedPackagePath));
             }
-            finally
+
+            var publishedPackagePaths = plans
+                .Select(static plan => plan.PublishedPackagePath)
+                .ToArray();
+            foreach (var plan in plans.Where(static plan => !string.IsNullOrWhiteSpace(plan.ReleaseZipPath)))
             {
-                try
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!string.IsNullOrWhiteSpace(plan.ReleaseZipPath))
                 {
-                    if (File.Exists(temporaryPath))
-                        File.Delete(temporaryPath);
+                    RewriteReleaseZipFromPublishedPackages(
+                        publishedPackagePaths,
+                        plan.PublishedPackagePath,
+                        plan.ReleaseZipPath!,
+                        plan.PublishedReleaseZipPath!,
+                        cancellationToken);
+                    rewrites.Add(new RecoveryFileRewrite(plan.ReleaseZipPath!, plan.PublishedReleaseZipPath!));
                 }
-                catch
-                {
-                    // The protected source asset has already been replaced or the recovery failed.
-                    // Temporary-file cleanup is best effort and must not hide the primary error.
-                }
+            }
+
+            RecoveryFileReplacementTransaction.Apply(rewrites, cancellationToken);
+            foreach (var plan in plans)
+            {
+                _logger.Info(
+                    $"Restored exact published NuGet bytes for GitHub recovery: {plan.Identity.Id} {expectedVersion}");
+                if (!string.IsNullOrWhiteSpace(plan.ReleaseZipPath))
+                    _logger.Info($"Restored published package payload in release ZIP: {Path.GetFileName(plan.ReleaseZipPath)}");
+            }
+
+            return plans
+                .SelectMany(static plan => new[] { plan.PackagePath, plan.ReleaseZipPath })
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Select(static path => path!)
+                .ToArray();
+        }
+        finally
+        {
+            foreach (var rewrite in rewrites)
+            {
+                TryDelete(rewrite.ReplacementPath);
+                if (rewrite.DeleteBackupOnCleanup)
+                    TryDelete(rewrite.BackupPath);
+            }
+            foreach (var plan in plans)
+            {
+                TryDelete(plan.PublishedPackagePath);
+                TryDelete(plan.PublishedReleaseZipPath);
             }
         }
-
-        return restored.ToArray();
     }
 
     private static NuGetPackageIdentity ReadIdentity(string packagePath)
@@ -180,5 +231,47 @@ internal sealed class PublishedNuGetAssetRecoveryService
         internal string Id { get; }
 
         internal string Version { get; }
+    }
+
+    private sealed class PackageRecoveryPlan
+    {
+        internal PackageRecoveryPlan(
+            string packagePath,
+            NuGetPackageIdentity identity,
+            string? releaseZipPath)
+        {
+            PackagePath = packagePath;
+            Identity = identity;
+            ReleaseZipPath = releaseZipPath;
+            PublishedPackagePath = packagePath + ".published-" + Guid.NewGuid().ToString("N") + ".tmp";
+            PublishedReleaseZipPath = string.IsNullOrWhiteSpace(releaseZipPath)
+                ? null
+                : releaseZipPath + ".published-" + Guid.NewGuid().ToString("N") + ".tmp";
+        }
+
+        internal string PackagePath { get; }
+
+        internal NuGetPackageIdentity Identity { get; }
+
+        internal string? ReleaseZipPath { get; }
+
+        internal string PublishedPackagePath { get; }
+
+        internal string? PublishedReleaseZipPath { get; }
+    }
+
+    private static void TryDelete(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch
+        {
+            // Cleanup must not hide the recovery result.
+        }
     }
 }

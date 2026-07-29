@@ -26,10 +26,12 @@ public sealed class PublishedModuleAssetRecoveryServiceTests
             var handler = new ModuleRecoveryHandler(packageBytes);
             var service = new PublishedModuleAssetRecoveryService(
                 new NullLogger(),
-                new NuGetV3PackageDownloader(handler));
+                new ManagedModuleRepositoryClient(
+                    new NullLogger(),
+                    new HttpClient(handler)));
 
             var restored = service.Restore(
-                "https://gallery.example/v3/index.json",
+                "https://www.powershellgallery.com/api/v2",
                 moduleName,
                 version,
                 [normalPath, fullPath],
@@ -51,8 +53,7 @@ public sealed class PublishedModuleAssetRecoveryServiceTests
             }
             Assert.Equal(
                 [
-                    "https://gallery.example/v3/index.json",
-                    "https://gallery.example/v3-flatcontainer/samplemodule/3.0.81/samplemodule.3.0.81.nupkg"
+                    "https://cdn.powershellgallery.com/packages/samplemodule.3.0.81.nupkg"
                 ],
                 handler.RequestUris);
             Assert.Empty(Directory.GetFiles(root.FullName, "*.tmp"));
@@ -135,21 +136,62 @@ public sealed class PublishedModuleAssetRecoveryServiceTests
         {
             var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
             RequestUris.Add(uri);
-            if (uri.EndsWith("/v3/index.json", StringComparison.Ordinal))
-            {
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent(
-                        "{\"resources\":[{\"@id\":\"https://gallery.example/v3-flatcontainer/\",\"@type\":\"PackageBaseAddress/3.0.0\"}]}",
-                        Encoding.UTF8,
-                        "application/json")
-                });
-            }
-
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new ByteArrayContent(packageBytes)
             });
+        }
+    }
+}
+
+public sealed class RecoveryFileReplacementTransactionTests
+{
+    [Fact]
+    public void Apply_PreservesBackupWhenRollbackCopyFails()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var first = Path.Combine(root.FullName, "first.zip");
+            var second = Path.Combine(root.FullName, "second.zip");
+            var firstReplacement = first + ".new";
+            var secondReplacement = second + ".new";
+            File.WriteAllText(first, "first-original");
+            File.WriteAllText(second, "second-original");
+            File.WriteAllText(firstReplacement, "first-replacement");
+            File.WriteAllText(secondReplacement, "second-replacement");
+            var firstRewrite = new RecoveryFileRewrite(first, firstReplacement);
+            var secondRewrite = new RecoveryFileRewrite(second, secondReplacement);
+            var replaceCount = 0;
+
+            Assert.Throws<IOException>(() => RecoveryFileReplacementTransaction.Apply(
+                [firstRewrite, secondRewrite],
+                CancellationToken.None,
+                copyFile: (source, destination, overwrite) =>
+                {
+                    if (overwrite && string.Equals(source, firstRewrite.BackupPath, StringComparison.Ordinal))
+                        throw new IOException("simulated rollback failure");
+                    File.Copy(source, destination, overwrite);
+                },
+                replaceFile: (source, destination) =>
+                {
+                    replaceCount++;
+                    if (replaceCount == 2)
+                        throw new IOException("simulated replacement failure");
+                    File.Replace(source, destination, destinationBackupFileName: null);
+                }));
+
+            Assert.True(File.Exists(firstRewrite.BackupPath));
+            Assert.False(firstRewrite.DeleteBackupOnCleanup);
+            Assert.True(secondRewrite.DeleteBackupOnCleanup);
+            Assert.Equal("first-original", File.ReadAllText(firstRewrite.BackupPath));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
         }
     }
 }

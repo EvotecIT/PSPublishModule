@@ -715,7 +715,7 @@ internal sealed class PowerForgeReleaseGitHubOptions
     /// </summary>
     public bool RequirePublishedModuleAssets { get; set; }
 
-    /// <summary>NuGet V3 source containing the already-published module package used for recovery.</summary>
+    /// <summary>NuGet repository source containing the already-published module package used for recovery.</summary>
     public string? PublishedModuleSource { get; set; }
 
     public string? TagTemplate { get; set; }
@@ -1120,6 +1120,8 @@ internal sealed class PowerForgeUnifiedGitHubReleaseResult
     public string[] UploadedAssets { get; set; } = Array.Empty<string>();
 
     public string[] RecoveredPublishedNuGetAssets { get; set; } = Array.Empty<string>();
+
+    public string[] RecoveredPublishedPackageReleaseZips { get; set; } = Array.Empty<string>();
 
     public string[] RecoveredPublishedModuleAssets { get; set; } = Array.Empty<string>();
 }
