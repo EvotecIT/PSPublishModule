@@ -203,10 +203,8 @@ public class WebShortcodeMediaTests
             {
                 var bundleRoot = Path.Combine(root, "static", "stories", "chart demo");
                 Directory.CreateDirectory(Path.Combine(bundleRoot, "media"));
-                using (var animated = new MagickImage(MagickColors.Transparent, 2, 2))
-                {
-                    animated.Write(Path.Combine(bundleRoot, "media", "demo frame.png"), MagickFormat.Png);
-                }
+                WebVisualStoryAnimatedArtifactTests.WriteTinyApng(
+                    Path.Combine(bundleRoot, "media", "demo frame.png"));
                 using (var completed = new MagickImage(MagickColors.Transparent, 2, 2))
                 {
                     completed.Write(Path.Combine(bundleRoot, "demo.png"), MagickFormat.Png);
@@ -229,6 +227,45 @@ public class WebShortcodeMediaTests
 
         Assert.Contains("/stories/chart%20demo/media/demo%20frame.png", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("<source media=\"print\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_DerivesRootUrlForManifestDirectlyUnderStatic()
+    {
+        var html = BuildSinglePageSite(
+            """
+            {{< story manifest="static/visual-story.json" transcript="hidden" >}}
+            """,
+            root =>
+            {
+                var bundleRoot = Path.Combine(root, "static");
+                Directory.CreateDirectory(bundleRoot);
+                File.WriteAllText(
+                    Path.Combine(bundleRoot, "demo.svg"),
+                    "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+                using (var completed = new MagickImage(MagickColors.Transparent, 2, 2))
+                {
+                    completed.Write(Path.Combine(bundleRoot, "demo.png"), MagickFormat.Png);
+                }
+                File.WriteAllText(
+                    Path.Combine(bundleRoot, "visual-story.json"),
+                    """
+                    {
+                      "schemaVersion": 1,
+                      "id": "root-story",
+                      "title": "Root story",
+                      "alt": "The result appears.",
+                      "outcome": "The result is visible.",
+                      "artifacts": [
+                        { "role": "animated", "format": "svg", "path": "demo.svg" },
+                        { "role": "completed", "format": "png", "path": "demo.png" }
+                      ]
+                    }
+                    """);
+            });
+
+        Assert.Contains("src=\"/demo.svg\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("/static/demo.svg", html, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildSinglePageSite(string markdown, Action<string>? setup = null)

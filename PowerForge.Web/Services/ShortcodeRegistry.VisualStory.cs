@@ -135,7 +135,9 @@ internal static partial class ShortcodeDefaults
         var directory = normalized.Contains('/')
             ? normalized[..normalized.LastIndexOf('/')]
             : string.Empty;
-        if (directory.StartsWith("static/", StringComparison.OrdinalIgnoreCase))
+        if (directory.Equals("static", StringComparison.OrdinalIgnoreCase))
+            directory = string.Empty;
+        else if (directory.StartsWith("static/", StringComparison.OrdinalIgnoreCase))
             directory = directory["static/".Length..];
         var encodedDirectory = string.Join(
             "/",

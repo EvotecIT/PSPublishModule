@@ -82,15 +82,6 @@ public static class WebVisualStoryStager
             var extension = Path.GetExtension(sourcePath).TrimStart('.');
             var normalizedFormat = NormalizeFormat(artifact.Format);
             ValidateArtifactFormat(artifact, sourcePath, normalizedFormat, extension);
-            if (IsCompletedArtifact(artifact))
-            {
-                ValidateCompletedPng(sourcePath, artifact.Path);
-            }
-            if (IsAnimatedArtifact(artifact))
-            {
-                WebVisualStoryAnimatedArtifactValidator.Validate(sourcePath, artifact.Path, normalizedFormat);
-            }
-
             var sha256 = ComputeSha256(sourcePath);
             ValidateDeclaredIntegrity(artifact, info.Length, sha256);
             var relativePath = Path.GetRelativePath(sourceRoot, sourcePath).Replace('\\', '/');
@@ -156,9 +147,21 @@ public static class WebVisualStoryStager
                     throw new InvalidOperationException(
                         $"Visual-story artifact changed while it was being staged: {item.RelativePath}");
                 }
+                var stagedFormat = NormalizeFormat(item.Artifact.Format);
+                if (IsCompletedArtifact(item.Artifact))
+                {
+                    ValidateCompletedPng(temporaryDestination, item.RelativePath);
+                }
+                if (IsAnimatedArtifact(item.Artifact))
+                {
+                    WebVisualStoryAnimatedArtifactValidator.Validate(
+                        temporaryDestination,
+                        item.RelativePath,
+                        stagedFormat);
+                }
                 item.Artifact.Role = item.Artifact.Role.Trim().ToLowerInvariant();
                 item.Artifact.Path = item.RelativePath;
-                item.Artifact.Format = NormalizeFormat(item.Artifact.Format);
+                item.Artifact.Format = stagedFormat;
                 item.Artifact.MediaType ??= GetMediaType(item.Artifact.Format);
                 item.Artifact.Bytes = item.Bytes;
                 item.Artifact.Sha256 = item.Sha256;

@@ -1118,6 +1118,9 @@ public static partial class WebApiDocsGenerator
         var safeAlt = System.Web.HttpUtility.HtmlEncode(alt);
         var safeTitle = System.Web.HttpUtility.HtmlEncode(title);
         var safePoster = string.IsNullOrWhiteSpace(media.PosterUrl) ? string.Empty : System.Web.HttpUtility.HtmlEncode(media.PosterUrl);
+        var safePosterSrcSet = string.IsNullOrWhiteSpace(media.PosterUrl)
+            ? string.Empty
+            : System.Web.HttpUtility.HtmlEncode(EncodeSrcSetUrl(media.PosterUrl));
         var safeMimeType = string.IsNullOrWhiteSpace(media.MimeType) ? string.Empty : System.Web.HttpUtility.HtmlEncode(media.MimeType);
         var widthAttr = media.Width is > 0 ? $" width=\"{media.Width.Value}\"" : string.Empty;
         var heightAttr = media.Height is > 0 ? $" height=\"{media.Height.Value}\"" : string.Empty;
@@ -1169,8 +1172,8 @@ public static partial class WebApiDocsGenerator
                             html.Line("<picture>");
                             using (html.Indent())
                             {
-                                html.Line($"<source media=\"print\" srcset=\"{safePoster}\" type=\"image/png\" />");
-                                html.Line($"<source media=\"(prefers-reduced-motion: reduce)\" srcset=\"{safePoster}\" type=\"image/png\" />");
+                                html.Line($"<source media=\"print\" srcset=\"{safePosterSrcSet}\" type=\"image/png\" />");
+                                html.Line($"<source media=\"(prefers-reduced-motion: reduce)\" srcset=\"{safePosterSrcSet}\" type=\"image/png\" />");
                                 html.Line($"<img src=\"{safeUrl}\" alt=\"{safeAlt}\" loading=\"lazy\" decoding=\"async\"{widthAttr}{heightAttr} />");
                             }
                             html.Line("</picture>");

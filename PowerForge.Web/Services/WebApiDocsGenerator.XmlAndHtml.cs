@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -272,6 +273,12 @@ public static partial class WebApiDocsGenerator
         {
             throw new InvalidOperationException(
                 "API visual-story media requires a completed poster for reduced-motion and print output.");
+        }
+        if (type.Equals("story", StringComparison.OrdinalIgnoreCase) &&
+            !IsCompletedPngHref(posterUrl))
+        {
+            throw new InvalidOperationException(
+                "API visual-story media requires a completed PNG poster for reduced-motion and print output.");
         }
         var alt = Normalize(element.Attribute("alt")?.Value ?? string.Empty);
         if (type.Equals("story", StringComparison.OrdinalIgnoreCase) &&
@@ -660,6 +667,40 @@ public static partial class WebApiDocsGenerator
             return string.Empty;
 
         return trimmed;
+    }
+
+    private static bool IsCompletedPngHref(string href)
+    {
+        var path = href;
+        var delimiter = path.IndexOfAny(new[] { '?', '#' });
+        if (delimiter >= 0)
+            path = path[..delimiter];
+        return path.EndsWith(".png", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string EncodeSrcSetUrl(string href)
+    {
+        var encoded = new StringBuilder(href.Length);
+        for (var index = 0; index < href.Length; index++)
+        {
+            var character = href[index];
+            if (character != ',' && !char.IsWhiteSpace(character))
+            {
+                encoded.Append(character);
+                continue;
+            }
+
+            var scalarLength = char.IsHighSurrogate(character) &&
+                               index + 1 < href.Length &&
+                               char.IsLowSurrogate(href[index + 1])
+                ? 2
+                : 1;
+            var bytes = Encoding.UTF8.GetBytes(href.Substring(index, scalarLength));
+            foreach (var value in bytes)
+                encoded.Append('%').Append(value.ToString("X2", CultureInfo.InvariantCulture));
+            index += scalarLength - 1;
+        }
+        return encoded.ToString();
     }
 
     private static string InferTypeKind(string name)

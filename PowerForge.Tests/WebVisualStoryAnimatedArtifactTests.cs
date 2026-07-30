@@ -249,13 +249,25 @@ public class WebVisualStoryAnimatedArtifactTests
         }
     }
 
+    [Fact]
+    public void ApngValidation_RejectsAggregateDecodedBytesBeyondTheBudget()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            WebVisualStoryAnimatedArtifactValidator.ReserveApngDecodedBytes(
+                500_000_000,
+                20_000_000,
+                "oversized.png"));
+
+        Assert.Contains("aggregate decoded-byte safety limit", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static WebVisualStoryBundle ReadBundle(string manifest)
         => JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(manifest), JsonOptions)!;
 
     private static void WriteBundle(string manifest, WebVisualStoryBundle bundle)
         => File.WriteAllText(manifest, JsonSerializer.Serialize(bundle, JsonOptions));
 
-    private static void WriteTinyApng(
+    internal static void WriteTinyApng(
         string path,
         bool completeSecondFrame = true,
         byte secondFrameDisposal = 0)

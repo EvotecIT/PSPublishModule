@@ -11,6 +11,8 @@ internal static class WebVisualStoryAnimatedArtifactValidator
 {
     private const int MaximumGifFrames = 240;
     private const ulong MaximumGifDecodedPixels = 128_000_000UL;
+    private const int MaximumApngFrames = 240;
+    private const long MaximumApngDecodedBytes = 512_000_000L;
     private const string SvgNamespace = "http://www.w3.org/2000/svg";
 
     /// <summary>
@@ -157,6 +159,7 @@ internal static class WebVisualStoryAnimatedArtifactValidator
         MemoryStream? frameData = null;
         uint frameWidth = 0;
         uint frameHeight = 0;
+        var decodedFrameBytes = 0L;
         while (offset + 12 <= bytes.Length)
         {
             var length = ReadUInt32(bytes, offset);
@@ -202,6 +205,9 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                 declaredFrames = ReadUInt32(bytes, dataOffset);
                 if (declaredFrames < 2)
                     throw new InvalidOperationException($"Visual-story APNG must contain multiple frames: {displayPath}");
+                if (declaredFrames > MaximumApngFrames)
+                    throw new InvalidOperationException(
+                        $"Visual-story animated artifact exceeds the {MaximumApngFrames}-frame safety limit: {displayPath}");
                 sawAnimationControl = true;
             }
             else if (first == 'f' && second == 'c' && third == 'T' && fourth == 'L')
@@ -231,6 +237,15 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                 {
                     throw new InvalidOperationException($"Visual-story APNG has invalid frame control: {displayPath}");
                 }
+                decodedFrameBytes = ReserveApngDecodedBytes(
+                    decodedFrameBytes,
+                    ComputeDecodedFrameBytes(
+                        frameWidth,
+                        frameHeight,
+                        bitDepth,
+                        colorType,
+                        interlaceMethod),
+                    displayPath);
                 frameData?.Dispose();
                 frameData = new MemoryStream();
                 frameCount++;
@@ -394,6 +409,19 @@ internal static class WebVisualStoryAnimatedArtifactValidator
             var passWidth = PassLength(width, pass.X, pass.Dx);
             var passHeight = PassLength(height, pass.Y, pass.Dy);
             total = checked(total + ComputePassBytes(passWidth, passHeight, channels, bitDepth));
+        }
+        return total;
+    }
+
+    internal static long ReserveApngDecodedBytes(long currentBytes, long frameBytes, string displayPath)
+    {
+        if (currentBytes < 0) throw new ArgumentOutOfRangeException(nameof(currentBytes));
+        if (frameBytes < 0) throw new ArgumentOutOfRangeException(nameof(frameBytes));
+        var total = checked(currentBytes + frameBytes);
+        if (total > MaximumApngDecodedBytes)
+        {
+            throw new InvalidOperationException(
+                $"Visual-story animated artifact exceeds the aggregate decoded-byte safety limit: {displayPath}");
         }
         return total;
     }
