@@ -10,13 +10,37 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellBenchmarkEnvironmentMetadata
 {
+    internal sealed class SourceProvenance
+    {
+        internal string? GitSha { get; set; }
+        internal string? GitBranch { get; set; }
+        internal string? GitStatus { get; set; }
+    }
+
     /// <summary>
     /// Builds a metadata map for a benchmark suite run.
     /// </summary>
     /// <param name="suite">Benchmark suite.</param>
     /// <returns>Metadata values.</returns>
     public static Dictionary<string, string> Build(PowerShellBenchmarkSuite suite)
+        => Build(suite, CaptureSourceProvenance(suite));
+
+    internal static Dictionary<string, string> Build(
+        PowerShellBenchmarkSuite suite,
+        SourceProvenance startedProvenance)
     {
+        if (startedProvenance is null)
+            throw new ArgumentNullException(nameof(startedProvenance));
+        SourceProvenance finishedProvenance = CaptureSourceProvenance(suite);
+        if (!string.Equals(startedProvenance.GitSha, finishedProvenance.GitSha, StringComparison.Ordinal) ||
+            !string.Equals(startedProvenance.GitBranch, finishedProvenance.GitBranch, StringComparison.Ordinal) ||
+            !string.Equals(startedProvenance.GitStatus, finishedProvenance.GitStatus, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Benchmark source provenance changed while measurements were running. " +
+                "Discard this run and measure again from an unchanged worktree.");
+        }
+
         var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["suite"] = suite.Name,
@@ -42,21 +66,30 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
         };
         foreach (var item in suite.Metadata)
             metadata["benchmark." + item.Key] = item.Value;
-        string? gitSha = ReadGitValue(suite.SourceRoot, "rev-parse HEAD");
-        AddMetadata(metadata, "gitSha", gitSha);
-        AddMetadata(metadata, "gitBranch", ReadGitValue(suite.SourceRoot, "branch --show-current"));
-        if (!string.IsNullOrWhiteSpace(gitSha))
+        AddMetadata(metadata, "gitSha", startedProvenance.GitSha);
+        AddMetadata(metadata, "gitBranch", startedProvenance.GitBranch);
+        if (!string.IsNullOrWhiteSpace(startedProvenance.GitSha) &&
+            startedProvenance.GitStatus is not null)
         {
-            string? status = ReadGitValue(
-                suite.SourceRoot,
-                "status --porcelain --untracked-files=normal");
-            if (status is not null)
-            {
-                metadata["gitWorktreeClean"] =
-                    string.IsNullOrWhiteSpace(status) ? "true" : "false";
-            }
+            metadata["gitWorktreeClean"] =
+                string.IsNullOrWhiteSpace(startedProvenance.GitStatus) ? "true" : "false";
         }
         return metadata;
+    }
+
+    internal static SourceProvenance CaptureSourceProvenance(PowerShellBenchmarkSuite suite)
+    {
+        if (suite is null)
+            throw new ArgumentNullException(nameof(suite));
+        string? gitSha = ReadGitValue(suite.SourceRoot, "rev-parse HEAD");
+        return new SourceProvenance
+        {
+            GitSha = gitSha,
+            GitBranch = ReadGitValue(suite.SourceRoot, "branch --show-current"),
+            GitStatus = string.IsNullOrWhiteSpace(gitSha)
+                ? null
+                : ReadGitValue(suite.SourceRoot, "status --porcelain --untracked-files=normal")
+        };
     }
 
     /// <summary>

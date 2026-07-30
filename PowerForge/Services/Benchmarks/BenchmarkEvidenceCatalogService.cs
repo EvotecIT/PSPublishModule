@@ -383,6 +383,13 @@ public sealed class BenchmarkEvidenceCatalogService
                 "Commit or remove all tracked and untracked source changes before measuring.");
         }
 
+        if (string.IsNullOrWhiteSpace(result.Environment.RuntimeVersion) ||
+            string.IsNullOrWhiteSpace(result.Environment.Runner))
+        {
+            throw new InvalidOperationException(
+                "Publishable benchmark evidence requires the measured runtime identity and benchmark runner identity.");
+        }
+
         bool hasUnknownStatus =
             result.Samples.Any(sample =>
                 !Enum.IsDefined(typeof(BenchmarkSampleStatus), sample.Status)) ||
@@ -413,8 +420,9 @@ public sealed class BenchmarkEvidenceCatalogService
                 row.FailureCount > 0 ||
                 string.Equals(row.Status, "Failed", StringComparison.OrdinalIgnoreCase) ||
                 (string.Equals(row.Status, "Succeeded", StringComparison.OrdinalIgnoreCase) &&
-                 !IsValidDuration(row.MedianMs) &&
-                 !IsValidDuration(row.MeanMs)));
+                 (row.SampleCount <= 0 ||
+                  (!IsValidDuration(row.MedianMs) &&
+                   !IsValidDuration(row.MeanMs)))));
         bool hasSuccessfulMeasurement =
             result.Samples.Any(sample =>
                 sample.Status == BenchmarkSampleStatus.Succeeded &&

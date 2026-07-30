@@ -111,13 +111,59 @@ internal static class BenchmarkFileUpdateLock
     internal static string CreatePathHash(string destinationPath, bool? caseInsensitive = null)
     {
         string normalizedPath = Path.GetFullPath(destinationPath);
-        bool normalizeCase = caseInsensitive ??
-            (Path.DirectorySeparatorChar == '\\' ||
-             RuntimeInformation.IsOSPlatform(OSPlatform.OSX));
+        bool normalizeCase = caseInsensitive ?? IsCaseInsensitivePath(normalizedPath);
         if (normalizeCase)
             normalizedPath = normalizedPath.ToUpperInvariant();
         using var sha256 = SHA256.Create();
         byte[] hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(normalizedPath));
         return BitConverter.ToString(hash).Replace("-", string.Empty);
+    }
+
+    internal static bool IsCaseInsensitivePath(string destinationPath)
+    {
+        string fullPath = Path.GetFullPath(destinationPath);
+        string? directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
+        {
+            string probeName = ".PfCaseProbe-" + Guid.NewGuid().ToString("N");
+            string probePath = Path.Combine(directory, probeName);
+            string alternatePath = Path.Combine(directory, probeName.ToLowerInvariant());
+            try
+            {
+                using (new FileStream(
+                    probePath,
+                    FileMode.CreateNew,
+                    FileAccess.ReadWrite,
+                    FileShare.ReadWrite | FileShare.Delete,
+                    bufferSize: 1,
+                    FileOptions.DeleteOnClose))
+                {
+                    return File.Exists(alternatePath);
+                }
+            }
+            catch (IOException)
+            {
+                // Fall back to the platform default when the target volume cannot be probed.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Fall back to the platform default when the target volume cannot be probed.
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(probePath))
+                        File.Delete(probePath);
+                }
+                catch
+                {
+                    // A DeleteOnClose probe may already be gone or independently protected.
+                }
+            }
+        }
+
+        return Path.DirectorySeparatorChar == '\\' ||
+               RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
     }
 }

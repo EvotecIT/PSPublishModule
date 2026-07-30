@@ -336,6 +336,63 @@ public sealed partial class BenchmarkServicesTests
         Assert.Contains("successful measurement", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void EvidenceCatalog_RejectsAnySuccessfulSummaryWithoutContributingSamples()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Summary =
+        [
+            result.Summary[0],
+            new BenchmarkSummaryRow
+            {
+                Suite = result.Suite,
+                Scenario = "Empty",
+                Operation = "Read",
+                Engine = "OfficeIMO",
+                Os = "Windows",
+                RunMode = "full",
+                Status = "Succeeded",
+                SampleCount = 0,
+                MedianMs = 11
+            }
+        ];
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "mixed-empty-summary.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("no failed measurements", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void EvidenceCatalog_RejectsMissingRuntimeOrRunnerIdentity(bool removeRuntime)
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        if (removeRuntime)
+            result.Environment.RuntimeVersion = string.Empty;
+        else
+            result.Environment.Runner = string.Empty;
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "missing-runtime-identity.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("runtime identity", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("runner identity", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("abc123")]
     [InlineData("012345678901234567890123456789012345678g")]
@@ -531,7 +588,11 @@ public sealed partial class BenchmarkServicesTests
     public void EvidenceCatalog_NormalizesLinuxDistributionLabels()
     {
         BenchmarkRunResult result = Result("Ubuntu 24.04", "fixture-a", 10);
-        result.Environment = new BenchmarkEnvironmentInfo();
+        result.Environment = new BenchmarkEnvironmentInfo
+        {
+            RuntimeVersion = ".NET 10.0.10",
+            Runner = "BenchmarkDotNet 0.15.8"
+        };
 
         BenchmarkEvidenceCatalog catalog = new BenchmarkEvidenceCatalogService().Update(
             null,
@@ -598,6 +659,28 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(
             BenchmarkFileUpdateLock.CreatePathHash(upper, caseInsensitive: true),
             BenchmarkFileUpdateLock.CreatePathHash(lower, caseInsensitive: true));
+    }
+
+    [Fact]
+    public void EvidenceCatalog_LockIdentityUsesDestinationFileSystemCaseRules()
+    {
+        string root = CreateTempRoot();
+        string upper = Path.Combine(root, "Index.json");
+        string lower = Path.Combine(root, "index.json");
+        bool caseInsensitive = BenchmarkFileUpdateLock.IsCaseInsensitivePath(upper);
+
+        if (caseInsensitive)
+        {
+            Assert.Equal(
+                BenchmarkFileUpdateLock.CreatePathHash(upper),
+                BenchmarkFileUpdateLock.CreatePathHash(lower));
+        }
+        else
+        {
+            Assert.NotEqual(
+                BenchmarkFileUpdateLock.CreatePathHash(upper),
+                BenchmarkFileUpdateLock.CreatePathHash(lower));
+        }
     }
 
     [Fact]
@@ -1187,7 +1270,8 @@ public sealed partial class BenchmarkServicesTests
                 OsFamily = platform,
                 OsArchitecture = "X64",
                 ProcessArchitecture = "X64",
-                RuntimeVersion = ".NET 10.0.10"
+                RuntimeVersion = ".NET 10.0.10",
+                Runner = "BenchmarkDotNet 0.15.8"
             },
             Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {

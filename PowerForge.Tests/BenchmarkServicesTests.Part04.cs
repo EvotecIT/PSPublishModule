@@ -439,6 +439,23 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_ParsesNormalizedCommaDelimitedDecimalPointInvariantly()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(
+            csv,
+            "Suite,Scenario,Operation,Engine,Host,Iteration,Status,DurationMs\n"
+            + "suite,decimal,Run,Managed,Current,0,Succeeded,1.234\n");
+
+        BenchmarkSample sample = Assert.Single(
+            new BenchmarkResultImporter().Import(csv).Samples);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+        Assert.Equal(1.234, sample.DurationMs);
+    }
+
+    [Fact]
     public void Importer_MarksSummaryWithoutDurationAsFailed()
     {
         var root = CreateTempRoot();

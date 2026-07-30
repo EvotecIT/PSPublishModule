@@ -309,7 +309,15 @@ $result.Metadata['benchmark.workload.id'] = 'markpflug-65k-sales-v1'
 $result.Metadata['benchmark.fixture.csv'] = 'AC959F43...'
 $result.Metadata['benchmark.package.officeimo'] = '3.0.4'
 $result.Metadata['benchmark.package.sylvan'] = '0.5.7'
-$result.Metadata['gitSha'] = (git rev-parse HEAD).Trim()
+$gitSha = (git rev-parse HEAD).Trim()
+$gitStatus = git status --porcelain --untracked-files=normal
+if ($LASTEXITCODE -ne 0 -or
+    [string]::IsNullOrWhiteSpace($gitSha) -or
+    $gitStatus) {
+    throw 'Benchmark publishing requires a clean Git worktree.'
+}
+$result.Metadata['gitSha'] = $gitSha
+$result.Metadata['gitWorktreeClean'] = 'true'
 
 [PowerForge.BenchmarkJson]::Write(
     '.\Website\static\data\benchmarks\tabular\windows-full.json',
@@ -331,8 +339,9 @@ so concurrent platform jobs cannot silently discard or truncate another lane.
 The catalog replaces only the matching comparison/platform/run-mode lane.
 Windows, Linux, and macOS remain separate entries. `availability` lists missing
 platforms explicitly. A publishable lane must contain successful measurements,
-no failures, and an exact `gitSha`; invalid evidence is rejected rather than
-appearing available. Publishable lanes with different `gitSha` values or
+no failures, measured runtime and runner identity, and an exact `gitSha` from a
+verified clean worktree; invalid evidence is rejected rather than appearing
+available. Publishable lanes with different `gitSha` values or
 different `benchmark.fixture.*`, `benchmark.package.*`, or
 `benchmark.workload.*` metadata are marked non-comparable and carry the exact
 conflicting dimensions.

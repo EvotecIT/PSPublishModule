@@ -22,7 +22,11 @@ Adds one normalized benchmark result to a platform-aware evidence catalog.
 ### EXAMPLE 1
 ```powershell
 $result = Import-BenchmarkResult .\BenchmarkDotNet.Artifacts
-$result.Metadata['gitSha'] = (git rev-parse HEAD).Trim()
+$gitSha = (git rev-parse HEAD).Trim()
+$gitStatus = git status --porcelain --untracked-files=normal
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gitSha) -or $gitStatus) { throw 'Benchmark publishing requires a clean Git worktree.' }
+$result.Metadata['gitSha'] = $gitSha
+$result.Metadata['gitWorktreeClean'] = 'true'
 $result | Update-BenchmarkEvidenceCatalog -Path .\Website\data\benchmark-index.json -ComparisonId tabular-65k-v1 -ResultPath .\Website\data\windows-full.json -RunMode full -Publish
 ```
 
@@ -112,7 +116,8 @@ Accept wildcard characters: True
 
 ### -Publish
 Marks this lane as suitable for public benchmark claims. Published evidence must contain
-successful measurements without failures and exact source provenance in metadata key gitSha.
+successful measurements without failures, runtime and runner identity, and exact clean-worktree
+source provenance in metadata keys gitSha and gitWorktreeClean.
 
 ```yaml
 Type: SwitchParameter

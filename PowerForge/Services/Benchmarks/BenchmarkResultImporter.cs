@@ -1158,9 +1158,23 @@ public sealed class BenchmarkResultImporter
             return true;
         if (sawDecimalPoint)
             return false;
-        if (delimiter == ',' && LooksLikeBenchmarkDotNetCsv(headers))
+        if (delimiter == ',' &&
+            (LooksLikeBenchmarkDotNetCsv(headers) || LooksLikeNormalizedBenchmarkCsv(headers)))
             return false;
         return null;
+    }
+
+    private static bool LooksLikeNormalizedBenchmarkCsv(string[] headers)
+    {
+        var names = new HashSet<string>(headers, StringComparer.OrdinalIgnoreCase);
+        return names.Contains("Suite") &&
+               names.Contains("Scenario") &&
+               names.Contains("Operation") &&
+               names.Contains("Engine") &&
+               names.Contains("Host") &&
+               (names.Contains("DurationMs") ||
+                names.Contains("MedianMs") ||
+                names.Contains("MeanMs"));
     }
 
     private static HashSet<string> DecimalConventionColumnsFor(string[] headers)

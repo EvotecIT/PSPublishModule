@@ -10,7 +10,11 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Record a Windows publish lane</summary>
 /// <code>$result = Import-BenchmarkResult .\BenchmarkDotNet.Artifacts
-/// $result.Metadata['gitSha'] = (git rev-parse HEAD).Trim()
+/// $gitSha = (git rev-parse HEAD).Trim()
+/// $gitStatus = git status --porcelain --untracked-files=normal
+/// if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gitSha) -or $gitStatus) { throw 'Benchmark publishing requires a clean Git worktree.' }
+/// $result.Metadata['gitSha'] = $gitSha
+/// $result.Metadata['gitWorktreeClean'] = 'true'
 /// $result | Update-BenchmarkEvidenceCatalog -Path .\Website\data\benchmark-index.json -ComparisonId tabular-65k-v1 -ResultPath .\Website\data\windows-full.json -RunMode full -Publish</code>
 /// </example>
 [Cmdlet(VerbsData.Update, "BenchmarkEvidenceCatalog", SupportsShouldProcess = true)]
@@ -44,7 +48,8 @@ public sealed class UpdateBenchmarkEvidenceCatalogCommand : PSCmdlet
 
     /// <summary>
     /// Marks this lane as suitable for public benchmark claims. Published evidence must contain
-    /// successful measurements without failures and exact source provenance in metadata key <c>gitSha</c>.
+    /// successful measurements without failures, runtime and runner identity, and exact clean-worktree
+    /// source provenance in metadata keys <c>gitSha</c> and <c>gitWorktreeClean</c>.
     /// </summary>
     [Parameter]
     public SwitchParameter Publish { get; set; }
