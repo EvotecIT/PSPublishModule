@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Added portable visual-story bundle validation and staging, an optional trusted `visual-story` pipeline producer task, responsive site/blog shortcodes, completed PNG outcome enforcement, accessible transcripts/downloads, and API-doc story media with reduced-motion fallback.
 - Added pipeline-thread marshalling for terminating errors and `ShouldContinue` prompts raised after an asynchronous cmdlet await, while preserving derived cmdlet resource cleanup through virtual disposal.
 - Fixed module merging so `using` lines inside PowerShell here-strings and block comments remain in place instead of being moved into the generated module header.
 - Hardened the canonical `AsyncPSCmdlet` lifecycle with request-specific prompt and `ShouldProcess` replies while preserving PowerShell-thread execution until the first await.

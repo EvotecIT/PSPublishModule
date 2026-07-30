@@ -139,6 +139,10 @@ internal static partial class WebPipelineRunner
             case "exec":
                 ExecuteExec(step, baseDir, stepResult);
                 break;
+            case "visual-story":
+            case "visualstory":
+                ExecuteVisualStory(step, baseDir, stepResult);
+                break;
             case "git-sync":
                 ExecuteGitSync(step, baseDir, logger, stepResult);
                 break;

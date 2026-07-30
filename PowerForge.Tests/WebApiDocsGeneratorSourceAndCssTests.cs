@@ -502,6 +502,7 @@ public class WebApiDocsGeneratorSourceAndCssTests
                     <code>Sample.Run();</code>
                     <media kind="terminal" src="/casts/sample.cast" title="Terminal playback" caption="Recorded terminal output." poster="/images/sample-terminal.png" mimeType="application/x-asciicast" />
                     <media kind="video" src="/videos/sample" title="Video playback" caption="Recorded video output." mimeType="video/mp4" />
+                    <media kind="story" src="/stories/sample.svg" title="Visual story" alt="Code runs and the result appears." caption="A complete code-to-result demonstration." poster="/stories/sample.png" />
                     <image src="/images/sample-output.png" alt="Rendered sample output" caption="Example screenshot." width="1280" height="720" />
                   </example>
                 </member>
@@ -546,6 +547,10 @@ public class WebApiDocsGeneratorSourceAndCssTests
             Assert.DoesNotContain("class=\"example-media-meta\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("class=\"example-media example-media-video\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("<source src=\"/videos/sample\" type=\"video/mp4\" />", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("class=\"example-media example-media-story\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("prefers-reduced-motion: reduce", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("src=\"/stories/sample.svg\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("srcset=\"/stories/sample.png\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("class=\"example-media example-media-image\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("src=\"/images/sample-output.png\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("alt=\"Rendered sample output\"", html, StringComparison.OrdinalIgnoreCase);

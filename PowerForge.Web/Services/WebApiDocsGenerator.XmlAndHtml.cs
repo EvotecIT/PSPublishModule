@@ -314,6 +314,7 @@ public static partial class WebApiDocsGenerator
             "img" or "image" or "screenshot" => "image",
             "video" => "video",
             "terminal" or "terminalcast" or "asciinema" => "terminal",
+            "story" or "visual-story" or "visualstory" => "story",
             "media" => "link",
             "link" or "download" or "asset" => "link",
             _ => string.Empty

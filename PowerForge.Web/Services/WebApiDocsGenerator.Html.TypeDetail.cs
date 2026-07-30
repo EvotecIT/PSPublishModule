@@ -1160,6 +1160,27 @@ public static partial class WebApiDocsGenerator
                     }
                     html.Line("</div>");
                     break;
+                case "story":
+                    html.Line("<div class=\"example-media-frame example-media-frame-story\">");
+                    using (html.Indent())
+                    {
+                        if (!string.IsNullOrWhiteSpace(safePoster))
+                        {
+                            html.Line("<picture>");
+                            using (html.Indent())
+                            {
+                                html.Line($"<source media=\"(prefers-reduced-motion: reduce)\" srcset=\"{safePoster}\" type=\"image/png\" />");
+                                html.Line($"<img src=\"{safeUrl}\" alt=\"{safeAlt}\" loading=\"lazy\" decoding=\"async\"{widthAttr}{heightAttr} />");
+                            }
+                            html.Line("</picture>");
+                        }
+                        else
+                        {
+                            html.Line($"<img src=\"{safeUrl}\" alt=\"{safeAlt}\" loading=\"lazy\" decoding=\"async\"{widthAttr}{heightAttr} />");
+                        }
+                    }
+                    html.Line("</div>");
+                    break;
                 default:
                     html.Line("<div class=\"example-media-frame example-media-frame-link\">");
                     using (html.Indent())

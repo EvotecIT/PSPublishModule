@@ -147,6 +147,46 @@ public class WebShortcodeMediaTests
         Assert.Equal(1, occurrences);
     }
 
+    [Fact]
+    public void Build_RendersStory_WithAnimatedAndCompletedFallbacks()
+    {
+        var html = BuildSinglePageSite(
+            """
+            {{< story manifest="static/stories/chart/visual-story.json" base="/stories/chart" transcript="expanded" >}}
+            """,
+            root =>
+            {
+                var bundleRoot = Path.Combine(root, "static", "stories", "chart");
+                Directory.CreateDirectory(bundleRoot);
+                File.WriteAllText(Path.Combine(bundleRoot, "demo.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+                File.WriteAllBytes(Path.Combine(bundleRoot, "demo.png"), new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 });
+                File.WriteAllText(Path.Combine(bundleRoot, "demo.txt"), "Create chart\nChart is visible");
+                File.WriteAllText(Path.Combine(bundleRoot, "visual-story.json"),
+                    """
+                    {
+                      "schemaVersion": 1,
+                      "id": "chart-five-lines",
+                      "title": "Create a chart in five lines",
+                      "alt": "Source code followed by the generated chart.",
+                      "outcome": "The chart is visible.",
+                      "artifacts": [
+                        { "role": "animated", "format": "svg", "path": "demo.svg" },
+                        { "role": "completed", "format": "png", "path": "demo.png" },
+                        { "role": "transcript", "format": "text", "path": "demo.txt" }
+                      ]
+                    }
+                    """);
+            });
+
+        Assert.Contains("data-pf-story=\"chart-five-lines\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("prefers-reduced-motion: reduce", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/stories/chart/demo.svg", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/stories/chart/demo.png", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("The chart is visible.", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<details class=\"pf-story-transcript\" open>", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Chart is visible", html, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string BuildSinglePageSite(string markdown, Action<string>? setup = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-shortcode-media-" + Guid.NewGuid().ToString("N"));

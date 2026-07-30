@@ -1352,6 +1352,33 @@ Notes:
 - `allowFailure` (`continueOnError`) keeps the pipeline green when the command exits non-zero.
 - `exec` steps are intentionally not cacheable (they can have external side effects).
 
+#### visual-story
+
+Runs an optional trusted producer and stages a validated, self-contained visual-story bundle for websites, API docs, blog posts, and downloadable demos.
+
+```json
+{
+  "task": "visual-story",
+  "command": "pwsh",
+  "argsList": ["-NoProfile", "-File", "./Examples/Build-ChartStory.ps1"],
+  "manifest": "./.generated/chart-story/story.json",
+  "out": "./static/stories/chart-five-lines",
+  "maximumArtifactBytes": 26214400
+}
+```
+
+The producer is optional: omit `command` to stage an already resolved bundle. Producer execution is a trusted build-time action only; shortcode and page rendering never execute showcased code. The manifest and output must remain inside the pipeline root. Artifacts must remain inside the producer bundle, use supported SVG/GIF/APNG/PNG/HTML/text formats, stay within the size limit, and include exactly one `completed` PNG. The completed artifact is the enforceable fallback that proves the story's promised outcome for reduced-motion, print, static, and constrained hosts. Producer failures cannot be ignored.
+
+Use the staged story in any Markdown collection:
+
+```text
+{{< story manifest="static/stories/chart-five-lines/visual-story.json"
+    base="/stories/chart-five-lines"
+    transcript="collapsible" >}}
+```
+
+The shortcode renders script-free animated media, a reduced-motion completed PNG, accessible alt/caption text, an optional transcript disclosure, and direct downloads including GIF for Discord.
+
 #### git-sync
 Syncs a local working folder from a Git repository (public/private via token env), so pipeline inputs do not need to be pre-cloned.
 ```json
