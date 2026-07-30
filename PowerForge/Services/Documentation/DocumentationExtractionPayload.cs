@@ -98,6 +98,14 @@ internal sealed class DocumentationCommandHelp
     [DataMember(Name = "outputs")]
     public List<DocumentationTypeHelp> Outputs { get; set; } = new();
 
+    /// <summary>Authored output metadata captured from Get-Help before reconciliation.</summary>
+    [DataMember(Name = "authoredOutputs")]
+    public List<DocumentationTypeHelp> AuthoredOutputs { get; set; } = new();
+
+    /// <summary>Runtime output metadata captured from CommandInfo before reconciliation.</summary>
+    [DataMember(Name = "runtimeOutputs")]
+    public List<DocumentationTypeHelp> RuntimeOutputs { get; set; } = new();
+
     /// <summary>Related links (from Get-Help).</summary>
     [DataMember(Name = "relatedLinks")]
     public List<DocumentationLinkHelp> RelatedLinks { get; set; } = new();
@@ -122,6 +130,10 @@ internal sealed class DocumentationTypeHelp
     /// </summary>
     [DataMember(Name = "clrTypeName")]
     public string ClrTypeName { get; set; } = string.Empty;
+
+    /// <summary>Canonical CLR type identity observed inside the target PowerShell host.</summary>
+    [DataMember(Name = "canonicalTypeName")]
+    public string CanonicalTypeName { get; set; } = string.Empty;
 
     /// <summary>Type description.</summary>
     [DataMember(Name = "description")]
@@ -226,6 +238,18 @@ internal sealed class DocumentationParameterHelp
     /// <summary>Default value (stringified).</summary>
     [DataMember(Name = "defaultValue")]
     public string DefaultValue { get; set; } = string.Empty;
+
+    /// <summary>True when PSDefaultValueAttribute explicitly supplied metadata.</summary>
+    [DataMember(Name = "hasMetadataDefault")]
+    public bool HasMetadataDefault { get; set; }
+
+    /// <summary>Optional authored display text from PSDefaultValueAttribute.Help.</summary>
+    [DataMember(Name = "metadataDefaultHelp")]
+    public string? MetadataDefaultHelp { get; set; }
+
+    /// <summary>Tagged PSDefaultValueAttribute.Value captured in the target PowerShell host.</summary>
+    [DataMember(Name = "metadataDefaultValue")]
+    public DocumentationRuntimeValue? MetadataDefaultValue { get; set; }
 
     /// <summary>Pipeline input text (True/False/ByValue/ByPropertyName).</summary>
     [DataMember(Name = "pipelineInput")]

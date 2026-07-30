@@ -4,19 +4,15 @@
   [string]$OutputJsonPath
 )
 # <PowerForgeTypeIdentityHelpers />
-# <PowerForgeOutputMatchingHelpers />
-# <PowerForgeParameterMetadataHelpers />
-# <PowerForgeDefaultValueCollectionHelpers />
-# <PowerForgeDefaultValueScalarHelpers />
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 function EmitError([string]$msg) {
   try {
     $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$msg))
-    Microsoft.PowerShell.Utility\Write-Output ('PFDOCS::ERROR::' + $b64)
+    Write-Output ('PFDOCS::ERROR::' + $b64)
   } catch {
-    Microsoft.PowerShell.Utility\Write-Output 'PFDOCS::ERROR::'
+    Write-Output 'PFDOCS::ERROR::'
   }
 }
 
@@ -29,50 +25,126 @@ function GetText([object]$obj) {
   try { return [string]$obj } catch { return '' }
 }
 
-function ConvertToPowerShellDefaultValue(
-  [object]$value,
-  [System.Collections.IList]$referenceStack = $null
-) {
-  if ($null -eq $referenceStack) {
-    $referenceStack = [System.Collections.ArrayList]::new()
+function GetCanonicalTypeNameFromType([type]$type) {
+  if ($null -eq $type) { return '' }
+  if ($type.IsArray) {
+    $elementName = GetCanonicalTypeNameFromType ($type.GetElementType())
+    $rank = $type.GetArrayRank()
+    if ($rank -le 1) { return ($elementName + '[]') }
+    return ($elementName + '[' + (',' * ($rank - 1)) + ']')
   }
-  if ($null -eq $value) { return '$null' }
-  AddDefaultValueReference $value $referenceStack
-  if ($value -is [char]) {
-    return ('([char]' + [int][char]$value + ')')
+  if ($type.IsGenericTypeDefinition) {
+    if ($type.FullName) { return [string]$type.FullName }
+    return [string]$type.Name
   }
-  if ($value -is [string]) {
-    $text = [string]$value
-    $isInterned = [object]::ReferenceEquals($value, [string]::IsInterned($text))
-    return ConvertStringToPowerShellDefaultValue $text $isInterned
-  }
-  if ($value -is [bool]) {
-    if ($value) { return '$true' }
-    return '$false'
-  }
-  if (TestExactRuntimeValueType $value ([System.Management.Automation.SwitchParameter])) {
-    $switchValue = if ($value.IsPresent) { '$true' } else { '$false' }
-    return ('[System.Management.Automation.SwitchParameter]::new(' + $switchValue + ')')
-  }
-  if ($value -is [enum]) {
-    $enumType = $value.GetType()
-    $enumName = GetPowerShellSafeEnumName $enumType $value
-    $enumTypeExpression = GetPowerShellTypeDefaultExpression $enumType
-    $enumTypeIsLiteral = TestPowerShellTypeLiteral $enumType
-    if ($enumName -and $enumTypeIsLiteral) {
-      return ($enumTypeExpression + '::' + $enumName)
+  if ($type.IsGenericType) {
+    $definition = $type.GetGenericTypeDefinition()
+    $definitionName = [string]$definition.FullName
+    if (-not $definitionName) { $definitionName = [string]$definition.Name }
+    if ($definitionName.IndexOf('+') -lt 0) {
+      $definitionName = $definitionName -replace '`\d+$', ''
     }
+    $arguments = @()
+    foreach ($argument in $type.GetGenericArguments()) {
+      $arguments += GetCanonicalTypeNameFromType $argument
+    }
+    return ($definitionName + '[' + ($arguments -join ',') + ']')
+  }
+  if ($type.FullName) { return [string]$type.FullName }
+  return [string]$type.Name
+}
+
+function ResolveExactType([string]$candidate) {
+  if ([string]::IsNullOrWhiteSpace($candidate)) { return $null }
+  $resolvedType = $null
+  try { $resolvedType = [System.Type]::GetType($candidate, $false, $false) } catch { $resolvedType = $null }
+  if ($resolvedType) { return $resolvedType }
+  foreach ($assembly in [System.AppDomain]::CurrentDomain.GetAssemblies()) {
+    try { $resolvedType = $assembly.GetType($candidate, $false, $false) } catch { $resolvedType = $null }
+  if ($resolvedType) { return $resolvedType }
+  }
+  return $null
+}
+
+function ResolveUniqueTypeCaseInsensitive([string]$candidate, [ref]$isAmbiguous) {
+  $isAmbiguous.Value = $false
+  if ([string]::IsNullOrWhiteSpace($candidate)) { return $null }
+  $matches = [System.Collections.Generic.Dictionary[string,System.Type]]::new([System.StringComparer]::Ordinal)
+  $ambiguous = $false
+  $resolvedType = $null
+  try {
+    $resolvedType = [System.Type]::GetType($candidate, $false, $true)
+  } catch [System.Reflection.AmbiguousMatchException] {
+    $ambiguous = $true
+  } catch {
+    $resolvedType = $null
+  }
+  if ($resolvedType) {
+    $matches[(GetCanonicalTypeNameFromType $resolvedType)] = $resolvedType
+  }
+  foreach ($assembly in [System.AppDomain]::CurrentDomain.GetAssemblies()) {
+    $resolvedType = $null
+    try {
+      $resolvedType = $assembly.GetType($candidate, $false, $true)
+    } catch [System.Reflection.AmbiguousMatchException] {
+      $ambiguous = $true
+    } catch {
+      $resolvedType = $null
+    }
+    if ($resolvedType) {
+      $matches[(GetCanonicalTypeNameFromType $resolvedType)] = $resolvedType
+    }
+  }
+  $isAmbiguous.Value = $ambiguous
+  if ($ambiguous -or $matches.Count -ne 1) { return $null }
+  foreach ($match in $matches.Values) { return $match }
+  return $null
+}
+
+function ResolveCanonicalTypeName([string]$candidate) {
+  if ([string]::IsNullOrWhiteSpace($candidate)) { return '' }
+  $trimmed = $candidate.Trim()
+  $resolvedType = ResolveExactType $trimmed
+  $ambiguous = $false
+  if (-not $resolvedType) { $resolvedType = ResolveUniqueTypeCaseInsensitive $trimmed ([ref]$ambiguous) }
+  if (-not $resolvedType -and -not $ambiguous) {
+    try { $resolvedType = $trimmed -as [type] } catch { $resolvedType = $null }
+  }
+  if ($resolvedType) { return GetCanonicalTypeNameFromType $resolvedType }
+  return ($trimmed -replace '\s+', '')
+}
+
+function ConvertToRuntimeDefaultValue([object]$value) {
+  if ($null -eq $value) {
+    return [ordered]@{ kind = 'Null'; text = $null; name = $null; canonicalTypeName = $null; items = @() }
+  }
+
+  $kind = 'Text'
+  $text = $null
+  $name = $null
+  $canonicalTypeName = $null
+  $items = @()
+
+  if ($value -is [string]) {
+    $kind = 'String'
+    $text = [string]$value
+  } elseif ($value -is [char]) {
+    $kind = 'Char'
+    $text = [string]$value
+  } elseif ($value -is [bool]) {
+    $kind = 'Boolean'
+    $text = [string]$value
+  } elseif ($value -is [enum]) {
+    $kind = 'Enum'
+    $enumType = $value.GetType()
+    $canonicalTypeName = GetCanonicalTypeNameFromType $enumType
+    $name = [System.Enum]::GetName($enumType, $value)
     $underlyingValue = [System.Convert]::ChangeType(
       $value,
       [System.Enum]::GetUnderlyingType($enumType),
       [System.Globalization.CultureInfo]::InvariantCulture)
-    $underlyingType = [System.Enum]::GetUnderlyingType($enumType)
-    $underlyingText = if ([object]::ReferenceEquals($underlyingType, [char])) {
-      ([int][char]$underlyingValue).ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    } else {
-      [System.Convert]::ToString($underlyingValue, [System.Globalization.CultureInfo]::InvariantCulture)
-    }
-    $underlyingTypeName = GetCanonicalTypeNameFromType $underlyingType
+<<<<<<< HEAD
+    $underlyingTypeName = GetCanonicalTypeNameFromType ([System.Enum]::GetUnderlyingType($enumType))
     $enumTypeArgument = if ($enumTypeIsLiteral) { $enumTypeExpression } else { '(' + $enumTypeExpression + ')' }
     return ('[System.Enum]::ToObject(' + $enumTypeArgument + ', ([' + $underlyingTypeName + ']' + $underlyingText + '))')
   }
@@ -185,6 +257,12 @@ function ConvertToPowerShellDefaultValue(
   }
   if ($value -is [System.Collections.IDictionary] -or
       $value -is [System.Collections.IEnumerable]) {
+    foreach ($seenReference in $referenceStack) {
+      if ([object]::ReferenceEquals($seenReference, $value)) {
+        throw 'Repeated or circular default-value collection references are not supported.'
+      }
+    }
+    [void]$referenceStack.Add($value)
     if ($value -is [System.Collections.IDictionary]) {
       return ConvertDictionaryToPowerShellDefaultValue $value $referenceStack
     }
@@ -196,12 +274,61 @@ function ConvertToPowerShellDefaultValue(
       return ConvertMultidimensionalArrayToPowerShellDefaultValue $value $referenceStack
     }
     $items = [System.Collections.Generic.List[string]]::new()
+=======
+    $text = [System.Convert]::ToString($underlyingValue, [System.Globalization.CultureInfo]::InvariantCulture)
+  } elseif ($value -is [type]) {
+    $kind = 'Type'
+    $canonicalTypeName = GetCanonicalTypeNameFromType $value
+  } elseif ($value -is [double]) {
+    $kind = 'Double'
+    $text = $value.ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
+  } elseif ($value -is [single]) {
+    $kind = 'Single'
+    $text = $value.ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
+  } elseif ($value -is [System.Collections.IEnumerable]) {
+    $kind = 'Collection'
+>>>>>>> e2bda78a (Move documentation normalization into C#)
     foreach ($item in $value) {
-      $items.Add((ConvertToPowerShellDefaultValue $item $referenceStack))
+      $items += ConvertToRuntimeDefaultValue $item
     }
-    return ConvertCollectionItemsToPowerShellDefaultValue $items $value $referenceStack
+  } elseif ($value -is [System.IFormattable]) {
+    $kind = 'Formattable'
+    $text = $value.ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
+  } else {
+    $text = [string]$value
   }
-  return ConvertScalarToPowerShellDefaultValue $value
+  return [ordered]@{
+    kind = $kind
+    text = $text
+    name = $name
+    canonicalTypeName = $canonicalTypeName
+    items = @($items)
+  }
+}
+
+function GetOutputTypeSnapshot([object]$outputType) {
+  $outputTypeName = ''
+  $outputTypeClrName = ''
+  $canonicalTypeName = ''
+  $runtimeType = $null
+  try { $outputTypeName = [string]$outputType.Name } catch { $outputTypeName = '' }
+  try { $runtimeType = $outputType.Type } catch { $runtimeType = $null }
+  if ($runtimeType -is [type]) {
+    $outputTypeClrName = [string]$runtimeType.FullName
+    $canonicalTypeName = GetCanonicalTypeNameFromType $runtimeType
+  }
+  if (-not $outputTypeClrName) {
+    try { $outputTypeClrName = [string]$outputType.TypeName.FullName } catch { $outputTypeClrName = '' }
+  }
+  if (-not $outputTypeClrName) { $outputTypeClrName = $outputTypeName }
+  if (-not $outputTypeName) { $outputTypeName = $outputTypeClrName }
+  if (-not $outputTypeName) { return $null }
+  return [pscustomobject][ordered]@{
+    name = $outputTypeName
+    clrTypeName = $outputTypeClrName
+    canonicalTypeName = $canonicalTypeName
+    description = ''
+  }
 }
 
 try {
@@ -213,18 +340,16 @@ try {
   try { $m = Import-PowerShellDataFile -Path $ManifestPath -ErrorAction Stop } catch { $m = $null }
 
   $collectorHelperFunctions = GetCollectorHelperFunctionSnapshot
-  $restoreCollectorHelpers = (Get-Command RestoreCollectorHelperFunctions -CommandType Function).ScriptBlock
-  $testXmlSafeIdentityText = (Get-Command TestXmlSafeIdentityText -CommandType Function).ScriptBlock
-  $getDocumentedModuleCommands = (Get-Command GetDocumentedModuleCommands -CommandType Function).ScriptBlock
-  $getDocumentedModuleCommandSnapshot = (Get-Command GetDocumentedModuleCommandSnapshot -CommandType Function).ScriptBlock
+  $restoreCollectorHelpers = Get-Command RestoreCollectorHelperFunctions -CommandType Function
   $targetVariableImportFilter = '__PowerForgeDocumentationCollector_' + [guid]::NewGuid().ToString('N')
   $targetAliasImportFilter = '__PowerForgeDocumentationCollector_' + [guid]::NewGuid().ToString('N')
   $mod = Import-Module -Name $ManifestPath -Force -PassThru -Function '*' -Cmdlet '*' -Alias $targetAliasImportFilter -Variable $targetVariableImportFilter -ErrorAction Stop
-  $commandSnapshot = & $getDocumentedModuleCommandSnapshot $mod $testXmlSafeIdentityText $getDocumentedModuleCommands
-  $commands = @($commandSnapshot.Commands)
-  $helpByCommandName = $commandSnapshot.HelpByCommandName
   & $restoreCollectorHelpers $collectorHelperFunctions
   $moduleNameResolved = $mod.Name
+
+  $commands = Get-Command -Module $moduleNameResolved -ErrorAction SilentlyContinue | Where-Object {
+    $_.CommandType -eq 'Cmdlet' -or $_.CommandType -eq 'Function'
+  } | Sort-Object -Property Name
 
   $result = [ordered]@{
     moduleName = [string]$moduleNameResolved
@@ -237,7 +362,8 @@ try {
   }
 
   foreach ($c in $commands) {
-    $help = $helpByCommandName[[string]$c.Name]
+    $help = $null
+    try { $help = Get-Help -Name $c.Name -Full -ErrorAction SilentlyContinue } catch { $help = $null }
 
     $implType = $null
     $dllPath = $null
@@ -265,7 +391,7 @@ try {
       if ($null -ne $ps -and $null -ne $ps.Parameters) { $psParameters = @($ps.Parameters) }
       foreach ($pp in $psParameters) {
         $pn = [string]$pp.Name
-        if (-not $paramSets.ContainsKey($pn)) { $paramSets[$pn] = Microsoft.PowerShell.Utility\New-Object System.Collections.Generic.List[string] }
+        if (-not $paramSets.ContainsKey($pn)) { $paramSets[$pn] = New-Object System.Collections.Generic.List[string] }
         $null = $paramSets[$pn].Add([string]$ps.Name)
       }
     }
@@ -289,13 +415,13 @@ try {
     $paramNames = @()
     try {
       if ($c -and $c.Parameters) {
-        $paramNames = @($c.Parameters.GetEnumerator() | Microsoft.PowerShell.Core\ForEach-Object { [string]$_.Key })
+        $paramNames = @($c.Parameters.GetEnumerator() | ForEach-Object { [string]$_.Key })
       }
     } catch { $paramNames = @() }
     foreach ($hp in $helpParameters) { try { $paramNames += [string]$hp.Name } catch {
       # best effort: keep extracting other parameters even when one help node is incomplete
     } }
-    $paramNames = @($paramNames | Microsoft.PowerShell.Core\Where-Object { $_ -and ($commonParamNames -notcontains $_) } | Microsoft.PowerShell.Utility\Sort-Object -Unique)
+    $paramNames = @($paramNames | Where-Object { $_ -and ($commonParamNames -notcontains $_) } | Sort-Object -Unique)
 
     $parameters = @()
     foreach ($pn in $paramNames) {
@@ -318,8 +444,6 @@ try {
       }
       $possibleValues = @()
       $enumPossibleValues = @()
-      $hasValidateSet = $false
-      $validateSetCaseSensitive = $false
 
       $required = $false
       $parameterSetRequired = @{}
@@ -329,6 +453,8 @@ try {
       $pipeByProp = $false
       $defaultValue = ''
       $hasMetadataDefault = $false
+      $metadataDefaultHelp = $null
+      $metadataDefaultValue = $null
       $acceptWild = $false
 
       try {
@@ -357,8 +483,6 @@ try {
           foreach ($attr in @($pmeta.Attributes)) {
             if ($null -eq $attr) { continue }
             if ($attr -is [System.Management.Automation.ValidateSetAttribute]) {
-              $hasValidateSet = $true
-              if (TestValidateSetCaseSensitive $attr) { $validateSetCaseSensitive = $true }
               foreach ($value in @($attr.ValidValues)) {
                 if ($null -ne $value) { $possibleValues += [string]$value }
               }
@@ -368,10 +492,9 @@ try {
             }
             if ($attr -is [System.Management.Automation.PSDefaultValueAttribute]) {
               $hasMetadataDefault = $true
-              try {
-                $defaultValue = ConvertPSDefaultValueAttribute $attr
-              } catch {
-                $defaultValue = ''
+              $metadataDefaultHelp = [string]$attr.Help
+              if ([string]::IsNullOrWhiteSpace($metadataDefaultHelp)) {
+                $metadataDefaultValue = ConvertToRuntimeDefaultValue $attr.Value
               }
             }
           }
@@ -410,7 +533,7 @@ try {
           foreach ($a in @($hp.Aliases)) { $aliases += [string]$a }
         }
         try {
-          if (-not $hasValidateSet -and $hp.ValidValues) {
+          if ($hp.ValidValues) {
             foreach ($value in @($hp.ValidValues)) {
               if ($null -ne $value) { $possibleValues += [string]$value }
             }
@@ -440,10 +563,13 @@ try {
           # keep the metadata-derived default when Get-Help omits or reshapes Globbing
         }
       }
-      if ($hasValidateSet) { $enumPossibleValues = @() }
-      $possibleValues = @(MergeParameterPossibleValues @($possibleValues) @($enumPossibleValues) $validateSetCaseSensitive $hasValidateSet)
+<<<<<<< HEAD
+      $possibleValues = @(MergeParameterPossibleValues @($possibleValues) @($enumPossibleValues))
 
       $sets = @()
+=======
+      $sets = @()
+>>>>>>> e2bda78a (Move documentation normalization into C#)
       if ($paramSets.ContainsKey($pn)) { $sets = @($paramSets[$pn]) }
       if (-not $sets -or $sets.Count -eq 0) { $sets = @('(All)') }
 
@@ -466,16 +592,15 @@ try {
         parameterSetRequired = $parameterSetRequired
         position = $positionText
         defaultValue = $defaultValue
+        hasMetadataDefault = [bool]$hasMetadataDefault
+        metadataDefaultHelp = $metadataDefaultHelp
+        metadataDefaultValue = $metadataDefaultValue
         pipelineInput = $pipelineInput
         acceptWildcardCharacters = [bool]$acceptWild
       }
     }
 
     $parameters = @(ConvertParametersToXmlSafeDocumentationText @($parameters))
-    $parameterSetIdentities = ConvertParameterSetIdentitiesToXmlSafeDocumentationText $defaultSet @($syntax) @($parameters)
-    $defaultSet = $parameterSetIdentities.DefaultSet
-    $syntax = @($parameterSetIdentities.Syntax)
-    $parameters = @($parameterSetIdentities.Parameters)
 
     $helpExamples = @()
     try {
@@ -585,19 +710,21 @@ try {
     }
 
     $helpOutputs = @()
-    $helpOutputByKey = [System.Collections.Generic.Dictionary[string,object]]::new([System.StringComparer]::Ordinal)
-    $helpOutputKeyCounts = [System.Collections.Generic.Dictionary[string,int]]::new([System.StringComparer]::Ordinal)
-    $helpOutputByFoldedKey = [System.Collections.Generic.Dictionary[string,object]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    $helpOutputFoldedKeyCounts = [System.Collections.Generic.Dictionary[string,int]]::new([System.StringComparer]::OrdinalIgnoreCase)
     try {
       $helpReturnValues = @()
       try { if ($help -and $help.ReturnValues -and $help.ReturnValues.ReturnValue) { $helpReturnValues = @($help.ReturnValues.ReturnValue) } } catch { $helpReturnValues = @() }
       foreach ($rv in $helpReturnValues) {
         $typeName = ''
         $typeClrName = ''
+        $canonicalTypeName = ''
+        $runtimeType = $null
         try { $typeName = [string]$rv.Type.Name } catch { $typeName = '' }
         if (-not $typeName) { try { $typeName = [string]$rv.Type } catch { $typeName = '' } }
-        try { $typeClrName = [string]$rv.Type.Type.FullName } catch { $typeClrName = '' }
+        try { $runtimeType = $rv.Type.Type } catch { $runtimeType = $null }
+        if ($runtimeType -is [type]) {
+          $typeClrName = [string]$runtimeType.FullName
+          $canonicalTypeName = GetCanonicalTypeNameFromType $runtimeType
+        }
         if (-not $typeClrName) { try { $typeClrName = [string]$rv.Type.FullName } catch { $typeClrName = '' } }
         $typeName = $typeName.Trim()
         $typeClrName = $typeClrName.Trim()
@@ -614,15 +741,18 @@ try {
           # best effort: description collections are not guaranteed on every output type entry
         }
 
-        $helpOutput = [pscustomobject][ordered]@{ name = $typeName; clrTypeName = $typeClrName; description = $typeDesc }
-        $helpOutputs += $helpOutput
-        AddTypeKeysToIndexes $helpOutput @(GetTypeKeys $typeName $typeClrName) `
-          $helpOutputByKey $helpOutputKeyCounts $helpOutputByFoldedKey $helpOutputFoldedKeyCounts
+        $helpOutputs += [ordered]@{
+          name = $typeName
+          clrTypeName = $typeClrName
+          canonicalTypeName = $canonicalTypeName
+          description = $typeDesc
+        }
       }
     } catch {
       # best effort: older hosts can omit or reshape ReturnValues entirely
     }
 
+<<<<<<< HEAD
     $outputs = @()
     $seenOutputIdentities = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     $seenRuntimeOutputIdentities = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
@@ -697,54 +827,17 @@ try {
           clrTypeName = $displayClrTypeName
           description = $typeDesc
         }
+=======
+    $runtimeOutputs = @()
+    try {
+      foreach ($outputType in @($c.OutputType)) {
+        $snapshot = GetOutputTypeSnapshot $outputType
+        if ($snapshot) { $runtimeOutputs += $snapshot }
+>>>>>>> e2bda78a (Move documentation normalization into C#)
       }
     } catch {
       # best effort: command metadata may not expose OutputType uniformly across hosts
     }
-    $allowHelpOnlyOutputs = [string]$c.CommandType -ne 'Cmdlet' -or $runtimeOutputMetadata.Count -eq 0
-    if ($allowHelpOnlyOutputs) {
-      foreach ($helpOutput in $helpOutputs) {
-        $helpOutputIdentity = GetTypeIdentity ([string]$helpOutput.name) ([string]$helpOutput.clrTypeName)
-        if ([string]$c.CommandType -eq 'Cmdlet' -and
-            $runtimeOutputMetadata.Count -eq 0 -and
-            $helpOutputIdentity -eq 'System.Object' -and
-            [string]::IsNullOrWhiteSpace([string]$helpOutput.description)) {
-          continue
-        }
-
-        $matchesRuntimeOutput = $false
-        foreach ($key in @(GetTypeKeys ([string]$helpOutput.name) ([string]$helpOutput.clrTypeName))) {
-          if ($runtimeOutputKeys.ContainsKey($key) -and
-              [int]$helpOutputKeyCounts[$key] -eq 1 -and
-              [int]$runtimeOutputKeyCounts[$key] -eq 1) {
-            $matchedRuntimeOutput = $runtimeOutputByKey[$key]
-            if (TestConflictingQualifiedTypeIdentity ([string]$matchedRuntimeOutput.identity) $helpOutputIdentity) {
-              continue
-            }
-            $matchesRuntimeOutput = $true
-            break
-          }
-        }
-        if (-not $matchesRuntimeOutput) {
-          $matchedRuntimeOutput = GetUniqueUnqualifiedCaseInsensitiveTypeMatch `
-            @(GetTypeKeys ([string]$helpOutput.name) ([string]$helpOutput.clrTypeName)) `
-            $runtimeOutputByFoldedKey $runtimeOutputFoldedKeyCounts $helpOutputFoldedKeyCounts
-          if ($matchedRuntimeOutput -and
-              -not (TestConflictingQualifiedTypeIdentity ([string]$matchedRuntimeOutput.identity) $helpOutputIdentity)) {
-            $matchesRuntimeOutput = $true
-          }
-        }
-        if ($matchesRuntimeOutput) { continue }
-
-        if (-not $seenOutputIdentities.Add([string]$helpOutputIdentity)) { continue }
-        $outputs += [ordered]@{
-          name = [string]$helpOutput.name
-          clrTypeName = [string]$helpOutput.clrTypeName
-          description = [string]$helpOutput.description
-        }
-      }
-    }
-    $outputs = @(ConvertOutputsToXmlSafeDocumentationText @($outputs))
 
     $links = @()
     try {
@@ -775,18 +868,20 @@ try {
       parameters = @($parameters)
       examples = @($examples)
       inputs = @($inputs)
-      outputs = @($outputs)
+      outputs = @()
+      authoredOutputs = @($helpOutputs)
+      runtimeOutputs = @($runtimeOutputs)
       relatedLinks = @($links)
       notes = @()
     }
   }
 
   $outDir = Split-Path -Path $OutputJsonPath -Parent
-  if ($outDir) { [System.IO.Directory]::CreateDirectory($outDir) | Microsoft.PowerShell.Core\Out-Null }
-  $json = $result | Microsoft.PowerShell.Utility\ConvertTo-Json -Depth 8
+  if ($outDir) { [System.IO.Directory]::CreateDirectory($outDir) | Out-Null }
+  $json = $result | ConvertTo-Json -Depth 100
   [System.IO.File]::WriteAllText($OutputJsonPath, $json, [System.Text.UTF8Encoding]::new($false))
 
-  Microsoft.PowerShell.Utility\Write-Output 'PFDOCS::OK'
+  Write-Output 'PFDOCS::OK'
   exit 0
 } catch {
   EmitError $_.Exception.Message
