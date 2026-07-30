@@ -114,195 +114,101 @@ function ResolveCanonicalTypeName([string]$candidate) {
   return ($trimmed -replace '\s+', '')
 }
 
-function ConvertToRuntimeDefaultValue([object]$value) {
-  if ($null -eq $value) {
-    return [ordered]@{ kind = 'Null'; text = $null; name = $null; canonicalTypeName = $null; items = @() }
+function ConvertToUtf16CodeUnits([string]$text) {
+  $units = @()
+  foreach ($character in $text.ToCharArray()) {
+    $units += ([int]$character).ToString([System.Globalization.CultureInfo]::InvariantCulture)
   }
+  return ($units -join ',')
+}
 
-  $kind = 'Text'
-  $text = $null
-  $name = $null
-  $canonicalTypeName = $null
-  $items = @()
+function AddRuntimeDefaultValueTokens([object]$value, [System.Collections.IList]$tokens) {
+  if ($null -eq $value) {
+    $tokens.Add([ordered]@{ kind = 'Null' }) | Out-Null
+    return
+  }
 
   if ($value -is [string]) {
-    $kind = 'String'
-    $text = [string]$value
-  } elseif ($value -is [char]) {
-    $kind = 'Char'
-    $text = [string]$value
-  } elseif ($value -is [bool]) {
-    $kind = 'Boolean'
-    $text = [string]$value
-  } elseif ($value -is [enum]) {
-    $kind = 'Enum'
+    $tokens.Add([ordered]@{
+      kind = 'StringCodeUnits'
+      text = ConvertToUtf16CodeUnits ([string]$value)
+    }) | Out-Null
+    return
+  }
+  if ($value -is [char]) {
+    $tokens.Add([ordered]@{
+      kind = 'CharCodeUnit'
+      text = ([int][char]$value).ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    }) | Out-Null
+    return
+  }
+  if ($value -is [bool]) {
+    $tokens.Add([ordered]@{ kind = 'Boolean'; text = [string]$value }) | Out-Null
+    return
+  }
+  if ($value -is [enum]) {
     $enumType = $value.GetType()
-    $canonicalTypeName = GetCanonicalTypeNameFromType $enumType
-    $name = [System.Enum]::GetName($enumType, $value)
+    $underlyingType = [System.Enum]::GetUnderlyingType($enumType)
     $underlyingValue = [System.Convert]::ChangeType(
       $value,
-      [System.Enum]::GetUnderlyingType($enumType),
+      $underlyingType,
       [System.Globalization.CultureInfo]::InvariantCulture)
-<<<<<<< HEAD
-    $underlyingTypeName = GetCanonicalTypeNameFromType ([System.Enum]::GetUnderlyingType($enumType))
-    $enumTypeArgument = if ($enumTypeIsLiteral) { $enumTypeExpression } else { '(' + $enumTypeExpression + ')' }
-    return ('[System.Enum]::ToObject(' + $enumTypeArgument + ', ([' + $underlyingTypeName + ']' + $underlyingText + '))')
+    $tokens.Add([ordered]@{
+      kind = 'Enum'
+      text = [System.Convert]::ToString($underlyingValue, [System.Globalization.CultureInfo]::InvariantCulture)
+      name = [System.Enum]::GetName($enumType, $value)
+      canonicalTypeName = GetCanonicalTypeNameFromType $enumType
+      underlyingTypeName = GetCanonicalTypeNameFromType $underlyingType
+    }) | Out-Null
+    return
   }
   if ($value -is [type]) {
-    if (-not (TestGenuineRuntimeTypeValue $value)) {
-      throw 'Delegated or custom Type defaults are not supported.'
-    }
-    return GetPowerShellTypeDefaultExpression $value
+    $tokens.Add([ordered]@{
+      kind = 'Type'
+      canonicalTypeName = GetCanonicalTypeNameFromType $value
+    }) | Out-Null
+    return
   }
   if ($value -is [double]) {
-    if ([double]::IsNaN($value)) {
-      $bits = [System.BitConverter]::DoubleToInt64Bits($value)
-      return ('[System.BitConverter]::Int64BitsToDouble(([long]' +
-        $bits.ToString([System.Globalization.CultureInfo]::InvariantCulture) + '))')
-    }
-    if ([double]::IsPositiveInfinity($value)) { return '[double]::PositiveInfinity' }
-    if ([double]::IsNegativeInfinity($value)) { return '[double]::NegativeInfinity' }
-    if ($value -eq 0) {
-      if ([System.BitConverter]::DoubleToInt64Bits($value) -lt 0) { return '([double]-0.0)' }
-      return '([double]0.0)'
-    }
-    return ('([double]' + $value.ToString('G17', [System.Globalization.CultureInfo]::InvariantCulture) + ')')
+    $tokens.Add([ordered]@{
+      kind = 'Double'
+      text = $value.ToString('G17', [System.Globalization.CultureInfo]::InvariantCulture)
+    }) | Out-Null
+    return
   }
   if ($value -is [single]) {
-    if ([single]::IsNaN($value)) {
-      $bits = [System.BitConverter]::ToInt32([System.BitConverter]::GetBytes([single]$value), 0)
-      return ('[System.BitConverter]::ToSingle([System.BitConverter]::GetBytes(([int]' +
-        $bits.ToString([System.Globalization.CultureInfo]::InvariantCulture) + ')), 0)')
-    }
-    if ([single]::IsPositiveInfinity($value)) { return '[single]::PositiveInfinity' }
-    if ([single]::IsNegativeInfinity($value)) { return '[single]::NegativeInfinity' }
-    if ($value -eq 0) {
-      $bits = [System.BitConverter]::ToInt32([System.BitConverter]::GetBytes([single]$value), 0)
-      if ($bits -lt 0) { return '([single]-0.0)' }
-      return '([single]0.0)'
-    }
-    return ('([single]' + $value.ToString('G9', [System.Globalization.CultureInfo]::InvariantCulture) + ')')
+    $tokens.Add([ordered]@{
+      kind = 'Single'
+      text = $value.ToString('G9', [System.Globalization.CultureInfo]::InvariantCulture)
+    }) | Out-Null
+    return
   }
-  if ($value -is [decimal]) {
-    $bits = [System.Decimal]::GetBits($value)
-    $isNegative = if ($bits[3] -lt 0) { '$true' } else { '$false' }
-    $scale = (($bits[3] -shr 16) -band 0xFF)
-    return ('[System.Decimal]::new(([int]' + $bits[0].ToString([System.Globalization.CultureInfo]::InvariantCulture) +
-      '), ([int]' + $bits[1].ToString([System.Globalization.CultureInfo]::InvariantCulture) +
-      '), ([int]' + $bits[2].ToString([System.Globalization.CultureInfo]::InvariantCulture) +
-      '), ' + $isNegative + ', ([byte]' + $scale.ToString([System.Globalization.CultureInfo]::InvariantCulture) + '))')
-  }
-  if (TestExactRuntimeValueType $value ([System.Numerics.BigInteger])) {
-    $integerText = $value.ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    return ("[System.Numerics.BigInteger]::Parse('" + $integerText + "', [System.Globalization.CultureInfo]::InvariantCulture)")
-  }
-  if ($value -is [guid]) {
-    return ("[System.Guid]::ParseExact('" + $value.ToString('D') + "', 'D')")
-  }
-  if ($value -is [version]) {
-    $versionText = $value.ToString().Replace("'", "''")
-    return ("[System.Version]::Parse('" + $versionText + "')")
-  }
-  if (TestExactRuntimeValueType $value ([uri])) {
-    if ($value.UserEscaped) {
-      throw 'User-escaped Uri defaults are not supported.'
-    }
-    $uriText = ConvertToPowerShellDefaultValue $value.OriginalString $referenceStack
-    $uriKind = if ($value.IsAbsoluteUri) { 'Absolute' } else { 'Relative' }
-    $reconstructedUri = [System.Uri]::new($value.OriginalString, [System.UriKind]$uriKind)
-    $uriStateMatches =
-      $reconstructedUri.OriginalString -ceq $value.OriginalString -and
-      $reconstructedUri.ToString() -ceq $value.ToString() -and
-      $reconstructedUri.UserEscaped -eq $value.UserEscaped
-    if ($value.IsAbsoluteUri) {
-      $uriStateMatches = $uriStateMatches -and
-        $reconstructedUri.AbsoluteUri -ceq $value.AbsoluteUri -and
-        $reconstructedUri.PathAndQuery -ceq $value.PathAndQuery
-    }
-    if (-not $uriStateMatches) {
-      throw 'Uri defaults with noncanonical reconstruction state are not supported.'
-    }
-    return ('[System.Uri]::new(' + $uriText + ', [System.UriKind]::' + $uriKind + ')')
-  }
-  if (TestExactRuntimeValueType $value (GetCoreRuntimeType 'System.DateOnly')) {
-    $dayNumber = $value.DayNumber.ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    return ('[System.DateOnly]::FromDayNumber(([int]' + $dayNumber + '))')
-  }
-  if (TestExactRuntimeValueType $value (GetCoreRuntimeType 'System.TimeOnly')) {
-    $ticks = $value.Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    return ('[System.TimeOnly]::new(([long]' + $ticks + '))')
-  }
-  if ($value -is [datetime]) {
-    if ($value.Kind -eq [System.DateTimeKind]::Local -and
-        [System.TimeZoneInfo]::Local.IsAmbiguousTime($value)) {
-      throw 'Ambiguous local DateTime defaults cannot be represented portably.'
-    }
-    $ticks = $value.Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    return ('[System.DateTime]::new(([long]' + $ticks + '), [System.DateTimeKind]::' + $value.Kind + ')')
-  }
-  if ($value -is [datetimeoffset]) {
-    $dateText = $value.ToString('O', [System.Globalization.CultureInfo]::InvariantCulture)
-    return ("[System.DateTimeOffset]::ParseExact('" + $dateText + "', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)")
-  }
-  if ($value -is [timespan]) {
-    $timeText = $value.ToString('c', [System.Globalization.CultureInfo]::InvariantCulture)
-    return ("[System.TimeSpan]::ParseExact('" + $timeText + "', 'c', [System.Globalization.CultureInfo]::InvariantCulture)")
-  }
-  if ($value -is [scriptblock]) {
-    if (-not (TestRecreatableScriptBlock $value)) {
-      throw 'Stateful, module-bound, or constrained ScriptBlock defaults are not supported.'
-    }
-    $scriptText = ConvertToPowerShellDefaultValue ([string]$value.ToString())
-    return ('[scriptblock]::Create(' + $scriptText + ')')
-  }
-  if ($value -is [System.Collections.IDictionary] -or
-      $value -is [System.Collections.IEnumerable]) {
-    foreach ($seenReference in $referenceStack) {
-      if ([object]::ReferenceEquals($seenReference, $value)) {
-        throw 'Repeated or circular default-value collection references are not supported.'
-      }
-    }
-    [void]$referenceStack.Add($value)
-    if ($value -is [System.Collections.IDictionary]) {
-      return ConvertDictionaryToPowerShellDefaultValue $value $referenceStack
-    }
-    if ($value -isnot [System.Collections.IList] -and $value -isnot [System.Array]) {
-      throw ('Unsupported enumerable default type: ' + $value.GetType().FullName)
-    }
-    if ($value -is [System.Array] -and
-        ($value.Rank -gt 1 -or $value.GetType() -ne $value.GetType().GetElementType().MakeArrayType())) {
-      return ConvertMultidimensionalArrayToPowerShellDefaultValue $value $referenceStack
-    }
-    $items = [System.Collections.Generic.List[string]]::new()
-=======
-    $text = [System.Convert]::ToString($underlyingValue, [System.Globalization.CultureInfo]::InvariantCulture)
-  } elseif ($value -is [type]) {
-    $kind = 'Type'
-    $canonicalTypeName = GetCanonicalTypeNameFromType $value
-  } elseif ($value -is [double]) {
-    $kind = 'Double'
-    $text = $value.ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
-  } elseif ($value -is [single]) {
-    $kind = 'Single'
-    $text = $value.ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
-  } elseif ($value -is [System.Collections.IEnumerable]) {
-    $kind = 'Collection'
->>>>>>> e2bda78a (Move documentation normalization into C#)
+  if ($value -is [System.Collections.IEnumerable]) {
+    $tokens.Add([ordered]@{ kind = 'CollectionStart' }) | Out-Null
     foreach ($item in $value) {
-      $items += ConvertToRuntimeDefaultValue $item
+      AddRuntimeDefaultValueTokens $item $tokens
     }
-  } elseif ($value -is [System.IFormattable]) {
-    $kind = 'Formattable'
-    $text = $value.ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
-  } else {
-    $text = [string]$value
+    $tokens.Add([ordered]@{ kind = 'CollectionEnd' }) | Out-Null
+    return
   }
+  if ($value -is [System.IFormattable]) {
+    $tokens.Add([ordered]@{
+      kind = 'Formattable'
+      text = $value.ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
+    }) | Out-Null
+    return
+  }
+  $tokens.Add([ordered]@{
+    kind = 'TextCodeUnits'
+    text = ConvertToUtf16CodeUnits ([string]$value)
+  }) | Out-Null
+}
+
+function ConvertToRuntimeDefaultValue([object]$value) {
+  $tokens = [System.Collections.ArrayList]::new()
+  AddRuntimeDefaultValueTokens $value $tokens
   return [ordered]@{
-    kind = $kind
-    text = $text
-    name = $name
-    canonicalTypeName = $canonicalTypeName
-    items = @($items)
+    tokens = @($tokens)
   }
 }
 
@@ -450,7 +356,6 @@ try {
         $typeName = ''
       }
       $possibleValues = @()
-      $enumPossibleValues = @()
 
       $required = $false
       $parameterSetRequired = @{}
@@ -514,10 +419,7 @@ try {
         if ($enumType -and $enumType.IsArray) { $enumType = $enumType.GetElementType() }
         if ($enumType -and $enumType.IsEnum) {
           foreach ($enumName in [System.Enum]::GetNames($enumType)) {
-            if ($enumName -and
-                (ConvertToXmlSafeDefaultHelpText ([string]$enumName)) -ceq [string]$enumName) {
-              $enumPossibleValues += [string]$enumName
-            }
+            if ($enumName) { $possibleValues += [string]$enumName }
           }
         }
       } catch {
@@ -570,13 +472,7 @@ try {
           # keep the metadata-derived default when Get-Help omits or reshapes Globbing
         }
       }
-<<<<<<< HEAD
-      $possibleValues = @(MergeParameterPossibleValues @($possibleValues) @($enumPossibleValues))
-
       $sets = @()
-=======
-      $sets = @()
->>>>>>> e2bda78a (Move documentation normalization into C#)
       if ($paramSets.ContainsKey($pn)) { $sets = @($paramSets[$pn]) }
       if (-not $sets -or $sets.Count -eq 0) { $sets = @('(All)') }
 
@@ -733,8 +629,6 @@ try {
           $canonicalTypeName = GetCanonicalTypeNameFromType $runtimeType
         }
         if (-not $typeClrName) { try { $typeClrName = [string]$rv.Type.FullName } catch { $typeClrName = '' } }
-        $typeName = $typeName.Trim()
-        $typeClrName = $typeClrName.Trim()
         if (-not $typeClrName) { $typeClrName = $typeName }
         if (-not $typeName) { continue }
         if (-not $canonicalTypeName) {
@@ -765,88 +659,11 @@ try {
       # best effort: older hosts can omit or reshape ReturnValues entirely
     }
 
-<<<<<<< HEAD
-    $outputs = @()
-    $seenOutputIdentities = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
-    $seenRuntimeOutputIdentities = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
-    $runtimeOutputKeys = [System.Collections.Generic.Dictionary[string,bool]]::new([System.StringComparer]::Ordinal)
-    $runtimeOutputByKey = [System.Collections.Generic.Dictionary[string,object]]::new([System.StringComparer]::Ordinal)
-    $runtimeOutputKeyCounts = [System.Collections.Generic.Dictionary[string,int]]::new([System.StringComparer]::Ordinal)
-    $runtimeOutputByFoldedKey = [System.Collections.Generic.Dictionary[string,object]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    $runtimeOutputFoldedKeyCounts = [System.Collections.Generic.Dictionary[string,int]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    $runtimeOutputMetadata = @()
-    $runtimeOutputIdentityCounts = [System.Collections.Generic.Dictionary[string,int]]::new([System.StringComparer]::Ordinal)
-    try {
-      foreach ($outputType in @($c.OutputType)) {
-        $metadata = GetOutputTypeMetadata $outputType
-        if (-not $metadata -or -not $metadata.identity) { continue }
-        $runtimeIdentity = if ($metadata.runtimeIdentity) { [string]$metadata.runtimeIdentity } else { [string]$metadata.identity }
-        if (-not $seenRuntimeOutputIdentities.Add($runtimeIdentity)) { continue }
-        [void]$seenOutputIdentities.Add([string]$metadata.identity)
-        $runtimeOutputMetadata += $metadata
-        $runtimeOutputIdentityCounts[[string]$metadata.identity] =
-          if ($runtimeOutputIdentityCounts.ContainsKey([string]$metadata.identity)) {
-            [int]$runtimeOutputIdentityCounts[[string]$metadata.identity] + 1
-          } else { 1 }
-        foreach ($key in @($metadata.keys)) { $runtimeOutputKeys[$key] = $true }
-        AddTypeKeysToIndexes $metadata @($metadata.keys) `
-          $runtimeOutputByKey $runtimeOutputKeyCounts $runtimeOutputByFoldedKey $runtimeOutputFoldedKeyCounts
-      }
-
-      foreach ($metadata in $runtimeOutputMetadata) {
-        $typeDesc = ''
-        $displayName = [string]$metadata.name
-        $displayClrTypeName = [string]$metadata.clrTypeName
-        $exactHelpMatch = $null
-        foreach ($key in @($metadata.keys)) {
-          if ($helpOutputByKey.ContainsKey($key) -and
-              [int]$helpOutputKeyCounts[$key] -eq 1 -and
-              [int]$runtimeOutputKeyCounts[$key] -eq 1) {
-            $matchedHelpOutput = $helpOutputByKey[$key]
-            $matchedHelpIdentity = GetTypeIdentity ([string]$matchedHelpOutput.name) ([string]$matchedHelpOutput.clrTypeName)
-            if (TestConflictingQualifiedTypeIdentity ([string]$metadata.identity) $matchedHelpIdentity) {
-              continue
-            }
-            $exactHelpMatch = $matchedHelpOutput
-            $typeDesc = [string]$matchedHelpOutput.description
-            if (-not [string]::IsNullOrWhiteSpace([string]$matchedHelpOutput.name)) {
-              $displayName = [string]$matchedHelpOutput.name
-            }
-            break
-          }
-        }
-        if ($null -eq $exactHelpMatch) {
-          $matchedHelpOutput = GetUniqueUnqualifiedCaseInsensitiveTypeMatch @($metadata.keys) `
-            $helpOutputByFoldedKey $helpOutputFoldedKeyCounts $runtimeOutputFoldedKeyCounts
-          if ($matchedHelpOutput) {
-            $matchedHelpIdentity = GetTypeIdentity ([string]$matchedHelpOutput.name) ([string]$matchedHelpOutput.clrTypeName)
-            if (-not (TestConflictingQualifiedTypeIdentity ([string]$metadata.identity) $matchedHelpIdentity)) {
-              $typeDesc = [string]$matchedHelpOutput.description
-              if (-not [string]::IsNullOrWhiteSpace([string]$matchedHelpOutput.name)) {
-                $displayName = [string]$matchedHelpOutput.name
-              }
-            }
-          }
-        }
-
-        if ([int]$runtimeOutputIdentityCounts[[string]$metadata.identity] -gt 1 -and
-            -not [string]::IsNullOrWhiteSpace([string]$metadata.assemblyQualifiedName)) {
-          $displayName = [string]$metadata.assemblyQualifiedName
-          $displayClrTypeName = [string]$metadata.assemblyQualifiedName
-        }
-
-        $outputs += [ordered]@{
-          name = $displayName
-          clrTypeName = $displayClrTypeName
-          description = $typeDesc
-        }
-=======
     $runtimeOutputs = @()
     try {
       foreach ($outputType in @($c.OutputType)) {
         $snapshot = GetOutputTypeSnapshot $outputType
         if ($snapshot) { $runtimeOutputs += $snapshot }
->>>>>>> e2bda78a (Move documentation normalization into C#)
       }
     } catch {
       # best effort: command metadata may not expose OutputType uniformly across hosts

@@ -27,6 +27,18 @@ public sealed class DocumentationMetadataNormalizerTests
             CanonicalTypeName = "Example.Mode",
             Text = "3"
         }));
+        Assert.Equal("[System.Enum]::ToObject([Example.UnsignedMode], ([System.UInt64]18446744073709551614))", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+        {
+            Kind = "Enum",
+            CanonicalTypeName = "Example.UnsignedMode",
+            UnderlyingTypeName = "System.UInt64",
+            Text = "18446744073709551614"
+        }));
+        Assert.Equal("([char]120)", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+        {
+            Kind = "Char",
+            Text = "x"
+        }));
         Assert.Equal("[System.String]", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
         {
             Kind = "Type",
@@ -56,6 +68,25 @@ public sealed class DocumentationMetadataNormalizerTests
         Assert.DoesNotContain('\0', formatted);
         Assert.DoesNotContain('\r', formatted);
         Assert.DoesNotContain('\n', formatted);
+    }
+
+    [Fact]
+    public void DefaultValueFormatter_DecodesFlatNestedTokensAndUnpairedSurrogates()
+    {
+        var tokens = new List<DocumentationRuntimeValue>();
+        for (var index = 0; index < 120; index++)
+            tokens.Add(new DocumentationRuntimeValue { Kind = "CollectionStart" });
+        tokens.Add(new DocumentationRuntimeValue { Kind = "StringCodeUnits", Text = "55296" });
+        for (var index = 0; index < 120; index++)
+            tokens.Add(new DocumentationRuntimeValue { Kind = "CollectionEnd" });
+
+        var formatted = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+        {
+            Tokens = tokens
+        });
+
+        Assert.Equal(NestedExpression(120, "(-join @(([char]55296)))"), formatted);
+        Assert.DoesNotContain('\uFFFD', formatted);
     }
 
     [Fact]
@@ -124,6 +155,28 @@ public sealed class DocumentationMetadataNormalizerTests
     }
 
     [Fact]
+    public void Normalize_PreservesClrOutputIdentitiesThatDifferOnlyByCase()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Get-CaseVariants",
+            CommandType = "Cmdlet",
+            RuntimeOutputs =
+            [
+                Type("Result", "Example.Result"),
+                Type("RESULT", "Example.RESULT")
+            ]
+        };
+
+        DocumentationMetadataNormalizer.Normalize(PayloadWith(command));
+
+        Assert.Collection(
+            command.Outputs,
+            output => Assert.Equal("Example.Result", output.CanonicalTypeName),
+            output => Assert.Equal("Example.RESULT", output.CanonicalTypeName));
+    }
+
+    [Fact]
     public void Normalize_PreservesAuthoredFallbackButSuppressesSyntheticObjectOutput()
     {
         var command = new DocumentationCommandHelp
@@ -179,4 +232,12 @@ public sealed class DocumentationMetadataNormalizerTests
             CanonicalTypeName = canonicalTypeName,
             Description = description
         };
+
+    private static string NestedExpression(int depth, string value)
+    {
+        var result = value;
+        for (var index = 0; index < depth; index++)
+            result = "@(" + result + ")";
+        return result;
+    }
 }

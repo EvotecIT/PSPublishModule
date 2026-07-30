@@ -70,7 +70,7 @@ internal static class DocumentationMetadataNormalizer
         var authoredIndex = BuildIndex(authoredOutputs);
         var runtimeIndex = BuildIndex(runtimeOutputs);
         var outputs = new List<DocumentationTypeHelp>();
-        var seenIdentities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenIdentities = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var runtimeOutput in runtimeOutputs)
         {
@@ -140,7 +140,7 @@ internal static class DocumentationMetadataNormalizer
     private static List<DocumentationTypeHelp> DeduplicateByIdentity(IEnumerable<DocumentationTypeHelp> values)
     {
         var result = new List<DocumentationTypeHelp>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var value in values)
         {
             if (value is null) continue;
@@ -212,7 +212,7 @@ internal static class DocumentationMetadataNormalizer
             : Whitespace.Replace(candidate!.Trim(), string.Empty);
 
     private static bool HasConflictingQualifiedIdentity(string left, string right)
-        => !left.Equals(right, StringComparison.OrdinalIgnoreCase) &&
+        => !left.Equals(right, StringComparison.Ordinal) &&
            IsQualified(left) &&
            IsQualified(right);
 

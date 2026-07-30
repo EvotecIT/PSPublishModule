@@ -35,7 +35,7 @@ function Get-CollectorFixture {
 
         $nestedDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $nested = 1
-        foreach ($index in 1..12) { $nested = ,$nested }
+        foreach ($index in 1..80) { $nested = ,$nested }
         $nestedDefault.Value = $nested
         $attributes.Add($nestedDefault)
 
@@ -60,6 +60,17 @@ function Get-CollectorFixture {
                 'HelpWins',
                 [object],
                 $helpAttributes))
+
+        $surrogateAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $surrogateDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $surrogateDefault.Value = [string][char]0xD800
+        $surrogateAttributes.Add($surrogateDefault)
+        $parameters.Add(
+            'InvalidSurrogate',
+            [System.Management.Automation.RuntimeDefinedParameter]::new(
+                'InvalidSurrogate',
+                [string],
+                $surrogateAttributes))
 
         $parameters
     }
@@ -126,13 +137,17 @@ function Get-AcceleratedOutput {
                     item => item.Name == "Get-CollectorFixture");
                 var nested = Assert.Single(command.Parameters, parameter => parameter.Name == "Nested");
                 var helpWins = Assert.Single(command.Parameters, parameter => parameter.Name == "HelpWins");
+                var invalidSurrogate = Assert.Single(
+                    command.Parameters,
+                    parameter => parameter.Name == "InvalidSurrogate");
                 var accelerated = Assert.Single(
                     payload.Commands,
                     item => item.Name == "Get-AcceleratedOutput");
                 var acceleratedOutput = Assert.Single(accelerated.Outputs);
 
-                Assert.Equal(NestedExpression(12, "1"), nested.DefaultValue);
+                Assert.Equal(NestedExpression(80, "1"), nested.DefaultValue);
                 Assert.Equal("authored display value", helpWins.DefaultValue);
+                Assert.Equal("(-join @(([char]55296)))", invalidSurrogate.DefaultValue);
                 Assert.Equal("System.String", acceleratedOutput.ClrTypeName);
                 Assert.Equal("An authored accelerator description.", acceleratedOutput.Description);
             }

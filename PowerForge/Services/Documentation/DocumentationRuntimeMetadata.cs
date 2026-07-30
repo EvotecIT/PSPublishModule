@@ -26,7 +26,18 @@ internal sealed class DocumentationRuntimeValue
     [DataMember(Name = "canonicalTypeName")]
     public string? CanonicalTypeName { get; set; }
 
+    /// <summary>Canonical CLR enum underlying type observed inside the PowerShell host.</summary>
+    [DataMember(Name = "underlyingTypeName")]
+    public string? UnderlyingTypeName { get; set; }
+
     /// <summary>Recursively captured collection elements.</summary>
     [DataMember(Name = "items")]
     public List<DocumentationRuntimeValue> Items { get; set; } = new();
+
+    /// <summary>
+    /// Flat structural token stream used by the host collector so JSON depth does
+    /// not depend on the nesting depth of the captured runtime value.
+    /// </summary>
+    [DataMember(Name = "tokens")]
+    public List<DocumentationRuntimeValue> Tokens { get; set; } = new();
 }

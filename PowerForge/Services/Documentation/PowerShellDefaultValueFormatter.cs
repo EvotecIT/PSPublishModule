@@ -19,6 +19,8 @@ internal static class PowerShellDefaultValueFormatter
     public static string Format(DocumentationRuntimeValue? value)
     {
         if (value is null) return string.Empty;
+        if (value.Tokens is { Count: > 0 })
+            return FormatTokens(value.Tokens);
 
         switch ((value.Kind ?? string.Empty).Trim().ToLowerInvariant())
         {
@@ -26,8 +28,12 @@ internal static class PowerShellDefaultValueFormatter
                 return "$null";
             case "string":
                 return FormatString(value.Text ?? string.Empty, preserveCharacterType: false);
+            case "stringcodeunits":
+                return FormatString(DecodeCodeUnits(value.Text), preserveCharacterType: false);
             case "char":
                 return FormatString(value.Text ?? string.Empty, preserveCharacterType: true);
+            case "charcodeunit":
+                return FormatCharacterCodeUnit(value.Text);
             case "boolean":
                 return string.Equals(value.Text, "True", StringComparison.OrdinalIgnoreCase)
                     ? "$true"
@@ -47,6 +53,8 @@ internal static class PowerShellDefaultValueFormatter
             case "formattable":
             case "text":
                 return value.Text ?? string.Empty;
+            case "textcodeunits":
+                return DecodeCodeUnits(value.Text);
             default:
                 return value.Text ?? string.Empty;
         }
@@ -73,7 +81,11 @@ internal static class PowerShellDefaultValueFormatter
         if (typeName.Length == 0) return value.Text ?? string.Empty;
         if (!string.IsNullOrWhiteSpace(value.Name))
             return "[" + typeName + "]::" + value.Name!.Trim();
-        return "[System.Enum]::ToObject([" + typeName + "], " + (value.Text ?? string.Empty) + ")";
+        var numericValue = value.Text ?? string.Empty;
+        var underlyingTypeName = (value.UnderlyingTypeName ?? string.Empty).Trim();
+        if (underlyingTypeName.Length > 0)
+            numericValue = "([" + underlyingTypeName + "]" + numericValue + ")";
+        return "[System.Enum]::ToObject([" + typeName + "], " + numericValue + ")";
     }
 
     private static string FormatFloatingPoint(string? text, string powerShellType)
@@ -91,14 +103,14 @@ internal static class PowerShellDefaultValueFormatter
 
     private static string FormatString(string text, bool preserveCharacterType)
     {
-        if (!NeedsEncoding(text))
-            return "'" + text.Replace("'", "''") + "'";
-
         if (preserveCharacterType)
         {
             var character = text.Length > 0 ? text[0] : '\0';
             return "([char]" + ((int)character).ToString(CultureInfo.InvariantCulture) + ")";
         }
+
+        if (!NeedsEncoding(text))
+            return "'" + text.Replace("'", "''") + "'";
 
         var parts = new List<string>();
         var segment = new List<char>();
@@ -124,5 +136,69 @@ internal static class PowerShellDefaultValueFormatter
 
         FlushSegment();
         return "(-join @(" + string.Join(", ", parts) + "))";
+    }
+
+    private static string FormatTokens(IReadOnlyList<DocumentationRuntimeValue> tokens)
+    {
+        var collections = new Stack<List<string>>();
+        string? result = null;
+
+        foreach (var token in tokens)
+        {
+            var kind = (token.Kind ?? string.Empty).Trim();
+            if (kind.Equals("CollectionStart", StringComparison.OrdinalIgnoreCase))
+            {
+                collections.Push(new List<string>());
+                continue;
+            }
+
+            if (kind.Equals("CollectionEnd", StringComparison.OrdinalIgnoreCase))
+            {
+                if (collections.Count == 0)
+                    throw new FormatException("The runtime default token stream contains an unexpected collection terminator.");
+                Append("@(" + string.Join(", ", collections.Pop()) + ")");
+                continue;
+            }
+
+            Append(Format(token));
+        }
+
+        if (collections.Count > 0)
+            throw new FormatException("The runtime default token stream is missing a collection terminator.");
+        return result ?? throw new FormatException("The runtime default token stream is empty.");
+
+        void Append(string value)
+        {
+            if (collections.Count > 0)
+            {
+                collections.Peek().Add(value);
+                return;
+            }
+
+            if (result is not null)
+                throw new FormatException("The runtime default token stream contains trailing values.");
+            result = value;
+        }
+    }
+
+    private static string FormatCharacterCodeUnit(string? text)
+    {
+        if (!ushort.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var value))
+            throw new FormatException("The runtime default character code unit is invalid.");
+        return "([char]" + value.ToString(CultureInfo.InvariantCulture) + ")";
+    }
+
+    private static string DecodeCodeUnits(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+        var values = text!.Split(',');
+        var characters = new char[values.Length];
+        for (var index = 0; index < values.Length; index++)
+        {
+            if (!ushort.TryParse(values[index], NumberStyles.None, CultureInfo.InvariantCulture, out var value))
+                throw new FormatException("The runtime default UTF-16 code-unit sequence is invalid.");
+            characters[index] = (char)value;
+        }
+        return new string(characters);
     }
 }
