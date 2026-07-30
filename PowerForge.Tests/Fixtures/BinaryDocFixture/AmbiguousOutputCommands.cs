@@ -24,6 +24,13 @@ namespace BinaryDocFixture
     {
     }
 
+    /// <summary>Returns one qualified output type while stale help names another.</summary>
+    [Cmdlet(VerbsCommon.Get, "BinaryDocConflictingOutput")]
+    [OutputType(typeof(OutputA.Result))]
+    public sealed class GetBinaryDocConflictingOutputCommand : PSCmdlet
+    {
+    }
+
     /// <summary>Returns two distinct output types that share a short name.</summary>
     [Cmdlet(VerbsCommon.Get, "BinaryDocAmbiguousOutputs")]
     [OutputType(typeof(OutputA.Result), typeof(OutputB.Result))]

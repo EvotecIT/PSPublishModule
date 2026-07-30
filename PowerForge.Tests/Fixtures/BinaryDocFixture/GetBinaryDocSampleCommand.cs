@@ -111,6 +111,26 @@ public sealed class GetBinaryDocEmptyDefaultCommand : PSCmdlet
     [PSDefaultValue(Value = new[] { typeof(string), typeof(int) })]
     public Type[] ValueTypes { get; set; } = [typeof(string), typeof(int)];
 
+    /// <summary>An optional value whose authored default help contains an XML-invalid control.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = "unused", Help = "\0")]
+    public string ControlHelp { get; set; } = "unused";
+
+    /// <summary>An optional multiline value containing a Markdown fence line.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = "first\n```\nlast")]
+    public string FenceText { get; set; } = "first\n```\nlast";
+
+    /// <summary>An optional non-finite double value.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = double.NaN)]
+    public double NotANumber { get; set; } = double.NaN;
+
+    /// <summary>Optional non-finite single-precision values.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = new[] { float.PositiveInfinity, float.NegativeInfinity })]
+    public float[] Infinities { get; set; } = [float.PositiveInfinity, float.NegativeInfinity];
+
     /// <summary>An optional value whose declared default is explicitly null.</summary>
     [Parameter]
     [PSDefaultValue(Value = null)]

@@ -24,18 +24,22 @@ function GetText([object]$obj) {
   try { return [string]$obj } catch { return '' }
 }
 
+function TestDefaultTextNeedsEncoding([string]$text) {
+  foreach ($character in $text.ToCharArray()) {
+    if ($character -eq "`r" -or
+        $character -eq "`n" -or
+        -not [System.Xml.XmlConvert]::IsXmlChar($character)) {
+      return $true
+    }
+  }
+  return $false
+}
+
 function ConvertToPowerShellDefaultValue([object]$value) {
   if ($null -eq $value) { return '$null' }
   if ($value -is [string] -or $value -is [char]) {
     $text = [string]$value
-    $containsInvalidXmlCharacter = $false
-    foreach ($character in $text.ToCharArray()) {
-      if (-not [System.Xml.XmlConvert]::IsXmlChar($character)) {
-        $containsInvalidXmlCharacter = $true
-        break
-      }
-    }
-    if (-not $containsInvalidXmlCharacter) {
+    if (-not (TestDefaultTextNeedsEncoding $text)) {
       return ("'" + $text.Replace("'", "''") + "'")
     }
     if ($value -is [char]) {
@@ -44,7 +48,9 @@ function ConvertToPowerShellDefaultValue([object]$value) {
     $parts = @()
     $segment = ''
     foreach ($character in $text.ToCharArray()) {
-      if ([System.Xml.XmlConvert]::IsXmlChar($character)) {
+      if ($character -ne "`r" -and
+          $character -ne "`n" -and
+          [System.Xml.XmlConvert]::IsXmlChar($character)) {
         $segment += $character
         continue
       }
@@ -77,6 +83,16 @@ function ConvertToPowerShellDefaultValue([object]$value) {
   }
   if ($value -is [type]) {
     return ('[' + (GetCanonicalTypeNameFromType $value) + ']')
+  }
+  if ($value -is [double]) {
+    if ([double]::IsNaN($value)) { return '[double]::NaN' }
+    if ([double]::IsPositiveInfinity($value)) { return '[double]::PositiveInfinity' }
+    if ([double]::IsNegativeInfinity($value)) { return '[double]::NegativeInfinity' }
+  }
+  if ($value -is [single]) {
+    if ([single]::IsNaN($value)) { return '[single]::NaN' }
+    if ([single]::IsPositiveInfinity($value)) { return '[single]::PositiveInfinity' }
+    if ([single]::IsNegativeInfinity($value)) { return '[single]::NegativeInfinity' }
   }
   if ($value -is [System.Collections.IEnumerable]) {
     $items = @()
@@ -151,6 +167,20 @@ function GetTypeIdentity([string]$name, [string]$clrName) {
     if ($identity) { return $identity }
   }
   return ''
+}
+
+function TestQualifiedTypeIdentity([string]$identity) {
+  if ([string]::IsNullOrWhiteSpace($identity)) { return $false }
+  $baseName = $identity
+  $genericIndex = $baseName.IndexOf('[')
+  if ($genericIndex -ge 0) { $baseName = $baseName.Substring(0, $genericIndex) }
+  return $baseName.Contains('.') -or $baseName.Contains('+')
+}
+
+function TestConflictingQualifiedTypeIdentity([string]$left, [string]$right) {
+  return $left -ne $right -and
+    (TestQualifiedTypeIdentity $left) -and
+    (TestQualifiedTypeIdentity $right)
 }
 
 function GetOutputTypeMetadata([object]$outputType) {
@@ -330,8 +360,13 @@ try {
               $acceptWild = $true
             }
             if ($attr -is [System.Management.Automation.PSDefaultValueAttribute]) {
-              if (-not [string]::IsNullOrWhiteSpace([string]$attr.Help)) {
-                $defaultValue = [string]$attr.Help
+              $defaultHelp = [string]$attr.Help
+              if (-not [string]::IsNullOrWhiteSpace($defaultHelp)) {
+                if (TestDefaultTextNeedsEncoding $defaultHelp) {
+                  $defaultValue = ConvertToPowerShellDefaultValue $defaultHelp
+                } else {
+                  $defaultValue = $defaultHelp
+                }
               } else {
                 $defaultValue = ConvertToPowerShellDefaultValue $attr.Value
               }
@@ -594,6 +629,7 @@ try {
     $outputs = @()
     $seenOutputIdentities = @{}
     $runtimeOutputKeys = @{}
+    $runtimeOutputByKey = @{}
     $runtimeOutputKeyCounts = @{}
     $runtimeOutputMetadata = @()
     try {
@@ -605,6 +641,9 @@ try {
         $runtimeOutputMetadata += $metadata
         foreach ($key in @($metadata.keys)) {
           $runtimeOutputKeys[$key] = $true
+          if (-not $runtimeOutputByKey.ContainsKey($key)) {
+            $runtimeOutputByKey[$key] = $metadata
+          }
           if ($runtimeOutputKeyCounts.ContainsKey($key)) {
             $runtimeOutputKeyCounts[$key] = [int]$runtimeOutputKeyCounts[$key] + 1
           } else {
@@ -619,7 +658,12 @@ try {
           if ($helpOutputByKey.ContainsKey($key) -and
               [int]$helpOutputKeyCounts[$key] -eq 1 -and
               [int]$runtimeOutputKeyCounts[$key] -eq 1) {
-            $typeDesc = [string]$helpOutputByKey[$key].description
+            $matchedHelpOutput = $helpOutputByKey[$key]
+            $matchedHelpIdentity = GetTypeIdentity ([string]$matchedHelpOutput.name) ([string]$matchedHelpOutput.clrTypeName)
+            if (TestConflictingQualifiedTypeIdentity ([string]$metadata.identity) $matchedHelpIdentity) {
+              continue
+            }
+            $typeDesc = [string]$matchedHelpOutput.description
             break
           }
         }
@@ -649,6 +693,10 @@ try {
           if ($runtimeOutputKeys.ContainsKey($key) -and
               [int]$helpOutputKeyCounts[$key] -eq 1 -and
               [int]$runtimeOutputKeyCounts[$key] -eq 1) {
+            $matchedRuntimeOutput = $runtimeOutputByKey[$key]
+            if (TestConflictingQualifiedTypeIdentity ([string]$matchedRuntimeOutput.identity) $helpOutputIdentity) {
+              continue
+            }
             $matchesRuntimeOutput = $true
             break
           }

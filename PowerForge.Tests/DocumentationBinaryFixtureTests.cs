@@ -134,7 +134,7 @@ public sealed class DocumentationBinaryFixtureTests
     Author = 'PowerForge.Tests'
     Description = 'Binary fixture module for empty-default extraction tests.'
     FunctionsToExport = @()
-    CmdletsToExport = @('Get-BinaryDocEmptyDefault', 'Get-BinaryDocAuthoredOutput', 'Get-BinaryDocAmbiguousOutputs')
+    CmdletsToExport = @('Get-BinaryDocEmptyDefault', 'Get-BinaryDocAuthoredOutput', 'Get-BinaryDocConflictingOutput', 'Get-BinaryDocAmbiguousOutputs')
     AliasesToExport = @()
     VariablesToExport = @()
 }
@@ -215,6 +215,36 @@ public sealed class DocumentationBinaryFixtureTests
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Get-BinaryDocConflictingOutput</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>BinaryDocConflictingOutput</command:noun>
+      <maml:description>
+        <maml:para>Returns one qualified output while stale help names another.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Returns one qualified output while stale help names another.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Get-BinaryDocConflictingOutput</maml:name>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters />
+    <command:inputTypes />
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>BinaryDocFixture.OutputB.Result</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>This stale OutputB description must not leak onto OutputA.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Get-BinaryDocAmbiguousOutputs</command:name>
       <command:verb>Get</command:verb>
       <command:noun>BinaryDocAmbiguousOutputs</command:noun>
@@ -287,6 +317,18 @@ public sealed class DocumentationBinaryFixtureTests
                 "@([System.String], [System.Int32])",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "ValueTypes", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
+                "(-join @(([char]0)))",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "ControlHelp", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
+                "(-join @('first', ([char]10), '```', ([char]10), 'last'))",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "FenceText", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
+                "[double]::NaN",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "NotANumber", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
+                "@([single]::PositiveInfinity, [single]::NegativeInfinity)",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Infinities", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
                 "$null",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "OptionalValue", StringComparison.Ordinal)).DefaultValue);
 
@@ -296,6 +338,13 @@ public sealed class DocumentationBinaryFixtureTests
             var authoredOutput = Assert.Single(authoredOutputCommand.Outputs);
             Assert.Equal("BinaryDocFixture.BinaryDocOutput", authoredOutput.ClrTypeName);
             Assert.Contains("authored binary output description", authoredOutput.Description, StringComparison.Ordinal);
+
+            var conflictingOutputCommand = Assert.Single(
+                payload.Commands,
+                item => string.Equals(item.Name, "Get-BinaryDocConflictingOutput", StringComparison.Ordinal));
+            var conflictingOutput = Assert.Single(conflictingOutputCommand.Outputs);
+            Assert.Equal("BinaryDocFixture.OutputA.Result", conflictingOutput.ClrTypeName);
+            Assert.True(string.IsNullOrEmpty(conflictingOutput.Description));
 
             var ambiguousOutputCommand = Assert.Single(
                 payload.Commands,
@@ -341,8 +390,20 @@ public sealed class DocumentationBinaryFixtureTests
                 generatedMaml,
                 StringComparison.Ordinal);
             Assert.Contains(
+                "<dev:defaultValue>[double]::NaN</dev:defaultValue>",
+                generatedMaml,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "<dev:defaultValue>@([single]::PositiveInfinity, [single]::NegativeInfinity)</dev:defaultValue>",
+                generatedMaml,
+                StringComparison.Ordinal);
+            Assert.Contains(
                 "<dev:defaultValue>$null</dev:defaultValue>",
                 generatedMaml,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "Default value: (-join @('first', ([char]10), '```', ([char]10), 'last'))",
+                File.ReadAllText(Path.Combine(markdownDirectory, "Get-BinaryDocEmptyDefault.md")),
                 StringComparison.Ordinal);
             Assert.Contains(
                 "An authored binary output description.",
