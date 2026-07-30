@@ -40,7 +40,7 @@
     "Configuration": "Release",
     "StagingPath": "Artefacts/ProjectBuild",
     "CleanStaging": true,
-    "PlanOutputPath": "Artefacts/ProjectBuild/project.build.plan.json",
+    "PlanOutputPath": "../Artefacts/ProjectBuild/project.build.plan.json",
     "UpdateVersions": true,
     "Build": true,
     "PublishNuget": false,

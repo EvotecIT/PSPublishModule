@@ -58,6 +58,9 @@ public sealed class GitHubReleasePublishRequest
     /// <summary>Preflight-verified release identifier permitted for idempotent reuse.</summary>
     public long? ExpectedExistingReleaseId { get; set; }
 
+    /// <summary>When true, a reused release must remain published, non-draft, and non-prerelease.</summary>
+    public bool RequirePublishedStableRelease { get; set; }
+
     /// <summary>
     /// Optional marker that must still be present in the release body immediately before assets are mutated.
     /// </summary>

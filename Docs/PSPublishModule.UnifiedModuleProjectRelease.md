@@ -103,7 +103,9 @@ publish configuration.
 For direct `Build-Module` GitHub publishing, an X-pattern version also skips occupied GitHub tags/releases during
 publish planning. The publish row switches to determinate byte progress and shows the active asset. Existing releases
 are not reused by default. Use `-ReuseExistingRelease` only for a deliberate recovery run, and add
-`-ReplaceExistingAssets` only when that recovery should replace same-name assets.
+`-ReplaceExistingAssets` only when that recovery should replace same-name assets. Protected recovery should also
+bind the exact existing release, authorize the complete asset-name set, and verify the server-assigned identity of
+every uploaded asset before reporting success.
 
 ### PowerShell-authored package configuration
 
@@ -518,6 +520,58 @@ For PSPublishModule's self-build, the practical sequence is:
 .\Build\Build-Project.ps1 -RunMode Build
 .\Build\Build-Project.ps1 -Publish
 ```
+
+PSPublishModule maintainers should normally use the **PSPublishModule Public Release**
+workflow instead of running the publish command interactively. The workflow is fixed to
+the signing-capable Windows runner and has three explicit operations:
+
+1. `Plan` validates the exact `main` commit, release credentials, signing certificate,
+   coordinated version, and artifact graph without publishing.
+2. `Prepare` runs the Build gate and opens a narrow version pull request containing only
+   the generated module and package version sources. A retry reuses an existing open
+   release pull request only when its remote branch is based on the authorized commit and
+   its complete tracked tree matches the newly prepared result; stale or divergent refs
+   require explicit reconciliation.
+3. `Publish` accepts only a merged version and an exact
+   `publish:<version>:<main-commit>` confirmation, then publishes and verifies NuGet,
+   PowerShell Gallery, and the GitHub release. Its effective configuration replaces every
+   X-pattern with the authorized exact version and disables source-version mutation, so a
+   recovery run cannot advance a partially published release train. If the exact stable
+   GitHub release already exists after a partial asset upload, recovery first binds its
+   release ID and tag commit to the authorized source, revalidates both immediately before
+   every deletion/upload, and replaces same-named assets. The shared release engine requires
+   that exact 40-character commit binding even when recovery is invoked outside this workflow.
+   Rebuilt NuGet packages are replaced
+   locally with the exact bytes already published by the configured NuGet source before the
+   manifest and checksums are regenerated, so timestamped signatures cannot diverge between
+   NuGet and GitHub. Every package release ZIP is also rewritten from the published packages;
+   this restores matching signed library payloads across sibling project ZIPs while preserving
+   ZIP-only dependencies and diagnostics. The module ZIP payloads are likewise rebuilt from
+   the exact module files downloaded through PowerShell Gallery's supported v2/CDN read path,
+   while full-package-only examples and dependencies are preserved. Registry publishing is
+   disabled only when release replacement, exact NuGet-byte
+   recovery, and exact module-payload recovery are all bound to the verified release. Because
+   NuGet does not expose a matching byte-retrieval contract for
+   `.snupkg` files, recovery fails before mutation when symbol-package assets are present.
+   When no GitHub release or tag exists yet, recovery also inspects the exact public package
+   and module versions. Every first-release publish reconstructs its GitHub payloads from the
+   registries after publication, so a late `SkipDuplicate` result cannot leave GitHub with
+   different rebuilt bytes. If an earlier attempt published only part of the registry train,
+   the retry keeps NuGet publication enabled so `SkipDuplicate` can complete missing packages
+   and suppresses module publication only when that exact gallery version already exists.
+   Project release ZIP recovery supports both `lib/<tfm>/...` library packages and
+   `tools/<tfm>/any/...` .NET tool packages.
+   Registry publication is skipped during this verified GitHub-only recovery because the
+   stable partial GitHub release proves the earlier NuGet and PowerShell Gallery lanes already
+   completed. Existing asset names must be a subset of the authorized rebuilt set.
+   Asset IDs are bound both to the verified pre-delete snapshot and the upload response, and
+   the complete final name-to-ID set is reconciled before success. Late same-name collisions,
+   leftover assets, drafts, prereleases, missing tags, mismatched commits, changed release
+   identities, and changed asset identities fail closed.
+
+Every run uploads a compact JSON receipt. Release plans are written under the ignored
+repository-level `Artefacts` directory so machine-specific absolute paths no longer
+create tracked release churn.
 
 The Build gate should report the same resolved version for the primary package and module, list the local NuGet
 source added for the module build, and show the combined module/package assets under `Release.StageRoot`.

@@ -56,6 +56,7 @@ public sealed partial class GitHubReleasePublisher
         var reuseExistingReleaseOnConflict = request.ReuseExistingReleaseOnConflict;
         var requireExpectedExistingRelease = request.RequireExpectedExistingRelease;
         var expectedExistingReleaseId = request.ExpectedExistingReleaseId;
+        var requirePublishedStableRelease = request.RequirePublishedStableRelease;
         var expectedReleaseBodyMarker = request.ExpectedReleaseBodyMarker;
         var expectedTagCommitSha = request.ExpectedTagCommitSha;
         var replaceExistingAssets = request.ReplaceExistingAssets;
@@ -103,6 +104,7 @@ public sealed partial class GitHubReleasePublisher
             reuseExistingReleaseOnConflict,
             requireExpectedExistingRelease,
             expectedExistingReleaseId,
+            requirePublishedStableRelease,
             cancellationToken);
         releaseWatch.Stop();
         _logger.Success($"GitHub release ready in {DotNetRepositoryReleaseService.FormatDuration(releaseWatch.Elapsed)}: {release.HtmlUrl}");
@@ -132,6 +134,8 @@ public sealed partial class GitHubReleasePublisher
                 tagName,
                 expectedReleaseBodyMarker,
                 expectedTagCommitSha,
+                requirePublishedStableRelease,
+                release.ReusedExistingRelease,
                 replaceExistingAssets,
                 result.ReplacedExistingAssets,
                 result.UploadedAssets,
@@ -196,9 +200,21 @@ public sealed partial class GitHubReleasePublisher
         bool reuseExistingReleaseOnConflict,
         bool requireExpectedExistingRelease,
         long? expectedExistingReleaseId,
+        bool requirePublishedStableRelease,
         CancellationToken cancellationToken)
     {
         var uri = BuildApiUri(apiBaseUrl, $"/repos/{owner}/{repo}/releases");
+
+        if (reuseExistingReleaseOnConflict &&
+            requireExpectedExistingRelease &&
+            expectedExistingReleaseId.HasValue)
+        {
+            var expected = GetReleaseByTag(owner, repo, token, apiBaseUrl, tagName, reusedExistingRelease: true, cancellationToken);
+            ValidateExpectedExistingRelease(tagName, true, expectedExistingReleaseId, expected.Id);
+            ValidatePublishedStableRelease(tagName, requirePublishedStableRelease, expected);
+            _logger.Info($"GitHub release for tag '{tagName}' already exists; reusing preflight-verified release {expected.Id}.");
+            return expected;
+        }
 
         var normalizedCommitish = string.IsNullOrWhiteSpace(commitish) ? null : commitish!.Trim();
         var normalizedReleaseNotes =
@@ -236,6 +252,7 @@ public sealed partial class GitHubReleasePublisher
                     requireExpectedExistingRelease,
                     expectedExistingReleaseId,
                     existing.Id);
+                ValidatePublishedStableRelease(tagName, requirePublishedStableRelease, existing);
 
                 _logger.Info(requireExpectedExistingRelease
                     ? $"GitHub release for tag '{tagName}' already exists; reusing preflight-verified release {existing.Id}."
@@ -252,7 +269,15 @@ public sealed partial class GitHubReleasePublisher
         if (string.IsNullOrWhiteSpace(upload))
             throw new InvalidOperationException("GitHub release creation succeeded but upload_url was empty.");
 
-        return new GitHubReleaseApiResponse(parsed.Id, html, upload, reusedExistingRelease: false, parsed.Body);
+        return new GitHubReleaseApiResponse(
+            parsed.Id,
+            html,
+            upload,
+            reusedExistingRelease: false,
+            parsed.Body,
+            parsed.Draft,
+            parsed.Prerelease,
+            parsed.PublishedAt);
     }
 
     private GitHubReleaseApiResponse GetReleaseByTag(
@@ -279,7 +304,15 @@ public sealed partial class GitHubReleasePublisher
         if (string.IsNullOrWhiteSpace(upload))
             throw new InvalidOperationException($"GitHub get-release-by-tag succeeded for '{tagName}' but upload_url was empty.");
 
-        return new GitHubReleaseApiResponse(parsed.Id, html, upload, reusedExistingRelease, parsed.Body);
+        return new GitHubReleaseApiResponse(
+            parsed.Id,
+            html,
+            upload,
+            reusedExistingRelease,
+            parsed.Body,
+            parsed.Draft,
+            parsed.Prerelease,
+            parsed.PublishedAt);
     }
 
     private IReadOnlyList<string> UploadAssets(
@@ -293,27 +326,22 @@ public sealed partial class GitHubReleasePublisher
         string tagName,
         string? expectedReleaseBodyMarker,
         string? expectedTagCommitSha,
+        bool requirePublishedStableRelease,
+        bool reusedExistingRelease,
         bool replaceExistingAssets,
         List<string> replacedExistingAssets,
         List<string> uploadedAssets,
         IGitHubReleaseProgressReporter? progress,
         CancellationToken cancellationToken)
     {
-        ValidateReleaseBeforeAssetMutation(
-            owner,
-            repo,
-            token,
-            apiBaseUrl,
-            releaseId,
-            tagName,
-            expectedReleaseBodyMarker,
-            expectedTagCommitSha,
-            cancellationToken);
-
         var skippedAssets = new List<string>();
-        var replaceableAssetNames = replaceExistingAssets
-            ? CreateReplaceableAssetNameSet(ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId, cancellationToken))
-            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var authorizedAssetNames = CreateAuthorizedAssetNameSet(assets);
+        var uploadedAssetIds = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        var replaceableAssets = replaceExistingAssets
+            ? CreateReplaceableAssetMap(ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId, cancellationToken))
+            : new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        if (replaceExistingAssets)
+            ValidateExistingAssetNamesAuthorized(replaceableAssets.Keys, authorizedAssetNames);
 
         for (var index = 0; index < assets.Length; index++)
         {
@@ -322,8 +350,21 @@ public sealed partial class GitHubReleasePublisher
             var fileName = Path.GetFileName(assetPath) ?? assetPath;
             var assetSize = new FileInfo(assetPath).Length;
 
+            ValidateReleaseBeforeAssetMutation(
+                owner,
+                repo,
+                token,
+                apiBaseUrl,
+                releaseId,
+                tagName,
+                expectedReleaseBodyMarker,
+                expectedTagCommitSha,
+                requirePublishedStableRelease,
+                cancellationToken);
+
+            var deletedExistingAsset = false;
             if (replaceExistingAssets &&
-                TryReserveExistingAssetNameForReplacement(replaceableAssetNames, fileName))
+                TryReserveExistingAssetForReplacement(replaceableAssets, fileName, out var expectedAssetId))
             {
                 ReportAssetProgress(
                     progress,
@@ -332,8 +373,34 @@ public sealed partial class GitHubReleasePublisher
                     assets.Length,
                     GitHubReleaseAssetProgressState.Replacing,
                     totalBytes: assetSize);
-                if (DeleteExistingAssetByName(owner, repo, token, apiBaseUrl, releaseId, fileName, cancellationToken))
+                if (DeleteExpectedExistingAsset(
+                    owner,
+                    repo,
+                    token,
+                    apiBaseUrl,
+                    releaseId,
+                    fileName,
+                    expectedAssetId,
+                    cancellationToken))
+                {
                     replacedExistingAssets.Add(fileName);
+                    deletedExistingAsset = true;
+                }
+            }
+
+            if (deletedExistingAsset)
+            {
+                ValidateReleaseBeforeAssetMutation(
+                    owner,
+                    repo,
+                    token,
+                    apiBaseUrl,
+                    releaseId,
+                    tagName,
+                    expectedReleaseBodyMarker,
+                    expectedTagCommitSha,
+                    requirePublishedStableRelease,
+                    cancellationToken);
             }
 
             _logger.Info($"Uploading GitHub release asset: {fileName} ({DotNetRepositoryReleaseService.FormatBytes(assetSize)})");
@@ -361,38 +428,30 @@ public sealed partial class GitHubReleasePublisher
                     total),
                 cancellationToken);
             var respText = resp.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-            if (!resp.IsSuccessStatusCode && replaceExistingAssets &&
-                (int)resp.StatusCode == 422 &&
-                IsAlreadyExistsValidationError(respText, fieldName: "name") &&
-                TryReserveExistingAssetNameForReplacement(replaceableAssetNames, fileName) &&
-                DeleteExistingAssetByName(owner, repo, token, apiBaseUrl, releaseId, fileName, cancellationToken))
-            {
-                replacedExistingAssets.Add(fileName);
-                resp.Dispose();
-                resp = UploadAsset(
-                    uploadUrl,
-                    assetPath,
-                    fileName,
-                    token,
-                    (transferred, total) => ReportAssetProgress(
-                        progress,
-                        assetPath,
-                        index,
-                        assets.Length,
-                        GitHubReleaseAssetProgressState.Uploading,
-                        transferred,
-                        total),
-                    cancellationToken);
-                respText = resp.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-            }
 
             using (resp)
             {
                 if (!resp.IsSuccessStatusCode)
                 {
-                    // Idempotency: reruns can hit "asset already exists". Prefer to continue rather than failing the whole build.
-                    if ((int)resp.StatusCode == 422 && IsAlreadyExistsValidationError(respText, fieldName: "name"))
+                    // Non-replacement idempotency: reruns can safely leave an existing asset untouched.
+                    if (!replaceExistingAssets &&
+                        (int)resp.StatusCode == 422 &&
+                        IsAlreadyExistsValidationError(respText, fieldName: "name"))
                     {
+                        if (!reusedExistingRelease)
+                        {
+                            ReportAssetProgress(
+                                progress,
+                                assetPath,
+                                index,
+                                assets.Length,
+                                GitHubReleaseAssetProgressState.Failed,
+                                totalBytes: assetSize,
+                                detail: "Unverified same-name asset appeared on a newly created release");
+                            throw new InvalidOperationException(
+                                $"GitHub release asset '{fileName}' appeared during first publication; refusing to accept unverified bytes.");
+                        }
+
                         assetWatch.Stop();
                         _logger.Info($"GitHub release asset '{fileName}' already exists; skipping upload after {DotNetRepositoryReleaseService.FormatDuration(assetWatch.Elapsed)}.");
                         skippedAssets.Add(fileName);
@@ -407,6 +466,22 @@ public sealed partial class GitHubReleasePublisher
                         continue;
                     }
 
+                    if (replaceExistingAssets &&
+                        (int)resp.StatusCode == 422 &&
+                        IsAlreadyExistsValidationError(respText, fieldName: "name"))
+                    {
+                        ReportAssetProgress(
+                            progress,
+                            assetPath,
+                            index,
+                            assets.Length,
+                            GitHubReleaseAssetProgressState.Failed,
+                            totalBytes: assetSize,
+                            detail: "Unverified same-name asset appeared during replacement");
+                        throw new InvalidOperationException(
+                            $"GitHub release asset '{fileName}' appeared or changed after the verified replacement snapshot; refusing to skip unverified bytes.");
+                    }
+
                     ReportAssetProgress(
                         progress,
                         assetPath,
@@ -418,6 +493,29 @@ public sealed partial class GitHubReleasePublisher
                     throw new InvalidOperationException($"GitHub asset upload failed for '{fileName}' ({(int)resp.StatusCode} {resp.ReasonPhrase}). {TrimForMessage(respText)}");
                 }
             }
+
+            var uploadedAssetId = ReadUploadedAssetId(fileName, respText);
+            ValidateReleaseBeforeAssetMutation(
+                owner,
+                repo,
+                token,
+                apiBaseUrl,
+                releaseId,
+                tagName,
+                expectedReleaseBodyMarker,
+                expectedTagCommitSha,
+                requirePublishedStableRelease,
+                cancellationToken);
+            ValidateCurrentAssetIdentity(
+                owner,
+                repo,
+                token,
+                apiBaseUrl,
+                releaseId,
+                fileName,
+                uploadedAssetId,
+                cancellationToken);
+            uploadedAssetIds.Add(fileName, uploadedAssetId);
 
             assetWatch.Stop();
             uploadedAssets.Add(fileName);
@@ -432,158 +530,41 @@ public sealed partial class GitHubReleasePublisher
             _logger.Success($"Uploaded GitHub release asset: {fileName} in {DotNetRepositoryReleaseService.FormatDuration(assetWatch.Elapsed)} ({DotNetRepositoryReleaseService.FormatBytes(assetSize)}).");
         }
 
+        if (replaceExistingAssets || uploadedAssetIds.Count == assets.Length)
+        {
+            ValidateReleaseBeforeAssetMutation(
+                owner,
+                repo,
+                token,
+                apiBaseUrl,
+                releaseId,
+                tagName,
+                expectedReleaseBodyMarker,
+                expectedTagCommitSha,
+                requirePublishedStableRelease,
+                cancellationToken);
+            ValidateFinalAssetSet(
+                owner,
+                repo,
+                token,
+                apiBaseUrl,
+                releaseId,
+                uploadedAssetIds,
+                cancellationToken);
+            ValidateReleaseBeforeAssetMutation(
+                owner,
+                repo,
+                token,
+                apiBaseUrl,
+                releaseId,
+                tagName,
+                expectedReleaseBodyMarker,
+                expectedTagCommitSha,
+                requirePublishedStableRelease,
+                cancellationToken);
+        }
+
         return skippedAssets;
-    }
-
-    internal static bool TryReserveExistingAssetNameForReplacement(ISet<string> replaceableAssetNames, string fileName)
-    {
-        if (replaceableAssetNames is null) throw new ArgumentNullException(nameof(replaceableAssetNames));
-        if (string.IsNullOrWhiteSpace(fileName)) return false;
-
-        return replaceableAssetNames.Remove(fileName);
-    }
-
-    internal static void ValidateExpectedExistingRelease(
-        string tagName,
-        bool requireExpectedExistingRelease,
-        long? expectedExistingReleaseId,
-        long actualExistingReleaseId)
-    {
-        if (!requireExpectedExistingRelease) return;
-        if (expectedExistingReleaseId.HasValue && expectedExistingReleaseId.Value == actualExistingReleaseId) return;
-
-        throw new InvalidOperationException(
-            $"GitHub release for tag '{tagName}' already exists, but release id {actualExistingReleaseId} was not preflight-verified for reuse.");
-    }
-
-    private static HashSet<string> CreateReplaceableAssetNameSet(IEnumerable<GitHubReleaseAssetResponse> existingAssets)
-    {
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var asset in existingAssets)
-        {
-            if (!string.IsNullOrWhiteSpace(asset.Name))
-                names.Add(asset.Name!);
-        }
-
-        return names;
-    }
-
-    private static HttpResponseMessage UploadAsset(
-        string uploadUrl,
-        string assetPath,
-        string fileName,
-        string token,
-        Action<long, long>? reportProgress,
-        CancellationToken cancellationToken)
-    {
-        var target = new Uri(uploadUrl + "?name=" + Uri.EscapeDataString(fileName));
-
-        using var content = new GitHubReleaseProgressFileContent(assetPath, reportProgress);
-        content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-
-        using var req = new HttpRequestMessage(HttpMethod.Post, target) { Content = content };
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        return SharedClient.SendAsync(req, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
-    }
-
-    private static void ReportAssetProgress(
-        IGitHubReleaseProgressReporter? progress,
-        string assetPath,
-        int zeroBasedPosition,
-        int totalAssets,
-        GitHubReleaseAssetProgressState state,
-        long bytesTransferred = 0,
-        long totalBytes = 0,
-        string? detail = null)
-    {
-        if (progress is null)
-            return;
-
-        try
-        {
-            progress.Report(new GitHubReleaseAssetProgress
-            {
-                FilePath = assetPath,
-                FileName = Path.GetFileName(assetPath) ?? assetPath,
-                Position = zeroBasedPosition + 1,
-                TotalAssets = totalAssets,
-                State = state,
-                BytesTransferred = bytesTransferred,
-                TotalBytes = totalBytes,
-                Detail = detail
-            });
-        }
-        catch
-        {
-            // Progress is best effort and must never change release correctness.
-        }
-    }
-
-    private bool DeleteExistingAssetByName(
-        string owner,
-        string repo,
-        string token,
-        string apiBaseUrl,
-        long releaseId,
-        string fileName,
-        CancellationToken cancellationToken)
-    {
-        if (releaseId <= 0)
-            throw new InvalidOperationException("GitHub release asset replacement requires the release id returned by GitHub.");
-
-        var asset = ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId, cancellationToken)
-            .FirstOrDefault(existing => string.Equals(existing.Name, fileName, StringComparison.OrdinalIgnoreCase));
-        if (asset is null)
-            return false;
-
-        var uri = BuildApiUri(apiBaseUrl, $"/repos/{owner}/{repo}/releases/assets/{asset.Id}");
-        using var request = new HttpRequestMessage(HttpMethod.Delete, uri);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        var response = SharedClient.SendAsync(request, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
-        var responseText = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-        using (response)
-        {
-            if (!response.IsSuccessStatusCode && response.StatusCode != HttpStatusCode.NotFound)
-                throw new InvalidOperationException($"GitHub asset delete failed for '{fileName}' ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
-        }
-
-        _logger.Info($"Deleted existing GitHub release asset before replacement: {fileName}");
-        return true;
-    }
-
-    private static IReadOnlyList<GitHubReleaseAssetResponse> ListReleaseAssets(
-        string owner,
-        string repo,
-        string token,
-        string apiBaseUrl,
-        long releaseId,
-        CancellationToken cancellationToken)
-    {
-        var assets = new List<GitHubReleaseAssetResponse>();
-        for (var page = 1; ; page++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var uri = BuildApiUri(apiBaseUrl, $"/repos/{owner}/{repo}/releases/{releaseId}/assets?per_page=100&page={page}");
-            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-            var response = SharedClient.SendAsync(request, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
-            var responseText = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-            using (response)
-            {
-                if (!response.IsSuccessStatusCode)
-                    throw new InvalidOperationException($"GitHub list-release-assets failed for release '{releaseId}' ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
-            }
-
-            var pageAssets = Deserialize<GitHubReleaseAssetResponse[]>(responseText) ?? Array.Empty<GitHubReleaseAssetResponse>();
-            assets.AddRange(pageAssets);
-            if (pageAssets.Length < 100)
-                break;
-        }
-
-        return assets;
     }
 
     private static HttpClient CreateSharedClient()
@@ -709,6 +690,15 @@ public sealed partial class GitHubReleasePublisher
 
         [DataMember(Name = "body")]
         public string? Body { get; set; }
+
+        [DataMember(Name = "draft")]
+        public bool Draft { get; set; }
+
+        [DataMember(Name = "prerelease")]
+        public bool Prerelease { get; set; }
+
+        [DataMember(Name = "published_at")]
+        public string? PublishedAt { get; set; }
     }
 
     [DataContract]
@@ -749,13 +739,24 @@ public sealed partial class GitHubReleasePublisher
 
     private sealed class GitHubReleaseApiResponse
     {
-        public GitHubReleaseApiResponse(long id, string htmlUrl, string uploadUrl, bool reusedExistingRelease, string? body = null)
+        public GitHubReleaseApiResponse(
+            long id,
+            string htmlUrl,
+            string uploadUrl,
+            bool reusedExistingRelease,
+            string? body = null,
+            bool isDraft = false,
+            bool isPreRelease = false,
+            string? publishedAt = null)
         {
             Id = id;
             HtmlUrl = htmlUrl;
             UploadUrl = uploadUrl;
             ReusedExistingRelease = reusedExistingRelease;
             Body = body;
+            IsDraft = isDraft;
+            IsPreRelease = isPreRelease;
+            PublishedAt = publishedAt;
         }
 
         public long Id { get; }
@@ -763,5 +764,8 @@ public sealed partial class GitHubReleasePublisher
         public string UploadUrl { get; }
         public bool ReusedExistingRelease { get; }
         public string? Body { get; }
+        public bool IsDraft { get; }
+        public bool IsPreRelease { get; }
+        public string? PublishedAt { get; }
     }
 }

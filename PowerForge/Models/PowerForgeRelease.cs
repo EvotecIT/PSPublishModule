@@ -250,6 +250,8 @@ internal sealed class PowerForgeReleaseResult
 
     public string ConfigPath { get; set; } = string.Empty;
 
+    public bool RegistryPublishingSkippedForVerifiedGitHubRecovery { get; set; }
+
     public PowerForgeModuleReleasePlanSummary? ModulePlan { get; set; }
 
     public ModuleBuildHostExecutionResult? Module { get; set; }
@@ -684,13 +686,43 @@ internal sealed class PowerForgeReleaseGitHubOptions
 
     public string? TokenEnvName { get; set; }
 
+    /// <summary>Optional exact commit used to create and verify the unified release tag.</summary>
+    public string? Commitish { get; set; }
+
     public bool GenerateReleaseNotes { get; set; } = true;
 
     public bool IsPreRelease { get; set; }
 
     public bool ReuseExistingRelease { get; set; }
 
+    public bool RequireExpectedExistingRelease { get; set; }
+
+    public long? ExpectedExistingReleaseId { get; set; }
+
+    public bool RequirePublishedStableRelease { get; set; }
+
     public bool ReplaceExistingAssets { get; set; }
+
+    /// <summary>
+    /// During verified recovery, replace locally rebuilt NuGet assets with the exact bytes already
+    /// published by the configured package source before regenerating checksums and uploading.
+    /// </summary>
+    public bool RequirePublishedNuGetAssets { get; set; }
+
+    /// <summary>
+    /// During verified recovery, replace rebuilt module archive payloads with the exact module
+    /// files already published by <see cref="PublishedModuleSource"/> before checksums are regenerated.
+    /// </summary>
+    public bool RequirePublishedModuleAssets { get; set; }
+
+    /// <summary>NuGet repository source containing the already-published module package used for recovery.</summary>
+    public string? PublishedModuleSource { get; set; }
+
+    /// <summary>Restore registry-published payloads before creating the first GitHub release for the exact commit.</summary>
+    public bool RecoverPublishedRegistryAssetsBeforeGitHubRelease { get; set; }
+
+    /// <summary>The exact module version was already present in the public gallery at recovery preflight.</summary>
+    public bool PublishedModuleAlreadyExists { get; set; }
 
     public string? TagTemplate { get; set; }
 
@@ -1092,4 +1124,10 @@ internal sealed class PowerForgeUnifiedGitHubReleaseResult
     public string[] ReplacedExistingAssets { get; set; } = Array.Empty<string>();
 
     public string[] UploadedAssets { get; set; } = Array.Empty<string>();
+
+    public string[] RecoveredPublishedNuGetAssets { get; set; } = Array.Empty<string>();
+
+    public string[] RecoveredPublishedPackageReleaseZips { get; set; } = Array.Empty<string>();
+
+    public string[] RecoveredPublishedModuleAssets { get; set; } = Array.Empty<string>();
 }

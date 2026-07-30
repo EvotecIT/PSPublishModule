@@ -111,15 +111,53 @@
         "Token": { "type": [ "string", "null" ] },
         "TokenFilePath": { "type": [ "string", "null" ] },
         "TokenEnvName": { "type": [ "string", "null" ] },
+        "Commitish": {
+          "type": [ "string", "null" ],
+          "pattern": "^[0-9A-Fa-f]{40}$",
+          "description": "Exact commit SHA used to create and verify the unified GitHub release tag."
+        },
         "GenerateReleaseNotes": { "type": "boolean" },
         "IsPreRelease": { "type": "boolean" },
         "ReuseExistingRelease": {
           "type": "boolean",
           "description": "Explicit recovery mode. When true, a release with the same tag may be reused. Auto-versioned normal releases should leave this false so an occupied GitHub tag selects a new version."
         },
+        "RequireExpectedExistingRelease": {
+          "type": "boolean",
+          "description": "Require recovery to reuse the exact preflight-verified release identifier instead of creating or selecting another release."
+        },
+        "ExpectedExistingReleaseId": {
+          "type": [ "integer", "null" ],
+          "minimum": 1,
+          "description": "Exact GitHub release identifier authorized by recovery preflight."
+        },
+        "RequirePublishedStableRelease": {
+          "type": "boolean",
+          "description": "Require a reused release to remain published, non-draft, and non-prerelease before asset mutation."
+        },
         "ReplaceExistingAssets": {
           "type": "boolean",
           "description": "When ReuseExistingRelease is true, delete same-named assets before uploading replacements."
+        },
+        "RequirePublishedNuGetAssets": {
+          "type": "boolean",
+          "description": "During verified recovery, replace rebuilt .nupkg assets with the exact bytes already published by Packages.PublishSource before checksums and GitHub assets are regenerated."
+        },
+        "RequirePublishedModuleAssets": {
+          "type": "boolean",
+          "description": "During verified recovery, replace rebuilt module archive payloads with the exact module files already published by PublishedModuleSource before checksums and GitHub assets are regenerated."
+        },
+        "PublishedModuleSource": {
+          "type": [ "string", "null" ],
+          "description": "NuGet repository source containing the already-published module package used for exact-payload recovery. PowerShell Gallery recovery should use its supported v2 read endpoint."
+        },
+        "RecoverPublishedRegistryAssetsBeforeGitHubRelease": {
+          "type": "boolean",
+          "description": "Restore exact registry-published payloads before creating the first GitHub release for the commit."
+        },
+        "PublishedModuleAlreadyExists": {
+          "type": "boolean",
+          "description": "The exact module version was already present in the public gallery at recovery preflight and must not be published again."
         },
         "TagTemplate": { "type": [ "string", "null" ] },
         "ReleaseNameTemplate": { "type": [ "string", "null" ] }

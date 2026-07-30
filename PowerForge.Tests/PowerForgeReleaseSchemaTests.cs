@@ -48,6 +48,98 @@ public sealed class PowerForgeReleaseSchemaTests
         Assert.True(appleSchema.Evaluate(node, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
     }
 
+    [Fact]
+    public void Release_schema_accepts_exact_verified_github_recovery_binding()
+    {
+        var schemaDocument = JsonNode.Parse(File.ReadAllText(GetSchemaPath("powerforge.release.schema.json")))!;
+        var gitHubSchema = JsonSchema.FromText(schemaDocument["properties"]!["GitHub"]!.ToJsonString());
+        var node = JsonNode.Parse("""
+            {
+              "Publish": true,
+              "ReuseExistingRelease": true,
+              "RequireExpectedExistingRelease": true,
+              "ExpectedExistingReleaseId": 42,
+              "RequirePublishedStableRelease": true,
+              "ReplaceExistingAssets": true,
+              "RequirePublishedNuGetAssets": true,
+              "RequirePublishedModuleAssets": true,
+              "PublishedModuleSource": "https://www.powershellgallery.com/api/v2"
+            }
+            """)!;
+
+        Assert.True(gitHubSchema.Evaluate(node, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
+    }
+
+    [Fact]
+    public void Release_runtime_loads_exact_verified_github_recovery_binding()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            File.WriteAllText(path, """
+                {
+                  "GitHub": {
+                    "Publish": true,
+                    "ReuseExistingRelease": true,
+                    "RequireExpectedExistingRelease": true,
+                    "ExpectedExistingReleaseId": 42,
+                    "RequirePublishedStableRelease": true,
+                    "ReplaceExistingAssets": true,
+                    "RequirePublishedNuGetAssets": true,
+                    "RequirePublishedModuleAssets": true,
+                    "PublishedModuleSource": "https://www.powershellgallery.com/api/v2"
+                  }
+                }
+                """);
+
+            var gitHub = Assert.IsType<PowerForgeReleaseGitHubOptions>(
+                PowerForgeReleaseService.LoadConfiguration(path).GitHub);
+            Assert.True(gitHub.ReuseExistingRelease);
+            Assert.True(gitHub.RequireExpectedExistingRelease);
+            Assert.Equal(42, gitHub.ExpectedExistingReleaseId);
+            Assert.True(gitHub.RequirePublishedStableRelease);
+            Assert.True(gitHub.ReplaceExistingAssets);
+            Assert.True(gitHub.RequirePublishedNuGetAssets);
+            Assert.True(gitHub.RequirePublishedModuleAssets);
+            Assert.Equal("https://www.powershellgallery.com/api/v2", gitHub.PublishedModuleSource);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Release_runtime_loads_pre_github_registry_recovery_binding()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            File.WriteAllText(path, """
+                {
+                  "GitHub": {
+                    "Publish": true,
+                    "Commitish": "0123456789abcdef0123456789abcdef01234567",
+                    "RequirePublishedNuGetAssets": true,
+                    "RequirePublishedModuleAssets": true,
+                    "PublishedModuleSource": "https://www.powershellgallery.com/api/v2",
+                    "RecoverPublishedRegistryAssetsBeforeGitHubRelease": true,
+                    "PublishedModuleAlreadyExists": true
+                  }
+                }
+                """);
+
+            var gitHub = Assert.IsType<PowerForgeReleaseGitHubOptions>(
+                PowerForgeReleaseService.LoadConfiguration(path).GitHub);
+            Assert.True(gitHub.RecoverPublishedRegistryAssetsBeforeGitHubRelease);
+            Assert.True(gitHub.PublishedModuleAlreadyExists);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static string GetSchemaPath(string fileName) => Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory,
         "..", "..", "..", "..",
