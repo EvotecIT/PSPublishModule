@@ -147,7 +147,10 @@ jobs:
 
           artifact_prefix='powerforge-apple-screenshots-'
           provenance_prefix='powerforge-apple-screenshot-provenance-'
-          mapfile -t artifact_names < <(
+          artifact_names=()
+          while IFS= read -r artifact_name; do
+            artifact_names+=("$artifact_name")
+          done < <(
             gh api --paginate \
               "repos/${GITHUB_REPOSITORY}/actions/runs/${CAPTURE_RUN_ID}/artifacts" \
               --jq '.artifacts[] | select(.expired == false) | .name'
@@ -156,10 +159,10 @@ jobs:
           provenance_refs=()
           for artifact_name in "${artifact_names[@]}"; do
             if [[ "$artifact_name" =~ ^${artifact_prefix}([0-9A-Fa-f]{40})$ ]]; then
-              source_refs+=("${BASH_REMATCH[1],,}")
+              source_refs+=("$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')")
             fi
             if [[ "$artifact_name" =~ ^${provenance_prefix}([0-9A-Fa-f]{40})$ ]]; then
-              provenance_refs+=("${BASH_REMATCH[1],,}")
+              provenance_refs+=("$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')")
             fi
           done
           [[ ${#source_refs[@]} -eq 1 ]] || {
@@ -202,7 +205,8 @@ jobs:
               echo 'source_ref must be blank or an exact 40-character commit SHA.' >&2
               exit 1
             }
-            [[ "${EXPECTED_SOURCE_REF,,}" == "$resolved_source_ref" ]] || {
+            expected_source_ref="$(printf '%s' "$EXPECTED_SOURCE_REF" | tr '[:upper:]' '[:lower:]')"
+            [[ "$expected_source_ref" == "$resolved_source_ref" ]] || {
               echo "Requested source_ref ${EXPECTED_SOURCE_REF} does not match capture source ${resolved_source_ref}." >&2
               exit 1
             }

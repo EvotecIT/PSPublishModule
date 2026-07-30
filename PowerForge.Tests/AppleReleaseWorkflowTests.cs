@@ -510,6 +510,10 @@ public sealed partial class AppleReleaseWorkflowTests
             Assert.DoesNotContain("runs-on: windows-", workflow, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("runs-on: macos-", workflow, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("self-hosted", workflow, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("mapfile ", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("readarray ", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain(",,}", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("declare -A", workflow, StringComparison.Ordinal);
         }
     }
 
