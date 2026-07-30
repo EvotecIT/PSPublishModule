@@ -73,10 +73,13 @@ public sealed partial class BenchmarkEvidenceCatalogService
             lane.Entry.ResultPath = CreateContentAddressedResultPath(
                 lane.Entry.ResultPath,
                 lane.Entry.ResultSha256);
-            lane.Entry.ArtifactFileName = ExtractBundleArtifactFileName(lane.Entry.ResultPath);
+            lane.Entry.ArtifactRelativePath =
+                ExtractBundleArtifactRelativePath(lane.Entry.ResultPath);
+            lane.Entry.ArtifactFileName =
+                Path.GetFileName(lane.Entry.ArtifactRelativePath);
             string artifactPath = ResolveBundleArtifactPath(
                 outputCatalogPath,
-                lane.Entry.ArtifactFileName,
+                lane.Entry.ArtifactRelativePath,
                 lane.Entry.ResultPath);
             lane.DestinationPath = artifactPath;
             lane.Entry.ArtifactDestinationSha256 = ComputeArtifactDestinationSha256(
@@ -145,13 +148,28 @@ public sealed partial class BenchmarkEvidenceCatalogService
         BenchmarkEvidenceEntry sourceEntry)
     {
         ValidateBundleEntry(sourceEntry);
-        string sourceArtifactFileName = string.IsNullOrWhiteSpace(sourceEntry.ArtifactFileName)
-            ? ExtractBundleArtifactFileName(sourceEntry.ResultPath)
-            : sourceEntry.ArtifactFileName;
+        bool hasPersistedArtifactPath =
+            !string.IsNullOrWhiteSpace(sourceEntry.ArtifactRelativePath) ||
+            !string.IsNullOrWhiteSpace(sourceEntry.ArtifactFileName);
+        string sourceArtifactRelativePath =
+            !string.IsNullOrWhiteSpace(sourceEntry.ArtifactRelativePath)
+                ? sourceEntry.ArtifactRelativePath
+                : !string.IsNullOrWhiteSpace(sourceEntry.ArtifactFileName)
+                    ? sourceEntry.ArtifactFileName
+                    : ExtractBundleArtifactFileName(sourceEntry.ResultPath);
         string artifactPath = ResolveBundleArtifactPath(
             sourceCatalogPath,
-            sourceArtifactFileName,
+            sourceArtifactRelativePath,
             sourceEntry.ResultPath);
+        if (!File.Exists(artifactPath) &&
+            !hasPersistedArtifactPath &&
+            TryFindLegacySchemaThreeArtifact(
+                sourceCatalogPath,
+                sourceEntry,
+                out string? discoveredArtifactPath))
+        {
+            artifactPath = discoveredArtifactPath!;
+        }
         if (!File.Exists(artifactPath))
         {
             throw new FileNotFoundException(
@@ -267,8 +285,8 @@ public sealed partial class BenchmarkEvidenceCatalogService
         => string.Equals(left.ResultSha256, right.ResultSha256, StringComparison.OrdinalIgnoreCase) &&
            string.Equals(left.ResultPath, right.ResultPath, StringComparison.Ordinal) &&
            string.Equals(
-               EffectiveBundleArtifactFileName(left),
-               EffectiveBundleArtifactFileName(right),
+               EffectiveBundleArtifactRelativePath(left),
+               EffectiveBundleArtifactRelativePath(right),
                StringComparison.OrdinalIgnoreCase) &&
            string.Equals(left.Suite, right.Suite, StringComparison.Ordinal) &&
            left.GeneratedUtc == right.GeneratedUtc &&
@@ -287,25 +305,28 @@ public sealed partial class BenchmarkEvidenceCatalogService
 
     private static string ResolveBundleArtifactPath(
         string catalogPath,
-        string artifactFileName,
+        string artifactRelativePath,
         string resultPath)
     {
-        if (!IsPortableBundleFileName(artifactFileName))
-        {
-            throw new InvalidOperationException(
-                $"Benchmark result path '{resultPath}' does not identify a portable bundle artifact file.");
-        }
-
         string directory = Path.GetDirectoryName(catalogPath)
                            ?? throw new InvalidOperationException(
                                $"Unable to determine the evidence catalog directory for '{catalogPath}'.");
         string resolvedDirectory = BenchmarkJson.ResolveWritePath(directory);
-        string artifactPath = BenchmarkJson.ResolveWritePath(Path.Combine(resolvedDirectory, artifactFileName));
-        string? artifactDirectory = Path.GetDirectoryName(artifactPath);
-        if (!string.Equals(
-                resolvedDirectory,
-                artifactDirectory,
-                FrameworkCompatibility.GetPathStringComparison(artifactPath)))
+        string normalizedRelativePath =
+            NormalizeBundleArtifactRelativePath(artifactRelativePath, resultPath);
+        string artifactPath = BenchmarkJson.ResolveWritePath(
+            Path.Combine(resolvedDirectory, normalizedRelativePath));
+        string relativeToBundle = FrameworkCompatibility.GetRelativePath(
+            resolvedDirectory,
+            artifactPath);
+        if (Path.IsPathRooted(relativeToBundle) ||
+            relativeToBundle.Equals("..", StringComparison.Ordinal) ||
+            relativeToBundle.StartsWith(
+                ".." + Path.DirectorySeparatorChar,
+                StringComparison.Ordinal) ||
+            relativeToBundle.StartsWith(
+                ".." + Path.AltDirectorySeparatorChar,
+                StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"Benchmark result path '{resultPath}' resolves outside its portable evidence bundle.");
@@ -316,25 +337,19 @@ public sealed partial class BenchmarkEvidenceCatalogService
 
     private static string ExtractBundleArtifactFileName(string resultPath)
     {
-        string portablePath = resultPath.Replace('\\', '/').TrimEnd('/');
-        if (portablePath.IndexOfAny(['?', '#']) >= 0)
+        string encodedFileName = ExtractResultPathFileSegment(resultPath);
+        string fileName;
+        try
+        {
+            fileName = Uri.UnescapeDataString(encodedFileName);
+        }
+        catch (UriFormatException exception)
         {
             throw new InvalidOperationException(
-                $"Benchmark result path '{resultPath}' cannot contain a query or fragment.");
+                $"Benchmark result path '{resultPath}' does not contain a valid escaped artifact file name.",
+                exception);
         }
 
-        string pathComponent = portablePath;
-        if (Uri.TryCreate(portablePath, UriKind.Absolute, out Uri? uri))
-        {
-            pathComponent = uri.IsFile
-                ? uri.LocalPath.Replace('\\', '/')
-                : uri.AbsolutePath;
-        }
-
-        int separator = pathComponent.LastIndexOf('/');
-        string fileName = separator >= 0
-            ? pathComponent.Substring(separator + 1)
-            : pathComponent;
         if (!IsPortableBundleFileName(fileName))
         {
             throw new InvalidOperationException(
@@ -344,29 +359,192 @@ public sealed partial class BenchmarkEvidenceCatalogService
         return fileName;
     }
 
-    private static string EffectiveBundleArtifactFileName(BenchmarkEvidenceEntry entry)
-        => string.IsNullOrWhiteSpace(entry.ArtifactFileName)
-            ? ExtractBundleArtifactFileName(entry.ResultPath)
-            : entry.ArtifactFileName;
+    private static string EffectiveBundleArtifactRelativePath(
+        BenchmarkEvidenceEntry entry)
+        => !string.IsNullOrWhiteSpace(entry.ArtifactRelativePath)
+            ? entry.ArtifactRelativePath
+            : !string.IsNullOrWhiteSpace(entry.ArtifactFileName)
+                ? entry.ArtifactFileName
+                : ExtractBundleArtifactFileName(entry.ResultPath);
 
     private static string CreateContentAddressedResultPath(
         string resultPath,
         string resultSha256)
     {
         string fileName = ExtractBundleArtifactFileName(resultPath);
-        string extension = Path.GetExtension(fileName);
-        string stem = Path.GetFileNameWithoutExtension(fileName);
+        string normalizedHash = resultSha256.ToLowerInvariant();
+        string decodedStem = Path.GetFileNameWithoutExtension(fileName);
+        if (decodedStem.EndsWith(
+                "." + normalizedHash,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return resultPath;
+        }
+
+        string encodedFileName = ExtractResultPathFileSegment(resultPath);
+        string encodedExtension = Path.GetExtension(encodedFileName);
+        string encodedStem = Path.GetFileNameWithoutExtension(encodedFileName);
         string contentFileName =
-            $"{stem}.{resultSha256.ToLowerInvariant()}{extension}";
-        if (!IsPortableBundleFileName(contentFileName))
+            $"{encodedStem}.{normalizedHash}{encodedExtension}";
+        int separatorIndex = Math.Max(
+            resultPath.LastIndexOf('/'),
+            resultPath.LastIndexOf('\\'));
+        string contentResultPath =
+            resultPath.Substring(0, separatorIndex + 1) + contentFileName;
+        _ = ExtractBundleArtifactFileName(contentResultPath);
+        if (contentFileName.Length > 1024)
         {
             throw new InvalidOperationException(
                 $"Benchmark result path '{resultPath}' cannot be converted to a portable immutable artifact name.");
         }
-        int separatorIndex = Math.Max(
-            resultPath.LastIndexOf('/'),
-            resultPath.LastIndexOf('\\'));
-        return resultPath.Substring(0, separatorIndex + 1) + contentFileName;
+
+        return contentResultPath;
+    }
+
+    private static string ExtractResultPathFileSegment(string resultPath)
+    {
+        string portablePath = resultPath.Replace('\\', '/').TrimEnd('/');
+        if (portablePath.IndexOfAny(['?', '#']) >= 0)
+        {
+            throw new InvalidOperationException(
+                $"Benchmark result path '{resultPath}' cannot contain a query or fragment.");
+        }
+
+        int separator = portablePath.LastIndexOf('/');
+        string fileName = separator >= 0
+            ? portablePath.Substring(separator + 1)
+            : portablePath;
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            throw new InvalidOperationException(
+                $"Benchmark result path '{resultPath}' does not identify a portable bundle artifact file.");
+        }
+
+        return fileName;
+    }
+
+    private static string ExtractBundleArtifactRelativePath(string resultPath)
+    {
+        string portablePath = resultPath.Replace('\\', '/').TrimEnd('/');
+        if (Uri.TryCreate(portablePath, UriKind.Absolute, out _) ||
+            portablePath.StartsWith("/", StringComparison.Ordinal) ||
+            Path.IsPathRooted(portablePath))
+        {
+            return ExtractBundleArtifactFileName(resultPath);
+        }
+
+        var segments = new List<string>();
+        foreach (string encodedSegment in portablePath.Split('/'))
+        {
+            if (string.IsNullOrEmpty(encodedSegment) ||
+                encodedSegment.Equals(".", StringComparison.Ordinal))
+            {
+                continue;
+            }
+            if (encodedSegment.Equals("..", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Benchmark result path '{resultPath}' resolves outside its portable evidence bundle.");
+            }
+
+            string segment;
+            try
+            {
+                segment = Uri.UnescapeDataString(encodedSegment);
+            }
+            catch (UriFormatException exception)
+            {
+                throw new InvalidOperationException(
+                    $"Benchmark result path '{resultPath}' contains an invalid escaped path segment.",
+                    exception);
+            }
+            if (!IsPortableBundleFileName(segment))
+            {
+                throw new InvalidOperationException(
+                    $"Benchmark result path '{resultPath}' does not identify a portable bundle artifact path.");
+            }
+            segments.Add(segment);
+        }
+
+        if (segments.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Benchmark result path '{resultPath}' does not identify a portable bundle artifact path.");
+        }
+
+        return Path.Combine(segments.ToArray());
+    }
+
+    private static string NormalizeBundleArtifactRelativePath(
+        string artifactRelativePath,
+        string resultPath)
+    {
+        if (string.IsNullOrWhiteSpace(artifactRelativePath) ||
+            Path.IsPathRooted(artifactRelativePath))
+        {
+            throw new InvalidOperationException(
+                $"Benchmark result path '{resultPath}' does not identify a portable bundle artifact path.");
+        }
+
+        string[] segments = artifactRelativePath
+            .Replace('\\', '/')
+            .Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0 ||
+            segments.Any(segment =>
+                segment is "." or ".." ||
+                !IsPortableBundleFileName(segment)))
+        {
+            throw new InvalidOperationException(
+                $"Benchmark result path '{resultPath}' does not identify a portable bundle artifact path.");
+        }
+
+        return Path.Combine(segments);
+    }
+
+    private static bool TryFindLegacySchemaThreeArtifact(
+        string sourceCatalogPath,
+        BenchmarkEvidenceEntry sourceEntry,
+        out string? artifactPath)
+    {
+        artifactPath = null;
+        string directory = Path.GetDirectoryName(sourceCatalogPath)
+                           ?? throw new InvalidOperationException(
+                               $"Unable to determine the evidence catalog directory for '{sourceCatalogPath}'.");
+        string fullCatalogPath = BenchmarkJson.ResolveWritePath(sourceCatalogPath);
+        StringComparison pathComparison =
+            FrameworkCompatibility.GetPathStringComparison(fullCatalogPath);
+        foreach (string candidate in Directory
+                     .EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
+                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            string fullCandidate = BenchmarkJson.ResolveWritePath(candidate);
+            if (string.Equals(fullCandidate, fullCatalogPath, pathComparison))
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(sourceEntry.ArtifactDestinationSha256) &&
+                !string.Equals(
+                    ComputeArtifactDestinationSha256(
+                        sourceCatalogPath,
+                        fullCandidate),
+                    sourceEntry.ArtifactDestinationSha256,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (string.Equals(
+                    BenchmarkJson.ComputeFileSha256(fullCandidate),
+                    sourceEntry.ResultSha256,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                artifactPath = fullCandidate;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsPortableBundleFileName(string fileName)
@@ -434,22 +612,23 @@ public sealed partial class BenchmarkEvidenceCatalogService
         var owners = new Dictionary<string, BundleLane>(StringComparer.OrdinalIgnoreCase);
         foreach (BundleLane lane in lanes)
         {
-            string fileName = ExtractBundleArtifactFileName(lane.Entry.ResultPath);
-            if (string.Equals(fileName, catalogFileName, StringComparison.OrdinalIgnoreCase))
+            string relativePath =
+                ExtractBundleArtifactRelativePath(lane.Entry.ResultPath);
+            if (string.Equals(relativePath, catalogFileName, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
                     $"Benchmark result path '{lane.Entry.ResultPath}' would overwrite the destination catalog.");
             }
 
-            if (owners.TryGetValue(fileName, out BundleLane? existing))
+            if (owners.TryGetValue(relativePath, out BundleLane? existing))
             {
                 throw new InvalidOperationException(
                     $"Benchmark lanes '{existing.Entry.ComparisonId}/{existing.Entry.Platform}/{existing.Entry.RunMode}' " +
                     $"and '{lane.Entry.ComparisonId}/{lane.Entry.Platform}/{lane.Entry.RunMode}' " +
-                    $"would overwrite the same bundle artifact '{fileName}'.");
+                    $"would overwrite the same bundle artifact '{relativePath}'.");
             }
 
-            owners.Add(fileName, lane);
+            owners.Add(relativePath, lane);
         }
     }
 
@@ -465,6 +644,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             ResultSha256 = entry.ResultSha256,
             ArtifactDestinationSha256 = entry.ArtifactDestinationSha256,
             ArtifactFileName = entry.ArtifactFileName,
+            ArtifactRelativePath = entry.ArtifactRelativePath,
             Suite = entry.Suite,
             Environment = CopyEnvironment(entry.Environment),
             Compatibility = new Dictionary<string, string>(

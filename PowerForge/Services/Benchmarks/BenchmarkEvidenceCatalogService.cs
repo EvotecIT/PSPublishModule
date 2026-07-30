@@ -172,6 +172,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 writtenEntry);
             writtenEntry.ArtifactDestinationSha256 = artifactDestinationSha256;
             writtenEntry.ArtifactFileName = Path.GetFileName(artifactPath);
+            writtenEntry.ArtifactRelativePath = writtenEntry.ArtifactFileName;
             artifactSelected = true;
             artifactExisted = File.Exists(artifactPath);
             if (artifactExisted)
