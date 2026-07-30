@@ -260,6 +260,14 @@ public static class BenchmarkJson
                ?? throw new InvalidOperationException($"Unable to deserialize benchmark JSON: {path}");
     }
 
+    internal static T ReadBytes<T>(byte[] bytes, string sourceDescription)
+    {
+        if (bytes is null) throw new ArgumentNullException(nameof(bytes));
+        return JsonSerializer.Deserialize<T>(bytes, Options)
+               ?? throw new InvalidOperationException(
+                   $"Unable to deserialize benchmark JSON: {sourceDescription}");
+    }
+
     /// <summary>
     /// Reads a benchmark summary from either a full run result or a summary array.
     /// </summary>

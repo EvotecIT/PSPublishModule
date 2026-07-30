@@ -92,6 +92,19 @@ public sealed class BenchmarkEvidenceEntry
     /// </summary>
     public string ArtifactDestinationSha256 { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Portable file name of the normalized artifact stored beside this catalog.
+    /// This can differ from the final segment of <see cref="ResultPath"/> when a public URL
+    /// and a local evidence-bundle destination are configured independently.
+    /// </summary>
+    public string ArtifactFileName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Portable relative path of the normalized artifact within this catalog's bundle.
+    /// Unlike <see cref="ArtifactFileName"/>, this retains supported relative directories.
+    /// </summary>
+    public string ArtifactRelativePath { get; set; } = string.Empty;
+
     /// <summary>Benchmark suite name.</summary>
     public string Suite { get; set; } = string.Empty;
 

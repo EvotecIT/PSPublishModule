@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+
 namespace PowerForge;
 
 /// <summary>
@@ -20,6 +22,14 @@ public sealed class BenchmarkProvenanceCaptureSession : IDisposable
     /// <summary>Source branch captured before measurement.</summary>
     public string SourceBranch { get; internal set; } = string.Empty;
 
+    /// <summary>Workload metadata declared before measurement and bound into the completed sidecar.</summary>
+    public IReadOnlyDictionary<string, string> Metadata { get; internal set; } =
+        new ReadOnlyDictionary<string, string>(
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+    /// <summary>Run mode declared before measurement, such as <c>quick</c> or <c>full</c>.</summary>
+    public string RunMode { get; internal set; } = string.Empty;
+
     internal IDisposable? ArtifactRootLease { get; set; }
 
     /// <summary>Releases the exclusive artifact-root reservation.</summary>
@@ -38,6 +48,9 @@ internal sealed class BenchmarkArtifactProvenanceDocument
     public bool GitWorktreeClean { get; set; }
     public DateTimeOffset StartedUtc { get; set; }
     public DateTimeOffset FinishedUtc { get; set; }
+    public Dictionary<string, string> Metadata { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+    public string RunMode { get; set; } = string.Empty;
     public BenchmarkProducedArtifact[] Artifacts { get; set; } = Array.Empty<BenchmarkProducedArtifact>();
 }
 

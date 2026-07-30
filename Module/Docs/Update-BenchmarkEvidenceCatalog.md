@@ -21,7 +21,7 @@ Adds one normalized benchmark result to a platform-aware evidence catalog.
 
 ### EXAMPLE 1
 ```powershell
-$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts
+$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts -Metadata @{ 'benchmark.workload.id' = 'tabular-65k-v1' } -RunMode full
 dotnet run -c Release --project .\Benchmarks -- --artifacts .\Build\BenchmarkDotNet.Artifacts
 $capture | Complete-BenchmarkProvenanceCapture
 $result = Import-BenchmarkResult .\Build\BenchmarkDotNet.Artifacts

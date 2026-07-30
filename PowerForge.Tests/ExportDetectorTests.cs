@@ -56,6 +56,7 @@ public sealed class ExportDetectorTests
         Assert.Contains("Complete-BenchmarkProvenanceCapture", exports.Cmdlets);
         Assert.Contains("Get-ManagedModule", exports.Cmdlets);
         Assert.Contains("Install-ManagedModule", exports.Cmdlets);
+        Assert.Contains("Merge-BenchmarkEvidenceCatalog", exports.Cmdlets);
         Assert.Contains("Invoke-PowerForgeBundlePostProcess", exports.Cmdlets);
         Assert.Contains("Invoke-PowerForgePluginExport", exports.Cmdlets);
         Assert.Contains("Invoke-PowerForgePluginPack", exports.Cmdlets);
@@ -68,6 +69,7 @@ public sealed class ExportDetectorTests
         Assert.Contains("Complete-BenchmarkProvenanceCapture", bootstrapper, StringComparison.Ordinal);
         Assert.Contains("Get-ManagedModule", bootstrapper, StringComparison.Ordinal);
         Assert.Contains("Install-ManagedModule", bootstrapper, StringComparison.Ordinal);
+        Assert.Contains("Merge-BenchmarkEvidenceCatalog", bootstrapper, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgeBundlePostProcess", bootstrapper, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgePluginExport", bootstrapper, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgePluginPack", bootstrapper, StringComparison.Ordinal);

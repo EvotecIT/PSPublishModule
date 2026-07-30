@@ -79,6 +79,22 @@ public sealed class BenchmarkResultImporter
         BenchmarkArtifactProvenanceDocument provenance,
         string sidecarPath)
     {
+        foreach (KeyValuePair<string, string> item in provenance.Metadata)
+        {
+            if (result.Metadata.TryGetValue(item.Key, out string? existing) &&
+                !string.Equals(existing, item.Value, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Benchmark artifact metadata '{item.Key}' conflicts with the declaration bound into its production provenance sidecar.");
+            }
+            result.Metadata[item.Key] = item.Value;
+        }
+        ApplyDeclaredRunMode(result, provenance.RunMode);
+        if (!string.IsNullOrWhiteSpace(provenance.RunMode))
+        {
+            result.Metadata["benchmark.provenance.runMode"] =
+                provenance.RunMode;
+        }
         result.StartedUtc = provenance.StartedUtc;
         result.FinishedUtc = provenance.FinishedUtc;
         result.Metadata["gitSha"] = provenance.SourceCommit;
@@ -89,6 +105,44 @@ public sealed class BenchmarkResultImporter
         result.Metadata["benchmark.provenance.sidecar.sha256"] =
             BenchmarkJson.ComputeFileSha256(sidecarPath);
         CaptureValidatedProductionState(result);
+    }
+
+    private static void ApplyDeclaredRunMode(
+        BenchmarkRunResult result,
+        string runMode)
+    {
+        if (string.IsNullOrWhiteSpace(runMode))
+            return;
+
+        string normalized = runMode.Trim().ToLowerInvariant();
+        IEnumerable<string> embeddedModes = result.Samples
+            .Select(sample => sample.RunMode)
+            .Concat(result.Summary.Select(row => row.RunMode))
+            .Concat(result.Comparison.Select(row => row.RunMode))
+            .Where(value =>
+                !string.IsNullOrWhiteSpace(value) &&
+                !string.Equals(value, "import", StringComparison.OrdinalIgnoreCase));
+        if (embeddedModes.Any(value =>
+                !string.Equals(value, normalized, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                $"Benchmark artifact run mode conflicts with the '{normalized}' declaration bound into its production provenance sidecar.");
+        }
+        if (result.Metadata.TryGetValue("runMode", out string? metadataRunMode) &&
+            !string.IsNullOrWhiteSpace(metadataRunMode) &&
+            !string.Equals(metadataRunMode, normalized, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Benchmark artifact metadata run mode conflicts with the '{normalized}' declaration bound into its production provenance sidecar.");
+        }
+
+        foreach (BenchmarkSample sample in result.Samples)
+            sample.RunMode = normalized;
+        foreach (BenchmarkSummaryRow row in result.Summary)
+            row.RunMode = normalized;
+        foreach (BenchmarkComparisonRow row in result.Comparison)
+            row.RunMode = normalized;
+        result.Metadata["runMode"] = normalized;
     }
 
     private static void ClearUnvalidatedProductionProvenance(BenchmarkRunResult result)
@@ -122,9 +176,13 @@ public sealed class BenchmarkResultImporter
     internal static bool HasUnchangedValidatedProductionMetadata(
         BenchmarkRunResult result)
     {
-        return result.ValidatedProductionMetadata.All(item =>
-            result.Metadata.TryGetValue(item.Key, out string? value) &&
-            string.Equals(item.Value, value, StringComparison.Ordinal));
+        Dictionary<string, string> current = result.Metadata
+            .Where(item => BenchmarkEvidenceMetadataPolicy.IsProvenanceBoundKey(item.Key))
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
+        return current.Count == result.ValidatedProductionMetadata.Count &&
+               result.ValidatedProductionMetadata.All(item =>
+                   current.TryGetValue(item.Key, out string? value) &&
+                   string.Equals(item.Value, value, StringComparison.Ordinal));
     }
 
     internal static string ComputeValidatedProductionContentSha256(
@@ -371,8 +429,11 @@ public sealed class BenchmarkResultImporter
             row.MeanMs = MetricValue(sample.Metrics, "MeanMs") ?? row.MeanMs;
             row.MinMs = MetricValue(sample.Metrics, "MinMs") ?? row.MinMs;
             row.MaxMs = MetricValue(sample.Metrics, "MaxMs") ?? row.MaxMs;
-            row.P95Ms = MetricValue(sample.Metrics, "P95Ms") ?? row.P95Ms;
-            row.P99Ms = MetricValue(sample.Metrics, "P99Ms") ?? row.P99Ms;
+            // A BenchmarkDotNet report row is one aggregate record, not one timing
+            // observation. Preserve only percentiles the report actually supplied;
+            // falling back to the aggregate row's duration invents missing percentiles.
+            row.P95Ms = MetricValue(sample.Metrics, "P95Ms");
+            row.P99Ms = MetricValue(sample.Metrics, "P99Ms");
             row.StdDevMs = MetricValue(sample.Metrics, "StdDevMs") ?? row.StdDevMs;
             row.StdErrMs = MetricValue(sample.Metrics, "StdErrMs") ?? row.StdErrMs;
         }
@@ -697,24 +758,34 @@ public sealed class BenchmarkResultImporter
             var engine = GetBenchmarkDotNetEngine(benchmark);
             var metrics = ExtractBenchmarkDotNetMetrics(statistics);
             AddBenchmarkDotNetMemoryMetrics(TryGetObject(benchmark, "Memory"), metrics);
-
-            samples.Add(new BenchmarkSample
+            double[] originalValues = GetBenchmarkDotNetOriginalValues(statistics);
+            if (originalValues.Length > 0)
             {
-                RunId = "import",
-                Suite = suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path),
-                Scenario = method,
-                Operation = "Run",
-                Engine = engine,
-                Host = string.Empty,
-                Os = environment.OsFamily,
-                RunMode = "import",
-                Iteration = 0,
-                Status = mean.HasValue ? BenchmarkSampleStatus.Succeeded : BenchmarkSampleStatus.Failed,
-                DurationMs = mean ?? 0,
-                Reason = mean.HasValue ? string.Empty : "BenchmarkDotNet JSON duration could not be parsed.",
-                Variables = variables,
-                Metrics = metrics
-            });
+                for (int index = 0; index < originalValues.Length; index++)
+                {
+                    samples.Add(CreateBenchmarkDotNetSample(
+                        suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path),
+                        method,
+                        engine,
+                        environment.OsFamily,
+                        index,
+                        originalValues[index] * 0.000001,
+                        variables,
+                        metrics));
+                }
+            }
+            else
+            {
+                samples.Add(CreateBenchmarkDotNetSample(
+                    suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path),
+                    method,
+                    engine,
+                    environment.OsFamily,
+                    0,
+                    mean,
+                    variables,
+                    metrics));
+            }
         }
 
         if (samples.Count == 0)
@@ -723,6 +794,71 @@ public sealed class BenchmarkResultImporter
         result = BuildImportedResult(suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path), samples);
         result.Environment = environment;
         return true;
+    }
+
+    private static BenchmarkSample CreateBenchmarkDotNetSample(
+        string suite,
+        string method,
+        string engine,
+        string os,
+        int iteration,
+        double? durationMs,
+        IDictionary<string, string?> variables,
+        IDictionary<string, double> metrics)
+        => new()
+        {
+            RunId = "import",
+            Suite = suite,
+            Scenario = method,
+            Operation = "Run",
+            Engine = engine,
+            Host = string.Empty,
+            Os = os,
+            RunMode = "import",
+            Iteration = iteration,
+            Status = durationMs.HasValue
+                ? BenchmarkSampleStatus.Succeeded
+                : BenchmarkSampleStatus.Failed,
+            DurationMs = durationMs ?? 0,
+            Reason = durationMs.HasValue
+                ? string.Empty
+                : "BenchmarkDotNet JSON duration could not be parsed.",
+            Variables = new Dictionary<string, string?>(
+                variables,
+                StringComparer.OrdinalIgnoreCase),
+            Metrics = new Dictionary<string, double>(
+                metrics,
+                StringComparer.OrdinalIgnoreCase)
+        };
+
+    private static double[] GetBenchmarkDotNetOriginalValues(JsonElement? statistics)
+    {
+        if (!statistics.HasValue ||
+            statistics.Value.ValueKind != JsonValueKind.Object ||
+            !BenchmarkJson.TryGetPropertyIgnoreCase(
+                statistics.Value,
+                "OriginalValues",
+                out JsonElement values) ||
+            values.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<double>();
+        }
+
+        var result = new List<double>();
+        foreach (JsonElement value in values.EnumerateArray())
+        {
+            double? number = GetDoubleValue(value);
+            if (!number.HasValue ||
+                number.Value < 0 ||
+                double.IsNaN(number.Value) ||
+                double.IsInfinity(number.Value))
+            {
+                return Array.Empty<double>();
+            }
+            result.Add(number.Value);
+        }
+
+        return result.ToArray();
     }
 
     private static string BenchmarkDotNetJsonReportFamily(string path)
