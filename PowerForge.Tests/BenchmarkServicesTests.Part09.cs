@@ -645,6 +645,46 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void BenchmarkImporter_UsesBenchmarkDotNetOriginalValuesAsRawSamples()
+    {
+        string root = CreateTempRoot();
+        string reportPath = Path.Combine(root, "Case-report-full.json");
+        File.WriteAllText(
+            reportPath,
+            """
+            {
+              "Title": "demo",
+              "Benchmarks": [
+                {
+                  "Method": "Read",
+                  "Statistics": {
+                    "OriginalValues": [1000000, 2000000, 3000000, 4000000, 5000000],
+                    "Mean": 3000000,
+                    "Median": 3000000,
+                    "Min": 1000000,
+                    "Max": 5000000,
+                    "Percentiles": {
+                      "P95": 4800000
+                    }
+                  }
+                }
+              ]
+            }
+            """);
+
+        BenchmarkRunResult result =
+            new BenchmarkResultImporter().Import(reportPath);
+        BenchmarkSummaryRow row = Assert.Single(result.Summary);
+
+        Assert.Equal(5, result.Samples.Length);
+        Assert.Equal([1D, 2D, 3D, 4D, 5D], result.Samples.Select(sample => sample.DurationMs));
+        Assert.Equal(5, row.SampleCount);
+        Assert.Equal(3, row.MedianMs);
+        Assert.InRange(row.P95Ms.GetValueOrDefault(), 4.799999, 4.800001);
+        Assert.InRange(row.P99Ms.GetValueOrDefault(), 4.959999, 4.960001);
+    }
+
+    [Fact]
     public void BenchmarkProvenanceCapture_RejectsArtifactMutationAfterCompletion()
     {
         string root = CreateTempRoot();

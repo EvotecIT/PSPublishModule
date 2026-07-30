@@ -758,24 +758,34 @@ public sealed class BenchmarkResultImporter
             var engine = GetBenchmarkDotNetEngine(benchmark);
             var metrics = ExtractBenchmarkDotNetMetrics(statistics);
             AddBenchmarkDotNetMemoryMetrics(TryGetObject(benchmark, "Memory"), metrics);
-
-            samples.Add(new BenchmarkSample
+            double[] originalValues = GetBenchmarkDotNetOriginalValues(statistics);
+            if (originalValues.Length > 0)
             {
-                RunId = "import",
-                Suite = suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path),
-                Scenario = method,
-                Operation = "Run",
-                Engine = engine,
-                Host = string.Empty,
-                Os = environment.OsFamily,
-                RunMode = "import",
-                Iteration = 0,
-                Status = mean.HasValue ? BenchmarkSampleStatus.Succeeded : BenchmarkSampleStatus.Failed,
-                DurationMs = mean ?? 0,
-                Reason = mean.HasValue ? string.Empty : "BenchmarkDotNet JSON duration could not be parsed.",
-                Variables = variables,
-                Metrics = metrics
-            });
+                for (int index = 0; index < originalValues.Length; index++)
+                {
+                    samples.Add(CreateBenchmarkDotNetSample(
+                        suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path),
+                        method,
+                        engine,
+                        environment.OsFamily,
+                        index,
+                        originalValues[index] * 0.000001,
+                        variables,
+                        metrics));
+                }
+            }
+            else
+            {
+                samples.Add(CreateBenchmarkDotNetSample(
+                    suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path),
+                    method,
+                    engine,
+                    environment.OsFamily,
+                    0,
+                    mean,
+                    variables,
+                    metrics));
+            }
         }
 
         if (samples.Count == 0)
@@ -784,6 +794,71 @@ public sealed class BenchmarkResultImporter
         result = BuildImportedResult(suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path), samples);
         result.Environment = environment;
         return true;
+    }
+
+    private static BenchmarkSample CreateBenchmarkDotNetSample(
+        string suite,
+        string method,
+        string engine,
+        string os,
+        int iteration,
+        double? durationMs,
+        IDictionary<string, string?> variables,
+        IDictionary<string, double> metrics)
+        => new()
+        {
+            RunId = "import",
+            Suite = suite,
+            Scenario = method,
+            Operation = "Run",
+            Engine = engine,
+            Host = string.Empty,
+            Os = os,
+            RunMode = "import",
+            Iteration = iteration,
+            Status = durationMs.HasValue
+                ? BenchmarkSampleStatus.Succeeded
+                : BenchmarkSampleStatus.Failed,
+            DurationMs = durationMs ?? 0,
+            Reason = durationMs.HasValue
+                ? string.Empty
+                : "BenchmarkDotNet JSON duration could not be parsed.",
+            Variables = new Dictionary<string, string?>(
+                variables,
+                StringComparer.OrdinalIgnoreCase),
+            Metrics = new Dictionary<string, double>(
+                metrics,
+                StringComparer.OrdinalIgnoreCase)
+        };
+
+    private static double[] GetBenchmarkDotNetOriginalValues(JsonElement? statistics)
+    {
+        if (!statistics.HasValue ||
+            statistics.Value.ValueKind != JsonValueKind.Object ||
+            !BenchmarkJson.TryGetPropertyIgnoreCase(
+                statistics.Value,
+                "OriginalValues",
+                out JsonElement values) ||
+            values.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<double>();
+        }
+
+        var result = new List<double>();
+        foreach (JsonElement value in values.EnumerateArray())
+        {
+            double? number = GetDoubleValue(value);
+            if (!number.HasValue ||
+                number.Value < 0 ||
+                double.IsNaN(number.Value) ||
+                double.IsInfinity(number.Value))
+            {
+                return Array.Empty<double>();
+            }
+            result.Add(number.Value);
+        }
+
+        return result.ToArray();
     }
 
     private static string BenchmarkDotNetJsonReportFamily(string path)
