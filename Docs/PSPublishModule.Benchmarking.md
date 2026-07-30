@@ -353,10 +353,14 @@ Merge-BenchmarkEvidenceCatalog `
 ```
 
 The merge verifies every normalized result against the SHA-256 and lane metadata
-recorded by its source catalog, rejects conflicting copies of the same lane, and
-copies the verified results beside the destination catalog before committing the
-catalog. This is the cross-machine convergence step; the update lock only
-coordinates writers that actually share one filesystem.
+recorded by its source catalog and rejects conflicting copies of the same lane.
+Verified results are written beside the destination catalog under immutable,
+content-addressed file names before the catalog is atomically switched. An older
+catalog therefore continues to reference unchanged bytes even if a process stops
+during publication. This is the cross-machine convergence step; the update lock
+only coordinates writers that actually share one filesystem. Schema 1 catalogs
+must first be updated by the current PowerForge version so legacy publish flags
+are demoted and revalidated.
 
 The catalog replaces only the matching comparison/platform/run-mode lane.
 Windows, Linux, and macOS remain separate entries. `availability` lists missing

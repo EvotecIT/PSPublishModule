@@ -22,7 +22,7 @@ public sealed class MergeBenchmarkEvidenceCatalogCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string[] SourcePath { get; set; } = Array.Empty<string>();
 
-    /// <summary>Destination catalog path. Normalized results are copied beside it.</summary>
+    /// <summary>Destination catalog path. Normalized results are published beside it under immutable content-addressed names.</summary>
     [Parameter(Mandatory = true, Position = 1)]
     [ValidateNotNullOrEmpty]
     public string Path { get; set; } = string.Empty;

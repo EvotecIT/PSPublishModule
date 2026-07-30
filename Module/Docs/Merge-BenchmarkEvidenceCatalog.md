@@ -44,7 +44,7 @@ Accept wildcard characters: True
 ```
 
 ### -Path
-Destination catalog path. Normalized results are copied beside it.
+Destination catalog path. Normalized results are published beside it under immutable content-addressed names.
 
 ```yaml
 Type: String

@@ -43,6 +43,12 @@ public sealed partial class BenchmarkEvidenceCatalogService
 
             BenchmarkEvidenceCatalog source = BenchmarkJson.Read<BenchmarkEvidenceCatalog>(sourceCatalogPath);
             ValidateCatalogSchema(source);
+            if (source.SchemaVersion == 1)
+            {
+                throw new InvalidOperationException(
+                    $"Benchmark evidence source catalog '{sourceCatalogPath}' uses schema 1. " +
+                    "Update it with the current PowerForge version before merging so legacy publish flags are demoted and revalidated.");
+            }
             platformSets.AddRange(source.ExpectedPlatforms);
             foreach (BenchmarkEvidenceEntry entry in source.Entries)
                 candidates.Add(LoadBundleLane(sourceCatalogPath, entry));
@@ -61,9 +67,17 @@ public sealed partial class BenchmarkEvidenceCatalogService
         string outputDirectory = Path.GetDirectoryName(outputCatalogPath)
                                  ?? throw new InvalidOperationException(
                                      $"Unable to determine the evidence catalog directory for '{outputCatalogPath}'.");
+        ValidateDistinctSourceBundleDestinations(outputCatalogPath, selected);
         foreach (BundleLane lane in selected)
         {
-            string artifactPath = ResolveBundleArtifactPath(outputCatalogPath, lane.Entry.ResultPath);
+            lane.Entry.ResultPath = CreateContentAddressedResultPath(
+                lane.Entry.ResultPath,
+                lane.Entry.ResultSha256);
+            lane.Entry.ArtifactFileName = ExtractBundleArtifactFileName(lane.Entry.ResultPath);
+            string artifactPath = ResolveBundleArtifactPath(
+                outputCatalogPath,
+                lane.Entry.ArtifactFileName,
+                lane.Entry.ResultPath);
             lane.DestinationPath = artifactPath;
             lane.Entry.ArtifactDestinationSha256 = ComputeArtifactDestinationSha256(
                 outputCatalogPath,
@@ -81,17 +95,27 @@ public sealed partial class BenchmarkEvidenceCatalogService
             Availability = BuildAvailability(entries, platforms)
         };
 
-        var previous = new Dictionary<string, PreviousFile>(
-            GetPathComparer(outputCatalogPath));
-        CapturePrevious(previous, outputCatalogPath);
-        foreach (BundleLane lane in selected)
-            CapturePrevious(previous, lane.DestinationPath!);
-
+        var createdArtifacts = new List<string>();
         try
         {
             Directory.CreateDirectory(outputDirectory);
             foreach (BundleLane lane in selected)
-                BenchmarkJson.WriteBytes(lane.DestinationPath!, lane.ArtifactBytes);
+            {
+                string destinationPath = lane.DestinationPath!;
+                if (File.Exists(destinationPath))
+                {
+                    string existingHash = BenchmarkJson.ComputeFileSha256(destinationPath);
+                    if (!string.Equals(existingHash, lane.Entry.ResultSha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException(
+                            $"Immutable benchmark artifact '{Path.GetFileName(destinationPath)}' already exists with different content.");
+                    }
+                    continue;
+                }
+
+                BenchmarkJson.WriteBytes(destinationPath, lane.ArtifactBytes);
+                createdArtifacts.Add(destinationPath);
+            }
             BenchmarkJson.Write(outputCatalogPath, merged);
             return merged;
         }
@@ -99,12 +123,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
         {
             try
             {
-                foreach (KeyValuePair<string, PreviousFile> item in previous.Reverse())
+                foreach (string artifactPath in createdArtifacts)
                 {
-                    if (item.Value.Existed)
-                        BenchmarkJson.WriteBytes(item.Key, item.Value.Bytes!);
-                    else if (File.Exists(item.Key))
-                        File.Delete(item.Key);
+                    if (File.Exists(artifactPath))
+                        File.Delete(artifactPath);
                 }
             }
             catch (Exception rollbackException)
@@ -123,7 +145,13 @@ public sealed partial class BenchmarkEvidenceCatalogService
         BenchmarkEvidenceEntry sourceEntry)
     {
         ValidateBundleEntry(sourceEntry);
-        string artifactPath = ResolveBundleArtifactPath(sourceCatalogPath, sourceEntry.ResultPath);
+        string sourceArtifactFileName = string.IsNullOrWhiteSpace(sourceEntry.ArtifactFileName)
+            ? ExtractBundleArtifactFileName(sourceEntry.ResultPath)
+            : sourceEntry.ArtifactFileName;
+        string artifactPath = ResolveBundleArtifactPath(
+            sourceCatalogPath,
+            sourceArtifactFileName,
+            sourceEntry.ResultPath);
         if (!File.Exists(artifactPath))
         {
             throw new FileNotFoundException(
@@ -173,7 +201,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         BenchmarkEvidenceEntry entry,
         BenchmarkRunResult result)
     {
-        string platform = ResolvePlatform(result, platformOverride: null);
+        string platform = ResolvePlatform(result, entry.Platform);
         DateTimeOffset generatedUtc = ResolveGeneratedUtc(result);
         Dictionary<string, string> compatibility = BuildCompatibility(result);
         bool mismatch =
@@ -238,6 +266,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
         BenchmarkEvidenceEntry right)
         => string.Equals(left.ResultSha256, right.ResultSha256, StringComparison.OrdinalIgnoreCase) &&
            string.Equals(left.ResultPath, right.ResultPath, StringComparison.Ordinal) &&
+           string.Equals(
+               EffectiveBundleArtifactFileName(left),
+               EffectiveBundleArtifactFileName(right),
+               StringComparison.OrdinalIgnoreCase) &&
            string.Equals(left.Suite, right.Suite, StringComparison.Ordinal) &&
            left.GeneratedUtc == right.GeneratedUtc &&
            left.Publish == right.Publish &&
@@ -255,29 +287,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
 
     private static string ResolveBundleArtifactPath(
         string catalogPath,
+        string artifactFileName,
         string resultPath)
     {
-        string portablePath = resultPath.Replace('\\', '/').TrimEnd('/');
-        if (portablePath.IndexOfAny(['?', '#']) >= 0)
-        {
-            throw new InvalidOperationException(
-                $"Benchmark result path '{resultPath}' cannot contain a query or fragment.");
-        }
-
-        string pathComponent = portablePath;
-        if (Uri.TryCreate(portablePath, UriKind.Absolute, out Uri? uri))
-        {
-            if (uri.IsFile)
-                pathComponent = uri.LocalPath.Replace('\\', '/');
-            else
-                pathComponent = uri.AbsolutePath;
-        }
-
-        int separator = pathComponent.LastIndexOf('/');
-        string fileName = separator >= 0
-            ? pathComponent.Substring(separator + 1)
-            : pathComponent;
-        if (!IsPortableBundleFileName(fileName))
+        if (!IsPortableBundleFileName(artifactFileName))
         {
             throw new InvalidOperationException(
                 $"Benchmark result path '{resultPath}' does not identify a portable bundle artifact file.");
@@ -287,7 +300,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
                            ?? throw new InvalidOperationException(
                                $"Unable to determine the evidence catalog directory for '{catalogPath}'.");
         string resolvedDirectory = BenchmarkJson.ResolveWritePath(directory);
-        string artifactPath = BenchmarkJson.ResolveWritePath(Path.Combine(resolvedDirectory, fileName));
+        string artifactPath = BenchmarkJson.ResolveWritePath(Path.Combine(resolvedDirectory, artifactFileName));
         string? artifactDirectory = Path.GetDirectoryName(artifactPath);
         if (!string.Equals(
                 resolvedDirectory,
@@ -301,9 +314,65 @@ public sealed partial class BenchmarkEvidenceCatalogService
         return artifactPath;
     }
 
+    private static string ExtractBundleArtifactFileName(string resultPath)
+    {
+        string portablePath = resultPath.Replace('\\', '/').TrimEnd('/');
+        if (portablePath.IndexOfAny(['?', '#']) >= 0)
+        {
+            throw new InvalidOperationException(
+                $"Benchmark result path '{resultPath}' cannot contain a query or fragment.");
+        }
+
+        string pathComponent = portablePath;
+        if (Uri.TryCreate(portablePath, UriKind.Absolute, out Uri? uri))
+        {
+            pathComponent = uri.IsFile
+                ? uri.LocalPath.Replace('\\', '/')
+                : uri.AbsolutePath;
+        }
+
+        int separator = pathComponent.LastIndexOf('/');
+        string fileName = separator >= 0
+            ? pathComponent.Substring(separator + 1)
+            : pathComponent;
+        if (!IsPortableBundleFileName(fileName))
+        {
+            throw new InvalidOperationException(
+                $"Benchmark result path '{resultPath}' does not identify a portable bundle artifact file.");
+        }
+
+        return fileName;
+    }
+
+    private static string EffectiveBundleArtifactFileName(BenchmarkEvidenceEntry entry)
+        => string.IsNullOrWhiteSpace(entry.ArtifactFileName)
+            ? ExtractBundleArtifactFileName(entry.ResultPath)
+            : entry.ArtifactFileName;
+
+    private static string CreateContentAddressedResultPath(
+        string resultPath,
+        string resultSha256)
+    {
+        string fileName = ExtractBundleArtifactFileName(resultPath);
+        string extension = Path.GetExtension(fileName);
+        string stem = Path.GetFileNameWithoutExtension(fileName);
+        string contentFileName =
+            $"{stem}.{resultSha256.ToLowerInvariant()}{extension}";
+        if (!IsPortableBundleFileName(contentFileName))
+        {
+            throw new InvalidOperationException(
+                $"Benchmark result path '{resultPath}' cannot be converted to a portable immutable artifact name.");
+        }
+        int separatorIndex = Math.Max(
+            resultPath.LastIndexOf('/'),
+            resultPath.LastIndexOf('\\'));
+        return resultPath.Substring(0, separatorIndex + 1) + contentFileName;
+    }
+
     private static bool IsPortableBundleFileName(string fileName)
     {
         if (string.IsNullOrWhiteSpace(fileName) ||
+            fileName.Length > 255 ||
             fileName is "." or ".." ||
             fileName.EndsWith(".", StringComparison.Ordinal) ||
             fileName.EndsWith(" ", StringComparison.Ordinal) ||
@@ -332,7 +401,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         string outputCatalogPath,
         IEnumerable<BundleLane> lanes)
     {
-        StringComparer comparer = GetPathComparer(outputCatalogPath);
+        StringComparer comparer = StringComparer.OrdinalIgnoreCase;
         var owners = new Dictionary<string, BundleLane>(comparer);
         foreach (BundleLane lane in lanes)
         {
@@ -357,6 +426,33 @@ public sealed partial class BenchmarkEvidenceCatalogService
         }
     }
 
+    private static void ValidateDistinctSourceBundleDestinations(
+        string outputCatalogPath,
+        IEnumerable<BundleLane> lanes)
+    {
+        string catalogFileName = Path.GetFileName(outputCatalogPath);
+        var owners = new Dictionary<string, BundleLane>(StringComparer.OrdinalIgnoreCase);
+        foreach (BundleLane lane in lanes)
+        {
+            string fileName = ExtractBundleArtifactFileName(lane.Entry.ResultPath);
+            if (string.Equals(fileName, catalogFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Benchmark result path '{lane.Entry.ResultPath}' would overwrite the destination catalog.");
+            }
+
+            if (owners.TryGetValue(fileName, out BundleLane? existing))
+            {
+                throw new InvalidOperationException(
+                    $"Benchmark lanes '{existing.Entry.ComparisonId}/{existing.Entry.Platform}/{existing.Entry.RunMode}' " +
+                    $"and '{lane.Entry.ComparisonId}/{lane.Entry.Platform}/{lane.Entry.RunMode}' " +
+                    $"would overwrite the same bundle artifact '{fileName}'.");
+            }
+
+            owners.Add(fileName, lane);
+        }
+    }
+
     private static BenchmarkEvidenceEntry CloneEntry(BenchmarkEvidenceEntry entry)
         => new()
         {
@@ -368,6 +464,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             ResultPath = entry.ResultPath,
             ResultSha256 = entry.ResultSha256,
             ArtifactDestinationSha256 = entry.ArtifactDestinationSha256,
+            ArtifactFileName = entry.ArtifactFileName,
             Suite = entry.Suite,
             Environment = CopyEnvironment(entry.Environment),
             Compatibility = new Dictionary<string, string>(
@@ -390,16 +487,6 @@ public sealed partial class BenchmarkEvidenceCatalogService
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
 
-    private static void CapturePrevious(
-        IDictionary<string, PreviousFile> previous,
-        string path)
-    {
-        if (previous.ContainsKey(path))
-            return;
-        bool existed = File.Exists(path);
-        previous[path] = new PreviousFile(existed, existed ? File.ReadAllBytes(path) : null);
-    }
-
     private sealed class BundleLane
     {
         internal BundleLane(BenchmarkEvidenceEntry entry, byte[] artifactBytes)
@@ -413,15 +500,4 @@ public sealed partial class BenchmarkEvidenceCatalogService
         internal string? DestinationPath { get; set; }
     }
 
-    private sealed class PreviousFile
-    {
-        internal PreviousFile(bool existed, byte[]? bytes)
-        {
-            Existed = existed;
-            Bytes = bytes;
-        }
-
-        internal bool Existed { get; }
-        internal byte[]? Bytes { get; }
-    }
 }
