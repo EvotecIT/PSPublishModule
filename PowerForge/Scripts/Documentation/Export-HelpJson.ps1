@@ -30,6 +30,22 @@ function ConvertToPowerShellDefaultValue([object]$value) {
     $text = [string]$value
     return ("'" + $text.Replace("'", "''") + "'")
   }
+  if ($value -is [bool]) {
+    if ($value) { return '$true' }
+    return '$false'
+  }
+  if ($value -is [enum]) {
+    $enumType = $value.GetType()
+    $enumName = [System.Enum]::GetName($enumType, $value)
+    if ($enumName) {
+      return ('[' + $enumType.FullName + ']::' + $enumName)
+    }
+    $underlyingValue = [System.Convert]::ChangeType(
+      $value,
+      [System.Enum]::GetUnderlyingType($enumType),
+      [System.Globalization.CultureInfo]::InvariantCulture)
+    return ('([' + $enumType.FullName + ']' + [string]$underlyingValue + ')')
+  }
   if ($value -is [System.Collections.IEnumerable]) {
     $items = @()
     foreach ($item in $value) {
@@ -37,23 +53,72 @@ function ConvertToPowerShellDefaultValue([object]$value) {
     }
     return ('@(' + ($items -join ', ') + ')')
   }
+  if ($value -is [System.IFormattable]) {
+    return $value.ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
+  }
   return [string]$value
+}
+
+function GetCanonicalTypeNameFromType([type]$type) {
+  if ($null -eq $type) { return '' }
+  if ($type.IsArray) {
+    $elementName = GetCanonicalTypeNameFromType ($type.GetElementType())
+    $rank = $type.GetArrayRank()
+    if ($rank -le 1) { return ($elementName + '[]') }
+    return ($elementName + '[' + (',' * ($rank - 1)) + ']')
+  }
+  if ($type.IsGenericType) {
+    $definition = $type.GetGenericTypeDefinition()
+    $definitionName = [string]$definition.FullName
+    if (-not $definitionName) { $definitionName = [string]$definition.Name }
+    $definitionName = $definitionName -replace '`\d+$', ''
+    $arguments = @()
+    foreach ($argument in $type.GetGenericArguments()) {
+      $arguments += GetCanonicalTypeNameFromType $argument
+    }
+    return ($definitionName + '[' + ($arguments -join ',') + ']')
+  }
+  if ($type.FullName) { return [string]$type.FullName }
+  return [string]$type.Name
+}
+
+function GetCanonicalTypeName([string]$candidate) {
+  if ([string]::IsNullOrWhiteSpace($candidate)) { return '' }
+  $trimmed = $candidate.Trim()
+  $resolvedType = $null
+  try { $resolvedType = $trimmed -as [type] } catch { $resolvedType = $null }
+  if ($resolvedType) { return GetCanonicalTypeNameFromType $resolvedType }
+  return ($trimmed -replace '\s+', '')
 }
 
 function GetTypeKeys([string]$name, [string]$clrName) {
   $keys = @()
   foreach ($candidate in @($name, $clrName)) {
     if (-not [string]::IsNullOrWhiteSpace($candidate)) {
-      $keys += $candidate.Trim()
-    }
-  }
-  if (-not [string]::IsNullOrWhiteSpace($clrName)) {
-    $separatorIndex = $clrName.LastIndexOf('.')
-    if ($separatorIndex -ge 0 -and $separatorIndex -lt ($clrName.Length - 1)) {
-      $keys += $clrName.Substring($separatorIndex + 1)
+      $trimmed = $candidate.Trim()
+      $keys += $trimmed
+      $canonical = GetCanonicalTypeName $trimmed
+      if ($canonical) {
+        $keys += $canonical
+        $genericIndex = $canonical.IndexOf('[')
+        $baseName = if ($genericIndex -ge 0) { $canonical.Substring(0, $genericIndex) } else { $canonical }
+        $genericSuffix = if ($genericIndex -ge 0) { $canonical.Substring($genericIndex) } else { '' }
+        $separatorIndex = [System.Math]::Max($baseName.LastIndexOf('.'), $baseName.LastIndexOf('+'))
+        if ($separatorIndex -ge 0 -and $separatorIndex -lt ($baseName.Length - 1)) {
+          $keys += ($baseName.Substring($separatorIndex + 1) + $genericSuffix)
+        }
+      }
     }
   }
   return @($keys | Sort-Object -Unique)
+}
+
+function GetTypeIdentity([string]$name, [string]$clrName) {
+  foreach ($candidate in @($clrName, $name)) {
+    $identity = GetCanonicalTypeName $candidate
+    if ($identity) { return $identity }
+  }
+  return ''
 }
 
 try {
@@ -488,7 +553,7 @@ try {
           }
         }
 
-        $outputIdentity = if ($outputTypeClrName) { $outputTypeClrName.Trim() } else { $outputTypeName.Trim() }
+        $outputIdentity = GetTypeIdentity $outputTypeName $outputTypeClrName
         if ($seenOutputIdentities.ContainsKey($outputIdentity)) { continue }
         $seenOutputIdentities[$outputIdentity] = $true
         foreach ($key in @(GetTypeKeys $outputTypeName $outputTypeClrName)) {
@@ -507,11 +572,7 @@ try {
         }
         if ($matchesRuntimeOutput) { continue }
 
-        $helpOutputIdentity = if ($helpOutput.clrTypeName) {
-          ([string]$helpOutput.clrTypeName).Trim()
-        } else {
-          ([string]$helpOutput.name).Trim()
-        }
+        $helpOutputIdentity = GetTypeIdentity ([string]$helpOutput.name) ([string]$helpOutput.clrTypeName)
         if ($seenOutputIdentities.ContainsKey($helpOutputIdentity)) { continue }
         $seenOutputIdentities[$helpOutputIdentity] = $true
         $outputs += [ordered]@{

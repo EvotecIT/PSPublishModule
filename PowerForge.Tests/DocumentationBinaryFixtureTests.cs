@@ -44,7 +44,7 @@ public sealed class DocumentationBinaryFixtureTests
             var staleHelpDirectory = Path.Combine(tempRoot, "en-US");
             Directory.CreateDirectory(staleHelpDirectory);
             var staleExternalHelp = File.ReadAllText(Path.Combine(expectedRoot, "BinaryDocFixture-help.xml"))
-                .Replace("<dev:defaultValue>Basic</dev:defaultValue>", "<dev:defaultValue>None</dev:defaultValue>", StringComparison.Ordinal);
+                .Replace("<dev:defaultValue>[BinaryDocFixture.BinaryDocMode]::Basic</dev:defaultValue>", "<dev:defaultValue>None</dev:defaultValue>", StringComparison.Ordinal);
             File.WriteAllText(
                 Path.Combine(staleHelpDirectory, "BinaryDocFixture-help.xml"),
                 staleExternalHelp,
@@ -55,7 +55,7 @@ public sealed class DocumentationBinaryFixtureTests
             var modeParameter = Assert.Single(
                 Assert.Single(extracted.Commands).Parameters,
                 parameter => string.Equals(parameter.Name, "Mode", StringComparison.Ordinal));
-            Assert.Equal("Basic", modeParameter.DefaultValue);
+            Assert.Equal("[BinaryDocFixture.BinaryDocMode]::Basic", modeParameter.DefaultValue);
 
             var result = engine.Build(
                 moduleName: moduleName,
@@ -209,6 +209,12 @@ public sealed class DocumentationBinaryFixtureTests
                 "@('a', 'b c')",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Names", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
+                "@($true, $false)",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Switches", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
+                "@([BinaryDocFixture.BinaryDocMode]::Basic, [BinaryDocFixture.BinaryDocMode]::Advanced)",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Modes", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
                 "$null",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "OptionalValue", StringComparison.Ordinal)).DefaultValue);
 
@@ -233,6 +239,14 @@ public sealed class DocumentationBinaryFixtureTests
                 StringComparison.Ordinal);
             Assert.Contains(
                 "<dev:defaultValue>@('a', 'b c')</dev:defaultValue>",
+                File.ReadAllText(generatedMamlPath),
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "Default value: @($true, $false)",
+                File.ReadAllText(Path.Combine(markdownDirectory, "Get-BinaryDocEmptyDefault.md")),
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "<dev:defaultValue>@([BinaryDocFixture.BinaryDocMode]::Basic, [BinaryDocFixture.BinaryDocMode]::Advanced)</dev:defaultValue>",
                 File.ReadAllText(generatedMamlPath),
                 StringComparison.Ordinal);
             Assert.Contains(
@@ -290,10 +304,10 @@ function Get-DescribedOutput {
     .EXTERNALHELP DescribedOutputModule-help.xml
     #>
     [CmdletBinding()]
-    [OutputType([string])]
+    [OutputType([System.Collections.Generic.List[string]])]
     param()
 
-    'fixture'
+    [System.Collections.Generic.List[string]]::new()
 }
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
@@ -324,10 +338,10 @@ function Get-DescribedOutput {
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.String</maml:name>
+          <maml:name>System.Collections.Generic.List[System.String]</maml:name>
         </dev:type>
         <maml:description>
-          <maml:para>A string whose authored output description must survive metadata extraction.</maml:para>
+          <maml:para>A generic list whose authored output description must survive metadata extraction.</maml:para>
         </maml:description>
       </command:returnValue>
     </command:returnValues>
@@ -352,7 +366,7 @@ function Get-DescribedOutput {
             var engine = new DocumentationEngine(new PowerShellRunner(), new NullLogger());
             var payload = engine.ExtractHelpPayload(tempRoot, manifestPath, TimeSpan.FromMinutes(1));
             var output = Assert.Single(Assert.Single(payload.Commands).Outputs);
-            Assert.Equal("System.String", output.ClrTypeName);
+            Assert.StartsWith("System.Collections.Generic.List`1[[System.String,", output.ClrTypeName, StringComparison.Ordinal);
             Assert.Contains(
                 "authored output description must survive metadata extraction",
                 output.Description,

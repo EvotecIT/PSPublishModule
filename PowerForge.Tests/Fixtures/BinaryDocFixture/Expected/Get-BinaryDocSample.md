@@ -45,7 +45,7 @@ Possible values: Basic, Advanced
 
 Required: False
 Position: named
-Default value: Basic
+Default value: [BinaryDocFixture.BinaryDocMode]::Basic
 Accept pipeline input: False
 Accept wildcard characters: False
 ```

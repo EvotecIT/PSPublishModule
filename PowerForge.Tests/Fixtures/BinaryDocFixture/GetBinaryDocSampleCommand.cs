@@ -81,6 +81,16 @@ public sealed class GetBinaryDocEmptyDefaultCommand : PSCmdlet
     [PSDefaultValue(Value = new[] { "a", "b c" })]
     public string[] Names { get; set; } = ["a", "b c"];
 
+    /// <summary>Optional switches whose Boolean values must remain valid PowerShell literals.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = new[] { true, false })]
+    public bool[] Switches { get; set; } = [true, false];
+
+    /// <summary>Optional modes whose enum values must remain valid PowerShell literals.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = new[] { BinaryDocMode.Basic, BinaryDocMode.Advanced })]
+    public BinaryDocMode[] Modes { get; set; } = [BinaryDocMode.Basic, BinaryDocMode.Advanced];
+
     /// <summary>An optional value whose declared default is explicitly null.</summary>
     [Parameter]
     [PSDefaultValue(Value = null)]
