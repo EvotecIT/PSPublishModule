@@ -80,6 +80,11 @@ public sealed class GetBinaryDocEmptyDefaultCommand : PSCmdlet
     [Parameter]
     [PSDefaultValue(Value = new[] { "a", "b c" })]
     public string[] Names { get; set; } = ["a", "b c"];
+
+    /// <summary>An optional value whose declared default is explicitly null.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = null)]
+    public string? OptionalValue { get; set; }
 }
 
 /// <summary>Rendering mode for the binary documentation fixture.</summary>

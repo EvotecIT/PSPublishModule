@@ -210,11 +210,10 @@ try {
             if ($attr -is [System.Management.Automation.PSDefaultValueAttribute]) {
               if (-not [string]::IsNullOrWhiteSpace([string]$attr.Help)) {
                 $defaultValue = [string]$attr.Help
-                $hasMetadataDefault = $true
-              } elseif ($null -ne $attr.Value) {
+              } else {
                 $defaultValue = ConvertToPowerShellDefaultValue $attr.Value
-                $hasMetadataDefault = $true
               }
+              $hasMetadataDefault = $true
             }
           }
         }
@@ -465,7 +464,8 @@ try {
     }
 
     $outputs = @()
-    $seenOutputs = @{}
+    $seenOutputIdentities = @{}
+    $runtimeOutputKeys = @{}
     try {
       foreach ($outputType in @($c.OutputType)) {
         $outputTypeName = ''
@@ -488,13 +488,11 @@ try {
           }
         }
 
-        $alreadySeen = $false
+        $outputIdentity = if ($outputTypeClrName) { $outputTypeClrName.Trim() } else { $outputTypeName.Trim() }
+        if ($seenOutputIdentities.ContainsKey($outputIdentity)) { continue }
+        $seenOutputIdentities[$outputIdentity] = $true
         foreach ($key in @(GetTypeKeys $outputTypeName $outputTypeClrName)) {
-          if ($seenOutputs.ContainsKey($key)) { $alreadySeen = $true; break }
-        }
-        if ($alreadySeen) { continue }
-        foreach ($key in @(GetTypeKeys $outputTypeName $outputTypeClrName)) {
-          $seenOutputs[$key] = $true
+          $runtimeOutputKeys[$key] = $true
         }
         $outputs += [ordered]@{ name = $outputTypeName; clrTypeName = $outputTypeClrName; description = $typeDesc }
       }
@@ -503,14 +501,19 @@ try {
     }
     if ([string]$c.CommandType -ne 'Cmdlet') {
       foreach ($helpOutput in $helpOutputs) {
-        $alreadySeen = $false
+        $matchesRuntimeOutput = $false
         foreach ($key in @(GetTypeKeys ([string]$helpOutput.name) ([string]$helpOutput.clrTypeName))) {
-          if ($seenOutputs.ContainsKey($key)) { $alreadySeen = $true; break }
+          if ($runtimeOutputKeys.ContainsKey($key)) { $matchesRuntimeOutput = $true; break }
         }
-        if ($alreadySeen) { continue }
-        foreach ($key in @(GetTypeKeys ([string]$helpOutput.name) ([string]$helpOutput.clrTypeName))) {
-          $seenOutputs[$key] = $true
+        if ($matchesRuntimeOutput) { continue }
+
+        $helpOutputIdentity = if ($helpOutput.clrTypeName) {
+          ([string]$helpOutput.clrTypeName).Trim()
+        } else {
+          ([string]$helpOutput.name).Trim()
         }
+        if ($seenOutputIdentities.ContainsKey($helpOutputIdentity)) { continue }
+        $seenOutputIdentities[$helpOutputIdentity] = $true
         $outputs += [ordered]@{
           name = [string]$helpOutput.name
           clrTypeName = [string]$helpOutput.clrTypeName
