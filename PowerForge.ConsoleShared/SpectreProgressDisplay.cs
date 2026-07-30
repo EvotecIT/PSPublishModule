@@ -35,7 +35,10 @@ internal static class SpectreProgressDisplay
             {
                 finalFrame = renderable;
                 taskObserver?.Invoke(tasks);
-                return renderable;
+                return SpectreProgressViewport.Project(
+                    renderable,
+                    tasks,
+                    Math.Max(1, console.Profile.Height - 2));
             })
             .Start(action);
 

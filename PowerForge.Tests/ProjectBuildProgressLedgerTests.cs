@@ -6,7 +6,7 @@ namespace PowerForge.Tests;
 public sealed class ProjectBuildProgressLedgerTests
 {
     [Fact]
-    public void ProgressLedger_KeepsEveryLiveTaskVisibleAndRetainsCompleteTimedHistory()
+    public void ProgressLedger_RegistersCompletePlanAndRetainsCompleteTimedHistory()
     {
         using var writer = new StringWriter();
         var console = CreateConsole(writer, height: 12);
@@ -77,7 +77,7 @@ public sealed class ProjectBuildProgressLedgerTests
     }
 
     [Fact]
-    public void ProgressLedger_KeepsCurrentWorkVisibleWhenLiveRegionOverflows()
+    public void ProgressLedger_UpdatesFullPlanTopToBottomWithoutMovingRows()
     {
         using var writer = new StringWriter();
         var console = CreateConsole(writer, height: 12);
@@ -103,16 +103,141 @@ public sealed class ProjectBuildProgressLedgerTests
                     .ToArray();
 
                 ledger.Plan(items);
-                ledger.Update(items[0], SpectreProgressLedgerState.Started, "building");
+                ledger.Update(items[6], SpectreProgressLedgerState.Started, "building");
+                ledger.Update(items[3], SpectreProgressLedgerState.Started, "building");
                 Assert.Equal(85, ledger.VisibleTaskCount);
             },
             tasks => finalTaskDescriptions = tasks.Select(task => task.Description).ToArray());
 
         Assert.NotNull(finalTaskDescriptions);
-        Assert.Contains("Project.01", finalTaskDescriptions![^1], StringComparison.Ordinal);
+        Assert.Equal(85, finalTaskDescriptions!.Count);
+        Assert.Contains("Project.01", finalTaskDescriptions[0], StringComparison.Ordinal);
+        Assert.Contains("Project.04", finalTaskDescriptions[3], StringComparison.Ordinal);
+        Assert.Contains("Project.07", finalTaskDescriptions[6], StringComparison.Ordinal);
+        Assert.Contains("Project.85", finalTaskDescriptions[^1], StringComparison.Ordinal);
         var output = writer.ToString();
         Assert.Contains("Project.01", output, StringComparison.Ordinal);
+        Assert.Contains("Project.07", output, StringComparison.Ordinal);
         Assert.Contains("Project.85", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProgressLedger_RendersSharedDetailedTitleTargetKindAndTimingLayout()
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer, height: 12);
+        var presentation = new SpectreProgressPresentation(viewportWidth: 140, unicode: false);
+        IReadOnlyList<string>? finalTaskDescriptions = null;
+
+        SpectreProgressDisplay.Run(
+            console,
+            presentation.CreateColumns(),
+            context =>
+            {
+                var ledger = new SpectreProgressLedger(context, presentation);
+                var item = new SpectreProgressLedgerItem
+                {
+                    Key = "artefact:unpacked",
+                    GroupKey = "Module",
+                    GroupTitle = "Build PowerShell module",
+                    GroupOrder = 1,
+                    Title = "Pack artefact",
+                    Target = "Unpacked",
+                    Kind = ModulePipelineStepKind.Artefact.ToString(),
+                    Position = 1,
+                    Total = 2
+                };
+
+                ledger.Plan([item]);
+                ledger.Update(item, SpectreProgressLedgerState.Started, "packing");
+            },
+            tasks => finalTaskDescriptions = tasks.Select(task => task.Description).ToArray());
+
+        var description = Assert.Single(finalTaskDescriptions!);
+        Assert.StartsWith("01/02 Pack artefact", description, StringComparison.Ordinal);
+        Assert.Contains("packing", description, StringComparison.Ordinal);
+        Assert.EndsWith("Unpacked", description, StringComparison.Ordinal);
+        Assert.Contains("PK", writer.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UnifiedReleaseConsole_UsesSharedModuleRowsInCanonicalOrder()
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer, height: 20);
+        var spec = new PowerForgeReleaseSpec
+        {
+            Module = new PowerForgeModuleReleaseOptions
+            {
+                ModuleName = "SampleProgress",
+                ModuleVersion = "1.0.0"
+            }
+        };
+        var request = new PowerForgeReleaseRequest
+        {
+            ConfigPath = "release.json",
+            ModuleOnly = true
+        };
+        var items = new[]
+        {
+            new PowerForgeReleaseProgressItem
+            {
+                Phase = PowerForgeReleaseProgressPhase.Module,
+                Key = "build:stage",
+                Title = "Stage to staging",
+                Kind = ModulePipelineStepKind.Build.ToString(),
+                Position = 1,
+                Total = 3
+            },
+            new PowerForgeReleaseProgressItem
+            {
+                Phase = PowerForgeReleaseProgressPhase.Module,
+                Key = "artefact:unpacked",
+                Title = "Pack artefact",
+                Target = "Unpacked (Local)",
+                Kind = ModulePipelineStepKind.Artefact.ToString(),
+                Position = 2,
+                Total = 3
+            },
+            new PowerForgeReleaseProgressItem
+            {
+                Phase = PowerForgeReleaseProgressPhase.Module,
+                Key = "publish:gallery",
+                Title = "Publish",
+                Target = "PowerShellGallery",
+                Kind = ModulePipelineStepKind.Publish.ToString(),
+                Position = 3,
+                Total = 3
+            }
+        };
+
+        var result = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
+            console,
+            spec,
+            request,
+            progress =>
+            {
+                var detailed = Assert.IsAssignableFrom<IPowerForgeReleaseProgressReporterV2>(progress);
+                progress.PhaseStarted(PowerForgeReleaseProgressPhase.Module, items.Length);
+                detailed.ItemsPlanned(PowerForgeReleaseProgressPhase.Module, items);
+                detailed.ItemUpdated(items[2], PowerForgeReleaseProgressItemState.Started, "publishing");
+                detailed.ItemUpdated(items[0], PowerForgeReleaseProgressItemState.Completed, "staged");
+                detailed.ItemUpdated(items[1], PowerForgeReleaseProgressItemState.Completed, "packed");
+                detailed.ItemUpdated(items[2], PowerForgeReleaseProgressItemState.Completed, "published");
+                progress.PhaseCompleted(PowerForgeReleaseProgressPhase.Module, "complete");
+                return new PowerForgeReleaseResult { Success = true };
+            });
+
+        Assert.True(result.Success);
+        var output = writer.ToString();
+        var first = output.LastIndexOf("01/03 Stage to staging", StringComparison.Ordinal);
+        var second = output.LastIndexOf("02/03 Pack artefact", StringComparison.Ordinal);
+        var third = output.LastIndexOf("03/03 Publish", StringComparison.Ordinal);
+        Assert.True(first >= 0, output);
+        Assert.True(second > first, output);
+        Assert.True(third > second, output);
+        Assert.Contains("Unpacked (Local)", output, StringComparison.Ordinal);
+        Assert.Contains("PowerShellGallery", output, StringComparison.Ordinal);
     }
 
     [Fact]

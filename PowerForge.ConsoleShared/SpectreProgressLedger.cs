@@ -7,18 +7,25 @@ using Spectre.Console;
 namespace PowerForge.ConsoleShared;
 
 /// <summary>
-/// Keeps every planned work item visible in the Spectre live region and retains the
-/// complete history for a durable post-run ledger.
+/// Registers the complete plan in canonical order and updates rows in place.
+/// The shared live viewport keeps current work visible without filtering, removing,
+/// or re-adding planned tasks.
 /// </summary>
 internal sealed class SpectreProgressLedger
 {
     private readonly ProgressContext _context;
+    private readonly SpectreProgressPresentation? _presentation;
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ProgressTask> _visibleTasks = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _sync = new();
 
-    internal SpectreProgressLedger(ProgressContext context)
-        => _context = context ?? throw new ArgumentNullException(nameof(context));
+    internal SpectreProgressLedger(
+        ProgressContext context,
+        SpectreProgressPresentation? presentation = null)
+    {
+        _context = context ?? throw new ArgumentNullException(nameof(context));
+        _presentation = presentation;
+    }
 
     internal void Plan(IEnumerable<SpectreProgressLedgerItem> items)
     {
@@ -41,7 +48,7 @@ internal sealed class SpectreProgressLedger
                 _entries[item.Key] = new Entry(item);
             }
 
-            RefreshVisibleTasks();
+            RefreshTasks();
         }
     }
 
@@ -65,8 +72,10 @@ internal sealed class SpectreProgressLedger
                 entry.Item = item;
             }
 
-            ApplyUpdate(entry, state, detail, moveStartedTaskToEnd: true);
-            RefreshVisibleTasks();
+            // Spectre keeps task insertion order. The full plan is materialized
+            // before any updates so an out-of-order start cannot move a row.
+            RefreshTasks();
+            ApplyUpdate(entry, state, detail);
             _context.Refresh();
         }
     }
@@ -121,11 +130,10 @@ internal sealed class SpectreProgressLedger
                 ApplyUpdate(
                     entry,
                     state,
-                    success ? "not required" : "skipped after failure",
-                    moveStartedTaskToEnd: false);
+                    success ? "not required" : "skipped after failure");
             }
 
-            RefreshVisibleTasks();
+            RefreshTasks();
             _context.Refresh();
         }
     }
@@ -135,7 +143,10 @@ internal sealed class SpectreProgressLedger
         lock (_sync)
         {
             foreach (var task in _visibleTasks.Values.ToArray())
+            {
                 _context.RemoveTask(task);
+                _presentation?.Remove(task);
+            }
 
             _visibleTasks.Clear();
             _context.Refresh();
@@ -155,6 +166,7 @@ internal sealed class SpectreProgressLedger
                     entry.Item.Position,
                     entry.Item.Total,
                     entry.Item.Title,
+                    entry.Item.Target,
                     entry.State,
                     entry.Detail,
                     entry.Duration ?? entry.Item.Duration ?? TimeSpan.Zero))
@@ -199,10 +211,14 @@ internal sealed class SpectreProgressLedger
             var ordinal = snapshot.Position > 0 && snapshot.Total > 0
                 ? $"{snapshot.Position:00}/{snapshot.Total:00}"
                 : "–";
+            var result = string.Join(
+                " — ",
+                new[] { snapshot.Target, snapshot.Detail }
+                    .Where(value => !string.IsNullOrWhiteSpace(value)));
             table.AddRow(
                 $"[{color}]{icon}[/]",
                 $"[{color}]{Esc($"{ordinal} {snapshot.Title}")}[/]",
-                $"[{color}]{Esc(snapshot.Detail)}[/]",
+                $"[{color}]{Esc(result)}[/]",
                 $"[deepskyblue1]{Esc(FormatDuration(snapshot.Duration))}[/]");
         }
 
@@ -219,30 +235,18 @@ internal sealed class SpectreProgressLedger
             maxValue: 1,
             autoStart: false);
         _visibleTasks[entry.Item.Key] = task;
+        _presentation?.Register(task, entry.Item.Kind);
         return task;
     }
 
     private void ApplyUpdate(
         Entry entry,
         SpectreProgressLedgerState state,
-        string? detail,
-        bool moveStartedTaskToEnd)
+        string? detail)
     {
         entry.State = state;
         entry.Detail = detail;
         entry.ProgressFraction = ResolveProgressFraction(entry.Item, state);
-
-        if (moveStartedTaskToEnd &&
-            state == SpectreProgressLedgerState.Started &&
-            _visibleTasks.TryGetValue(entry.Item.Key, out var plannedTask) &&
-            !plannedTask.IsStarted)
-        {
-            // Spectre crops overflowing live displays from the top. Re-adding the
-            // newly started task keeps the current work at the visible bottom while
-            // the full plan remains registered and is written durably after the run.
-            _context.RemoveTask(plannedTask);
-            _visibleTasks.Remove(entry.Item.Key);
-        }
 
         var task = EnsureVisibleTask(entry);
         task.Description = BuildLiveLabel(entry);
@@ -252,6 +256,7 @@ internal sealed class SpectreProgressLedger
             if (!task.IsStarted)
                 task.StartTask();
 
+            _presentation?.MarkStarted(task, entry.Item.Kind);
             task.IsIndeterminate = entry.Item.ProgressMaximum <= 0;
             if (!task.IsIndeterminate)
                 task.Value = task.MaxValue * entry.ProgressFraction;
@@ -265,10 +270,11 @@ internal sealed class SpectreProgressLedger
             task.Value = task.MaxValue;
             task.StopTask();
             entry.Duration = entry.Item.Duration ?? task.ElapsedTime ?? TimeSpan.Zero;
+            _presentation?.MarkTerminal(task, state, entry.Duration);
         }
     }
 
-    private void RefreshVisibleTasks()
+    private void RefreshTasks()
     {
         foreach (var entry in _entries.Values
                      .OrderBy(entry => entry.Item.GroupOrder)
@@ -277,8 +283,11 @@ internal sealed class SpectreProgressLedger
             EnsureVisibleTask(entry).Description = BuildLiveLabel(entry);
     }
 
-    private static string BuildLiveLabel(Entry entry)
+    private string BuildLiveLabel(Entry entry)
     {
+        if (_presentation is not null)
+            return _presentation.BuildLabel(entry.Item, entry.Detail);
+
         var unicode = ConsoleEncoding.ShouldRenderUnicode(AnsiConsole.Profile.Capabilities.Unicode);
         var (icon, color) = GetStateVisual(entry.State, unicode);
         var ordinal = entry.Item.Position > 0 && entry.Item.Total > 0
@@ -347,6 +356,7 @@ internal sealed class SpectreProgressLedgerItem
     internal int GroupOrder { get; set; }
     internal string Title { get; set; } = string.Empty;
     internal string? Kind { get; set; }
+    internal string? Target { get; set; }
     internal int Position { get; set; }
     internal int Total { get; set; }
     internal double ProgressValue { get; set; }
@@ -370,6 +380,7 @@ internal sealed class SpectreProgressLedgerSnapshot
         int position,
         int total,
         string title,
+        string? target,
         SpectreProgressLedgerState state,
         string? detail,
         TimeSpan duration)
@@ -378,6 +389,7 @@ internal sealed class SpectreProgressLedgerSnapshot
         Position = position;
         Total = total;
         Title = title;
+        Target = target;
         State = state;
         Detail = detail;
         Duration = duration;
@@ -387,6 +399,7 @@ internal sealed class SpectreProgressLedgerSnapshot
     internal int Position { get; }
     internal int Total { get; }
     internal string Title { get; }
+    internal string? Target { get; }
     internal SpectreProgressLedgerState State { get; }
     internal string? Detail { get; }
     internal TimeSpan Duration { get; }
