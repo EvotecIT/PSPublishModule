@@ -184,6 +184,22 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void BenchmarkJson_WritesPlatformIndependentLfBytes()
+    {
+        string root = CreateTempRoot();
+        string resultPath = Path.Combine(root, "canonical.json");
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+
+        BenchmarkJson.Write(resultPath, result);
+
+        byte[] bytes = File.ReadAllBytes(resultPath);
+        Assert.DoesNotContain((byte)'\r', bytes);
+        Assert.Equal(
+            BenchmarkJson.ComputeSha256(result),
+            BenchmarkJson.ComputeFileSha256(resultPath));
+    }
+
+    [Fact]
     public void EvidenceCatalog_SeparatesPortableResultPathFromLocalArtifactPath()
     {
         string root = CreateTempRoot();

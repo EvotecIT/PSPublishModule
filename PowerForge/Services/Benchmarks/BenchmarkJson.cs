@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Security.Cryptography;
 using System.Diagnostics;
+using System.Text;
 
 namespace PowerForge;
 
@@ -27,7 +28,7 @@ public static class BenchmarkJson
     public static void Write<T>(string path, T value)
     {
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Output path is required.", nameof(path));
-        WriteBytes(path, JsonSerializer.SerializeToUtf8Bytes(value, Options));
+        WriteBytes(path, SerializeCanonicalBytes(value));
     }
 
     internal static void WriteBytes(string path, byte[] bytes)
@@ -158,11 +159,19 @@ public static class BenchmarkJson
 
     internal static string ComputeSha256<T>(T value)
     {
-        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(value, Options);
+        byte[] bytes = SerializeCanonicalBytes(value);
         using var sha256 = SHA256.Create();
         return BitConverter.ToString(sha256.ComputeHash(bytes))
             .Replace("-", string.Empty)
             .ToLowerInvariant();
+    }
+
+    private static byte[] SerializeCanonicalBytes<T>(T value)
+    {
+        string json = JsonSerializer.Serialize(value, Options)
+            .Replace("\r\n", "\n")
+            .Replace('\r', '\n');
+        return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(json);
     }
 
     internal static string ComputeFileSha256(string path)
