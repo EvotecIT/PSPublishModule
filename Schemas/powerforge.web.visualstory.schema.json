@@ -65,6 +65,19 @@
                 "format": { "enum": ["text", "txt"] }
               }
             }
+          },
+          {
+            "if": {
+              "required": ["role"],
+              "properties": {
+                "role": { "const": "animated" }
+              }
+            },
+            "then": {
+              "properties": {
+                "format": { "enum": ["svg", "gif", "apng"] }
+              }
+            }
           }
         ]
       }

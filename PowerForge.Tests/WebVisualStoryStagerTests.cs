@@ -312,6 +312,8 @@ public class WebVisualStoryStagerTests
             artifacts["items"]!["allOf"]![0]!["then"]!["properties"]!["format"]!["const"]!.GetValue<string>());
         var transcriptFormats = artifacts["items"]!["allOf"]![1]!["then"]!["properties"]!["format"]!["enum"]!;
         Assert.Equal(new[] { "text", "txt" }, transcriptFormats.AsArray().Select(node => node!.GetValue<string>()));
+        var animatedFormats = artifacts["items"]!["allOf"]![2]!["then"]!["properties"]!["format"]!["enum"]!;
+        Assert.Equal(new[] { "svg", "gif", "apng" }, animatedFormats.AsArray().Select(node => node!.GetValue<string>()));
     }
 
     [Fact]

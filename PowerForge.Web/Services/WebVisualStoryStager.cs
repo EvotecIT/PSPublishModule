@@ -21,6 +21,11 @@ public static class WebVisualStoryStager
         "animated", "completed", "transcript", "source", "html"
     };
 
+    private static readonly HashSet<string> AnimatedFormats = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "svg", "gif", "apng"
+    };
+
     /// <summary>Validates and stages a producer-emitted bundle.</summary>
     /// <param name="options">Staging options.</param>
     /// <returns>Normalized staged bundle details.</returns>
@@ -80,6 +85,10 @@ public static class WebVisualStoryStager
             if (IsCompletedArtifact(artifact))
             {
                 ValidateCompletedPng(sourcePath, artifact.Path);
+            }
+            if (IsAnimatedArtifact(artifact))
+            {
+                WebVisualStoryAnimatedArtifactValidator.Validate(sourcePath, artifact.Path, normalizedFormat);
             }
 
             var sha256 = ComputeSha256(sourcePath);
@@ -203,6 +212,10 @@ public static class WebVisualStoryStager
             {
                 ValidateCompletedPng(artifactPath, artifact.Path);
             }
+            if (IsAnimatedArtifact(artifact))
+            {
+                WebVisualStoryAnimatedArtifactValidator.Validate(artifactPath, artifact.Path, normalizedFormat);
+            }
             if (artifact.Bytes is not null && artifact.Bytes.Value != info.Length)
                 throw new InvalidOperationException($"Visual-story artifact size does not match its manifest: {artifact.Path}");
             if (!string.IsNullOrWhiteSpace(artifact.Sha256) &&
@@ -241,6 +254,12 @@ public static class WebVisualStoryStager
             !string.Equals(NormalizeFormat(artifact.Format), "text", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("Visual-story transcript artifacts must use the text format.");
+        }
+        if (string.Equals(artifact.Role, "animated", StringComparison.OrdinalIgnoreCase) &&
+            !AnimatedFormats.Contains(NormalizeFormat(artifact.Format)))
+        {
+            throw new InvalidOperationException(
+                "Visual-story animated artifacts must use the svg, gif, or apng format.");
         }
     }
 
@@ -307,6 +326,9 @@ public static class WebVisualStoryStager
 
     private static bool IsCompletedArtifact(WebVisualStoryArtifact artifact)
         => string.Equals(artifact.Role, "completed", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsAnimatedArtifact(WebVisualStoryArtifact artifact)
+        => string.Equals(artifact.Role, "animated", StringComparison.OrdinalIgnoreCase);
 
     private static void ValidateCompletedPng(string path, string displayPath)
     {
@@ -497,7 +519,7 @@ public static class WebVisualStoryStager
             var insensitive = Directory.EnumerateDirectories(current)
                 .FirstOrDefault(path => string.Equals(Path.GetFileName(path), segment, StringComparison.OrdinalIgnoreCase));
             var desired = Path.Combine(current, segment);
-            if (insensitive is not null && OperatingSystem.IsWindows())
+            if (insensitive is not null)
             {
                 var temporary = Path.Combine(current, ".powerforge-case-" + Guid.NewGuid().ToString("N"));
                 Directory.Move(insensitive, temporary);
