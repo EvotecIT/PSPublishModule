@@ -171,6 +171,9 @@ try {
                 if ($null -ne $value) { $possibleValues += [string]$value }
               }
             }
+            if ($attr -is [System.Management.Automation.SupportsWildcardsAttribute]) {
+              $acceptWild = $true
+            }
           }
         }
       } catch {
@@ -213,7 +216,19 @@ try {
           # best effort: ValidValues is not consistently present across Get-Help payloads
         }
         try { $defaultValue = [string]$hp.DefaultValue } catch { $defaultValue = '' }
-        try { $acceptWild = [bool]$hp.Globbing } catch { $acceptWild = $false }
+        try {
+          $globbingValue = $hp.Globbing
+          if ($globbingValue -is [bool]) {
+            $acceptWild = $globbingValue
+          } elseif ($null -ne $globbingValue) {
+            $parsedGlobbing = $false
+            if ([bool]::TryParse(([string]$globbingValue).Trim(), [ref]$parsedGlobbing)) {
+              $acceptWild = $parsedGlobbing
+            }
+          }
+        } catch {
+          # keep the metadata-derived default when Get-Help omits or reshapes Globbing
+        }
       }
       $possibleValuesNormalized = @()
       $seenPossibleValues = @{}
