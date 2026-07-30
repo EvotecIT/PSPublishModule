@@ -28,7 +28,36 @@ function ConvertToPowerShellDefaultValue([object]$value) {
   if ($null -eq $value) { return '$null' }
   if ($value -is [string] -or $value -is [char]) {
     $text = [string]$value
-    return ("'" + $text.Replace("'", "''") + "'")
+    $containsInvalidXmlCharacter = $false
+    foreach ($character in $text.ToCharArray()) {
+      if (-not [System.Xml.XmlConvert]::IsXmlChar($character)) {
+        $containsInvalidXmlCharacter = $true
+        break
+      }
+    }
+    if (-not $containsInvalidXmlCharacter) {
+      return ("'" + $text.Replace("'", "''") + "'")
+    }
+    if ($value -is [char]) {
+      return ('([char]' + [int][char]$value + ')')
+    }
+    $parts = @()
+    $segment = ''
+    foreach ($character in $text.ToCharArray()) {
+      if ([System.Xml.XmlConvert]::IsXmlChar($character)) {
+        $segment += $character
+        continue
+      }
+      if ($segment.Length -gt 0) {
+        $parts += ("'" + $segment.Replace("'", "''") + "'")
+        $segment = ''
+      }
+      $parts += ('([char]' + [int]$character + ')')
+    }
+    if ($segment.Length -gt 0) {
+      $parts += ("'" + $segment.Replace("'", "''") + "'")
+    }
+    return ('(-join @(' + ($parts -join ', ') + '))')
   }
   if ($value -is [bool]) {
     if ($value) { return '$true' }
@@ -45,6 +74,9 @@ function ConvertToPowerShellDefaultValue([object]$value) {
       [System.Enum]::GetUnderlyingType($enumType),
       [System.Globalization.CultureInfo]::InvariantCulture)
     return ('([' + $enumType.FullName + ']' + [string]$underlyingValue + ')')
+  }
+  if ($value -is [type]) {
+    return ('[' + (GetCanonicalTypeNameFromType $value) + ']')
   }
   if ($value -is [System.Collections.IEnumerable]) {
     $items = @()
@@ -119,6 +151,31 @@ function GetTypeIdentity([string]$name, [string]$clrName) {
     if ($identity) { return $identity }
   }
   return ''
+}
+
+function GetOutputTypeMetadata([object]$outputType) {
+  $outputTypeName = ''
+  $outputTypeClrName = ''
+  try { $outputTypeName = [string]$outputType.Name } catch { $outputTypeName = '' }
+  try { $outputTypeClrName = [string]$outputType.Type.FullName } catch { $outputTypeClrName = '' }
+  if (-not $outputTypeClrName) {
+    try { $outputTypeClrName = [string]$outputType.TypeName.FullName } catch { $outputTypeClrName = '' }
+  }
+  if (-not $outputTypeClrName) {
+    try { $outputTypeClrName = [string]$outputType.Type.FullName } catch {
+      # best effort: OutputType wrappers differ between hosts and command kinds
+    }
+  }
+  if (-not $outputTypeClrName) { $outputTypeClrName = $outputTypeName }
+  if (-not $outputTypeName) { $outputTypeName = $outputTypeClrName }
+  if (-not $outputTypeName) { return $null }
+
+  return [pscustomobject][ordered]@{
+    name = $outputTypeName
+    clrTypeName = $outputTypeClrName
+    identity = GetTypeIdentity $outputTypeName $outputTypeClrName
+    keys = @(GetTypeKeys $outputTypeName $outputTypeClrName)
+  }
 }
 
 try {
@@ -493,6 +550,7 @@ try {
 
     $helpOutputs = @()
     $helpOutputByKey = @{}
+    $helpOutputKeyCounts = @{}
     try {
       $helpReturnValues = @()
       try { if ($help -and $help.ReturnValues -and $help.ReturnValues.ReturnValue) { $helpReturnValues = @($help.ReturnValues.ReturnValue) } } catch { $helpReturnValues = @() }
@@ -519,6 +577,11 @@ try {
         $helpOutput = [pscustomobject][ordered]@{ name = $typeName; clrTypeName = $typeClrName; description = $typeDesc }
         $helpOutputs += $helpOutput
         foreach ($key in @(GetTypeKeys $typeName $typeClrName)) {
+          if ($helpOutputKeyCounts.ContainsKey($key)) {
+            $helpOutputKeyCounts[$key] = [int]$helpOutputKeyCounts[$key] + 1
+          } else {
+            $helpOutputKeyCounts[$key] = 1
+          }
           if (-not $helpOutputByKey.ContainsKey($key)) {
             $helpOutputByKey[$key] = $helpOutput
           }
@@ -531,48 +594,67 @@ try {
     $outputs = @()
     $seenOutputIdentities = @{}
     $runtimeOutputKeys = @{}
+    $runtimeOutputKeyCounts = @{}
+    $runtimeOutputMetadata = @()
     try {
       foreach ($outputType in @($c.OutputType)) {
-        $outputTypeName = ''
-        $outputTypeClrName = ''
-        try { $outputTypeName = [string]$outputType.Name } catch { $outputTypeName = '' }
-        try { $outputTypeClrName = [string]$outputType.Type.FullName } catch { $outputTypeClrName = '' }
-        if (-not $outputTypeClrName) { try { $outputTypeClrName = [string]$outputType.TypeName.FullName } catch { $outputTypeClrName = '' } }
-        if (-not $outputTypeClrName) { try { $outputTypeClrName = [string]$outputType.Type.FullName } catch {
-          # best effort: OutputType wrappers differ between hosts and command kinds
-        } }
-        if (-not $outputTypeClrName) { $outputTypeClrName = $outputTypeName }
-        if (-not $outputTypeName) { $outputTypeName = $outputTypeClrName }
-        if (-not $outputTypeName) { continue }
+        $metadata = GetOutputTypeMetadata $outputType
+        if (-not $metadata -or -not $metadata.identity) { continue }
+        if ($seenOutputIdentities.ContainsKey($metadata.identity)) { continue }
+        $seenOutputIdentities[$metadata.identity] = $true
+        $runtimeOutputMetadata += $metadata
+        foreach ($key in @($metadata.keys)) {
+          $runtimeOutputKeys[$key] = $true
+          if ($runtimeOutputKeyCounts.ContainsKey($key)) {
+            $runtimeOutputKeyCounts[$key] = [int]$runtimeOutputKeyCounts[$key] + 1
+          } else {
+            $runtimeOutputKeyCounts[$key] = 1
+          }
+        }
+      }
 
+      foreach ($metadata in $runtimeOutputMetadata) {
         $typeDesc = ''
-        foreach ($key in @(GetTypeKeys $outputTypeName $outputTypeClrName)) {
-          if ($helpOutputByKey.ContainsKey($key)) {
+        foreach ($key in @($metadata.keys)) {
+          if ($helpOutputByKey.ContainsKey($key) -and
+              [int]$helpOutputKeyCounts[$key] -eq 1 -and
+              [int]$runtimeOutputKeyCounts[$key] -eq 1) {
             $typeDesc = [string]$helpOutputByKey[$key].description
             break
           }
         }
 
-        $outputIdentity = GetTypeIdentity $outputTypeName $outputTypeClrName
-        if ($seenOutputIdentities.ContainsKey($outputIdentity)) { continue }
-        $seenOutputIdentities[$outputIdentity] = $true
-        foreach ($key in @(GetTypeKeys $outputTypeName $outputTypeClrName)) {
-          $runtimeOutputKeys[$key] = $true
+        $outputs += [ordered]@{
+          name = [string]$metadata.name
+          clrTypeName = [string]$metadata.clrTypeName
+          description = $typeDesc
         }
-        $outputs += [ordered]@{ name = $outputTypeName; clrTypeName = $outputTypeClrName; description = $typeDesc }
       }
     } catch {
       # best effort: command metadata may not expose OutputType uniformly across hosts
     }
-    if ([string]$c.CommandType -ne 'Cmdlet') {
+    $allowHelpOnlyOutputs = [string]$c.CommandType -ne 'Cmdlet' -or $runtimeOutputMetadata.Count -eq 0
+    if ($allowHelpOnlyOutputs) {
       foreach ($helpOutput in $helpOutputs) {
+        $helpOutputIdentity = GetTypeIdentity ([string]$helpOutput.name) ([string]$helpOutput.clrTypeName)
+        if ([string]$c.CommandType -eq 'Cmdlet' -and
+            $runtimeOutputMetadata.Count -eq 0 -and
+            $helpOutputIdentity -eq 'System.Object' -and
+            [string]::IsNullOrWhiteSpace([string]$helpOutput.description)) {
+          continue
+        }
+
         $matchesRuntimeOutput = $false
         foreach ($key in @(GetTypeKeys ([string]$helpOutput.name) ([string]$helpOutput.clrTypeName))) {
-          if ($runtimeOutputKeys.ContainsKey($key)) { $matchesRuntimeOutput = $true; break }
+          if ($runtimeOutputKeys.ContainsKey($key) -and
+              [int]$helpOutputKeyCounts[$key] -eq 1 -and
+              [int]$runtimeOutputKeyCounts[$key] -eq 1) {
+            $matchesRuntimeOutput = $true
+            break
+          }
         }
         if ($matchesRuntimeOutput) { continue }
 
-        $helpOutputIdentity = GetTypeIdentity ([string]$helpOutput.name) ([string]$helpOutput.clrTypeName)
         if ($seenOutputIdentities.ContainsKey($helpOutputIdentity)) { continue }
         $seenOutputIdentities[$helpOutputIdentity] = $true
         $outputs += [ordered]@{

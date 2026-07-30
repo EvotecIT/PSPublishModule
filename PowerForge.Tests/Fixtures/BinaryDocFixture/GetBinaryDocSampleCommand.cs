@@ -91,6 +91,26 @@ public sealed class GetBinaryDocEmptyDefaultCommand : PSCmdlet
     [PSDefaultValue(Value = new[] { BinaryDocMode.Basic, BinaryDocMode.Advanced })]
     public BinaryDocMode[] Modes { get; set; } = [BinaryDocMode.Basic, BinaryDocMode.Advanced];
 
+    /// <summary>An optional string containing an XML-invalid control character.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = "\0")]
+    public string ControlText { get; set; } = "\0";
+
+    /// <summary>An optional XML-invalid control character.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = '\0')]
+    public char ControlCharacter { get; set; }
+
+    /// <summary>An optional type whose default must remain a type literal.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = typeof(string))]
+    public Type ValueType { get; set; } = typeof(string);
+
+    /// <summary>Optional types whose element semantics must remain visible.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = new[] { typeof(string), typeof(int) })]
+    public Type[] ValueTypes { get; set; } = [typeof(string), typeof(int)];
+
     /// <summary>An optional value whose declared default is explicitly null.</summary>
     [Parameter]
     [PSDefaultValue(Value = null)]

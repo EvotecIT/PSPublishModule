@@ -18,6 +18,12 @@ namespace BinaryDocFixture.OutputB
 
 namespace BinaryDocFixture
 {
+    /// <summary>Uses authored external help as its output contract.</summary>
+    [Cmdlet(VerbsCommon.Get, "BinaryDocAuthoredOutput")]
+    public sealed class GetBinaryDocAuthoredOutputCommand : PSCmdlet
+    {
+    }
+
     /// <summary>Returns two distinct output types that share a short name.</summary>
     [Cmdlet(VerbsCommon.Get, "BinaryDocAmbiguousOutputs")]
     [OutputType(typeof(OutputA.Result), typeof(OutputB.Result))]
