@@ -92,7 +92,7 @@ concurrency:
 
 jobs:
   resolve-source:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: 10
     permissions:
       actions: read
