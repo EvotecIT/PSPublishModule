@@ -4,7 +4,7 @@ namespace PowerForge.Web;
 public sealed class WebVisualStoryBundle
 {
     /// <summary>Manifest schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int? SchemaVersion { get; set; }
     /// <summary>Stable story identifier.</summary>
     public string Id { get; set; } = string.Empty;
     /// <summary>Human-readable story title.</summary>

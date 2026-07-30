@@ -55,8 +55,12 @@ public static class WebVisualStoryStager
         ValidateBundle(bundle);
         ValidateCompletedArtifact(bundle);
 
-        var resolved = new List<(WebVisualStoryArtifact Artifact, string SourcePath, string FileName, long Bytes, string Sha256)>();
-        var fileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var stagedManifestPath = Path.Combine(outputRoot, "visual-story.json");
+        if (!options.Overwrite && File.Exists(stagedManifestPath))
+            throw new IOException($"Visual-story manifest already exists: {stagedManifestPath}");
+
+        var resolved = new List<(WebVisualStoryArtifact Artifact, string SourcePath, string RelativePath, string DestinationPath, long Bytes, string Sha256)>();
+        var relativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var artifact in bundle.Artifacts)
         {
             ValidateArtifact(artifact);
@@ -77,33 +81,55 @@ public static class WebVisualStoryStager
                 ValidateCompletedPng(sourcePath, artifact.Path);
             }
 
-            var fileName = Path.GetFileName(sourcePath);
-            if (!fileNames.Add(fileName))
-                throw new InvalidOperationException($"Visual-story artifact file names must be unique: {fileName}");
-
-            resolved.Add((artifact, sourcePath, fileName, info.Length, ComputeSha256(sourcePath)));
+            var sha256 = ComputeSha256(sourcePath);
+            ValidateDeclaredIntegrity(artifact, info.Length, sha256);
+            var relativePath = Path.GetRelativePath(sourceRoot, sourcePath).Replace('\\', '/');
+            if (!relativePaths.Add(relativePath))
+                throw new InvalidOperationException($"Visual-story artifact paths must be unique: {relativePath}");
+            var destinationPath = VisualStoryPathGuard.ResolveRelativePath(outputRoot, relativePath, "staged artifact");
+            resolved.Add((artifact, sourcePath, relativePath, destinationPath, info.Length, sha256));
         }
+
+        if (!options.Overwrite)
+        {
+            var collision = resolved.FirstOrDefault(item =>
+                !SamePath(item.SourcePath, item.DestinationPath) && File.Exists(item.DestinationPath));
+            if (collision.Artifact is not null)
+                throw new IOException($"Visual-story artifact already exists: {collision.DestinationPath}");
+        }
+
+        var previousPaths = options.Overwrite && File.Exists(stagedManifestPath)
+            ? LoadDeclaredArtifactPaths(stagedManifestPath, outputRoot)
+            : Array.Empty<string>();
+        var currentPaths = resolved.Select(static item => item.RelativePath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         Directory.CreateDirectory(outputRoot);
         foreach (var item in resolved)
         {
-            var destination = Path.Combine(outputRoot, item.FileName);
-            var samePath = string.Equals(
-                Path.GetFullPath(item.SourcePath),
-                Path.GetFullPath(destination),
-                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
-            if (!samePath && File.Exists(destination) && !options.Overwrite)
-                throw new IOException($"Visual-story artifact already exists: {destination}");
-            if (!samePath)
-                File.Copy(item.SourcePath, destination, overwrite: options.Overwrite);
-            item.Artifact.Path = item.FileName.Replace('\\', '/');
+            if (!SamePath(item.SourcePath, item.DestinationPath))
+            {
+                Directory.CreateDirectory(
+                    Path.GetDirectoryName(item.DestinationPath)
+                    ?? throw new InvalidOperationException("Visual-story artifact has no destination directory."));
+                File.Copy(item.SourcePath, item.DestinationPath, overwrite: options.Overwrite);
+            }
+            item.Artifact.Role = item.Artifact.Role.Trim().ToLowerInvariant();
+            item.Artifact.Path = item.RelativePath;
             item.Artifact.Format = NormalizeFormat(item.Artifact.Format);
             item.Artifact.MediaType ??= GetMediaType(item.Artifact.Format);
             item.Artifact.Bytes = item.Bytes;
             item.Artifact.Sha256 = item.Sha256;
         }
 
-        var stagedManifestPath = Path.Combine(outputRoot, "visual-story.json");
+        foreach (var previousPath in previousPaths.Where(path => !currentPaths.Contains(path)))
+        {
+            var obsoletePath = VisualStoryPathGuard.ResolveRelativePath(outputRoot, previousPath, "obsolete staged artifact");
+            if (File.Exists(obsoletePath))
+                File.Delete(obsoletePath);
+            DeleteEmptyParents(Path.GetDirectoryName(obsoletePath), outputRoot);
+        }
+
         File.WriteAllText(
             stagedManifestPath,
             JsonSerializer.Serialize(bundle, WebJson.Options));
@@ -167,6 +193,8 @@ public static class WebVisualStoryStager
 
     private static void ValidateBundle(WebVisualStoryBundle bundle)
     {
+        if (bundle.SchemaVersion is null)
+            throw new InvalidOperationException("Visual-story schemaVersion is required.");
         if (bundle.SchemaVersion != 1)
             throw new InvalidOperationException($"Unsupported visual-story schema version: {bundle.SchemaVersion}");
         Require(bundle.Id, "id");
@@ -284,6 +312,57 @@ public static class WebVisualStoryStager
     {
         using var stream = File.OpenRead(path);
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
+
+    private static void ValidateDeclaredIntegrity(
+        WebVisualStoryArtifact artifact,
+        long actualBytes,
+        string actualSha256)
+    {
+        if (artifact.Bytes is not null && artifact.Bytes.Value != actualBytes)
+            throw new InvalidOperationException($"Visual-story artifact size does not match its manifest: {artifact.Path}");
+        if (!string.IsNullOrWhiteSpace(artifact.Sha256) &&
+            !string.Equals(artifact.Sha256, actualSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Visual-story artifact digest does not match its manifest: {artifact.Path}");
+        }
+    }
+
+    private static string[] LoadDeclaredArtifactPaths(string manifestPath, string outputRoot)
+    {
+        var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(
+                         File.ReadAllText(manifestPath),
+                         WebJson.Options)
+                     ?? throw new InvalidOperationException("Existing visual-story manifest is empty or invalid.");
+        ValidateBundle(bundle);
+        var paths = new List<string>(bundle.Artifacts.Length);
+        foreach (var artifact in bundle.Artifacts)
+        {
+            ValidateArtifact(artifact);
+            var fullPath = VisualStoryPathGuard.ResolveRelativePath(outputRoot, artifact.Path, "existing staged artifact");
+            paths.Add(Path.GetRelativePath(outputRoot, fullPath).Replace('\\', '/'));
+        }
+        return paths.ToArray();
+    }
+
+    private static bool SamePath(string left, string right)
+        => string.Equals(
+            Path.GetFullPath(left),
+            Path.GetFullPath(right),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    private static void DeleteEmptyParents(string? directory, string root)
+    {
+        while (!string.IsNullOrWhiteSpace(directory) && !SamePath(directory, root))
+        {
+            if (!Directory.Exists(directory) ||
+                Directory.EnumerateFileSystemEntries(directory).Any())
+            {
+                break;
+            }
+            Directory.Delete(directory);
+            directory = Path.GetDirectoryName(directory);
+        }
     }
 
     private static void Require(string? value, string name)

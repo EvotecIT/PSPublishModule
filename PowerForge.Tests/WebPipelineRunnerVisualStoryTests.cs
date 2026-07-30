@@ -47,6 +47,7 @@ public class WebPipelineRunnerVisualStoryTests
                   "steps": [
                     {
                       "task": "visual-story",
+                      "command": "this-command-must-not-run",
                       "manifest": "source/story.json",
                       "out": "../escaped-story"
                     }

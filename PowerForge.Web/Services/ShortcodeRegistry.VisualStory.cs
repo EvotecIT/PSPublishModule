@@ -17,10 +17,11 @@ internal static partial class ShortcodeDefaults
         var bundle = WebVisualStoryStager.Load(manifestPath);
         var baseUrl = ReadAttr(attrs, "base", "baseUrl", "base-url");
         if (string.IsNullOrWhiteSpace(baseUrl))
-            baseUrl = DeriveVisualStoryBaseUrl(manifestValue);
+            baseUrl = DeriveVisualStoryBaseUrl(context.RootPath, manifestPath);
 
         var animated = SelectStoryArtifact(bundle, "animated", "svg") ??
-                       SelectStoryArtifact(bundle, "animated", "gif");
+                       SelectStoryArtifact(bundle, "animated", "gif") ??
+                       SelectStoryArtifact(bundle, "animated", "apng");
         var completed = SelectStoryArtifact(bundle, "completed", "png")
                         ?? throw new InvalidOperationException(
                             $"Visual-story bundle '{bundle.Id}' has no completed PNG artifact.");
@@ -58,6 +59,7 @@ internal static partial class ShortcodeDefaults
         if (!ReferenceEquals(requested, completed))
         {
             sb.AppendLine("    <picture>");
+            sb.AppendLine($@"      <source media=""print"" srcset=""{System.Web.HttpUtility.HtmlEncode(completedUrl)}"" type=""image/png"" />");
             sb.AppendLine($@"      <source media=""(prefers-reduced-motion: reduce)"" srcset=""{System.Web.HttpUtility.HtmlEncode(completedUrl)}"" type=""image/png"" />");
             sb.AppendLine($@"      <img src=""{System.Web.HttpUtility.HtmlEncode(requestedUrl)}"" alt=""{System.Web.HttpUtility.HtmlEncode(alt)}"" loading=""{System.Web.HttpUtility.HtmlEncode(loading)}"" decoding=""async"" />");
             sb.AppendLine("    </picture>");
@@ -126,17 +128,29 @@ internal static partial class ShortcodeDefaults
         return VisualStoryPathGuard.ResolveRelativePath(root, artifactPath, "shortcode artifact");
     }
 
-    private static string DeriveVisualStoryBaseUrl(string manifest)
+    private static string DeriveVisualStoryBaseUrl(string rootPath, string manifestPath)
     {
-        var normalized = manifest.Replace('\\', '/');
+        var root = Path.GetFullPath(string.IsNullOrWhiteSpace(rootPath) ? "." : rootPath);
+        var normalized = Path.GetRelativePath(root, manifestPath).Replace('\\', '/');
         var directory = normalized.Contains('/')
             ? normalized[..normalized.LastIndexOf('/')]
             : string.Empty;
         if (directory.StartsWith("static/", StringComparison.OrdinalIgnoreCase))
             directory = directory["static/".Length..];
-        return "/" + directory.Trim('/');
+        var encodedDirectory = string.Join(
+            "/",
+            directory.Split('/', StringSplitOptions.RemoveEmptyEntries)
+                .Select(Uri.EscapeDataString));
+        return "/" + encodedDirectory;
     }
 
     private static string JoinVisualStoryUrl(string baseUrl, string path)
-        => baseUrl.TrimEnd('/') + "/" + path.Replace('\\', '/').TrimStart('/');
+    {
+        var encodedPath = string.Join(
+            "/",
+            path.Replace('\\', '/')
+                .Split('/', StringSplitOptions.RemoveEmptyEntries)
+                .Select(Uri.EscapeDataString));
+        return baseUrl.TrimEnd('/') + "/" + encodedPath;
+    }
 }

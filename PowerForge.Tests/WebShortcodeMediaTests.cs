@@ -186,9 +186,49 @@ public class WebShortcodeMediaTests
         Assert.Contains("prefers-reduced-motion: reduce", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("/stories/chart/demo.svg", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("/stories/chart/demo.png", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<source media=\"print\"", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("The chart is visible.", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("<details class=\"pf-story-transcript\" open>", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Chart is visible", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_RendersApngByDefaultAndEncodesNestedArtifactUrls()
+    {
+        var html = BuildSinglePageSite(
+            """
+            {{< story manifest="./static/stories/chart demo/visual-story.json" transcript="hidden" >}}
+            """,
+            root =>
+            {
+                var bundleRoot = Path.Combine(root, "static", "stories", "chart demo");
+                Directory.CreateDirectory(Path.Combine(bundleRoot, "media"));
+                using (var animated = new MagickImage(MagickColors.Transparent, 2, 2))
+                {
+                    animated.Write(Path.Combine(bundleRoot, "media", "demo frame.png"), MagickFormat.Png);
+                }
+                using (var completed = new MagickImage(MagickColors.Transparent, 2, 2))
+                {
+                    completed.Write(Path.Combine(bundleRoot, "demo.png"), MagickFormat.Png);
+                }
+                File.WriteAllText(Path.Combine(bundleRoot, "visual-story.json"),
+                    """
+                    {
+                      "schemaVersion": 1,
+                      "id": "apng-story",
+                      "title": "APNG story",
+                      "alt": "Animated result.",
+                      "outcome": "The result is visible.",
+                      "artifacts": [
+                        { "role": "animated", "format": "apng", "path": "media/demo frame.png" },
+                        { "role": "completed", "format": "png", "path": "demo.png" }
+                      ]
+                    }
+                    """);
+            });
+
+        Assert.Contains("/stories/chart%20demo/media/demo%20frame.png", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<source media=\"print\"", html, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildSinglePageSite(string markdown, Action<string>? setup = null)

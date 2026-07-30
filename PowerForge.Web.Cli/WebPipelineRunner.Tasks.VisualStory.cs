@@ -6,14 +6,6 @@ internal static partial class WebPipelineRunner
 {
     private static void ExecuteVisualStory(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
     {
-        var command = GetString(step, "command") ?? GetString(step, "cmd") ?? GetString(step, "file");
-        if (!string.IsNullOrWhiteSpace(command))
-        {
-            if (GetBool(step, "allowFailure") == true || GetBool(step, "continueOnError") == true)
-                throw new InvalidOperationException("visual-story producer failures cannot be ignored.");
-            ExecuteExec(step, baseDir, new WebPipelineStepResult());
-        }
-
         var manifestValue = GetString(step, "manifest") ??
                             GetString(step, "manifestPath") ??
                             GetString(step, "manifest-path");
@@ -32,6 +24,14 @@ internal static partial class WebPipelineRunner
                          ?? throw new InvalidOperationException("visual-story output path could not be resolved.");
         EnsureVisualStoryPathWithinBase(baseDir, manifestPath, "manifest");
         EnsureVisualStoryPathWithinBase(baseDir, outputPath, "output");
+
+        var command = GetString(step, "command") ?? GetString(step, "cmd") ?? GetString(step, "file");
+        if (!string.IsNullOrWhiteSpace(command))
+        {
+            if (GetBool(step, "allowFailure") == true || GetBool(step, "continueOnError") == true)
+                throw new InvalidOperationException("visual-story producer failures cannot be ignored.");
+            ExecuteExec(step, baseDir, new WebPipelineStepResult());
+        }
 
         var maximumArtifactBytes = GetLong(step, "maximumArtifactBytes") ??
                                    GetLong(step, "maximum-artifact-bytes") ??

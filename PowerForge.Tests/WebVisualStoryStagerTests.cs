@@ -62,6 +62,129 @@ public class WebVisualStoryStagerTests
     }
 
     [Fact]
+    public void Stage_RejectsDeclaredIntegrityThatDoesNotMatchSource()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var manifest = Path.Combine(root, "source", "story.json");
+            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(manifest), WebJsonForTests.Options)!;
+            bundle.Artifacts[0].Bytes = 0;
+            bundle.Artifacts[0].Sha256 = new string('0', 64);
+            File.WriteAllText(manifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("size does not match", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Stage_PreservesNestedPathsAndCanonicalizesRoles()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var nested = Path.Combine(source, "media", "animated");
+            Directory.CreateDirectory(nested);
+            File.Move(Path.Combine(source, "demo.svg"), Path.Combine(nested, "demo.svg"));
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(manifest), WebJsonForTests.Options)!;
+            bundle.Artifacts[0].Role = "ANIMATED";
+            bundle.Artifacts[0].Path = "./media/animated/demo.svg";
+            File.WriteAllText(manifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
+
+            var result = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = manifest,
+                OutputPath = Path.Combine(root, "published")
+            });
+
+            var animated = Assert.Single(result.Bundle.Artifacts, artifact => artifact.Role == "animated");
+            Assert.Equal("media/animated/demo.svg", animated.Path);
+            Assert.True(File.Exists(Path.Combine(root, "published", "media", "animated", "demo.svg")));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Stage_HonorsOverwriteForManifestAndRemovesObsoleteDeclaredArtifacts()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var sourceManifest = Path.Combine(root, "source", "story.json");
+            var output = Path.Combine(root, "published");
+            WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = sourceManifest,
+                OutputPath = output
+            });
+
+            Assert.Throws<IOException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = sourceManifest,
+                    OutputPath = output,
+                    Overwrite = false
+                }));
+
+            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(sourceManifest), WebJsonForTests.Options)!;
+            bundle.Artifacts = bundle.Artifacts.Where(artifact => artifact.Role != "transcript").ToArray();
+            File.WriteAllText(sourceManifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
+            WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = sourceManifest,
+                OutputPath = output
+            });
+
+            Assert.False(File.Exists(Path.Combine(output, "demo.txt")));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Stage_RequiresSchemaVersion()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var manifest = Path.Combine(root, "source", "story.json");
+            var json = File.ReadAllText(manifest).Replace("\"schemaVersion\": 1,", string.Empty, StringComparison.Ordinal);
+            File.WriteAllText(manifest, json);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("schemaVersion is required", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Stage_RejectsArtifactOutsideBundle()
     {
         var root = CreateBundle();
@@ -195,6 +318,7 @@ public class WebVisualStoryStagerTests
         File.WriteAllText(Path.Combine(source, "demo.txt"), "Run demo\nThe chart is visible.");
         var bundle = new WebVisualStoryBundle
         {
+            SchemaVersion = 1,
             Id = "chart-five-lines",
             Title = "Create a chart in five lines",
             Alt = "Source code followed by the generated chart.",
