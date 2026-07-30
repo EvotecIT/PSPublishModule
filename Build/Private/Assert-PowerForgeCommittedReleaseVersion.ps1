@@ -48,7 +48,12 @@ function Assert-PowerForgeCommittedReleaseVersion {
 
         [xml] $project = Get-Content -Raw -LiteralPath $projectPath
         $committedVersions = @($project.Project.PropertyGroup |
-            ForEach-Object { [string] $_.VersionPrefix } |
+            ForEach-Object {
+                $versionProperty = $_.PSObject.Properties['VersionPrefix']
+                if ($null -ne $versionProperty) {
+                    [string] $versionProperty.Value
+                }
+            } |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
             Select-Object -Unique)
         if ($committedVersions.Count -ne 1 -or $committedVersions[0] -ne $Version) {
