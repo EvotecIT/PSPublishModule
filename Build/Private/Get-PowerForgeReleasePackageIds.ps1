@@ -24,6 +24,11 @@ function Get-PowerForgeReleasePackageIds {
         }
     }
 
+    $configuration = [string] $ReleaseConfig.Packages.Configuration
+    if ([string]::IsNullOrWhiteSpace($configuration)) {
+        $configuration = 'Release'
+    }
+
     $packageIds = foreach ($projectName in @($projectNames | Select-Object -Unique)) {
         $relativeProjectPath = if ($projectName.EndsWith('.csproj', [StringComparison]::OrdinalIgnoreCase)) {
             $projectName
@@ -36,14 +41,43 @@ function Get-PowerForgeReleasePackageIds {
             throw "Configured release project was not found: $projectPath"
         }
 
-        [xml] $projectXml = Get-Content -Raw -LiteralPath $projectPath
-        $packageId = @($projectXml.Project.PropertyGroup.PackageId) |
-            ForEach-Object { [string] $_ } |
-            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-            Select-Object -First 1
-        if ([string]::IsNullOrWhiteSpace($packageId)) {
-            $packageId = [IO.Path]::GetFileNameWithoutExtension($projectPath)
+        $evaluation = Get-PowerForgeEvaluatedProjectProperties `
+            -ProjectPath $projectPath `
+            -Configuration $configuration
+        $targetFrameworks = @(
+            ([string] $evaluation.TargetFrameworks).Split(
+                [char[]] @(';'),
+                [StringSplitOptions]::RemoveEmptyEntries) |
+                ForEach-Object { $_.Trim() } |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        )
+        $evaluatedPackageIds = if ($targetFrameworks.Count -eq 0) {
+            @([string] $evaluation.PackageId)
+        } else {
+            @(
+                foreach ($targetFramework in $targetFrameworks) {
+                    $frameworkEvaluation = Get-PowerForgeEvaluatedProjectProperties `
+                        -ProjectPath $projectPath `
+                        -Configuration $configuration `
+                        -TargetFramework $targetFramework
+                    [string] $frameworkEvaluation.PackageId
+                }
+            )
         }
+        $distinctPackageIds = @(
+            $evaluatedPackageIds |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+                Sort-Object -Unique
+        )
+        if ($distinctPackageIds.Count -ne 1) {
+            $reportedIds = if ($distinctPackageIds.Count -eq 0) {
+                '<missing>'
+            } else {
+                $distinctPackageIds -join ', '
+            }
+            throw "Release project '$projectPath' must evaluate to exactly one package ID across all target frameworks; found '$reportedIds'."
+        }
+        $packageId = $distinctPackageIds[0]
         if ($packageId -notmatch '^[A-Za-z0-9_.-]+$') {
             throw "Release project '$projectPath' resolved unsafe package ID '$packageId'."
         }
@@ -51,4 +85,63 @@ function Get-PowerForgeReleasePackageIds {
     }
 
     @($packageIds | Sort-Object -Unique)
+}
+
+function Get-PowerForgeEvaluatedProjectProperties {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string] $ProjectPath,
+
+        [Parameter(Mandatory)]
+        [string] $Configuration,
+
+        [string] $TargetFramework
+    )
+
+    $dotnet = Get-Command dotnet -CommandType Application -ErrorAction Stop |
+        Select-Object -First 1
+    $arguments = @(
+        'msbuild',
+        $ProjectPath,
+        '-nologo',
+        "-property:Configuration=$Configuration"
+    )
+    if (-not [string]::IsNullOrWhiteSpace($TargetFramework)) {
+        $arguments += "-property:TargetFramework=$TargetFramework"
+    }
+    $arguments += @(
+        '-getProperty:PackageId',
+        '-getProperty:TargetFrameworks'
+    )
+
+    $output = & $dotnet.Source @arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "MSBuild package identity evaluation failed for '$ProjectPath' with exit code $LASTEXITCODE."
+    }
+    $json = @($output | ForEach-Object { [string] $_ }) -join [Environment]::NewLine
+    try {
+        $result = $json | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        throw "MSBuild package identity evaluation returned invalid output for '$ProjectPath': $($_.Exception.Message)"
+    }
+    $propertiesProperty = $result.PSObject.Properties['Properties']
+    if ($null -eq $propertiesProperty -or $null -eq $propertiesProperty.Value) {
+        throw "MSBuild package identity evaluation returned no properties for '$ProjectPath'."
+    }
+    $properties = $propertiesProperty.Value
+    $packageIdProperty = $properties.PSObject.Properties['PackageId']
+    $targetFrameworksProperty = $properties.PSObject.Properties['TargetFrameworks']
+    [pscustomobject] @{
+        PackageId = if ($null -eq $packageIdProperty) {
+            $null
+        } else {
+            [string] $packageIdProperty.Value
+        }
+        TargetFrameworks = if ($null -eq $targetFrameworksProperty) {
+            $null
+        } else {
+            [string] $targetFrameworksProperty.Value
+        }
+    }
 }

@@ -34,6 +34,49 @@ function Invoke-PowerForgeGitHubReleaseProbe {
     }
 }
 
+function Get-PowerForgeGitHubTagCommit {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string] $Owner,
+
+        [Parameter(Mandatory)]
+        [string] $Repository,
+
+        [Parameter(Mandatory)]
+        [string] $Tag,
+
+        [Parameter(Mandatory)]
+        [string] $Token,
+
+        [scriptblock] $Probe
+    )
+
+    if ($null -eq $Probe) {
+        $Probe = {
+            param($probeUri, $probeToken)
+            Invoke-PowerForgeGitHubReleaseProbe `
+                -Uri $probeUri `
+                -Token $probeToken
+        }
+    }
+
+    $escapedTag = [Uri]::EscapeDataString($Tag)
+    $tagReference = & $Probe `
+        "https://api.github.com/repos/$Owner/$Repository/git/ref/tags/$escapedTag" `
+        $Token
+    if ($null -eq $tagReference) {
+        return $null
+    }
+    $commit = & $Probe `
+        "https://api.github.com/repos/$Owner/$Repository/commits/$escapedTag" `
+        $Token
+    if ($null -eq $commit) {
+        return $null
+    }
+    [string] $commit.sha
+}
+
 function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
     [CmdletBinding()]
     param(
@@ -111,12 +154,11 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
     if ($null -eq $GetTagCommit) {
         $GetTagCommit = {
             param($probeOwner, $probeRepository, $probeTag, $probeToken)
-            $escapedTag = [Uri]::EscapeDataString([string] $probeTag)
-            $commit = Invoke-PowerForgeGitHubReleaseProbe `
-                -Uri "https://api.github.com/repos/$probeOwner/$probeRepository/commits/$escapedTag" `
+            Get-PowerForgeGitHubTagCommit `
+                -Owner $probeOwner `
+                -Repository $probeRepository `
+                -Tag $probeTag `
                 -Token $probeToken
-            if ($null -eq $commit) { return $null }
-            [string] $commit.sha
         }
     }
 

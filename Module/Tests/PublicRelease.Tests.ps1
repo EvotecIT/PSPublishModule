@@ -6,6 +6,10 @@ Describe 'Public release committed version validation' {
             (Join-Path $PSScriptRoot '..\..'))
         . (Join-Path $script:RepositoryRoot `
             'Build\Private\Assert-PowerForgeCommittedReleaseVersion.ps1')
+        . (Join-Path $script:RepositoryRoot `
+            'Build\Private\Get-PowerForgeReleasePackageIds.ps1')
+        . (Join-Path $script:RepositoryRoot `
+            'Build\Private\Enable-PowerForgeVerifiedGitHubReleaseRecovery.ps1')
 
         $script:ReleaseVersionTestRoot = Join-Path `
             ([IO.Path]::GetTempPath()) `
@@ -27,17 +31,19 @@ Describe 'Public release committed version validation' {
                 $script:ReleaseVersionTestRoot `
                 'Module\PSPublishModule.psd1') `
             -Encoding UTF8
-        @"
+        $script:SampleProjectContent = @"
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <VersionPrefix>3.0.84</VersionPrefix>
+    <PackageId>Sample.Package</PackageId>
   </PropertyGroup>
   <PropertyGroup Condition="'`$(TargetFramework)' == 'net8.0'">
     <GenerateDependencyFile>false</GenerateDependencyFile>
   </PropertyGroup>
 </Project>
-"@ | Set-Content `
+"@
+        $script:SampleProjectContent | Set-Content `
             -LiteralPath (Join-Path `
                 $script:ReleaseVersionTestRoot `
                 'Sample\Sample.csproj') `
@@ -52,6 +58,14 @@ Describe 'Public release committed version validation' {
                 }
             }
         }
+    }
+
+    BeforeEach {
+        $script:SampleProjectContent | Set-Content `
+            -LiteralPath (Join-Path `
+                $script:ReleaseVersionTestRoot `
+                'Sample\Sample.csproj') `
+            -Encoding UTF8
     }
 
     AfterAll {
@@ -72,6 +86,14 @@ Describe 'Public release committed version validation' {
         } | Should -Not -Throw
     }
 
+    It 'resolves PackageId when conditional property groups omit it' {
+        $packageIds = Get-PowerForgeReleasePackageIds `
+            -RepositoryRoot $script:ReleaseVersionTestRoot `
+            -ReleaseConfig $script:ReleaseConfig
+
+        @($packageIds) | Should -Be @('Sample.Package')
+    }
+
     It 'still rejects a missing committed project version' {
         $projectPath = Join-Path `
             $script:ReleaseVersionTestRoot `
@@ -86,5 +108,98 @@ Describe 'Public release committed version validation' {
                 -Version '3.0.84' `
                 -ReleaseConfig $script:ReleaseConfig
         } | Should -Throw '*found ''<missing>''*'
+    }
+
+    It 'falls back to the project name when PackageId is omitted' {
+        $projectPath = Join-Path `
+            $script:ReleaseVersionTestRoot `
+            'Sample\Sample.csproj'
+        (Get-Content -Raw -LiteralPath $projectPath).Replace(
+            '<PackageId>Sample.Package</PackageId>',
+            '') | Set-Content -LiteralPath $projectPath -Encoding UTF8
+
+        $packageIds = Get-PowerForgeReleasePackageIds `
+            -RepositoryRoot $script:ReleaseVersionTestRoot `
+            -ReleaseConfig $script:ReleaseConfig
+
+        @($packageIds) | Should -Be @('Sample')
+    }
+
+    It 'uses the evaluated AssemblyName when PackageId is omitted' {
+        $projectPath = Join-Path `
+            $script:ReleaseVersionTestRoot `
+            'Sample\Sample.csproj'
+        (Get-Content -Raw -LiteralPath $projectPath).Replace(
+            '<PackageId>Sample.Package</PackageId>',
+            '<AssemblyName>Evaluated.Package</AssemblyName>') |
+            Set-Content -LiteralPath $projectPath -Encoding UTF8
+
+        $packageIds = Get-PowerForgeReleasePackageIds `
+            -RepositoryRoot $script:ReleaseVersionTestRoot `
+            -ReleaseConfig $script:ReleaseConfig
+
+        @($packageIds) | Should -Be @('Evaluated.Package')
+    }
+
+    It 'rejects package IDs that differ across target frameworks' {
+        $projectPath = Join-Path `
+            $script:ReleaseVersionTestRoot `
+            'Sample\Sample.csproj'
+        (Get-Content -Raw -LiteralPath $projectPath).Replace(
+            '<PackageId>Sample.Package</PackageId>',
+            @"
+    <PackageId>Sample.Package</PackageId>
+  </PropertyGroup>
+  <PropertyGroup Condition="'`$(TargetFramework)' == 'net10.0'">
+    <PackageId>Sample.Package.Net10</PackageId>
+"@) | Set-Content -LiteralPath $projectPath -Encoding UTF8
+
+        {
+            Get-PowerForgeReleasePackageIds `
+                -RepositoryRoot $script:ReleaseVersionTestRoot `
+                -ReleaseConfig $script:ReleaseConfig
+        } | Should -Throw '*exactly one package ID*'
+    }
+
+    It 'treats a missing Git tag ref as an unpublished tag' {
+        $script:GitHubProbeUris = @()
+        $commit = Get-PowerForgeGitHubTagCommit `
+            -Owner 'EvotecIT' `
+            -Repository 'PSPublishModule' `
+            -Tag 'v3.0.84' `
+            -Token 'test-token' `
+            -Probe {
+                param($uri, $token)
+                $script:GitHubProbeUris += $uri
+                $null
+            }
+
+        $commit | Should -BeNullOrEmpty
+        @($script:GitHubProbeUris).Count | Should -Be 1
+        $script:GitHubProbeUris[0] |
+            Should -BeLike '*/git/ref/tags/v3.0.84'
+    }
+
+    It 'resolves a commit only after the Git tag ref exists' {
+        $script:GitHubProbeUris = @()
+        $expectedCommit = '0123456789abcdef0123456789abcdef01234567'
+        $commit = Get-PowerForgeGitHubTagCommit `
+            -Owner 'EvotecIT' `
+            -Repository 'PSPublishModule' `
+            -Tag 'v3.0.84' `
+            -Token 'test-token' `
+            -Probe {
+                param($uri, $token)
+                $script:GitHubProbeUris += $uri
+                if ($uri -like '*/git/ref/tags/*') {
+                    return [pscustomobject] @{ ref = 'refs/tags/v3.0.84' }
+                }
+                [pscustomobject] @{ sha = $expectedCommit }
+            }
+
+        $commit | Should -Be $expectedCommit
+        @($script:GitHubProbeUris).Count | Should -Be 2
+        $script:GitHubProbeUris[1] |
+            Should -BeLike '*/commits/v3.0.84'
     }
 }
