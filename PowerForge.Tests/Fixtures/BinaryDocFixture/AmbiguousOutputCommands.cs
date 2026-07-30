@@ -6,6 +6,11 @@ namespace BinaryDocFixture.OutputA
     public sealed class Result
     {
     }
+
+    /// <summary>Represents a distinct CLR type whose name differs only by case.</summary>
+    public sealed class RESULT
+    {
+    }
 }
 
 namespace BinaryDocFixture.OutputB
@@ -31,9 +36,9 @@ namespace BinaryDocFixture
     {
     }
 
-    /// <summary>Returns two distinct output types that share a short name.</summary>
+    /// <summary>Returns distinct output types that share or case-collide on a short name.</summary>
     [Cmdlet(VerbsCommon.Get, "BinaryDocAmbiguousOutputs")]
-    [OutputType(typeof(OutputA.Result), typeof(OutputB.Result))]
+    [OutputType(typeof(OutputA.Result), typeof(OutputA.RESULT), typeof(OutputB.Result))]
     public sealed class GetBinaryDocAmbiguousOutputsCommand : PSCmdlet
     {
     }

@@ -37,13 +37,13 @@ function TestDefaultTextNeedsEncoding([string]$text) {
 
 function ConvertToPowerShellDefaultValue([object]$value) {
   if ($null -eq $value) { return '$null' }
-  if ($value -is [string] -or $value -is [char]) {
+  if ($value -is [char]) {
+    return ('([char]' + [int][char]$value + ')')
+  }
+  if ($value -is [string]) {
     $text = [string]$value
     if (-not (TestDefaultTextNeedsEncoding $text)) {
       return ("'" + $text.Replace("'", "''") + "'")
-    }
-    if ($value -is [char]) {
-      return ('([char]' + [int][char]$value + ')')
     }
     $parts = @()
     $segment = ''
@@ -79,7 +79,8 @@ function ConvertToPowerShellDefaultValue([object]$value) {
       $value,
       [System.Enum]::GetUnderlyingType($enumType),
       [System.Globalization.CultureInfo]::InvariantCulture)
-    return ('[System.Enum]::ToObject([' + $enumType.FullName + '], ' + [string]$underlyingValue + ')')
+    $underlyingTypeName = GetCanonicalTypeNameFromType ([System.Enum]::GetUnderlyingType($enumType))
+    return ('[System.Enum]::ToObject([' + $enumType.FullName + '], ([' + $underlyingTypeName + ']' + [string]$underlyingValue + '))')
   }
   if ($value -is [type]) {
     return ('[' + (GetCanonicalTypeNameFromType $value) + ']')
@@ -88,11 +89,13 @@ function ConvertToPowerShellDefaultValue([object]$value) {
     if ([double]::IsNaN($value)) { return '[double]::NaN' }
     if ([double]::IsPositiveInfinity($value)) { return '[double]::PositiveInfinity' }
     if ([double]::IsNegativeInfinity($value)) { return '[double]::NegativeInfinity' }
+    return $value.ToString('G17', [System.Globalization.CultureInfo]::InvariantCulture)
   }
   if ($value -is [single]) {
     if ([single]::IsNaN($value)) { return '[single]::NaN' }
     if ([single]::IsPositiveInfinity($value)) { return '[single]::PositiveInfinity' }
     if ([single]::IsNegativeInfinity($value)) { return '[single]::NegativeInfinity' }
+    return $value.ToString('G9', [System.Globalization.CultureInfo]::InvariantCulture)
   }
   if ($value -is [System.Collections.IEnumerable]) {
     $items = @()
@@ -123,7 +126,9 @@ function GetCanonicalTypeNameFromType([type]$type) {
     $definition = $type.GetGenericTypeDefinition()
     $definitionName = [string]$definition.FullName
     if (-not $definitionName) { $definitionName = [string]$definition.Name }
-    $definitionName = $definitionName -replace '`\d+$', ''
+    if ($definitionName.IndexOf('+') -lt 0) {
+      $definitionName = $definitionName -replace '`\d+$', ''
+    }
     $arguments = @()
     foreach ($argument in $type.GetGenericArguments()) {
       $arguments += GetCanonicalTypeNameFromType $argument
@@ -167,7 +172,19 @@ function GetTypeKeys([string]$name, [string]$clrName) {
 
 function GetTypeIdentity([string]$name, [string]$clrName) {
   foreach ($candidate in @($clrName, $name)) {
-    $identity = GetCanonicalTypeName $candidate
+    if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+    $trimmed = $candidate.Trim()
+    $resolvedType = $null
+    try { $resolvedType = [System.Type]::GetType($trimmed, $false, $false) } catch { $resolvedType = $null }
+    if (-not $resolvedType) {
+      foreach ($assembly in [System.AppDomain]::CurrentDomain.GetAssemblies()) {
+        try { $resolvedType = $assembly.GetType($trimmed, $false, $false) } catch { $resolvedType = $null }
+        if ($resolvedType) { break }
+      }
+    }
+    if ($resolvedType) { return GetCanonicalTypeNameFromType $resolvedType }
+    if (TestQualifiedTypeIdentity $trimmed) { return ($trimmed -replace '\s+', '') }
+    $identity = GetCanonicalTypeName $trimmed
     if ($identity) { return $identity }
   }
   return ''
@@ -182,7 +199,7 @@ function TestQualifiedTypeIdentity([string]$identity) {
 }
 
 function TestConflictingQualifiedTypeIdentity([string]$left, [string]$right) {
-  return $left -ne $right -and
+  return $left -cne $right -and
     (TestQualifiedTypeIdentity $left) -and
     (TestQualifiedTypeIdentity $right)
 }
@@ -190,8 +207,12 @@ function TestConflictingQualifiedTypeIdentity([string]$left, [string]$right) {
 function GetOutputTypeMetadata([object]$outputType) {
   $outputTypeName = ''
   $outputTypeClrName = ''
+  $outputRuntimeType = $null
   try { $outputTypeName = [string]$outputType.Name } catch { $outputTypeName = '' }
-  try { $outputTypeClrName = [string]$outputType.Type.FullName } catch { $outputTypeClrName = '' }
+  try { $outputRuntimeType = $outputType.Type } catch { $outputRuntimeType = $null }
+  if ($outputRuntimeType -is [type]) {
+    $outputTypeClrName = [string]$outputRuntimeType.FullName
+  }
   if (-not $outputTypeClrName) {
     try { $outputTypeClrName = [string]$outputType.TypeName.FullName } catch { $outputTypeClrName = '' }
   }
@@ -203,11 +224,16 @@ function GetOutputTypeMetadata([object]$outputType) {
   if (-not $outputTypeClrName) { $outputTypeClrName = $outputTypeName }
   if (-not $outputTypeName) { $outputTypeName = $outputTypeClrName }
   if (-not $outputTypeName) { return $null }
+  $outputIdentity = if ($outputRuntimeType -is [type]) {
+    GetCanonicalTypeNameFromType $outputRuntimeType
+  } else {
+    GetTypeIdentity $outputTypeName $outputTypeClrName
+  }
 
   return [pscustomobject][ordered]@{
     name = $outputTypeName
     clrTypeName = $outputTypeClrName
-    identity = GetTypeIdentity $outputTypeName $outputTypeClrName
+    identity = $outputIdentity
     keys = @(GetTypeKeys $outputTypeName $outputTypeClrName)
   }
 }
@@ -631,7 +657,7 @@ try {
     }
 
     $outputs = @()
-    $seenOutputIdentities = @{}
+    $seenOutputIdentities = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     $runtimeOutputKeys = @{}
     $runtimeOutputByKey = @{}
     $runtimeOutputKeyCounts = @{}
@@ -640,8 +666,7 @@ try {
       foreach ($outputType in @($c.OutputType)) {
         $metadata = GetOutputTypeMetadata $outputType
         if (-not $metadata -or -not $metadata.identity) { continue }
-        if ($seenOutputIdentities.ContainsKey($metadata.identity)) { continue }
-        $seenOutputIdentities[$metadata.identity] = $true
+        if (-not $seenOutputIdentities.Add([string]$metadata.identity)) { continue }
         $runtimeOutputMetadata += $metadata
         foreach ($key in @($metadata.keys)) {
           $runtimeOutputKeys[$key] = $true
@@ -707,8 +732,7 @@ try {
         }
         if ($matchesRuntimeOutput) { continue }
 
-        if ($seenOutputIdentities.ContainsKey($helpOutputIdentity)) { continue }
-        $seenOutputIdentities[$helpOutputIdentity] = $true
+        if (-not $seenOutputIdentities.Add([string]$helpOutputIdentity)) { continue }
         $outputs += [ordered]@{
           name = [string]$helpOutput.name
           clrTypeName = [string]$helpOutput.clrTypeName

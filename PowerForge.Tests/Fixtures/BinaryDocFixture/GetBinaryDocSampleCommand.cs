@@ -96,6 +96,11 @@ public sealed class GetBinaryDocEmptyDefaultCommand : PSCmdlet
     [PSDefaultValue(Value = (BinaryDocMode)3)]
     public BinaryDocMode UnnamedMode { get; set; } = (BinaryDocMode)3;
 
+    /// <summary>An optional unnamed unsigned enum value beyond Int64 range.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = (BinaryDocUnsignedMode)18446744073709551614UL)]
+    public BinaryDocUnsignedMode UnnamedUnsignedMode { get; set; } = (BinaryDocUnsignedMode)18446744073709551614UL;
+
     /// <summary>An optional string containing an XML-invalid control character.</summary>
     [Parameter]
     [PSDefaultValue(Value = "\0")]
@@ -106,6 +111,11 @@ public sealed class GetBinaryDocEmptyDefaultCommand : PSCmdlet
     [PSDefaultValue(Value = '\0')]
     public char ControlCharacter { get; set; }
 
+    /// <summary>An optional XML-safe character that must remain a character.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = 'x')]
+    public char Character { get; set; } = 'x';
+
     /// <summary>An optional type whose default must remain a type literal.</summary>
     [Parameter]
     [PSDefaultValue(Value = typeof(string))]
@@ -115,6 +125,11 @@ public sealed class GetBinaryDocEmptyDefaultCommand : PSCmdlet
     [Parameter]
     [PSDefaultValue(Value = typeof(List<>))]
     public Type OpenGenericType { get; set; } = typeof(List<>);
+
+    /// <summary>An optional nested constructed generic type whose segment arities must remain resolvable.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = typeof(BinaryDocOuter<int>.BinaryDocInner<string>))]
+    public Type NestedGenericType { get; set; } = typeof(BinaryDocOuter<int>.BinaryDocInner<string>);
 
     /// <summary>Optional types whose element semantics must remain visible.</summary>
     [Parameter]
@@ -141,6 +156,16 @@ public sealed class GetBinaryDocEmptyDefaultCommand : PSCmdlet
     [PSDefaultValue(Value = new[] { float.PositiveInfinity, float.NegativeInfinity })]
     public float[] Infinities { get; set; } = [float.PositiveInfinity, float.NegativeInfinity];
 
+    /// <summary>An optional finite double that requires round-trip precision.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = 0.84551240822557006)]
+    public double PreciseDouble { get; set; } = 0.84551240822557006;
+
+    /// <summary>An optional finite single that requires round-trip precision.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = 1.2345678F)]
+    public float PreciseSingle { get; set; } = 1.2345678F;
+
     /// <summary>An optional value whose declared default is explicitly null.</summary>
     [Parameter]
     [PSDefaultValue(Value = null)]
@@ -155,6 +180,22 @@ public enum BinaryDocMode
 
     /// <summary>Advanced fixture output.</summary>
     Advanced
+}
+
+/// <summary>Unsigned rendering mode for unnamed enum-value coverage.</summary>
+public enum BinaryDocUnsignedMode : ulong
+{
+    /// <summary>Known unsigned fixture value.</summary>
+    Known = 1
+}
+
+/// <summary>Outer generic fixture type.</summary>
+public sealed class BinaryDocOuter<T>
+{
+    /// <summary>Nested generic fixture type.</summary>
+    public sealed class BinaryDocInner<TInner>
+    {
+    }
 }
 
 /// <summary>Represents the output returned by the binary documentation fixture command.</summary>

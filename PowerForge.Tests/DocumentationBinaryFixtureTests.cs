@@ -305,8 +305,11 @@ public sealed class DocumentationBinaryFixtureTests
                 "@([BinaryDocFixture.BinaryDocMode]::Basic, [BinaryDocFixture.BinaryDocMode]::Advanced)",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Modes", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
-                "[System.Enum]::ToObject([BinaryDocFixture.BinaryDocMode], 3)",
+                "[System.Enum]::ToObject([BinaryDocFixture.BinaryDocMode], ([System.Int32]3))",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "UnnamedMode", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
+                "[System.Enum]::ToObject([BinaryDocFixture.BinaryDocUnsignedMode], ([System.UInt64]18446744073709551614))",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "UnnamedUnsignedMode", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
                 "(-join @(([char]0)))",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "ControlText", StringComparison.Ordinal)).DefaultValue);
@@ -314,11 +317,17 @@ public sealed class DocumentationBinaryFixtureTests
                 "([char]0)",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "ControlCharacter", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
+                "([char]120)",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Character", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
                 "[System.String]",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "ValueType", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
                 "[System.Collections.Generic.List`1]",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "OpenGenericType", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
+                "[BinaryDocFixture.BinaryDocOuter`1+BinaryDocInner`1[System.Int32,System.String]]",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "NestedGenericType", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
                 "@([System.String], [System.Int32])",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "ValueTypes", StringComparison.Ordinal)).DefaultValue);
@@ -334,6 +343,12 @@ public sealed class DocumentationBinaryFixtureTests
             Assert.Equal(
                 "@([single]::PositiveInfinity, [single]::NegativeInfinity)",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Infinities", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
+                "0.84551240822557006",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "PreciseDouble", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
+                "1.23456776",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "PreciseSingle", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
                 "$null",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "OptionalValue", StringComparison.Ordinal)).DefaultValue);
@@ -355,14 +370,18 @@ public sealed class DocumentationBinaryFixtureTests
             var ambiguousOutputCommand = Assert.Single(
                 payload.Commands,
                 item => string.Equals(item.Name, "Get-BinaryDocAmbiguousOutputs", StringComparison.Ordinal));
-            Assert.Equal(2, ambiguousOutputCommand.Outputs.Count);
+            Assert.Equal(3, ambiguousOutputCommand.Outputs.Count);
             var outputA = Assert.Single(
                 ambiguousOutputCommand.Outputs,
                 output => string.Equals(output.ClrTypeName, "BinaryDocFixture.OutputA.Result", StringComparison.Ordinal));
             var outputB = Assert.Single(
                 ambiguousOutputCommand.Outputs,
                 output => string.Equals(output.ClrTypeName, "BinaryDocFixture.OutputB.Result", StringComparison.Ordinal));
+            var outputCaseVariant = Assert.Single(
+                ambiguousOutputCommand.Outputs,
+                output => string.Equals(output.ClrTypeName, "BinaryDocFixture.OutputA.RESULT", StringComparison.Ordinal));
             Assert.True(string.IsNullOrEmpty(outputA.Description));
+            Assert.True(string.IsNullOrEmpty(outputCaseVariant.Description));
             Assert.Contains("Only the OutputB result", outputB.Description, StringComparison.Ordinal);
 
             var markdownDirectory = Path.Combine(tempRoot, "GeneratedDocs");
@@ -388,7 +407,11 @@ public sealed class DocumentationBinaryFixtureTests
                 generatedMaml,
                 StringComparison.Ordinal);
             Assert.Contains(
-                "<dev:defaultValue>[System.Enum]::ToObject([BinaryDocFixture.BinaryDocMode], 3)</dev:defaultValue>",
+                "<dev:defaultValue>[System.Enum]::ToObject([BinaryDocFixture.BinaryDocMode], ([System.Int32]3))</dev:defaultValue>",
+                generatedMaml,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "<dev:defaultValue>[System.Enum]::ToObject([BinaryDocFixture.BinaryDocUnsignedMode], ([System.UInt64]18446744073709551614))</dev:defaultValue>",
                 generatedMaml,
                 StringComparison.Ordinal);
             Assert.Contains(
@@ -401,6 +424,10 @@ public sealed class DocumentationBinaryFixtureTests
                 StringComparison.Ordinal);
             Assert.Contains(
                 "<dev:defaultValue>[System.Collections.Generic.List`1]</dev:defaultValue>",
+                generatedMaml,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "<dev:defaultValue>[BinaryDocFixture.BinaryDocOuter`1+BinaryDocInner`1[System.Int32,System.String]]</dev:defaultValue>",
                 generatedMaml,
                 StringComparison.Ordinal);
             Assert.Contains(
