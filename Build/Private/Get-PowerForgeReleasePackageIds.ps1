@@ -57,8 +57,9 @@ function Get-PowerForgeReleasePackageIds {
                 ForEach-Object { $_.Trim() } |
                 Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
         )
-        $evaluatedPackageIds = if ($targetFrameworks.Count -eq 0) {
-            @([string] $evaluation.PackageId)
+        $packageId = [string] $evaluation.PackageId
+        $frameworkPackageIds = if ($targetFrameworks.Count -eq 0) {
+            @()
         } else {
             @(
                 foreach ($targetFramework in $targetFrameworks) {
@@ -70,20 +71,22 @@ function Get-PowerForgeReleasePackageIds {
                 }
             )
         }
-        $distinctPackageIds = @(
-            $evaluatedPackageIds |
+        $distinctFrameworkPackageIds = @(
+            $frameworkPackageIds |
                 Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
                 Sort-Object -Unique
         )
-        if ($distinctPackageIds.Count -ne 1) {
-            $reportedIds = if ($distinctPackageIds.Count -eq 0) {
+        if ($distinctFrameworkPackageIds.Count -gt 1) {
+            $reportedIds = if ($distinctFrameworkPackageIds.Count -eq 0) {
                 '<missing>'
             } else {
-                $distinctPackageIds -join ', '
+                $distinctFrameworkPackageIds -join ', '
             }
             throw "Release project '$projectPath' must evaluate to exactly one package ID across all target frameworks; found '$reportedIds'."
         }
-        $packageId = $distinctPackageIds[0]
+        if ([string]::IsNullOrWhiteSpace($packageId)) {
+            throw "Release project '$projectPath' did not evaluate a package-level package ID."
+        }
         if ($packageId -notmatch '^[A-Za-z0-9_.-]+$') {
             throw "Release project '$projectPath' resolved unsafe package ID '$packageId'."
         }

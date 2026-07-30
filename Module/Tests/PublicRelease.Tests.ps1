@@ -169,6 +169,23 @@ Describe 'Public release committed version validation' {
         } | Should -Throw '*exactly one package ID*'
     }
 
+    It 'uses the package-level PackageId when only the outer build overrides it' {
+        $projectPath = Join-Path `
+            $script:ReleaseVersionTestRoot `
+            'Sample\Sample.csproj'
+        (Get-Content -Raw -LiteralPath $projectPath).Replace(
+            '<PackageId>Sample.Package</PackageId>',
+            @"
+    <PackageId Condition="'`$(TargetFramework)' == ''">Outer.Package</PackageId>
+"@) | Set-Content -LiteralPath $projectPath -Encoding UTF8
+
+        $packageIds = Get-PowerForgeReleasePackageIds `
+            -RepositoryRoot $script:ReleaseVersionTestRoot `
+            -ReleaseConfig $script:ReleaseConfig
+
+        @($packageIds) | Should -Be @('Outer.Package')
+    }
+
     It 'parses MSBuild JSON after first-run dotnet banner output' {
         $result = ConvertFrom-PowerForgeMsBuildPropertyOutput `
             -ProjectPath 'Sample\Sample.csproj' `
@@ -218,15 +235,56 @@ Describe 'Public release committed version validation' {
                 param($uri, $token)
                 $script:GitHubProbeUris += $uri
                 if ($uri -like '*/git/ref/tags/*') {
-                    return [pscustomobject] @{ ref = 'refs/tags/v3.0.84' }
+                    return [pscustomobject] @{
+                        ref = 'refs/tags/v3.0.84'
+                        object = [pscustomobject] @{
+                            type = 'commit'
+                            sha = $expectedCommit
+                        }
+                    }
                 }
-                [pscustomobject] @{ sha = $expectedCommit }
+                throw "Unexpected probe URI: $uri"
+            }
+
+        $commit | Should -Be $expectedCommit
+        @($script:GitHubProbeUris).Count | Should -Be 1
+    }
+
+    It 'peels an annotated tag through its exact tag object' {
+        $script:GitHubProbeUris = @()
+        $tagObject = '1111111111111111111111111111111111111111'
+        $expectedCommit = '0123456789abcdef0123456789abcdef01234567'
+        $commit = Get-PowerForgeGitHubTagCommit `
+            -Owner 'EvotecIT' `
+            -Repository 'PSPublishModule' `
+            -Tag 'v3.0.84' `
+            -Token 'test-token' `
+            -Probe {
+                param($uri, $token)
+                $script:GitHubProbeUris += $uri
+                if ($uri -like '*/git/ref/tags/*') {
+                    return [pscustomobject] @{
+                        ref = 'refs/tags/v3.0.84'
+                        object = [pscustomobject] @{
+                            type = 'tag'
+                            sha = $tagObject
+                        }
+                    }
+                }
+                if ($uri -like "*/git/tags/$tagObject") {
+                    return [pscustomobject] @{
+                        object = [pscustomobject] @{
+                            type = 'commit'
+                            sha = $expectedCommit
+                        }
+                    }
+                }
+                throw "Unexpected probe URI: $uri"
             }
 
         $commit | Should -Be $expectedCommit
         @($script:GitHubProbeUris).Count | Should -Be 2
-        $script:GitHubProbeUris[1] |
-            Should -BeLike '*/commits/v3.0.84'
+        $script:GitHubProbeUris[1] | Should -BeLike "*/git/tags/$tagObject"
     }
 
     It 'fails closed when an existing Git tag does not resolve to a commit' {
@@ -241,11 +299,15 @@ Describe 'Public release committed version validation' {
                     if ($uri -like '*/git/ref/tags/*') {
                         return [pscustomobject] @{
                             ref = 'refs/tags/v3.0.84'
+                            object = [pscustomobject] @{
+                                type = 'tag'
+                                sha = '1111111111111111111111111111111111111111'
+                            }
                         }
                     }
                     $null
                 }
-        } | Should -Throw '*exists but does not resolve*'
+        } | Should -Throw '*annotated tag object is not accessible*'
     }
 
     It 'proves repository access before interpreting release endpoint absence' {
@@ -278,5 +340,44 @@ Describe 'Public release committed version validation' {
                     throw 'Registry probe must not run.'
                 }
         } | Should -Throw '*not accessible*'
+    }
+
+    It 'rejects a repository token without release-capable write permission' {
+        $releaseConfig = [pscustomobject] @{
+            GitHub = [pscustomobject] @{
+                Publish = $true
+                Owner = 'EvotecIT'
+                Repository = 'PSPublishModule'
+                TagTemplate = 'v{Version}'
+                ReuseExistingRelease = $false
+                ReplaceExistingAssets = $false
+            }
+        }
+
+        {
+            Enable-PowerForgeVerifiedGitHubReleaseRecovery `
+                -ReleaseConfig $releaseConfig `
+                -Version '3.0.84' `
+                -ExpectedCommit '0123456789abcdef0123456789abcdef01234567' `
+                -Token 'test-token' `
+                -PackageIds @('PowerForge') `
+                -GetRepository {
+                    [pscustomobject] @{
+                        permissions = [pscustomobject] @{
+                            pull = $true
+                            push = $false
+                        }
+                    }
+                } `
+                -GetReleaseByTag {
+                    throw 'Release probe must not run.'
+                } `
+                -GetTagCommit {
+                    throw 'Tag probe must not run.'
+                } `
+                -GetRegistryState {
+                    throw 'Registry probe must not run.'
+                }
+        } | Should -Throw '*not writable*'
     }
 }
