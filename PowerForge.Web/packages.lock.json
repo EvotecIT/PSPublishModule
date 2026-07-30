@@ -6,7 +6,7 @@
         "type": "Direct",
         "requested": "[2.2.1, )",
         "resolved": "2.2.1",
-        "contentHash": "tVVBTnxYiQvCEoszj8nEMGNJEUxjhbnFyoSUojaQ0pr246F9WQU3tXSS0icCGrRx54nd5HJnDUWRvwqgC2Aq/w==",
+        "contentHash": "4YqBg37t7CVEf4hH9j2tM4LKsZex5j45x6A4PAVYPO9eQEZjK6uhPh+1S21ShAgd1CcvzQiOgbgWLplrnM0Omw==",
         "dependencies": {
           "AngleSharp": "1.5.2",
           "AngleSharp.Css": "1.0.0-beta.216",
@@ -17,6 +17,7 @@
           "Jint": "4.8.0",
           "Microsoft.Playwright": "1.59.0",
           "NUglify": "1.21.17",
+          "OfficeIMO.Html": "3.0.2",
           "OfficeIMO.Markdown.Html": "3.0.2",
           "PreMailer.Net": "2.7.2"
         }
@@ -251,7 +252,7 @@
         "type": "Direct",
         "requested": "[2.2.1, )",
         "resolved": "2.2.1",
-        "contentHash": "tVVBTnxYiQvCEoszj8nEMGNJEUxjhbnFyoSUojaQ0pr246F9WQU3tXSS0icCGrRx54nd5HJnDUWRvwqgC2Aq/w==",
+        "contentHash": "4YqBg37t7CVEf4hH9j2tM4LKsZex5j45x6A4PAVYPO9eQEZjK6uhPh+1S21ShAgd1CcvzQiOgbgWLplrnM0Omw==",
         "dependencies": {
           "AngleSharp": "1.5.2",
           "AngleSharp.Css": "1.0.0-beta.216",
@@ -262,6 +263,7 @@
           "Jint": "4.8.0",
           "Microsoft.Playwright": "1.59.0",
           "NUglify": "1.21.17",
+          "OfficeIMO.Html": "3.0.2",
           "OfficeIMO.Markdown.Html": "3.0.2",
           "PreMailer.Net": "2.7.2"
         }
