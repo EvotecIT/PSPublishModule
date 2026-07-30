@@ -53,6 +53,7 @@ public sealed class ExportDetectorTests
         var bootstrapper = File.ReadAllText(bootstrapperPath);
 
         Assert.Contains("Find-ManagedModule", exports.Cmdlets);
+        Assert.Contains("Complete-BenchmarkProvenanceCapture", exports.Cmdlets);
         Assert.Contains("Get-ManagedModule", exports.Cmdlets);
         Assert.Contains("Install-ManagedModule", exports.Cmdlets);
         Assert.Contains("Invoke-PowerForgeBundlePostProcess", exports.Cmdlets);
@@ -60,8 +61,11 @@ public sealed class ExportDetectorTests
         Assert.Contains("Invoke-PowerForgePluginPack", exports.Cmdlets);
         Assert.Contains("Repair-ManagedModule", exports.Cmdlets);
         Assert.Contains("Save-ManagedModule", exports.Cmdlets);
+        Assert.Contains("Start-BenchmarkProvenanceCapture", exports.Cmdlets);
+        Assert.Contains("Update-BenchmarkEvidenceCatalog", exports.Cmdlets);
         Assert.Contains("Update-ManagedModule", exports.Cmdlets);
         Assert.Contains("Find-ManagedModule", bootstrapper, StringComparison.Ordinal);
+        Assert.Contains("Complete-BenchmarkProvenanceCapture", bootstrapper, StringComparison.Ordinal);
         Assert.Contains("Get-ManagedModule", bootstrapper, StringComparison.Ordinal);
         Assert.Contains("Install-ManagedModule", bootstrapper, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgeBundlePostProcess", bootstrapper, StringComparison.Ordinal);
@@ -69,6 +73,8 @@ public sealed class ExportDetectorTests
         Assert.Contains("Invoke-PowerForgePluginPack", bootstrapper, StringComparison.Ordinal);
         Assert.Contains("Repair-ManagedModule", bootstrapper, StringComparison.Ordinal);
         Assert.Contains("Save-ManagedModule", bootstrapper, StringComparison.Ordinal);
+        Assert.Contains("Start-BenchmarkProvenanceCapture", bootstrapper, StringComparison.Ordinal);
+        Assert.Contains("Update-BenchmarkEvidenceCatalog", bootstrapper, StringComparison.Ordinal);
         Assert.Contains("Update-ManagedModule", bootstrapper, StringComparison.Ordinal);
     }
 

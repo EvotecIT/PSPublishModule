@@ -81,14 +81,23 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
     {
         if (suite is null)
             throw new ArgumentNullException(nameof(suite));
-        string? gitSha = ReadGitValue(suite.SourceRoot, "rev-parse", "HEAD");
+        string? repositoryRoot = ReadGitValue(
+            suite.SourceRoot,
+            "rev-parse",
+            "--show-toplevel");
+        string? gitWorkingDirectory = string.IsNullOrWhiteSpace(repositoryRoot)
+            ? suite.SourceRoot
+            : Path.GetFullPath(repositoryRoot!);
+        string? gitSha = ReadGitValue(gitWorkingDirectory, "rev-parse", "HEAD");
         return new SourceProvenance
         {
             GitSha = gitSha,
-            GitBranch = ReadGitValue(suite.SourceRoot, "branch", "--show-current"),
+            GitBranch = ReadGitValue(gitWorkingDirectory, "branch", "--show-current"),
             GitStatus = string.IsNullOrWhiteSpace(gitSha)
                 ? null
-                : ReadGitValue(suite.SourceRoot, BuildGitStatusArguments(suite))
+                : ReadGitValue(
+                    gitWorkingDirectory,
+                    BuildGitStatusArguments(suite, gitWorkingDirectory))
         };
     }
 
@@ -179,7 +188,7 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
                 return sysctlName!;
         }
 
-        return $"{RuntimeInformation.OSArchitecture} processor";
+        return string.Empty;
     }
 
     private static string? ReadGitValue(string? workingDirectory, params string[] arguments)
@@ -189,7 +198,9 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             timeoutMilliseconds: 3000,
             workingDirectory: workingDirectory);
 
-    private static string[] BuildGitStatusArguments(PowerShellBenchmarkSuite suite)
+    private static string[] BuildGitStatusArguments(
+        PowerShellBenchmarkSuite suite,
+        string? repositoryRoot)
     {
         var arguments = new List<string>
         {
@@ -197,37 +208,41 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             "--porcelain",
             "--untracked-files=normal"
         };
-        if (string.IsNullOrWhiteSpace(suite.SourceRoot) ||
+        if (string.IsNullOrWhiteSpace(repositoryRoot) ||
+            string.IsNullOrWhiteSpace(suite.SourceRoot) ||
             string.IsNullOrWhiteSpace(suite.OutputRoot))
         {
             return arguments.ToArray();
         }
 
         string sourceRoot = Path.GetFullPath(suite.SourceRoot!);
+        string fullRepositoryRoot = Path.GetFullPath(repositoryRoot!);
         string outputRoot = Path.GetFullPath(
             Path.IsPathRooted(suite.OutputRoot)
                 ? suite.OutputRoot
                 : Path.Combine(sourceRoot, suite.OutputRoot));
-        string sourcePrefix = sourceRoot
-                                  .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                              + Path.DirectorySeparatorChar;
+        string repositoryPrefix = fullRepositoryRoot
+                                      .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                                  + Path.DirectorySeparatorChar;
         if (string.Equals(
                 outputRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                sourceRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                FrameworkCompatibility.GetPathStringComparison(sourceRoot)))
+                fullRepositoryRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                FrameworkCompatibility.GetPathStringComparison(fullRepositoryRoot)))
         {
             throw new InvalidOperationException(
                 "A benchmark output root cannot be the same directory as its source root.");
         }
 
         if (!outputRoot.StartsWith(
-                sourcePrefix,
-                FrameworkCompatibility.GetPathStringComparison(sourceRoot)))
+                repositoryPrefix,
+                FrameworkCompatibility.GetPathStringComparison(fullRepositoryRoot)))
         {
             return arguments.ToArray();
         }
 
-        string relativeOutput = FrameworkCompatibility.GetRelativePath(sourceRoot, outputRoot)
+        string relativeOutput = FrameworkCompatibility.GetRelativePath(
+                fullRepositoryRoot,
+                outputRoot)
             .Replace(Path.DirectorySeparatorChar, '/')
             .Replace(Path.AltDirectorySeparatorChar, '/')
             .Trim('/');

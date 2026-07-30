@@ -88,7 +88,7 @@ public sealed class BenchmarkResultImporter
         result.Metadata["benchmark.provenance.source"] = "sidecar";
         result.Metadata["benchmark.provenance.sidecar.sha256"] =
             BenchmarkJson.ComputeFileSha256(sidecarPath);
-        result.HasValidatedProductionProvenance = true;
+        CaptureValidatedProductionState(result);
     }
 
     private static void ClearUnvalidatedProductionProvenance(BenchmarkRunResult result)
@@ -102,6 +102,53 @@ public sealed class BenchmarkResultImporter
             result.Metadata.Remove(key);
         }
         result.HasValidatedProductionProvenance = false;
+        result.ValidatedProductionContentSha256 = null;
+        result.ValidatedProductionMetadata.Clear();
+    }
+
+    internal static void CaptureValidatedProductionState(BenchmarkRunResult result)
+    {
+        if (result is null)
+            throw new ArgumentNullException(nameof(result));
+
+        result.ValidatedProductionMetadata = result.Metadata
+            .Where(item => BenchmarkEvidenceMetadataPolicy.IsProvenanceBoundKey(item.Key))
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
+        result.HasValidatedProductionProvenance = true;
+        result.ValidatedProductionContentSha256 =
+            ComputeValidatedProductionContentSha256(result);
+    }
+
+    internal static bool HasUnchangedValidatedProductionMetadata(
+        BenchmarkRunResult result)
+    {
+        return result.ValidatedProductionMetadata.All(item =>
+            result.Metadata.TryGetValue(item.Key, out string? value) &&
+            string.Equals(item.Value, value, StringComparison.Ordinal));
+    }
+
+    internal static string ComputeValidatedProductionContentSha256(
+        BenchmarkRunResult result)
+    {
+        if (result is null)
+            throw new ArgumentNullException(nameof(result));
+
+        return BenchmarkJson.ComputeSha256(new
+        {
+            result.RunId,
+            result.Suite,
+            result.StartedUtc,
+            result.FinishedUtc,
+            result.Environment,
+            result.Samples,
+            result.Summary,
+            result.Comparison,
+            Metadata = result.ValidatedProductionMetadata
+                .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(item => item.Key, StringComparer.Ordinal)
+                .Select(item => new { item.Key, item.Value })
+                .ToArray()
+        });
     }
 
     private BenchmarkRunResult ImportDirectory(string path, string? suite, CultureInfo? culture)
@@ -328,16 +375,6 @@ public sealed class BenchmarkResultImporter
             row.P99Ms = MetricValue(sample.Metrics, "P99Ms") ?? row.P99Ms;
             row.StdDevMs = MetricValue(sample.Metrics, "StdDevMs") ?? row.StdDevMs;
             row.StdErrMs = MetricValue(sample.Metrics, "StdErrMs") ?? row.StdErrMs;
-            if (sample.Variables.TryGetValue("N", out string? countText) &&
-                int.TryParse(
-                    countText,
-                    NumberStyles.Integer,
-                    CultureInfo.InvariantCulture,
-                    out int sampleCount) &&
-                sampleCount > 0)
-            {
-                row.SampleCount = sampleCount;
-            }
         }
     }
 
@@ -587,7 +624,7 @@ public sealed class BenchmarkResultImporter
                     isBenchmarkDotNetCsv,
                     usesDecimalComma,
                     culture),
-                SampleCount = ParseInt(Get(map, "SampleCount", "N"), culture)
+                SampleCount = ParseInt(Get(map, "SampleCount"), culture)
                               ?? (median.HasValue || mean.HasValue ? 1 : 0),
                 FailureCount = failureCount,
                 OutlierCount = ParseInt(Get(map, "OutlierCount"), culture) ?? 0,

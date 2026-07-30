@@ -256,7 +256,7 @@ public sealed partial class BenchmarkServicesTests
             "full",
             publish: true);
 
-        Assert.Equal(2, updated.SchemaVersion);
+        Assert.Equal(3, updated.SchemaVersion);
         Assert.False(Assert.Single(updated.Entries, entry => entry.Platform == "linux").Publish);
         Assert.True(Assert.Single(updated.Entries, entry => entry.Platform == "windows").Publish);
         Assert.Contains(
@@ -538,7 +538,8 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkSummaryRow row = Assert.Single(
             new BenchmarkResultImporter().Import(reportPath).Summary);
 
-        Assert.Equal(12, row.SampleCount);
+        Assert.Equal(1, row.SampleCount);
+        Assert.Equal("12", row.Variables["N"]);
         Assert.Equal(12.5, row.P95Ms);
         Assert.Equal(13.5, row.P99Ms);
         Assert.Equal(0.75, row.StdDevMs);

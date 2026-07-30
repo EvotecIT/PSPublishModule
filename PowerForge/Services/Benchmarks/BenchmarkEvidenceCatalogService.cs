@@ -9,21 +9,8 @@ namespace PowerForge;
 /// </summary>
 public sealed partial class BenchmarkEvidenceCatalogService
 {
-    private const int SupportedSchemaVersion = 2;
+    private const int SupportedSchemaVersion = 3;
     private static readonly string[] DefaultExpectedPlatforms = { "windows", "linux", "macos" };
-    private static readonly string[] ExecutionPolicyMetadataKeys =
-    {
-        "profile",
-        "cleanup",
-        "warmupCount",
-        "iterationCount",
-        "runOrder",
-        "memoryCleanup",
-        "cooldownMilliseconds",
-        "outlierMode",
-        "runMode"
-    };
-
     /// <summary>
     /// Adds or replaces one platform/run-mode lane and recomputes comparison and availability state.
     /// </summary>
@@ -73,13 +60,14 @@ public sealed partial class BenchmarkEvidenceCatalogService
         catalog.ExpectedPlatforms = NormalizeExpectedPlatforms(expectedPlatforms ?? catalog.ExpectedPlatforms);
 
         string resolvedPlatform = ResolvePlatform(result, platform);
+        DateTimeOffset generatedUtc = ResolveGeneratedUtc(result);
 
         var entry = new BenchmarkEvidenceEntry
         {
             ComparisonId = comparisonId.Trim(),
             Platform = resolvedPlatform,
             RunMode = normalizedRunMode,
-            GeneratedUtc = result.FinishedUtc == default ? DateTimeOffset.UtcNow : result.FinishedUtc,
+            GeneratedUtc = generatedUtc,
             Publish = publish,
             ResultPath = resultPath,
             ResultSha256 = BenchmarkJson.ComputeSha256(result),
@@ -150,37 +138,43 @@ public sealed partial class BenchmarkEvidenceCatalogService
         byte[]? previousArtifact = null;
         bool artifactExisted = false;
         bool artifactSelected = false;
-        if (publish)
+        BenchmarkEvidenceEntry writtenEntry = updated.Entries.Single(entry =>
+            string.Equals(entry.ComparisonId, comparisonId.Trim(), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(entry.Platform, ResolvePlatform(result, platform), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(entry.RunMode, runMode.Trim(), StringComparison.OrdinalIgnoreCase));
+        string inputHash = BenchmarkJson.ComputeSha256(result);
+        bool inputWasSelected = string.Equals(
+                                    writtenEntry.ResultSha256,
+                                    inputHash,
+                                    StringComparison.OrdinalIgnoreCase) &&
+                                string.Equals(
+                                    writtenEntry.ResultPath,
+                                    resultPath,
+                                    StringComparison.Ordinal);
+        if (inputWasSelected)
         {
-            BenchmarkEvidenceEntry writtenEntry = updated.Entries.Single(entry =>
-                string.Equals(entry.ComparisonId, comparisonId.Trim(), StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(entry.Platform, ResolvePlatform(result, platform), StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(entry.RunMode, runMode.Trim(), StringComparison.OrdinalIgnoreCase));
-            string inputHash = BenchmarkJson.ComputeSha256(result);
-            bool inputWasSelected = string.Equals(
-                                        writtenEntry.ResultSha256,
-                                        inputHash,
-                                        StringComparison.OrdinalIgnoreCase) &&
-                                    string.Equals(
-                                        writtenEntry.ResultPath,
-                                        resultPath,
-                                        StringComparison.Ordinal);
-            if (inputWasSelected)
+            artifactPath = ResolveResultArtifactPath(
+                fullPath,
+                resultPath,
+                resultArtifactPath);
+            if (string.Equals(artifactPath, fullPath, StringComparison.OrdinalIgnoreCase))
             {
-                artifactPath = ResolveResultArtifactPath(
-                    fullPath,
-                    resultPath,
-                    resultArtifactPath);
-                if (string.Equals(artifactPath, fullPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException(
-                        "The benchmark result artifact path must be different from the evidence catalog path.");
-                }
-                artifactSelected = true;
-                artifactExisted = File.Exists(artifactPath);
-                if (artifactExisted)
-                    previousArtifact = File.ReadAllBytes(artifactPath);
+                throw new InvalidOperationException(
+                    "The benchmark result artifact path must be different from the evidence catalog path.");
             }
+            string artifactDestinationSha256 =
+                ComputeArtifactDestinationSha256(fullPath, artifactPath);
+            ValidateArtifactDestinationOwnership(
+                catalog,
+                fullPath,
+                artifactPath,
+                artifactDestinationSha256,
+                writtenEntry);
+            writtenEntry.ArtifactDestinationSha256 = artifactDestinationSha256;
+            artifactSelected = true;
+            artifactExisted = File.Exists(artifactPath);
+            if (artifactExisted)
+                previousArtifact = File.ReadAllBytes(artifactPath);
         }
 
         try
@@ -189,10 +183,6 @@ public sealed partial class BenchmarkEvidenceCatalogService
             {
                 BenchmarkJson.Write(artifactPath!, result);
                 string writtenHash = BenchmarkJson.ComputeFileSha256(artifactPath!);
-                BenchmarkEvidenceEntry writtenEntry = updated.Entries.Single(entry =>
-                    string.Equals(entry.ComparisonId, comparisonId.Trim(), StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(entry.Platform, ResolvePlatform(result, platform), StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(entry.RunMode, runMode.Trim(), StringComparison.OrdinalIgnoreCase));
                 if (!string.Equals(writtenEntry.ResultSha256, writtenHash, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException(
@@ -239,7 +229,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             if (!uri.IsFile)
             {
                 throw new InvalidOperationException(
-                    "Publishable benchmark evidence must use a local result artifact path so PowerForge can write and hash the validated payload.");
+                    "Benchmark evidence must use a local result artifact path so PowerForge can write and hash the normalized payload.");
             }
 
             return BenchmarkJson.ResolveWritePath(uri.LocalPath);
@@ -249,6 +239,101 @@ public sealed partial class BenchmarkEvidenceCatalogService
                                   ?? throw new InvalidOperationException(
                                       $"Unable to determine the evidence catalog directory for '{catalogPath}'.");
         return BenchmarkJson.ResolveWritePath(Path.Combine(catalogDirectory, resultPath));
+    }
+
+    private static void ValidateArtifactDestinationOwnership(
+        BenchmarkEvidenceCatalog? catalog,
+        string catalogPath,
+        string artifactPath,
+        string artifactDestinationSha256,
+        BenchmarkEvidenceEntry selectedEntry)
+    {
+        if (catalog is null)
+            return;
+
+        string? existingArtifactHash = File.Exists(artifactPath)
+            ? BenchmarkJson.ComputeFileSha256(artifactPath)
+            : null;
+        foreach (BenchmarkEvidenceEntry existing in catalog.Entries)
+        {
+            if (SameLane(existing, selectedEntry))
+                continue;
+
+            bool persistedDestinationMatches =
+                !string.IsNullOrWhiteSpace(existing.ArtifactDestinationSha256) &&
+                string.Equals(
+                    existing.ArtifactDestinationSha256,
+                    artifactDestinationSha256,
+                    StringComparison.OrdinalIgnoreCase);
+            bool resolvedPathMatches =
+                TryResolveExistingArtifactPath(
+                    catalogPath,
+                    existing.ResultPath,
+                    out string? existingArtifactPath) &&
+                string.Equals(
+                    existingArtifactPath,
+                    artifactPath,
+                    FrameworkCompatibility.GetPathStringComparison(artifactPath));
+            bool existingContentOwnsDestination =
+                string.IsNullOrWhiteSpace(existing.ArtifactDestinationSha256) &&
+                !string.IsNullOrWhiteSpace(existingArtifactHash) &&
+                !string.IsNullOrWhiteSpace(existing.ResultSha256) &&
+                string.Equals(
+                    existingArtifactHash,
+                    existing.ResultSha256,
+                    StringComparison.OrdinalIgnoreCase);
+            if (!persistedDestinationMatches &&
+                !resolvedPathMatches &&
+                !existingContentOwnsDestination)
+                continue;
+
+            throw new InvalidOperationException(
+                $"Published benchmark lane '{selectedEntry.ComparisonId}/{selectedEntry.Platform}/{selectedEntry.RunMode}' " +
+                $"resolves to the artifact destination already owned by " +
+                $"'{existing.ComparisonId}/{existing.Platform}/{existing.RunMode}': '{artifactPath}'.");
+        }
+    }
+
+    private static string ComputeArtifactDestinationSha256(
+        string catalogPath,
+        string artifactPath)
+    {
+        string catalogDirectory = Path.GetDirectoryName(catalogPath)
+                                  ?? throw new InvalidOperationException(
+                                      $"Unable to determine the evidence catalog directory for '{catalogPath}'.");
+        string normalizedDestination = FrameworkCompatibility.GetRelativePath(
+                catalogDirectory,
+                artifactPath)
+            .Replace(Path.DirectorySeparatorChar, '/')
+            .Replace(Path.AltDirectorySeparatorChar, '/');
+        if (FrameworkCompatibility.GetPathStringComparison(artifactPath) ==
+            StringComparison.OrdinalIgnoreCase)
+        {
+            normalizedDestination = normalizedDestination.ToLowerInvariant();
+        }
+        using SHA256 sha256 = SHA256.Create();
+        byte[] hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(normalizedDestination));
+        return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static bool TryResolveExistingArtifactPath(
+        string catalogPath,
+        string resultPath,
+        out string? artifactPath)
+    {
+        try
+        {
+            artifactPath = ResolveResultArtifactPath(
+                catalogPath,
+                resultPath,
+                resultArtifactPath: null);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            artifactPath = null;
+            return false;
+        }
     }
 
     private static string[] NormalizeExpectedPlatforms(IEnumerable<string>? platforms)
@@ -295,16 +380,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             ComputeComparisonShape(result));
         foreach (var item in result.Metadata.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
         {
-            if (item.Key.StartsWith("benchmark.fixture.", StringComparison.OrdinalIgnoreCase) ||
-                item.Key.StartsWith("benchmark.package.", StringComparison.OrdinalIgnoreCase) ||
-                item.Key.StartsWith("benchmark.workload.", StringComparison.OrdinalIgnoreCase) ||
-                item.Key.StartsWith("benchmark.execution.", StringComparison.OrdinalIgnoreCase) ||
-                item.Key.StartsWith("benchmark.runner.", StringComparison.OrdinalIgnoreCase) ||
-                ExecutionPolicyMetadataKeys.Contains(item.Key, StringComparer.OrdinalIgnoreCase) ||
-                item.Key.Equals("gitSha", StringComparison.OrdinalIgnoreCase) ||
-                item.Key.Equals("pwsh", StringComparison.OrdinalIgnoreCase) ||
-                item.Key.Equals("psEdition", StringComparison.OrdinalIgnoreCase) ||
-                item.Key.Equals("powerShellVersion", StringComparison.OrdinalIgnoreCase))
+            if (BenchmarkEvidenceMetadataPolicy.IsCompatibilityKey(item.Key))
             {
                 dimensions[item.Key] = item.Value;
             }
@@ -499,6 +575,17 @@ public sealed partial class BenchmarkEvidenceCatalogService
             throw new InvalidOperationException(
                 "Publishable imported benchmark evidence requires a production provenance sidecar captured around the benchmark run.");
         }
+        if (result.HasValidatedProductionProvenance &&
+            (!BenchmarkResultImporter.HasUnchangedValidatedProductionMetadata(result) ||
+             !string.Equals(
+                 result.ValidatedProductionContentSha256,
+                 BenchmarkResultImporter.ComputeValidatedProductionContentSha256(result),
+                 StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                "Imported benchmark measurements changed after production provenance validation. " +
+                "Re-import the original sidecar-bound artifacts before publication.");
+        }
         string? gitSha = MetadataValue(result.Metadata, "gitSha");
         if (!IsFullGitObjectId(gitSha))
         {
@@ -524,10 +611,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 "Publishable benchmark evidence requires the measured runtime identity and benchmark runner identity.");
         }
         if (string.IsNullOrWhiteSpace(result.Environment.ProcessArchitecture) ||
-            string.IsNullOrWhiteSpace(result.Environment.ProcessorName))
+            IsGenericProcessorIdentity(result.Environment.ProcessorName))
         {
             throw new InvalidOperationException(
-                "Publishable benchmark evidence requires processArchitecture and processorName hardware identity.");
+                "Publishable benchmark evidence requires processArchitecture and a specific processorName hardware identity.");
         }
 
         bool hasUnknownStatus =
@@ -586,7 +673,41 @@ public sealed partial class BenchmarkEvidenceCatalogService
 
         ValidateSuiteConsistency(result);
         ValidateSummariesMatchSamples(result);
+        ValidateSummaryStatistics(result.Summary);
         ValidateComparisonsMatchSummaries(result);
+    }
+
+    private static DateTimeOffset ResolveGeneratedUtc(BenchmarkRunResult result)
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset generatedUtc =
+            result.FinishedUtc == default ? now : result.FinishedUtc;
+        if (generatedUtc > now.AddMinutes(5))
+        {
+            throw new InvalidOperationException(
+                "Benchmark completion time cannot be in the future beyond the allowed five-minute clock-skew tolerance.");
+        }
+        if (result.StartedUtc != default && generatedUtc < result.StartedUtc)
+        {
+            throw new InvalidOperationException(
+                "Benchmark completion time cannot precede its start time.");
+        }
+
+        return generatedUtc;
+    }
+
+    private static bool IsGenericProcessorIdentity(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+
+        string normalized = value!.Trim();
+        return normalized.Equals("processor", StringComparison.OrdinalIgnoreCase) ||
+               normalized.EndsWith(" processor", StringComparison.OrdinalIgnoreCase) &&
+               Enum.GetNames(typeof(System.Runtime.InteropServices.Architecture))
+                   .Any(architecture => normalized.Equals(
+                       architecture + " processor",
+                       StringComparison.OrdinalIgnoreCase));
     }
 
     private static void ValidateDistinctPublishedResultPaths(
@@ -641,12 +762,12 @@ public sealed partial class BenchmarkEvidenceCatalogService
     {
         if (catalog is null)
             return;
-        if (catalog.SchemaVersion is 1 or SupportedSchemaVersion)
+        if (catalog.SchemaVersion is 1 or 2 or SupportedSchemaVersion)
             return;
 
         throw new InvalidOperationException(
             $"Benchmark evidence catalog schema {catalog.SchemaVersion} is not supported by this build. " +
-            $"Supported schemas are 1 and {SupportedSchemaVersion}; use a compatible PowerForge version before updating the catalog.");
+            $"Supported schemas are 1, 2, and {SupportedSchemaVersion}; use a compatible PowerForge version before updating the catalog.");
     }
 
     private static void ValidateEmbeddedRunModes(BenchmarkRunResult result, string expectedRunMode)

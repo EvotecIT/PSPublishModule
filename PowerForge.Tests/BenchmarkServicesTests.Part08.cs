@@ -617,7 +617,7 @@ public sealed partial class BenchmarkServicesTests
         string root = CreateTempRoot();
         string path = Path.Combine(root, "index.json");
         const string futureCatalog =
-            "{\"schemaVersion\":3,\"futureData\":{\"preserve\":true},\"entries\":[],\"availability\":[]}";
+            "{\"schemaVersion\":4,\"futureData\":{\"preserve\":true},\"entries\":[],\"availability\":[]}";
         File.WriteAllText(path, futureCatalog);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
@@ -629,7 +629,7 @@ public sealed partial class BenchmarkServicesTests
                 "full",
                 publish: true));
 
-        Assert.Contains("schema 3", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("schema 4", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(futureCatalog, File.ReadAllText(path));
     }
 
@@ -1192,6 +1192,7 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkRunResult older = Result("Windows", "fixture-a", 11);
         newer.FinishedUtc = DateTimeOffset.UtcNow;
         older.FinishedUtc = newer.FinishedUtc.AddMinutes(-5);
+        older.StartedUtc = older.FinishedUtc.AddMinutes(-1);
 
         BenchmarkEvidenceCatalog catalog = service.Update(
             null,

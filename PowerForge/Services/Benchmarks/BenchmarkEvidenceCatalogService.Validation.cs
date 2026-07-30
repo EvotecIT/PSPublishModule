@@ -25,6 +25,92 @@ public sealed partial class BenchmarkEvidenceCatalogService
         return NearlyEqual(row.Ratio!.Value, row.Actual!.Value / baseline);
     }
 
+    private static void ValidateSummaryStatistics(
+        IReadOnlyCollection<BenchmarkSummaryRow> rows)
+    {
+        foreach (BenchmarkSummaryRow row in rows)
+        {
+            if (row.SampleCount < 0 ||
+                row.FailureCount < 0 ||
+                row.OutlierCount < 0)
+            {
+                throw new InvalidOperationException(
+                    "Publishable benchmark summary counts cannot be negative.");
+            }
+
+            ValidateOptionalPositiveDuration(row, nameof(row.MedianMs), row.MedianMs);
+            ValidateOptionalPositiveDuration(row, nameof(row.MeanMs), row.MeanMs);
+            ValidateOptionalPositiveDuration(row, nameof(row.MinMs), row.MinMs);
+            ValidateOptionalPositiveDuration(row, nameof(row.MaxMs), row.MaxMs);
+            ValidateOptionalPositiveDuration(row, nameof(row.P95Ms), row.P95Ms);
+            ValidateOptionalPositiveDuration(row, nameof(row.P99Ms), row.P99Ms);
+            ValidateOptionalNonNegativeDuration(row, nameof(row.StdDevMs), row.StdDevMs);
+            ValidateOptionalNonNegativeDuration(row, nameof(row.StdErrMs), row.StdErrMs);
+
+            ValidateOrderedDuration(row, nameof(row.MinMs), row.MinMs, nameof(row.MaxMs), row.MaxMs);
+            ValidateOrderedDuration(row, nameof(row.MinMs), row.MinMs, nameof(row.MedianMs), row.MedianMs);
+            ValidateOrderedDuration(row, nameof(row.MedianMs), row.MedianMs, nameof(row.MaxMs), row.MaxMs);
+            ValidateOrderedDuration(row, nameof(row.MinMs), row.MinMs, nameof(row.MeanMs), row.MeanMs);
+            ValidateOrderedDuration(row, nameof(row.MeanMs), row.MeanMs, nameof(row.MaxMs), row.MaxMs);
+            ValidateOrderedDuration(row, nameof(row.MinMs), row.MinMs, nameof(row.P95Ms), row.P95Ms);
+            ValidateOrderedDuration(row, nameof(row.P95Ms), row.P95Ms, nameof(row.MaxMs), row.MaxMs);
+            ValidateOrderedDuration(row, nameof(row.MinMs), row.MinMs, nameof(row.P99Ms), row.P99Ms);
+            ValidateOrderedDuration(row, nameof(row.P99Ms), row.P99Ms, nameof(row.MaxMs), row.MaxMs);
+            ValidateOrderedDuration(row, nameof(row.P95Ms), row.P95Ms, nameof(row.P99Ms), row.P99Ms);
+            ValidateOrderedDuration(row, nameof(row.StdErrMs), row.StdErrMs, nameof(row.StdDevMs), row.StdDevMs);
+
+            if (row.FailureReasons.Any(item => item.Value < 0) ||
+                row.Metrics.Any(item =>
+                    double.IsNaN(item.Value) ||
+                    double.IsInfinity(item.Value)))
+            {
+                throw new InvalidOperationException(
+                    "Publishable benchmark summary failure counts and custom metrics must be finite and non-negative where applicable.");
+            }
+        }
+    }
+
+    private static void ValidateOptionalPositiveDuration(
+        BenchmarkSummaryRow row,
+        string name,
+        double? value)
+    {
+        if (value.HasValue && !IsValidDuration(value.Value))
+        {
+            throw new InvalidOperationException(
+                $"Publishable benchmark summary '{CreateSummaryIdentity(row)}' has invalid {name} value {value.Value}.");
+        }
+    }
+
+    private static void ValidateOptionalNonNegativeDuration(
+        BenchmarkSummaryRow row,
+        string name,
+        double? value)
+    {
+        if (value.HasValue &&
+            (value.Value < 0 ||
+             double.IsNaN(value.Value) ||
+             double.IsInfinity(value.Value)))
+        {
+            throw new InvalidOperationException(
+                $"Publishable benchmark summary '{CreateSummaryIdentity(row)}' has invalid {name} value {value.Value}.");
+        }
+    }
+
+    private static void ValidateOrderedDuration(
+        BenchmarkSummaryRow row,
+        string lowerName,
+        double? lower,
+        string upperName,
+        double? upper)
+    {
+        if (lower.HasValue && upper.HasValue && lower.Value > upper.Value)
+        {
+            throw new InvalidOperationException(
+                $"Publishable benchmark summary '{CreateSummaryIdentity(row)}' requires {lowerName} <= {upperName}.");
+        }
+    }
+
     private static void ValidateSummariesMatchSamples(BenchmarkRunResult result)
     {
         if (result.Samples.Length == 0 || result.Summary.Length == 0)

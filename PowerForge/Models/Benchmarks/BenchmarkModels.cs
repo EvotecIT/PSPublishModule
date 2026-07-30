@@ -269,6 +269,13 @@ public sealed class BenchmarkRunResult
     [JsonIgnore]
     internal bool HasValidatedProductionProvenance { get; set; }
 
+    [JsonIgnore]
+    internal string? ValidatedProductionContentSha256 { get; set; }
+
+    [JsonIgnore]
+    internal Dictionary<string, string> ValidatedProductionMetadata { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Stable run identifier.</summary>
     public string RunId { get; set; } = string.Empty;
 

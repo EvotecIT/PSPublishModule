@@ -48,7 +48,7 @@ public sealed class BenchmarkEnvironmentInfo
 public sealed class BenchmarkEvidenceCatalog
 {
     /// <summary>Catalog schema version.</summary>
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
 
     /// <summary>Platforms expected for a complete published comparison.</summary>
     public string[] ExpectedPlatforms { get; set; } = { "windows", "linux", "macos" };
@@ -85,6 +85,12 @@ public sealed class BenchmarkEvidenceEntry
 
     /// <summary>SHA-256 of the exact normalized result payload validated for this entry.</summary>
     public string ResultSha256 { get; set; } = string.Empty;
+
+    /// <summary>
+    /// SHA-256 identity of the normalized local artifact destination relative to the catalog.
+    /// This prevents two lanes from overwriting one output even when the previous file is absent.
+    /// </summary>
+    public string ArtifactDestinationSha256 { get; set; } = string.Empty;
 
     /// <summary>Benchmark suite name.</summary>
     public string Suite { get; set; } = string.Empty;
