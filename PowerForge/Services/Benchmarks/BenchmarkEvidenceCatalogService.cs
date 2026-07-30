@@ -187,7 +187,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 writtenEntry);
             writtenEntry.ArtifactDestinationSha256 = artifactDestinationSha256;
             writtenEntry.ArtifactFileName = Path.GetFileName(artifactPath);
-            writtenEntry.ArtifactRelativePath = writtenEntry.ArtifactFileName;
+            writtenEntry.ArtifactRelativePath = ResolveArtifactRelativePath(
+                fullPath,
+                artifactPath,
+                resultPath);
             artifactSelected = true;
             artifactExisted = File.Exists(artifactPath);
             if (artifactExisted)
@@ -322,15 +325,37 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 catalogDirectory,
                 artifactPath)
             .Replace(Path.DirectorySeparatorChar, '/')
-            .Replace(Path.AltDirectorySeparatorChar, '/');
-        if (FrameworkCompatibility.GetPathStringComparison(artifactPath) ==
-            StringComparison.OrdinalIgnoreCase)
-        {
-            normalizedDestination = normalizedDestination.ToLowerInvariant();
-        }
+            .Replace(Path.AltDirectorySeparatorChar, '/')
+            .ToLowerInvariant();
         using SHA256 sha256 = SHA256.Create();
         byte[] hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(normalizedDestination));
         return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static string ResolveArtifactRelativePath(
+        string catalogPath,
+        string artifactPath,
+        string resultPath)
+    {
+        string catalogDirectory = Path.GetDirectoryName(catalogPath)
+                                  ?? throw new InvalidOperationException(
+                                      $"Unable to determine the evidence catalog directory for '{catalogPath}'.");
+        string relativePath = FrameworkCompatibility.GetRelativePath(
+            catalogDirectory,
+            artifactPath);
+        if (!Path.IsPathRooted(relativePath) &&
+            !relativePath.Equals("..", StringComparison.Ordinal) &&
+            !relativePath.StartsWith(
+                ".." + Path.DirectorySeparatorChar,
+                StringComparison.Ordinal) &&
+            !relativePath.StartsWith(
+                ".." + Path.AltDirectorySeparatorChar,
+                StringComparison.Ordinal))
+        {
+            return NormalizeBundleArtifactRelativePath(relativePath, resultPath);
+        }
+
+        return Path.GetFileName(artifactPath);
     }
 
     private static bool TryResolveExistingArtifactPath(

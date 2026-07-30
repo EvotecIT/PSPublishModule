@@ -478,6 +478,39 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void EvidenceCatalog_MergeFilesPreservesImplicitRelativeArtifactDirectory()
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        string outputRoot = Path.Combine(root, "merged");
+        Directory.CreateDirectory(sourceRoot);
+        var service = new BenchmarkEvidenceCatalogService();
+        string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
+        BenchmarkEvidenceCatalog source = service.UpdateFile(
+            sourceCatalogPath,
+            Result("Windows", "fixture-a", 10),
+            "comparison-a",
+            "results/windows.json",
+            "full",
+            publish: true);
+
+        BenchmarkEvidenceEntry sourceEntry = Assert.Single(source.Entries);
+        Assert.Equal(
+            "results/windows.json",
+            sourceEntry.ArtifactRelativePath.Replace('\\', '/'));
+        Assert.True(File.Exists(
+            Path.Combine(sourceRoot, sourceEntry.ArtifactRelativePath)));
+
+        BenchmarkEvidenceCatalog merged = service.MergeFiles(
+            Path.Combine(outputRoot, "index.json"),
+            [sourceCatalogPath]);
+
+        BenchmarkEvidenceEntry mergedEntry = Assert.Single(merged.Entries);
+        Assert.True(File.Exists(
+            Path.Combine(outputRoot, mergedEntry.ArtifactRelativePath)));
+    }
+
+    [Fact]
     public void EvidenceCatalog_MergeFilesFindsPreArtifactFileNameSchemaThreeBundlesByHash()
     {
         string root = CreateTempRoot();
@@ -504,6 +537,69 @@ public sealed partial class BenchmarkServicesTests
             [sourceCatalogPath]);
 
         Assert.Single(merged.Entries);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_MergeFilesFindsLegacyBundleByUniqueContentHashWhenDestinationIdentityDiffers()
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        Directory.CreateDirectory(sourceRoot);
+        var service = new BenchmarkEvidenceCatalogService();
+        string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
+        service.UpdateFile(
+            sourceCatalogPath,
+            Result("Windows", "fixture-a", 10),
+            "comparison-a",
+            "/data/benchmarks/windows.json",
+            "full",
+            publish: true,
+            resultArtifactPath: Path.Combine(sourceRoot, "Run.json"));
+        BenchmarkEvidenceCatalog source =
+            BenchmarkJson.Read<BenchmarkEvidenceCatalog>(sourceCatalogPath);
+        source.Entries[0].ArtifactFileName = string.Empty;
+        source.Entries[0].ArtifactRelativePath = string.Empty;
+        source.Entries[0].ArtifactDestinationSha256 = new string('a', 64);
+        BenchmarkJson.Write(sourceCatalogPath, source);
+
+        BenchmarkEvidenceCatalog merged = service.MergeFiles(
+            Path.Combine(root, "merged", "index.json"),
+            [sourceCatalogPath]);
+
+        Assert.Single(merged.Entries);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_MergeFilesRejectsAmbiguousLegacyContentHashMatches()
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        Directory.CreateDirectory(sourceRoot);
+        var service = new BenchmarkEvidenceCatalogService();
+        string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
+        string sourceArtifactPath = Path.Combine(sourceRoot, "Run.json");
+        service.UpdateFile(
+            sourceCatalogPath,
+            Result("Windows", "fixture-a", 10),
+            "comparison-a",
+            "/data/benchmarks/windows.json",
+            "full",
+            publish: true,
+            resultArtifactPath: sourceArtifactPath);
+        File.Copy(
+            sourceArtifactPath,
+            Path.Combine(sourceRoot, "Copy.json"));
+        BenchmarkEvidenceCatalog source =
+            BenchmarkJson.Read<BenchmarkEvidenceCatalog>(sourceCatalogPath);
+        source.Entries[0].ArtifactFileName = string.Empty;
+        source.Entries[0].ArtifactRelativePath = string.Empty;
+        source.Entries[0].ArtifactDestinationSha256 = new string('a', 64);
+        BenchmarkJson.Write(sourceCatalogPath, source);
+
+        Assert.Throws<FileNotFoundException>(() =>
+            service.MergeFiles(
+                Path.Combine(root, "merged", "index.json"),
+                [sourceCatalogPath]));
     }
 
     [Fact]

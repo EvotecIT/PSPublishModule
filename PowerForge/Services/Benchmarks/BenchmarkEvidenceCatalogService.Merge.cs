@@ -520,6 +520,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         string fullCatalogPath = BenchmarkJson.ResolveWritePath(sourceCatalogPath);
         StringComparison pathComparison =
             FrameworkCompatibility.GetPathStringComparison(fullCatalogPath);
+        var contentMatches = new List<string>();
         foreach (string candidate in Directory
                      .EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
                      .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
@@ -530,25 +531,31 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 continue;
             }
 
+            if (!string.Equals(
+                    BenchmarkJson.ComputeFileSha256(fullCandidate),
+                    sourceEntry.ResultSha256,
+                    StringComparison.OrdinalIgnoreCase))
+                continue;
+
             if (!string.IsNullOrWhiteSpace(sourceEntry.ArtifactDestinationSha256) &&
-                !string.Equals(
+                string.Equals(
                     ComputeArtifactDestinationSha256(
                         sourceCatalogPath,
                         fullCandidate),
                     sourceEntry.ArtifactDestinationSha256,
                     StringComparison.OrdinalIgnoreCase))
             {
-                continue;
-            }
-
-            if (string.Equals(
-                    BenchmarkJson.ComputeFileSha256(fullCandidate),
-                    sourceEntry.ResultSha256,
-                    StringComparison.OrdinalIgnoreCase))
-            {
                 artifactPath = fullCandidate;
                 return true;
             }
+
+            contentMatches.Add(fullCandidate);
+        }
+
+        if (contentMatches.Count == 1)
+        {
+            artifactPath = contentMatches[0];
+            return true;
         }
 
         return false;

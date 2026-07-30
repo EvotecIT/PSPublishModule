@@ -69544,6 +69544,30 @@ System.Management.Automation.PSModuleInfo</maml:name>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Metadata</maml:name>
+          <maml:description>
+            <maml:para>Optional workload metadata to bind before measurement. Publishable evidence requires benchmark.workload.id.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RunMode</maml:name>
+          <maml:description>
+            <maml:para>Optional for diagnostic captures; publishable evidence requires a run mode bound before measurement.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SourceRoot</maml:name>
           <maml:description>
@@ -69565,6 +69589,30 @@ System.Management.Automation.PSModuleInfo</maml:name>
           <maml:para>Fresh directory where the external benchmark will write its artifacts.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Metadata</maml:name>
+        <maml:description>
+          <maml:para>Optional workload metadata to bind before measurement. Publishable evidence requires benchmark.workload.id.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+        <dev:type>
+          <maml:name>Hashtable</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RunMode</maml:name>
+        <maml:description>
+          <maml:para>Optional for diagnostic captures; publishable evidence requires a run mode bound before measurement.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />
@@ -69606,7 +69654,7 @@ System.Management.Automation.PSModuleInfo</maml:name>
     <command:examples>
       <command:example>
         <maml:title>Reserve a BenchmarkDotNet artifact directory before measurement</maml:title>
-        <dev:code>$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts</dev:code>
+        <dev:code>$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts -Metadata @{ 'benchmark.workload.id' = 'tabular-65k-v1' } -RunMode full</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -74261,7 +74309,7 @@ portable consumer path rather than a local path.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Record a Windows publish lane</maml:title>
-        <dev:code>$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts&#xD;
+        <dev:code>$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts -Metadata @{ 'benchmark.workload.id' = 'tabular-65k-v1' } -RunMode full&#xD;
             dotnet run -c Release --project .\Benchmarks -- --artifacts .\Build\BenchmarkDotNet.Artifacts&#xD;
             $capture | Complete-BenchmarkProvenanceCapture&#xD;
             $result = Import-BenchmarkResult .\Build\BenchmarkDotNet.Artifacts&#xD;
