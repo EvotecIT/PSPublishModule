@@ -25,7 +25,7 @@ function Invoke-PowerForgeGitHubReleaseProbe {
             if (-not $response.IsSuccessStatusCode) {
                 throw "GitHub release recovery probe failed ($([int] $response.StatusCode) $($response.ReasonPhrase))."
             }
-            $content | ConvertFrom-Json -Depth 20
+            $content | ConvertFrom-Json
         } finally {
             $response.Dispose()
         }
@@ -72,7 +72,7 @@ function Get-PowerForgeGitHubTagCommit {
         "https://api.github.com/repos/$Owner/$Repository/commits/$escapedTag" `
         $Token
     if ($null -eq $commit) {
-        return $null
+        throw "GitHub tag '$Tag' exists but does not resolve to an accessible commit."
     }
     [string] $commit.sha
 }
@@ -102,6 +102,8 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
         [string] $NuGetSource = 'https://api.nuget.org/v3/index.json',
 
         [string] $ModuleName = 'PSPublishModule',
+
+        [scriptblock] $GetRepository,
 
         [scriptblock] $GetReleaseByTag,
 
@@ -142,6 +144,14 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
     $gitHub | Add-Member -NotePropertyName RecoverPublishedRegistryAssetsBeforeGitHubRelease -NotePropertyValue $false -Force
     $gitHub | Add-Member -NotePropertyName PublishedModuleAlreadyExists -NotePropertyValue $false -Force
 
+    if ($null -eq $GetRepository) {
+        $GetRepository = {
+            param($probeOwner, $probeRepository, $probeToken)
+            Invoke-PowerForgeGitHubReleaseProbe `
+                -Uri "https://api.github.com/repos/$probeOwner/$probeRepository" `
+                -Token $probeToken
+        }
+    }
     if ($null -eq $GetReleaseByTag) {
         $GetReleaseByTag = {
             param($probeOwner, $probeRepository, $probeTag, $probeToken)
@@ -162,6 +172,10 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
         }
     }
 
+    $repositoryState = & $GetRepository $owner $repository $Token
+    if ($null -eq $repositoryState) {
+        throw "GitHub repository '$owner/$repository' is not accessible with the configured release token; endpoint absence cannot be verified safely."
+    }
     $release = & $GetReleaseByTag $owner $repository $tagName $Token
     $tagCommit = & $GetTagCommit $owner $repository $tagName $Token
     if ($null -eq $release -and [string]::IsNullOrWhiteSpace([string] $tagCommit)) {

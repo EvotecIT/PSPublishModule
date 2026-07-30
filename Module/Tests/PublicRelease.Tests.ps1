@@ -94,6 +94,14 @@ Describe 'Public release committed version validation' {
         @($packageIds) | Should -Be @('Sample.Package')
     }
 
+    It 'uses Release when the optional package configuration is omitted' {
+        {
+            Get-PowerForgeReleasePackageIds `
+                -RepositoryRoot $script:ReleaseVersionTestRoot `
+                -ReleaseConfig $script:ReleaseConfig
+        } | Should -Not -Throw
+    }
+
     It 'still rejects a missing committed project version' {
         $projectPath = Join-Path `
             $script:ReleaseVersionTestRoot `
@@ -161,6 +169,24 @@ Describe 'Public release committed version validation' {
         } | Should -Throw '*exactly one package ID*'
     }
 
+    It 'parses MSBuild JSON after first-run dotnet banner output' {
+        $result = ConvertFrom-PowerForgeMsBuildPropertyOutput `
+            -ProjectPath 'Sample\Sample.csproj' `
+            -Output @(
+                'Welcome to .NET 10.0!',
+                'Telemetry information',
+                '{',
+                '  "Properties": {',
+                '    "PackageId": "Sample.Package",',
+                '    "TargetFrameworks": "net8.0;net10.0"',
+                '  }',
+                '}'
+            )
+
+        $result.Properties.PackageId | Should -Be 'Sample.Package'
+        $result.Properties.TargetFrameworks | Should -Be 'net8.0;net10.0'
+    }
+
     It 'treats a missing Git tag ref as an unpublished tag' {
         $script:GitHubProbeUris = @()
         $commit = Get-PowerForgeGitHubTagCommit `
@@ -201,5 +227,56 @@ Describe 'Public release committed version validation' {
         @($script:GitHubProbeUris).Count | Should -Be 2
         $script:GitHubProbeUris[1] |
             Should -BeLike '*/commits/v3.0.84'
+    }
+
+    It 'fails closed when an existing Git tag does not resolve to a commit' {
+        {
+            Get-PowerForgeGitHubTagCommit `
+                -Owner 'EvotecIT' `
+                -Repository 'PSPublishModule' `
+                -Tag 'v3.0.84' `
+                -Token 'test-token' `
+                -Probe {
+                    param($uri, $token)
+                    if ($uri -like '*/git/ref/tags/*') {
+                        return [pscustomobject] @{
+                            ref = 'refs/tags/v3.0.84'
+                        }
+                    }
+                    $null
+                }
+        } | Should -Throw '*exists but does not resolve*'
+    }
+
+    It 'proves repository access before interpreting release endpoint absence' {
+        $releaseConfig = [pscustomobject] @{
+            GitHub = [pscustomobject] @{
+                Publish = $true
+                Owner = 'EvotecIT'
+                Repository = 'PSPublishModule'
+                TagTemplate = 'v{Version}'
+                ReuseExistingRelease = $false
+                ReplaceExistingAssets = $false
+            }
+        }
+
+        {
+            Enable-PowerForgeVerifiedGitHubReleaseRecovery `
+                -ReleaseConfig $releaseConfig `
+                -Version '3.0.84' `
+                -ExpectedCommit '0123456789abcdef0123456789abcdef01234567' `
+                -Token 'test-token' `
+                -PackageIds @('PowerForge') `
+                -GetRepository { $null } `
+                -GetReleaseByTag {
+                    throw 'Release probe must not run.'
+                } `
+                -GetTagCommit {
+                    throw 'Tag probe must not run.'
+                } `
+                -GetRegistryState {
+                    throw 'Registry probe must not run.'
+                }
+        } | Should -Throw '*not accessible*'
     }
 }

@@ -24,7 +24,13 @@ function Get-PowerForgeReleasePackageIds {
         }
     }
 
-    $configuration = [string] $ReleaseConfig.Packages.Configuration
+    $configurationProperty =
+        $ReleaseConfig.Packages.PSObject.Properties['Configuration']
+    $configuration = if ($null -eq $configurationProperty) {
+        $null
+    } else {
+        [string] $configurationProperty.Value
+    }
     if ([string]::IsNullOrWhiteSpace($configuration)) {
         $configuration = 'Release'
     }
@@ -119,12 +125,9 @@ function Get-PowerForgeEvaluatedProjectProperties {
     if ($LASTEXITCODE -ne 0) {
         throw "MSBuild package identity evaluation failed for '$ProjectPath' with exit code $LASTEXITCODE."
     }
-    $json = @($output | ForEach-Object { [string] $_ }) -join [Environment]::NewLine
-    try {
-        $result = $json | ConvertFrom-Json -ErrorAction Stop
-    } catch {
-        throw "MSBuild package identity evaluation returned invalid output for '$ProjectPath': $($_.Exception.Message)"
-    }
+    $result = ConvertFrom-PowerForgeMsBuildPropertyOutput `
+        -Output $output `
+        -ProjectPath $ProjectPath
     $propertiesProperty = $result.PSObject.Properties['Properties']
     if ($null -eq $propertiesProperty -or $null -eq $propertiesProperty.Value) {
         throw "MSBuild package identity evaluation returned no properties for '$ProjectPath'."
@@ -143,5 +146,29 @@ function Get-PowerForgeEvaluatedProjectProperties {
         } else {
             [string] $targetFrameworksProperty.Value
         }
+    }
+}
+
+function ConvertFrom-PowerForgeMsBuildPropertyOutput {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object[]] $Output,
+
+        [Parameter(Mandatory)]
+        [string] $ProjectPath
+    )
+
+    $text = @($Output | ForEach-Object { [string] $_ }) -join [Environment]::NewLine
+    $jsonStart = $text.IndexOf('{')
+    $jsonEnd = $text.LastIndexOf('}')
+    if ($jsonStart -lt 0 -or $jsonEnd -lt $jsonStart) {
+        throw "MSBuild package identity evaluation returned no JSON payload for '$ProjectPath'."
+    }
+    $json = $text.Substring($jsonStart, $jsonEnd - $jsonStart + 1)
+    try {
+        $json | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        throw "MSBuild package identity evaluation returned invalid output for '$ProjectPath': $($_.Exception.Message)"
     }
 }
