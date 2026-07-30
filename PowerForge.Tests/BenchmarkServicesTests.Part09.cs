@@ -607,6 +607,44 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void BenchmarkImporter_DoesNotInventMissingBenchmarkDotNetPercentiles()
+    {
+        string root = CreateTempRoot();
+        string reportPath = Path.Combine(root, "Case-report-full.json");
+        File.WriteAllText(
+            reportPath,
+            """
+            {
+              "Title": "demo",
+              "Benchmarks": [
+                {
+                  "Method": "Read",
+                  "Statistics": {
+                    "Mean": 1100000,
+                    "Median": 1000000,
+                    "Min": 900000,
+                    "Max": 2000000,
+                    "Percentiles": {
+                      "P95": 1500000
+                    }
+                  }
+                }
+              ]
+            }
+            """);
+
+        BenchmarkSummaryRow row = Assert.Single(
+            new BenchmarkResultImporter().Import(reportPath).Summary);
+
+        Assert.Equal(1, row.MedianMs);
+        Assert.InRange(row.MeanMs.GetValueOrDefault(), 1.099999, 1.100001);
+        Assert.InRange(row.MinMs.GetValueOrDefault(), 0.899999, 0.900001);
+        Assert.Equal(2, row.MaxMs);
+        Assert.InRange(row.P95Ms.GetValueOrDefault(), 1.499999, 1.500001);
+        Assert.Null(row.P99Ms);
+    }
+
+    [Fact]
     public void BenchmarkProvenanceCapture_RejectsArtifactMutationAfterCompletion()
     {
         string root = CreateTempRoot();

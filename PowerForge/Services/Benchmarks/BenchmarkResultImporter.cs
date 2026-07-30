@@ -429,8 +429,11 @@ public sealed class BenchmarkResultImporter
             row.MeanMs = MetricValue(sample.Metrics, "MeanMs") ?? row.MeanMs;
             row.MinMs = MetricValue(sample.Metrics, "MinMs") ?? row.MinMs;
             row.MaxMs = MetricValue(sample.Metrics, "MaxMs") ?? row.MaxMs;
-            row.P95Ms = MetricValue(sample.Metrics, "P95Ms") ?? row.P95Ms;
-            row.P99Ms = MetricValue(sample.Metrics, "P99Ms") ?? row.P99Ms;
+            // A BenchmarkDotNet report row is one aggregate record, not one timing
+            // observation. Preserve only percentiles the report actually supplied;
+            // falling back to the aggregate row's duration invents missing percentiles.
+            row.P95Ms = MetricValue(sample.Metrics, "P95Ms");
+            row.P99Ms = MetricValue(sample.Metrics, "P99Ms");
             row.StdDevMs = MetricValue(sample.Metrics, "StdDevMs") ?? row.StdDevMs;
             row.StdErrMs = MetricValue(sample.Metrics, "StdErrMs") ?? row.StdErrMs;
         }
