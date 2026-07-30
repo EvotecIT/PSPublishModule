@@ -255,6 +255,8 @@ public class WebVisualStoryStagerTests
         Assert.Equal(
             "png",
             artifacts["items"]!["allOf"]![0]!["then"]!["properties"]!["format"]!["const"]!.GetValue<string>());
+        var transcriptFormats = artifacts["items"]!["allOf"]![1]!["then"]!["properties"]!["format"]!["enum"]!;
+        Assert.Equal(new[] { "text", "txt" }, transcriptFormats.AsArray().Select(node => node!.GetValue<string>()));
     }
 
     [Fact]
@@ -278,6 +280,59 @@ public class WebVisualStoryStagerTests
                 }));
 
             Assert.Contains("transcript artifacts must use the text format", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Stage_RejectsArtifactPathThatConflictsWithStagedManifest()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var reservedDirectory = Path.Combine(source, "visual-story.json");
+            Directory.CreateDirectory(reservedDirectory);
+            File.Move(Path.Combine(source, "demo.svg"), Path.Combine(reservedDirectory, "demo.svg"));
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(manifest), WebJsonForTests.Options)!;
+            bundle.Artifacts[0].Path = "visual-story.json/demo.svg";
+            File.WriteAllText(manifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("reserved staged manifest", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void PromoteStagedDirectory_RestoresExistingBundleWhenPromotionFails()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-story-promotion-" + Guid.NewGuid().ToString("N"));
+        var output = Path.Combine(root, "published");
+        Directory.CreateDirectory(output);
+        File.WriteAllText(Path.Combine(output, "visual-story.json"), "previous");
+        try
+        {
+            Assert.Throws<DirectoryNotFoundException>(() =>
+                WebVisualStoryStager.PromoteStagedDirectory(
+                    Path.Combine(root, "missing-stage"),
+                    output));
+
+            Assert.Equal("previous", File.ReadAllText(Path.Combine(output, "visual-story.json")));
+            Assert.Empty(Directory.GetDirectories(root, "*.pf-story-backup-*"));
         }
         finally
         {

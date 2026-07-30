@@ -273,13 +273,20 @@ public static partial class WebApiDocsGenerator
             throw new InvalidOperationException(
                 "API visual-story media requires a completed poster for reduced-motion and print output.");
         }
+        var alt = Normalize(element.Attribute("alt")?.Value ?? string.Empty);
+        if (type.Equals("story", StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(alt))
+        {
+            throw new InvalidOperationException(
+                "API visual-story media requires alternative text that describes the code-to-result presentation.");
+        }
 
         media = new ApiExampleMediaModel
         {
             Type = type,
             Url = url,
             Title = Normalize(element.Attribute("title")?.Value ?? element.Attribute("label")?.Value ?? string.Empty),
-            Alt = Normalize(element.Attribute("alt")?.Value ?? string.Empty),
+            Alt = alt,
             Caption = Normalize(
                 element.Attribute("caption")?.Value ??
                 element.Attribute("description")?.Value ??

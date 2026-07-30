@@ -8,6 +8,7 @@ namespace PowerForge.Web;
 /// <summary>Validates producer output and stages a portable visual-story bundle.</summary>
 public static class WebVisualStoryStager
 {
+    private const string StagedManifestFileName = "visual-story.json";
     private static readonly JsonSerializerOptions ManifestJsonOptions = CreateManifestJsonOptions();
 
     private static readonly HashSet<string> SupportedFormats = new(StringComparer.OrdinalIgnoreCase)
@@ -55,7 +56,7 @@ public static class WebVisualStoryStager
         ValidateBundle(bundle);
         ValidateCompletedArtifact(bundle);
 
-        var stagedManifestPath = Path.Combine(outputRoot, "visual-story.json");
+        var stagedManifestPath = Path.Combine(outputRoot, StagedManifestFileName);
         if (!options.Overwrite && File.Exists(stagedManifestPath))
             throw new IOException($"Visual-story manifest already exists: {stagedManifestPath}");
 
@@ -84,6 +85,7 @@ public static class WebVisualStoryStager
             var sha256 = ComputeSha256(sourcePath);
             ValidateDeclaredIntegrity(artifact, info.Length, sha256);
             var relativePath = Path.GetRelativePath(sourceRoot, sourcePath).Replace('\\', '/');
+            ValidateReservedStagedPath(relativePath);
             if (!relativePaths.Add(relativePath))
                 throw new InvalidOperationException($"Visual-story artifact paths must be unique: {relativePath}");
             var destinationPath = VisualStoryPathGuard.ResolveRelativePath(outputRoot, relativePath, "staged artifact");
@@ -104,35 +106,53 @@ public static class WebVisualStoryStager
         var currentPaths = resolved.Select(static item => item.RelativePath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        Directory.CreateDirectory(outputRoot);
-        foreach (var item in resolved)
+        var stagingRoot = CreateSiblingPath(outputRoot, "stage");
+        try
         {
-            if (!SamePath(item.SourcePath, item.DestinationPath))
+            if (Directory.Exists(outputRoot))
+                CopyDirectoryContents(outputRoot, stagingRoot);
+            else
+                Directory.CreateDirectory(stagingRoot);
+
+            foreach (var item in resolved)
             {
+                var temporaryDestination = VisualStoryPathGuard.ResolveRelativePath(
+                    stagingRoot,
+                    item.RelativePath,
+                    "temporary staged artifact");
                 Directory.CreateDirectory(
-                    Path.GetDirectoryName(item.DestinationPath)
+                    Path.GetDirectoryName(temporaryDestination)
                     ?? throw new InvalidOperationException("Visual-story artifact has no destination directory."));
-                File.Copy(item.SourcePath, item.DestinationPath, overwrite: options.Overwrite);
+                File.Copy(item.SourcePath, temporaryDestination, overwrite: true);
+                item.Artifact.Role = item.Artifact.Role.Trim().ToLowerInvariant();
+                item.Artifact.Path = item.RelativePath;
+                item.Artifact.Format = NormalizeFormat(item.Artifact.Format);
+                item.Artifact.MediaType ??= GetMediaType(item.Artifact.Format);
+                item.Artifact.Bytes = item.Bytes;
+                item.Artifact.Sha256 = item.Sha256;
             }
-            item.Artifact.Role = item.Artifact.Role.Trim().ToLowerInvariant();
-            item.Artifact.Path = item.RelativePath;
-            item.Artifact.Format = NormalizeFormat(item.Artifact.Format);
-            item.Artifact.MediaType ??= GetMediaType(item.Artifact.Format);
-            item.Artifact.Bytes = item.Bytes;
-            item.Artifact.Sha256 = item.Sha256;
-        }
 
-        foreach (var previousPath in previousPaths.Where(path => !currentPaths.Contains(path)))
+            foreach (var previousPath in previousPaths.Where(path => !currentPaths.Contains(path)))
+            {
+                var obsoletePath = VisualStoryPathGuard.ResolveRelativePath(
+                    stagingRoot,
+                    previousPath,
+                    "obsolete staged artifact");
+                if (File.Exists(obsoletePath))
+                    File.Delete(obsoletePath);
+                DeleteEmptyParents(Path.GetDirectoryName(obsoletePath), stagingRoot);
+            }
+
+            File.WriteAllText(
+                Path.Combine(stagingRoot, StagedManifestFileName),
+                JsonSerializer.Serialize(bundle, WebJson.Options));
+            PromoteStagedDirectory(stagingRoot, outputRoot);
+        }
+        catch
         {
-            var obsoletePath = VisualStoryPathGuard.ResolveRelativePath(outputRoot, previousPath, "obsolete staged artifact");
-            if (File.Exists(obsoletePath))
-                File.Delete(obsoletePath);
-            DeleteEmptyParents(Path.GetDirectoryName(obsoletePath), outputRoot);
+            TryDeleteDirectory(stagingRoot);
+            throw;
         }
-
-        File.WriteAllText(
-            stagedManifestPath,
-            JsonSerializer.Serialize(bundle, WebJson.Options));
 
         return new WebVisualStoryStageResult
         {
@@ -217,6 +237,19 @@ public static class WebVisualStoryStager
             !string.Equals(NormalizeFormat(artifact.Format), "text", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("Visual-story transcript artifacts must use the text format.");
+        }
+    }
+
+    private static void ValidateReservedStagedPath(string relativePath)
+    {
+        var firstSeparator = relativePath.IndexOf('/');
+        var firstSegment = firstSeparator < 0
+            ? relativePath
+            : relativePath.Substring(0, firstSeparator);
+        if (string.Equals(firstSegment, StagedManifestFileName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Visual-story artifact path conflicts with the reserved staged manifest: {relativePath}");
         }
     }
 
@@ -342,6 +375,80 @@ public static class WebVisualStoryStager
             paths.Add(Path.GetRelativePath(outputRoot, fullPath).Replace('\\', '/'));
         }
         return paths.ToArray();
+    }
+
+    private static string CreateSiblingPath(string outputRoot, string role)
+    {
+        var normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(outputRoot));
+        var parent = Path.GetDirectoryName(normalizedRoot)
+                     ?? throw new InvalidOperationException("Visual-story output must have a parent directory.");
+        Directory.CreateDirectory(parent);
+        return Path.Combine(
+            parent,
+            "." + Path.GetFileName(normalizedRoot) + ".pf-story-" + role + "-" + Guid.NewGuid().ToString("N"));
+    }
+
+    private static void CopyDirectoryContents(string sourceRoot, string destinationRoot)
+    {
+        var source = new DirectoryInfo(sourceRoot);
+        if ((source.Attributes & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException($"Visual-story output cannot be a symbolic link: {sourceRoot}");
+        Directory.CreateDirectory(destinationRoot);
+
+        foreach (var file in source.EnumerateFiles())
+        {
+            if ((file.Attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException($"Visual-story output cannot contain symbolic links: {file.FullName}");
+            file.CopyTo(Path.Combine(destinationRoot, file.Name), overwrite: true);
+        }
+        foreach (var directory in source.EnumerateDirectories())
+        {
+            if ((directory.Attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException($"Visual-story output cannot contain symbolic links: {directory.FullName}");
+            CopyDirectoryContents(directory.FullName, Path.Combine(destinationRoot, directory.Name));
+        }
+    }
+
+    internal static void PromoteStagedDirectory(string stagingRoot, string outputRoot)
+    {
+        var backupRoot = CreateSiblingPath(outputRoot, "backup");
+        var movedExistingOutput = false;
+        try
+        {
+            if (Directory.Exists(outputRoot))
+            {
+                Directory.Move(outputRoot, backupRoot);
+                movedExistingOutput = true;
+            }
+            Directory.Move(stagingRoot, outputRoot);
+        }
+        catch
+        {
+            if (movedExistingOutput && Directory.Exists(backupRoot))
+            {
+                if (Directory.Exists(outputRoot))
+                    Directory.Delete(outputRoot, recursive: true);
+                Directory.Move(backupRoot, outputRoot);
+            }
+            throw;
+        }
+
+        TryDeleteDirectory(backupRoot);
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     private static bool SamePath(string left, string right)

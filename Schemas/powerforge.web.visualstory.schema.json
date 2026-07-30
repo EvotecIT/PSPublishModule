@@ -52,6 +52,19 @@
                 "format": { "const": "png" }
               }
             }
+          },
+          {
+            "if": {
+              "required": ["role"],
+              "properties": {
+                "role": { "const": "transcript" }
+              }
+            },
+            "then": {
+              "properties": {
+                "format": { "enum": ["text", "txt"] }
+              }
+            }
           }
         ]
       }
