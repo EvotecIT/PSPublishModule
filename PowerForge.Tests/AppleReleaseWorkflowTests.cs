@@ -490,6 +490,34 @@ public sealed partial class AppleReleaseWorkflowTests
     }
 
     [Fact]
+    public void AppleReusableWorkflowsDoNotRequireGitHubHostedRunners()
+    {
+        var root = FindRepoRoot();
+        foreach (var workflowName in new[]
+                 {
+                     "powerforge-apple-screenshots.yml",
+                     "powerforge-apple-screenshot-capture.yml",
+                     "powerforge-apple-screenshot-approve.yml",
+                     "powerforge-apple-monitor.yml",
+                     "powerforge-apple-version-pr.yml",
+                     "powerforge-apple-advance.yml",
+                     "powerforge-apple-governance.yml",
+                     "powerforge-apple-approval.yml"
+                 })
+        {
+            var workflow = Read(root, ".github", "workflows", workflowName);
+            Assert.DoesNotContain("runs-on: ubuntu-", workflow, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("runs-on: windows-", workflow, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("runs-on: macos-", workflow, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("self-hosted", workflow, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("mapfile ", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("readarray ", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain(",,}", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("declare -A", workflow, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void AppleWorkflowRunScriptsDoNotInlineCallerControlledInputs()
     {
         var root = FindRepoRoot();
