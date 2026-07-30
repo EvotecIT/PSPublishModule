@@ -35,6 +35,8 @@ $actualCommit = $null
 $releaseOutput = $null
 $effectiveConfigPath = $null
 $releaseRecovery = $null
+$moduleProvenancePath = $null
+$moduleProvenanceCreated = $false
 [pscustomobject]@{
     Success       = $false
     Status        = 'Running'
@@ -136,6 +138,19 @@ try {
         if ($Confirm -cne $expectedConfirmation) {
             throw "Publish confirmation must exactly equal '$expectedConfirmation'."
         }
+
+        $moduleProvenancePath = Join-Path $repositoryRoot 'Module\PowerForge.ReleaseProvenance.json'
+        if (Test-Path -LiteralPath $moduleProvenancePath) {
+            throw "Refusing to overwrite existing module release provenance: $moduleProvenancePath"
+        }
+        [ordered]@{
+            schemaVersion = 1
+            moduleName    = [string] $releaseConfig.Module.ModuleName
+            version       = $Version
+            repository    = "https://github.com/$([string] $releaseConfig.GitHub.Owner)/$([string] $releaseConfig.GitHub.Repository)"
+            commit        = $ExpectedCommit
+        } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $moduleProvenancePath -Encoding utf8BOM
+        $moduleProvenanceCreated = $true
     }
 
     $effectiveConfigPath = Join-Path (Split-Path -Parent $ConfigPath) ".release.authorized.$PID.json"
@@ -211,5 +226,8 @@ try {
 } finally {
     if (-not [string]::IsNullOrWhiteSpace($effectiveConfigPath)) {
         Remove-Item -LiteralPath $effectiveConfigPath -Force -ErrorAction SilentlyContinue
+    }
+    if ($moduleProvenanceCreated -and -not [string]::IsNullOrWhiteSpace($moduleProvenancePath)) {
+        Remove-Item -LiteralPath $moduleProvenancePath -Force -ErrorAction SilentlyContinue
     }
 }

@@ -147,6 +147,68 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
         }
     }
 
+    [Fact]
+    public void Restore_RetriesUntilNewlyPublishedPackageIsReadable()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string packageId = "PowerForge";
+            const string version = "3.0.81";
+            var packagePath = Path.Combine(root.FullName, $"{packageId}.{version}.nupkg");
+            var publishedBytes = CreatePackage(packageId, version, "published");
+            File.WriteAllBytes(packagePath, CreatePackage(packageId, version, "rebuilt"));
+            var handler = new NuGetRecoveryHandler(publishedBytes, packageNotFoundResponses: 1);
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(handler),
+                indexingTimeout: TimeSpan.FromSeconds(1),
+                retryDelay: TimeSpan.Zero);
+
+            service.Restore(
+                "https://packages.example/v3/index.json",
+                version,
+                [packagePath],
+                CancellationToken.None);
+
+            Assert.Equal(3, handler.RequestUris.Count);
+            Assert.Equal(publishedBytes, File.ReadAllBytes(packagePath));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Restore_DoesNotRetryInvalidPublishedPayload()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var packagePath = Path.Combine(root.FullName, "PowerForge.3.0.81.nupkg");
+            File.WriteAllBytes(packagePath, CreatePackage("PowerForge", "3.0.81", "rebuilt"));
+            var handler = new NuGetRecoveryHandler(Encoding.UTF8.GetBytes("not a NuGet package"));
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(handler),
+                indexingTimeout: TimeSpan.FromSeconds(1),
+                retryDelay: TimeSpan.Zero);
+
+            Assert.Throws<InvalidOperationException>(() => service.Restore(
+                "https://packages.example/v3/index.json",
+                "3.0.81",
+                [packagePath],
+                CancellationToken.None));
+
+            Assert.Equal(2, handler.RequestUris.Count);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     private static byte[] CreatePackage(string packageId, string version, string signatureMarker)
     {
         using var memory = new MemoryStream();
@@ -211,9 +273,12 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
         return reader.ReadToEnd();
     }
 
-    private sealed class NuGetRecoveryHandler(byte[] packageBytes) : HttpMessageHandler
+    private sealed class NuGetRecoveryHandler(
+        byte[] packageBytes,
+        int packageNotFoundResponses = 0) : HttpMessageHandler
     {
         internal List<string> RequestUris { get; } = [];
+        private int _packageNotFoundResponses = packageNotFoundResponses;
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -229,6 +294,14 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
                         "{\"resources\":[{\"@id\":\"https://packages.example/v3-flatcontainer/\",\"@type\":\"PackageBaseAddress/3.0.0\"}]}",
                         Encoding.UTF8,
                         "application/json")
+                });
+            }
+
+            if (_packageNotFoundResponses-- > 0)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
+                {
+                    Content = new StringContent("not indexed")
                 });
             }
 

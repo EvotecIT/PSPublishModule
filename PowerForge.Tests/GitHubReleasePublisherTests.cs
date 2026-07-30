@@ -207,6 +207,121 @@ public sealed class GitHubReleasePublisherTests
     }
 
     [Fact]
+    public async Task PublishRelease_NewReleaseRejectsConcurrentSameNameAsset()
+    {
+        var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(assetPath, "asset");
+
+        async Task Respond(string json, int statusCode)
+        {
+            var context = await listener.GetContextAsync();
+            await context.Request.InputStream.CopyToAsync(Stream.Null);
+            var bytes = Encoding.UTF8.GetBytes(json);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = bytes.Length;
+            await context.Response.OutputStream.WriteAsync(bytes);
+            context.Response.Close();
+        }
+
+        var server = Task.Run(async () =>
+        {
+            await Respond($$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}"}""", 201);
+            await Respond(
+                """{"message":"Validation Failed","errors":[{"resource":"ReleaseAsset","code":"already_exists","field":"name"}]}""",
+                422);
+        });
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new GitHubReleasePublisher(new NullLogger()).PublishRelease(
+                    new GitHubReleasePublishRequest
+                    {
+                        Owner = "EvotecIT",
+                        Repository = "example",
+                        Token = "token",
+                        ApiBaseUrl = apiBaseUrl,
+                        TagName = "v1.2.3",
+                        AssetFilePaths = [assetPath]
+                    }));
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("first publication", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("unverified bytes", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            listener.Stop();
+            listener.Close();
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
+    public async Task PublishRelease_ReusedReleaseRetainsOrdinarySameNameSkipCompatibility()
+    {
+        var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(assetPath, "asset");
+
+        async Task Respond(string json, int statusCode)
+        {
+            var context = await listener.GetContextAsync();
+            await context.Request.InputStream.CopyToAsync(Stream.Null);
+            var bytes = Encoding.UTF8.GetBytes(json);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = bytes.Length;
+            await context.Response.OutputStream.WriteAsync(bytes);
+            context.Response.Close();
+        }
+
+        var server = Task.Run(async () =>
+        {
+            await Respond($$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}"}""", 200);
+            await Respond(
+                """{"message":"Validation Failed","errors":[{"resource":"ReleaseAsset","code":"already_exists","field":"name"}]}""",
+                422);
+        });
+
+        try
+        {
+            var result = new GitHubReleasePublisher(new NullLogger()).PublishRelease(
+                new GitHubReleasePublishRequest
+                {
+                    Owner = "EvotecIT",
+                    Repository = "example",
+                    Token = "token",
+                    ApiBaseUrl = apiBaseUrl,
+                    TagName = "v1.2.3",
+                    ReuseExistingReleaseOnConflict = true,
+                    RequireExpectedExistingRelease = true,
+                    ExpectedExistingReleaseId = 42,
+                    AssetFilePaths = [assetPath]
+                });
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(result.Succeeded);
+            Assert.Equal(Path.GetFileName(assetPath), Assert.Single(result.SkippedExistingAssets));
+            Assert.Empty(result.UploadedAssets);
+        }
+        finally
+        {
+            listener.Stop();
+            listener.Close();
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
     public void PublishRelease_ThrowsWhenAssetDoesNotExist()
     {
         var publisher = new GitHubReleasePublisher(new NullLogger());

@@ -58,8 +58,8 @@ internal sealed partial class PowerForgeReleaseService
     private readonly Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, ISet<PowerForgeReleaseToolOutputKind>, DotNetPublishPlan> _planDotNetTools;
     private readonly Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult> _runDotNetTools;
     private readonly Func<GitHubReleasePublishRequest, CancellationToken, GitHubReleasePublishResult> _publishGitHubRelease;
-    private readonly Func<string, string, IEnumerable<string>, CancellationToken, string[]> _restorePublishedNuGetAssets;
-    private readonly Func<string, string, string, IEnumerable<string>, CancellationToken, string[]> _restorePublishedModuleAssets;
+    private readonly Func<string, string, IEnumerable<string>, CancellationToken, string[]>? _restorePublishedNuGetAssets;
+    private readonly Func<string, string, string, IEnumerable<string>, CancellationToken, string[]>? _restorePublishedModuleAssets;
     private readonly Func<string, string, string, string, GitHubReleaseVersionOccupancy> _probeGitHubReleaseVersion;
     private readonly Func<PowerForgeWingetSubmissionPlan, PowerForgeWingetSubmissionResult> _submitWinget;
     private readonly Func<AppleAppArchiveRequest, AppleAppArchiveResult> _archiveAppleApp;
@@ -203,21 +203,8 @@ internal sealed partial class PowerForgeReleaseService
             throw new ArgumentNullException(nameof(publishGitHubRelease));
         _publishGitHubRelease = publishGitHubReleaseWithCancellation
             ?? ((publishRequest, _) => publishGitHubRelease(publishRequest));
-        _restorePublishedNuGetAssets = restorePublishedNuGetAssets
-            ?? ((source, version, paths, cancellationToken) =>
-                new PublishedNuGetAssetRecoveryService(logger).Restore(
-                    source,
-                    version,
-                    paths,
-                    cancellationToken));
-        _restorePublishedModuleAssets = restorePublishedModuleAssets
-            ?? ((source, moduleName, version, paths, cancellationToken) =>
-                new PublishedModuleAssetRecoveryService(logger).Restore(
-                    source,
-                    moduleName,
-                    version,
-                    paths,
-                    cancellationToken));
+        _restorePublishedNuGetAssets = restorePublishedNuGetAssets;
+        _restorePublishedModuleAssets = restorePublishedModuleAssets;
         _probeGitHubReleaseVersion = probeGitHubReleaseVersion
             ?? GitHubReleaseVersionAvailabilityService.Probe;
         _submitWinget = submitWinget ?? (plan => new WingetSubmissionService(logger).Run(plan));

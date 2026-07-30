@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Net;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -10,13 +11,26 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
 {
     private readonly ILogger _logger;
     private readonly NuGetV3PackageDownloader _downloader;
+    private readonly TimeSpan _indexingTimeout;
+    private readonly TimeSpan _retryDelay;
+    private readonly Action<TimeSpan, CancellationToken> _delay;
 
     internal PublishedNuGetAssetRecoveryService(
         ILogger logger,
-        NuGetV3PackageDownloader? downloader = null)
+        NuGetV3PackageDownloader? downloader = null,
+        TimeSpan? indexingTimeout = null,
+        TimeSpan? retryDelay = null,
+        Action<TimeSpan, CancellationToken>? delay = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _downloader = downloader ?? new NuGetV3PackageDownloader();
+        _indexingTimeout = indexingTimeout ?? TimeSpan.FromMinutes(10);
+        _retryDelay = retryDelay ?? TimeSpan.FromSeconds(5);
+        _delay = delay ?? ((duration, cancellationToken) =>
+        {
+            if (duration > TimeSpan.Zero)
+                Task.Delay(duration, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
+        });
     }
 
     internal string[] Restore(
@@ -98,16 +112,12 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
             foreach (var plan in plans)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                _downloader.DownloadPackageAsync(
-                        serviceIndexUrl,
-                        plan.Identity.Id,
-                        expectedVersion,
-                        plan.PublishedPackagePath,
-                        new PrivateGalleryIndexOptions(),
-                        cancellationToken)
-                    .ConfigureAwait(false)
-                    .GetAwaiter()
-                    .GetResult();
+                DownloadPublishedPackage(
+                    serviceIndexUrl,
+                    plan.Identity.Id,
+                    expectedVersion,
+                    plan.PublishedPackagePath,
+                    cancellationToken);
 
                 var publishedIdentity = ReadIdentity(plan.PublishedPackagePath);
                 ValidateIdentity(publishedIdentity, expectedVersion, plan.PublishedPackagePath, "published");
@@ -171,6 +181,49 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
             }
         }
     }
+
+    private void DownloadPublishedPackage(
+        string serviceIndexUrl,
+        string packageId,
+        string expectedVersion,
+        string destinationPath,
+        CancellationToken cancellationToken)
+    {
+        var started = DateTime.UtcNow;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            TryDelete(destinationPath);
+            try
+            {
+                _downloader.DownloadPackageAsync(
+                        serviceIndexUrl,
+                        packageId,
+                        expectedVersion,
+                        destinationPath,
+                        new PrivateGalleryIndexOptions(),
+                        cancellationToken)
+                    .ConfigureAwait(false)
+                    .GetAwaiter()
+                    .GetResult();
+                return;
+            }
+            catch (NuGetPackageDownloadException exception)
+                when (IsRetryableIndexingStatus(exception.StatusCode) &&
+                      DateTime.UtcNow - started < _indexingTimeout)
+            {
+                _logger.Info(
+                    $"Published NuGet package {packageId} {expectedVersion} is not readable yet; waiting for registry indexing.");
+                _delay(_retryDelay, cancellationToken);
+            }
+        }
+    }
+
+    private static bool IsRetryableIndexingStatus(HttpStatusCode statusCode)
+        => statusCode == HttpStatusCode.NotFound ||
+           statusCode == HttpStatusCode.RequestTimeout ||
+           statusCode == (HttpStatusCode)429 ||
+           (int)statusCode >= 500;
 
     private static NuGetPackageIdentity ReadIdentity(string packagePath)
     {

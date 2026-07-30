@@ -135,6 +135,7 @@ public sealed partial class GitHubReleasePublisher
                 expectedReleaseBodyMarker,
                 expectedTagCommitSha,
                 requirePublishedStableRelease,
+                release.ReusedExistingRelease,
                 replaceExistingAssets,
                 result.ReplacedExistingAssets,
                 result.UploadedAssets,
@@ -326,6 +327,7 @@ public sealed partial class GitHubReleasePublisher
         string? expectedReleaseBodyMarker,
         string? expectedTagCommitSha,
         bool requirePublishedStableRelease,
+        bool reusedExistingRelease,
         bool replaceExistingAssets,
         List<string> replacedExistingAssets,
         List<string> uploadedAssets,
@@ -436,6 +438,20 @@ public sealed partial class GitHubReleasePublisher
                         (int)resp.StatusCode == 422 &&
                         IsAlreadyExistsValidationError(respText, fieldName: "name"))
                     {
+                        if (!reusedExistingRelease)
+                        {
+                            ReportAssetProgress(
+                                progress,
+                                assetPath,
+                                index,
+                                assets.Length,
+                                GitHubReleaseAssetProgressState.Failed,
+                                totalBytes: assetSize,
+                                detail: "Unverified same-name asset appeared on a newly created release");
+                            throw new InvalidOperationException(
+                                $"GitHub release asset '{fileName}' appeared during first publication; refusing to accept unverified bytes.");
+                        }
+
                         assetWatch.Stop();
                         _logger.Info($"GitHub release asset '{fileName}' already exists; skipping upload after {DotNetRepositoryReleaseService.FormatDuration(assetWatch.Elapsed)}.");
                         skippedAssets.Add(fileName);

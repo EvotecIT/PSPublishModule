@@ -9,6 +9,7 @@ public sealed partial class AppleReleaseWorkflowTests
         var workflow = Read(root, ".github", "workflows", "pspublishmodule-public-release.yml");
         var script = Read(root, "Build", "Invoke-PowerForgePublicRelease.ps1");
         var releaseConfig = Read(root, "Build", "release.json");
+        var moduleConfig = Read(root, "powerforge.json");
         var releaseSchema = Read(root, "Schemas", "powerforge.release.schema.json");
 
         Assert.Contains("runs-on: [self-hosted, windows, runner-github-runner-w]", workflow, StringComparison.Ordinal);
@@ -25,6 +26,11 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("-DisableVersionUpdates:($Operation -eq 'Publish')", script, StringComparison.Ordinal);
         Assert.Contains("Enable-PowerForgeVerifiedGitHubReleaseRecovery", script, StringComparison.Ordinal);
         Assert.Contains("Get-PowerForgeReleasePackageIds", script, StringComparison.Ordinal);
+        Assert.Contains("PowerForge.ReleaseProvenance.json", script, StringComparison.Ordinal);
+        Assert.Contains("moduleName    = [string] $releaseConfig.Module.ModuleName", script, StringComparison.Ordinal);
+        Assert.Contains("commit        = $ExpectedCommit", script, StringComparison.Ordinal);
+        Assert.Contains("$moduleProvenanceCreated", script, StringComparison.Ordinal);
+        Assert.Contains("\"PowerForge.ReleaseProvenance.json\"", moduleConfig, StringComparison.Ordinal);
         Assert.Contains(". .\\Build\\Private\\Assert-PowerForgeCommittedReleaseVersion.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("$releaseConfig.GitHub | Add-Member -NotePropertyName Commitish", script, StringComparison.Ordinal);
         Assert.Contains("ExpectedTagCommitSha = gitHub.Commitish", Read(root, "PowerForge", "Services", "PowerForgeReleaseService.cs"), StringComparison.Ordinal);
@@ -83,7 +89,7 @@ public sealed partial class AppleReleaseWorkflowTests
                       $"$freshResult = Enable-PowerForgeVerifiedGitHubReleaseRecovery -ReleaseConfig $fresh -Version '3.0.81' -ExpectedCommit '{commit}' -Token 'test' -PackageIds @('PowerForge') -GetReleaseByTag $missingProbe -GetTagCommit $missingProbe -GetRegistryState $emptyRegistry; " +
                       "if ($freshResult.ReuseEnabled -or -not $freshResult.RegistryRecovery -or $fresh.GitHub.ReuseExistingRelease -or $fresh.GitHub.ReplaceExistingAssets -or $fresh.GitHub.RequireExpectedExistingRelease -or $null -ne $fresh.GitHub.ExpectedExistingReleaseId -or $fresh.GitHub.RequirePublishedStableRelease -or -not $fresh.GitHub.RequirePublishedNuGetAssets -or -not $fresh.GitHub.RequirePublishedModuleAssets -or $fresh.GitHub.PublishedModuleSource -ne 'https://www.powershellgallery.com/api/v2' -or -not $fresh.GitHub.RecoverPublishedRegistryAssetsBeforeGitHubRelease -or $fresh.GitHub.PublishedModuleAlreadyExists) { throw 'Fresh release did not enable exact post-publication recovery.' }; " +
                       "$partial = '{\"GitHub\":{\"Publish\":true,\"Owner\":\"EvotecIT\",\"Repository\":\"PSPublishModule\",\"TagTemplate\":\"v{Version}\"}}' | ConvertFrom-Json; " +
-                      "$partialRegistry = { [pscustomobject]@{ AnyPublished = $true; PublishedPackageIds = @('PowerForge'); ModulePublished = $true } }; " +
+                      "$partialRegistry = { [pscustomobject]@{ AnyPublished = $true; PublishedPackageIds = @('PowerForge'); ModulePublished = $true; ProvenanceVerified = $true } }; " +
                       $"$partialResult = Enable-PowerForgeVerifiedGitHubReleaseRecovery -ReleaseConfig $partial -Version '3.0.81' -ExpectedCommit '{commit}' -Token 'test' -PackageIds @('PowerForge','PowerForge.Build') -GetReleaseByTag $missingProbe -GetTagCommit $missingProbe -GetRegistryState $partialRegistry; " +
                       "if ($partialResult.ReuseEnabled -or -not $partialResult.RegistryRecovery -or $partial.GitHub.ReuseExistingRelease -or $partial.GitHub.ReplaceExistingAssets -or -not $partial.GitHub.RequirePublishedNuGetAssets -or -not $partial.GitHub.RequirePublishedModuleAssets -or -not $partial.GitHub.RecoverPublishedRegistryAssetsBeforeGitHubRelease -or -not $partial.GitHub.PublishedModuleAlreadyExists) { throw 'Partial registry recovery binding is incomplete.' }";
 
@@ -95,6 +101,13 @@ public sealed partial class AppleReleaseWorkflowTests
             StringComparison.Ordinal);
         var mismatchResult = Run("pwsh", root, "-NoProfile", "-Command", mismatch);
         Assert.NotEqual(0, mismatchResult.ExitCode);
+
+        var foreignRegistry = command.Replace(
+            "ProvenanceVerified = $true",
+            "ProvenanceVerified = $false",
+            StringComparison.Ordinal);
+        var foreignRegistryResult = Run("pwsh", root, "-NoProfile", "-Command", foreignRegistry);
+        Assert.NotEqual(0, foreignRegistryResult.ExitCode);
     }
 
     [Fact]

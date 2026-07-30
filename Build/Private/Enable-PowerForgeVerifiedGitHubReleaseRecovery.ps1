@@ -80,6 +80,7 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
     if ($owner -notmatch '^[A-Za-z0-9_.-]+$' -or $repository -notmatch '^[A-Za-z0-9_.-]+$') {
         throw 'The GitHub release owner or repository contains unsupported characters.'
     }
+    $expectedRepositoryUrl = "https://github.com/$owner/$repository"
 
     $tagTemplate = if ([string]::IsNullOrWhiteSpace([string] $gitHub.TagTemplate)) { 'v{Version}' } else { [string] $gitHub.TagTemplate }
     $tagName = $tagTemplate.Replace('{Version}', $Version).Replace('{Repository}', $repository)
@@ -130,12 +131,17 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
                     -NuGetSource $probeNuGetSource `
                     -ModuleName $probeModuleName `
                     -ModuleSource $probeModuleSource `
-                    -Version $probeVersion
+                    -Version $probeVersion `
+                    -ExpectedCommit $ExpectedCommit `
+                    -ExpectedRepositoryUrl $expectedRepositoryUrl
             }
         }
         $registryState = & $GetRegistryState $PackageIds $NuGetSource $ModuleName $PublishedModuleSource $Version
         if ($null -eq $registryState) {
             throw 'Public registry recovery probe returned no state.'
+        }
+        if ($registryState.AnyPublished -eq $true -and $registryState.ProvenanceVerified -ne $true) {
+            throw "Public registry version $Version is occupied without provenance bound to authorized commit '$ExpectedCommit'."
         }
         $gitHub.RequirePublishedNuGetAssets = $true
         $gitHub.RequirePublishedModuleAssets = $true

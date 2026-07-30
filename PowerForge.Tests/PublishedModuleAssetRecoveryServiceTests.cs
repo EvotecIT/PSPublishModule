@@ -65,6 +65,41 @@ public sealed class PublishedModuleAssetRecoveryServiceTests
         }
     }
 
+    [Fact]
+    public void Restore_RetriesUntilNewlyPublishedModuleIsReadable()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string moduleName = "SampleModule";
+            const string version = "3.0.81";
+            var archivePath = Path.Combine(root.FullName, $"{moduleName}.v{version}.zip");
+            CreateModuleArchive(archivePath, moduleName, includeExtras: false);
+            var handler = new ModuleRecoveryHandler(
+                CreatePublishedPackage(moduleName, version),
+                packageNotFoundResponses: 1);
+            var service = new PublishedModuleAssetRecoveryService(
+                new NullLogger(),
+                new ManagedModuleRepositoryClient(new NullLogger(), new HttpClient(handler)),
+                indexingTimeout: TimeSpan.FromSeconds(1),
+                retryDelay: TimeSpan.Zero);
+
+            service.Restore(
+                "https://www.powershellgallery.com/api/v2",
+                moduleName,
+                version,
+                [archivePath],
+                CancellationToken.None);
+
+            Assert.Equal(2, handler.RequestUris.Count);
+            AssertPublishedPayload(archivePath, moduleName);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     private static byte[] CreatePublishedPackage(string moduleName, string version)
     {
         using var memory = new MemoryStream();
@@ -79,6 +114,10 @@ public sealed class PublishedModuleAssetRecoveryServiceTests
             WriteEntry(archive, $"{moduleName}.psd1", "published manifest");
             WriteEntry(archive, $"{moduleName}.psm1", "published signed payload");
             WriteEntry(archive, "Lib/Module.dll", "published binary");
+            WriteEntry(
+                archive,
+                PublishedRegistryProvenanceValidator.ModuleProvenanceFileName,
+                $$"""{"schemaVersion":1,"moduleName":"{{moduleName}}","version":"{{version}}","repository":"https://github.com/EvotecIT/PSPublishModule","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}""");
         }
         return memory.ToArray();
     }
@@ -126,9 +165,12 @@ public sealed class PublishedModuleAssetRecoveryServiceTests
         return reader.ReadToEnd();
     }
 
-    private sealed class ModuleRecoveryHandler(byte[] packageBytes) : HttpMessageHandler
+    private sealed class ModuleRecoveryHandler(
+        byte[] packageBytes,
+        int packageNotFoundResponses = 0) : HttpMessageHandler
     {
         internal List<string> RequestUris { get; } = [];
+        private int _packageNotFoundResponses = packageNotFoundResponses;
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -136,6 +178,13 @@ public sealed class PublishedModuleAssetRecoveryServiceTests
         {
             var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
             RequestUris.Add(uri);
+            if (_packageNotFoundResponses-- > 0)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
+                {
+                    Content = new StringContent("not indexed")
+                });
+            }
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new ByteArrayContent(packageBytes)

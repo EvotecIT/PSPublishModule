@@ -10,13 +10,26 @@ internal sealed class PublishedModuleAssetRecoveryService
 {
     private readonly ILogger _logger;
     private readonly ManagedModuleRepositoryClient _repositoryClient;
+    private readonly TimeSpan _indexingTimeout;
+    private readonly TimeSpan _retryDelay;
+    private readonly Action<TimeSpan, CancellationToken> _delay;
 
     internal PublishedModuleAssetRecoveryService(
         ILogger logger,
-        ManagedModuleRepositoryClient? repositoryClient = null)
+        ManagedModuleRepositoryClient? repositoryClient = null,
+        TimeSpan? indexingTimeout = null,
+        TimeSpan? retryDelay = null,
+        Action<TimeSpan, CancellationToken>? delay = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _repositoryClient = repositoryClient ?? new ManagedModuleRepositoryClient(logger);
+        _indexingTimeout = indexingTimeout ?? TimeSpan.FromMinutes(10);
+        _retryDelay = retryDelay ?? TimeSpan.FromSeconds(5);
+        _delay = delay ?? ((duration, cancellationToken) =>
+        {
+            if (duration > TimeSpan.Zero)
+                Task.Delay(duration, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
+        });
     }
 
     internal string[] Restore(
@@ -67,16 +80,12 @@ internal sealed class PublishedModuleAssetRecoveryService
             var repository = new ManagedModuleRepository(
                 "PublishedModuleRecovery",
                 serviceIndexUrl);
-            var download = _repositoryClient.DownloadPackageAsync(
-                    repository,
-                    moduleName,
-                    expectedVersion,
-                    packageDirectory,
-                    credential: null,
-                    cancellationToken)
-                .ConfigureAwait(false)
-                .GetAwaiter()
-                .GetResult();
+            var download = DownloadPublishedModule(
+                repository,
+                moduleName,
+                expectedVersion,
+                packageDirectory,
+                cancellationToken);
             packagePath = download.PackagePath;
 
             var payload = ReadPublishedPayload(packagePath, moduleName, expectedVersion);
@@ -112,6 +121,47 @@ internal sealed class PublishedModuleAssetRecoveryService
             TryDeleteDirectory(packageDirectory);
         }
     }
+
+    private ManagedModuleDownloadResult DownloadPublishedModule(
+        ManagedModuleRepository repository,
+        string moduleName,
+        string expectedVersion,
+        string packageDirectory,
+        CancellationToken cancellationToken)
+    {
+        var started = DateTime.UtcNow;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return _repositoryClient.DownloadPackageAsync(
+                        repository,
+                        moduleName,
+                        expectedVersion,
+                        packageDirectory,
+                        credential: null,
+                        cancellationToken)
+                    .ConfigureAwait(false)
+                    .GetAwaiter()
+                    .GetResult();
+            }
+            catch (ManagedModuleRepositoryException exception)
+                when (IsRetryableIndexingStatus(exception.StatusCode) &&
+                      DateTime.UtcNow - started < _indexingTimeout)
+            {
+                _logger.Info(
+                    $"Published module {moduleName} {expectedVersion} is not readable yet; waiting for registry indexing.");
+                _delay(_retryDelay, cancellationToken);
+            }
+        }
+    }
+
+    private static bool IsRetryableIndexingStatus(int? statusCode)
+        => statusCode == 404 ||
+           statusCode == 408 ||
+           statusCode == 429 ||
+           statusCode >= 500;
 
     private static IReadOnlyDictionary<string, PublishedEntry> ReadPublishedPayload(
         string packagePath,

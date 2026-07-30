@@ -104,17 +104,31 @@ internal sealed partial class PowerForgeReleaseService
 
         try
         {
-            var recovered = _restorePublishedNuGetAssets(
-                spec.Packages?.PublishSource ?? string.Empty,
-                version,
-                result.ReleaseAssets,
-                cancellationToken);
+            var recovered = _restorePublishedNuGetAssets is null
+                ? new PublishedNuGetAssetRecoveryService(_logger).Restore(
+                    spec.Packages?.PublishSource ?? string.Empty,
+                    version,
+                    result.ReleaseAssets,
+                    cancellationToken)
+                : _restorePublishedNuGetAssets(
+                    spec.Packages?.PublishSource ?? string.Empty,
+                    version,
+                    result.ReleaseAssets,
+                    cancellationToken);
             recoveredAssets = recovered
                 .Where(path => string.Equals(Path.GetExtension(path), ".nupkg", StringComparison.OrdinalIgnoreCase))
                 .ToArray();
             recoveredReleaseZips = recovered
                 .Where(path => string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase))
                 .ToArray();
+            if (_restorePublishedNuGetAssets is null)
+            {
+                PublishedRegistryProvenanceValidator.ValidateNuGetPackages(
+                    recoveredAssets,
+                    version,
+                    $"https://github.com/{owner}/{repository}",
+                    gitHub.Commitish!);
+            }
             return null;
         }
         catch (OperationCanceledException)
@@ -159,12 +173,28 @@ internal sealed partial class PowerForgeReleaseService
 
         try
         {
-            recoveredAssets = _restorePublishedModuleAssets(
-                gitHub.PublishedModuleSource ?? string.Empty,
-                result.ModulePlan?.ModuleName ?? string.Empty,
-                version,
-                moduleAssets,
-                cancellationToken);
+            recoveredAssets = _restorePublishedModuleAssets is null
+                ? new PublishedModuleAssetRecoveryService(_logger).Restore(
+                    gitHub.PublishedModuleSource ?? string.Empty,
+                    result.ModulePlan?.ModuleName ?? string.Empty,
+                    version,
+                    moduleAssets,
+                    cancellationToken)
+                : _restorePublishedModuleAssets(
+                    gitHub.PublishedModuleSource ?? string.Empty,
+                    result.ModulePlan?.ModuleName ?? string.Empty,
+                    version,
+                    moduleAssets,
+                    cancellationToken);
+            if (_restorePublishedModuleAssets is null)
+            {
+                PublishedRegistryProvenanceValidator.ValidateModuleArchives(
+                    recoveredAssets,
+                    result.ModulePlan?.ModuleName ?? string.Empty,
+                    version,
+                    $"https://github.com/{owner}/{repository}",
+                    gitHub.Commitish!);
+            }
             return null;
         }
         catch (OperationCanceledException)
