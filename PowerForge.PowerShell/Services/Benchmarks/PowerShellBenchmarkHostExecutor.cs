@@ -92,6 +92,8 @@ public sealed class PowerShellBenchmarkHostExecutor
             hosts = new[] { "Current" };
 
         var hostSelections = ResolveHostSelections(hosts);
+        PowerShellBenchmarkEnvironmentMetadata.SourceProvenance sourceProvenance =
+            PowerShellBenchmarkEnvironmentMetadata.CaptureSourceProvenance(suite);
         var started = DateTimeOffset.UtcNow;
         var results = new List<BenchmarkRunResult>();
         foreach (var host in hostSelections)
@@ -99,7 +101,11 @@ public sealed class PowerShellBenchmarkHostExecutor
             results.Add(RunHost(suite, request, host.Host, host.Executable, started));
         }
 
-        var merged = PowerShellBenchmarkResultMerger.Merge(suite, results, started);
+        var merged = PowerShellBenchmarkResultMerger.Merge(
+            suite,
+            results,
+            started,
+            sourceProvenance);
         try
         {
             PowerShellBenchmarkComparisonEvaluator.ValidateGates(suite, merged.Summary);
@@ -302,7 +308,8 @@ public sealed class PowerShellBenchmarkHostExecutor
             StartedUtc = started,
             FinishedUtc = DateTimeOffset.UtcNow,
             Samples = samples,
-            Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite)
+            Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite),
+            Environment = PowerShellBenchmarkEnvironmentMetadata.BuildEnvironment()
         };
     }
 

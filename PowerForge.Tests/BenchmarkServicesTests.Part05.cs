@@ -7,6 +7,111 @@ namespace PowerForge.Tests;
 public sealed partial class BenchmarkServicesTests
 {
     [Fact]
+    public void ResultMergerPreservesDistinctChildRuntimeAndRunnerIdentities()
+    {
+        BenchmarkRunResult core = ChildResult(
+            "Core",
+            ".NET 10.0",
+            "PowerShell 7.6");
+        BenchmarkRunResult desktop = ChildResult(
+            "Desktop",
+            ".NET Framework 4.8",
+            "Windows PowerShell 5.1");
+
+        BenchmarkEnvironmentInfo environment =
+            PowerShellBenchmarkResultMerger.MergeEnvironment(new[] { core, desktop });
+
+        Assert.Equal(
+            "Core=.NET 10.0; Desktop=.NET Framework 4.8",
+            environment.RuntimeVersion);
+        Assert.Equal(
+            "Core=PowerShell 7.6; Desktop=Windows PowerShell 5.1",
+            environment.Runner);
+    }
+
+    [Fact]
+    public void ResultMergerDoesNotHideMissingChildRuntimeIdentity()
+    {
+        BenchmarkRunResult identified = ChildResult(
+            "Core",
+            ".NET 10.0",
+            "PowerShell 7.6");
+        BenchmarkRunResult unidentified = ChildResult(
+            "Desktop",
+            string.Empty,
+            "Windows PowerShell 5.1");
+
+        BenchmarkEnvironmentInfo environment =
+            PowerShellBenchmarkResultMerger.MergeEnvironment(
+                new[] { identified, unidentified });
+
+        Assert.Empty(environment.RuntimeVersion);
+        Assert.Equal(
+            "Core=PowerShell 7.6; Desktop=Windows PowerShell 5.1",
+            environment.Runner);
+    }
+
+    [Fact]
+    public void EnvironmentMetadataRejectsSourceProvenanceThatChangedDuringRun()
+    {
+        PowerShellBenchmarkSuite suite = CreateRunnableSuite();
+        suite.SourceRoot = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            ".."));
+        PowerShellBenchmarkEnvironmentMetadata.SourceProvenance captured =
+            PowerShellBenchmarkEnvironmentMetadata.CaptureSourceProvenance(suite);
+        Assert.False(string.IsNullOrWhiteSpace(captured.GitSha));
+        var changed = new PowerShellBenchmarkEnvironmentMetadata.SourceProvenance
+        {
+            GitSha = new string('0', captured.GitSha!.Length),
+            GitBranch = captured.GitBranch,
+            GitStatus = captured.GitStatus
+        };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => PowerShellBenchmarkEnvironmentMetadata.Build(suite, changed));
+
+        Assert.Contains(
+            "changed while measurements were running",
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EnvironmentMetadataExcludesReservedInRepositoryOutputFromSourceStatus()
+    {
+        string root = CreateTempRoot();
+        RunGit(root, "init");
+        RunGit(root, "config user.email benchmark@example.test");
+        RunGit(root, "config user.name Benchmark");
+        File.WriteAllText(Path.Combine(root, "source.txt"), "measured");
+        RunGit(root, "add source.txt");
+        RunGit(root, "commit -m measured");
+        string outputRoot = Path.Combine(root, "Build", "Benchmarks");
+        Directory.CreateDirectory(outputRoot);
+        File.WriteAllText(Path.Combine(outputRoot, "report.json"), "{}");
+        var suite = new PowerShellBenchmarkSuite
+        {
+            Name = "provenance",
+            SourceRoot = root,
+            OutputRoot = outputRoot
+        };
+
+        PowerShellBenchmarkEnvironmentMetadata.SourceProvenance clean =
+            PowerShellBenchmarkEnvironmentMetadata.CaptureSourceProvenance(suite);
+        File.WriteAllText(Path.Combine(root, "unrelated.txt"), "dirty");
+        PowerShellBenchmarkEnvironmentMetadata.SourceProvenance dirty =
+            PowerShellBenchmarkEnvironmentMetadata.CaptureSourceProvenance(suite);
+
+        Assert.True(string.IsNullOrWhiteSpace(clean.GitStatus));
+        Assert.Contains("unrelated.txt", dirty.GitStatus, StringComparison.Ordinal);
+        Assert.DoesNotContain("Build/Benchmarks", dirty.GitStatus, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void DslRuntime_PreservesSpecLocalHelperFunctionsInCapturedBlocks()
     {
         var root = CreateTempRoot();
@@ -33,6 +138,23 @@ benchmark 'helpers' {
 
         Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
     }
+
+    private static BenchmarkRunResult ChildResult(
+        string host,
+        string runtime,
+        string runner)
+        => new()
+        {
+            Environment = new BenchmarkEnvironmentInfo
+            {
+                RuntimeVersion = runtime,
+                Runner = runner
+            },
+            Samples =
+            [
+                new BenchmarkSample { Host = host }
+            ]
+        };
 
     [Fact]
     public void DslRuntime_RestoresCapturedHelperFunctionsAfterUse()

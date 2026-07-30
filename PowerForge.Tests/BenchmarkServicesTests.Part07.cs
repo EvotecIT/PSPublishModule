@@ -333,6 +333,7 @@ public sealed partial class BenchmarkServicesTests
             IterationCount = 1,
             Artifacts = BenchmarkArtifactKind.None
         };
+        suite.SourceRoot = suite.OutputRoot;
         suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Engine", Values = { "Managed" } });
         suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Operation", Values = { "Run" } });
         suite.Engines.Add(engine);

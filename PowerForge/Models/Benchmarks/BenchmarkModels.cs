@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace PowerForge;
 
 /// <summary>
@@ -264,6 +266,16 @@ public sealed class BenchmarkComparisonRow
 /// </summary>
 public sealed class BenchmarkRunResult
 {
+    [JsonIgnore]
+    internal bool HasValidatedProductionProvenance { get; set; }
+
+    [JsonIgnore]
+    internal string? ValidatedProductionContentSha256 { get; set; }
+
+    [JsonIgnore]
+    internal Dictionary<string, string> ValidatedProductionMetadata { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Stable run identifier.</summary>
     public string RunId { get; set; } = string.Empty;
 
@@ -290,6 +302,9 @@ public sealed class BenchmarkRunResult
 
     /// <summary>Environment and runner metadata.</summary>
     public Dictionary<string, string> Metadata { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Typed environment identity used to keep platform evidence separate and auditable.</summary>
+    public BenchmarkEnvironmentInfo Environment { get; set; } = new();
 }
 
 /// <summary>

@@ -173,6 +173,25 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_UsesExplicitCultureForGroupedNormalizedMemoryFields()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(
+            csv,
+            "Suite;Scenario;Operation;Engine;Host;Iteration;Status;DurationMs;AllocatedBytes;WorkingSetDeltaBytes;Reason\n"
+            + "suite;case;Run;Managed;Current;0;Succeeded;12,5;1.234;-2.345;\n");
+
+        BenchmarkSample sample = Assert.Single(
+            new BenchmarkResultImporter().Import(
+                csv,
+                culture: System.Globalization.CultureInfo.GetCultureInfo("de-DE")).Samples);
+
+        Assert.Equal(1234, sample.AllocatedBytes);
+        Assert.Equal(-2345, sample.WorkingSetDeltaBytes);
+    }
+
+    [Fact]
     public void Importer_PreservesCsvCustomMetrics()
     {
         var root = CreateTempRoot();
@@ -244,6 +263,214 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal("Fast", sample.Scenario);
         Assert.Equal(12.5, sample.DurationMs);
         Assert.DoesNotContain(sample.Variables.Keys, key => key.Contains("Method", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Importer_ReadsLocaleDelimitedBenchmarkDotNetCsvWithoutTreatingRuntimeLabelsAsMetrics()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "benchmark-report.csv");
+        File.WriteAllText(
+            csv,
+            "Method;Job;Mean;Allocated\n"
+            + "OfficeIMO;NET8.0;54,90 ms;36,46 MB\n"
+            + "Sep;NET8.0;28,67 ms;34,22 MB\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+
+        Assert.Collection(
+            result.Samples.OrderBy(sample => sample.Scenario),
+            sample =>
+            {
+                Assert.Equal("OfficeIMO", sample.Scenario);
+                Assert.Equal(54.9, sample.DurationMs);
+                Assert.Equal(36.46 * 1024 * 1024, sample.Metrics["Allocated"], precision: 3);
+                Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+            },
+            sample =>
+            {
+                Assert.Equal("Sep", sample.Scenario);
+                Assert.Equal(28.67, sample.DurationMs);
+                Assert.Equal(34.22 * 1024 * 1024, sample.Metrics["Allocated"], precision: 3);
+                Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+            });
+        Assert.All(result.Summary, row => Assert.True(row.Metrics.ContainsKey("Allocated")));
+    }
+
+    [Fact]
+    public void Importer_UsesExplicitCultureForAmbiguousBenchmarkDotNetCsvNumbers()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "benchmark-report.csv");
+        File.WriteAllText(
+            csv,
+            "Method;Job;Mean\n"
+            + "Invariant;Dry;1,234 ns\n");
+
+        BenchmarkRunResult ambiguous = new BenchmarkResultImporter().Import(csv, "demo");
+        BenchmarkRunResult invariant = new BenchmarkResultImporter().Import(
+            csv,
+            "demo",
+            System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+        BenchmarkRunResult decimalComma = new BenchmarkResultImporter().Import(
+            csv,
+            "demo",
+            System.Globalization.CultureInfo.GetCultureInfo("de-DE"));
+
+        Assert.Equal(BenchmarkSampleStatus.Failed, Assert.Single(ambiguous.Samples).Status);
+        Assert.Equal(0.001234, Assert.Single(invariant.Samples).DurationMs, precision: 9);
+        Assert.Equal(0.000001234, Assert.Single(decimalComma.Samples).DurationMs, precision: 12);
+    }
+
+    [Fact]
+    public void Importer_UsesExplicitCultureGroupSeparatorForBenchmarkDotNetCsvNumbers()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "benchmark-report.csv");
+        File.WriteAllText(
+            csv,
+            "Method;Job;Mean\n"
+            + "Grouped;Dry;1.234 ns\n");
+
+        BenchmarkRunResult result = new BenchmarkResultImporter().Import(
+            csv,
+            "demo",
+            System.Globalization.CultureInfo.GetCultureInfo("de-DE"));
+
+        Assert.Equal(0.001234, Assert.Single(result.Samples).DurationMs, precision: 9);
+    }
+
+    [Fact]
+    public void Importer_RejectsAmbiguousDotGroupedBenchmarkDotNetCsvNumbersWithoutCulture()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "benchmark-report.csv");
+        File.WriteAllText(
+            csv,
+            "Method;Job;Mean\n"
+            + "Ambiguous;Dry;1.234 ns\n");
+
+        BenchmarkRunResult ambiguous = new BenchmarkResultImporter().Import(csv, "demo");
+        BenchmarkRunResult decimalPoint = new BenchmarkResultImporter().Import(
+            csv,
+            "demo",
+            System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+        BenchmarkRunResult grouped = new BenchmarkResultImporter().Import(
+            csv,
+            "demo",
+            System.Globalization.CultureInfo.GetCultureInfo("de-DE"));
+
+        Assert.Equal(BenchmarkSampleStatus.Failed, Assert.Single(ambiguous.Samples).Status);
+        Assert.Equal(0.000001234, Assert.Single(decimalPoint.Samples).DurationMs, precision: 12);
+        Assert.Equal(0.001234, Assert.Single(grouped.Samples).DurationMs, precision: 9);
+    }
+
+    [Fact]
+    public void Importer_UsesExplicitCultureForGroupedSummaryCounts()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "summary.csv");
+        File.WriteAllText(
+            csv,
+            "Suite;Scenario;Operation;Engine;Host;SampleCount;FailureCount;OutlierCount;MedianMs\n"
+            + "suite;case;Run;Managed;Current;1.234;1.000;2.345;12,5\n");
+
+        BenchmarkSummaryRow row = Assert.Single(
+            new BenchmarkResultImporter().Import(
+                csv,
+                culture: System.Globalization.CultureInfo.GetCultureInfo("de-DE")).Summary);
+
+        Assert.Equal(1234, row.SampleCount);
+        Assert.Equal(1000, row.FailureCount);
+        Assert.Equal(2345, row.OutlierCount);
+        Assert.Equal("Failed", row.Status);
+    }
+
+    [Fact]
+    public void Importer_UsesExplicitCultureForGroupedSampleIterations()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(
+            csv,
+            "Suite;Scenario;Operation;Engine;Host;Iteration;Status;DurationMs\n"
+            + "suite;case;Run;Managed;Current;1.234;Succeeded;12,5\n");
+
+        BenchmarkSample sample = Assert.Single(
+            new BenchmarkResultImporter().Import(
+                csv,
+                culture: System.Globalization.CultureInfo.GetCultureInfo("de-DE")).Samples);
+
+        Assert.Equal(1234, sample.Iteration);
+        Assert.Equal(12.5, sample.DurationMs);
+    }
+
+    [Fact]
+    public void Importer_UsesInferredDecimalCommaForDotGroupedDurations()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(
+            csv,
+            "Suite;Scenario;Operation;Engine;Host;Iteration;Status;DurationMs\n"
+            + "suite;decimal;Run;Managed;Current;0;Succeeded;1,5\n"
+            + "suite;grouped;Run;Managed;Current;1;Succeeded;1.234\n");
+
+        BenchmarkRunResult result = new BenchmarkResultImporter().Import(csv);
+
+        Assert.Equal(1.5, result.Samples[0].DurationMs);
+        Assert.Equal(1234, result.Samples[1].DurationMs);
+    }
+
+    [Fact]
+    public void Importer_ParsesInvariantScientificNotationWithoutExplicitCulture()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(
+            csv,
+            "Suite,Scenario,Operation,Engine,Host,Iteration,Status,DurationMs\n"
+            + "suite,scientific,Run,Managed,Current,0,Succeeded,1.234E-10\n");
+
+        BenchmarkSample sample = Assert.Single(new BenchmarkResultImporter().Import(csv).Samples);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+        Assert.Equal(1.234E-10, sample.DurationMs);
+    }
+
+    [Fact]
+    public void Importer_ParsesNormalizedCommaDelimitedDecimalPointInvariantly()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(
+            csv,
+            "Suite,Scenario,Operation,Engine,Host,Iteration,Status,DurationMs\n"
+            + "suite,decimal,Run,Managed,Current,0,Succeeded,1.234\n");
+
+        BenchmarkSample sample = Assert.Single(
+            new BenchmarkResultImporter().Import(csv).Samples);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+        Assert.Equal(1.234, sample.DurationMs);
+    }
+
+    [Fact]
+    public void Importer_MarksSummaryWithoutDurationAsFailed()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "summary.csv");
+        File.WriteAllText(
+            csv,
+            "Suite,Scenario,Operation,Engine,Host,FailureCount,MedianMs,MeanMs\n"
+            + "suite,broken,Run,Managed,Current,0,not-a-duration,also-invalid\n");
+
+        BenchmarkSummaryRow row = Assert.Single(
+            new BenchmarkResultImporter().Import(csv).Summary);
+
+        Assert.Equal("Failed", row.Status);
+        Assert.Null(row.MedianMs);
+        Assert.Null(row.MeanMs);
     }
 
     [Fact]
@@ -334,6 +561,30 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal("suite", result.Suite);
         Assert.Equal("New", sample.Scenario);
         Assert.Equal("2", sample.Variables["Rows"]);
+    }
+
+    [Fact]
+    public void Importer_DirectoryRejectsMixedPlatformsBeforeSelectingLatestRunnerSamples()
+    {
+        var root = CreateTempRoot();
+        var older = Path.Combine(root, "windows");
+        var newer = Path.Combine(root, "linux");
+        Directory.CreateDirectory(older);
+        Directory.CreateDirectory(newer);
+        var olderSamples = Path.Combine(older, "samples.csv");
+        var newerSamples = Path.Combine(newer, "samples.csv");
+        const string header = "Suite,Scenario,Operation,Engine,Host,OS,Iteration,Status,DurationMs\n";
+        File.WriteAllText(olderSamples, header + "suite,case,Run,Managed,Current,Windows,0,Succeeded,1\n");
+        File.WriteAllText(newerSamples, header + "suite,case,Run,Managed,Current,Linux,0,Succeeded,2\n");
+        File.SetLastWriteTimeUtc(olderSamples, DateTime.UtcNow.AddMinutes(-5));
+        File.SetLastWriteTimeUtc(newerSamples, DateTime.UtcNow);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => new BenchmarkResultImporter().Import(root));
+
+        Assert.Contains("one operating system", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Windows", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Linux", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

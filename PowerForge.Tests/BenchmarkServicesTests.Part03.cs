@@ -22,6 +22,23 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_RejectsUnknownNormalizedSampleStatus()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(
+            csv,
+            "Suite,Scenario,Operation,Engine,Host,OS,RunMode,Iteration,Status,DurationMs,Reason\n" +
+            "suite,case,Run,Managed,Current,Windows,full,0,TimedOut,12,\n");
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkResultImporter().Import(csv));
+
+        Assert.Contains("TimedOut", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Importer_FailsNonFiniteCsvDurations()
     {
         var root = CreateTempRoot();
@@ -101,6 +118,61 @@ public sealed partial class BenchmarkServicesTests
 
         Assert.Equal("new", result.Suite);
         Assert.Single(result.Samples);
+    }
+
+    [Fact]
+    public void Importer_DirectoryKeepsBenchmarkDotNetCsvReportsDistinct()
+    {
+        var root = CreateTempRoot();
+        File.WriteAllText(
+            Path.Combine(root, "First.Bench-report.csv"),
+            "Method,Mean [ms]\nWrite,1\n");
+        File.WriteAllText(
+            Path.Combine(root, "Second.Bench-report.csv"),
+            "Method,Mean [ms]\nWrite,2\n");
+
+        BenchmarkRunResult result = new BenchmarkResultImporter().Import(root);
+
+        Assert.Equal(2, result.Summary.Length);
+        Assert.Contains(
+            result.Summary,
+            row => row.Variables["BenchmarkDotNetReport"] == "First.Bench");
+        Assert.Contains(
+            result.Summary,
+            row => row.Variables["BenchmarkDotNetReport"] == "Second.Bench");
+    }
+
+    [Fact]
+    public void Importer_DirectoryRejectsMixedPlatformsBeforeSelectingLatestRunReport()
+    {
+        var root = CreateTempRoot();
+        var older = Path.Combine(root, "windows");
+        var newer = Path.Combine(root, "linux");
+        Directory.CreateDirectory(older);
+        Directory.CreateDirectory(newer);
+        var olderReport = Path.Combine(older, "run-report.json");
+        var newerReport = Path.Combine(newer, "run-report.json");
+        BenchmarkJson.Write(olderReport, new BenchmarkRunResult
+        {
+            Suite = "suite",
+            Environment = new BenchmarkEnvironmentInfo { OsFamily = "Windows" },
+            Samples = new[] { Sample("suite", "case", "Run", "Managed", 1) }
+        });
+        BenchmarkJson.Write(newerReport, new BenchmarkRunResult
+        {
+            Suite = "suite",
+            Environment = new BenchmarkEnvironmentInfo { OsFamily = "Linux" },
+            Samples = new[] { Sample("suite", "case", "Run", "Managed", 2) }
+        });
+        File.SetLastWriteTimeUtc(olderReport, DateTime.UtcNow.AddMinutes(-5));
+        File.SetLastWriteTimeUtc(newerReport, DateTime.UtcNow);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => new BenchmarkResultImporter().Import(root));
+
+        Assert.Contains("one operating system", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Windows", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Linux", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -304,7 +376,7 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
-    public void Importer_PreservesBenchmarkDotNetHostAndSplitsParameters()
+    public void Importer_SeparatesBenchmarkDotNetEnvironmentFromSemanticHostAndSplitsParameters()
     {
         var root = CreateTempRoot();
         var path = Path.Combine(root, "Demo-report-full-compressed.json");
@@ -332,7 +404,8 @@ public sealed partial class BenchmarkServicesTests
         var result = new BenchmarkResultImporter().Import(path);
         var sample = Assert.Single(result.Samples);
 
-        Assert.Contains(".NET 10.0", sample.Host, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(sample.Host);
+        Assert.Equal(".NET 10.0", result.Environment.RuntimeVersion);
         Assert.Equal("10", sample.Variables["Rows"]);
         Assert.Equal("Fast", sample.Variables["Profile"]);
         Assert.DoesNotContain("Parameters", sample.Variables.Keys);
@@ -431,6 +504,30 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(1, row.MinMs);
         Assert.Equal(12, row.MaxMs);
         Assert.Equal(8192, row.Metrics["Allocated"]);
+    }
+
+    [Fact]
+    public void Importer_ExcludesBenchmarkDotNetDerivedResultColumnsFromWorkloadVariables()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "Demo-report.csv");
+        File.WriteAllText(
+            csv,
+            "Method,Rows,Mean [ms],Op/s,Rank\nWrite,10,12,83.333,1\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+        var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
+
+        Assert.Equal("10", sample.Variables["Rows"]);
+        Assert.DoesNotContain("Op/s", sample.Variables.Keys);
+        Assert.DoesNotContain("Rank", sample.Variables.Keys);
+        Assert.Equal(83.333, sample.Metrics["OperationsPerSecond"]);
+        Assert.Equal(1, sample.Metrics["Rank"]);
+        Assert.DoesNotContain("Op/s", row.Variables.Keys);
+        Assert.DoesNotContain("Rank", row.Variables.Keys);
+        Assert.Equal(83.333, row.Metrics["OperationsPerSecond"]);
+        Assert.Equal(1, row.Metrics["Rank"]);
     }
 
     [Fact]

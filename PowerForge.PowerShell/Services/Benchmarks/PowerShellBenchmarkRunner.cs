@@ -144,6 +144,8 @@ public sealed partial class PowerShellBenchmarkRunner
         ValidateCurrentRunspaceProfile(suite);
         ValidateComparisons(suite);
         PowerShellBenchmarkArtifactWriter.ValidateReadmeBlocks(suite);
+        PowerShellBenchmarkEnvironmentMetadata.SourceProvenance sourceProvenance =
+            PowerShellBenchmarkEnvironmentMetadata.CaptureSourceProvenance(suite);
         var runId = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
         var started = DateTimeOffset.UtcNow;
         var samples = new List<BenchmarkSample>();
@@ -182,7 +184,8 @@ public sealed partial class PowerShellBenchmarkRunner
             Samples = samples.ToArray(),
             Summary = summary,
             Comparison = Array.Empty<BenchmarkComparisonRow>(),
-            Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite)
+            Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite, sourceProvenance),
+            Environment = PowerShellBenchmarkEnvironmentMetadata.BuildEnvironment()
         };
 
         try

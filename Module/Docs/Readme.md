@@ -58,6 +58,9 @@ Asserts that a benchmark path exists or does not exist.
 ### [Assert-BenchmarkValue](Assert-BenchmarkValue.md)
 Asserts a benchmark value condition.
 
+### [Complete-BenchmarkProvenanceCapture](Complete-BenchmarkProvenanceCapture.md)
+Verifies unchanged source after an external benchmark and writes a hash-bound artifact sidecar.
+
 ### [Compress-ManagedResource](Compress-ManagedResource.md)
 Compresses a managed PowerShell resource folder into a NuGet package.
 
@@ -547,6 +550,9 @@ Resolves documentation files from an installed module (root or Internals folder)
 ### [Start-AppleApp](Start-AppleApp.md)
 Launches an installed Apple app on a physical device.
 
+### [Start-BenchmarkProvenanceCapture](Start-BenchmarkProvenanceCapture.md)
+Captures clean source state before an external benchmark writes into a fresh artifact directory.
+
 ### [Step-Version](Step-Version.md)
 Steps a version based on an expected version pattern (supports the legacy X placeholder).
 
@@ -600,6 +606,9 @@ Unregisters a saved managed module repository profile.
 
 ### [Update-BenchmarkDocument](Update-BenchmarkDocument.md)
 Updates a marker-delimited benchmark block in a Markdown document.
+
+### [Update-BenchmarkEvidenceCatalog](Update-BenchmarkEvidenceCatalog.md)
+Adds one normalized benchmark result to a platform-aware evidence catalog.
 
 ### [Update-ManagedModule](Update-ManagedModule.md)
 Updates installed PowerShell modules through the managed C# module engine.

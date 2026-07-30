@@ -1,4 +1,5 @@
 using System.IO;
+using System.Globalization;
 using System.Management.Automation;
 using PowerForge;
 
@@ -29,6 +30,14 @@ public sealed class ImportBenchmarkResultCommand : PSCmdlet
     public string? Suite { get; set; }
 
     /// <summary>
+    /// Optional numeric culture used by the producing CSV report, for example <c>de-DE</c>.
+    /// Supply it when punctuation such as <c>1,234</c> would otherwise be ambiguous.
+    /// </summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? Culture { get; set; }
+
+    /// <summary>
     /// Optional output path for normalized JSON.
     /// </summary>
     [Parameter]
@@ -40,7 +49,10 @@ public sealed class ImportBenchmarkResultCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var input = SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path);
-        var result = new BenchmarkResultImporter().Import(input, Suite);
+        CultureInfo? culture = string.IsNullOrWhiteSpace(Culture)
+            ? null
+            : CultureInfo.GetCultureInfo(Culture!);
+        var result = new BenchmarkResultImporter().Import(input, Suite, culture);
         if (!string.IsNullOrWhiteSpace(OutputPath))
         {
             var output = SessionState.Path.GetUnresolvedProviderPathFromPSPath(OutputPath!);

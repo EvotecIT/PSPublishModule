@@ -13,7 +13,9 @@ metadata with any table that is committed or shared.
 | Command | Purpose |
 | --- | --- |
 | `Invoke-BenchmarkSuite` | Runs a `.benchmark.ps1` suite, writes artifacts, updates declared README blocks, and returns a `BenchmarkRunResult`. |
+| `Start-BenchmarkProvenanceCapture` / `Complete-BenchmarkProvenanceCapture` | Bind a fresh external benchmark artifact directory to clean, unchanged Git source state and per-file hashes. |
 | `Import-BenchmarkResult` | Imports BenchmarkDotNet CSV/JSON artifacts or normalized benchmark JSON/CSV into the common result schema. |
+| `Update-BenchmarkEvidenceCatalog` | Records an independent Windows, Linux, or macOS result lane and exposes missing or incompatible platform evidence. |
 | `Update-BenchmarkDocument` | Replaces one marker-delimited Markdown block from a normalized summary or comparison file. |
 | `Test-BenchmarkGate` | Verifies benchmark summary metrics against a JSON baseline with tolerance rules. |
 
@@ -288,8 +290,62 @@ Import-BenchmarkResult `
 ```
 
 The importer preserves BenchmarkDotNet method/job identity, timing units,
-memory/statistical metrics, and user parameters where they do not conflict with
-the normalized benchmark schema.
+memory/statistical metrics, user parameters, and typed host details such as the
+operating system, CPU, architecture, runtime, SDK, and core counts. Directory
+imports retain that environment instead of flattening it into an unidentified
+combined result.
+
+## Cross-Platform Evidence
+
+Do not merge benchmark measurements from different operating systems into one
+number. Import each run, attach exact workload provenance, and update the shared
+catalog:
+
+```powershell
+$capture = Start-BenchmarkProvenanceCapture `
+    -SourceRoot . `
+    -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts
+
+dotnet run -c Release --project .\Benchmarks -- `
+    --artifacts .\Build\BenchmarkDotNet.Artifacts
+
+$capture | Complete-BenchmarkProvenanceCapture
+
+$result = Import-BenchmarkResult `
+    -Path .\Build\BenchmarkDotNet.Artifacts `
+    -Suite tabular-65k
+
+$result.Metadata['benchmark.workload.id'] = 'markpflug-65k-sales-v1'
+$result.Metadata['benchmark.fixture.csv'] = 'AC959F43...'
+$result.Metadata['benchmark.package.officeimo'] = '3.0.4'
+$result.Metadata['benchmark.package.sylvan'] = '0.5.7'
+
+Update-BenchmarkEvidenceCatalog `
+    -InputObject $result `
+    -Path .\Website\static\data\benchmarks\tabular\index.json `
+    -ComparisonId markpflug-65k-sales-v1-net10.0 `
+    -ResultPath windows-full.json `
+    -RunMode full `
+    -ExpectedPlatform windows,linux,macos `
+    -Publish
+```
+
+Directory imports reject reports that identify more than one operating system.
+External imports are publishable only when their fresh artifact directory has a
+completed production sidecar; adding the current checkout SHA after a run is not
+accepted as provenance. Catalog updates use a cross-process lease and
+metadata-preserving same-directory replacement, write the exact validated
+normalized result beside the catalog, and record its SHA-256, so concurrent
+platform jobs cannot silently discard, substitute, or truncate another lane.
+The catalog replaces only the matching comparison/platform/run-mode lane.
+Windows, Linux, and macOS remain separate entries. `availability` lists missing
+platforms explicitly. A publishable lane must contain successful measurements,
+no failures, measured runtime and runner identity, and an exact `gitSha` from a
+verified clean worktree; invalid evidence is rejected rather than appearing
+available. Publishable lanes with different `gitSha` values or
+different `benchmark.fixture.*`, `benchmark.package.*`, or
+`benchmark.workload.*` metadata are marked non-comparable and carry the exact
+conflicting dimensions.
 
 ## Markdown Blocks
 
