@@ -1,3 +1,4 @@
+using ImageMagick;
 using PowerForge.Web;
 
 namespace PowerForge.Tests;
@@ -159,7 +160,10 @@ public class WebShortcodeMediaTests
                 var bundleRoot = Path.Combine(root, "static", "stories", "chart");
                 Directory.CreateDirectory(bundleRoot);
                 File.WriteAllText(Path.Combine(bundleRoot, "demo.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
-                File.WriteAllBytes(Path.Combine(bundleRoot, "demo.png"), new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 });
+                using (var image = new MagickImage(MagickColors.Transparent, 2, 2))
+                {
+                    image.Write(Path.Combine(bundleRoot, "demo.png"), MagickFormat.Png);
+                }
                 File.WriteAllText(Path.Combine(bundleRoot, "demo.txt"), "Create chart\nChart is visible");
                 File.WriteAllText(Path.Combine(bundleRoot, "visual-story.json"),
                     """

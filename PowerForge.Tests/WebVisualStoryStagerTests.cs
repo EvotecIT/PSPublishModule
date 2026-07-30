@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ImageMagick;
 using PowerForge.Web;
 
 namespace PowerForge.Tests;
@@ -140,13 +141,57 @@ public class WebVisualStoryStagerTests
         }
     }
 
+    [Fact]
+    public void Load_RejectsCompletedArtifactWhoseExtensionDoesNotMatchPng()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var manifest = Path.Combine(root, "source", "story.json");
+            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(manifest), WebJsonForTests.Options)!;
+            var completed = Assert.Single(bundle.Artifacts, artifact => artifact.Role == "completed");
+            completed.Path = "demo.svg";
+            File.WriteAllText(manifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
+
+            var error = Assert.Throws<InvalidOperationException>(() => WebVisualStoryStager.Load(manifest));
+
+            Assert.Contains("does not match", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Load_RejectsCompletedArtifactWithCorruptPngBytes()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var manifest = Path.Combine(root, "source", "story.json");
+            File.WriteAllText(Path.Combine(root, "source", "demo.png"), "not a PNG");
+
+            var error = Assert.Throws<InvalidOperationException>(() => WebVisualStoryStager.Load(manifest));
+
+            Assert.Contains("decodable PNG", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     internal static string CreateBundle()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-story-" + Guid.NewGuid().ToString("N"));
         var source = Path.Combine(root, "source");
         Directory.CreateDirectory(source);
         File.WriteAllText(Path.Combine(source, "demo.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
-        File.WriteAllBytes(Path.Combine(source, "demo.png"), new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 });
+        using (var image = new MagickImage(MagickColors.Transparent, 2, 2))
+        {
+            image.Write(Path.Combine(source, "demo.png"), MagickFormat.Png);
+        }
         File.WriteAllText(Path.Combine(source, "demo.txt"), "Run demo\nThe chart is visible.");
         var bundle = new WebVisualStoryBundle
         {

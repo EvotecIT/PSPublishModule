@@ -1367,7 +1367,7 @@ Runs an optional trusted producer and stages a validated, self-contained visual-
 }
 ```
 
-The producer is optional: omit `command` to stage an already resolved bundle. Producer execution is a trusted build-time action only; shortcode and page rendering never execute showcased code. The manifest and output must remain inside the pipeline root. Artifacts must remain inside the producer bundle, use supported SVG/GIF/APNG/PNG/HTML/text formats, stay within the size limit, and include exactly one `completed` PNG. The completed artifact is the enforceable fallback that proves the story's promised outcome for reduced-motion, print, static, and constrained hosts. Producer failures cannot be ignored.
+The producer is optional: omit `command` to stage an already resolved bundle. Producer execution is a trusted build-time action only; shortcode and page rendering never execute showcased code. The manifest and output must remain inside the pipeline root. Artifacts must remain inside the producer bundle, use supported SVG/GIF/APNG/PNG/HTML/text formats, stay within the size limit, and include exactly one `completed` PNG. That file must use a `.png` extension, decode as PNG, and stay within the 100-megapixel safety limit. The completed artifact is the enforceable fallback that proves the story's promised outcome for reduced-motion, print, static, and constrained hosts. Producer failures cannot be ignored.
 
 Use the staged story in any Markdown collection:
 

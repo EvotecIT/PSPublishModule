@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using ImageMagick;
 
 namespace PowerForge.Web;
 
@@ -52,6 +53,7 @@ public static class WebVisualStoryStager
                      ?? throw new InvalidOperationException("Visual-story manifest is empty or invalid.");
 
         ValidateBundle(bundle);
+        ValidateCompletedArtifact(bundle);
 
         var resolved = new List<(WebVisualStoryArtifact Artifact, string SourcePath, string FileName, long Bytes, string Sha256)>();
         var fileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -69,9 +71,11 @@ public static class WebVisualStoryStager
 
             var extension = Path.GetExtension(sourcePath).TrimStart('.');
             var normalizedFormat = NormalizeFormat(artifact.Format);
-            if (!FormatMatchesExtension(normalizedFormat, extension))
-                throw new InvalidOperationException(
-                    $"Visual-story artifact format '{artifact.Format}' does not match '{artifact.Path}'.");
+            ValidateArtifactFormat(artifact, sourcePath, normalizedFormat, extension);
+            if (IsCompletedArtifact(artifact))
+            {
+                ValidateCompletedPng(sourcePath, artifact.Path);
+            }
 
             var fileName = Path.GetFileName(sourcePath);
             if (!fileNames.Add(fileName))
@@ -79,8 +83,6 @@ public static class WebVisualStoryStager
 
             resolved.Add((artifact, sourcePath, fileName, info.Length, ComputeSha256(sourcePath)));
         }
-
-        ValidateCompletedArtifact(bundle);
 
         Directory.CreateDirectory(outputRoot);
         foreach (var item in resolved)
@@ -136,6 +138,7 @@ public static class WebVisualStoryStager
                          WebJson.Options)
                      ?? throw new InvalidOperationException("Visual-story manifest is empty or invalid.");
         ValidateBundle(bundle);
+        ValidateCompletedArtifact(bundle);
         foreach (var artifact in bundle.Artifacts)
         {
             ValidateArtifact(artifact);
@@ -146,13 +149,19 @@ public static class WebVisualStoryStager
             if (!File.Exists(artifactPath))
                 throw new FileNotFoundException($"Visual-story artifact was not found: {artifact.Path}", artifactPath);
             var info = new FileInfo(artifactPath);
+            var normalizedFormat = NormalizeFormat(artifact.Format);
+            var extension = Path.GetExtension(artifactPath).TrimStart('.');
+            ValidateArtifactFormat(artifact, artifactPath, normalizedFormat, extension);
+            if (IsCompletedArtifact(artifact))
+            {
+                ValidateCompletedPng(artifactPath, artifact.Path);
+            }
             if (artifact.Bytes is not null && artifact.Bytes.Value != info.Length)
                 throw new InvalidOperationException($"Visual-story artifact size does not match its manifest: {artifact.Path}");
             if (!string.IsNullOrWhiteSpace(artifact.Sha256) &&
                 !string.Equals(artifact.Sha256, ComputeSha256(artifactPath), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Visual-story artifact digest does not match its manifest: {artifact.Path}");
         }
-        ValidateCompletedArtifact(bundle);
         return bundle;
     }
 
@@ -207,6 +216,58 @@ public static class WebVisualStoryStager
             return extension.Equals("png", StringComparison.OrdinalIgnoreCase) ||
                    extension.Equals("apng", StringComparison.OrdinalIgnoreCase);
         return format.Equals(extension, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void ValidateArtifactFormat(
+        WebVisualStoryArtifact artifact,
+        string path,
+        string normalizedFormat,
+        string extension)
+    {
+        if (!FormatMatchesExtension(normalizedFormat, extension))
+        {
+            throw new InvalidOperationException(
+                $"Visual-story artifact format '{artifact.Format}' does not match '{artifact.Path}'.");
+        }
+
+        if (IsCompletedArtifact(artifact) &&
+            !string.Equals(Path.GetExtension(path), ".png", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Visual-story completed artifact must use a .png file: {artifact.Path}");
+        }
+    }
+
+    private static bool IsCompletedArtifact(WebVisualStoryArtifact artifact)
+        => string.Equals(artifact.Role, "completed", StringComparison.OrdinalIgnoreCase);
+
+    private static void ValidateCompletedPng(string path, string displayPath)
+    {
+        try
+        {
+            var info = new MagickImageInfo(path);
+            if (info.Format != MagickFormat.Png || info.Width == 0 || info.Height == 0)
+            {
+                throw new InvalidOperationException($"Visual-story completed artifact is not a decodable PNG: {displayPath}");
+            }
+            if ((ulong)info.Width * info.Height > 100_000_000UL)
+            {
+                throw new InvalidOperationException(
+                    $"Visual-story completed PNG exceeds the 100-megapixel safety limit: {displayPath}");
+            }
+
+            using var image = new MagickImage(path);
+            if (image.Format != MagickFormat.Png || image.Width == 0 || image.Height == 0)
+            {
+                throw new InvalidOperationException($"Visual-story completed artifact is not a decodable PNG: {displayPath}");
+            }
+        }
+        catch (MagickException ex)
+        {
+            throw new InvalidOperationException(
+                $"Visual-story completed artifact is not a decodable PNG: {displayPath}",
+                ex);
+        }
     }
 
     private static string GetMediaType(string format)
