@@ -366,7 +366,7 @@ public static class WebStaticServer
         response.Close();
     }
 
-    private static string GetContentType(string extension)
+    internal static string GetContentType(string extension)
     {
         return extension.ToLowerInvariant() switch
         {
@@ -377,6 +377,7 @@ public static class WebStaticServer
             ".json" => "application/json; charset=utf-8",
             ".wasm" => "application/wasm",
             ".svg" => "image/svg+xml",
+            ".apng" => "image/png",
             ".png" => "image/png",
             ".jpg" => "image/jpeg",
             ".jpeg" => "image/jpeg",

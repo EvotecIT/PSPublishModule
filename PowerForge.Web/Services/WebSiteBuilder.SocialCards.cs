@@ -874,6 +874,7 @@ public static partial class WebSiteBuilder
 
         var mimeType = Path.GetExtension(sourcePath).ToLowerInvariant() switch
         {
+            ".apng" => "image/png",
             ".png" => "image/png",
             ".jpg" => "image/jpeg",
             ".jpeg" => "image/jpeg",

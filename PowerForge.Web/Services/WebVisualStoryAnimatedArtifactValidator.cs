@@ -9,6 +9,10 @@ namespace PowerForge.Web;
 /// </summary>
 internal static class WebVisualStoryAnimatedArtifactValidator
 {
+    private const int MaximumGifFrames = 240;
+    private const ulong MaximumGifDecodedPixels = 128_000_000UL;
+    private const string SvgNamespace = "http://www.w3.org/2000/svg";
+
     /// <summary>
     /// Validates that an animated artifact matches its declared format and contains decodable content.
     /// </summary>
@@ -35,14 +39,41 @@ internal static class WebVisualStoryAnimatedArtifactValidator
     {
         try
         {
-            using var frames = new MagickImageCollection();
-            frames.Read(path);
-            if (frames.Count < 2)
+            using (var metadata = new MagickImageCollection())
             {
-                throw new InvalidOperationException(
-                    $"Visual-story animated artifact must contain multiple decodable frames: {displayPath}");
+                metadata.Ping(path);
+                if (metadata.Count < 2)
+                {
+                    throw new InvalidOperationException(
+                        $"Visual-story animated artifact must contain multiple decodable frames: {displayPath}");
+                }
+                if (metadata.Count > MaximumGifFrames)
+                {
+                    throw new InvalidOperationException(
+                        $"Visual-story animated artifact exceeds the {MaximumGifFrames}-frame safety limit: {displayPath}");
+                }
+
+                var decodedPixels = 0UL;
+                foreach (var frame in metadata)
+                {
+                    if (frame.Format is not (MagickFormat.Gif or MagickFormat.Gif87) ||
+                        frame.Width == 0 ||
+                        frame.Height == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Visual-story animated artifact does not match its declared format: {displayPath}");
+                    }
+                    decodedPixels = checked(decodedPixels + (ulong)frame.Width * frame.Height);
+                    if (decodedPixels > MaximumGifDecodedPixels)
+                    {
+                        throw new InvalidOperationException(
+                            $"Visual-story animated artifact exceeds the aggregate decoded-pixel safety limit: {displayPath}");
+                    }
+                }
             }
 
+            using var frames = new MagickImageCollection();
+            frames.Read(path);
             foreach (var frame in frames)
             {
                 if (frame.Format is not (MagickFormat.Gif or MagickFormat.Gif87) ||
@@ -80,7 +111,8 @@ internal static class WebVisualStoryAnimatedArtifactValidator
             using var stream = File.OpenRead(path);
             using var reader = XmlReader.Create(stream, settings);
             reader.MoveToContent();
-            if (!string.Equals(reader.LocalName, "svg", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(reader.LocalName, "svg", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(reader.NamespaceURI, SvgNamespace, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
                     $"Visual-story animated artifact is not a valid SVG: {displayPath}");
@@ -193,9 +225,11 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                 var y = ReadUInt32(bytes, dataOffset + 16);
                 if (frameWidth == 0 || frameHeight == 0 ||
                     x + (ulong)frameWidth > canvasWidth ||
-                    y + (ulong)frameHeight > canvasHeight)
+                    y + (ulong)frameHeight > canvasHeight ||
+                    bytes[dataOffset + 24] > 2 ||
+                    bytes[dataOffset + 25] > 1)
                 {
-                    throw new InvalidOperationException($"Visual-story APNG has invalid frame bounds: {displayPath}");
+                    throw new InvalidOperationException($"Visual-story APNG has invalid frame control: {displayPath}");
                 }
                 frameData?.Dispose();
                 frameData = new MemoryStream();

@@ -148,6 +148,14 @@ public static class WebVisualStoryStager
                     "temporary staged artifact");
                 EnsureDirectoryCasing(stagingRoot, item.RelativePath);
                 File.Copy(item.SourcePath, temporaryDestination, overwrite: true);
+                var stagedInfo = new FileInfo(temporaryDestination);
+                var stagedSha256 = ComputeSha256(temporaryDestination);
+                if (stagedInfo.Length != item.Bytes ||
+                    !string.Equals(stagedSha256, item.Sha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"Visual-story artifact changed while it was being staged: {item.RelativePath}");
+                }
                 item.Artifact.Role = item.Artifact.Role.Trim().ToLowerInvariant();
                 item.Artifact.Path = item.RelativePath;
                 item.Artifact.Format = NormalizeFormat(item.Artifact.Format);

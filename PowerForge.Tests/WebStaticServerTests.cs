@@ -9,6 +9,12 @@ namespace PowerForge.Tests;
 public class WebStaticServerTests
 {
     [Fact]
+    public void GetContentType_RecognizesAnimatedPng()
+    {
+        Assert.Equal("image/png", WebStaticServer.GetContentType(".apng"));
+    }
+
+    [Fact]
     public async Task ServeWithPortFallback_UsesNextAvailablePort_AndServesContent()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-static-server-fallback-" + Guid.NewGuid().ToString("N"));

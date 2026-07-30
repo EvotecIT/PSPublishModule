@@ -889,6 +889,7 @@ public static partial class WebSiteBuilder
             ".js" => "text/javascript",
             ".json" => "application/json",
             ".svg" => "image/svg+xml",
+            ".apng" => "image/png",
             ".png" => "image/png",
             ".jpg" => "image/jpeg",
             ".jpeg" => "image/jpeg",

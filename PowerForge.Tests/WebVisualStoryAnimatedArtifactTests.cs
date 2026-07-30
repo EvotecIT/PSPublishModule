@@ -68,6 +68,36 @@ public class WebVisualStoryAnimatedArtifactTests
         }
     }
 
+    [Fact]
+    public void Stage_RejectsSvgRootsOutsideTheSvgNamespace()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            File.WriteAllText(Path.Combine(source, "wrong-namespace.svg"), "<svg xmlns=\"urn:not-svg\"/>");
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = ReadBundle(manifest);
+            var animated = Assert.Single(bundle.Artifacts, artifact => artifact.Role == "animated");
+            animated.Format = "svg";
+            animated.Path = "wrong-namespace.svg";
+            WriteBundle(manifest, bundle);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("valid SVG", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     [Theory]
     [InlineData("gif", "animated.gif", MagickFormat.Gif)]
     [InlineData("apng", "animated.png", MagickFormat.APng)]
@@ -147,13 +177,88 @@ public class WebVisualStoryAnimatedArtifactTests
         }
     }
 
+    [Fact]
+    public void Stage_RejectsInvalidApngFrameControlOperations()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var animationPath = Path.Combine(source, "animated.png");
+            WriteTinyApng(animationPath, secondFrameDisposal: 3);
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = ReadBundle(manifest);
+            var animated = Assert.Single(bundle.Artifacts, artifact => artifact.Role == "animated");
+            animated.Format = "apng";
+            animated.Path = "animated.png";
+            WriteBundle(manifest, bundle);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("frame control", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Stage_RejectsGifCollectionsBeyondTheFrameBudget()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var animationPath = Path.Combine(source, "too-many.gif");
+            using (var frames = new MagickImageCollection())
+            {
+                for (var index = 0; index < 241; index++)
+                {
+                    frames.Add(new MagickImage(MagickColors.DeepSkyBlue, 1, 1)
+                    {
+                        AnimationDelay = 1
+                    });
+                }
+                frames.Write(animationPath, MagickFormat.Gif);
+            }
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = ReadBundle(manifest);
+            var animated = Assert.Single(bundle.Artifacts, artifact => artifact.Role == "animated");
+            animated.Format = "gif";
+            animated.Path = "too-many.gif";
+            WriteBundle(manifest, bundle);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("frame safety limit", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     private static WebVisualStoryBundle ReadBundle(string manifest)
         => JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(manifest), JsonOptions)!;
 
     private static void WriteBundle(string manifest, WebVisualStoryBundle bundle)
         => File.WriteAllText(manifest, JsonSerializer.Serialize(bundle, JsonOptions));
 
-    private static void WriteTinyApng(string path, bool completeSecondFrame = true)
+    private static void WriteTinyApng(
+        string path,
+        bool completeSecondFrame = true,
+        byte secondFrameDisposal = 0)
     {
         using var output = new MemoryStream();
         output.Write(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 });
@@ -169,7 +274,7 @@ public class WebVisualStoryAnimatedArtifactTests
         WritePngChunk(output, "acTL", animation);
         WritePngChunk(output, "fcTL", FrameControl(sequence: 0));
         WritePngChunk(output, "IDAT", CompressPngPixel(0, 191, 255, 255));
-        WritePngChunk(output, "fcTL", FrameControl(sequence: 1));
+        WritePngChunk(output, "fcTL", FrameControl(sequence: 1, disposal: secondFrameDisposal));
         var compressedFrame = completeSecondFrame
             ? CompressPngPixel(60, 179, 113, 255)
             : CompressPngBytes(0);
@@ -181,7 +286,7 @@ public class WebVisualStoryAnimatedArtifactTests
         File.WriteAllBytes(path, output.ToArray());
     }
 
-    private static byte[] FrameControl(uint sequence)
+    private static byte[] FrameControl(uint sequence, byte disposal = 0)
     {
         var control = new byte[26];
         WriteUInt32(control, 0, sequence);
@@ -189,6 +294,7 @@ public class WebVisualStoryAnimatedArtifactTests
         WriteUInt32(control, 8, 1);
         control[21] = 1;
         control[23] = 10;
+        control[24] = disposal;
         return control;
     }
 
