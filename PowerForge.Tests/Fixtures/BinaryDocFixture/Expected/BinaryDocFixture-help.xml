@@ -30,7 +30,7 @@
             <maml:name>BinaryDocMode</maml:name>
             <maml:uri />
           </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
+          <dev:defaultValue>Basic</dev:defaultValue>
         </command:parameter>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="SampleName">
           <maml:name>Name</maml:name>
@@ -61,7 +61,7 @@
           <maml:name>BinaryDocMode</maml:name>
           <maml:uri />
         </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
+        <dev:defaultValue>Basic</dev:defaultValue>
       </command:parameter>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="SampleName">
         <maml:name>Name</maml:name>

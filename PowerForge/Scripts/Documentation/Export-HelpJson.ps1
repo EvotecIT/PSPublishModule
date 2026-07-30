@@ -139,6 +139,7 @@ try {
       $pipeByValue = $false
       $pipeByProp = $false
       $defaultValue = ''
+      $hasMetadataDefault = $false
       $acceptWild = $false
 
       try {
@@ -173,6 +174,15 @@ try {
             }
             if ($attr -is [System.Management.Automation.SupportsWildcardsAttribute]) {
               $acceptWild = $true
+            }
+            if ($attr -is [System.Management.Automation.PSDefaultValueAttribute]) {
+              if ($null -ne $attr.Value) {
+                $defaultValue = [string]$attr.Value
+                $hasMetadataDefault = $true
+              } elseif (-not [string]::IsNullOrWhiteSpace([string]$attr.Help)) {
+                $defaultValue = [string]$attr.Help
+                $hasMetadataDefault = $true
+              }
             }
           }
         }
@@ -215,7 +225,14 @@ try {
         } catch {
           # best effort: ValidValues is not consistently present across Get-Help payloads
         }
-        try { $defaultValue = [string]$hp.DefaultValue } catch { $defaultValue = '' }
+        try {
+          $helpDefaultValue = [string]$hp.DefaultValue
+          if (-not $hasMetadataDefault -and -not [string]::IsNullOrWhiteSpace($helpDefaultValue)) {
+            $defaultValue = $helpDefaultValue
+          }
+        } catch {
+          # keep the metadata-derived default when Get-Help omits or reshapes DefaultValue
+        }
         try {
           $globbingValue = $hp.Globbing
           if ($globbingValue -is [bool]) {

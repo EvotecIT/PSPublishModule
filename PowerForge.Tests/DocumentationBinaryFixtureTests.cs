@@ -19,6 +19,7 @@ public sealed class DocumentationBinaryFixtureTests
             var assemblyPath = Path.Combine(outputDirectory, moduleName + ".dll");
             var xmlPath = Path.Combine(outputDirectory, moduleName + ".xml");
             var manifestPath = Path.Combine(tempRoot, moduleName + ".psd1");
+            var expectedRoot = Path.Combine(fixtureRoot, "Expected");
 
             Assert.True(File.Exists(assemblyPath), $"Expected built fixture assembly at '{assemblyPath}'.");
             Assert.True(File.Exists(xmlPath), $"Expected built fixture XML docs at '{xmlPath}'.");
@@ -40,7 +41,22 @@ public sealed class DocumentationBinaryFixtureTests
 }
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
+            var staleHelpDirectory = Path.Combine(tempRoot, "en-US");
+            Directory.CreateDirectory(staleHelpDirectory);
+            var staleExternalHelp = File.ReadAllText(Path.Combine(expectedRoot, "BinaryDocFixture-help.xml"))
+                .Replace("<dev:defaultValue>Basic</dev:defaultValue>", "<dev:defaultValue>None</dev:defaultValue>", StringComparison.Ordinal);
+            File.WriteAllText(
+                Path.Combine(staleHelpDirectory, "BinaryDocFixture-help.xml"),
+                staleExternalHelp,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
             var engine = new DocumentationEngine(new PowerShellRunner(), new NullLogger());
+            var extracted = engine.ExtractHelpPayload(tempRoot, manifestPath, TimeSpan.FromMinutes(1));
+            var modeParameter = Assert.Single(
+                Assert.Single(extracted.Commands).Parameters,
+                parameter => string.Equals(parameter.Name, "Mode", StringComparison.Ordinal));
+            Assert.Equal("Basic", modeParameter.DefaultValue);
+
             var result = engine.Build(
                 moduleName: moduleName,
                 stagingPath: tempRoot,
@@ -65,7 +81,6 @@ public sealed class DocumentationBinaryFixtureTests
             Assert.True(File.Exists(markdownPath), $"Expected generated markdown help at '{markdownPath}'.");
             Assert.True(File.Exists(externalHelpPath), $"Expected generated MAML help at '{externalHelpPath}'.");
 
-            var expectedRoot = Path.Combine(fixtureRoot, "Expected");
             Assert.Equal(
                 NormalizeText(File.ReadAllText(Path.Combine(expectedRoot, "Get-BinaryDocSample.md"))),
                 NormalizeText(File.ReadAllText(markdownPath)));

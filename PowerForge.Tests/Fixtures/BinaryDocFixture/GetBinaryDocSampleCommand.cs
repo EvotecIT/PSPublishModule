@@ -38,6 +38,7 @@ public sealed class GetBinaryDocSampleCommand : PSCmdlet
 
     /// <summary>Selects the sample rendering mode.</summary>
     [Parameter]
+    [PSDefaultValue(Value = BinaryDocMode.Basic)]
     public BinaryDocMode Mode { get; set; } = BinaryDocMode.Basic;
 
     /// <summary>Writes the sample output object.</summary>

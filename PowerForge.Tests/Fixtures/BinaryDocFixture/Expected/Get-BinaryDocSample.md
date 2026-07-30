@@ -45,7 +45,7 @@ Possible values: Basic, Advanced
 
 Required: False
 Position: named
-Default value: None
+Default value: Basic
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
