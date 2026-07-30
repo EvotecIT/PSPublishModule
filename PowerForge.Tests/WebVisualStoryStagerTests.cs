@@ -161,6 +161,61 @@ public class WebVisualStoryStagerTests
     }
 
     [Fact]
+    public void Stage_AppliesCaseOnlyArtifactRenamesExactly()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var sourceDirectory = Path.Combine(source, "media");
+            Directory.CreateDirectory(sourceDirectory);
+            File.Move(Path.Combine(source, "demo.svg"), Path.Combine(sourceDirectory, "demo.svg"));
+            var sourceManifest = Path.Combine(source, "story.json");
+            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(sourceManifest), WebJsonForTests.Options)!;
+            bundle.Artifacts[0].Path = "media/demo.svg";
+            File.WriteAllText(sourceManifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
+
+            var output = Path.Combine(root, "published");
+            WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = sourceManifest,
+                OutputPath = output
+            });
+            File.WriteAllText(Path.Combine(output, "media", "retained.txt"), "retained");
+
+            var sourceTemporary = Path.Combine(source, "source-case-" + Guid.NewGuid().ToString("N"));
+            Directory.Move(sourceDirectory, sourceTemporary);
+            var renamedSourceDirectory = Path.Combine(source, "Media");
+            Directory.Move(sourceTemporary, renamedSourceDirectory);
+            var fileTemporary = Path.Combine(renamedSourceDirectory, "file-case-" + Guid.NewGuid().ToString("N"));
+            File.Move(Path.Combine(renamedSourceDirectory, "demo.svg"), fileTemporary);
+            File.Move(fileTemporary, Path.Combine(renamedSourceDirectory, "Demo.svg"));
+            bundle.Artifacts[0].Path = "Media/Demo.svg";
+            File.WriteAllText(sourceManifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
+
+            WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = sourceManifest,
+                OutputPath = output
+            });
+
+            Assert.Contains(
+                Directory.EnumerateDirectories(output),
+                path => string.Equals(Path.GetFileName(path), "Media", StringComparison.Ordinal));
+            Assert.Contains(
+                Directory.EnumerateFiles(Path.Combine(output, "Media")),
+                path => string.Equals(Path.GetFileName(path), "Demo.svg", StringComparison.Ordinal));
+            Assert.True(File.Exists(Path.Combine(output, "Media", "retained.txt")));
+            var staged = WebVisualStoryStager.Load(Path.Combine(output, "visual-story.json"));
+            Assert.Contains(staged.Artifacts, artifact => string.Equals(artifact.Path, "Media/Demo.svg", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Stage_RequiresSchemaVersion()
     {
         var root = CreateBundle();

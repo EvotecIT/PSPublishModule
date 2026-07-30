@@ -103,8 +103,10 @@ public static class WebVisualStoryStager
         var previousPaths = options.Overwrite && File.Exists(stagedManifestPath)
             ? LoadDeclaredArtifactPaths(stagedManifestPath, outputRoot)
             : Array.Empty<string>();
-        var currentPaths = resolved.Select(static item => item.RelativePath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var currentPathByIdentity = resolved.ToDictionary(
+            static item => item.RelativePath,
+            static item => item.RelativePath,
+            StringComparer.OrdinalIgnoreCase);
 
         var stagingRoot = CreateSiblingPath(outputRoot, "stage");
         try
@@ -114,15 +116,28 @@ public static class WebVisualStoryStager
             else
                 Directory.CreateDirectory(stagingRoot);
 
+            foreach (var previousPath in previousPaths)
+            {
+                var stillCurrent = currentPathByIdentity.TryGetValue(previousPath, out var currentPath);
+                if (stillCurrent && string.Equals(previousPath, currentPath, StringComparison.Ordinal))
+                    continue;
+
+                var replacedPath = VisualStoryPathGuard.ResolveRelativePath(
+                    stagingRoot,
+                    previousPath,
+                    stillCurrent ? "case-replaced staged artifact" : "obsolete staged artifact");
+                if (File.Exists(replacedPath))
+                    File.Delete(replacedPath);
+                DeleteEmptyParents(Path.GetDirectoryName(replacedPath), stagingRoot);
+            }
+
             foreach (var item in resolved)
             {
                 var temporaryDestination = VisualStoryPathGuard.ResolveRelativePath(
                     stagingRoot,
                     item.RelativePath,
                     "temporary staged artifact");
-                Directory.CreateDirectory(
-                    Path.GetDirectoryName(temporaryDestination)
-                    ?? throw new InvalidOperationException("Visual-story artifact has no destination directory."));
+                EnsureDirectoryCasing(stagingRoot, item.RelativePath);
                 File.Copy(item.SourcePath, temporaryDestination, overwrite: true);
                 item.Artifact.Role = item.Artifact.Role.Trim().ToLowerInvariant();
                 item.Artifact.Path = item.RelativePath;
@@ -130,17 +145,6 @@ public static class WebVisualStoryStager
                 item.Artifact.MediaType ??= GetMediaType(item.Artifact.Format);
                 item.Artifact.Bytes = item.Bytes;
                 item.Artifact.Sha256 = item.Sha256;
-            }
-
-            foreach (var previousPath in previousPaths.Where(path => !currentPaths.Contains(path)))
-            {
-                var obsoletePath = VisualStoryPathGuard.ResolveRelativePath(
-                    stagingRoot,
-                    previousPath,
-                    "obsolete staged artifact");
-                if (File.Exists(obsoletePath))
-                    File.Delete(obsoletePath);
-                DeleteEmptyParents(Path.GetDirectoryName(obsoletePath), stagingRoot);
             }
 
             File.WriteAllText(
@@ -468,6 +472,42 @@ public static class WebVisualStoryStager
             }
             Directory.Delete(directory);
             directory = Path.GetDirectoryName(directory);
+        }
+    }
+
+    private static void EnsureDirectoryCasing(string root, string relativeArtifactPath)
+    {
+        var relativeDirectory = Path.GetDirectoryName(relativeArtifactPath.Replace('/', Path.DirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(relativeDirectory))
+            return;
+
+        var current = root;
+        foreach (var segment in relativeDirectory.Split(
+                     new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            var exact = Directory.EnumerateDirectories(current)
+                .FirstOrDefault(path => string.Equals(Path.GetFileName(path), segment, StringComparison.Ordinal));
+            if (exact is not null)
+            {
+                current = exact;
+                continue;
+            }
+
+            var insensitive = Directory.EnumerateDirectories(current)
+                .FirstOrDefault(path => string.Equals(Path.GetFileName(path), segment, StringComparison.OrdinalIgnoreCase));
+            var desired = Path.Combine(current, segment);
+            if (insensitive is not null && OperatingSystem.IsWindows())
+            {
+                var temporary = Path.Combine(current, ".powerforge-case-" + Guid.NewGuid().ToString("N"));
+                Directory.Move(insensitive, temporary);
+                Directory.Move(temporary, desired);
+            }
+            else
+            {
+                Directory.CreateDirectory(desired);
+            }
+            current = desired;
         }
     }
 
