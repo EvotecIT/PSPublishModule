@@ -1,4 +1,6 @@
 using PowerForge;
+using PowerForge.ConsoleShared;
+using Spectre.Console;
 
 namespace PowerForge.Tests;
 
@@ -86,6 +88,114 @@ public sealed class ModuleBuildWorkflowServiceTests
         Assert.Same(result, summaries[0]);
     }
 
+    [Fact]
+    public void ModuleStepPresentation_ProvidesCanonicalTitlesAndSemanticTargets()
+    {
+        var artefact = new ConfigurationArtefactSegment
+        {
+            ArtefactType = ArtefactType.Unpacked,
+            Configuration = new ArtefactConfiguration { ID = "ToGitHub" }
+        };
+        var publish = new ConfigurationPublishSegment
+        {
+            Configuration = new PublishConfiguration
+            {
+                Destination = PublishDestination.GitHub,
+                RepositoryName = "SampleModule"
+            }
+        };
+        var plan = CreatePlan(
+            artefacts: [artefact],
+            publishes: [publish],
+            installEnabled: true);
+        var steps = ModulePipelineStep.Create(plan);
+
+        var artefactDisplay = ModulePipelineStepPresentation.Create(
+            Assert.Single(steps, step => step.Kind == ModulePipelineStepKind.Artefact),
+            plan);
+        var publishDisplay = ModulePipelineStepPresentation.Create(
+            Assert.Single(steps, step => step.Kind == ModulePipelineStepKind.Publish),
+            plan);
+        var installDisplay = ModulePipelineStepPresentation.Create(
+            Assert.Single(steps, step => step.Kind == ModulePipelineStepKind.Install),
+            plan);
+
+        Assert.Equal("Pack artefact", artefactDisplay.Title);
+        Assert.Equal("Unpacked (ToGitHub)", artefactDisplay.Target);
+        Assert.Equal("Publish", publishDisplay.Title);
+        Assert.Equal("GitHub (SampleModule)", publishDisplay.Target);
+        Assert.Equal("Install", installDisplay.Title);
+        Assert.Equal("AutoRevision, keep 3", installDisplay.Target);
+
+        var transportedItems = ModulePipelineProgressItemFactory.Create(plan);
+        var transportedArtefact = Assert.Single(
+            transportedItems,
+            item => item.Kind == ModulePipelineStepKind.Artefact.ToString());
+        Assert.Equal(artefactDisplay.Title, transportedArtefact.Title);
+        Assert.Equal(artefactDisplay.Target, transportedArtefact.Target);
+    }
+
+    [Fact]
+    public void DirectModuleConsole_UsesSharedRichRowsInCanonicalOrder()
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer);
+        var plan = CreatePlan(
+            artefacts:
+            [
+                new ConfigurationArtefactSegment
+                {
+                    ArtefactType = ArtefactType.Unpacked,
+                    Configuration = new ArtefactConfiguration { ID = "ToGitHub" }
+                }
+            ],
+            publishes:
+            [
+                new ConfigurationPublishSegment
+                {
+                    Configuration = new PublishConfiguration
+                    {
+                        Destination = PublishDestination.GitHub,
+                        RepositoryName = "SampleModule"
+                    }
+                }
+            ],
+            installEnabled: true);
+        var steps = ModulePipelineStep.Create(plan);
+
+        var result = SpectreModulePipelineConsoleUi.RunInteractive(
+            console,
+            plan,
+            "powerforge.json",
+            progress =>
+            {
+                foreach (var step in steps)
+                {
+                    progress.StepStarting(step);
+                    progress.StepCompleted(step);
+                }
+
+                return CreateResult(plan);
+            });
+
+        Assert.Same(plan, result.Plan);
+        var output = writer.ToString();
+        Assert.Contains("PowerForge", output, StringComparison.Ordinal);
+        Assert.Contains("SampleModule 1.0.0", output, StringComparison.Ordinal);
+        Assert.Contains("Unpacked (ToGitHub)", output, StringComparison.Ordinal);
+        Assert.Contains("GitHub (SampleModule)", output, StringComparison.Ordinal);
+        Assert.Contains("AutoRevision, keep 3", output, StringComparison.Ordinal);
+
+        var stage = output.LastIndexOf("Stage to staging", StringComparison.Ordinal);
+        var artefact = output.LastIndexOf("Pack artefact", StringComparison.Ordinal);
+        var publish = output.LastIndexOf("Publish", StringComparison.Ordinal);
+        var install = output.LastIndexOf("Install", StringComparison.Ordinal);
+        Assert.True(stage >= 0, output);
+        Assert.True(artefact > stage, output);
+        Assert.True(publish > artefact, output);
+        Assert.True(install > publish, output);
+    }
+
     private static ModuleBuildPreparedContext CreatePreparedContext()
     {
         return new ModuleBuildPreparedContext
@@ -105,7 +215,10 @@ public sealed class ModuleBuildWorkflowServiceTests
         };
     }
 
-    private static ModulePipelinePlan CreatePlan()
+    private static ModulePipelinePlan CreatePlan(
+        ConfigurationArtefactSegment[]? artefacts = null,
+        ConfigurationPublishSegment[]? publishes = null,
+        bool installEnabled = false)
     {
         return new ModulePipelinePlan(
             moduleName: "SampleModule",
@@ -147,9 +260,9 @@ public sealed class ModuleBuildWorkflowServiceTests
             moduleSkip: null,
             signModule: false,
             signing: null,
-            publishes: Array.Empty<ConfigurationPublishSegment>(),
-            artefacts: Array.Empty<ConfigurationArtefactSegment>(),
-            installEnabled: false,
+            publishes: publishes ?? Array.Empty<ConfigurationPublishSegment>(),
+            artefacts: artefacts ?? Array.Empty<ConfigurationArtefactSegment>(),
+            installEnabled: installEnabled,
             installStrategy: InstallationStrategy.AutoRevision,
             installKeepVersions: 3,
             installRoots: Array.Empty<string>(),
@@ -185,5 +298,26 @@ public sealed class ModuleBuildWorkflowServiceTests
             diagnosticsPolicy: null,
             publishResults: Array.Empty<ModulePublishResult>(),
             artefactResults: Array.Empty<ArtefactBuildResult>());
+    }
+
+    private static IAnsiConsole CreateConsole(TextWriter writer)
+        => AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Out = new TestConsoleOutput(writer),
+            Ansi = AnsiSupport.Yes,
+            ColorSystem = ColorSystemSupport.NoColors,
+            Interactive = InteractionSupport.Yes
+        });
+
+    private sealed class TestConsoleOutput : IAnsiConsoleOutput
+    {
+        internal TestConsoleOutput(TextWriter writer)
+            => Writer = writer;
+
+        public TextWriter Writer { get; }
+        public bool IsTerminal => true;
+        public int Width => 140;
+        public int Height => 24;
+        public void SetEncoding(System.Text.Encoding encoding) { }
     }
 }
