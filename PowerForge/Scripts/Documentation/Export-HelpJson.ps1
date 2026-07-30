@@ -89,13 +89,30 @@ function ConvertToPowerShellDefaultValue([object]$value) {
     if ([double]::IsNaN($value)) { return '[double]::NaN' }
     if ([double]::IsPositiveInfinity($value)) { return '[double]::PositiveInfinity' }
     if ([double]::IsNegativeInfinity($value)) { return '[double]::NegativeInfinity' }
+    if ($value -eq 0) {
+      if ([System.BitConverter]::DoubleToInt64Bits($value) -lt 0) { return '-0.0' }
+      return '0.0'
+    }
     return $value.ToString('G17', [System.Globalization.CultureInfo]::InvariantCulture)
   }
   if ($value -is [single]) {
     if ([single]::IsNaN($value)) { return '[single]::NaN' }
     if ([single]::IsPositiveInfinity($value)) { return '[single]::PositiveInfinity' }
     if ([single]::IsNegativeInfinity($value)) { return '[single]::NegativeInfinity' }
-    return $value.ToString('G9', [System.Globalization.CultureInfo]::InvariantCulture)
+    if ($value -eq 0) {
+      $bits = [System.BitConverter]::ToInt32([System.BitConverter]::GetBytes([single]$value), 0)
+      if ($bits -lt 0) { return '([single]-0.0)' }
+      return '([single]0.0)'
+    }
+    return ('([single]' + $value.ToString('G9', [System.Globalization.CultureInfo]::InvariantCulture) + ')')
+  }
+  if ($value -is [decimal]) {
+    $decimalText = $value.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    return ("[System.Decimal]::Parse('" + $decimalText + "', [System.Globalization.CultureInfo]::InvariantCulture)")
+  }
+  if ($value -is [scriptblock]) {
+    $scriptText = ConvertToPowerShellDefaultValue ([string]$value.ToString())
+    return ('[scriptblock]::Create(' + $scriptText + ')')
   }
   if ($value -is [System.Collections.IEnumerable]) {
     $items = @()
@@ -139,11 +156,62 @@ function GetCanonicalTypeNameFromType([type]$type) {
   return [string]$type.Name
 }
 
+function ResolveExactType([string]$candidate) {
+  if ([string]::IsNullOrWhiteSpace($candidate)) { return $null }
+  $resolvedType = $null
+  try { $resolvedType = [System.Type]::GetType($candidate, $false, $false) } catch { $resolvedType = $null }
+  if ($resolvedType) { return $resolvedType }
+  foreach ($assembly in [System.AppDomain]::CurrentDomain.GetAssemblies()) {
+    try { $resolvedType = $assembly.GetType($candidate, $false, $false) } catch { $resolvedType = $null }
+    if ($resolvedType) { return $resolvedType }
+  }
+  return $null
+}
+
+function ResolveUniqueTypeCaseInsensitive([string]$candidate, [ref]$isAmbiguous) {
+  $isAmbiguous.Value = $false
+  if ([string]::IsNullOrWhiteSpace($candidate)) { return $null }
+  $matches = [System.Collections.Generic.Dictionary[string,System.Type]]::new([System.StringComparer]::Ordinal)
+  $ambiguous = $false
+  $resolvedType = $null
+  try {
+    $resolvedType = [System.Type]::GetType($candidate, $false, $true)
+  } catch [System.Reflection.AmbiguousMatchException] {
+    $ambiguous = $true
+  } catch {
+    $resolvedType = $null
+  }
+  if ($resolvedType) {
+    $matches[(GetCanonicalTypeNameFromType $resolvedType)] = $resolvedType
+  }
+  foreach ($assembly in [System.AppDomain]::CurrentDomain.GetAssemblies()) {
+    $resolvedType = $null
+    try {
+      $resolvedType = $assembly.GetType($candidate, $false, $true)
+    } catch [System.Reflection.AmbiguousMatchException] {
+      $ambiguous = $true
+    } catch {
+      $resolvedType = $null
+    }
+    if ($resolvedType) {
+      $matches[(GetCanonicalTypeNameFromType $resolvedType)] = $resolvedType
+    }
+  }
+  $isAmbiguous.Value = $ambiguous
+  if ($ambiguous -or $matches.Count -ne 1) { return $null }
+  foreach ($match in $matches.Values) { return $match }
+  return $null
+}
+
 function GetCanonicalTypeName([string]$candidate) {
   if ([string]::IsNullOrWhiteSpace($candidate)) { return '' }
   $trimmed = $candidate.Trim()
-  $resolvedType = $null
-  try { $resolvedType = $trimmed -as [type] } catch { $resolvedType = $null }
+  $resolvedType = ResolveExactType $trimmed
+  $ambiguous = $false
+  if (-not $resolvedType) { $resolvedType = ResolveUniqueTypeCaseInsensitive $trimmed ([ref]$ambiguous) }
+  if (-not $resolvedType -and -not $ambiguous) {
+    try { $resolvedType = $trimmed -as [type] } catch { $resolvedType = $null }
+  }
   if ($resolvedType) { return GetCanonicalTypeNameFromType $resolvedType }
   return ($trimmed -replace '\s+', '')
 }
@@ -174,16 +242,10 @@ function GetTypeIdentity([string]$name, [string]$clrName) {
   foreach ($candidate in @($clrName, $name)) {
     if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
     $trimmed = $candidate.Trim()
-    $resolvedType = $null
-    try { $resolvedType = [System.Type]::GetType($trimmed, $false, $false) } catch { $resolvedType = $null }
-    if (-not $resolvedType) {
-      foreach ($assembly in [System.AppDomain]::CurrentDomain.GetAssemblies()) {
-        try { $resolvedType = $assembly.GetType($trimmed, $false, $false) } catch { $resolvedType = $null }
-        if ($resolvedType) { break }
-      }
-    }
+    $resolvedType = ResolveExactType $trimmed
+    $ambiguous = $false
+    if (-not $resolvedType) { $resolvedType = ResolveUniqueTypeCaseInsensitive $trimmed ([ref]$ambiguous) }
     if ($resolvedType) { return GetCanonicalTypeNameFromType $resolvedType }
-    if (TestQualifiedTypeIdentity $trimmed) { return ($trimmed -replace '\s+', '') }
     $identity = GetCanonicalTypeName $trimmed
     if ($identity) { return $identity }
   }
@@ -614,8 +676,8 @@ try {
     }
 
     $helpOutputs = @()
-    $helpOutputByKey = @{}
-    $helpOutputKeyCounts = @{}
+    $helpOutputByKey = [System.Collections.Generic.Dictionary[string,object]]::new([System.StringComparer]::Ordinal)
+    $helpOutputKeyCounts = [System.Collections.Generic.Dictionary[string,int]]::new([System.StringComparer]::Ordinal)
     try {
       $helpReturnValues = @()
       try { if ($help -and $help.ReturnValues -and $help.ReturnValues.ReturnValue) { $helpReturnValues = @($help.ReturnValues.ReturnValue) } } catch { $helpReturnValues = @() }
@@ -658,9 +720,9 @@ try {
 
     $outputs = @()
     $seenOutputIdentities = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
-    $runtimeOutputKeys = @{}
-    $runtimeOutputByKey = @{}
-    $runtimeOutputKeyCounts = @{}
+    $runtimeOutputKeys = [System.Collections.Generic.Dictionary[string,bool]]::new([System.StringComparer]::Ordinal)
+    $runtimeOutputByKey = [System.Collections.Generic.Dictionary[string,object]]::new([System.StringComparer]::Ordinal)
+    $runtimeOutputKeyCounts = [System.Collections.Generic.Dictionary[string,int]]::new([System.StringComparer]::Ordinal)
     $runtimeOutputMetadata = @()
     try {
       foreach ($outputType in @($c.OutputType)) {

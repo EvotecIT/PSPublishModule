@@ -271,6 +271,14 @@ public sealed class DocumentationBinaryFixtureTests
           <maml:para>Only the OutputB result has an authored description.</maml:para>
         </maml:description>
       </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>BinaryDocFixture.OutputA.RESULT</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>The case-variant RESULT has its own authored description.</maml:para>
+        </maml:description>
+      </command:returnValue>
     </command:returnValues>
   </command:command>
 </helpItems>
@@ -347,7 +355,7 @@ public sealed class DocumentationBinaryFixtureTests
                 "0.84551240822557006",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "PreciseDouble", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
-                "1.23456776",
+                "([single]1.23456776)",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "PreciseSingle", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
                 "$null",
@@ -381,7 +389,7 @@ public sealed class DocumentationBinaryFixtureTests
                 ambiguousOutputCommand.Outputs,
                 output => string.Equals(output.ClrTypeName, "BinaryDocFixture.OutputA.RESULT", StringComparison.Ordinal));
             Assert.True(string.IsNullOrEmpty(outputA.Description));
-            Assert.True(string.IsNullOrEmpty(outputCaseVariant.Description));
+            Assert.Contains("case-variant RESULT", outputCaseVariant.Description, StringComparison.Ordinal);
             Assert.Contains("Only the OutputB result", outputB.Description, StringComparison.Ordinal);
 
             var markdownDirectory = Path.Combine(tempRoot, "GeneratedDocs");
@@ -539,7 +547,7 @@ function Get-DescribedOutput {
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.Collections.Generic.List[System.String]</maml:name>
+          <maml:name>system.collections.generic.list[system.string]</maml:name>
         </dev:type>
         <maml:description>
           <maml:para>A generic list whose authored output description must survive metadata extraction.</maml:para>
