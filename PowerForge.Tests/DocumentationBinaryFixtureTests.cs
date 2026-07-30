@@ -141,7 +141,8 @@ public sealed class DocumentationBinaryFixtureTests
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             var engine = new DocumentationEngine(new PowerShellRunner(), new NullLogger());
-            var command = Assert.Single(engine.ExtractHelpPayload(tempRoot, manifestPath, TimeSpan.FromMinutes(1)).Commands);
+            var payload = engine.ExtractHelpPayload(tempRoot, manifestPath, TimeSpan.FromMinutes(1));
+            var command = Assert.Single(payload.Commands);
             Assert.Empty(command.Outputs);
 
             Assert.Equal(
@@ -156,6 +157,22 @@ public sealed class DocumentationBinaryFixtureTests
             Assert.Equal(
                 "', '",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Delimiter", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
+                "@('a', 'b c')",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Names", StringComparison.Ordinal)).DefaultValue);
+
+            var markdownDirectory = Path.Combine(tempRoot, "GeneratedDocs");
+            var mamlDirectory = Path.Combine(tempRoot, "GeneratedHelp");
+            new MarkdownHelpWriter().WriteCommandHelpFiles(payload, moduleName, markdownDirectory);
+            var generatedMamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, moduleName, mamlDirectory);
+            Assert.Contains(
+                "Default value: @('a', 'b c')",
+                File.ReadAllText(Path.Combine(markdownDirectory, "Get-BinaryDocEmptyDefault.md")),
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "<dev:defaultValue>@('a', 'b c')</dev:defaultValue>",
+                File.ReadAllText(generatedMamlPath),
+                StringComparison.Ordinal);
         }
         finally
         {
@@ -173,6 +190,119 @@ public sealed class DocumentationBinaryFixtureTests
             {
                 if (Directory.Exists(outputDirectory))
                     Directory.Delete(outputDirectory, true);
+            }
+            catch
+            {
+                // Best effort cleanup; do not mask assertion failures.
+            }
+        }
+    }
+
+    [Fact]
+    public void DocumentationEngine_PreservesScriptOutputDescriptionsWithRuntimeOutputTypes()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "pf-docs-output-description-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+
+        try
+        {
+            const string moduleName = "DescribedOutputModule";
+            var modulePath = Path.Combine(tempRoot, moduleName + ".psm1");
+            var manifestPath = Path.Combine(tempRoot, moduleName + ".psd1");
+
+            File.WriteAllText(modulePath, """
+function Get-DescribedOutput {
+    <#
+    .EXTERNALHELP DescribedOutputModule-help.xml
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+
+    'fixture'
+}
+""", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            var helpDirectory = Path.Combine(tempRoot, "en-US");
+            Directory.CreateDirectory(helpDirectory);
+            File.WriteAllText(Path.Combine(helpDirectory, moduleName + "-help.xml"), """
+<?xml version="1.0" encoding="utf-8"?>
+<helpItems schema="maml" xmlns="http://msh">
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Get-DescribedOutput</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>DescribedOutput</command:noun>
+      <maml:description>
+        <maml:para>Returns a described output value.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Returns a described output value.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Get-DescribedOutput</maml:name>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters />
+    <command:inputTypes />
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>A string whose authored output description must survive metadata extraction.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+  </command:command>
+</helpItems>
+""", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            File.WriteAllText(manifestPath, """
+@{
+    RootModule = 'DescribedOutputModule.psm1'
+    ModuleVersion = '1.0.0'
+    GUID = '88888888-8888-8888-8888-888888888888'
+    Author = 'PowerForge.Tests'
+    Description = 'Script fixture module for output-description extraction tests.'
+    FunctionsToExport = @('Get-DescribedOutput')
+    CmdletsToExport = @()
+    AliasesToExport = @()
+    VariablesToExport = @()
+}
+""", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            var engine = new DocumentationEngine(new PowerShellRunner(), new NullLogger());
+            var payload = engine.ExtractHelpPayload(tempRoot, manifestPath, TimeSpan.FromMinutes(1));
+            var output = Assert.Single(Assert.Single(payload.Commands).Outputs);
+            Assert.Equal("System.String", output.ClrTypeName);
+            Assert.Contains(
+                "authored output description must survive metadata extraction",
+                output.Description,
+                StringComparison.Ordinal);
+
+            var markdownDirectory = Path.Combine(tempRoot, "GeneratedDocs");
+            var mamlDirectory = Path.Combine(tempRoot, "GeneratedHelp");
+            new MarkdownHelpWriter().WriteCommandHelpFiles(payload, moduleName, markdownDirectory);
+            var generatedMamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, moduleName, mamlDirectory);
+            Assert.Contains(
+                "authored output description must survive metadata extraction",
+                File.ReadAllText(Path.Combine(markdownDirectory, "Get-DescribedOutput.md")),
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "authored output description must survive metadata extraction",
+                File.ReadAllText(generatedMamlPath),
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(tempRoot))
+                    Directory.Delete(tempRoot, true);
             }
             catch
             {

@@ -24,6 +24,38 @@ function GetText([object]$obj) {
   try { return [string]$obj } catch { return '' }
 }
 
+function ConvertToPowerShellDefaultValue([object]$value) {
+  if ($null -eq $value) { return '$null' }
+  if ($value -is [string] -or $value -is [char]) {
+    $text = [string]$value
+    return ("'" + $text.Replace("'", "''") + "'")
+  }
+  if ($value -is [System.Collections.IEnumerable]) {
+    $items = @()
+    foreach ($item in $value) {
+      $items += ConvertToPowerShellDefaultValue $item
+    }
+    return ('@(' + ($items -join ', ') + ')')
+  }
+  return [string]$value
+}
+
+function GetTypeKeys([string]$name, [string]$clrName) {
+  $keys = @()
+  foreach ($candidate in @($name, $clrName)) {
+    if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+      $keys += $candidate.Trim()
+    }
+  }
+  if (-not [string]::IsNullOrWhiteSpace($clrName)) {
+    $separatorIndex = $clrName.LastIndexOf('.')
+    if ($separatorIndex -ge 0 -and $separatorIndex -lt ($clrName.Length - 1)) {
+      $keys += $clrName.Substring($separatorIndex + 1)
+    }
+  }
+  return @($keys | Sort-Object -Unique)
+}
+
 try {
   if ([string]::IsNullOrWhiteSpace($ManifestPath) -or -not (Test-Path -LiteralPath $ManifestPath)) {
     throw ('Manifest not found: ' + $ManifestPath)
@@ -180,12 +212,7 @@ try {
                 $defaultValue = [string]$attr.Help
                 $hasMetadataDefault = $true
               } elseif ($null -ne $attr.Value) {
-                if ($attr.Value -is [string] -or $attr.Value -is [char]) {
-                  $metadataDefaultValue = [string]$attr.Value
-                  $defaultValue = "'" + $metadataDefaultValue.Replace("'", "''") + "'"
-                } else {
-                  $defaultValue = [string]$attr.Value
-                }
+                $defaultValue = ConvertToPowerShellDefaultValue $attr.Value
                 $hasMetadataDefault = $true
               }
             }
@@ -400,6 +427,43 @@ try {
       }
     }
 
+    $helpOutputs = @()
+    $helpOutputByKey = @{}
+    try {
+      $helpReturnValues = @()
+      try { if ($help -and $help.ReturnValues -and $help.ReturnValues.ReturnValue) { $helpReturnValues = @($help.ReturnValues.ReturnValue) } } catch { $helpReturnValues = @() }
+      foreach ($rv in $helpReturnValues) {
+        $typeName = ''
+        $typeClrName = ''
+        try { $typeName = [string]$rv.Type.Name } catch { $typeName = '' }
+        if (-not $typeName) { try { $typeName = [string]$rv.Type } catch { $typeName = '' } }
+        try { $typeClrName = [string]$rv.Type.Type.FullName } catch { $typeClrName = '' }
+        if (-not $typeClrName) { try { $typeClrName = [string]$rv.Type.FullName } catch { $typeClrName = '' } }
+        if (-not $typeClrName) { $typeClrName = $typeName }
+        if (-not $typeName) { continue }
+
+        $typeDesc = ''
+        try {
+          foreach ($d in @($rv.Description)) {
+            $t = (GetText $d).Trim()
+            if ($t) { if ($typeDesc) { $typeDesc += "`n`n" }; $typeDesc += $t }
+          }
+        } catch {
+          # best effort: description collections are not guaranteed on every output type entry
+        }
+
+        $helpOutput = [pscustomobject][ordered]@{ name = $typeName; clrTypeName = $typeClrName; description = $typeDesc }
+        $helpOutputs += $helpOutput
+        foreach ($key in @(GetTypeKeys $typeName $typeClrName)) {
+          if (-not $helpOutputByKey.ContainsKey($key)) {
+            $helpOutputByKey[$key] = $helpOutput
+          }
+        }
+      }
+    } catch {
+      # best effort: older hosts can omit or reshape ReturnValues entirely
+    }
+
     $outputs = @()
     $seenOutputs = @{}
     try {
@@ -416,46 +480,42 @@ try {
         if (-not $outputTypeName) { $outputTypeName = $outputTypeClrName }
         if (-not $outputTypeName) { continue }
 
-        $key = if ($outputTypeClrName) { $outputTypeClrName } else { $outputTypeName }
-        if ($seenOutputs.ContainsKey($key)) { continue }
-        $seenOutputs[$key] = $true
-        $outputs += [ordered]@{ name = $outputTypeName; clrTypeName = $outputTypeClrName; description = '' }
+        $typeDesc = ''
+        foreach ($key in @(GetTypeKeys $outputTypeName $outputTypeClrName)) {
+          if ($helpOutputByKey.ContainsKey($key)) {
+            $typeDesc = [string]$helpOutputByKey[$key].description
+            break
+          }
+        }
+
+        $alreadySeen = $false
+        foreach ($key in @(GetTypeKeys $outputTypeName $outputTypeClrName)) {
+          if ($seenOutputs.ContainsKey($key)) { $alreadySeen = $true; break }
+        }
+        if ($alreadySeen) { continue }
+        foreach ($key in @(GetTypeKeys $outputTypeName $outputTypeClrName)) {
+          $seenOutputs[$key] = $true
+        }
+        $outputs += [ordered]@{ name = $outputTypeName; clrTypeName = $outputTypeClrName; description = $typeDesc }
       }
     } catch {
       # best effort: command metadata may not expose OutputType uniformly across hosts
     }
-    if (($outputs.Count -eq 0) -and ([string]$c.CommandType -ne 'Cmdlet')) {
-      try {
-        $helpReturnValues = @()
-        try { if ($help -and $help.ReturnValues -and $help.ReturnValues.ReturnValue) { $helpReturnValues = @($help.ReturnValues.ReturnValue) } } catch { $helpReturnValues = @() }
-        foreach ($rv in $helpReturnValues) {
-          $typeName = ''
-          $typeClrName = ''
-          try { $typeName = [string]$rv.Type.Name } catch { $typeName = '' }
-          if (-not $typeName) { try { $typeName = [string]$rv.Type } catch { $typeName = '' } }
-          try { $typeClrName = [string]$rv.Type.Type.FullName } catch { $typeClrName = '' }
-          if (-not $typeClrName) { try { $typeClrName = [string]$rv.Type.FullName } catch { $typeClrName = '' } }
-          if (-not $typeClrName) { $typeClrName = $typeName }
-          if (-not $typeName) { continue }
-
-          $key = if ($typeClrName) { $typeClrName } else { $typeName }
-          if ($seenOutputs.ContainsKey($key)) { continue }
-          $seenOutputs[$key] = $true
-
-          $typeDesc = ''
-          try {
-            foreach ($d in @($rv.Description)) {
-              $t = (GetText $d).Trim()
-              if ($t) { if ($typeDesc) { $typeDesc += "`n`n" }; $typeDesc += $t }
-            }
-          } catch {
-            # best effort: description collections are not guaranteed on every output type entry
-          }
-
-          $outputs += [ordered]@{ name = $typeName; clrTypeName = $typeClrName; description = $typeDesc }
+    if ([string]$c.CommandType -ne 'Cmdlet') {
+      foreach ($helpOutput in $helpOutputs) {
+        $alreadySeen = $false
+        foreach ($key in @(GetTypeKeys ([string]$helpOutput.name) ([string]$helpOutput.clrTypeName))) {
+          if ($seenOutputs.ContainsKey($key)) { $alreadySeen = $true; break }
         }
-      } catch {
-        # best effort: older hosts can omit or reshape ReturnValues entirely
+        if ($alreadySeen) { continue }
+        foreach ($key in @(GetTypeKeys ([string]$helpOutput.name) ([string]$helpOutput.clrTypeName))) {
+          $seenOutputs[$key] = $true
+        }
+        $outputs += [ordered]@{
+          name = [string]$helpOutput.name
+          clrTypeName = [string]$helpOutput.clrTypeName
+          description = [string]$helpOutput.description
+        }
       }
     }
 

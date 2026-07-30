@@ -75,6 +75,11 @@ public sealed class GetBinaryDocEmptyDefaultCommand : PSCmdlet
     [Parameter]
     [PSDefaultValue(Value = ", ")]
     public string Delimiter { get; set; } = ", ";
+
+    /// <summary>Optional names whose element boundaries must remain visible.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = new[] { "a", "b c" })]
+    public string[] Names { get; set; } = ["a", "b c"];
 }
 
 /// <summary>Rendering mode for the binary documentation fixture.</summary>
