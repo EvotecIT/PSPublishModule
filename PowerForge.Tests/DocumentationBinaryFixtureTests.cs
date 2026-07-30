@@ -305,6 +305,9 @@ public sealed class DocumentationBinaryFixtureTests
                 "@([BinaryDocFixture.BinaryDocMode]::Basic, [BinaryDocFixture.BinaryDocMode]::Advanced)",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Modes", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
+                "[System.Enum]::ToObject([BinaryDocFixture.BinaryDocMode], 3)",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "UnnamedMode", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
                 "(-join @(([char]0)))",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "ControlText", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
@@ -313,6 +316,9 @@ public sealed class DocumentationBinaryFixtureTests
             Assert.Equal(
                 "[System.String]",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "ValueType", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
+                "[System.Collections.Generic.List`1]",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "OpenGenericType", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
                 "@([System.String], [System.Int32])",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "ValueTypes", StringComparison.Ordinal)).DefaultValue);
@@ -382,11 +388,19 @@ public sealed class DocumentationBinaryFixtureTests
                 generatedMaml,
                 StringComparison.Ordinal);
             Assert.Contains(
+                "<dev:defaultValue>[System.Enum]::ToObject([BinaryDocFixture.BinaryDocMode], 3)</dev:defaultValue>",
+                generatedMaml,
+                StringComparison.Ordinal);
+            Assert.Contains(
                 "<dev:defaultValue>(-join @(([char]0)))</dev:defaultValue>",
                 generatedMaml,
                 StringComparison.Ordinal);
             Assert.Contains(
                 "<dev:defaultValue>@([System.String], [System.Int32])</dev:defaultValue>",
+                generatedMaml,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "<dev:defaultValue>[System.Collections.Generic.List`1]</dev:defaultValue>",
                 generatedMaml,
                 StringComparison.Ordinal);
             Assert.Contains(

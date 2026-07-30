@@ -91,6 +91,11 @@ public sealed class GetBinaryDocEmptyDefaultCommand : PSCmdlet
     [PSDefaultValue(Value = new[] { BinaryDocMode.Basic, BinaryDocMode.Advanced })]
     public BinaryDocMode[] Modes { get; set; } = [BinaryDocMode.Basic, BinaryDocMode.Advanced];
 
+    /// <summary>An optional unnamed enum value that must bypass PowerShell enum validation.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = (BinaryDocMode)3)]
+    public BinaryDocMode UnnamedMode { get; set; } = (BinaryDocMode)3;
+
     /// <summary>An optional string containing an XML-invalid control character.</summary>
     [Parameter]
     [PSDefaultValue(Value = "\0")]
@@ -105,6 +110,11 @@ public sealed class GetBinaryDocEmptyDefaultCommand : PSCmdlet
     [Parameter]
     [PSDefaultValue(Value = typeof(string))]
     public Type ValueType { get; set; } = typeof(string);
+
+    /// <summary>An optional open generic type whose arity must remain part of the literal.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = typeof(List<>))]
+    public Type OpenGenericType { get; set; } = typeof(List<>);
 
     /// <summary>Optional types whose element semantics must remain visible.</summary>
     [Parameter]

@@ -79,7 +79,7 @@ function ConvertToPowerShellDefaultValue([object]$value) {
       $value,
       [System.Enum]::GetUnderlyingType($enumType),
       [System.Globalization.CultureInfo]::InvariantCulture)
-    return ('([' + $enumType.FullName + ']' + [string]$underlyingValue + ')')
+    return ('[System.Enum]::ToObject([' + $enumType.FullName + '], ' + [string]$underlyingValue + ')')
   }
   if ($value -is [type]) {
     return ('[' + (GetCanonicalTypeNameFromType $value) + ']')
@@ -114,6 +114,10 @@ function GetCanonicalTypeNameFromType([type]$type) {
     $rank = $type.GetArrayRank()
     if ($rank -le 1) { return ($elementName + '[]') }
     return ($elementName + '[' + (',' * ($rank - 1)) + ']')
+  }
+  if ($type.IsGenericTypeDefinition) {
+    if ($type.FullName) { return [string]$type.FullName }
+    return [string]$type.Name
   }
   if ($type.IsGenericType) {
     $definition = $type.GetGenericTypeDefinition()
