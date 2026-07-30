@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Security.Cryptography;
@@ -28,10 +27,16 @@ public static class BenchmarkJson
     public static void Write<T>(string path, T value)
     {
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Output path is required.", nameof(path));
+        WriteBytes(path, JsonSerializer.SerializeToUtf8Bytes(value, Options));
+    }
+
+    internal static void WriteBytes(string path, byte[] bytes)
+    {
+        if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Output path is required.", nameof(path));
+        if (bytes is null) throw new ArgumentNullException(nameof(bytes));
         string fullPath = ResolveWritePath(path);
         string directory = Path.GetDirectoryName(fullPath)!;
         Directory.CreateDirectory(directory);
-        var json = JsonSerializer.Serialize(value, Options);
         string temporaryPath = Path.Combine(
             directory,
             $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
@@ -52,14 +57,8 @@ public static class BenchmarkJson
                        FileShare.None,
                        bufferSize: 64 * 1024,
                        FileOptions.SequentialScan))
-            using (var writer = new StreamWriter(
-                       stream,
-                       new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-                       bufferSize: 64 * 1024,
-                       leaveOpen: true))
             {
-                writer.Write(json);
-                writer.Flush();
+                stream.Write(bytes, 0, bytes.Length);
                 stream.Flush(flushToDisk: true);
             }
 
@@ -95,11 +94,14 @@ public static class BenchmarkJson
         string sourcePath,
         string destinationPath)
     {
-        string executable = "/bin/cp";
-        if (!File.Exists(executable))
+        if (OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("Unix metadata cloning is not available on Windows.");
+        string? executable = ResolveUnixCopyExecutable();
+        if (string.IsNullOrWhiteSpace(executable))
         {
-            throw new PlatformNotSupportedException(
-                "Atomic benchmark JSON replacement on Unix requires /bin/cp to preserve ownership, ACLs, extended attributes, and mode.");
+            File.Copy(sourcePath, destinationPath, overwrite: false);
+            File.SetUnixFileMode(destinationPath, File.GetUnixFileMode(sourcePath));
+            return;
         }
 
         var startInfo = new ProcessStartInfo
@@ -129,6 +131,29 @@ public static class BenchmarkJson
             throw new IOException(
                 $"Unable to preserve Unix ownership and ACL metadata while replacing '{sourcePath}': {standardError.Trim()}");
         }
+    }
+
+    private static string? ResolveUnixCopyExecutable()
+    {
+        foreach (string candidate in new[] { "/bin/cp", "/usr/bin/cp" })
+        {
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        string? path = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+        foreach (string directory in path.Split(Path.PathSeparator))
+        {
+            if (string.IsNullOrWhiteSpace(directory))
+                continue;
+            string candidate = Path.Combine(directory, "cp");
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        return null;
     }
 #endif
 

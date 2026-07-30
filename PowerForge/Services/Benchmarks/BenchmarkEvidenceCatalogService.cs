@@ -64,6 +64,11 @@ public sealed partial class BenchmarkEvidenceCatalogService
 
         ValidateCatalogSchema(catalog);
         catalog ??= new BenchmarkEvidenceCatalog();
+        if (catalog.SchemaVersion == 1)
+        {
+            foreach (BenchmarkEvidenceEntry legacyEntry in catalog.Entries)
+                legacyEntry.Publish = false;
+        }
         catalog.SchemaVersion = SupportedSchemaVersion;
         catalog.ExpectedPlatforms = NormalizeExpectedPlatforms(expectedPlatforms ?? catalog.ExpectedPlatforms);
 
@@ -135,6 +140,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
             ? BenchmarkJson.Read<BenchmarkEvidenceCatalog>(fullPath)
             : null;
         var updated = Update(catalog, result, comparisonId, resultPath, runMode, publish, expectedPlatforms, platform);
+        string? artifactPath = null;
+        byte[]? previousArtifact = null;
+        bool artifactExisted = false;
+        bool artifactSelected = false;
         if (publish)
         {
             BenchmarkEvidenceEntry writtenEntry = updated.Entries.Single(entry =>
@@ -152,24 +161,59 @@ public sealed partial class BenchmarkEvidenceCatalogService
                                         StringComparison.Ordinal);
             if (inputWasSelected)
             {
-                string artifactPath = ResolveResultArtifactPath(fullPath, resultPath);
+                artifactPath = ResolveResultArtifactPath(fullPath, resultPath);
                 if (string.Equals(artifactPath, fullPath, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException(
                         "The benchmark result artifact path must be different from the evidence catalog path.");
                 }
+                artifactSelected = true;
+                artifactExisted = File.Exists(artifactPath);
+                if (artifactExisted)
+                    previousArtifact = File.ReadAllBytes(artifactPath);
+            }
+        }
 
-                BenchmarkJson.Write(artifactPath, result);
-                string writtenHash = BenchmarkJson.ComputeFileSha256(artifactPath);
+        try
+        {
+            if (artifactSelected)
+            {
+                BenchmarkJson.Write(artifactPath!, result);
+                string writtenHash = BenchmarkJson.ComputeFileSha256(artifactPath!);
+                BenchmarkEvidenceEntry writtenEntry = updated.Entries.Single(entry =>
+                    string.Equals(entry.ComparisonId, comparisonId.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(entry.Platform, ResolvePlatform(result, platform), StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(entry.RunMode, runMode.Trim(), StringComparison.OrdinalIgnoreCase));
                 if (!string.Equals(writtenEntry.ResultSha256, writtenHash, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException(
                         "The normalized benchmark result artifact does not match the validated catalog payload.");
                 }
             }
+
+            BenchmarkJson.Write(fullPath, updated);
+            return updated;
         }
-        BenchmarkJson.Write(fullPath, updated);
-        return updated;
+        catch (Exception publicationException)
+        {
+            if (!artifactSelected)
+                throw;
+            try
+            {
+                if (artifactExisted)
+                    BenchmarkJson.WriteBytes(artifactPath!, previousArtifact!);
+                else if (File.Exists(artifactPath))
+                    File.Delete(artifactPath);
+            }
+            catch (Exception rollbackException)
+            {
+                throw new InvalidOperationException(
+                    "Benchmark evidence publication failed and the previous result artifact could not be restored.",
+                    new AggregateException(publicationException, rollbackException));
+            }
+
+            throw;
+        }
     }
 
     private static string ResolveResultArtifactPath(string catalogPath, string resultPath)

@@ -81,6 +81,37 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void EnvironmentMetadataExcludesReservedInRepositoryOutputFromSourceStatus()
+    {
+        string root = CreateTempRoot();
+        RunGit(root, "init");
+        RunGit(root, "config user.email benchmark@example.test");
+        RunGit(root, "config user.name Benchmark");
+        File.WriteAllText(Path.Combine(root, "source.txt"), "measured");
+        RunGit(root, "add source.txt");
+        RunGit(root, "commit -m measured");
+        string outputRoot = Path.Combine(root, "Build", "Benchmarks");
+        Directory.CreateDirectory(outputRoot);
+        File.WriteAllText(Path.Combine(outputRoot, "report.json"), "{}");
+        var suite = new PowerShellBenchmarkSuite
+        {
+            Name = "provenance",
+            SourceRoot = root,
+            OutputRoot = outputRoot
+        };
+
+        PowerShellBenchmarkEnvironmentMetadata.SourceProvenance clean =
+            PowerShellBenchmarkEnvironmentMetadata.CaptureSourceProvenance(suite);
+        File.WriteAllText(Path.Combine(root, "unrelated.txt"), "dirty");
+        PowerShellBenchmarkEnvironmentMetadata.SourceProvenance dirty =
+            PowerShellBenchmarkEnvironmentMetadata.CaptureSourceProvenance(suite);
+
+        Assert.True(string.IsNullOrWhiteSpace(clean.GitStatus));
+        Assert.Contains("unrelated.txt", dirty.GitStatus, StringComparison.Ordinal);
+        Assert.DoesNotContain("Build/Benchmarks", dirty.GitStatus, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void DslRuntime_PreservesSpecLocalHelperFunctionsInCapturedBlocks()
     {
         var root = CreateTempRoot();

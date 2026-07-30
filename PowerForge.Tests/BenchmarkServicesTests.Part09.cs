@@ -184,6 +184,83 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void EvidenceCatalog_DemotesLegacyPublishedLanesDuringSchemaMigration()
+    {
+        var legacy = new BenchmarkEvidenceCatalog
+        {
+            SchemaVersion = 1,
+            Entries =
+            [
+                new BenchmarkEvidenceEntry
+                {
+                    ComparisonId = "comparison-a",
+                    Platform = "linux",
+                    RunMode = "full",
+                    Publish = true,
+                    ResultPath = "legacy-linux.json",
+                    ResultSha256 = string.Empty
+                }
+            ]
+        };
+
+        BenchmarkEvidenceCatalog updated = new BenchmarkEvidenceCatalogService().Update(
+            legacy,
+            Result("Windows", "fixture-a", 10),
+            "comparison-a",
+            "windows.json",
+            "full",
+            publish: true);
+
+        Assert.Equal(2, updated.SchemaVersion);
+        Assert.False(Assert.Single(updated.Entries, entry => entry.Platform == "linux").Publish);
+        Assert.True(Assert.Single(updated.Entries, entry => entry.Platform == "windows").Publish);
+        Assert.Contains(
+            updated.Availability,
+            lane => lane.Platform == "linux" && !lane.Available);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RestoresPreviousResultWhenCatalogCommitFails()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "index.json");
+        string resultPath = Path.Combine(root, "windows.json");
+        var service = new BenchmarkEvidenceCatalogService();
+        BenchmarkRunResult original = Result("Windows", "fixture-a", 10);
+        service.UpdateFile(
+            catalogPath,
+            original,
+            "comparison-a",
+            "windows.json",
+            "full",
+            publish: true);
+        byte[] expectedArtifact = File.ReadAllBytes(resultPath);
+        File.SetAttributes(catalogPath, File.GetAttributes(catalogPath) | FileAttributes.ReadOnly);
+        try
+        {
+            BenchmarkRunResult replacement = Result("Windows", "fixture-a", 20);
+            replacement.FinishedUtc = original.FinishedUtc.AddMinutes(1);
+
+            Assert.ThrowsAny<Exception>(() => service.UpdateFile(
+                catalogPath,
+                replacement,
+                "comparison-a",
+                "windows.json",
+                "full",
+                publish: true));
+
+            Assert.Equal(expectedArtifact, File.ReadAllBytes(resultPath));
+        }
+        finally
+        {
+            File.SetAttributes(catalogPath, FileAttributes.Normal);
+        }
+    }
+
+    [Fact]
     public void EvidenceCatalog_RejectsImportedEvidenceWithoutProductionSidecar()
     {
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
@@ -258,6 +335,43 @@ public sealed partial class BenchmarkServicesTests
             new BenchmarkResultImporter().Import(artifactRoot));
 
         Assert.Contains("does not match", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BenchmarkProvenanceSnapshotRemainsBoundAfterOriginalArtifactsChange()
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        string artifactRoot = Path.Combine(root, "artifacts");
+        Directory.CreateDirectory(sourceRoot);
+        RunGit(sourceRoot, "init");
+        RunGit(sourceRoot, "config user.email benchmark@example.test");
+        RunGit(sourceRoot, "config user.name Benchmark");
+        File.WriteAllText(Path.Combine(sourceRoot, "source.txt"), "measured");
+        RunGit(sourceRoot, "add source.txt");
+        RunGit(sourceRoot, "commit -m measured");
+        var service = new BenchmarkArtifactProvenanceService();
+        BenchmarkProvenanceCaptureSession capture = service.Start(sourceRoot, artifactRoot);
+        string reportPath = Path.Combine(artifactRoot, "Case-report-full.json");
+        File.WriteAllText(reportPath, BenchmarkDotNetReport("Windows"));
+        service.Complete(capture);
+        Assert.True(BenchmarkArtifactProvenanceService.TryLoadAndValidate(
+            artifactRoot,
+            out BenchmarkArtifactProvenanceDocument? provenance,
+            out string validatedRoot,
+            out string sidecarPath));
+
+        using BenchmarkArtifactSnapshot snapshot =
+            BenchmarkArtifactProvenanceService.CreateValidatedSnapshot(
+                artifactRoot,
+                provenance!,
+                validatedRoot,
+                sidecarPath);
+        File.WriteAllText(reportPath, BenchmarkDotNetReport("Linux"));
+        BenchmarkRunResult imported = new BenchmarkResultImporter().Import(snapshot.InputPath);
+
+        Assert.Equal("Windows", imported.Environment.OsFamily);
+        Assert.Equal(capture.SourceCommit, imported.Metadata["gitSha"]);
     }
 
     [Fact]

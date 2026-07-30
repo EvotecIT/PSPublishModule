@@ -169,6 +169,63 @@ public sealed class BenchmarkArtifactProvenanceService
         return true;
     }
 
+    internal static BenchmarkArtifactSnapshot CreateValidatedSnapshot(
+        string inputPath,
+        BenchmarkArtifactProvenanceDocument provenance,
+        string artifactRoot,
+        string sidecarPath)
+    {
+        if (provenance is null) throw new ArgumentNullException(nameof(provenance));
+        string snapshotContainer = Path.Combine(
+            Path.GetTempPath(),
+            "powerforge-benchmark-import-" + Guid.NewGuid().ToString("N"));
+        string rootName = new DirectoryInfo(
+            Path.GetFullPath(artifactRoot)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)).Name;
+        string snapshotRoot = Path.Combine(snapshotContainer, rootName);
+        Directory.CreateDirectory(snapshotRoot);
+        try
+        {
+            File.Copy(sidecarPath, Path.Combine(snapshotRoot, SidecarFileName), overwrite: false);
+            foreach (BenchmarkProducedArtifact artifact in provenance.Artifacts)
+            {
+                string sourcePath = ResolveContainedArtifactPath(artifactRoot, artifact.Path);
+                string destinationPath = ResolveContainedArtifactPath(snapshotRoot, artifact.Path);
+                Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+                File.Copy(sourcePath, destinationPath, overwrite: false);
+                File.SetLastWriteTimeUtc(destinationPath, File.GetLastWriteTimeUtc(sourcePath));
+            }
+
+            string fullInput = Path.GetFullPath(inputPath);
+            string snapshotInput = Directory.Exists(fullInput)
+                ? snapshotRoot
+                : ResolveContainedArtifactPath(
+                    snapshotRoot,
+                    NormalizeRelativePath(
+                        FrameworkCompatibility.GetRelativePath(artifactRoot, fullInput)));
+            if (!TryLoadAndValidate(
+                    snapshotInput,
+                    out BenchmarkArtifactProvenanceDocument? snapshotProvenance,
+                    out _,
+                    out string snapshotSidecarPath))
+            {
+                throw new InvalidOperationException(
+                    "Unable to validate the isolated benchmark artifact snapshot.");
+            }
+
+            return new BenchmarkArtifactSnapshot(
+                snapshotContainer,
+                snapshotInput,
+                snapshotProvenance!,
+                snapshotSidecarPath);
+        }
+        catch
+        {
+            TryDeleteDirectory(snapshotContainer);
+            throw;
+        }
+    }
+
     private static IEnumerable<string> EnumerateArtifactFiles(string artifactRoot)
         => Directory.Exists(artifactRoot)
             ? Directory.EnumerateFiles(artifactRoot, "*", SearchOption.AllDirectories)
@@ -228,15 +285,50 @@ public sealed class BenchmarkArtifactProvenanceService
         using Process process = Process.Start(startInfo)
                                 ?? throw new InvalidOperationException(
                                     "Unable to start Git while capturing benchmark provenance.");
-        string output = process.StandardOutput.ReadToEnd();
-        string error = process.StandardError.ReadToEnd();
-        if (!process.WaitForExit(5000) || process.ExitCode != 0)
+        Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+        Task<string> errorTask = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(5000))
+        {
+            try
+            {
+#if NET8_0_OR_GREATER
+                process.Kill(entireProcessTree: true);
+#else
+                process.Kill();
+#endif
+                process.WaitForExit(1000);
+            }
+            catch
+            {
+                // The process may have exited between the timeout and cleanup.
+            }
+            throw new InvalidOperationException(
+                "Timed out while capturing benchmark source provenance.");
+        }
+
+        process.WaitForExit();
+        string output = outputTask.GetAwaiter().GetResult();
+        string error = errorTask.GetAwaiter().GetResult();
+        if (process.ExitCode != 0)
         {
             throw new InvalidOperationException(
                 $"Unable to capture benchmark source provenance: {error.Trim()}");
         }
 
         return output.TrimEnd();
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+            // Temporary import snapshots are best-effort cleanup only.
+        }
     }
 
     private static void ValidateCleanSourceState(GitSourceState state, string stage)
@@ -266,5 +358,38 @@ public sealed class BenchmarkArtifactProvenanceService
         internal string Commit { get; }
         internal string Branch { get; }
         internal string Status { get; }
+    }
+}
+
+internal sealed class BenchmarkArtifactSnapshot : IDisposable
+{
+    internal BenchmarkArtifactSnapshot(
+        string containerPath,
+        string inputPath,
+        BenchmarkArtifactProvenanceDocument provenance,
+        string sidecarPath)
+    {
+        ContainerPath = containerPath;
+        InputPath = inputPath;
+        Provenance = provenance;
+        SidecarPath = sidecarPath;
+    }
+
+    internal string ContainerPath { get; }
+    internal string InputPath { get; }
+    internal BenchmarkArtifactProvenanceDocument Provenance { get; }
+    internal string SidecarPath { get; }
+
+    public void Dispose()
+    {
+        try
+        {
+            if (Directory.Exists(ContainerPath))
+                Directory.Delete(ContainerPath, recursive: true);
+        }
+        catch
+        {
+            // Temporary import snapshots are best-effort cleanup only.
+        }
     }
 }

@@ -81,14 +81,14 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
     {
         if (suite is null)
             throw new ArgumentNullException(nameof(suite));
-        string? gitSha = ReadGitValue(suite.SourceRoot, "rev-parse HEAD");
+        string? gitSha = ReadGitValue(suite.SourceRoot, "rev-parse", "HEAD");
         return new SourceProvenance
         {
             GitSha = gitSha,
-            GitBranch = ReadGitValue(suite.SourceRoot, "branch --show-current"),
+            GitBranch = ReadGitValue(suite.SourceRoot, "branch", "--show-current"),
             GitStatus = string.IsNullOrWhiteSpace(gitSha)
                 ? null
-                : ReadGitValue(suite.SourceRoot, "status --porcelain --untracked-files=normal")
+                : ReadGitValue(suite.SourceRoot, BuildGitStatusArguments(suite))
         };
     }
 
@@ -182,12 +182,61 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
         return $"{RuntimeInformation.OSArchitecture} processor";
     }
 
-    private static string? ReadGitValue(string? workingDirectory, string arguments)
+    private static string? ReadGitValue(string? workingDirectory, params string[] arguments)
         => ReadProcessValue(
             "git",
             arguments,
             timeoutMilliseconds: 3000,
             workingDirectory: workingDirectory);
+
+    private static string[] BuildGitStatusArguments(PowerShellBenchmarkSuite suite)
+    {
+        var arguments = new List<string>
+        {
+            "status",
+            "--porcelain",
+            "--untracked-files=normal"
+        };
+        if (string.IsNullOrWhiteSpace(suite.SourceRoot) ||
+            string.IsNullOrWhiteSpace(suite.OutputRoot))
+        {
+            return arguments.ToArray();
+        }
+
+        string sourceRoot = Path.GetFullPath(suite.SourceRoot!);
+        string outputRoot = Path.GetFullPath(
+            Path.IsPathRooted(suite.OutputRoot)
+                ? suite.OutputRoot
+                : Path.Combine(sourceRoot, suite.OutputRoot));
+        string sourcePrefix = sourceRoot
+                                  .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                              + Path.DirectorySeparatorChar;
+        if (string.Equals(
+                outputRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                sourceRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                FrameworkCompatibility.GetPathStringComparison(sourceRoot)))
+        {
+            throw new InvalidOperationException(
+                "A benchmark output root cannot be the same directory as its source root.");
+        }
+
+        if (!outputRoot.StartsWith(
+                sourcePrefix,
+                FrameworkCompatibility.GetPathStringComparison(sourceRoot)))
+        {
+            return arguments.ToArray();
+        }
+
+        string relativeOutput = FrameworkCompatibility.GetRelativePath(sourceRoot, outputRoot)
+            .Replace(Path.DirectorySeparatorChar, '/')
+            .Replace(Path.AltDirectorySeparatorChar, '/')
+            .Trim('/');
+        arguments.Add("--");
+        arguments.Add(".");
+        arguments.Add($":(exclude,top){relativeOutput}");
+        arguments.Add($":(exclude,top){relativeOutput}/**");
+        return arguments.ToArray();
+    }
 
     internal static string? ReadProcessValue(
         string fileName,
@@ -247,4 +296,71 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             return null;
         }
     }
+
+    private static string? ReadProcessValue(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        int timeoutMilliseconds,
+        string? workingDirectory = null)
+    {
+        try
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = fileName,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+#if NET8_0_OR_GREATER
+            foreach (string argument in arguments)
+                startInfo.ArgumentList.Add(argument);
+#else
+            startInfo.Arguments = string.Join(" ", arguments.Select(QuoteProcessArgument));
+#endif
+            if (!string.IsNullOrWhiteSpace(workingDirectory) &&
+                Directory.Exists(workingDirectory))
+            {
+                startInfo.WorkingDirectory = Path.GetFullPath(workingDirectory!);
+            }
+            using var process = Process.Start(startInfo);
+            if (process is null)
+                return null;
+
+            Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+            Task<string> errorTask = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(timeoutMilliseconds))
+            {
+                try
+                {
+#if NET8_0_OR_GREATER
+                    process.Kill(entireProcessTree: true);
+#else
+                    process.Kill();
+#endif
+                    process.WaitForExit(1000);
+                }
+                catch
+                {
+                    // The process may have exited between the timeout and cleanup.
+                }
+                return null;
+            }
+
+            process.WaitForExit();
+            string output = outputTask.GetAwaiter().GetResult();
+            _ = errorTask.GetAwaiter().GetResult();
+            return process.ExitCode == 0 ? output.Trim() : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+#if !NET8_0_OR_GREATER
+    private static string QuoteProcessArgument(string value)
+        => "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+#endif
 }

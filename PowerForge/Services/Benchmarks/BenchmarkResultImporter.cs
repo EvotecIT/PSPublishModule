@@ -26,8 +26,22 @@ public sealed class BenchmarkResultImporter
             BenchmarkArtifactProvenanceService.TryLoadAndValidate(
                 fullPath,
                 out BenchmarkArtifactProvenanceDocument? provenance,
-                out _,
+                out string artifactRoot,
                 out string provenancePath);
+        using BenchmarkArtifactSnapshot? snapshot = hasProductionProvenance
+            ? BenchmarkArtifactProvenanceService.CreateValidatedSnapshot(
+                fullPath,
+                provenance!,
+                artifactRoot,
+                provenancePath)
+            : null;
+        if (snapshot is not null)
+        {
+            fullPath = snapshot.InputPath;
+            provenance = snapshot.Provenance;
+            provenancePath = snapshot.SidecarPath;
+        }
+
         BenchmarkRunResult result;
         if (Directory.Exists(fullPath))
         {
