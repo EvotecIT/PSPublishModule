@@ -79,6 +79,22 @@ public sealed class BenchmarkResultImporter
         BenchmarkArtifactProvenanceDocument provenance,
         string sidecarPath)
     {
+        foreach (KeyValuePair<string, string> item in provenance.Metadata)
+        {
+            if (result.Metadata.TryGetValue(item.Key, out string? existing) &&
+                !string.Equals(existing, item.Value, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Benchmark artifact metadata '{item.Key}' conflicts with the declaration bound into its production provenance sidecar.");
+            }
+            result.Metadata[item.Key] = item.Value;
+        }
+        ApplyDeclaredRunMode(result, provenance.RunMode);
+        if (!string.IsNullOrWhiteSpace(provenance.RunMode))
+        {
+            result.Metadata["benchmark.provenance.runMode"] =
+                provenance.RunMode;
+        }
         result.StartedUtc = provenance.StartedUtc;
         result.FinishedUtc = provenance.FinishedUtc;
         result.Metadata["gitSha"] = provenance.SourceCommit;
@@ -89,6 +105,44 @@ public sealed class BenchmarkResultImporter
         result.Metadata["benchmark.provenance.sidecar.sha256"] =
             BenchmarkJson.ComputeFileSha256(sidecarPath);
         CaptureValidatedProductionState(result);
+    }
+
+    private static void ApplyDeclaredRunMode(
+        BenchmarkRunResult result,
+        string runMode)
+    {
+        if (string.IsNullOrWhiteSpace(runMode))
+            return;
+
+        string normalized = runMode.Trim().ToLowerInvariant();
+        IEnumerable<string> embeddedModes = result.Samples
+            .Select(sample => sample.RunMode)
+            .Concat(result.Summary.Select(row => row.RunMode))
+            .Concat(result.Comparison.Select(row => row.RunMode))
+            .Where(value =>
+                !string.IsNullOrWhiteSpace(value) &&
+                !string.Equals(value, "import", StringComparison.OrdinalIgnoreCase));
+        if (embeddedModes.Any(value =>
+                !string.Equals(value, normalized, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                $"Benchmark artifact run mode conflicts with the '{normalized}' declaration bound into its production provenance sidecar.");
+        }
+        if (result.Metadata.TryGetValue("runMode", out string? metadataRunMode) &&
+            !string.IsNullOrWhiteSpace(metadataRunMode) &&
+            !string.Equals(metadataRunMode, normalized, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Benchmark artifact metadata run mode conflicts with the '{normalized}' declaration bound into its production provenance sidecar.");
+        }
+
+        foreach (BenchmarkSample sample in result.Samples)
+            sample.RunMode = normalized;
+        foreach (BenchmarkSummaryRow row in result.Summary)
+            row.RunMode = normalized;
+        foreach (BenchmarkComparisonRow row in result.Comparison)
+            row.RunMode = normalized;
+        result.Metadata["runMode"] = normalized;
     }
 
     private static void ClearUnvalidatedProductionProvenance(BenchmarkRunResult result)
@@ -122,9 +176,13 @@ public sealed class BenchmarkResultImporter
     internal static bool HasUnchangedValidatedProductionMetadata(
         BenchmarkRunResult result)
     {
-        return result.ValidatedProductionMetadata.All(item =>
-            result.Metadata.TryGetValue(item.Key, out string? value) &&
-            string.Equals(item.Value, value, StringComparison.Ordinal));
+        Dictionary<string, string> current = result.Metadata
+            .Where(item => BenchmarkEvidenceMetadataPolicy.IsProvenanceBoundKey(item.Key))
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
+        return current.Count == result.ValidatedProductionMetadata.Count &&
+               result.ValidatedProductionMetadata.All(item =>
+                   current.TryGetValue(item.Key, out string? value) &&
+                   string.Equals(item.Value, value, StringComparison.Ordinal));
     }
 
     internal static string ComputeValidatedProductionContentSha256(

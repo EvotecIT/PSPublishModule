@@ -37,6 +37,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         if (string.IsNullOrWhiteSpace(comparisonId)) throw new ArgumentException("Comparison identifier is required.", nameof(comparisonId));
         if (string.IsNullOrWhiteSpace(resultPath)) throw new ArgumentException("Result path is required.", nameof(resultPath));
         if (string.IsNullOrWhiteSpace(runMode)) throw new ArgumentException("Run mode is required.", nameof(runMode));
+        string normalizedComparisonId = comparisonId.Trim();
         string normalizedRunMode = runMode.Trim().ToLowerInvariant();
         if (publish && !string.Equals(normalizedRunMode, "full", StringComparison.Ordinal))
         {
@@ -47,6 +48,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
         {
             ValidateEmbeddedRunModes(result, normalizedRunMode);
             ValidatePublishableResult(result);
+            ValidateBoundPublishIdentity(
+                result,
+                normalizedComparisonId,
+                normalizedRunMode);
         }
 
         ValidateCatalogSchema(catalog);
@@ -64,7 +69,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
 
         var entry = new BenchmarkEvidenceEntry
         {
-            ComparisonId = comparisonId.Trim(),
+            ComparisonId = normalizedComparisonId,
             Platform = resolvedPlatform,
             RunMode = normalizedRunMode,
             GeneratedUtc = generatedUtc,
@@ -794,6 +799,12 @@ public sealed partial class BenchmarkEvidenceCatalogService
         foreach (BenchmarkComparisonRow row in result.Comparison)
             AddRunMode(modes, row.RunMode);
 
+        if (result.HasValidatedProductionProvenance && modes.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Publishable production benchmark evidence requires an explicit run mode bound into the provenance sidecar or measured artifact.");
+        }
+
         string[] conflicting = modes
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Where(mode => !string.Equals(mode, expectedRunMode, StringComparison.OrdinalIgnoreCase))
@@ -805,6 +816,41 @@ public sealed partial class BenchmarkEvidenceCatalogService
         throw new InvalidOperationException(
             $"Publishable benchmark evidence declares embedded run mode(s) {string.Join(", ", conflicting.Select(mode => $"'{mode}'"))}, " +
             $"which conflict with requested run mode '{expectedRunMode}'.");
+    }
+
+    private static void ValidateBoundPublishIdentity(
+        BenchmarkRunResult result,
+        string comparisonId,
+        string runMode)
+    {
+        if (!result.HasValidatedProductionProvenance)
+            return;
+
+        string? boundRunMode = MetadataValue(
+            result.Metadata,
+            "benchmark.provenance.runMode");
+        if (string.IsNullOrWhiteSpace(boundRunMode))
+        {
+            throw new InvalidOperationException(
+                "Publishable production benchmark evidence requires a run mode bound into its provenance sidecar before measurement.");
+        }
+        if (!string.Equals(boundRunMode, runMode, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Publishable benchmark run mode '{runMode}' must exactly match the provenance-bound run mode '{boundRunMode}'.");
+        }
+
+        string? workloadId = MetadataValue(result.Metadata, "benchmark.workload.id");
+        if (string.IsNullOrWhiteSpace(workloadId))
+        {
+            throw new InvalidOperationException(
+                "Publishable production benchmark evidence requires metadata key 'benchmark.workload.id' to be bound before measurement.");
+        }
+        if (!string.Equals(workloadId, comparisonId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Publishable benchmark comparison ID '{comparisonId}' must exactly match the provenance-bound workload ID '{workloadId}'.");
+        }
     }
 
     private static void AddRunMode(ICollection<string> modes, string? value)

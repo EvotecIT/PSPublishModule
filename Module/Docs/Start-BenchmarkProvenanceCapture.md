@@ -11,7 +11,7 @@ Captures clean source state before an external benchmark writes into a fresh art
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Start-BenchmarkProvenanceCapture -SourceRoot <string> -ArtifactRoot <string> [<CommonParameters>]
+Start-BenchmarkProvenanceCapture -SourceRoot <string> -ArtifactRoot <string> [-Metadata <hashtable>] [-RunMode <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -21,7 +21,7 @@ Captures clean source state before an external benchmark writes into a fresh art
 
 ### EXAMPLE 1
 ```powershell
-$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts
+$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts -Metadata @{ 'benchmark.workload.id' = 'tabular-65k-v1' } -RunMode full
 ```
 
 
@@ -37,6 +37,38 @@ Aliases: None
 Possible values:
 
 Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Metadata
+Optional workload metadata to bind before measurement. Publishable evidence requires benchmark.workload.id.
+
+```yaml
+Type: Hashtable
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RunMode
+Optional for diagnostic captures; publishable evidence requires a run mode bound before measurement.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False

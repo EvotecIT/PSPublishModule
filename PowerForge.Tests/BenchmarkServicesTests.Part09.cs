@@ -400,7 +400,19 @@ public sealed partial class BenchmarkServicesTests
 
         var service = new BenchmarkArtifactProvenanceService();
         BenchmarkProvenanceCaptureSession capture =
-            service.Start(sourceRoot, artifactRoot);
+            service.Start(
+                sourceRoot,
+                artifactRoot,
+                new Dictionary<string, string>
+                {
+                    ["benchmark.workload.id"] = "markpflug-65k-xlsx-net10.0",
+                    ["benchmark.workload.framework"] = "net10.0"
+                },
+                runMode: "Full");
+        IDictionary<string, string> immutableMetadata =
+            Assert.IsAssignableFrom<IDictionary<string, string>>(capture.Metadata);
+        Assert.Throws<NotSupportedException>(() =>
+            immutableMetadata["benchmark.workload.id"] = "changed-after-start");
         string reportPath = Path.Combine(artifactRoot, "Case-report-full.json");
         File.WriteAllText(reportPath, BenchmarkDotNetReport("Windows"));
         string sidecarPath = service.Complete(capture);
@@ -412,7 +424,53 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(capture.SourceCommit, imported.Metadata["gitSha"]);
         Assert.Equal("true", imported.Metadata["gitWorktreeClean"]);
         Assert.Equal("sidecar", imported.Metadata["benchmark.provenance.source"]);
+        Assert.Equal("markpflug-65k-xlsx-net10.0", imported.Metadata["benchmark.workload.id"]);
+        Assert.Equal("net10.0", imported.Metadata["benchmark.workload.framework"]);
+        Assert.Equal("full", imported.Metadata["runMode"]);
+        Assert.Equal("full", imported.Metadata["benchmark.provenance.runMode"]);
+        Assert.All(imported.Samples, sample => Assert.Equal("full", sample.RunMode));
+        Assert.All(imported.Summary, row => Assert.Equal("full", row.RunMode));
+        Assert.True(BenchmarkResultImporter.HasUnchangedValidatedProductionMetadata(imported));
+        Assert.Equal(
+            imported.ValidatedProductionContentSha256,
+            BenchmarkResultImporter.ComputeValidatedProductionContentSha256(imported));
         Assert.Equal(capture.StartedUtc, imported.StartedUtc);
+
+        BenchmarkEvidenceCatalog catalog = new BenchmarkEvidenceCatalogService().Update(
+            null,
+            imported,
+            "markpflug-65k-xlsx-net10.0",
+            "windows.json",
+            "full",
+            publish: true);
+
+        BenchmarkEvidenceEntry entry = Assert.Single(catalog.Entries);
+        Assert.True(entry.Publish);
+        Assert.Equal(capture.SourceCommit, entry.Compatibility["gitSha"]);
+    }
+
+    [Fact]
+    public void BenchmarkProvenanceCapture_RejectsCaptureOwnedMetadata()
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        string artifactRoot = Path.Combine(root, "artifacts");
+        Directory.CreateDirectory(sourceRoot);
+        RunGit(sourceRoot, "init");
+        RunGit(sourceRoot, "config user.email benchmark@example.test");
+        RunGit(sourceRoot, "config user.name Benchmark");
+        File.WriteAllText(Path.Combine(sourceRoot, "source.txt"), "measured");
+        RunGit(sourceRoot, "add source.txt");
+        RunGit(sourceRoot, "commit -m measured");
+
+        ArgumentException exception = Assert.Throws<ArgumentException>(() =>
+            new BenchmarkArtifactProvenanceService().Start(
+                sourceRoot,
+                artifactRoot,
+                new Dictionary<string, string> { ["gitSha"] = new string('a', 40) },
+                runMode: "full"));
+
+        Assert.Contains("owned by the capture service", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

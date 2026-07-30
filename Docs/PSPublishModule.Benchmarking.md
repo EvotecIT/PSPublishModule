@@ -303,9 +303,17 @@ number. Import each run, attach exact workload provenance, and update the shared
 catalog:
 
 ```powershell
+$metadata = @{
+    'benchmark.workload.id' = 'markpflug-65k-sales-v1'
+    'benchmark.fixture.csv' = 'AC959F43...'
+    'benchmark.package.officeimo' = '3.0.4'
+    'benchmark.package.sylvan' = '0.5.7'
+}
 $capture = Start-BenchmarkProvenanceCapture `
     -SourceRoot . `
-    -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts
+    -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts `
+    -Metadata $metadata `
+    -RunMode full
 
 dotnet run -c Release --project .\Benchmarks -- `
     --artifacts .\Build\BenchmarkDotNet.Artifacts
@@ -316,11 +324,6 @@ $result = Import-BenchmarkResult `
     -Path .\Build\BenchmarkDotNet.Artifacts `
     -Suite tabular-65k
 
-$result.Metadata['benchmark.workload.id'] = 'markpflug-65k-sales-v1'
-$result.Metadata['benchmark.fixture.csv'] = 'AC959F43...'
-$result.Metadata['benchmark.package.officeimo'] = '3.0.4'
-$result.Metadata['benchmark.package.sylvan'] = '0.5.7'
-
 Update-BenchmarkEvidenceCatalog `
     -InputObject $result `
     -Path .\Website\static\data\benchmarks\tabular\index.json `
@@ -330,6 +333,15 @@ Update-BenchmarkEvidenceCatalog `
     -ExpectedPlatform windows,linux,macos `
     -Publish
 ```
+
+Declare workload identity, fixture hashes, package versions, and run mode when
+starting the capture. PowerForge stores those declarations in the sidecar and
+applies them before sealing the imported result. Changing measurements or
+provenance-bound metadata after import is rejected for publishable evidence.
+Publishing also requires the sidecar-bound `benchmark.workload.id` to exactly
+match the catalog comparison ID and the sidecar-bound run mode to exactly match
+the requested lane. Diagnostic captures may omit those declarations, but they
+cannot later be relabeled as public Full evidence.
 
 Directory imports reject reports that identify more than one operating system.
 External imports are publishable only when their fresh artifact directory has a

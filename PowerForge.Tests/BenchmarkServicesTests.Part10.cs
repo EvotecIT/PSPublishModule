@@ -240,7 +240,7 @@ public sealed partial class BenchmarkServicesTests
     public void EvidenceCatalog_RejectsMeasurementsMutatedAfterProvenanceValidation()
     {
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
-        result.Metadata["importedUtc"] = DateTimeOffset.UtcNow.ToString("O");
+        BindProductionIdentity(result);
         BenchmarkResultImporter.CaptureValidatedProductionState(result);
         result.Summary[0].MedianMs = 20;
 
@@ -260,7 +260,7 @@ public sealed partial class BenchmarkServicesTests
     public void EvidenceCatalog_AllowsMetadataEnrichmentAfterProvenanceValidation()
     {
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
-        result.Metadata["importedUtc"] = DateTimeOffset.UtcNow.ToString("O");
+        BindProductionIdentity(result);
         BenchmarkResultImporter.CaptureValidatedProductionState(result);
         result.Metadata["benchmark.note"] = "enriched after import";
 
@@ -277,34 +277,24 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
-    public void EvidenceCatalog_AllowsNewCompatibilityMetadataAfterProvenanceValidation()
+    public void EvidenceCatalog_RejectsNewCompatibilityMetadataAfterProvenanceValidation()
     {
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
-        result.Metadata["importedUtc"] = DateTimeOffset.UtcNow.ToString("O");
+        BindProductionIdentity(result);
         BenchmarkResultImporter.CaptureValidatedProductionState(result);
         result.Metadata["benchmark.fixture.datasetSha256"] = new string('a', 64);
         result.Metadata["benchmark.package.AdditionalEngine"] = "1.2.3";
         result.Metadata["benchmark.workload.projectedColumns"] = "8";
-        Assert.DoesNotContain(result.ValidatedProductionMetadata, item =>
-            !result.Metadata.TryGetValue(item.Key, out string? value) ||
-            !string.Equals(item.Value, value, StringComparison.Ordinal));
-        Assert.Equal(
-            result.ValidatedProductionContentSha256,
-            BenchmarkResultImporter.ComputeValidatedProductionContentSha256(result));
-
-        BenchmarkEvidenceCatalog catalog =
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
             new BenchmarkEvidenceCatalogService().Update(
                 null,
                 result,
                 "comparison-a",
                 "windows.json",
                 "full",
-                publish: true);
+                publish: true));
 
-        BenchmarkEvidenceEntry entry = Assert.Single(catalog.Entries);
-        Assert.Equal(
-            new string('a', 64),
-            entry.Compatibility["benchmark.fixture.datasetSha256"]);
+        Assert.Contains("changed after", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -315,7 +305,7 @@ public sealed partial class BenchmarkServicesTests
         string metadataKey)
     {
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
-        result.Metadata["importedUtc"] = DateTimeOffset.UtcNow.ToString("O");
+        BindProductionIdentity(result);
         result.Metadata["gitSha"] = new string('a', 40);
         result.Metadata["gitWorktreeClean"] = "true";
         result.Metadata["benchmark.provenance.sidecar.sha256"] = new string('b', 64);
@@ -342,7 +332,7 @@ public sealed partial class BenchmarkServicesTests
     public void EvidenceCatalog_RejectsTimestampMutatedAfterProvenanceValidation()
     {
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
-        result.Metadata["importedUtc"] = DateTimeOffset.UtcNow.ToString("O");
+        BindProductionIdentity(result);
         BenchmarkResultImporter.CaptureValidatedProductionState(result);
         result.FinishedUtc = result.FinishedUtc.AddMinutes(1);
 
@@ -356,6 +346,78 @@ public sealed partial class BenchmarkServicesTests
                 publish: true));
 
         Assert.Contains("changed after", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RejectsProductionEvidenceWithoutSidecarBoundRunMode()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Metadata["importedUtc"] = DateTimeOffset.UtcNow.ToString("O");
+        result.Metadata["benchmark.workload.id"] = "comparison-a";
+        result.Metadata["runMode"] = "full";
+        BenchmarkResultImporter.CaptureValidatedProductionState(result);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "windows.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("provenance sidecar", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RejectsProductionEvidenceWithoutBoundWorkloadId()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Metadata["importedUtc"] = DateTimeOffset.UtcNow.ToString("O");
+        result.Metadata["runMode"] = "full";
+        result.Metadata["benchmark.provenance.runMode"] = "full";
+        BenchmarkResultImporter.CaptureValidatedProductionState(result);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "windows.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("benchmark.workload.id", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RejectsComparisonIdThatDiffersFromBoundWorkloadId()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        BindProductionIdentity(result);
+        BenchmarkResultImporter.CaptureValidatedProductionState(result);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-b",
+                "windows.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("must exactly match", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void BindProductionIdentity(
+        BenchmarkRunResult result,
+        string comparisonId = "comparison-a",
+        string runMode = "full")
+    {
+        result.Metadata["importedUtc"] = DateTimeOffset.UtcNow.ToString("O");
+        result.Metadata["benchmark.workload.id"] = comparisonId;
+        result.Metadata["runMode"] = runMode;
+        result.Metadata["benchmark.provenance.runMode"] = runMode;
     }
 
     [Fact]
