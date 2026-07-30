@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 
 namespace PowerForge;
 
@@ -237,9 +238,9 @@ public sealed partial class BenchmarkEvidenceCatalogService
         }
 
         string runMode = entry.RunMode.Trim().ToLowerInvariant();
-        ValidateEmbeddedRunModes(result, runMode);
         if (entry.Publish)
         {
+            ValidateEmbeddedRunModes(result, runMode);
             if (!string.Equals(runMode, "full", StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
@@ -251,6 +252,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             // That transient sidecar state is intentionally not serialized into the normalized
             // artifact, so consolidation revalidates every durable publishability invariant.
             ValidatePublishableResult(result, requireValidatedImportProvenance: false);
+            ValidateBoundPublishIdentity(result, entry.ComparisonId, runMode);
         }
     }
 
@@ -403,7 +405,12 @@ public sealed partial class BenchmarkEvidenceCatalogService
 
     private static string ExtractResultPathFileSegment(string resultPath)
     {
-        string portablePath = resultPath.Replace('\\', '/').TrimEnd('/');
+        string portablePath = resultPath.Replace('\\', '/');
+        if (portablePath.EndsWith("/", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Benchmark result path '{resultPath}' must identify a file and cannot end in a directory separator.");
+        }
         if (portablePath.IndexOfAny(['?', '#']) >= 0)
         {
             throw new InvalidOperationException(
@@ -551,6 +558,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
     {
         if (string.IsNullOrWhiteSpace(fileName) ||
             fileName.Length > 255 ||
+            Encoding.UTF8.GetByteCount(fileName) > 255 ||
             fileName is "." or ".." ||
             fileName.EndsWith(".", StringComparison.Ordinal) ||
             fileName.EndsWith(" ", StringComparison.Ordinal) ||

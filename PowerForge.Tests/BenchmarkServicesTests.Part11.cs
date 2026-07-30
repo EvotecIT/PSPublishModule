@@ -604,6 +604,144 @@ public sealed partial class BenchmarkServicesTests
         Assert.Contains("result path", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("https://benchmarks.example/data/")]
+    [InlineData("results/")]
+    [InlineData("results\\")]
+    public void EvidenceCatalog_MergeFilesRejectsResultPathsEndingInSeparator(
+        string resultPath)
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        Directory.CreateDirectory(sourceRoot);
+        var service = new BenchmarkEvidenceCatalogService();
+        string catalogPath = Path.Combine(sourceRoot, "index.json");
+        service.UpdateFile(
+            catalogPath,
+            Result("Windows", "fixture-a", 10),
+            "comparison-a",
+            resultPath,
+            "full",
+            publish: true,
+            resultArtifactPath: Path.Combine(sourceRoot, "artifact.json"));
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            service.MergeFiles(
+                Path.Combine(root, "merged", "index.json"),
+                [catalogPath]));
+
+        Assert.Contains("directory separator", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_MergeFilesRejectsArtifactNamesOverPortableUtf8ByteLimit()
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        Directory.CreateDirectory(sourceRoot);
+        var service = new BenchmarkEvidenceCatalogService();
+        string catalogPath = Path.Combine(sourceRoot, "index.json");
+        string longName = new string('界', 70) + ".json";
+        service.UpdateFile(
+            catalogPath,
+            Result("Windows", "fixture-a", 10),
+            "comparison-a",
+            "https://benchmarks.example/data/" + longName,
+            "full",
+            publish: true,
+            resultArtifactPath: Path.Combine(sourceRoot, "artifact.json"));
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            service.MergeFiles(
+                Path.Combine(root, "merged", "index.json"),
+                [catalogPath]));
+
+        Assert.Contains("portable", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_UpdateFilePersistsFallbackCompletionTimestampForMerge()
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        Directory.CreateDirectory(sourceRoot);
+        var service = new BenchmarkEvidenceCatalogService();
+        string catalogPath = Path.Combine(sourceRoot, "index.json");
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.FinishedUtc = default;
+        service.UpdateFile(
+            catalogPath,
+            result,
+            "comparison-a",
+            "windows.json",
+            "full",
+            publish: true);
+
+        BenchmarkEvidenceCatalog merged = service.MergeFiles(
+            Path.Combine(root, "merged", "index.json"),
+            [catalogPath]);
+
+        Assert.NotEqual(default, result.FinishedUtc);
+        Assert.Equal(result.FinishedUtc, Assert.Single(merged.Entries).GeneratedUtc);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_MergeFilesKeepsDiagnosticRunModeValidationConditional()
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        Directory.CreateDirectory(sourceRoot);
+        var service = new BenchmarkEvidenceCatalogService();
+        string catalogPath = Path.Combine(sourceRoot, "index.json");
+        service.UpdateFile(
+            catalogPath,
+            Result("Windows", "fixture-a", 10),
+            "comparison-a",
+            "windows.json",
+            "quick",
+            publish: false);
+
+        BenchmarkEvidenceCatalog merged = service.MergeFiles(
+            Path.Combine(root, "merged", "index.json"),
+            [catalogPath]);
+
+        BenchmarkEvidenceEntry entry = Assert.Single(merged.Entries);
+        Assert.False(entry.Publish);
+        Assert.Equal("quick", entry.RunMode);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_MergeFilesRevalidatesDurableSidecarWorkloadIdentity()
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        Directory.CreateDirectory(sourceRoot);
+        var service = new BenchmarkEvidenceCatalogService();
+        string catalogPath = Path.Combine(sourceRoot, "index.json");
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Metadata["benchmark.provenance.source"] = "sidecar";
+        result.Metadata["benchmark.provenance.runMode"] = "full";
+        result.Metadata["benchmark.workload.id"] = "comparison-a";
+        service.UpdateFile(
+            catalogPath,
+            result,
+            "comparison-a",
+            "windows.json",
+            "full",
+            publish: true);
+        BenchmarkEvidenceCatalog catalog =
+            BenchmarkJson.Read<BenchmarkEvidenceCatalog>(catalogPath);
+        catalog.Entries[0].ComparisonId = "comparison-b";
+        BenchmarkJson.Write(catalogPath, catalog);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            service.MergeFiles(
+                Path.Combine(root, "merged", "index.json"),
+                [catalogPath]));
+
+        Assert.Contains("must exactly match", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void EvidenceCatalog_MergeCmdletLeavesExpectedPlatformsOptional()
     {

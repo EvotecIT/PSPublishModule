@@ -133,6 +133,16 @@ public sealed partial class BenchmarkEvidenceCatalogService
         string? resultArtifactPath = null)
     {
         if (string.IsNullOrWhiteSpace(catalogPath)) throw new ArgumentException("Catalog path is required.", nameof(catalogPath));
+        if (result is null) throw new ArgumentNullException(nameof(result));
+        if (result.FinishedUtc == default)
+        {
+            if (result.HasValidatedProductionProvenance)
+            {
+                throw new InvalidOperationException(
+                    "Validated production benchmark evidence must preserve its sidecar-bound completion timestamp.");
+            }
+            result.FinishedUtc = ResolveGeneratedUtc(result);
+        }
         string fullPath = BenchmarkJson.ResolveWritePath(catalogPath);
         using var fileLease = BenchmarkFileUpdateLock.Acquire(fullPath);
         var catalog = File.Exists(fullPath)
@@ -823,7 +833,13 @@ public sealed partial class BenchmarkEvidenceCatalogService
         string comparisonId,
         string runMode)
     {
-        if (!result.HasValidatedProductionProvenance)
+        bool sidecarBound =
+            result.HasValidatedProductionProvenance ||
+            string.Equals(
+                MetadataValue(result.Metadata, "benchmark.provenance.source"),
+                "sidecar",
+                StringComparison.OrdinalIgnoreCase);
+        if (!sidecarBound)
             return;
 
         string? boundRunMode = MetadataValue(
