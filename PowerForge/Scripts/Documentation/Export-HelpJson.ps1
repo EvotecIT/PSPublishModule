@@ -110,6 +110,18 @@ function ConvertToPowerShellDefaultValue([object]$value) {
     $decimalText = $value.ToString([System.Globalization.CultureInfo]::InvariantCulture)
     return ("[System.Decimal]::Parse('" + $decimalText + "', [System.Globalization.CultureInfo]::InvariantCulture)")
   }
+  if ($value -is [datetime]) {
+    $dateText = $value.ToString('O', [System.Globalization.CultureInfo]::InvariantCulture)
+    return ("[System.DateTime]::ParseExact('" + $dateText + "', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)")
+  }
+  if ($value -is [datetimeoffset]) {
+    $dateText = $value.ToString('O', [System.Globalization.CultureInfo]::InvariantCulture)
+    return ("[System.DateTimeOffset]::ParseExact('" + $dateText + "', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)")
+  }
+  if ($value -is [timespan]) {
+    $timeText = $value.ToString('c', [System.Globalization.CultureInfo]::InvariantCulture)
+    return ("[System.TimeSpan]::ParseExact('" + $timeText + "', 'c', [System.Globalization.CultureInfo]::InvariantCulture)")
+  }
   if ($value -is [scriptblock]) {
     $scriptText = ConvertToPowerShellDefaultValue ([string]$value.ToString())
     return ('[scriptblock]::Create(' + $scriptText + ')')

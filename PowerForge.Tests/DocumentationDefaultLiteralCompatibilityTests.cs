@@ -39,6 +39,24 @@ function Get-DefaultLiteralFixture {
         $decimalAttributes.Add($decimalDefault)
         $parameters.Add('PreciseDecimal', [System.Management.Automation.RuntimeDefinedParameter]::new('PreciseDecimal', [decimal], $decimalAttributes))
 
+        $dateTimeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $dateTimeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $dateTimeDefault.Value = [datetime]::ParseExact('2026-07-30T12:34:56.1234567Z', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)
+        $dateTimeAttributes.Add($dateTimeDefault)
+        $parameters.Add('DateTime', [System.Management.Automation.RuntimeDefinedParameter]::new('DateTime', [datetime], $dateTimeAttributes))
+
+        $dateTimeOffsetAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $dateTimeOffsetDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $dateTimeOffsetDefault.Value = [datetimeoffset]::ParseExact('2026-07-30T12:34:56.1234567+05:30', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)
+        $dateTimeOffsetAttributes.Add($dateTimeOffsetDefault)
+        $parameters.Add('DateTimeOffset', [System.Management.Automation.RuntimeDefinedParameter]::new('DateTimeOffset', [datetimeoffset], $dateTimeOffsetAttributes))
+
+        $timeSpanAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $timeSpanDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $timeSpanDefault.Value = [timespan]::ParseExact('1.02:03:04.5678900', 'c', [System.Globalization.CultureInfo]::InvariantCulture)
+        $timeSpanAttributes.Add($timeSpanDefault)
+        $parameters.Add('TimeSpan', [System.Management.Automation.RuntimeDefinedParameter]::new('TimeSpan', [timespan], $timeSpanAttributes))
+
         $scriptAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $scriptDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $scriptDefault.Value = [scriptblock]::Create("1+2`n" + '```')
@@ -70,6 +88,15 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 "[System.Decimal]::Parse('0.1234567890123456789012345678', [System.Globalization.CultureInfo]::InvariantCulture)",
                 Default("PreciseDecimal"));
+            Assert.Equal(
+                "[System.DateTime]::ParseExact('2026-07-30T12:34:56.1234567Z', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",
+                Default("DateTime"));
+            Assert.Equal(
+                "[System.DateTimeOffset]::ParseExact('2026-07-30T12:34:56.1234567+05:30', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",
+                Default("DateTimeOffset"));
+            Assert.Equal(
+                "[System.TimeSpan]::ParseExact('1.02:03:04.5678900', 'c', [System.Globalization.CultureInfo]::InvariantCulture)",
+                Default("TimeSpan"));
             Assert.Equal(
                 "[scriptblock]::Create((-join @('1+2', ([char]10), '```')))",
                 Default("Script"));
