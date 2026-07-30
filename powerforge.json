@@ -66,6 +66,18 @@
       }
     },
     {
+      "Type": "Information",
+      "Configuration": {
+        "IncludeRoot": [
+          "*.psm1",
+          "*.psd1",
+          "*.Libraries.ps1",
+          "License*",
+          "PowerForge.ReleaseProvenance.json"
+        ]
+      }
+    },
+    {
       "Kind": "ApprovedModule",
       "Type": "ApprovedModule",
       "Configuration": {

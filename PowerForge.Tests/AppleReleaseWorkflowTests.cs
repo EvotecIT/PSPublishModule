@@ -5,7 +5,7 @@ using YamlDotNet.Serialization;
 
 namespace PowerForge.Tests;
 
-public sealed class AppleReleaseWorkflowTests
+public sealed partial class AppleReleaseWorkflowTests
 {
     [Fact]
     public void SetupActionRequiresExactVersionAndChecksum()
@@ -500,7 +500,8 @@ public sealed class AppleReleaseWorkflowTests
                      "powerforge-apple-screenshot-approve.yml",
                      "powerforge-apple-monitor.yml",
                      "powerforge-apple-advance.yml",
-                     "powerforge-apple-approval.yml"
+                     "powerforge-apple-approval.yml",
+                     "pspublishmodule-public-release.yml"
                  })
         {
             var workflow = Read(root, ".github", "workflows", workflowName);
@@ -522,7 +523,8 @@ public sealed class AppleReleaseWorkflowTests
                      "powerforge-apple-screenshot-approve.yml",
                      "powerforge-apple-monitor.yml",
                      "powerforge-apple-advance.yml",
-                     "powerforge-apple-approval.yml"
+                     "powerforge-apple-approval.yml",
+                     "pspublishmodule-public-release.yml"
                  })
         {
             var workflow = Read(root, ".github", "workflows", workflowName);

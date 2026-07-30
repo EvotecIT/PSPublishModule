@@ -389,7 +389,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void UnifiedGitHubRelease_PublishesAllZippedToolFamiliesToOneRelease()
+    public void FullUnifiedGitHubRelease_PublishesAllZippedToolFamiliesToOneRelease()
     {
         var root = CreateSandbox();
         try
@@ -398,12 +398,14 @@ public sealed partial class PowerForgeReleaseServiceTests
             var powerForgeWebZip = Path.Combine(root, "PowerForgeWeb-1.0.7-osx-arm64.zip");
             var powerForgeExecutable = Path.Combine(root, "PowerForge");
             var powerForgeWebExecutable = Path.Combine(root, "PowerForgeWeb");
+            var recoveredPackageZip = Path.Combine(root, "PowerForge.1.0.7.zip");
             File.WriteAllText(powerForgeZip, "zip");
             File.WriteAllText(powerForgeWebZip, "zip");
             File.WriteAllText(powerForgeExecutable, "exe");
             File.WriteAllText(powerForgeWebExecutable, "exe");
 
             var publishCalls = new List<GitHubReleasePublishRequest>();
+            var publishedNuGetRecoveryCalls = 0;
             var service = new PowerForgeReleaseService(
                 new NullLogger(),
                 executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
@@ -438,6 +440,15 @@ public sealed partial class PowerForgeReleaseServiceTests
                         ReusedExistingRelease = true,
                         HtmlUrl = "https://github.com/EvotecIT/PSPublishModule/releases/tag/v1.0.7"
                     };
+                },
+                restorePublishedNuGetAssets: (_, version, paths, _) =>
+                {
+                    publishedNuGetRecoveryCalls++;
+                    Assert.Equal("1.0.7", version);
+                    Assert.Equal(
+                        new[] { powerForgeZip, powerForgeWebZip }.OrderBy(static path => path),
+                        paths.OrderBy(static path => path));
+                    return ["PowerForge.1.0.7.nupkg", recoveredPackageZip];
                 });
 
             var result = service.Execute(
@@ -453,24 +464,120 @@ public sealed partial class PowerForgeReleaseServiceTests
                         VersionSource = PowerForgeReleaseVersionSource.Assets,
                         Owner = "EvotecIT",
                         Repository = "PSPublishModule",
-                        Token = "token"
+                        Token = "token",
+                        Commitish = "0123456789abcdef0123456789abcdef01234567",
+                        ReuseExistingRelease = true,
+                        RequireExpectedExistingRelease = true,
+                        ExpectedExistingReleaseId = 42,
+                        RequirePublishedStableRelease = true,
+                        ReplaceExistingAssets = true,
+                        RequirePublishedNuGetAssets = true,
+                        RequirePublishedModuleAssets = true,
+                        PublishedModuleSource = "https://www.powershellgallery.com/api/v2"
                     }
                 },
                 new PowerForgeReleaseRequest
                 {
-                    ConfigPath = Path.Combine(root, "release.json"),
-                    ToolsOnly = true
+                    ConfigPath = Path.Combine(root, "release.json")
                 });
 
             Assert.True(result.Success);
+            Assert.Equal(1, publishedNuGetRecoveryCalls);
+            Assert.Equal(
+                "PowerForge.1.0.7.nupkg",
+                Assert.Single(result.UnifiedGitHubRelease!.RecoveredPublishedNuGetAssets));
+            Assert.Equal(
+                recoveredPackageZip,
+                Assert.Single(result.UnifiedGitHubRelease.RecoveredPublishedPackageReleaseZips));
             Assert.Empty(result.ToolGitHubReleases);
             var publish = Assert.Single(publishCalls);
             Assert.Equal("v1.0.7", publish.TagName);
+            Assert.Equal("0123456789abcdef0123456789abcdef01234567", publish.Commitish);
+            Assert.Equal("0123456789abcdef0123456789abcdef01234567", publish.ExpectedTagCommitSha);
+            Assert.True(publish.ReuseExistingReleaseOnConflict);
+            Assert.True(publish.RequireExpectedExistingRelease);
+            Assert.Equal(42, publish.ExpectedExistingReleaseId);
+            Assert.True(publish.RequirePublishedStableRelease);
+            Assert.True(publish.ReplaceExistingAssets);
             Assert.Equal(
                 new[] { powerForgeZip, powerForgeWebZip }.OrderBy(static path => path),
                 publish.AssetFilePaths.OrderBy(static path => path));
             Assert.DoesNotContain(powerForgeExecutable, publish.AssetFilePaths);
             Assert.DoesNotContain(powerForgeWebExecutable, publish.AssetFilePaths);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void PublishBuiltReleaseOutputs_PropagatesCancellationFromPublishedAssetRecovery()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var packagePath = Path.Combine(root, "PowerForge.1.0.7.nupkg");
+            File.WriteAllText(packagePath, "rebuilt package");
+            using var cancellation = new CancellationTokenSource();
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages must not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools must not plan."),
+                runTools: _ => throw new InvalidOperationException("Tools must not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub must not run after cancellation."),
+                restorePublishedNuGetAssets: (_, _, _, cancellationToken) =>
+                {
+                    cancellation.Cancel();
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return Array.Empty<string>();
+                });
+            var built = new PowerForgeReleaseResult
+            {
+                Success = true,
+                ReleaseAssets = [packagePath],
+                ReleaseAssetEntries =
+                [
+                    new PowerForgeReleaseAssetEntry
+                    {
+                        Path = packagePath,
+                        Version = "1.0.7",
+                        Category = PowerForgeReleaseAssetCategory.Package
+                    }
+                ]
+            };
+
+            Assert.Throws<OperationCanceledException>(() => service.PublishBuiltReleaseOutputs(
+                new PowerForgeReleaseSpec
+                {
+                    Packages = new ProjectBuildConfiguration
+                    {
+                        PublishSource = "https://packages.example/v3/index.json"
+                    },
+                    GitHub = new PowerForgeReleaseGitHubOptions
+                    {
+                        Publish = true,
+                        VersionSource = PowerForgeReleaseVersionSource.Assets,
+                        Owner = "EvotecIT",
+                        Repository = "PSPublishModule",
+                        Token = "token",
+                        Commitish = "0123456789abcdef0123456789abcdef01234567",
+                        ReuseExistingRelease = true,
+                        RequireExpectedExistingRelease = true,
+                        ExpectedExistingReleaseId = 42,
+                        RequirePublishedStableRelease = true,
+                        ReplaceExistingAssets = true,
+                        RequirePublishedNuGetAssets = true,
+                        RequirePublishedModuleAssets = true,
+                        PublishedModuleSource = "https://www.powershellgallery.com/api/v2"
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    CancellationToken = cancellation.Token
+                },
+                built));
         }
         finally
         {

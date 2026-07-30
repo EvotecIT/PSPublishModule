@@ -6,6 +6,68 @@ namespace PowerForge.Tests;
 
 public sealed class ManifestEditorStringArrayTests
 {
+    [Theory]
+    [InlineData("\r\n")]
+    [InlineData("\n")]
+    public void ManifestEditsPreserveExistingLineEndings(string newLine)
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var path = Path.Combine(root.FullName, "LineEndings.psd1");
+            var source = string.Join(newLine, new[]
+            {
+                "@{",
+                "    RootModule       = 'LineEndings.psm1'",
+                "    ModuleVersion    = '1.0.0'",
+                "    ScriptsToProcess = @('Initialize.ps1')",
+                "}"
+            }) + newLine;
+            File.WriteAllText(path, source, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+            Assert.True(ManifestEditor.TrySetTopLevelModuleVersion(path, "1.0.1"));
+            Assert.True(ManifestEditor.TryRemoveTopLevelKey(path, "ScriptsToProcess"));
+            Assert.True(ManifestEditor.TrySetTopLevelStringArray(path, "ScriptsToProcess", Array.Empty<string>()));
+
+            var updated = File.ReadAllText(path);
+            if (newLine == "\r\n")
+                Assert.DoesNotContain("\n", updated.Replace("\r\n", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
+            else
+                Assert.DoesNotContain("\r", updated, StringComparison.Ordinal);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ManifestEditPreservesMixedLineEndingsOutsideTargetedValue()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var path = Path.Combine(root.FullName, "MixedLineEndings.psd1");
+            const string source = "@{\r\n" +
+                                  "    ModuleVersion = '1.0.0'\n" +
+                                  "    Description = @'\r\n" +
+                                  "first line\n" +
+                                  "second line\r\n" +
+                                  "'@\n" +
+                                  "}\r\n";
+            File.WriteAllText(path, source, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+            Assert.True(ManifestEditor.TrySetTopLevelModuleVersion(path, "1.0.1"));
+
+            var updated = File.ReadAllText(path);
+            Assert.Equal(source.Replace("1.0.0", "1.0.1", StringComparison.Ordinal), updated);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     [Fact]
     public void TryGetTopLevelStringArray_ReadsAtSyntaxArrays()
     {

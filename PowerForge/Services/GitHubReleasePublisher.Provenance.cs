@@ -7,6 +7,42 @@ using System.Threading;
 namespace PowerForge;
 
 public sealed partial class GitHubReleasePublisher {
+    internal static void ValidateExpectedExistingRelease(
+        string tagName,
+        bool requireExpectedExistingRelease,
+        long? expectedExistingReleaseId,
+        long actualExistingReleaseId) {
+        if (!requireExpectedExistingRelease) return;
+        if (expectedExistingReleaseId.HasValue && expectedExistingReleaseId.Value == actualExistingReleaseId) return;
+
+        throw new InvalidOperationException(
+            $"GitHub release for tag '{tagName}' already exists, but release id {actualExistingReleaseId} was not preflight-verified for reuse.");
+    }
+
+    private static void ValidatePublishedStableRelease(
+        string tagName,
+        bool requirePublishedStableRelease,
+        GitHubReleaseApiResponse release)
+        => ValidatePublishedStableRelease(
+            tagName,
+            requirePublishedStableRelease,
+            release.IsDraft,
+            release.IsPreRelease,
+            release.PublishedAt);
+
+    internal static void ValidatePublishedStableRelease(
+        string tagName,
+        bool requirePublishedStableRelease,
+        bool isDraft,
+        bool isPreRelease,
+        string? publishedAt) {
+        if (!requirePublishedStableRelease) return;
+        if (!isDraft && !isPreRelease && !string.IsNullOrWhiteSpace(publishedAt)) return;
+
+        throw new InvalidOperationException(
+            $"GitHub release for tag '{tagName}' is not a published stable release and cannot be reused for asset mutation.");
+    }
+
     private void ValidateReleaseBeforeAssetMutation(
         string owner,
         string repo,
@@ -16,8 +52,11 @@ public sealed partial class GitHubReleasePublisher {
         string tagName,
         string? expectedReleaseBodyMarker,
         string? expectedTagCommitSha,
+        bool requirePublishedStableRelease,
         CancellationToken cancellationToken) {
-        if (string.IsNullOrWhiteSpace(expectedReleaseBodyMarker) && string.IsNullOrWhiteSpace(expectedTagCommitSha)) return;
+        if (string.IsNullOrWhiteSpace(expectedReleaseBodyMarker) &&
+            string.IsNullOrWhiteSpace(expectedTagCommitSha) &&
+            !requirePublishedStableRelease) return;
 
         var currentRelease = GetReleaseByTag(owner, repo, token, apiBaseUrl, tagName, reusedExistingRelease: true, cancellationToken);
         var currentTagCommitSha = string.IsNullOrWhiteSpace(expectedTagCommitSha)
@@ -31,6 +70,7 @@ public sealed partial class GitHubReleasePublisher {
             expectedReleaseBodyMarker,
             currentTagCommitSha,
             expectedTagCommitSha);
+        ValidatePublishedStableRelease(tagName, requirePublishedStableRelease, currentRelease);
         _logger.Info($"Revalidated GitHub release {releaseId} and tag '{tagName}' immediately before asset mutation.");
     }
 

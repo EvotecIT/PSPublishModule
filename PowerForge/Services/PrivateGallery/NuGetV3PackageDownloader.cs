@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net;
 using System.Text.Json;
 
 namespace PowerForge;
@@ -56,7 +57,9 @@ public sealed class NuGetV3PackageDownloader
         PrivateGalleryHttp.ApplyAuthentication(request, options.Token, options.AuthenticationKind);
         using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"NuGet package download failed ({(int)response.StatusCode} {response.ReasonPhrase}) for {packageId} {version}.");
+            throw new NuGetPackageDownloadException(
+                response.StatusCode,
+                $"NuGet package download failed ({(int)response.StatusCode} {response.ReasonPhrase}) for {packageId} {version}.");
 
         var destinationDirectory = Path.GetDirectoryName(Path.GetFullPath(destinationPath));
         if (!string.IsNullOrWhiteSpace(destinationDirectory))
@@ -125,4 +128,15 @@ public sealed class NuGetV3PackageDownloader
 
     private static string EnsureTrailingSlash(string value)
         => value.EndsWith("/", StringComparison.Ordinal) ? value : value + "/";
+}
+
+internal sealed class NuGetPackageDownloadException : InvalidOperationException
+{
+    internal NuGetPackageDownloadException(HttpStatusCode statusCode, string message)
+        : base(message)
+    {
+        StatusCode = statusCode;
+    }
+
+    internal HttpStatusCode StatusCode { get; }
 }

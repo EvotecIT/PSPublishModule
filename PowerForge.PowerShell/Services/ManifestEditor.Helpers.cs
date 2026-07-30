@@ -358,7 +358,7 @@ public static partial class ManifestEditor
         var insertText = indent + key + keyPadding + "= " + valueExpression + NewLine;
 
         var newContent = normalizedPrefix + insertText + content.Substring(closingPos);
-        File.WriteAllText(filePath, newContent, new UTF8Encoding(true));
+        WriteManifest(filePath, content, newContent);
         return true;
     }
 
@@ -395,7 +395,7 @@ public static partial class ManifestEditor
             var newContent = content.Remove(removeStart, removeEnd - removeStart);
             if (string.Equals(content, newContent, StringComparison.Ordinal)) return false;
 
-            File.WriteAllText(filePath, newContent, new UTF8Encoding(true));
+            WriteManifest(filePath, content, newContent);
             return true;
         }
 
