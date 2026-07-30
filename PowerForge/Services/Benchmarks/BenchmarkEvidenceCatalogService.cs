@@ -104,6 +104,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             .ThenBy(existing => existing.RunMode, StringComparer.OrdinalIgnoreCase)
             .ThenByDescending(existing => existing.GeneratedUtc)
             .ToArray();
+        ValidateDistinctPublishedResultPaths(entries);
 
         ApplyCompatibility(entries);
         catalog.Entries = entries;
@@ -230,7 +231,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         string? resultArtifactPath)
     {
         if (!string.IsNullOrWhiteSpace(resultArtifactPath))
-            return BenchmarkJson.ResolveWritePath(resultArtifactPath);
+            return BenchmarkJson.ResolveWritePath(resultArtifactPath!);
         if (Path.IsPathRooted(resultPath))
             return BenchmarkJson.ResolveWritePath(resultPath);
         if (Uri.TryCreate(resultPath, UriKind.Absolute, out Uri? uri))
@@ -493,10 +494,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
     private static void ValidatePublishableResult(BenchmarkRunResult result)
     {
         if (!string.IsNullOrWhiteSpace(MetadataValue(result.Metadata, "importedUtc")) &&
-            !string.Equals(
-                MetadataValue(result.Metadata, "benchmark.provenance.source"),
-                "sidecar",
-                StringComparison.OrdinalIgnoreCase))
+            !result.HasValidatedProductionProvenance)
         {
             throw new InvalidOperationException(
                 "Publishable imported benchmark evidence requires a production provenance sidecar captured around the benchmark run.");
@@ -524,6 +522,12 @@ public sealed partial class BenchmarkEvidenceCatalogService
         {
             throw new InvalidOperationException(
                 "Publishable benchmark evidence requires the measured runtime identity and benchmark runner identity.");
+        }
+        if (string.IsNullOrWhiteSpace(result.Environment.ProcessArchitecture) ||
+            string.IsNullOrWhiteSpace(result.Environment.ProcessorName))
+        {
+            throw new InvalidOperationException(
+                "Publishable benchmark evidence requires processArchitecture and processorName hardware identity.");
         }
 
         bool hasUnknownStatus =
@@ -583,6 +587,32 @@ public sealed partial class BenchmarkEvidenceCatalogService
         ValidateSuiteConsistency(result);
         ValidateSummariesMatchSamples(result);
         ValidateComparisonsMatchSummaries(result);
+    }
+
+    private static void ValidateDistinctPublishedResultPaths(
+        IReadOnlyCollection<BenchmarkEvidenceEntry> entries)
+    {
+        string[] duplicates = entries
+            .Where(entry => entry.Publish)
+            .GroupBy(entry => entry.ResultPath, StringComparer.Ordinal)
+            .Where(group => group
+                .Select(entry => string.Join(
+                    "\u001f",
+                    entry.ComparisonId,
+                    entry.Platform,
+                    entry.RunMode))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Skip(1)
+                .Any())
+            .Select(group => group.Key)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+        if (duplicates.Length == 0)
+            return;
+
+        throw new InvalidOperationException(
+            "Published benchmark lanes must use distinct result paths. Shared path(s): " +
+            string.Join(", ", duplicates.Select(path => $"'{path}'")) + ".");
     }
 
     private static void ValidateSuiteConsistency(BenchmarkRunResult result)

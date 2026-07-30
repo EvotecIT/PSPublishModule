@@ -9,6 +9,7 @@ public sealed class BenchmarkArtifactProvenanceService
 {
     /// <summary>Name of the provenance sidecar stored in a benchmark artifact root.</summary>
     public const string SidecarFileName = ".powerforge-benchmark-provenance.json";
+    private const string ArtifactRootReservationName = ".powerforge-artifact-root";
 
     /// <summary>
     /// Starts a provenance capture and reserves an empty artifact directory.
@@ -29,24 +30,39 @@ public sealed class BenchmarkArtifactProvenanceService
         string fullArtifactRoot = Path.GetFullPath(artifactRoot);
         if (!Directory.Exists(fullSourceRoot))
             throw new DirectoryNotFoundException($"Benchmark source root was not found: {fullSourceRoot}");
-        if (Directory.Exists(fullArtifactRoot) &&
-            Directory.EnumerateFileSystemEntries(fullArtifactRoot).Any())
-        {
-            throw new InvalidOperationException(
-                "Benchmark provenance capture requires an empty artifact directory so stale reports cannot be attributed to the current source.");
-        }
-
         GitSourceState state = CaptureGitState(fullSourceRoot);
         ValidateCleanSourceState(state, "before");
-        Directory.CreateDirectory(fullArtifactRoot);
-        return new BenchmarkProvenanceCaptureSession
+        ValidateArtifactRootLocation(fullSourceRoot, fullArtifactRoot);
+        string reservationTarget = Path.Combine(
+            fullArtifactRoot,
+            ArtifactRootReservationName);
+        IDisposable? artifactRootLease = null;
+        try
         {
-            SourceRoot = fullSourceRoot,
-            ArtifactRoot = fullArtifactRoot,
-            StartedUtc = DateTimeOffset.UtcNow,
-            SourceCommit = state.Commit,
-            SourceBranch = state.Branch
-        };
+            artifactRootLease = BenchmarkFileUpdateLock.Acquire(reservationTarget);
+            if (Directory.EnumerateFileSystemEntries(fullArtifactRoot)
+                .Any(path => !IsArtifactRootReservationLock(path, fullArtifactRoot)))
+            {
+                throw new InvalidOperationException(
+                    "Benchmark provenance capture requires an empty artifact directory so stale reports cannot be attributed to the current source.");
+            }
+
+            var session = new BenchmarkProvenanceCaptureSession
+            {
+                SourceRoot = fullSourceRoot,
+                ArtifactRoot = fullArtifactRoot,
+                StartedUtc = DateTimeOffset.UtcNow,
+                SourceCommit = state.Commit,
+                SourceBranch = state.Branch,
+                ArtifactRootLease = artifactRootLease
+            };
+            artifactRootLease = null;
+            return session;
+        }
+        finally
+        {
+            artifactRootLease?.Dispose();
+        }
     }
 
     /// <summary>
@@ -57,43 +73,53 @@ public sealed class BenchmarkArtifactProvenanceService
     public string Complete(BenchmarkProvenanceCaptureSession session)
     {
         if (session is null) throw new ArgumentNullException(nameof(session));
-        GitSourceState state = CaptureGitState(session.SourceRoot);
-        ValidateCleanSourceState(state, "after");
-        if (!string.Equals(state.Commit, session.SourceCommit, StringComparison.Ordinal) ||
-            !string.Equals(state.Branch, session.SourceBranch, StringComparison.Ordinal))
-        {
+        if (session.ArtifactRootLease is null)
             throw new InvalidOperationException(
-                "Benchmark source provenance changed while the external measurement was running. Discard the artifacts and run again.");
-        }
-
-        string sidecarPath = Path.Combine(session.ArtifactRoot, SidecarFileName);
-        BenchmarkProducedArtifact[] artifacts = EnumerateArtifactFiles(session.ArtifactRoot)
-            .Select(path => new BenchmarkProducedArtifact
+                "The benchmark provenance capture session is no longer active.");
+        try
+        {
+            GitSourceState state = CaptureGitState(session.SourceRoot);
+            ValidateCleanSourceState(state, "after");
+            if (!string.Equals(state.Commit, session.SourceCommit, StringComparison.Ordinal) ||
+                !string.Equals(state.Branch, session.SourceBranch, StringComparison.Ordinal))
             {
-                Path = NormalizeRelativePath(
-                    FrameworkCompatibility.GetRelativePath(session.ArtifactRoot, path)),
-                Length = new FileInfo(path).Length,
-                Sha256 = BenchmarkJson.ComputeFileSha256(path)
-            })
-            .OrderBy(artifact => artifact.Path, StringComparer.Ordinal)
-            .ToArray();
-        if (artifacts.Length == 0)
-        {
-            throw new InvalidOperationException(
-                "The benchmark process did not produce any files in the reserved artifact directory.");
-        }
+                throw new InvalidOperationException(
+                    "Benchmark source provenance changed while the external measurement was running. Discard the artifacts and run again.");
+            }
 
-        var document = new BenchmarkArtifactProvenanceDocument
+            string sidecarPath = Path.Combine(session.ArtifactRoot, SidecarFileName);
+            BenchmarkProducedArtifact[] artifacts = EnumerateArtifactFiles(session.ArtifactRoot)
+                .Select(path => new BenchmarkProducedArtifact
+                {
+                    Path = NormalizeRelativePath(
+                        FrameworkCompatibility.GetRelativePath(session.ArtifactRoot, path)),
+                    Length = new FileInfo(path).Length,
+                    Sha256 = BenchmarkJson.ComputeFileSha256(path)
+                })
+                .OrderBy(artifact => artifact.Path, StringComparer.Ordinal)
+                .ToArray();
+            if (artifacts.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    "The benchmark process did not produce any files in the reserved artifact directory.");
+            }
+
+            var document = new BenchmarkArtifactProvenanceDocument
+            {
+                SourceCommit = session.SourceCommit,
+                SourceBranch = session.SourceBranch,
+                GitWorktreeClean = true,
+                StartedUtc = session.StartedUtc,
+                FinishedUtc = DateTimeOffset.UtcNow,
+                Artifacts = artifacts
+            };
+            BenchmarkJson.Write(sidecarPath, document);
+            return sidecarPath;
+        }
+        finally
         {
-            SourceCommit = session.SourceCommit,
-            SourceBranch = session.SourceBranch,
-            GitWorktreeClean = true,
-            StartedUtc = session.StartedUtc,
-            FinishedUtc = DateTimeOffset.UtcNow,
-            Artifacts = artifacts
-        };
-        BenchmarkJson.Write(sidecarPath, document);
-        return sidecarPath;
+            session.Dispose();
+        }
     }
 
     internal static bool TryLoadAndValidate(
@@ -105,7 +131,7 @@ public sealed class BenchmarkArtifactProvenanceService
         string fullInput = Path.GetFullPath(inputPath);
         artifactRoot = Directory.Exists(fullInput)
             ? fullInput
-            : Path.GetDirectoryName(fullInput) ?? string.Empty;
+            : FindArtifactRoot(fullInput);
         string resolvedArtifactRoot = artifactRoot;
         sidecarPath = Path.Combine(artifactRoot, SidecarFileName);
         provenance = null;
@@ -230,12 +256,128 @@ public sealed class BenchmarkArtifactProvenanceService
         => Directory.Exists(artifactRoot)
             ? Directory.EnumerateFiles(artifactRoot, "*", SearchOption.AllDirectories)
                 .Where(path =>
-                    !string.Equals(
+                     !string.Equals(
                         Path.GetFullPath(path),
                         Path.GetFullPath(Path.Combine(artifactRoot, SidecarFileName)),
-                        FrameworkCompatibility.GetPathStringComparison(artifactRoot)) &&
-                    !path.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
+                         FrameworkCompatibility.GetPathStringComparison(artifactRoot)) &&
+                    !IsArtifactRootReservationLock(path, artifactRoot) &&
+                     !path.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
             : Enumerable.Empty<string>();
+
+    private static string FindArtifactRoot(string inputPath)
+    {
+        string? current = Path.GetDirectoryName(inputPath);
+        while (!string.IsNullOrWhiteSpace(current))
+        {
+            if (File.Exists(Path.Combine(current, SidecarFileName)))
+                return current;
+            DirectoryInfo? parent = Directory.GetParent(current);
+            if (parent is null)
+                break;
+            current = parent.FullName;
+        }
+
+        return Path.GetDirectoryName(inputPath) ?? string.Empty;
+    }
+
+    private static bool IsArtifactRootReservationLock(
+        string path,
+        string artifactRoot)
+    {
+        string reservationPath = BenchmarkFileUpdateLock.CreateLockPath(
+            Path.Combine(artifactRoot, ArtifactRootReservationName));
+        return string.Equals(
+            Path.GetFullPath(path),
+            Path.GetFullPath(reservationPath),
+            FrameworkCompatibility.GetPathStringComparison(artifactRoot));
+    }
+
+    private static void ValidateArtifactRootLocation(
+        string sourceRoot,
+        string artifactRoot)
+    {
+        string normalizedSourceRoot = sourceRoot
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        string normalizedArtifactRoot = artifactRoot
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        StringComparison comparison =
+            FrameworkCompatibility.GetPathStringComparison(sourceRoot);
+        if (string.Equals(
+                normalizedSourceRoot,
+                normalizedArtifactRoot,
+                comparison))
+        {
+            throw new InvalidOperationException(
+                "The benchmark artifact root cannot be the source repository root.");
+        }
+        if (!normalizedArtifactRoot.StartsWith(normalizedSourceRoot, comparison))
+            return;
+
+        string relativePath = NormalizeRelativePath(
+            FrameworkCompatibility.GetRelativePath(sourceRoot, artifactRoot));
+        string tracked = ReadGitValue(sourceRoot, "ls-files -z");
+        string prefix = relativePath.TrimEnd('/') + "/";
+        if (tracked.Split('\0')
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Any(path =>
+                string.Equals(path, relativePath, StringComparison.Ordinal) ||
+                path.StartsWith(prefix, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                "An in-repository benchmark artifact root cannot contain tracked files.");
+        }
+        if (!IsGitIgnored(sourceRoot, relativePath))
+        {
+            throw new InvalidOperationException(
+                "An in-repository benchmark artifact root must be ignored by Git. Use an ignored generated-output directory or a directory outside the source repository.");
+        }
+    }
+
+    private static bool IsGitIgnored(string sourceRoot, string relativePath)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "git",
+            Arguments = "check-ignore -q --no-index --stdin",
+            WorkingDirectory = sourceRoot,
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        using Process process = Process.Start(startInfo)
+                                ?? throw new InvalidOperationException(
+                                    "Unable to start Git while validating the benchmark artifact root.");
+        process.StandardInput.WriteLine(relativePath);
+        process.StandardInput.Close();
+        Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+        Task<string> errorTask = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(5000))
+        {
+            try
+            {
+#if NET8_0_OR_GREATER
+                process.Kill(entireProcessTree: true);
+#else
+                process.Kill();
+#endif
+            }
+            catch
+            {
+            }
+            throw new InvalidOperationException(
+                "Timed out while validating the benchmark artifact root.");
+        }
+        outputTask.GetAwaiter().GetResult();
+        string error = errorTask.GetAwaiter().GetResult();
+        if (process.ExitCode is 0 or 1)
+            return process.ExitCode == 0;
+        throw new InvalidOperationException(
+            $"Unable to validate the benchmark artifact root against Git ignore rules: {error.Trim()}");
+    }
 
     private static string ResolveContainedArtifactPath(
         string artifactRoot,

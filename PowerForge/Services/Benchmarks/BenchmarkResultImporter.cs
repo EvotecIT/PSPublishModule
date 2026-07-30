@@ -67,6 +67,10 @@ public sealed class BenchmarkResultImporter
         {
             ApplyProductionProvenance(result, provenance!, provenancePath);
         }
+        else
+        {
+            ClearUnvalidatedProductionProvenance(result);
+        }
         return result;
     }
 
@@ -84,6 +88,20 @@ public sealed class BenchmarkResultImporter
         result.Metadata["benchmark.provenance.source"] = "sidecar";
         result.Metadata["benchmark.provenance.sidecar.sha256"] =
             BenchmarkJson.ComputeFileSha256(sidecarPath);
+        result.HasValidatedProductionProvenance = true;
+    }
+
+    private static void ClearUnvalidatedProductionProvenance(BenchmarkRunResult result)
+    {
+        foreach (string key in result.Metadata.Keys
+                     .Where(key => key.StartsWith(
+                         "benchmark.provenance.",
+                         StringComparison.OrdinalIgnoreCase))
+                     .ToArray())
+        {
+            result.Metadata.Remove(key);
+        }
+        result.HasValidatedProductionProvenance = false;
     }
 
     private BenchmarkRunResult ImportDirectory(string path, string? suite, CultureInfo? culture)
@@ -151,8 +169,12 @@ public sealed class BenchmarkResultImporter
             .ToArray();
         if (benchmarkDotNetFiles.Length > 0)
         {
-            var benchmarkDotNetSamples = benchmarkDotNetFiles.SelectMany(file => ImportCsvSamples(file, suite, defaultSuite, culture)).ToArray();
-            return BuildImportedResult(suite ?? benchmarkDotNetSamples.FirstOrDefault()?.Suite ?? defaultSuite, benchmarkDotNetSamples);
+            var benchmarkDotNetSamples = benchmarkDotNetFiles
+                .SelectMany(file => ImportCsvSamples(file, suite, defaultSuite, culture))
+                .ToArray();
+            return BuildImportedResult(
+                suite ?? benchmarkDotNetSamples.FirstOrDefault()?.Suite ?? defaultSuite,
+                benchmarkDotNetSamples);
         }
 
         var summaryFiles = Directory.GetFiles(path, "summary.csv", SearchOption.AllDirectories)
@@ -252,6 +274,8 @@ public sealed class BenchmarkResultImporter
     {
         var summarizer = new BenchmarkSummaryService();
         var now = DateTimeOffset.UtcNow;
+        BenchmarkSummaryRow[] summary = summarizer.Summarize(samples);
+        ApplyImportedAggregateStatistics(samples, summary);
         return new BenchmarkRunResult
         {
             RunId = "import-" + now.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture),
@@ -259,13 +283,76 @@ public sealed class BenchmarkResultImporter
             StartedUtc = now,
             FinishedUtc = now,
             Samples = samples.ToArray(),
-            Summary = summarizer.Summarize(samples),
+            Summary = summary,
             Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["importedUtc"] = now.ToString("O", CultureInfo.InvariantCulture)
             }
         };
     }
+
+    private static void ApplyImportedAggregateStatistics(
+        IReadOnlyList<BenchmarkSample> samples,
+        IEnumerable<BenchmarkSummaryRow> summary)
+    {
+        foreach (BenchmarkSummaryRow row in summary)
+        {
+            BenchmarkSample[] candidates = samples
+                .Where(sample =>
+                    string.Equals(sample.Suite, row.Suite, StringComparison.Ordinal) &&
+                    string.Equals(sample.Scenario, row.Scenario, StringComparison.Ordinal) &&
+                    string.Equals(sample.Operation, row.Operation, StringComparison.Ordinal) &&
+                    string.Equals(sample.Engine, row.Engine, StringComparison.Ordinal) &&
+                    string.Equals(sample.Host, row.Host, StringComparison.Ordinal) &&
+                    string.Equals(sample.Os, row.Os, StringComparison.Ordinal) &&
+                    string.Equals(sample.RunMode, row.RunMode, StringComparison.Ordinal) &&
+                    StringDictionariesMatch(sample.Variables, row.Variables))
+                .ToArray();
+            if (candidates.Length != 1)
+                continue;
+
+            BenchmarkSample sample = candidates[0];
+            bool isBenchmarkDotNetAggregate =
+                sample.Variables.ContainsKey("BenchmarkDotNetReport") ||
+                sample.Metrics.ContainsKey("P95Ms") ||
+                sample.Metrics.ContainsKey("P99Ms") ||
+                sample.Metrics.ContainsKey("StdDevMs");
+            if (!isBenchmarkDotNetAggregate)
+                continue;
+
+            row.MedianMs = MetricValue(sample.Metrics, "MedianMs") ?? row.MedianMs;
+            row.MeanMs = MetricValue(sample.Metrics, "MeanMs") ?? row.MeanMs;
+            row.MinMs = MetricValue(sample.Metrics, "MinMs") ?? row.MinMs;
+            row.MaxMs = MetricValue(sample.Metrics, "MaxMs") ?? row.MaxMs;
+            row.P95Ms = MetricValue(sample.Metrics, "P95Ms") ?? row.P95Ms;
+            row.P99Ms = MetricValue(sample.Metrics, "P99Ms") ?? row.P99Ms;
+            row.StdDevMs = MetricValue(sample.Metrics, "StdDevMs") ?? row.StdDevMs;
+            row.StdErrMs = MetricValue(sample.Metrics, "StdErrMs") ?? row.StdErrMs;
+            if (sample.Variables.TryGetValue("N", out string? countText) &&
+                int.TryParse(
+                    countText,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out int sampleCount) &&
+                sampleCount > 0)
+            {
+                row.SampleCount = sampleCount;
+            }
+        }
+    }
+
+    private static double? MetricValue(
+        IReadOnlyDictionary<string, double> metrics,
+        string name)
+        => metrics.TryGetValue(name, out double value) ? value : null;
+
+    private static bool StringDictionariesMatch(
+        IReadOnlyDictionary<string, string?> left,
+        IReadOnlyDictionary<string, string?> right)
+        => left.Count == right.Count &&
+           left.All(item =>
+               right.TryGetValue(item.Key, out string? value) &&
+               string.Equals(item.Value, value, StringComparison.Ordinal));
 
     private static BenchmarkRunResult BuildImportedSummaryResult(string suite, IReadOnlyList<BenchmarkSummaryRow> summary)
     {
@@ -500,7 +587,8 @@ public sealed class BenchmarkResultImporter
                     isBenchmarkDotNetCsv,
                     usesDecimalComma,
                     culture),
-                SampleCount = ParseInt(Get(map, "SampleCount"), culture) ?? 0,
+                SampleCount = ParseInt(Get(map, "SampleCount", "N"), culture)
+                              ?? (median.HasValue || mean.HasValue ? 1 : 0),
                 FailureCount = failureCount,
                 OutlierCount = ParseInt(Get(map, "OutlierCount"), culture) ?? 0,
                 Status = explicitStatus ??
@@ -889,7 +977,20 @@ public sealed class BenchmarkResultImporter
             metrics[metricName] = scaled;
             if (!string.Equals(metricName, property.Name, StringComparison.OrdinalIgnoreCase))
                 metrics[property.Name] = scaled;
+            string? legacyName = BenchmarkDotNetLegacyStatisticMetricName(property.Name);
+            if (!string.IsNullOrWhiteSpace(legacyName))
+                metrics[legacyName!] = scaled;
         }
+    }
+
+    private static string? BenchmarkDotNetLegacyStatisticMetricName(string name)
+    {
+        string normalized = RemoveBracketUnit(name).Replace(" ", string.Empty);
+        if (string.Equals(normalized, "StandardError", StringComparison.OrdinalIgnoreCase))
+            return "StdErr";
+        if (string.Equals(normalized, "StandardDeviation", StringComparison.OrdinalIgnoreCase))
+            return "StdDev";
+        return null;
     }
 
     private static void AddBenchmarkDotNetMemoryMetrics(JsonElement? memory, IDictionary<string, double> metrics)
@@ -1543,6 +1644,15 @@ public sealed class BenchmarkResultImporter
                 ? BenchmarkDotNetStatisticMetricName(name) ?? name
                 : name;
             metrics[metricName] = value.Value;
+            if (normalizeBenchmarkDotNetMetrics)
+            {
+                string originalName = RemoveBracketUnit(name).Trim();
+                if (!string.Equals(metricName, originalName, StringComparison.OrdinalIgnoreCase))
+                    metrics[originalName] = value.Value;
+                string? legacyName = BenchmarkDotNetLegacyStatisticMetricName(name);
+                if (!string.IsNullOrWhiteSpace(legacyName))
+                    metrics[legacyName!] = value.Value;
+            }
         }
 
         return metrics;
@@ -1721,8 +1831,12 @@ public sealed class BenchmarkResultImporter
         if (string.Equals(normalized, "Mean", StringComparison.OrdinalIgnoreCase)) return "MeanMs";
         if (string.Equals(normalized, "Min", StringComparison.OrdinalIgnoreCase)) return "MinMs";
         if (string.Equals(normalized, "Max", StringComparison.OrdinalIgnoreCase)) return "MaxMs";
-        if (string.Equals(normalized, "StandardError", StringComparison.OrdinalIgnoreCase)) return "StdErr";
-        if (string.Equals(normalized, "StandardDeviation", StringComparison.OrdinalIgnoreCase)) return "StdDev";
+        if (string.Equals(normalized, "P95", StringComparison.OrdinalIgnoreCase)) return "P95Ms";
+        if (string.Equals(normalized, "P99", StringComparison.OrdinalIgnoreCase)) return "P99Ms";
+        if (string.Equals(normalized, "StdErr", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "StandardError", StringComparison.OrdinalIgnoreCase)) return "StdErrMs";
+        if (string.Equals(normalized, "StdDev", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "StandardDeviation", StringComparison.OrdinalIgnoreCase)) return "StdDevMs";
         if (string.Equals(normalized, "Op/s", StringComparison.OrdinalIgnoreCase)) return "OperationsPerSecond";
         return normalized;
     }

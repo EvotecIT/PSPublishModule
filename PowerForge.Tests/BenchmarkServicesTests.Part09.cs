@@ -308,6 +308,67 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void EvidenceCatalog_RejectsForgedProductionSidecarMarker()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Metadata["importedUtc"] = DateTimeOffset.UtcNow.ToString("O");
+        result.Metadata["benchmark.provenance.source"] = "sidecar";
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "windows.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("production provenance sidecar", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RejectsPublishedLanesSharingOneResultPath()
+    {
+        var service = new BenchmarkEvidenceCatalogService();
+        BenchmarkEvidenceCatalog catalog = service.Update(
+            null,
+            Result("Windows", "fixture-a", 10),
+            "comparison-a",
+            "shared.json",
+            "full",
+            publish: true);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            service.Update(
+                catalog,
+                Result("Linux", "fixture-a", 11),
+                "comparison-a",
+                "shared.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("distinct result paths", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RequiresPublishedHardwareIdentity()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Environment.ProcessorName = string.Empty;
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "windows.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("processorName", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void BenchmarkProvenanceCapture_BindsFreshArtifactsToUnchangedSource()
     {
         string root = CreateTempRoot();
@@ -336,6 +397,138 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal("true", imported.Metadata["gitWorktreeClean"]);
         Assert.Equal("sidecar", imported.Metadata["benchmark.provenance.source"]);
         Assert.Equal(capture.StartedUtc, imported.StartedUtc);
+    }
+
+    [Fact]
+    public void BenchmarkProvenanceCapture_AllowsIgnoredInRepositoryArtifactRoot()
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        string artifactRoot = Path.Combine(sourceRoot, "Build", "BenchmarkArtifacts");
+        Directory.CreateDirectory(sourceRoot);
+        RunGit(sourceRoot, "init");
+        RunGit(sourceRoot, "config user.email benchmark@example.test");
+        RunGit(sourceRoot, "config user.name Benchmark");
+        File.WriteAllText(Path.Combine(sourceRoot, ".gitignore"), "Build/\n");
+        File.WriteAllText(Path.Combine(sourceRoot, "source.txt"), "measured");
+        RunGit(sourceRoot, "add .gitignore source.txt");
+        RunGit(sourceRoot, "commit -m measured");
+
+        var service = new BenchmarkArtifactProvenanceService();
+        BenchmarkProvenanceCaptureSession capture = service.Start(sourceRoot, artifactRoot);
+        File.WriteAllText(
+            Path.Combine(artifactRoot, "nested-report.json"),
+            BenchmarkDotNetReport("Windows"));
+
+        string sidecarPath = service.Complete(capture);
+
+        Assert.True(File.Exists(sidecarPath));
+    }
+
+    [Fact]
+    public void BenchmarkProvenanceCapture_RejectsUnignoredInRepositoryArtifactRoot()
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        string artifactRoot = Path.Combine(sourceRoot, "Build", "BenchmarkArtifacts");
+        Directory.CreateDirectory(sourceRoot);
+        RunGit(sourceRoot, "init");
+        RunGit(sourceRoot, "config user.email benchmark@example.test");
+        RunGit(sourceRoot, "config user.name Benchmark");
+        File.WriteAllText(Path.Combine(sourceRoot, "source.txt"), "measured");
+        RunGit(sourceRoot, "add source.txt");
+        RunGit(sourceRoot, "commit -m measured");
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkArtifactProvenanceService().Start(sourceRoot, artifactRoot));
+
+        Assert.Contains("ignored by Git", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task BenchmarkProvenanceCapture_ExclusivelyReservesArtifactRoot()
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        string artifactRoot = Path.Combine(root, "artifacts");
+        Directory.CreateDirectory(sourceRoot);
+        RunGit(sourceRoot, "init");
+        RunGit(sourceRoot, "config user.email benchmark@example.test");
+        RunGit(sourceRoot, "config user.name Benchmark");
+        File.WriteAllText(Path.Combine(sourceRoot, "source.txt"), "measured");
+        RunGit(sourceRoot, "add source.txt");
+        RunGit(sourceRoot, "commit -m measured");
+        var service = new BenchmarkArtifactProvenanceService();
+        using BenchmarkProvenanceCaptureSession first = service.Start(sourceRoot, artifactRoot);
+
+        Task<Exception?> competing = Task.Run(() =>
+        {
+            try
+            {
+                using BenchmarkProvenanceCaptureSession ignored =
+                    service.Start(sourceRoot, artifactRoot);
+                return null;
+            }
+            catch (Exception exception)
+            {
+                return exception;
+            }
+        });
+        await Task.Delay(TimeSpan.FromMilliseconds(200));
+        Assert.False(competing.IsCompleted);
+        first.Dispose();
+
+        Exception? completion = await competing;
+        Assert.Null(completion);
+    }
+
+    [Fact]
+    public void BenchmarkImporter_ValidatesNestedReportAgainstAncestorSidecar()
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        string artifactRoot = Path.Combine(root, "artifacts");
+        string nestedRoot = Path.Combine(artifactRoot, "results", "net10.0");
+        Directory.CreateDirectory(sourceRoot);
+        RunGit(sourceRoot, "init");
+        RunGit(sourceRoot, "config user.email benchmark@example.test");
+        RunGit(sourceRoot, "config user.name Benchmark");
+        File.WriteAllText(Path.Combine(sourceRoot, "source.txt"), "measured");
+        RunGit(sourceRoot, "add source.txt");
+        RunGit(sourceRoot, "commit -m measured");
+        var service = new BenchmarkArtifactProvenanceService();
+        BenchmarkProvenanceCaptureSession capture = service.Start(sourceRoot, artifactRoot);
+        Directory.CreateDirectory(nestedRoot);
+        string reportPath = Path.Combine(nestedRoot, "Case-report-full.json");
+        File.WriteAllText(reportPath, BenchmarkDotNetReport("Windows"));
+        service.Complete(capture);
+
+        BenchmarkRunResult imported = new BenchmarkResultImporter().Import(reportPath);
+
+        Assert.Equal(capture.SourceCommit, imported.Metadata["gitSha"]);
+        Assert.Equal("sidecar", imported.Metadata["benchmark.provenance.source"]);
+    }
+
+    [Fact]
+    public void BenchmarkImporter_MapsBenchmarkDotNetCsvStatisticsToMilliseconds()
+    {
+        string root = CreateTempRoot();
+        string reportPath = Path.Combine(root, "Case-report.csv");
+        File.WriteAllText(
+            reportPath,
+            "Method,Job,N,Mean [ms],Median [ms],P95 [ms],P99 [ms],StdDev [ms]\n" +
+            "OfficeIMO,full,12,10.5,10.0,12.5,13.5,0.75\n");
+
+        BenchmarkSummaryRow row = Assert.Single(
+            new BenchmarkResultImporter().Import(reportPath).Summary);
+
+        Assert.Equal(12, row.SampleCount);
+        Assert.Equal(12.5, row.P95Ms);
+        Assert.Equal(13.5, row.P99Ms);
+        Assert.Equal(0.75, row.StdDevMs);
+        Assert.Equal(12.5, row.Metrics["P95Ms"]);
+        Assert.Equal(13.5, row.Metrics["P99Ms"]);
+        Assert.Equal(0.75, row.Metrics["StdDevMs"]);
     }
 
     [Fact]

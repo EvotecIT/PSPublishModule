@@ -59,19 +59,7 @@ internal static class BenchmarkFileUpdateLock
                     Options = FileOptions.None,
                     UnixCreateMode = requestedMode
                 });
-            try
-            {
-                EnsureUnixLockPathIsNotSymbolicLink(lockPath);
-                UnixFileMode currentMode = File.GetUnixFileMode(lockPath);
-                if ((currentMode & requestedMode) != requestedMode)
-                    File.SetUnixFileMode(lockPath, currentMode | requestedMode);
-                return stream;
-            }
-            catch
-            {
-                stream.Dispose();
-                throw;
-            }
+            return stream;
         }
 #endif
         return new FileStream(

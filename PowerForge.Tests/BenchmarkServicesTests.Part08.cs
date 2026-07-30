@@ -664,6 +664,8 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkRunResult result = Result("Ubuntu 24.04", "fixture-a", 10);
         result.Environment = new BenchmarkEnvironmentInfo
         {
+            ProcessArchitecture = "X64",
+            ProcessorName = "Test CPU",
             RuntimeVersion = ".NET 10.0.10",
             Runner = "BenchmarkDotNet 0.15.8"
         };
@@ -1398,6 +1400,7 @@ public sealed partial class BenchmarkServicesTests
                 OsFamily = platform,
                 OsArchitecture = "X64",
                 ProcessArchitecture = "X64",
+                ProcessorName = "Test CPU",
                 RuntimeVersion = ".NET 10.0.10",
                 Runner = "BenchmarkDotNet 0.15.8"
             },

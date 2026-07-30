@@ -3,7 +3,7 @@ namespace PowerForge;
 /// <summary>
 /// In-memory token that binds a fresh benchmark output directory to source state captured before measurement.
 /// </summary>
-public sealed class BenchmarkProvenanceCaptureSession
+public sealed class BenchmarkProvenanceCaptureSession : IDisposable
 {
     /// <summary>Repository root whose source state is being measured.</summary>
     public string SourceRoot { get; internal set; } = string.Empty;
@@ -19,6 +19,15 @@ public sealed class BenchmarkProvenanceCaptureSession
 
     /// <summary>Source branch captured before measurement.</summary>
     public string SourceBranch { get; internal set; } = string.Empty;
+
+    internal IDisposable? ArtifactRootLease { get; set; }
+
+    /// <summary>Releases the exclusive artifact-root reservation.</summary>
+    public void Dispose()
+    {
+        ArtifactRootLease?.Dispose();
+        ArtifactRootLease = null;
+    }
 }
 
 internal sealed class BenchmarkArtifactProvenanceDocument

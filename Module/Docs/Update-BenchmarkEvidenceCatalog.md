@@ -11,7 +11,7 @@ Adds one normalized benchmark result to a platform-aware evidence catalog.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Update-BenchmarkEvidenceCatalog [-Path] <string> -InputObject <BenchmarkRunResult> -ComparisonId <string> -ResultPath <string> -RunMode <string> [-Publish] [-ExpectedPlatform <string[]>] [-Platform <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Update-BenchmarkEvidenceCatalog [-Path] <string> -InputObject <BenchmarkRunResult> -ComparisonId <string> -ResultPath <string> -RunMode <string> [-ResultArtifactPath <string>] [-Publish] [-ExpectedPlatform <string[]>] [-Platform <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -119,6 +119,24 @@ source provenance in metadata keys gitSha and gitWorktreeClean.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ResultArtifactPath
+Optional local filesystem destination for the normalized result artifact.
+Specify this when ResultPath is a website URL or another
+portable consumer path rather than a local path.
+
+```yaml
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

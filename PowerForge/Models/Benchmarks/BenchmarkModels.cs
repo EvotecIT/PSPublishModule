@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace PowerForge;
 
 /// <summary>
@@ -264,6 +266,9 @@ public sealed class BenchmarkComparisonRow
 /// </summary>
 public sealed class BenchmarkRunResult
 {
+    [JsonIgnore]
+    internal bool HasValidatedProductionProvenance { get; set; }
+
     /// <summary>Stable run identifier.</summary>
     public string RunId { get; set; } = string.Empty;
 

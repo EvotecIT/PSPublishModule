@@ -99,9 +99,8 @@ public static class BenchmarkJson
         string? executable = ResolveUnixCopyExecutable();
         if (string.IsNullOrWhiteSpace(executable))
         {
-            File.Copy(sourcePath, destinationPath, overwrite: false);
-            File.SetUnixFileMode(destinationPath, File.GetUnixFileMode(sourcePath));
-            return;
+            throw new PlatformNotSupportedException(
+                $"A metadata-preserving 'cp' executable is required to atomically replace '{sourcePath}' without losing Unix ownership or ACLs.");
         }
 
         var startInfo = new ProcessStartInfo

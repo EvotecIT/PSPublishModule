@@ -2049,8 +2049,8 @@
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Complete-BenchmarkProvenanceCapture -InputObject 'Value'</dev:code>
+        <maml:title>Complete a capture after the benchmark process exits</maml:title>
+        <dev:code>$capture | Complete-BenchmarkProvenanceCapture</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -69484,8 +69484,8 @@ System.Management.Automation.PSModuleInfo</maml:name>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Start-BenchmarkProvenanceCapture -SourceRoot 'Value' -ArtifactRoot 'Value'</dev:code>
+        <maml:title>Reserve a BenchmarkDotNet artifact directory before measurement</maml:title>
+        <dev:code>$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -73963,6 +73963,20 @@ source provenance in metadata keys gitSha and gitWorktreeClean.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ResultArtifactPath</maml:name>
+          <maml:description>
+            <maml:para>Optional local filesystem destination for the normalized result artifact.&#xD;
+Specify this when ResultPath is a website URL or another&#xD;
+portable consumer path rather than a local path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ResultPath</maml:name>
           <maml:description>
@@ -74065,6 +74079,20 @@ source provenance in metadata keys gitSha and gitWorktreeClean.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ResultArtifactPath</maml:name>
+        <maml:description>
+          <maml:para>Optional local filesystem destination for the normalized result artifact.&#xD;
+Specify this when ResultPath is a website URL or another&#xD;
+portable consumer path rather than a local path.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ResultPath</maml:name>
         <maml:description>
@@ -74113,7 +74141,7 @@ source provenance in metadata keys gitSha and gitWorktreeClean.</maml:para>
       <command:example>
         <maml:title>Record a Windows publish lane</maml:title>
         <dev:code>$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts&#xD;
-            dotnet run -c Release --project .\Benchmarks&#xD;
+            dotnet run -c Release --project .\Benchmarks -- --artifacts .\Build\BenchmarkDotNet.Artifacts&#xD;
             $capture | Complete-BenchmarkProvenanceCapture&#xD;
             $result = Import-BenchmarkResult .\Build\BenchmarkDotNet.Artifacts&#xD;
             $result | Update-BenchmarkEvidenceCatalog -Path .\Website\data\benchmark-index.json -ComparisonId tabular-65k-v1 -ResultPath windows-full.json -RunMode full -Publish</dev:code>
