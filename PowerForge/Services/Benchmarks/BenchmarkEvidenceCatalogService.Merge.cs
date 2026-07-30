@@ -99,49 +99,29 @@ public sealed partial class BenchmarkEvidenceCatalogService
             Availability = BuildAvailability(entries, platforms)
         };
 
-        var createdArtifacts = new List<string>();
-        try
+        Directory.CreateDirectory(outputDirectory);
+        foreach (BundleLane lane in selected)
         {
-            Directory.CreateDirectory(outputDirectory);
-            foreach (BundleLane lane in selected)
+            string destinationPath = lane.DestinationPath!;
+            if (File.Exists(destinationPath))
             {
-                string destinationPath = lane.DestinationPath!;
-                if (File.Exists(destinationPath))
+                string existingHash = BenchmarkJson.ComputeFileSha256(destinationPath);
+                if (!string.Equals(existingHash, lane.Entry.ResultSha256, StringComparison.OrdinalIgnoreCase))
                 {
-                    string existingHash = BenchmarkJson.ComputeFileSha256(destinationPath);
-                    if (!string.Equals(existingHash, lane.Entry.ResultSha256, StringComparison.OrdinalIgnoreCase))
-                    {
-                        throw new InvalidOperationException(
-                            $"Immutable benchmark artifact '{Path.GetFileName(destinationPath)}' already exists with different content.");
-                    }
-                    continue;
+                    throw new InvalidOperationException(
+                        $"Immutable benchmark artifact '{Path.GetFileName(destinationPath)}' already exists with different content.");
                 }
-
-                BenchmarkJson.WriteBytes(destinationPath, lane.ArtifactBytes);
-                createdArtifacts.Add(destinationPath);
-            }
-            BenchmarkJson.Write(outputCatalogPath, merged);
-            return merged;
-        }
-        catch (Exception mergeException)
-        {
-            try
-            {
-                foreach (string artifactPath in createdArtifacts)
-                {
-                    if (File.Exists(artifactPath))
-                        File.Delete(artifactPath);
-                }
-            }
-            catch (Exception rollbackException)
-            {
-                throw new InvalidOperationException(
-                    "Benchmark evidence merge failed and the previous bundle could not be restored.",
-                    new AggregateException(mergeException, rollbackException));
+                continue;
             }
 
-            throw;
+            // Immutable content-addressed artifacts are safe to retain when the catalog
+            // switch fails. Another catalog in the same bundle may already reference
+            // the identical path, so deleting it during rollback can corrupt that
+            // independently committed publication.
+            BenchmarkJson.WriteBytes(destinationPath, lane.ArtifactBytes);
         }
+        BenchmarkJson.Write(outputCatalogPath, merged);
+        return merged;
     }
 
     private static BundleLane LoadBundleLane(
@@ -588,7 +568,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
     private static bool IsReservedNumberedDevice(string value, string prefix)
         => value.Length == 4 &&
            value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
-           value[3] is >= '1' and <= '9';
+           (value[3] is >= '1' and <= '9' or '\u00B9' or '\u00B2' or '\u00B3');
 
     private static void ValidateDistinctBundleDestinations(
         string outputCatalogPath,

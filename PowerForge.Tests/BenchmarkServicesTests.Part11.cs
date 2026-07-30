@@ -676,6 +676,12 @@ public sealed partial class BenchmarkServicesTests
     [InlineData("/data/benchmarks/result.json#latest")]
     [InlineData("/data/benchmarks/CON.json")]
     [InlineData("/data/benchmarks/result?.json")]
+    [InlineData("/data/benchmarks/COM¹.json")]
+    [InlineData("/data/benchmarks/COM².json")]
+    [InlineData("/data/benchmarks/COM³.json")]
+    [InlineData("/data/benchmarks/LPT¹.json")]
+    [InlineData("/data/benchmarks/LPT².json")]
+    [InlineData("/data/benchmarks/LPT³.json")]
     public void EvidenceCatalog_MergeFilesRejectsNonPortableArtifactNames(string resultPath)
     {
         string root = CreateTempRoot();
@@ -698,6 +704,40 @@ public sealed partial class BenchmarkServicesTests
                 [catalogPath]));
 
         Assert.Contains("result path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_MergeFilesRetainsImmutableArtifactWhenCatalogSwitchFails()
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        string outputRoot = Path.Combine(root, "merged");
+        Directory.CreateDirectory(sourceRoot);
+        var service = new BenchmarkEvidenceCatalogService();
+        string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
+        BenchmarkEvidenceCatalog source = service.UpdateFile(
+            sourceCatalogPath,
+            Result("Windows", "fixture-a", 10),
+            "comparison-a",
+            "result.json",
+            "full",
+            publish: true);
+        BenchmarkEvidenceEntry sourceEntry = Assert.Single(source.Entries);
+        string outputCatalogPath = Path.Combine(outputRoot, "index.json");
+        Directory.CreateDirectory(outputCatalogPath);
+
+        Assert.ThrowsAny<Exception>(() =>
+            service.MergeFiles(
+                outputCatalogPath,
+                [sourceCatalogPath]));
+
+        string expectedArtifactPath = Path.Combine(
+            outputRoot,
+            $"result.{sourceEntry.ResultSha256}.json");
+        Assert.True(File.Exists(expectedArtifactPath));
+        Assert.Equal(
+            sourceEntry.ResultSha256,
+            BenchmarkJson.ComputeFileSha256(expectedArtifactPath));
     }
 
     [Theory]
