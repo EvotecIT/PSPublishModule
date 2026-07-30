@@ -1,8 +1,13 @@
+using System.Text.Json.Serialization;
+
 namespace PowerForge.Web;
 
 /// <summary>Portable manifest for a generated visual-story bundle.</summary>
 public sealed class WebVisualStoryBundle
 {
+    /// <summary>Optional URI of the schema used to author this manifest.</summary>
+    [JsonPropertyName("$schema")]
+    public string? Schema { get; set; }
     /// <summary>Manifest schema version.</summary>
     public int? SchemaVersion { get; set; }
     /// <summary>Stable story identifier.</summary>

@@ -6,16 +6,19 @@ namespace PowerForge.Tests;
 
 public class WebPipelineRunnerVisualStoryTests
 {
-    [Fact]
-    public void VisualStoryStepsAreNotCached()
+    [Theory]
+    [InlineData("visual-story")]
+    [InlineData("visualstory")]
+    public void VisualStoryStepsAreNotCached(string task)
     {
-        using var document = JsonDocument.Parse("""{"task":"visual-story","outputPath":"static/stories/demo"}""");
+        using var document = JsonDocument.Parse(
+            $$"""{"task":"{{task}}","outputPath":"static/stories/demo"}""");
         var method = typeof(WebPipelineRunner).GetMethod(
             "IsCacheableStep",
             BindingFlags.NonPublic | BindingFlags.Static);
 
         Assert.NotNull(method);
-        Assert.False((bool)method.Invoke(null, ["visual-story", document.RootElement])!);
+        Assert.False((bool)method.Invoke(null, [task, document.RootElement])!);
     }
 
     [Fact]

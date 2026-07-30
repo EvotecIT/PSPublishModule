@@ -263,6 +263,17 @@ public static partial class WebApiDocsGenerator
         if (string.IsNullOrWhiteSpace(url))
             return false;
 
+        var posterUrl = NormalizeInlineHref(
+            element.Attribute("poster")?.Value ??
+            element.Attribute("thumbnail")?.Value ??
+            element.Attribute("thumb")?.Value);
+        if (type.Equals("story", StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(posterUrl))
+        {
+            throw new InvalidOperationException(
+                "API visual-story media requires a completed poster for reduced-motion and print output.");
+        }
+
         media = new ApiExampleMediaModel
         {
             Type = type,
@@ -274,10 +285,7 @@ public static partial class WebApiDocsGenerator
                 element.Attribute("description")?.Value ??
                 NormalizeXmlText(element) ??
                 string.Empty),
-            PosterUrl = NormalizeInlineHref(
-                element.Attribute("poster")?.Value ??
-                element.Attribute("thumbnail")?.Value ??
-                element.Attribute("thumb")?.Value),
+            PosterUrl = posterUrl,
             MimeType = Normalize(
                 element.Attribute("mimeType")?.Value ??
                 element.Attribute("mime-type")?.Value ??

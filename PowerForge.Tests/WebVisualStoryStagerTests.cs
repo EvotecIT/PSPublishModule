@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using ImageMagick;
 using PowerForge.Web;
 
@@ -208,6 +209,52 @@ public class WebVisualStoryStagerTests
         {
             Directory.Delete(root, true);
         }
+    }
+
+    [Fact]
+    public void Stage_AcceptsAndPreservesThePublishedSchemaDeclaration()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var manifest = Path.Combine(root, "source", "story.json");
+            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(manifest), WebJsonForTests.Options)!;
+            bundle.Schema = "https://example.invalid/powerforge.web.visualstory.schema.json";
+            File.WriteAllText(manifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
+
+            var result = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = manifest,
+                OutputPath = Path.Combine(root, "published")
+            });
+
+            Assert.Equal(bundle.Schema, result.Bundle.Schema);
+            Assert.Contains("\"$schema\"", File.ReadAllText(result.ManifestPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void PublishedSchemaRequiresExactlyOneCompletedPng()
+    {
+        var schemaPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..",
+            "Schemas",
+            "powerforge.web.visualstory.schema.json"));
+        var schemaDocument = JsonNode.Parse(File.ReadAllText(schemaPath))!;
+        var artifacts = schemaDocument["properties"]!["artifacts"]!;
+        Assert.Equal(1, artifacts["minContains"]!.GetValue<int>());
+        Assert.Equal(1, artifacts["maxContains"]!.GetValue<int>());
+        Assert.Equal(
+            "completed",
+            artifacts["contains"]!["properties"]!["role"]!["const"]!.GetValue<string>());
+        Assert.Equal(
+            "png",
+            artifacts["items"]!["allOf"]![0]!["then"]!["properties"]!["format"]!["const"]!.GetValue<string>());
     }
 
     [Fact]
