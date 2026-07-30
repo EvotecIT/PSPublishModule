@@ -185,6 +185,60 @@ public class WebVisualStoryStagerTests
     }
 
     [Fact]
+    public void Stage_RejectsPropertiesOutsideThePublishedManifestSchema()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var manifest = Path.Combine(root, "source", "story.json");
+            var json = File.ReadAllText(manifest)
+                .Replace("\"role\": \"animated\",", "\"role\": \"animated\", \"sha265\": \"typo\",", StringComparison.Ordinal);
+            File.WriteAllText(manifest, json);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("published schema", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Stage_RequiresTextTranscriptArtifacts()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var manifest = Path.Combine(root, "source", "story.json");
+            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(manifest), WebJsonForTests.Options)!;
+            var transcript = Assert.Single(bundle.Artifacts, artifact => artifact.Role == "transcript");
+            transcript.Format = "png";
+            transcript.Path = "demo.png";
+            File.WriteAllText(manifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("transcript artifacts must use the text format", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Stage_RejectsArtifactOutsideBundle()
     {
         var root = CreateBundle();

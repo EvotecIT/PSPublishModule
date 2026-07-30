@@ -548,6 +548,7 @@ public class WebApiDocsGeneratorSourceAndCssTests
             Assert.Contains("class=\"example-media example-media-video\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("<source src=\"/videos/sample\" type=\"video/mp4\" />", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("class=\"example-media example-media-story\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<source media=\"print\" srcset=\"/stories/sample.png\" type=\"image/png\" />", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("prefers-reduced-motion: reduce", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("src=\"/stories/sample.svg\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("srcset=\"/stories/sample.png\"", html, StringComparison.OrdinalIgnoreCase);

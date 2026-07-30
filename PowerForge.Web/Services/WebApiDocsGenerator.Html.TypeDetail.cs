@@ -1169,6 +1169,7 @@ public static partial class WebApiDocsGenerator
                             html.Line("<picture>");
                             using (html.Indent())
                             {
+                                html.Line($"<source media=\"print\" srcset=\"{safePoster}\" type=\"image/png\" />");
                                 html.Line($"<source media=\"(prefers-reduced-motion: reduce)\" srcset=\"{safePoster}\" type=\"image/png\" />");
                                 html.Line($"<img src=\"{safeUrl}\" alt=\"{safeAlt}\" loading=\"lazy\" decoding=\"async\"{widthAttr}{heightAttr} />");
                             }

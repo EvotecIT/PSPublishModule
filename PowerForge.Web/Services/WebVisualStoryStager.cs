@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using ImageMagick;
 
 namespace PowerForge.Web;
@@ -7,6 +8,8 @@ namespace PowerForge.Web;
 /// <summary>Validates producer output and stages a portable visual-story bundle.</summary>
 public static class WebVisualStoryStager
 {
+    private static readonly JsonSerializerOptions ManifestJsonOptions = CreateManifestJsonOptions();
+
     private static readonly HashSet<string> SupportedFormats = new(StringComparer.OrdinalIgnoreCase)
     {
         "svg", "gif", "apng", "png", "html", "text", "txt"
@@ -47,10 +50,7 @@ public static class WebVisualStoryStager
             outputRoot,
             "output",
             allowRoot: true);
-        var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(
-                         File.ReadAllText(manifestPath),
-                         WebJson.Options)
-                     ?? throw new InvalidOperationException("Visual-story manifest is empty or invalid.");
+        var bundle = DeserializeManifest(manifestPath);
 
         ValidateBundle(bundle);
         ValidateCompletedArtifact(bundle);
@@ -159,10 +159,7 @@ public static class WebVisualStoryStager
             fullPath,
             "manifest",
             allowRoot: false);
-        var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(
-                         File.ReadAllText(fullPath),
-                         WebJson.Options)
-                     ?? throw new InvalidOperationException("Visual-story manifest is empty or invalid.");
+        var bundle = DeserializeManifest(fullPath);
         ValidateBundle(bundle);
         ValidateCompletedArtifact(bundle);
         foreach (var artifact in bundle.Artifacts)
@@ -216,6 +213,11 @@ public static class WebVisualStoryStager
             throw new InvalidOperationException($"Unsupported visual-story artifact role: {artifact.Role}");
         if (!SupportedFormats.Contains(NormalizeFormat(artifact.Format)))
             throw new InvalidOperationException($"Unsupported visual-story artifact format: {artifact.Format}");
+        if (string.Equals(artifact.Role, "transcript", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(NormalizeFormat(artifact.Format), "text", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Visual-story transcript artifacts must use the text format.");
+        }
     }
 
     private static void ValidateCompletedArtifact(WebVisualStoryBundle bundle)
@@ -330,10 +332,7 @@ public static class WebVisualStoryStager
 
     private static string[] LoadDeclaredArtifactPaths(string manifestPath, string outputRoot)
     {
-        var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(
-                         File.ReadAllText(manifestPath),
-                         WebJson.Options)
-                     ?? throw new InvalidOperationException("Existing visual-story manifest is empty or invalid.");
+        var bundle = DeserializeManifest(manifestPath);
         ValidateBundle(bundle);
         var paths = new List<string>(bundle.Artifacts.Length);
         foreach (var artifact in bundle.Artifacts)
@@ -369,5 +368,28 @@ public static class WebVisualStoryStager
     {
         if (string.IsNullOrWhiteSpace(value))
             throw new InvalidOperationException($"Visual-story {name} is required.");
+    }
+
+    private static JsonSerializerOptions CreateManifestJsonOptions()
+    {
+        return new JsonSerializerOptions(WebJson.Options)
+        {
+            UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
+        };
+    }
+
+    private static WebVisualStoryBundle DeserializeManifest(string path)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<WebVisualStoryBundle>(
+                       File.ReadAllText(path),
+                       ManifestJsonOptions)
+                   ?? throw new InvalidOperationException("Visual-story manifest is empty or invalid.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException("Visual-story manifest does not match the published schema.", ex);
+        }
     }
 }

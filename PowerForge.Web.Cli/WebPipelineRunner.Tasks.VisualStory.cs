@@ -31,6 +31,8 @@ internal static partial class WebPipelineRunner
             if (GetBool(step, "allowFailure") == true || GetBool(step, "continueOnError") == true)
                 throw new InvalidOperationException("visual-story producer failures cannot be ignored.");
             ExecuteExec(step, baseDir, new WebPipelineStepResult());
+            EnsureVisualStoryPathWithinBase(baseDir, manifestPath, "manifest");
+            EnsureVisualStoryPathWithinBase(baseDir, outputPath, "output");
         }
 
         var maximumArtifactBytes = GetLong(step, "maximumArtifactBytes") ??

@@ -1,9 +1,23 @@
 using PowerForge.Web.Cli;
+using System.Reflection;
+using System.Text.Json;
 
 namespace PowerForge.Tests;
 
 public class WebPipelineRunnerVisualStoryTests
 {
+    [Fact]
+    public void VisualStoryStepsAreNotCached()
+    {
+        using var document = JsonDocument.Parse("""{"task":"visual-story","outputPath":"static/stories/demo"}""");
+        var method = typeof(WebPipelineRunner).GetMethod(
+            "IsCacheableStep",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(method);
+        Assert.False((bool)method.Invoke(null, ["visual-story", document.RootElement])!);
+    }
+
     [Fact]
     public void RunPipeline_VisualStory_StagesResolvedBundleWithoutExecution()
     {
@@ -103,6 +117,58 @@ public class WebPipelineRunnerVisualStoryTests
         finally
         {
             Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_VisualStory_RechecksProducerCreatedManifestLinks()
+    {
+        var bundleRoot = WebVisualStoryStagerTests.CreateBundle();
+        var root = Path.Combine(Path.GetTempPath(), "pf-story-pipeline-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var producer = Path.Combine(root, "producer.ps1");
+            File.WriteAllText(
+                producer,
+                "param([string] $Link, [string] $Target)\n" +
+                "[System.IO.Directory]::CreateSymbolicLink($Link, $Target) | Out-Null\n");
+            var pipeline = new
+            {
+                steps = new[]
+                {
+                    new
+                    {
+                        task = "visual-story",
+                        command = "pwsh",
+                        argsList = new[]
+                        {
+                            "-NoLogo",
+                            "-NoProfile",
+                            "-File",
+                            producer,
+                            Path.Combine(root, "source"),
+                            Path.Combine(bundleRoot, "source")
+                        },
+                        manifest = "source/story.json",
+                        output = "published"
+                    }
+                }
+            };
+            File.WriteAllText(
+                Path.Combine(root, "pipeline.json"),
+                JsonSerializer.Serialize(pipeline));
+
+            var result = WebPipelineRunner.RunPipeline(Path.Combine(root, "pipeline.json"), logger: null);
+
+            Assert.False(result.Success);
+            Assert.Contains("symbolic link", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(Path.Combine(root, "published", "visual-story.json")));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+            Directory.Delete(bundleRoot, true);
         }
     }
 }
