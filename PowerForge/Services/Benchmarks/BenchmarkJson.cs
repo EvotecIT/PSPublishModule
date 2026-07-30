@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Security.Cryptography;
+using System.Diagnostics;
 
 namespace PowerForge;
 
@@ -35,9 +37,17 @@ public static class BenchmarkJson
             $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
         try
         {
+            bool clonedUnixMetadata = false;
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows() && File.Exists(fullPath))
+            {
+                CloneUnixFileForReplacement(fullPath, temporaryPath);
+                clonedUnixMetadata = true;
+            }
+#endif
             using (var stream = new FileStream(
                        temporaryPath,
-                       FileMode.CreateNew,
+                       clonedUnixMetadata ? FileMode.Truncate : FileMode.CreateNew,
                        FileAccess.Write,
                        FileShare.None,
                        bufferSize: 64 * 1024,
@@ -62,8 +72,6 @@ public static class BenchmarkJson
                 }
                 else
                 {
-                    UnixFileMode destinationMode = File.GetUnixFileMode(fullPath);
-                    File.SetUnixFileMode(temporaryPath, destinationMode);
                     File.Move(temporaryPath, fullPath, overwrite: true);
                 }
 #else
@@ -80,6 +88,66 @@ public static class BenchmarkJson
             if (File.Exists(temporaryPath))
                 File.Delete(temporaryPath);
         }
+    }
+
+#if NET8_0_OR_GREATER
+    private static void CloneUnixFileForReplacement(
+        string sourcePath,
+        string destinationPath)
+    {
+        string executable = "/bin/cp";
+        if (!File.Exists(executable))
+        {
+            throw new PlatformNotSupportedException(
+                "Atomic benchmark JSON replacement on Unix requires /bin/cp to preserve ownership, ACLs, extended attributes, and mode.");
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executable,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        if (OperatingSystem.IsLinux())
+            startInfo.ArgumentList.Add("--preserve=all");
+        else
+            startInfo.ArgumentList.Add("-p");
+        startInfo.ArgumentList.Add("--");
+        startInfo.ArgumentList.Add(sourcePath);
+        startInfo.ArgumentList.Add(destinationPath);
+
+        using Process process = Process.Start(startInfo)
+                                ?? throw new IOException(
+                                    $"Unable to start metadata-preserving copy for '{sourcePath}'.");
+        string standardError = process.StandardError.ReadToEnd();
+        process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+        {
+            throw new IOException(
+                $"Unable to preserve Unix ownership and ACL metadata while replacing '{sourcePath}': {standardError.Trim()}");
+        }
+    }
+#endif
+
+    internal static string ComputeSha256<T>(T value)
+    {
+        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(value, Options);
+        using var sha256 = SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(bytes))
+            .Replace("-", string.Empty)
+            .ToLowerInvariant();
+    }
+
+    internal static string ComputeFileSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var sha256 = SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(stream))
+            .Replace("-", string.Empty)
+            .ToLowerInvariant();
     }
 
     internal static string ResolveWritePath(string path)

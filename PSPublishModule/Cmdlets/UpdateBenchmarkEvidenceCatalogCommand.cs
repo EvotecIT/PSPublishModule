@@ -9,13 +9,11 @@ namespace PSPublishModule;
 /// </summary>
 /// <example>
 /// <summary>Record a Windows publish lane</summary>
-/// <code>$result = Import-BenchmarkResult .\BenchmarkDotNet.Artifacts
-/// $gitSha = (git rev-parse HEAD).Trim()
-/// $gitStatus = git status --porcelain --untracked-files=normal
-/// if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gitSha) -or $gitStatus) { throw 'Benchmark publishing requires a clean Git worktree.' }
-/// $result.Metadata['gitSha'] = $gitSha
-/// $result.Metadata['gitWorktreeClean'] = 'true'
-/// $result | Update-BenchmarkEvidenceCatalog -Path .\Website\data\benchmark-index.json -ComparisonId tabular-65k-v1 -ResultPath .\Website\data\windows-full.json -RunMode full -Publish</code>
+/// <code>$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts
+/// dotnet run -c Release --project .\Benchmarks -- --artifacts .\Build\BenchmarkDotNet.Artifacts
+/// $capture | Complete-BenchmarkProvenanceCapture
+/// $result = Import-BenchmarkResult .\Build\BenchmarkDotNet.Artifacts
+/// $result | Update-BenchmarkEvidenceCatalog -Path .\Website\data\benchmark-index.json -ComparisonId tabular-65k-v1 -ResultPath windows-full.json -RunMode full -Publish</code>
 /// </example>
 [Cmdlet(VerbsData.Update, "BenchmarkEvidenceCatalog", SupportsShouldProcess = true)]
 [OutputType(typeof(BenchmarkEvidenceCatalog))]

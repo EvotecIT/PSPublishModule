@@ -47,6 +47,96 @@ public sealed partial class BenchmarkEvidenceCatalogService
         }
     }
 
+    private static void ValidateComparisonsMatchSummaries(BenchmarkRunResult result)
+    {
+        if (result.Comparison.Length == 0)
+            return;
+        if (result.Summary.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "Publishable benchmark comparisons require the summary rows from which they were computed.");
+        }
+
+        var expectedRows = new List<BenchmarkComparisonRow>();
+        var comparer = new BenchmarkSummaryService();
+        foreach (var definition in result.Comparison
+                     .Select(row => new
+                     {
+                         Baseline = row.BaselineEngine,
+                         Metric = row.Metric,
+                         row.TieTolerance
+                     })
+                     .GroupBy(
+                         value => string.Join(
+                             "\u001f",
+                             value.Baseline,
+                             value.Metric,
+                             value.TieTolerance.ToString("R", System.Globalization.CultureInfo.InvariantCulture)),
+                         StringComparer.Ordinal)
+                     .Select(group => group.First()))
+        {
+            try
+            {
+                expectedRows.AddRange(comparer.Compare(
+                    result.Summary,
+                    definition.Baseline,
+                    definition.Metric,
+                    definition.TieTolerance));
+            }
+            catch (InvalidOperationException exception)
+            {
+                throw new InvalidOperationException(
+                    "Publishable benchmark comparisons must be reproducible from their summary rows.",
+                    exception);
+            }
+        }
+
+        var expectedByKey = expectedRows.ToDictionary(
+            CreateComparisonIdentity,
+            StringComparer.Ordinal);
+        var actualByKey = result.Comparison.ToDictionary(
+            CreateComparisonIdentity,
+            StringComparer.Ordinal);
+        bool matches = expectedByKey.Count == actualByKey.Count &&
+                       expectedByKey.All(item =>
+                           actualByKey.TryGetValue(item.Key, out BenchmarkComparisonRow? actual) &&
+                           ComparisonsMatch(item.Value, actual));
+        if (!matches)
+        {
+            throw new InvalidOperationException(
+                "Publishable benchmark comparisons must match values recomputed from the validated summary rows.");
+        }
+    }
+
+    private static string CreateComparisonIdentity(BenchmarkComparisonRow row)
+    {
+        var builder = new StringBuilder();
+        AppendIdentityPart(builder, "suite", row.Suite);
+        AppendIdentityPart(builder, "scenario", row.Scenario);
+        AppendIdentityPart(builder, "operation", row.Operation);
+        AppendIdentityPart(builder, "host", row.Host);
+        AppendIdentityPart(builder, "os", row.Os);
+        AppendIdentityPart(builder, "runMode", row.RunMode);
+        AppendIdentityPart(builder, "engine", row.Engine);
+        AppendIdentityPart(builder, "baselineEngine", row.BaselineEngine);
+        AppendIdentityPart(builder, "metric", row.Metric);
+        AppendIdentityPart(
+            builder,
+            "tieTolerance",
+            row.TieTolerance.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
+        foreach (var variable in row.Variables.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
+            AppendIdentityPart(builder, variable.Key.ToUpperInvariant(), variable.Value);
+        return builder.ToString();
+    }
+
+    private static bool ComparisonsMatch(
+        BenchmarkComparisonRow expected,
+        BenchmarkComparisonRow actual)
+        => string.Equals(expected.Status, actual.Status, StringComparison.OrdinalIgnoreCase) &&
+           NearlyEqual(expected.Actual, actual.Actual) &&
+           NearlyEqual(expected.Baseline, actual.Baseline) &&
+           NearlyEqual(expected.Ratio, actual.Ratio);
+
     private static PowerShellBenchmarkOutlierMode ResolveOutlierMode(
         IReadOnlyDictionary<string, string> metadata)
     {

@@ -77,6 +77,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             GeneratedUtc = result.FinishedUtc == default ? DateTimeOffset.UtcNow : result.FinishedUtc,
             Publish = publish,
             ResultPath = resultPath,
+            ResultSha256 = BenchmarkJson.ComputeSha256(result),
             Suite = result.Suite,
             Environment = CopyEnvironment(result.Environment),
             Compatibility = BuildCompatibility(result)
@@ -134,8 +135,62 @@ public sealed partial class BenchmarkEvidenceCatalogService
             ? BenchmarkJson.Read<BenchmarkEvidenceCatalog>(fullPath)
             : null;
         var updated = Update(catalog, result, comparisonId, resultPath, runMode, publish, expectedPlatforms, platform);
+        if (publish)
+        {
+            BenchmarkEvidenceEntry writtenEntry = updated.Entries.Single(entry =>
+                string.Equals(entry.ComparisonId, comparisonId.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(entry.Platform, ResolvePlatform(result, platform), StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(entry.RunMode, runMode.Trim(), StringComparison.OrdinalIgnoreCase));
+            string inputHash = BenchmarkJson.ComputeSha256(result);
+            bool inputWasSelected = string.Equals(
+                                        writtenEntry.ResultSha256,
+                                        inputHash,
+                                        StringComparison.OrdinalIgnoreCase) &&
+                                    string.Equals(
+                                        writtenEntry.ResultPath,
+                                        resultPath,
+                                        StringComparison.Ordinal);
+            if (inputWasSelected)
+            {
+                string artifactPath = ResolveResultArtifactPath(fullPath, resultPath);
+                if (string.Equals(artifactPath, fullPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        "The benchmark result artifact path must be different from the evidence catalog path.");
+                }
+
+                BenchmarkJson.Write(artifactPath, result);
+                string writtenHash = BenchmarkJson.ComputeFileSha256(artifactPath);
+                if (!string.Equals(writtenEntry.ResultSha256, writtenHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        "The normalized benchmark result artifact does not match the validated catalog payload.");
+                }
+            }
+        }
         BenchmarkJson.Write(fullPath, updated);
         return updated;
+    }
+
+    private static string ResolveResultArtifactPath(string catalogPath, string resultPath)
+    {
+        if (Path.IsPathRooted(resultPath))
+            return BenchmarkJson.ResolveWritePath(resultPath);
+        if (Uri.TryCreate(resultPath, UriKind.Absolute, out Uri? uri))
+        {
+            if (!uri.IsFile)
+            {
+                throw new InvalidOperationException(
+                    "Publishable benchmark evidence must use a local result artifact path so PowerForge can write and hash the validated payload.");
+            }
+
+            return BenchmarkJson.ResolveWritePath(uri.LocalPath);
+        }
+
+        string catalogDirectory = Path.GetDirectoryName(catalogPath)
+                                  ?? throw new InvalidOperationException(
+                                      $"Unable to determine the evidence catalog directory for '{catalogPath}'.");
+        return BenchmarkJson.ResolveWritePath(Path.Combine(catalogDirectory, resultPath));
     }
 
     private static string[] NormalizeExpectedPlatforms(IEnumerable<string>? platforms)
@@ -159,6 +214,19 @@ public sealed partial class BenchmarkEvidenceCatalogService
         AddCompatibilityDimension(dimensions, "environment.runner", result.Environment.Runner);
         AddCompatibilityDimension(dimensions, "environment.osArchitecture", result.Environment.OsArchitecture);
         AddCompatibilityDimension(dimensions, "environment.processArchitecture", result.Environment.ProcessArchitecture);
+        AddCompatibilityDimension(dimensions, "environment.processorName", result.Environment.ProcessorName);
+        AddCompatibilityDimension(
+            dimensions,
+            "environment.physicalProcessorCount",
+            result.Environment.PhysicalProcessorCount?.ToString(CultureInfo.InvariantCulture));
+        AddCompatibilityDimension(
+            dimensions,
+            "environment.physicalCoreCount",
+            result.Environment.PhysicalCoreCount?.ToString(CultureInfo.InvariantCulture));
+        AddCompatibilityDimension(
+            dimensions,
+            "environment.logicalCoreCount",
+            result.Environment.LogicalCoreCount?.ToString(CultureInfo.InvariantCulture));
         AddCompatibilityDimension(
             dimensions,
             "benchmark.workload.shape.sha256",
@@ -367,6 +435,15 @@ public sealed partial class BenchmarkEvidenceCatalogService
 
     private static void ValidatePublishableResult(BenchmarkRunResult result)
     {
+        if (!string.IsNullOrWhiteSpace(MetadataValue(result.Metadata, "importedUtc")) &&
+            !string.Equals(
+                MetadataValue(result.Metadata, "benchmark.provenance.source"),
+                "sidecar",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Publishable imported benchmark evidence requires a production provenance sidecar captured around the benchmark run.");
+        }
         string? gitSha = MetadataValue(result.Metadata, "gitSha");
         if (!IsFullGitObjectId(gitSha))
         {
@@ -446,7 +523,31 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 "Publishable benchmark evidence requires at least one successful measurement and no failed measurements.");
         }
 
+        ValidateSuiteConsistency(result);
         ValidateSummariesMatchSamples(result);
+        ValidateComparisonsMatchSummaries(result);
+    }
+
+    private static void ValidateSuiteConsistency(BenchmarkRunResult result)
+    {
+        if (string.IsNullOrWhiteSpace(result.Suite))
+        {
+            throw new InvalidOperationException(
+                "Publishable benchmark evidence requires a non-empty top-level suite identity.");
+        }
+
+        string suite = result.Suite.Trim();
+        bool mismatch = result.Samples.Any(sample =>
+                            !string.Equals(sample.Suite?.Trim(), suite, StringComparison.Ordinal)) ||
+                        result.Summary.Any(row =>
+                            !string.Equals(row.Suite?.Trim(), suite, StringComparison.Ordinal)) ||
+                        result.Comparison.Any(row =>
+                            !string.Equals(row.Suite?.Trim(), suite, StringComparison.Ordinal));
+        if (mismatch)
+        {
+            throw new InvalidOperationException(
+                "Publishable benchmark evidence requires the top-level suite to match every sample, summary, and comparison row.");
+        }
     }
 
     private static void ValidateCatalogSchema(BenchmarkEvidenceCatalog? catalog)

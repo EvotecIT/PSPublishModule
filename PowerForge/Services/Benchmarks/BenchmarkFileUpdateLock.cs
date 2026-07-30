@@ -46,6 +46,7 @@ internal static class BenchmarkFileUpdateLock
 #if NET8_0_OR_GREATER
         if (!OperatingSystem.IsWindows())
         {
+            EnsureUnixLockPathIsNotSymbolicLink(lockPath);
             UnixFileMode requestedMode = GetUnixLockMode(lockDirectory);
             var stream = new FileStream(
                 lockPath,
@@ -60,6 +61,7 @@ internal static class BenchmarkFileUpdateLock
                 });
             try
             {
+                EnsureUnixLockPathIsNotSymbolicLink(lockPath);
                 UnixFileMode currentMode = File.GetUnixFileMode(lockPath);
                 if ((currentMode & requestedMode) != requestedMode)
                     File.SetUnixFileMode(lockPath, currentMode | requestedMode);
@@ -94,6 +96,15 @@ internal static class BenchmarkFileUpdateLock
         if ((directoryMode & UnixFileMode.OtherWrite) != 0)
             lockMode |= UnixFileMode.OtherRead | UnixFileMode.OtherWrite;
         return lockMode;
+    }
+
+    private static void EnsureUnixLockPathIsNotSymbolicLink(string lockPath)
+    {
+        if (new FileInfo(lockPath).LinkTarget is not null)
+        {
+            throw new InvalidOperationException(
+                $"Benchmark evidence lock path '{lockPath}' is a symbolic link. Remove it before updating the catalog.");
+        }
     }
 #endif
 

@@ -1987,6 +1987,79 @@
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Complete-BenchmarkProvenanceCapture</command:name>
+      <command:verb>Complete</command:verb>
+      <command:noun>BenchmarkProvenanceCapture</command:noun>
+      <maml:description>
+        <maml:para>Verifies unchanged source after an external benchmark and writes a hash-bound artifact sidecar.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Verifies unchanged source after an external benchmark and writes a hash-bound artifact sidecar.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Complete-BenchmarkProvenanceCapture</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>InputObject</maml:name>
+          <maml:description>
+            <maml:para>Capture session returned before measurement.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">BenchmarkProvenanceCaptureSession</command:parameterValue>
+          <dev:type>
+            <maml:name>BenchmarkProvenanceCaptureSession</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>InputObject</maml:name>
+        <maml:description>
+          <maml:para>Capture session returned before measurement.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">BenchmarkProvenanceCaptureSession</command:parameterValue>
+        <dev:type>
+          <maml:name>BenchmarkProvenanceCaptureSession</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>PowerForge.BenchmarkProvenanceCaptureSession</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>EXAMPLE 1</maml:title>
+        <dev:code>Complete-BenchmarkProvenanceCapture -InputObject 'Value'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Compress-ManagedResource</command:name>
       <command:verb>Compress</command:verb>
       <command:noun>ManagedResource</command:noun>
@@ -69325,6 +69398,103 @@ System.Management.Automation.PSModuleInfo</maml:name>
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Start-BenchmarkProvenanceCapture</command:name>
+      <command:verb>Start</command:verb>
+      <command:noun>BenchmarkProvenanceCapture</command:noun>
+      <maml:description>
+        <maml:para>Captures clean source state before an external benchmark writes into a fresh artifact directory.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Captures clean source state before an external benchmark writes into a fresh artifact directory.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Start-BenchmarkProvenanceCapture</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ArtifactRoot</maml:name>
+          <maml:description>
+            <maml:para>Fresh directory where the external benchmark will write its artifacts.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SourceRoot</maml:name>
+          <maml:description>
+            <maml:para>Git repository root whose source is being measured.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ArtifactRoot</maml:name>
+        <maml:description>
+          <maml:para>Fresh directory where the external benchmark will write its artifacts.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SourceRoot</maml:name>
+        <maml:description>
+          <maml:para>Git repository root whose source is being measured.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.BenchmarkProvenanceCaptureSession</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>EXAMPLE 1</maml:title>
+        <dev:code>Start-BenchmarkProvenanceCapture -SourceRoot 'Value' -ArtifactRoot 'Value'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Step-Version</command:name>
       <command:verb>Step</command:verb>
       <command:noun>Version</command:noun>
@@ -73783,7 +73953,8 @@ carry OS metadata. Conflicting embedded labels are rejected.</maml:para>
           <maml:name>Publish</maml:name>
           <maml:description>
             <maml:para>Marks this lane as suitable for public benchmark claims. Published evidence must contain&#xD;
-successful measurements without failures and exact source provenance in metadata key gitSha.</maml:para>
+successful measurements without failures, runtime and runner identity, and exact clean-worktree&#xD;
+source provenance in metadata keys gitSha and gitWorktreeClean.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -73884,7 +74055,8 @@ carry OS metadata. Conflicting embedded labels are rejected.</maml:para>
         <maml:name>Publish</maml:name>
         <maml:description>
           <maml:para>Marks this lane as suitable for public benchmark claims. Published evidence must contain&#xD;
-successful measurements without failures and exact source provenance in metadata key gitSha.</maml:para>
+successful measurements without failures, runtime and runner identity, and exact clean-worktree&#xD;
+source provenance in metadata keys gitSha and gitWorktreeClean.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -73940,9 +74112,11 @@ successful measurements without failures and exact source provenance in metadata
     <command:examples>
       <command:example>
         <maml:title>Record a Windows publish lane</maml:title>
-        <dev:code>$result = Import-BenchmarkResult .\BenchmarkDotNet.Artifacts&#xD;
-            $result.Metadata['gitSha'] = (git rev-parse HEAD).Trim()&#xD;
-            $result | Update-BenchmarkEvidenceCatalog -Path .\Website\data\benchmark-index.json -ComparisonId tabular-65k-v1 -ResultPath .\Website\data\windows-full.json -RunMode full -Publish</dev:code>
+        <dev:code>$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts&#xD;
+            dotnet run -c Release --project .\Benchmarks&#xD;
+            $capture | Complete-BenchmarkProvenanceCapture&#xD;
+            $result = Import-BenchmarkResult .\Build\BenchmarkDotNet.Artifacts&#xD;
+            $result | Update-BenchmarkEvidenceCatalog -Path .\Website\data\benchmark-index.json -ComparisonId tabular-65k-v1 -ResultPath windows-full.json -RunMode full -Publish</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

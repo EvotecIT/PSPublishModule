@@ -22,6 +22,12 @@ public sealed class BenchmarkResultImporter
     {
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Input path is required.", nameof(path));
         var fullPath = Path.GetFullPath(path);
+        bool hasProductionProvenance =
+            BenchmarkArtifactProvenanceService.TryLoadAndValidate(
+                fullPath,
+                out BenchmarkArtifactProvenanceDocument? provenance,
+                out _,
+                out string provenancePath);
         BenchmarkRunResult result;
         if (Directory.Exists(fullPath))
         {
@@ -43,7 +49,27 @@ public sealed class BenchmarkResultImporter
         }
 
         EnsureSingleOperatingSystem(new[] { result });
+        if (hasProductionProvenance)
+        {
+            ApplyProductionProvenance(result, provenance!, provenancePath);
+        }
         return result;
+    }
+
+    private static void ApplyProductionProvenance(
+        BenchmarkRunResult result,
+        BenchmarkArtifactProvenanceDocument provenance,
+        string sidecarPath)
+    {
+        result.StartedUtc = provenance.StartedUtc;
+        result.FinishedUtc = provenance.FinishedUtc;
+        result.Metadata["gitSha"] = provenance.SourceCommit;
+        result.Metadata["gitWorktreeClean"] = provenance.GitWorktreeClean ? "true" : "false";
+        if (!string.IsNullOrWhiteSpace(provenance.SourceBranch))
+            result.Metadata["gitBranch"] = provenance.SourceBranch;
+        result.Metadata["benchmark.provenance.source"] = "sidecar";
+        result.Metadata["benchmark.provenance.sidecar.sha256"] =
+            BenchmarkJson.ComputeFileSha256(sidecarPath);
     }
 
     private BenchmarkRunResult ImportDirectory(string path, string? suite, CultureInfo? culture)

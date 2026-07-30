@@ -83,6 +83,9 @@ public sealed class BenchmarkEvidenceEntry
     /// <summary>Portable path or URL to the normalized run result.</summary>
     public string ResultPath { get; set; } = string.Empty;
 
+    /// <summary>SHA-256 of the exact normalized result payload validated for this entry.</summary>
+    public string ResultSha256 { get; set; } = string.Empty;
+
     /// <summary>Benchmark suite name.</summary>
     public string Suite { get; set; } = string.Empty;
 

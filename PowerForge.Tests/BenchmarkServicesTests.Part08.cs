@@ -1318,8 +1318,26 @@ public sealed partial class BenchmarkServicesTests
     {
         BenchmarkRunResult windows = Result("Windows", "fixture-a", 10);
         BenchmarkRunResult linux = Result("Linux", "fixture-a", 11);
-        windows.Comparison = [Comparison("Windows", 0.01)];
-        linux.Comparison = [Comparison("Linux", 0.05)];
+        windows.Summary =
+        [
+            windows.Summary[0],
+            SummaryRow(windows, "Sep", 10)
+        ];
+        linux.Summary =
+        [
+            linux.Summary[0],
+            SummaryRow(linux, "Sep", 10)
+        ];
+        windows.Comparison = new BenchmarkSummaryService().Compare(
+            windows.Summary,
+            "Sep",
+            "MedianMs",
+            0.01);
+        linux.Comparison = new BenchmarkSummaryService().Compare(
+            linux.Summary,
+            "Sep",
+            "MedianMs",
+            0.05);
         var service = new BenchmarkEvidenceCatalogService();
 
         BenchmarkEvidenceCatalog catalog = service.Update(
