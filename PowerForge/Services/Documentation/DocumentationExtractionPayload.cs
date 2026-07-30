@@ -247,6 +247,10 @@ internal sealed class DocumentationParameterHelp
     [DataMember(Name = "metadataDefaultHelp")]
     public string? MetadataDefaultHelp { get; set; }
 
+    /// <summary>Authored display text transported as UTF-16 code units to preserve invalid surrogate values.</summary>
+    [DataMember(Name = "metadataDefaultHelpCodeUnits")]
+    public string? MetadataDefaultHelpCodeUnits { get; set; }
+
     /// <summary>Tagged PSDefaultValueAttribute.Value captured in the target PowerShell host.</summary>
     [DataMember(Name = "metadataDefaultValue")]
     public DocumentationRuntimeValue? MetadataDefaultValue { get; set; }

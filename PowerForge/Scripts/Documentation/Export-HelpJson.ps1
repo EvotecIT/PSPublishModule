@@ -183,6 +183,20 @@ function AddRuntimeDefaultValueTokens([object]$value, [System.Collections.IList]
     }) | Out-Null
     return
   }
+  if ($value -is [decimal]) {
+    $tokens.Add([ordered]@{
+      kind = 'Decimal'
+      text = $value.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    }) | Out-Null
+    return
+  }
+  if ($value -is [scriptblock]) {
+    $tokens.Add([ordered]@{
+      kind = 'ScriptBlockCodeUnits'
+      text = ConvertToUtf16CodeUnits ([string]$value.ToString())
+    }) | Out-Null
+    return
+  }
   if ($value -is [System.Collections.IEnumerable]) {
     $tokens.Add([ordered]@{ kind = 'CollectionStart' }) | Out-Null
     foreach ($item in $value) {
@@ -366,6 +380,7 @@ try {
       $defaultValue = ''
       $hasMetadataDefault = $false
       $metadataDefaultHelp = $null
+      $metadataDefaultHelpCodeUnits = $null
       $metadataDefaultValue = $null
       $acceptWild = $false
 
@@ -405,7 +420,10 @@ try {
             if ($attr -is [System.Management.Automation.PSDefaultValueAttribute]) {
               $hasMetadataDefault = $true
               $metadataDefaultHelp = [string]$attr.Help
-              if ([string]::IsNullOrWhiteSpace($metadataDefaultHelp)) {
+              if (-not [string]::IsNullOrWhiteSpace($metadataDefaultHelp)) {
+                $metadataDefaultHelpCodeUnits = ConvertToUtf16CodeUnits $metadataDefaultHelp
+                $metadataDefaultHelp = $null
+              } else {
                 $metadataDefaultValue = ConvertToRuntimeDefaultValue $attr.Value
               }
             }
@@ -497,6 +515,7 @@ try {
         defaultValue = $defaultValue
         hasMetadataDefault = [bool]$hasMetadataDefault
         metadataDefaultHelp = $metadataDefaultHelp
+        metadataDefaultHelpCodeUnits = $metadataDefaultHelpCodeUnits
         metadataDefaultValue = $metadataDefaultValue
         pipelineInput = $pipelineInput
         acceptWildcardCharacters = [bool]$acceptWild

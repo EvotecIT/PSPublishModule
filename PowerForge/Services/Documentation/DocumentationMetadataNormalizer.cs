@@ -39,7 +39,9 @@ internal static class DocumentationMetadataNormalizer
 
             if (parameter.HasMetadataDefault)
             {
-                var help = parameter.MetadataDefaultHelp;
+                var help = !string.IsNullOrEmpty(parameter.MetadataDefaultHelpCodeUnits)
+                    ? PowerShellDefaultValueFormatter.DecodeUtf16CodeUnits(parameter.MetadataDefaultHelpCodeUnits)
+                    : parameter.MetadataDefaultHelp;
                 parameter.DefaultValue = !string.IsNullOrWhiteSpace(help)
                     ? PowerShellDefaultValueFormatter.NeedsEncoding(help)
                         ? PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
@@ -52,6 +54,7 @@ internal static class DocumentationMetadataNormalizer
             }
 
             parameter.MetadataDefaultHelp = null;
+            parameter.MetadataDefaultHelpCodeUnits = null;
             parameter.MetadataDefaultValue = null;
             parameter.HasMetadataDefault = false;
         }
@@ -175,7 +178,7 @@ internal static class DocumentationMetadataNormalizer
 
     private static List<string> GetKeys(DocumentationTypeHelp value)
     {
-        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var keys = new HashSet<string>(StringComparer.Ordinal);
         AddCandidate(value.Name);
         AddCandidate(value.ClrTypeName);
         AddCandidate(value.CanonicalTypeName);
@@ -248,7 +251,7 @@ internal static class DocumentationMetadataNormalizer
 
     private sealed class TypeIndex
     {
-        public Dictionary<string, int> Counts { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public Dictionary<string, DocumentationTypeHelp> ByKey { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, int> Counts { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, DocumentationTypeHelp> ByKey { get; } = new(StringComparer.Ordinal);
     }
 }

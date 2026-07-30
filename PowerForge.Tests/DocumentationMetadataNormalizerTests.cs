@@ -44,6 +44,30 @@ public sealed class DocumentationMetadataNormalizerTests
             Kind = "Type",
             CanonicalTypeName = "System.String"
         }));
+        Assert.Equal("-0.0", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+        {
+            Kind = "Double",
+            Text = "-0"
+        }));
+        Assert.Equal("([single]-0.0)", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+        {
+            Kind = "Single",
+            Text = "-0"
+        }));
+        Assert.Equal(
+            "[System.Decimal]::Parse('79228162514264337593543950335', [System.Globalization.CultureInfo]::InvariantCulture)",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "Decimal",
+                Text = "79228162514264337593543950335"
+            }));
+        Assert.Equal(
+            "[scriptblock]::Create((-join @('param($Value)', ([char]10), '$Value')))",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "ScriptBlockCodeUnits",
+                Text = string.Join(",", "param($Value)\n$Value".Select(character => (int)character))
+            }));
         Assert.Equal("@('one', $false)", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
         {
             Kind = "Collection",
@@ -114,6 +138,7 @@ public sealed class DocumentationMetadataNormalizerTests
         Assert.Equal(["Basic", "Advanced"], parameter.PossibleValues);
         Assert.False(parameter.HasMetadataDefault);
         Assert.Null(parameter.MetadataDefaultHelp);
+        Assert.Null(parameter.MetadataDefaultHelpCodeUnits);
         Assert.Null(parameter.MetadataDefaultValue);
     }
 
@@ -165,6 +190,11 @@ public sealed class DocumentationMetadataNormalizerTests
             [
                 Type("Result", "Example.Result"),
                 Type("RESULT", "Example.RESULT")
+            ],
+            AuthoredOutputs =
+            [
+                Type("Result", "Example.Result", "Mixed-case result."),
+                Type("RESULT", "Example.RESULT", "Upper-case result.")
             ]
         };
 
@@ -172,8 +202,16 @@ public sealed class DocumentationMetadataNormalizerTests
 
         Assert.Collection(
             command.Outputs,
-            output => Assert.Equal("Example.Result", output.CanonicalTypeName),
-            output => Assert.Equal("Example.RESULT", output.CanonicalTypeName));
+            output =>
+            {
+                Assert.Equal("Example.Result", output.CanonicalTypeName);
+                Assert.Equal("Mixed-case result.", output.Description);
+            },
+            output =>
+            {
+                Assert.Equal("Example.RESULT", output.CanonicalTypeName);
+                Assert.Equal("Upper-case result.", output.Description);
+            });
     }
 
     [Fact]

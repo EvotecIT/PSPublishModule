@@ -29,7 +29,7 @@ internal static class PowerShellDefaultValueFormatter
             case "string":
                 return FormatString(value.Text ?? string.Empty, preserveCharacterType: false);
             case "stringcodeunits":
-                return FormatString(DecodeCodeUnits(value.Text), preserveCharacterType: false);
+                return FormatString(DecodeUtf16CodeUnits(value.Text), preserveCharacterType: false);
             case "char":
                 return FormatString(value.Text ?? string.Empty, preserveCharacterType: true);
             case "charcodeunit":
@@ -48,13 +48,18 @@ internal static class PowerShellDefaultValueFormatter
                 return FormatFloatingPoint(value.Text, "double");
             case "single":
                 return FormatFloatingPoint(value.Text, "single");
+            case "decimal":
+                return "[System.Decimal]::Parse('" + (value.Text ?? string.Empty).Replace("'", "''") +
+                       "', [System.Globalization.CultureInfo]::InvariantCulture)";
+            case "scriptblockcodeunits":
+                return "[scriptblock]::Create(" + FormatString(DecodeUtf16CodeUnits(value.Text), preserveCharacterType: false) + ")";
             case "collection":
                 return "@(" + string.Join(", ", (value.Items ?? new List<DocumentationRuntimeValue>()).Select(Format)) + ")";
             case "formattable":
             case "text":
                 return value.Text ?? string.Empty;
             case "textcodeunits":
-                return DecodeCodeUnits(value.Text);
+                return DecodeUtf16CodeUnits(value.Text);
             default:
                 return value.Text ?? string.Empty;
         }
@@ -98,6 +103,14 @@ internal static class PowerShellDefaultValueFormatter
             return "[" + powerShellType + "]::PositiveInfinity";
         if (value.Equals("-Infinity", StringComparison.OrdinalIgnoreCase))
             return "[" + powerShellType + "]::NegativeInfinity";
+        if (powerShellType.Equals("single", StringComparison.Ordinal))
+        {
+            if (value.Equals("-0", StringComparison.Ordinal)) value = "-0.0";
+            else if (value.Equals("0", StringComparison.Ordinal)) value = "0.0";
+            return "([single]" + value + ")";
+        }
+        if (value.Equals("-0", StringComparison.Ordinal)) return "-0.0";
+        if (value.Equals("0", StringComparison.Ordinal)) return "0.0";
         return value;
     }
 
@@ -188,7 +201,7 @@ internal static class PowerShellDefaultValueFormatter
         return "([char]" + value.ToString(CultureInfo.InvariantCulture) + ")";
     }
 
-    private static string DecodeCodeUnits(string? text)
+    internal static string DecodeUtf16CodeUnits(string? text)
     {
         if (string.IsNullOrEmpty(text)) return string.Empty;
         var values = text!.Split(',');

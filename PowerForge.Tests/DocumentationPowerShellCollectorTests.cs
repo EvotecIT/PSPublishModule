@@ -72,6 +72,18 @@ function Get-CollectorFixture {
                 [string],
                 $surrogateAttributes))
 
+        $surrogateHelpAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $surrogateHelpDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $surrogateHelpDefault.Help = [string][char]0xD800
+        $surrogateHelpDefault.Value = 'ignored'
+        $surrogateHelpAttributes.Add($surrogateHelpDefault)
+        $parameters.Add(
+            'InvalidSurrogateHelp',
+            [System.Management.Automation.RuntimeDefinedParameter]::new(
+                'InvalidSurrogateHelp',
+                [string],
+                $surrogateHelpAttributes))
+
         $parameters
     }
 }
@@ -114,7 +126,7 @@ function Get-AcceleratedOutput {
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>string</maml:name>
+          <maml:name>system.string</maml:name>
         </dev:type>
         <maml:description>
           <maml:para>An authored accelerator description.</maml:para>
@@ -140,6 +152,9 @@ function Get-AcceleratedOutput {
                 var invalidSurrogate = Assert.Single(
                     command.Parameters,
                     parameter => parameter.Name == "InvalidSurrogate");
+                var invalidSurrogateHelp = Assert.Single(
+                    command.Parameters,
+                    parameter => parameter.Name == "InvalidSurrogateHelp");
                 var accelerated = Assert.Single(
                     payload.Commands,
                     item => item.Name == "Get-AcceleratedOutput");
@@ -148,6 +163,7 @@ function Get-AcceleratedOutput {
                 Assert.Equal(NestedExpression(80, "1"), nested.DefaultValue);
                 Assert.Equal("authored display value", helpWins.DefaultValue);
                 Assert.Equal("(-join @(([char]55296)))", invalidSurrogate.DefaultValue);
+                Assert.Equal("(-join @(([char]55296)))", invalidSurrogateHelp.DefaultValue);
                 Assert.Equal("System.String", acceleratedOutput.ClrTypeName);
                 Assert.Equal("An authored accelerator description.", acceleratedOutput.Description);
             }
