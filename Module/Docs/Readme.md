@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.82
+Help Version: 3.0.83
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -251,6 +251,9 @@ Executes a repository-wide .NET build/release pipeline from a JSON configuration
 
 ### [Invoke-ProjectRelease](Invoke-ProjectRelease.md)
 Executes a PowerShell-authored project release object through the unified PowerForge release engine.
+
+### [Merge-BenchmarkEvidenceCatalog](Merge-BenchmarkEvidenceCatalog.md)
+Consolidates independently produced platform benchmark evidence bundles.
 
 ### [New-AppleAppArchive](New-AppleAppArchive.md)
 Creates an Apple app .xcarchive using xcodebuild.

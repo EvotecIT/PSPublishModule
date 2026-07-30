@@ -567,9 +567,12 @@ public sealed partial class BenchmarkEvidenceCatalogService
         return issues.ToArray();
     }
 
-    private static void ValidatePublishableResult(BenchmarkRunResult result)
+    private static void ValidatePublishableResult(
+        BenchmarkRunResult result,
+        bool requireValidatedImportProvenance = true)
     {
-        if (!string.IsNullOrWhiteSpace(MetadataValue(result.Metadata, "importedUtc")) &&
+        if (requireValidatedImportProvenance &&
+            !string.IsNullOrWhiteSpace(MetadataValue(result.Metadata, "importedUtc")) &&
             !result.HasValidatedProductionProvenance)
         {
             throw new InvalidOperationException(

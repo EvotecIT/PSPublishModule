@@ -15,6 +15,7 @@ metadata with any table that is committed or shared.
 | `Invoke-BenchmarkSuite` | Runs a `.benchmark.ps1` suite, writes artifacts, updates declared README blocks, and returns a `BenchmarkRunResult`. |
 | `Start-BenchmarkProvenanceCapture` / `Complete-BenchmarkProvenanceCapture` | Bind a fresh external benchmark artifact directory to clean, unchanged Git source state and per-file hashes. |
 | `Import-BenchmarkResult` | Imports BenchmarkDotNet CSV/JSON artifacts or normalized benchmark JSON/CSV into the common result schema. |
+| `Merge-BenchmarkEvidenceCatalog` | Verifies and consolidates portable evidence bundles produced by independent platform runners. |
 | `Update-BenchmarkEvidenceCatalog` | Records an independent Windows, Linux, or macOS result lane and exposes missing or incompatible platform evidence. |
 | `Update-BenchmarkDocument` | Replaces one marker-delimited Markdown block from a normalized summary or comparison file. |
 | `Test-BenchmarkGate` | Verifies benchmark summary metrics against a JSON baseline with tolerance rules. |
@@ -337,6 +338,26 @@ accepted as provenance. Catalog updates use a cross-process lease and
 metadata-preserving same-directory replacement, write the exact validated
 normalized result beside the catalog, and record its SHA-256, so concurrent
 platform jobs cannot silently discard, substitute, or truncate another lane.
+Each platform runner should write an isolated portable bundle: one catalog plus
+its normalized result files in the same directory. Consolidate independently
+produced bundles only after every runner finishes:
+
+```powershell
+Merge-BenchmarkEvidenceCatalog `
+    -SourcePath `
+        .\artifacts\windows\index.json, `
+        .\artifacts\linux\index.json, `
+        .\artifacts\macos\index.json `
+    -Path .\Website\static\data\benchmarks\tabular\index.json `
+    -ExpectedPlatform windows,linux,macos
+```
+
+The merge verifies every normalized result against the SHA-256 and lane metadata
+recorded by its source catalog, rejects conflicting copies of the same lane, and
+copies the verified results beside the destination catalog before committing the
+catalog. This is the cross-machine convergence step; the update lock only
+coordinates writers that actually share one filesystem.
+
 The catalog replaces only the matching comparison/platform/run-mode lane.
 Windows, Linux, and macOS remain separate entries. `availability` lists missing
 platforms explicitly. A publishable lane must contain successful measurements,
