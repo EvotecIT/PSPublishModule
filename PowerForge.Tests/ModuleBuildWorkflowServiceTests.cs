@@ -100,6 +100,7 @@ public sealed class ModuleBuildWorkflowServiceTests
         {
             Configuration = new PublishConfiguration
             {
+                ID = "Release",
                 Destination = PublishDestination.GitHub,
                 RepositoryName = "SampleModule"
             }
@@ -123,7 +124,7 @@ public sealed class ModuleBuildWorkflowServiceTests
         Assert.Equal("Pack artefact", artefactDisplay.Title);
         Assert.Equal("Unpacked (ToGitHub)", artefactDisplay.Target);
         Assert.Equal("Publish", publishDisplay.Title);
-        Assert.Equal("GitHub (SampleModule)", publishDisplay.Target);
+        Assert.Equal("GitHub (Release, SampleModule)", publishDisplay.Target);
         Assert.Equal("Install", installDisplay.Title);
         Assert.Equal("AutoRevision, keep 3", installDisplay.Target);
 
@@ -133,6 +134,10 @@ public sealed class ModuleBuildWorkflowServiceTests
             item => item.Kind == ModulePipelineStepKind.Artefact.ToString());
         Assert.Equal(artefactDisplay.Title, transportedArtefact.Title);
         Assert.Equal(artefactDisplay.Target, transportedArtefact.Target);
+        var transportedPublish = Assert.Single(
+            transportedItems,
+            item => item.Kind == ModulePipelineStepKind.Publish.ToString());
+        Assert.Equal(publishDisplay.Target, transportedPublish.Target);
     }
 
     [Fact]

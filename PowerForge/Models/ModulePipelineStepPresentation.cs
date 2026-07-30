@@ -71,8 +71,11 @@ internal sealed class ModulePipelineStepPresentation
 
         var configuration = segment.Configuration ?? new PublishConfiguration();
         var repositoryName = configuration.Repository?.Name ?? configuration.RepositoryName;
-        return string.IsNullOrWhiteSpace(repositoryName)
+        var qualifiers = new[] { configuration.ID, repositoryName }
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToArray();
+        return qualifiers.Length == 0
             ? configuration.Destination.ToString()
-            : $"{configuration.Destination} ({repositoryName})";
+            : $"{configuration.Destination} ({string.Join(", ", qualifiers)})";
     }
 }

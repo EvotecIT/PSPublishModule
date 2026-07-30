@@ -30,7 +30,7 @@ internal sealed class SpectreProgressPresentation
         _includeBar = _barWidth > 0;
 
         const int percentWidth = 5;
-        var elapsedWidth = _includeElapsed ? 5 : 0;
+        var elapsedWidth = _includeElapsed ? 8 : 0;
         const int spinnerWidth = 2;
         const int iconWidth = 2;
         const int gaps = 10;
@@ -70,7 +70,7 @@ internal sealed class SpectreProgressPresentation
         if (idWidth == 0)
             return PadOrEllipsis(title, _descriptionWidth);
 
-        if (_targetWidth <= 0)
+        if (_targetWidth <= 0 || string.IsNullOrWhiteSpace(item.Target))
         {
             var titleWidth = Math.Max(0, _descriptionWidth - idWidth - 1);
             return $"{ordinal} {PadOrEllipsis(title, titleWidth)}".TrimEnd();

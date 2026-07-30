@@ -46,6 +46,42 @@ public sealed class SpectreBuildProgressColumnsTests
             column => Assert.IsType<SpinnerColumn>(column));
     }
 
+    [Theory]
+    [InlineData(0, "00:00")]
+    [InlineData(3599, "59:59")]
+    [InlineData(3900, "01:05:00")]
+    [InlineData(90061, "25:01:01")]
+    public void FormatElapsed_PreservesHoursWithoutWrapping(long seconds, string expected)
+        => Assert.Equal(
+            expected,
+            SpectreBuildProgressColumns.FormatElapsed(TimeSpan.FromSeconds(seconds)));
+
+    [Fact]
+    public void Presentation_DoesNotReserveTargetWidthForTargetlessRows()
+    {
+        var presentation = new SpectreProgressPresentation(viewportWidth: 120, unicode: false);
+        var targetless = new SpectreProgressLedgerItem
+        {
+            Title = "Publish PowerForgeWeb net10.0 win-x64 SingleContained",
+            Position = 1,
+            Total = 2
+        };
+        var targeted = new SpectreProgressLedgerItem
+        {
+            Title = "Publish",
+            Target = "PowerShellGallery",
+            Position = 2,
+            Total = 2
+        };
+
+        var targetlessLabel = presentation.BuildLabel(targetless, "packing");
+        var targetedLabel = presentation.BuildLabel(targeted, null);
+
+        Assert.Contains("SingleContained", targetlessLabel, StringComparison.Ordinal);
+        Assert.Contains("packing", targetlessLabel, StringComparison.Ordinal);
+        Assert.EndsWith("PowerShellGallery", targetedLabel, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Run_WritesCompletedProgressFrameAfterLiveDisplayCloses()
     {

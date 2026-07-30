@@ -125,12 +125,24 @@ internal static class SpectreBuildProgressColumns
         public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
         {
             if (_done.TryGetValue(task, out var elapsed))
-                return new Markup($"[blue]{elapsed:mm\\:ss}[/]");
+                return new Markup($"[blue]{FormatElapsed(elapsed)}[/]");
 
             if (_start.TryGetValue(task, out var startedAt))
-                return new Markup($"[blue]{(DateTimeOffset.Now - startedAt):mm\\:ss}[/]");
+                return new Markup($"[blue]{FormatElapsed(DateTimeOffset.Now - startedAt)}[/]");
 
             return new Markup("[blue]00:00[/]");
         }
+    }
+
+    internal static string FormatElapsed(TimeSpan elapsed)
+    {
+        if (elapsed < TimeSpan.Zero)
+            elapsed = TimeSpan.Zero;
+
+        if (elapsed.TotalHours < 1)
+            return $"{elapsed.Minutes:00}:{elapsed.Seconds:00}";
+
+        var totalHours = (long)Math.Floor(elapsed.TotalHours);
+        return $"{totalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}";
     }
 }
