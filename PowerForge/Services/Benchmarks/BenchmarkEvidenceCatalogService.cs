@@ -122,6 +122,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
     /// <param name="publish">Whether the lane supports public benchmark claims.</param>
     /// <param name="expectedPlatforms">Platforms expected for complete evidence.</param>
     /// <param name="platform">Producing platform override for artifacts that do not carry OS metadata.</param>
+    /// <param name="resultArtifactPath">
+    /// Optional local filesystem destination for the normalized result. Use this when
+    /// <paramref name="resultPath"/> is a website URL or another portable consumer path.
+    /// </param>
     /// <returns>Updated catalog.</returns>
     public BenchmarkEvidenceCatalog UpdateFile(
         string catalogPath,
@@ -131,7 +135,8 @@ public sealed partial class BenchmarkEvidenceCatalogService
         string runMode,
         bool publish,
         IEnumerable<string>? expectedPlatforms = null,
-        string? platform = null)
+        string? platform = null,
+        string? resultArtifactPath = null)
     {
         if (string.IsNullOrWhiteSpace(catalogPath)) throw new ArgumentException("Catalog path is required.", nameof(catalogPath));
         string fullPath = BenchmarkJson.ResolveWritePath(catalogPath);
@@ -161,7 +166,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
                                         StringComparison.Ordinal);
             if (inputWasSelected)
             {
-                artifactPath = ResolveResultArtifactPath(fullPath, resultPath);
+                artifactPath = ResolveResultArtifactPath(
+                    fullPath,
+                    resultPath,
+                    resultArtifactPath);
                 if (string.Equals(artifactPath, fullPath, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException(
@@ -216,8 +224,13 @@ public sealed partial class BenchmarkEvidenceCatalogService
         }
     }
 
-    private static string ResolveResultArtifactPath(string catalogPath, string resultPath)
+    private static string ResolveResultArtifactPath(
+        string catalogPath,
+        string resultPath,
+        string? resultArtifactPath)
     {
+        if (!string.IsNullOrWhiteSpace(resultArtifactPath))
+            return BenchmarkJson.ResolveWritePath(resultArtifactPath);
         if (Path.IsPathRooted(resultPath))
             return BenchmarkJson.ResolveWritePath(resultPath);
         if (Uri.TryCreate(resultPath, UriKind.Absolute, out Uri? uri))

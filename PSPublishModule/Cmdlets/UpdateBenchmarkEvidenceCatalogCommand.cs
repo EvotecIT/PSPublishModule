@@ -39,6 +39,15 @@ public sealed class UpdateBenchmarkEvidenceCatalogCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string ResultPath { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Optional local filesystem destination for the normalized result artifact.
+    /// Specify this when <see cref="ResultPath"/> is a website URL or another
+    /// portable consumer path rather than a local path.
+    /// </summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? ResultArtifactPath { get; set; }
+
     /// <summary>Run mode such as quick or full.</summary>
     [Parameter(Mandatory = true)]
     [ValidateNotNullOrEmpty]
@@ -80,7 +89,10 @@ public sealed class UpdateBenchmarkEvidenceCatalogCommand : PSCmdlet
             RunMode,
             Publish.IsPresent,
             ExpectedPlatform,
-            Platform);
+            Platform,
+            string.IsNullOrWhiteSpace(ResultArtifactPath)
+                ? null
+                : SessionState.Path.GetUnresolvedProviderPathFromPSPath(ResultArtifactPath));
         WriteObject(result);
     }
 }

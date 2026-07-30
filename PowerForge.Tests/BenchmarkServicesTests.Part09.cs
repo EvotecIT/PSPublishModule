@@ -184,6 +184,35 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void EvidenceCatalog_SeparatesPortableResultPathFromLocalArtifactPath()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "site", "data", "benchmarks", "index.json");
+        string artifactPath = Path.Combine(
+            root,
+            "site",
+            "data",
+            "benchmarks",
+            "windows.json");
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+
+        BenchmarkEvidenceCatalog catalog =
+            new BenchmarkEvidenceCatalogService().UpdateFile(
+                catalogPath,
+                result,
+                "comparison-a",
+                "/data/benchmarks/windows.json",
+                "full",
+                publish: true,
+                resultArtifactPath: artifactPath);
+
+        BenchmarkEvidenceEntry entry = Assert.Single(catalog.Entries);
+        Assert.Equal("/data/benchmarks/windows.json", entry.ResultPath);
+        Assert.Equal(result.RunId, BenchmarkJson.Read<BenchmarkRunResult>(artifactPath).RunId);
+        Assert.Equal(BenchmarkJson.ComputeFileSha256(artifactPath), entry.ResultSha256);
+    }
+
+    [Fact]
     public void EvidenceCatalog_DemotesLegacyPublishedLanesDuringSchemaMigration()
     {
         var legacy = new BenchmarkEvidenceCatalog
