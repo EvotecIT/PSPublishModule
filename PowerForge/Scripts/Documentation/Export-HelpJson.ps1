@@ -190,6 +190,27 @@ function AddRuntimeDefaultValueTokens([object]$value, [System.Collections.IList]
     }) | Out-Null
     return
   }
+  if ($value -is [datetime]) {
+    $tokens.Add([ordered]@{
+      kind = 'DateTime'
+      text = $value.ToString('O', [System.Globalization.CultureInfo]::InvariantCulture)
+    }) | Out-Null
+    return
+  }
+  if ($value -is [datetimeoffset]) {
+    $tokens.Add([ordered]@{
+      kind = 'DateTimeOffset'
+      text = $value.ToString('O', [System.Globalization.CultureInfo]::InvariantCulture)
+    }) | Out-Null
+    return
+  }
+  if ($value -is [timespan]) {
+    $tokens.Add([ordered]@{
+      kind = 'TimeSpan'
+      text = $value.ToString('c', [System.Globalization.CultureInfo]::InvariantCulture)
+    }) | Out-Null
+    return
+  }
   if ($value -is [scriptblock]) {
     $tokens.Add([ordered]@{
       kind = 'ScriptBlockCodeUnits'

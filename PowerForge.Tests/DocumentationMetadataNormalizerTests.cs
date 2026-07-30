@@ -62,6 +62,27 @@ public sealed class DocumentationMetadataNormalizerTests
                 Text = "79228162514264337593543950335"
             }));
         Assert.Equal(
+            "[System.DateTime]::ParseExact('2026-07-30T12:34:56.1234567Z', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "DateTime",
+                Text = "2026-07-30T12:34:56.1234567Z"
+            }));
+        Assert.Equal(
+            "[System.DateTimeOffset]::ParseExact('2026-07-30T12:34:56.1234567+05:30', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "DateTimeOffset",
+                Text = "2026-07-30T12:34:56.1234567+05:30"
+            }));
+        Assert.Equal(
+            "[System.TimeSpan]::ParseExact('1.02:03:04.5678900', 'c', [System.Globalization.CultureInfo]::InvariantCulture)",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "TimeSpan",
+                Text = "1.02:03:04.5678900"
+            }));
+        Assert.Equal(
             "[scriptblock]::Create((-join @('param($Value)', ([char]10), '$Value')))",
             PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
             {

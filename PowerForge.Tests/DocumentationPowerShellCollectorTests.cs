@@ -84,6 +84,24 @@ function Get-CollectorFixture {
                 [string],
                 $surrogateHelpAttributes))
 
+        $dateTimeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $dateTimeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $dateTimeDefault.Value = [datetime]::ParseExact('2026-07-30T12:34:56.1234567Z', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)
+        $dateTimeAttributes.Add($dateTimeDefault)
+        $parameters.Add('DateTime', [System.Management.Automation.RuntimeDefinedParameter]::new('DateTime', [datetime], $dateTimeAttributes))
+
+        $dateTimeOffsetAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $dateTimeOffsetDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $dateTimeOffsetDefault.Value = [datetimeoffset]::ParseExact('2026-07-30T12:34:56.1234567+05:30', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)
+        $dateTimeOffsetAttributes.Add($dateTimeOffsetDefault)
+        $parameters.Add('DateTimeOffset', [System.Management.Automation.RuntimeDefinedParameter]::new('DateTimeOffset', [datetimeoffset], $dateTimeOffsetAttributes))
+
+        $timeSpanAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $timeSpanDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $timeSpanDefault.Value = [timespan]::ParseExact('1.02:03:04.5678900', 'c', [System.Globalization.CultureInfo]::InvariantCulture)
+        $timeSpanAttributes.Add($timeSpanDefault)
+        $parameters.Add('TimeSpan', [System.Management.Automation.RuntimeDefinedParameter]::new('TimeSpan', [timespan], $timeSpanAttributes))
+
         $parameters
     }
 }
@@ -155,6 +173,9 @@ function Get-AcceleratedOutput {
                 var invalidSurrogateHelp = Assert.Single(
                     command.Parameters,
                     parameter => parameter.Name == "InvalidSurrogateHelp");
+                var dateTime = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTime");
+                var dateTimeOffset = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTimeOffset");
+                var timeSpan = Assert.Single(command.Parameters, parameter => parameter.Name == "TimeSpan");
                 var accelerated = Assert.Single(
                     payload.Commands,
                     item => item.Name == "Get-AcceleratedOutput");
@@ -164,6 +185,15 @@ function Get-AcceleratedOutput {
                 Assert.Equal("authored display value", helpWins.DefaultValue);
                 Assert.Equal("(-join @(([char]55296)))", invalidSurrogate.DefaultValue);
                 Assert.Equal("(-join @(([char]55296)))", invalidSurrogateHelp.DefaultValue);
+                Assert.Equal(
+                    "[System.DateTime]::ParseExact('2026-07-30T12:34:56.1234567Z', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",
+                    dateTime.DefaultValue);
+                Assert.Equal(
+                    "[System.DateTimeOffset]::ParseExact('2026-07-30T12:34:56.1234567+05:30', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",
+                    dateTimeOffset.DefaultValue);
+                Assert.Equal(
+                    "[System.TimeSpan]::ParseExact('1.02:03:04.5678900', 'c', [System.Globalization.CultureInfo]::InvariantCulture)",
+                    timeSpan.DefaultValue);
                 Assert.Equal("System.String", acceleratedOutput.ClrTypeName);
                 Assert.Equal("An authored accelerator description.", acceleratedOutput.Description);
             }

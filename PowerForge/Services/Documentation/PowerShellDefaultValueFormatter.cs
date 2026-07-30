@@ -51,6 +51,12 @@ internal static class PowerShellDefaultValueFormatter
             case "decimal":
                 return "[System.Decimal]::Parse('" + (value.Text ?? string.Empty).Replace("'", "''") +
                        "', [System.Globalization.CultureInfo]::InvariantCulture)";
+            case "datetime":
+                return FormatTemporalParseExact("System.DateTime", value.Text, "O", includeStyles: true);
+            case "datetimeoffset":
+                return FormatTemporalParseExact("System.DateTimeOffset", value.Text, "O", includeStyles: true);
+            case "timespan":
+                return FormatTemporalParseExact("System.TimeSpan", value.Text, "c", includeStyles: false);
             case "scriptblockcodeunits":
                 return "[scriptblock]::Create(" + FormatString(DecodeUtf16CodeUnits(value.Text), preserveCharacterType: false) + ")";
             case "collection":
@@ -112,6 +118,20 @@ internal static class PowerShellDefaultValueFormatter
         if (value.Equals("-0", StringComparison.Ordinal)) return "-0.0";
         if (value.Equals("0", StringComparison.Ordinal)) return "0.0";
         return value;
+    }
+
+    private static string FormatTemporalParseExact(
+        string typeName,
+        string? text,
+        string format,
+        bool includeStyles)
+    {
+        var expression = "[" + typeName + "]::ParseExact('" +
+                         (text ?? string.Empty).Replace("'", "''") + "', '" + format +
+                         "', [System.Globalization.CultureInfo]::InvariantCulture";
+        if (includeStyles)
+            expression += ", [System.Globalization.DateTimeStyles]::RoundtripKind";
+        return expression + ")";
     }
 
     private static string FormatString(string text, bool preserveCharacterType)
