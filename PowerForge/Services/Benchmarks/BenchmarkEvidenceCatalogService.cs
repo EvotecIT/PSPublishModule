@@ -7,7 +7,7 @@ namespace PowerForge;
 /// <summary>
 /// Builds and validates a platform-aware benchmark evidence catalog.
 /// </summary>
-public sealed class BenchmarkEvidenceCatalogService
+public sealed partial class BenchmarkEvidenceCatalogService
 {
     private const int SupportedSchemaVersion = 2;
     private static readonly string[] DefaultExpectedPlatforms = { "windows", "linux", "macos" };
@@ -157,6 +157,8 @@ public sealed class BenchmarkEvidenceCatalogService
         AddCompatibilityDimension(dimensions, "environment.runtimeVersion", result.Environment.RuntimeVersion);
         AddCompatibilityDimension(dimensions, "environment.dotNetSdkVersion", result.Environment.DotNetSdkVersion);
         AddCompatibilityDimension(dimensions, "environment.runner", result.Environment.Runner);
+        AddCompatibilityDimension(dimensions, "environment.osArchitecture", result.Environment.OsArchitecture);
+        AddCompatibilityDimension(dimensions, "environment.processArchitecture", result.Environment.ProcessArchitecture);
         AddCompatibilityDimension(
             dimensions,
             "benchmark.workload.shape.sha256",
@@ -393,7 +395,8 @@ public sealed class BenchmarkEvidenceCatalogService
         bool hasUnknownStatus =
             result.Samples.Any(sample =>
                 !Enum.IsDefined(typeof(BenchmarkSampleStatus), sample.Status)) ||
-            result.Summary.Any(row => !IsKnownSummaryStatus(row.Status));
+            result.Summary.Any(row => !IsKnownMeasurementStatus(row.Status)) ||
+            result.Comparison.Any(row => !IsKnownMeasurementStatus(row.Status));
         if (hasUnknownStatus)
         {
             throw new InvalidOperationException(
@@ -404,6 +407,8 @@ public sealed class BenchmarkEvidenceCatalogService
         bool hasSkippedMeasurement =
             result.Samples.Any(sample => sample.Status == BenchmarkSampleStatus.Skipped) ||
             result.Summary.Any(row =>
+                string.Equals(row.Status, "Skipped", StringComparison.OrdinalIgnoreCase)) ||
+            result.Comparison.Any(row =>
                 string.Equals(row.Status, "Skipped", StringComparison.OrdinalIgnoreCase));
         if (hasSkippedMeasurement)
         {
@@ -422,7 +427,11 @@ public sealed class BenchmarkEvidenceCatalogService
                 (string.Equals(row.Status, "Succeeded", StringComparison.OrdinalIgnoreCase) &&
                  (row.SampleCount <= 0 ||
                   (!IsValidDuration(row.MedianMs) &&
-                   !IsValidDuration(row.MeanMs)))));
+                   !IsValidDuration(row.MeanMs))))) ||
+            result.Comparison.Any(row =>
+                string.Equals(row.Status, "Failed", StringComparison.OrdinalIgnoreCase) ||
+                (string.Equals(row.Status, "Succeeded", StringComparison.OrdinalIgnoreCase) &&
+                 !IsValidComparison(row)));
         bool hasSuccessfulMeasurement =
             result.Samples.Any(sample =>
                 sample.Status == BenchmarkSampleStatus.Succeeded &&
@@ -436,6 +445,8 @@ public sealed class BenchmarkEvidenceCatalogService
             throw new InvalidOperationException(
                 "Publishable benchmark evidence requires at least one successful measurement and no failed measurements.");
         }
+
+        ValidateSummariesMatchSamples(result);
     }
 
     private static void ValidateCatalogSchema(BenchmarkEvidenceCatalog? catalog)
@@ -498,7 +509,7 @@ public sealed class BenchmarkEvidenceCatalogService
     private static bool IsValidDuration(double? value)
         => value.HasValue && IsValidDuration(value.Value);
 
-    private static bool IsKnownSummaryStatus(string? status)
+    private static bool IsKnownMeasurementStatus(string? status)
         => string.Equals(status, "Succeeded", StringComparison.OrdinalIgnoreCase)
            || string.Equals(status, "Failed", StringComparison.OrdinalIgnoreCase)
            || string.Equals(status, "Skipped", StringComparison.OrdinalIgnoreCase);

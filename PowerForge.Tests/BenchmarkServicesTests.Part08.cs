@@ -300,6 +300,80 @@ public sealed partial class BenchmarkServicesTests
         Assert.Contains("skipped measurements", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("Failed")]
+    [InlineData("Skipped")]
+    [InlineData("TimedOut")]
+    public void EvidenceCatalog_RejectsNonSuccessfulComparisonStatus(string status)
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        BenchmarkComparisonRow comparison = Comparison("Windows", 0.05);
+        comparison.Status = status;
+        result.Comparison = [comparison];
+
+        Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "invalid-comparison-status.json",
+                "full",
+                publish: true));
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RejectsComparisonWithoutRequiredMeasurements()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        BenchmarkComparisonRow comparison = Comparison("Windows", 0.05);
+        comparison.Actual = null;
+        result.Comparison = [comparison];
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "invalid-comparison-measurement.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("no failed measurements", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RejectsSummaryThatDoesNotMatchRawSamples()
+    {
+        BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
+        result.Samples =
+        [
+            new BenchmarkSample
+            {
+                Suite = result.Suite,
+                Scenario = "CsvTyped",
+                Operation = "Read",
+                Engine = "OfficeIMO",
+                Os = "Windows",
+                RunMode = "full",
+                Status = BenchmarkSampleStatus.Succeeded,
+                DurationMs = 10
+            }
+        ];
+        result.Summary = new BenchmarkSummaryService().Summarize(result.Samples);
+        result.Summary[0].MedianMs = 100;
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(
+                null,
+                result,
+                "comparison-a",
+                "tampered-summary.json",
+                "full",
+                publish: true));
+
+        Assert.Contains("recomputed", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void EvidenceCatalog_RejectsPublishWithoutSourceProvenance()
     {
@@ -707,6 +781,38 @@ public sealed partial class BenchmarkServicesTests
         var mac = Assert.Single(catalog.Entries, entry => entry.Platform == "macos");
         Assert.False(mac.Comparable);
         Assert.Contains(mac.CompatibilityIssues, issue => issue.Contains("benchmark.fixture.sha256", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void EvidenceCatalog_MarksDifferentProcessArchitecturesAsNotComparable()
+    {
+        BenchmarkRunResult windows = Result("Windows", "fixture-a", 10);
+        BenchmarkRunResult linux = Result("Linux", "fixture-a", 11);
+        linux.Environment.OsArchitecture = "Arm64";
+        linux.Environment.ProcessArchitecture = "Arm64";
+        var service = new BenchmarkEvidenceCatalogService();
+
+        BenchmarkEvidenceCatalog catalog = service.Update(
+            null,
+            windows,
+            "comparison-a",
+            "windows.json",
+            "full",
+            publish: true);
+        catalog = service.Update(
+            catalog,
+            linux,
+            "comparison-a",
+            "linux.json",
+            "full",
+            publish: true);
+
+        Assert.All(catalog.Entries, entry => Assert.False(entry.Comparable));
+        Assert.All(
+            catalog.Entries,
+            entry => Assert.Contains(
+                entry.CompatibilityIssues,
+                issue => issue.Contains("processArchitecture", StringComparison.OrdinalIgnoreCase)));
     }
 
     [Fact]
@@ -1252,6 +1358,10 @@ public sealed partial class BenchmarkServicesTests
             RunMode = "full",
             Engine = "OfficeIMO",
             BaselineEngine = "Sep",
+            Status = "Succeeded",
+            Actual = 10,
+            Baseline = 10,
+            Ratio = 1,
             Metric = "MedianMs",
             TieTolerance = tieTolerance
         };

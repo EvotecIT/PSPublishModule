@@ -22,6 +22,23 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_RejectsUnknownNormalizedSampleStatus()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(
+            csv,
+            "Suite,Scenario,Operation,Engine,Host,OS,RunMode,Iteration,Status,DurationMs,Reason\n" +
+            "suite,case,Run,Managed,Current,Windows,full,0,TimedOut,12,\n");
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkResultImporter().Import(csv));
+
+        Assert.Contains("TimedOut", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Importer_FailsNonFiniteCsvDurations()
     {
         var root = CreateTempRoot();

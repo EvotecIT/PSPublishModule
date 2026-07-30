@@ -1399,10 +1399,21 @@ public sealed class BenchmarkResultImporter
 
     private static BenchmarkSampleStatus ParseSampleStatus(string? value, bool hasDuration)
     {
-        if (!string.IsNullOrWhiteSpace(value) && Enum.TryParse<BenchmarkSampleStatus>(value, ignoreCase: true, out var status))
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            if (!Enum.TryParse<BenchmarkSampleStatus>(value, ignoreCase: true, out var status) ||
+                !Enum.IsDefined(typeof(BenchmarkSampleStatus), status))
+            {
+                throw new InvalidOperationException(
+                    $"Unsupported benchmark sample status '{value}'. " +
+                    "Only Succeeded, Failed, and Skipped statuses are supported.");
+            }
+
             return status == BenchmarkSampleStatus.Succeeded && !hasDuration
                 ? BenchmarkSampleStatus.Failed
                 : status;
+        }
+
         return hasDuration ? BenchmarkSampleStatus.Succeeded : BenchmarkSampleStatus.Failed;
     }
 
