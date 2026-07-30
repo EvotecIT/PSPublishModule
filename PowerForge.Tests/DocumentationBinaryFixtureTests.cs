@@ -112,6 +112,68 @@ public sealed class DocumentationBinaryFixtureTests
         }
     }
 
+    [Fact]
+    public void DocumentationEngine_PreservesExplicitlyEmptyMetadataDefaults()
+    {
+        var fixtureRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "PowerForge.Tests", "Fixtures", "BinaryDocFixture"));
+        var outputDirectory = BuildFixtureProject(fixtureRoot);
+        var tempRoot = Path.Combine(Path.GetTempPath(), "pf-binary-doc-empty-default-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+
+        try
+        {
+            const string moduleName = "BinaryDocFixture";
+            var manifestPath = Path.Combine(tempRoot, moduleName + ".psd1");
+            File.Copy(Path.Combine(outputDirectory, moduleName + ".dll"), Path.Combine(tempRoot, moduleName + ".dll"));
+            File.Copy(Path.Combine(outputDirectory, moduleName + ".xml"), Path.Combine(tempRoot, moduleName + ".xml"));
+            File.WriteAllText(manifestPath, """
+@{
+    RootModule = 'BinaryDocFixture.dll'
+    ModuleVersion = '1.0.0'
+    GUID = '77777777-7777-7777-7777-777777777777'
+    Author = 'PowerForge.Tests'
+    Description = 'Binary fixture module for empty-default extraction tests.'
+    FunctionsToExport = @()
+    CmdletsToExport = @('Get-BinaryDocEmptyDefault')
+    AliasesToExport = @()
+    VariablesToExport = @()
+}
+""", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            var engine = new DocumentationEngine(new PowerShellRunner(), new NullLogger());
+            var command = Assert.Single(engine.ExtractHelpPayload(tempRoot, manifestPath, TimeSpan.FromMinutes(1)).Commands);
+
+            Assert.Equal(
+                "Empty string",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Label", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
+                "''",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Separator", StringComparison.Ordinal)).DefaultValue);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(tempRoot))
+                    Directory.Delete(tempRoot, true);
+            }
+            catch
+            {
+                // Best effort cleanup; do not mask assertion failures.
+            }
+
+            try
+            {
+                if (Directory.Exists(outputDirectory))
+                    Directory.Delete(outputDirectory, true);
+            }
+            catch
+            {
+                // Best effort cleanup; do not mask assertion failures.
+            }
+        }
+    }
+
     private static string BuildFixtureProject(string fixtureRoot)
     {
         var outputDirectory = Path.Combine(Path.GetTempPath(), "pf-binary-doc-fixture-build-" + Guid.NewGuid().ToString("N"));

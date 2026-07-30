@@ -177,7 +177,14 @@ try {
             }
             if ($attr -is [System.Management.Automation.PSDefaultValueAttribute]) {
               if ($null -ne $attr.Value) {
-                $defaultValue = [string]$attr.Value
+                $metadataDefaultValue = [string]$attr.Value
+                if (-not [string]::IsNullOrWhiteSpace($metadataDefaultValue)) {
+                  $defaultValue = $metadataDefaultValue
+                } elseif (-not [string]::IsNullOrWhiteSpace([string]$attr.Help)) {
+                  $defaultValue = [string]$attr.Help
+                } else {
+                  $defaultValue = "'" + $metadataDefaultValue.Replace("'", "''") + "'"
+                }
                 $hasMetadataDefault = $true
               } elseif (-not [string]::IsNullOrWhiteSpace([string]$attr.Help)) {
                 $defaultValue = [string]$attr.Help

@@ -52,6 +52,21 @@ public sealed class GetBinaryDocSampleCommand : PSCmdlet
     }
 }
 
+/// <summary>Returns parameters with explicitly empty defaults.</summary>
+[Cmdlet(VerbsCommon.Get, "BinaryDocEmptyDefault")]
+public sealed class GetBinaryDocEmptyDefaultCommand : PSCmdlet
+{
+    /// <summary>An optional label whose empty default has a human-readable description.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = "", Help = "Empty string")]
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>An optional separator whose empty default is rendered as a PowerShell literal.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = "")]
+    public string Separator { get; set; } = string.Empty;
+}
+
 /// <summary>Rendering mode for the binary documentation fixture.</summary>
 public enum BinaryDocMode
 {
