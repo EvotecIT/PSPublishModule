@@ -746,6 +746,7 @@ Markdown only topic body.
 
             var text = File.ReadAllText(Path.Combine(root, "Get-Demo.md"));
             Assert.False(HasIsolatedLf(text), "Markdown help should be normalized to CRLF line endings.");
+            Assert.Contains("Aliases: None\r\n", text, StringComparison.Ordinal);
             Assert.Contains("Possible values:\r\n\r\nRequired:", text, StringComparison.Ordinal);
             Assert.DoesNotContain("Possible values: \r\n", text, StringComparison.Ordinal);
         }

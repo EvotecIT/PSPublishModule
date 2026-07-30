@@ -65,6 +65,16 @@ public sealed class GetBinaryDocEmptyDefaultCommand : PSCmdlet
     [Parameter]
     [PSDefaultValue(Value = "")]
     public string Separator { get; set; } = string.Empty;
+
+    /// <summary>An optional delay whose authored help takes precedence over its numeric value.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = 5, Help = "five seconds")]
+    public int DelaySeconds { get; set; } = 5;
+
+    /// <summary>An optional delimiter whose trailing space is part of the default.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = ", ")]
+    public string Delimiter { get; set; } = ", ";
 }
 
 /// <summary>Rendering mode for the binary documentation fixture.</summary>

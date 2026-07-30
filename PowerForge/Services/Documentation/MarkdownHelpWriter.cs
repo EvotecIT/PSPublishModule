@@ -329,7 +329,7 @@ internal sealed class MarkdownHelpWriter
             .Select(a => a.Trim())
             .ToArray();
 
-        return aliases.Length == 0 ? string.Empty : string.Join(", ", aliases);
+        return aliases.Length == 0 ? "None" : string.Join(", ", aliases);
     }
 
     private static string FormatPossibleValues(DocumentationParameterHelp p)

@@ -142,6 +142,7 @@ public sealed class DocumentationBinaryFixtureTests
 
             var engine = new DocumentationEngine(new PowerShellRunner(), new NullLogger());
             var command = Assert.Single(engine.ExtractHelpPayload(tempRoot, manifestPath, TimeSpan.FromMinutes(1)).Commands);
+            Assert.Empty(command.Outputs);
 
             Assert.Equal(
                 "Empty string",
@@ -149,6 +150,12 @@ public sealed class DocumentationBinaryFixtureTests
             Assert.Equal(
                 "''",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Separator", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
+                "five seconds",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "DelaySeconds", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
+                "', '",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Delimiter", StringComparison.Ordinal)).DefaultValue);
         }
         finally
         {

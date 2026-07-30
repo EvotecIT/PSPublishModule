@@ -29,7 +29,7 @@ For C# cmdlets, the source of truth should be:
   - `<list type="alertSet">`: notes / warnings / caveats
 - parameter property / field XML docs
   - `<summary>` / `<remarks>`: parameter description
-  - `[PSDefaultValue(Value = ...)]`: documented runtime default for optional parameters; use `Help` to describe an empty or whitespace-only default
+  - `[PSDefaultValue(Value = ...)]`: documented runtime default for optional parameters; nonblank `Help` is the preferred display label, while string values are rendered as PowerShell literals to preserve whitespace
 - referenced input/output CLR type XML docs
   - `<summary>` / `<remarks>`: input/output type descriptions
 - curated module content
