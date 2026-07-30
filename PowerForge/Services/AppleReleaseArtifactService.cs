@@ -91,7 +91,7 @@ internal sealed class AppleReleaseArtifactService
             if (!File.Exists(fullPath) && !Directory.Exists(fullPath))
                 continue;
             EnsureNoReparsePoints(plan.ProjectRoot, fullPath);
-            EnsureTreeContainsNoReparsePoints(fullPath);
+            EnsureTreeContainsOnlySafeLinks(fullPath);
 
             reclaimedBytes += GetSize(fullPath);
             if (File.Exists(fullPath))
@@ -163,7 +163,7 @@ internal sealed class AppleReleaseArtifactService
         }
     }
 
-    private static void EnsureTreeContainsNoReparsePoints(string path)
+    private static void EnsureTreeContainsOnlySafeLinks(string path)
     {
         var pending = new Stack<string>();
         pending.Push(path);
@@ -173,8 +173,8 @@ internal sealed class AppleReleaseArtifactService
             var attributes = File.GetAttributes(current);
             if ((attributes & FileAttributes.ReparsePoint) != 0)
             {
-                throw new InvalidOperationException(
-                    $"Refusing to recursively remove an Apple release artifact tree containing a symbolic link or reparse point: {current}");
+                EnsureSafeVersionedFrameworkLink(path, current, attributes);
+                continue;
             }
 
             if ((attributes & FileAttributes.Directory) == 0)
@@ -184,6 +184,97 @@ internal sealed class AppleReleaseArtifactService
         }
     }
 
+    private static void EnsureSafeVersionedFrameworkLink(
+        string artifactRoot,
+        string linkPath,
+        FileAttributes attributes)
+    {
+#if NET8_0_OR_GREATER
+        var frameworkRoot = FindContainingFrameworkRoot(artifactRoot, linkPath);
+        if (frameworkRoot is null)
+        {
+            throw new InvalidOperationException(
+                $"Refusing to recursively remove an Apple release artifact tree containing a symbolic link outside a framework bundle: {linkPath}");
+        }
+
+        var linkInfo = (attributes & FileAttributes.Directory) != 0
+            ? (FileSystemInfo)new DirectoryInfo(linkPath)
+            : new FileInfo(linkPath);
+        var linkTarget = linkInfo.LinkTarget;
+        if (string.IsNullOrWhiteSpace(linkTarget))
+        {
+            throw new InvalidOperationException(
+                $"Refusing to remove an Apple framework containing an unreadable symbolic link: {linkPath}");
+        }
+        if (Path.IsPathRooted(linkTarget))
+        {
+            throw new InvalidOperationException(
+                $"Refusing to remove an Apple framework containing an absolute symbolic link: {linkPath} -> {linkTarget}");
+        }
+
+        var linkDirectory = Path.GetDirectoryName(linkPath)
+            ?? throw new InvalidOperationException($"Unable to resolve the Apple framework link parent: {linkPath}");
+        var declaredTarget = Path.GetFullPath(Path.Combine(linkDirectory, linkTarget));
+        if (!IsWithinRoot(declaredTarget, frameworkRoot))
+        {
+            throw new InvalidOperationException(
+                $"Refusing to remove an Apple framework containing a symbolic link that escapes its bundle: {linkPath} -> {linkTarget}");
+        }
+
+        FileSystemInfo? resolvedTarget;
+        try
+        {
+            resolvedTarget = linkInfo.ResolveLinkTarget(returnFinalTarget: true);
+        }
+        catch (Exception exception) when (
+            exception is IOException ||
+            exception is UnauthorizedAccessException ||
+            exception is NotSupportedException)
+        {
+            throw new InvalidOperationException(
+                $"Refusing to remove an Apple framework containing an invalid symbolic link: {linkPath} -> {linkTarget}",
+                exception);
+        }
+
+        if (resolvedTarget is null ||
+            (!File.Exists(resolvedTarget.FullName) && !Directory.Exists(resolvedTarget.FullName)))
+        {
+            throw new InvalidOperationException(
+                $"Refusing to remove an Apple framework containing a broken symbolic link: {linkPath} -> {linkTarget}");
+        }
+        if (!IsWithinRoot(resolvedTarget.FullName, frameworkRoot))
+        {
+            throw new InvalidOperationException(
+                $"Refusing to remove an Apple framework containing a symbolic link that resolves outside its bundle: {linkPath} -> {linkTarget}");
+        }
+#else
+        throw new InvalidOperationException(
+            $"Refusing to recursively remove an Apple release artifact tree containing a symbolic link or reparse point: {linkPath}");
+#endif
+    }
+
+    private static string? FindContainingFrameworkRoot(string artifactRoot, string linkPath)
+    {
+        var root = Path.GetFullPath(artifactRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var current = Path.GetDirectoryName(Path.GetFullPath(linkPath));
+        while (!string.IsNullOrWhiteSpace(current) && IsWithinRoot(current, root))
+        {
+            if (Path.GetFileName(current).EndsWith(".framework", StringComparison.OrdinalIgnoreCase) &&
+                Directory.Exists(current) &&
+                (File.GetAttributes(current) & FileAttributes.ReparsePoint) == 0)
+            {
+                return current;
+            }
+
+            if (current.Equals(root, PathComparison))
+                break;
+            current = Path.GetDirectoryName(current);
+        }
+
+        return null;
+    }
+
     private static DateTime GetLastWriteTimeUtc(string path)
         => File.Exists(path)
             ? File.GetLastWriteTimeUtc(path)
@@ -191,10 +282,30 @@ internal sealed class AppleReleaseArtifactService
 
     private static long GetSize(string path)
     {
-        if (File.Exists(path))
+        var attributes = File.GetAttributes(path);
+        if ((attributes & FileAttributes.ReparsePoint) != 0)
+            return 0;
+        if ((attributes & FileAttributes.Directory) == 0)
             return new FileInfo(path).Length;
-        return Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
-            .Sum(static file => new FileInfo(file).Length);
+
+        long size = 0;
+        var pending = new Stack<string>();
+        pending.Push(path);
+        while (pending.Count > 0)
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(pending.Pop()))
+            {
+                attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                    continue;
+                if ((attributes & FileAttributes.Directory) != 0)
+                    pending.Push(entry);
+                else
+                    size += new FileInfo(entry).Length;
+            }
+        }
+
+        return size;
     }
 
     private static long GetAvailableBytes(string path)
