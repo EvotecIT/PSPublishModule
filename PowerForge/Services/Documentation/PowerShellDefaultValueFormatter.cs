@@ -73,7 +73,7 @@ internal static class PowerShellDefaultValueFormatter
         if (typeName.Length == 0) return value.Text ?? string.Empty;
         if (!string.IsNullOrWhiteSpace(value.Name))
             return "[" + typeName + "]::" + value.Name!.Trim();
-        return "([" + typeName + "]" + (value.Text ?? string.Empty) + ")";
+        return "[System.Enum]::ToObject([" + typeName + "], " + (value.Text ?? string.Empty) + ")";
     }
 
     private static string FormatFloatingPoint(string? text, string powerShellType)

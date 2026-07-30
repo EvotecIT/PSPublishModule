@@ -21,6 +21,12 @@ public sealed class DocumentationMetadataNormalizerTests
             Name = "Advanced",
             Text = "2"
         }));
+        Assert.Equal("[System.Enum]::ToObject([Example.Mode], 3)", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+        {
+            Kind = "Enum",
+            CanonicalTypeName = "Example.Mode",
+            Text = "3"
+        }));
         Assert.Equal("[System.String]", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
         {
             Kind = "Type",
@@ -70,10 +76,12 @@ public sealed class DocumentationMetadataNormalizerTests
         });
 
         DocumentationMetadataNormalizer.Normalize(payload);
+        DocumentationMetadataNormalizer.Normalize(payload);
 
         Assert.Equal("''", parameter.DefaultValue);
         Assert.Equal(["short", "s"], parameter.Aliases);
         Assert.Equal(["Basic", "Advanced"], parameter.PossibleValues);
+        Assert.False(parameter.HasMetadataDefault);
         Assert.Null(parameter.MetadataDefaultHelp);
         Assert.Null(parameter.MetadataDefaultValue);
     }

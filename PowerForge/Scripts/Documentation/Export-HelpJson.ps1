@@ -323,6 +323,13 @@ function GetOutputTypeSnapshot([object]$outputType) {
   if (-not $outputTypeClrName) { $outputTypeClrName = $outputTypeName }
   if (-not $outputTypeName) { $outputTypeName = $outputTypeClrName }
   if (-not $outputTypeName) { return $null }
+  if (-not $canonicalTypeName) {
+    foreach ($candidate in @($outputTypeClrName, $outputTypeName)) {
+      $canonicalTypeName = ResolveCanonicalTypeName $candidate
+      if ($canonicalTypeName) { break }
+    }
+  }
+
   return [pscustomobject][ordered]@{
     name = $outputTypeName
     clrTypeName = $outputTypeClrName
@@ -730,6 +737,12 @@ try {
         $typeClrName = $typeClrName.Trim()
         if (-not $typeClrName) { $typeClrName = $typeName }
         if (-not $typeName) { continue }
+        if (-not $canonicalTypeName) {
+          foreach ($candidate in @($typeClrName, $typeName)) {
+            $canonicalTypeName = ResolveCanonicalTypeName $candidate
+            if ($canonicalTypeName) { break }
+          }
+        }
 
         $typeDesc = ''
         try {

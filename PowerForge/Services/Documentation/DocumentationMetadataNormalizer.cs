@@ -53,6 +53,7 @@ internal static class DocumentationMetadataNormalizer
 
             parameter.MetadataDefaultHelp = null;
             parameter.MetadataDefaultValue = null;
+            parameter.HasMetadataDefault = false;
         }
     }
 

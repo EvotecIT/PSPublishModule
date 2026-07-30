@@ -19,7 +19,7 @@ public sealed class DocumentationPowerShellCollectorTests
     RootModule = 'CollectorFixture.psm1'
     ModuleVersion = '1.0.0'
     GUID = '77777777-7777-7777-7777-777777777777'
-    FunctionsToExport = @('Get-CollectorFixture')
+    FunctionsToExport = @('Get-CollectorFixture', 'Get-AcceleratedOutput')
     CmdletsToExport = @()
     AliasesToExport = @()
     VariablesToExport = @()
@@ -64,6 +64,54 @@ function Get-CollectorFixture {
         $parameters
     }
 }
+
+function Get-AcceleratedOutput {
+    <#
+    .EXTERNALHELP CollectorFixture-help.xml
+    #>
+    [OutputType([string])]
+    [CmdletBinding()]
+    param()
+
+    'value'
+}
+""", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            var helpDirectory = Path.Combine(root, "en-US");
+            Directory.CreateDirectory(helpDirectory);
+            File.WriteAllText(Path.Combine(helpDirectory, "CollectorFixture-help.xml"), """
+<?xml version="1.0" encoding="utf-8"?>
+<helpItems schema="maml" xmlns="http://msh">
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Get-AcceleratedOutput</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>AcceleratedOutput</command:noun>
+      <maml:description>
+        <maml:para>Returns a string value.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Returns a string value.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Get-AcceleratedOutput</maml:name>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters />
+    <command:inputTypes />
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>string</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>An authored accelerator description.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+  </command:command>
+</helpItems>
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             var hosts = OperatingSystem.IsWindows()
@@ -73,12 +121,20 @@ function Get-CollectorFixture {
             {
                 var engine = new DocumentationEngine(new ExecutablePowerShellRunner(host, root), new NullLogger());
                 var payload = engine.ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
-                var command = Assert.Single(payload.Commands);
+                var command = Assert.Single(
+                    payload.Commands,
+                    item => item.Name == "Get-CollectorFixture");
                 var nested = Assert.Single(command.Parameters, parameter => parameter.Name == "Nested");
                 var helpWins = Assert.Single(command.Parameters, parameter => parameter.Name == "HelpWins");
+                var accelerated = Assert.Single(
+                    payload.Commands,
+                    item => item.Name == "Get-AcceleratedOutput");
+                var acceleratedOutput = Assert.Single(accelerated.Outputs);
 
                 Assert.Equal(NestedExpression(12, "1"), nested.DefaultValue);
                 Assert.Equal("authored display value", helpWins.DefaultValue);
+                Assert.Equal("System.String", acceleratedOutput.ClrTypeName);
+                Assert.Equal("An authored accelerator description.", acceleratedOutput.Description);
             }
         }
         finally
