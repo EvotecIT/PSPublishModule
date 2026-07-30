@@ -33,6 +33,7 @@ public sealed class GetBinaryDocSampleCommand : PSCmdlet
     /// <summary>Name of the requested sample object.</summary>
     [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true)]
     [Alias("SampleName")]
+    [SupportsWildcards]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>Selects the sample rendering mode.</summary>
