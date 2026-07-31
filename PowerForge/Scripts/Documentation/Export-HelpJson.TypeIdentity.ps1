@@ -68,17 +68,53 @@ function GetConstructibleDictionaryTypeName([System.Collections.IDictionary]$val
 }
 
 function GetDictionaryCapacity([System.Collections.IDictionary]$value) {
-  $capacityProperty = $value.GetType().GetProperty(
+  $dictionaryType = $value.GetType()
+  $isExactGenericDictionary = $dictionaryType.IsGenericType -and
+    [object]::ReferenceEquals(
+      $dictionaryType.GetGenericTypeDefinition(),
+      [System.Collections.Generic.Dictionary``2])
+  if ($isExactGenericDictionary) {
+    $flags = [System.Reflection.BindingFlags]'Instance,NonPublic'
+    $freeCountField = $null
+    foreach ($fieldName in @('_freeCount', 'freeCount')) {
+      $freeCountField = $dictionaryType.GetField($fieldName, $flags)
+      if ($null -ne $freeCountField) { break }
+    }
+    if ($null -eq $freeCountField) {
+      throw ('Dictionary free-list state is unavailable: ' + $dictionaryType.FullName)
+    }
+    if ([int]$freeCountField.GetValue($value) -ne 0) {
+      throw ('Dictionary defaults with removed slots are not supported: ' + $dictionaryType.FullName)
+    }
+  }
+
+  $capacityProperty = $dictionaryType.GetProperty(
     'Capacity',
     [System.Reflection.BindingFlags]'Instance,Public')
-  if ($null -eq $capacityProperty -or
-      $capacityProperty.PropertyType -ne [int] -or
-      $capacityProperty.GetIndexParameters().Count -ne 0) {
-    return $null
+  if ($null -ne $capacityProperty -and
+      $capacityProperty.PropertyType -eq [int] -and
+      $capacityProperty.GetIndexParameters().Count -eq 0) {
+    try { return [int]$capacityProperty.GetValue($value, $null) } catch {
+      throw ('Dictionary capacity is unavailable: ' + $dictionaryType.FullName)
+    }
   }
-  try { return [int]$capacityProperty.GetValue($value, $null) } catch {
-    throw ('Dictionary capacity is unavailable: ' + $value.GetType().FullName)
+
+  if ($isExactGenericDictionary) {
+    $bucketsField = $null
+    foreach ($fieldName in @('_buckets', 'buckets')) {
+      $bucketsField = $dictionaryType.GetField(
+        $fieldName,
+        [System.Reflection.BindingFlags]'Instance,NonPublic')
+      if ($null -ne $bucketsField) { break }
+    }
+    if ($null -eq $bucketsField) {
+      throw ('Dictionary bucket state is unavailable: ' + $dictionaryType.FullName)
+    }
+    $buckets = $bucketsField.GetValue($value)
+    if ($null -eq $buckets) { return 0 }
+    return [int]$buckets.Length
   }
+  return $null
 }
 
 function GetDictionaryComparer([System.Collections.IDictionary]$value, [ref]$comparerType) {

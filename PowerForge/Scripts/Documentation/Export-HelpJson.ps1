@@ -161,6 +161,19 @@ function ConvertToPowerShellDefaultValue(
     }
     $uriText = ConvertToPowerShellDefaultValue $value.OriginalString $referenceStack
     $uriKind = if ($value.IsAbsoluteUri) { 'Absolute' } else { 'Relative' }
+    $reconstructedUri = [System.Uri]::new($value.OriginalString, [System.UriKind]$uriKind)
+    $uriStateMatches =
+      $reconstructedUri.OriginalString -ceq $value.OriginalString -and
+      $reconstructedUri.ToString() -ceq $value.ToString() -and
+      $reconstructedUri.UserEscaped -eq $value.UserEscaped
+    if ($value.IsAbsoluteUri) {
+      $uriStateMatches = $uriStateMatches -and
+        $reconstructedUri.AbsoluteUri -ceq $value.AbsoluteUri -and
+        $reconstructedUri.PathAndQuery -ceq $value.PathAndQuery
+    }
+    if (-not $uriStateMatches) {
+      throw 'Uri defaults with noncanonical reconstruction state are not supported.'
+    }
     return ('[System.Uri]::new(' + $uriText + ', [System.UriKind]::' + $uriKind + ')')
   }
   if (TestExactRuntimeValueType $value (GetCoreRuntimeType 'System.DateOnly')) {
@@ -396,7 +409,10 @@ try {
         if ($enumType -and $enumType.IsArray) { $enumType = $enumType.GetElementType() }
         if ($enumType -and $enumType.IsEnum) {
           foreach ($enumName in [System.Enum]::GetNames($enumType)) {
-            if ($enumName) { $enumPossibleValues += [string]$enumName }
+            if ($enumName -and
+                (ConvertToXmlSafeDefaultHelpText ([string]$enumName)) -ceq [string]$enumName) {
+              $enumPossibleValues += [string]$enumName
+            }
           }
         }
       } catch {

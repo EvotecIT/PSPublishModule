@@ -19,6 +19,20 @@ public sealed class DocumentationDefaultLiteralCompatibilityTests
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             File.WriteAllText(Path.Combine(root, "DefaultLiteralFixture.psm1"), """
 $script:fileBoundDefault = & (Join-Path -Path $PSScriptRoot -ChildPath 'FileBoundDefault.ps1')
+$filterPowerShell = [powershell]::Create()
+try {
+    $script:filterDefault = $filterPowerShell.AddScript(
+        'filter PowerForgeDocumentationFilterDefault { $_ }; (Get-Command PowerForgeDocumentationFilterDefault).ScriptBlock').Invoke()[0]
+} finally {
+    $filterPowerShell.Dispose()
+}
+$isFilterProperty = [scriptblock].GetProperty(
+    'IsFilter',
+    [System.Reflection.BindingFlags]'Instance,Public,NonPublic')
+if ($script:filterDefault.Module -or $script:filterDefault.File -or
+    -not [bool]$isFilterProperty.GetValue($script:filterDefault, $null)) {
+    throw 'The filter ScriptBlock fixture must be in-memory, module-free, and file-free.'
+}
 if (-not ('DefaultLiteralFixture.CaseMode' -as [type])) {
     Add-Type -TypeDefinition 'namespace DefaultLiteralFixture { public enum CaseMode { A = 1, a = 2 } }'
 }
@@ -34,6 +48,12 @@ if (-not ('DefaultLiteralFixture.WeirdMode' -as [type])) {
         [int])
     [void]$enumBuilder.DefineLiteral('A-B', 1)
     [void]$enumBuilder.CreateTypeInfo()
+    $xmlInvalidEnumBuilder = $moduleBuilder.DefineEnum(
+        'DefaultLiteralFixture.XmlInvalidMode',
+        [System.Reflection.TypeAttributes]::Public,
+        [int])
+    [void]$xmlInvalidEnumBuilder.DefineLiteral(('A' + [char]1), 1)
+    $script:xmlInvalidEnumType = $xmlInvalidEnumBuilder.CreateTypeInfo().AsType()
     $unsafeTypeBuilder = $moduleBuilder.DefineEnum(
         'DefaultLiteralFixture.A-B',
         [System.Reflection.TypeAttributes]::Public,
@@ -66,6 +86,12 @@ if ($null -eq $script:xmlInvalidDefaultType) {
     $script:xmlInvalidDefaultType = [System.AppDomain]::CurrentDomain.GetAssemblies() |
         ForEach-Object { $_.GetTypes() } |
         Where-Object { $_.FullName -ceq $xmlInvalidTypeName } |
+        Select-Object -First 1
+}
+if ($null -eq $script:xmlInvalidEnumType) {
+    $script:xmlInvalidEnumType = [System.AppDomain]::CurrentDomain.GetAssemblies() |
+        ForEach-Object { $_.GetType('DefaultLiteralFixture.XmlInvalidMode', $false, $false) } |
+        Where-Object { $null -ne $_ } |
         Select-Object -First 1
 }
 
@@ -154,6 +180,18 @@ function Get-DefaultLiteralFixture {
         $userEscapedUriAttributes.Add($userEscapedUriDefault)
         $parameters.Add('UserEscapedUri', [System.Management.Automation.RuntimeDefinedParameter]::new('UserEscapedUri', [uri], $userEscapedUriAttributes))
 
+        $noncanonicalUriAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $noncanonicalUriDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        if ('System.UriCreationOptions' -as [type]) {
+            $uriOptions = [System.UriCreationOptions]::new()
+            $uriOptions.DangerousDisablePathAndQueryCanonicalization = $true
+            $noncanonicalUriDefault.Value = [uri]::new('http://example.com/a/../b', [ref]$uriOptions)
+        } else {
+            $noncanonicalUriDefault.Value = [System.Globalization.CultureInfo]::InvariantCulture
+        }
+        $noncanonicalUriAttributes.Add($noncanonicalUriDefault)
+        $parameters.Add('NoncanonicalUri', [System.Management.Automation.RuntimeDefinedParameter]::new('NoncanonicalUri', [uri], $noncanonicalUriAttributes))
+
         $dictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $dictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $dictionaryDefault.Value = [ordered]@{
@@ -171,6 +209,25 @@ function Get-DefaultLiteralFixture {
         $caseDistinctDictionaryDefault.Value = $caseDistinctDictionary
         $caseDistinctDictionaryAttributes.Add($caseDistinctDictionaryDefault)
         $parameters.Add('CaseDistinctDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('CaseDistinctDictionary', [System.Collections.Generic.Dictionary[string, int]], $caseDistinctDictionaryAttributes))
+
+        $reservedDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $reservedDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $reservedDictionary = [System.Collections.Generic.Dictionary[string, int]]::new(100)
+        $reservedDictionary.Add('alpha', 1)
+        $reservedDictionaryDefault.Value = $reservedDictionary
+        $reservedDictionaryAttributes.Add($reservedDictionaryDefault)
+        $parameters.Add('ReservedDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('ReservedDictionary', [System.Collections.Generic.Dictionary[string, int]], $reservedDictionaryAttributes))
+
+        $removedDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $removedDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $removedDictionary = [System.Collections.Generic.Dictionary[int, int]]::new()
+        $removedDictionary.Add(1, 1)
+        $removedDictionary.Add(2, 2)
+        $removedDictionary.Add(3, 3)
+        [void]$removedDictionary.Remove(2)
+        $removedDictionaryDefault.Value = $removedDictionary
+        $removedDictionaryAttributes.Add($removedDictionaryDefault)
+        $parameters.Add('RemovedDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('RemovedDictionary', [System.Collections.Generic.Dictionary[int, int]], $removedDictionaryAttributes))
 
         $concurrentDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $concurrentDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -419,6 +476,12 @@ function Get-DefaultLiteralFixture {
         $fileBoundScriptAttributes.Add($fileBoundScriptDefault)
         $parameters.Add('FileBoundScript', [System.Management.Automation.RuntimeDefinedParameter]::new('FileBoundScript', [scriptblock], $fileBoundScriptAttributes))
 
+        $filterScriptAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $filterScriptDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $filterScriptDefault.Value = $script:filterDefault
+        $filterScriptAttributes.Add($filterScriptDefault)
+        $parameters.Add('FilterScript', [System.Management.Automation.RuntimeDefinedParameter]::new('FilterScript', [scriptblock], $filterScriptAttributes))
+
         $pointerTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $pointerTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $pointerTypeDefault.Value = [int].MakePointerType()
@@ -455,6 +518,10 @@ function Get-DefaultLiteralFixture {
         $weirdModeDefault.Value = [System.Enum]::ToObject($weirdModeType, 1)
         $weirdModeAttributes.Add($weirdModeDefault)
         $parameters.Add('WeirdMode', [System.Management.Automation.RuntimeDefinedParameter]::new('WeirdMode', $weirdModeType, $weirdModeAttributes))
+
+        $xmlInvalidModeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $parameters.Add('XmlInvalidMode', [System.Management.Automation.RuntimeDefinedParameter]::new(
+            'XmlInvalidMode', $script:xmlInvalidEnumType, $xmlInvalidModeAttributes))
 
         $parameters
     }
@@ -540,12 +607,15 @@ function Get-DefaultLiteralFixture {
                 "[System.Uri]::new('https://example.com/a''b?x=1', [System.UriKind]::Absolute)",
                 Default("Uri"));
             Assert.True(string.IsNullOrEmpty(Default("UserEscapedUri")));
+            Assert.True(string.IsNullOrEmpty(Default("NoncanonicalUri")));
             Assert.Equal(
                 "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('alpha'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
                 Default("Dictionary"));
             Assert.Equal(
                 "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new(([int]3), [System.StringComparer]::Ordinal); ([System.Collections.IDictionary]$dictionary).Add(('A'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('a'), (2)); return ,$dictionary }",
                 Default("CaseDistinctDictionary"));
+            Assert.Contains("::new(([int]107))", Default("ReservedDictionary"), StringComparison.Ordinal);
+            Assert.True(string.IsNullOrEmpty(Default("RemovedDictionary")));
             Assert.Equal(
                 "& { $dictionary = [System.Collections.Concurrent.ConcurrentDictionary[System.String,System.Int32]]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('Alpha'), (1)); return ,$dictionary }",
                 Default("ConcurrentDictionary"));
@@ -639,6 +709,7 @@ function Get-DefaultLiteralFixture {
             Assert.True(string.IsNullOrEmpty(Default("StatefulScript")));
             Assert.True(string.IsNullOrEmpty(Default("ConstrainedScript")));
             Assert.True(string.IsNullOrEmpty(Default("FileBoundScript")));
+            Assert.True(string.IsNullOrEmpty(Default("FilterScript")));
             Assert.Equal("[System.Int32].MakePointerType()", Default("PointerType"));
             Assert.Equal("[System.Int32].MakeByRefType()", Default("ByRefType"));
             Assert.Equal("[System.Int32].MakeArrayType(1)", Default("NonSzArrayType"));
@@ -652,6 +723,9 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 "[System.Enum]::ToObject([DefaultLiteralFixture.WeirdMode], ([System.Int32]1))",
                 Default("WeirdMode"));
+            Assert.Empty(Assert.Single(
+                command.Parameters,
+                parameter => parameter.Name == "XmlInvalidMode").PossibleValues);
 
             string Default(string name)
                 => Assert.Single(command.Parameters, parameter => parameter.Name == name).DefaultValue;

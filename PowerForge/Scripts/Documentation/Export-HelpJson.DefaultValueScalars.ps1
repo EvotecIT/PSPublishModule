@@ -18,6 +18,14 @@ function TestRecreatableScriptBlock([scriptblock]$value) {
   }
 
   try {
+    $isFilterProperty = [scriptblock].GetProperty(
+      'IsFilter',
+      [System.Reflection.BindingFlags]'Instance,Public,NonPublic')
+    if ($null -eq $isFilterProperty -or -not $isFilterProperty.CanRead -or
+        [bool]$isFilterProperty.GetValue($value, $null)) {
+      return $false
+    }
+
     $languageModeProperty = [scriptblock].GetProperty(
       'LanguageMode',
       [System.Reflection.BindingFlags]'Instance,Public,NonPublic')
