@@ -65,6 +65,22 @@ public sealed class DocumentationMetadataNormalizerTests
                 Kind = "Type",
                 CanonicalTypeName = "System.Int32&"
             }));
+        Assert.Equal(
+            "[System.Int32].MakeArrayType(1)",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "Type",
+                CanonicalTypeName = "System.Int32[*]"
+            }));
+        Assert.Equal(
+            "[System.Enum]::ToObject([Example.CaseMode], ([System.Int32]1))",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "Enum",
+                CanonicalTypeName = "Example.CaseMode",
+                UnderlyingTypeName = "System.Int32",
+                Text = "1"
+            }));
         Assert.Equal("-0.0", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
         {
             Kind = "Double",
@@ -206,7 +222,11 @@ public sealed class DocumentationMetadataNormalizerTests
         {
             Tokens =
             [
-                new DocumentationRuntimeValue { Kind = "DictionaryStart" },
+                new DocumentationRuntimeValue
+                {
+                    Kind = "DictionaryStart",
+                    CanonicalTypeName = "System.Collections.Generic.Dictionary[System.String,System.Object]"
+                },
                 new DocumentationRuntimeValue { Kind = "DictionaryEntryStart" },
                 new DocumentationRuntimeValue { Kind = "StringCodeUnits", Text = "65" },
                 new DocumentationRuntimeValue { Kind = "Formattable", Text = "1", CanonicalTypeName = "System.Int32" },
@@ -229,7 +249,7 @@ public sealed class DocumentationMetadataNormalizerTests
         });
 
         Assert.Equal(
-            "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new(); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); $dictionary.Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
+            "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Object]]::new(); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); $dictionary.Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
             formatted);
 
         var array = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
@@ -424,6 +444,24 @@ public sealed class DocumentationMetadataNormalizerTests
                 Assert.Equal("Example.RESULT", output.CanonicalTypeName);
                 Assert.Equal("Upper-case result.", output.Description);
             });
+    }
+
+    [Fact]
+    public void Normalize_MatchesUniqueUnqualifiedOutputNamesCaseInsensitively()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Get-Widget",
+            CommandType = "Cmdlet",
+            RuntimeOutputs = [Type("Widget", "Demo.Widget")],
+            AuthoredOutputs = [Type("widget", "widget", "Unique widget description.")]
+        };
+
+        DocumentationMetadataNormalizer.Normalize(PayloadWith(command));
+
+        var output = Assert.Single(command.Outputs);
+        Assert.Equal("Demo.Widget", output.CanonicalTypeName);
+        Assert.Equal("Unique widget description.", output.Description);
     }
 
     [Fact]

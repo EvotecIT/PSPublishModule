@@ -83,7 +83,7 @@ function AddRuntimeDefaultValueTokens(
     $tokens.Add([ordered]@{
       kind = 'Enum'
       text = [System.Convert]::ToString($underlyingValue, [System.Globalization.CultureInfo]::InvariantCulture)
-      name = [System.Enum]::GetName($enumType, $value)
+      name = GetPowerShellSafeEnumName $enumType $value
       canonicalTypeName = GetCanonicalTypeNameFromType $enumType
       underlyingTypeName = GetCanonicalTypeNameFromType $underlyingType
     }) | Out-Null
@@ -208,7 +208,10 @@ function AddRuntimeDefaultValueTokens(
     [void]$referenceStack.Add($value)
     try {
       if ($value -is [System.Collections.IDictionary]) {
-        $tokens.Add([ordered]@{ kind = 'DictionaryStart' }) | Out-Null
+        $tokens.Add([ordered]@{
+          kind = 'DictionaryStart'
+          canonicalTypeName = GetConstructibleDictionaryTypeName $value
+        }) | Out-Null
         foreach ($entry in $value.GetEnumerator()) {
           $tokens.Add([ordered]@{ kind = 'DictionaryEntryStart' }) | Out-Null
           AddRuntimeDefaultValueTokens $entry.Key $tokens $referenceStack
@@ -471,12 +474,18 @@ try {
             }
             if ($attr -is [System.Management.Automation.PSDefaultValueAttribute]) {
               $hasMetadataDefault = $true
-              $metadataDefaultHelp = [string]$attr.Help
-              if (-not [string]::IsNullOrWhiteSpace($metadataDefaultHelp)) {
-                $metadataDefaultHelpCodeUnits = ConvertToUtf16CodeUnits $metadataDefaultHelp
+              try {
+                $metadataDefaultHelp = [string]$attr.Help
+                if (-not [string]::IsNullOrWhiteSpace($metadataDefaultHelp)) {
+                  $metadataDefaultHelpCodeUnits = ConvertToUtf16CodeUnits $metadataDefaultHelp
+                  $metadataDefaultHelp = $null
+                } else {
+                  $metadataDefaultValue = ConvertToRuntimeDefaultValue $attr.Value
+                }
+              } catch {
                 $metadataDefaultHelp = $null
-              } else {
-                $metadataDefaultValue = ConvertToRuntimeDefaultValue $attr.Value
+                $metadataDefaultHelpCodeUnits = $null
+                $metadataDefaultValue = $null
               }
             }
           }

@@ -188,6 +188,9 @@ internal static class PowerShellDefaultValueFormatter
         if (canonicalTypeName.EndsWith("&", StringComparison.Ordinal))
             return FormatTypeExpression(canonicalTypeName.Substring(0, canonicalTypeName.Length - 1)) +
                    ".MakeByRefType()";
+        if (canonicalTypeName.EndsWith("[*]", StringComparison.Ordinal))
+            return FormatTypeExpression(canonicalTypeName.Substring(0, canonicalTypeName.Length - 3)) +
+                   ".MakeArrayType(1)";
         return "[" + canonicalTypeName + "]";
     }
 
@@ -257,7 +260,7 @@ internal static class PowerShellDefaultValueFormatter
 
             if (kind.Equals("DictionaryStart", StringComparison.OrdinalIgnoreCase))
             {
-                frames.Push(new DictionaryTokenFrame());
+                frames.Push(new DictionaryTokenFrame(token.CanonicalTypeName));
                 continue;
             }
 
@@ -351,10 +354,18 @@ internal static class PowerShellDefaultValueFormatter
 
     private sealed class DictionaryTokenFrame : TokenFrame
     {
+        private readonly string _dictionaryTypeName;
         private readonly List<KeyValuePair<string, string>> _entries = new();
         private string? _key;
         private string? _value;
         private bool _entryOpen;
+
+        public DictionaryTokenFrame(string? dictionaryTypeName)
+        {
+            _dictionaryTypeName = string.IsNullOrWhiteSpace(dictionaryTypeName)
+                ? "System.Collections.Specialized.OrderedDictionary"
+                : dictionaryTypeName!.Trim();
+        }
 
         public void BeginEntry()
         {
@@ -391,7 +402,7 @@ internal static class PowerShellDefaultValueFormatter
                 throw new FormatException("The runtime default token stream ends inside a dictionary entry.");
             var statements = new List<string>
             {
-                "$dictionary = [System.Collections.Specialized.OrderedDictionary]::new()"
+                "$dictionary = [" + _dictionaryTypeName + "]::new()"
             };
             statements.AddRange(_entries.Select(entry =>
                 "$dictionary.Add((" + entry.Key + "), (" + entry.Value + "))"));

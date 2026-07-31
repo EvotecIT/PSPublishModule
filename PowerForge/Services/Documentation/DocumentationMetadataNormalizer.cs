@@ -81,6 +81,7 @@ internal static class DocumentationMetadataNormalizer
             if (identity.Length == 0 || !seenIdentities.Add(identity)) continue;
 
             var description = string.Empty;
+            var matched = false;
             foreach (var key in GetKeys(runtimeOutput))
             {
                 if (!authoredIndex.ByKey.TryGetValue(key, out var authoredOutput) ||
@@ -92,7 +93,15 @@ internal static class DocumentationMetadataNormalizer
                     continue;
 
                 description = authoredOutput.Description ?? string.Empty;
+                matched = true;
                 break;
+            }
+
+            if (!matched && TryGetUniqueCaseInsensitiveMatch(
+                    GetKeys(runtimeOutput), authoredIndex, runtimeIndex, out var foldedAuthoredOutput) &&
+                !HasConflictingQualifiedIdentity(identity, GetIdentity(foldedAuthoredOutput)))
+            {
+                description = foldedAuthoredOutput.Description ?? string.Empty;
             }
 
             outputs.Add(Copy(runtimeOutput, description));
@@ -130,6 +139,13 @@ internal static class DocumentationMetadataNormalizer
                     break;
                 }
 
+                if (!matchesRuntime && TryGetUniqueCaseInsensitiveMatch(
+                        GetKeys(authoredOutput), runtimeIndex, authoredIndex, out var foldedRuntimeOutput) &&
+                    !HasConflictingQualifiedIdentity(GetIdentity(foldedRuntimeOutput), identity))
+                {
+                    matchesRuntime = true;
+                }
+
                 if (matchesRuntime || !seenIdentities.Add(identity)) continue;
                 outputs.Add(Copy(authoredOutput, authoredOutput.Description ?? string.Empty));
             }
@@ -160,6 +176,7 @@ internal static class DocumentationMetadataNormalizer
         foreach (var value in values)
         {
             if (value is null) continue;
+            var foldedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var key in GetKeys(value))
             {
                 if (!index.Counts.TryGetValue(key, out var count))
@@ -171,9 +188,42 @@ internal static class DocumentationMetadataNormalizer
                 {
                     index.Counts[key] = count + 1;
                 }
+
+                if (!foldedKeys.Add(key)) continue;
+                if (!index.FoldedCounts.TryGetValue(key, out var foldedCount))
+                {
+                    index.FoldedCounts[key] = 1;
+                    index.ByFoldedKey[key] = value;
+                }
+                else
+                {
+                    index.FoldedCounts[key] = foldedCount + 1;
+                }
             }
         }
         return index;
+    }
+
+    private static bool TryGetUniqueCaseInsensitiveMatch(
+        IEnumerable<string> keys,
+        TypeIndex candidates,
+        TypeIndex sources,
+        out DocumentationTypeHelp match)
+    {
+        foreach (var key in keys)
+        {
+            if (IsQualified(key) ||
+                !candidates.ByFoldedKey.TryGetValue(key, out var candidate) ||
+                candidates.FoldedCounts[key] != 1 ||
+                sources.FoldedCounts[key] != 1)
+                continue;
+
+            match = candidate;
+            return true;
+        }
+
+        match = null!;
+        return false;
     }
 
     private static List<string> GetKeys(DocumentationTypeHelp value)
@@ -253,5 +303,7 @@ internal static class DocumentationMetadataNormalizer
     {
         public Dictionary<string, int> Counts { get; } = new(StringComparer.Ordinal);
         public Dictionary<string, DocumentationTypeHelp> ByKey { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, int> FoldedCounts { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, DocumentationTypeHelp> ByFoldedKey { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 }

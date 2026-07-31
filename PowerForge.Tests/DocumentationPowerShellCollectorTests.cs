@@ -26,6 +26,10 @@ public sealed class DocumentationPowerShellCollectorTests
 }
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             File.WriteAllText(modulePath, """
+if (-not ('CollectorFixture.CaseMode' -as [type])) {
+    Add-Type -TypeDefinition 'namespace CollectorFixture { public enum CaseMode { A = 1, a = 2 } }'
+}
+
 class InvalidTextDefault {
     [string] ToString() {
         return [string][char]0xD800
@@ -151,6 +155,18 @@ function Get-CollectorFixture {
         $byRefTypeAttributes.Add($byRefTypeDefault)
         $parameters.Add('ByRefType', [System.Management.Automation.RuntimeDefinedParameter]::new('ByRefType', [type], $byRefTypeAttributes))
 
+        $nonSzArrayTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $nonSzArrayTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $nonSzArrayTypeDefault.Value = [int].MakeArrayType(1)
+        $nonSzArrayTypeAttributes.Add($nonSzArrayTypeDefault)
+        $parameters.Add('NonSzArrayType', [System.Management.Automation.RuntimeDefinedParameter]::new('NonSzArrayType', [type], $nonSzArrayTypeAttributes))
+
+        $caseModeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $caseModeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $caseModeDefault.Value = [System.Enum]::ToObject([CollectorFixture.CaseMode], 1)
+        $caseModeAttributes.Add($caseModeDefault)
+        $parameters.Add('CaseMode', [System.Management.Automation.RuntimeDefinedParameter]::new('CaseMode', [CollectorFixture.CaseMode], $caseModeAttributes))
+
         $uriAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $uriDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $uriDefault.Value = [uri]::new("https://example.com/a'b?x=1")
@@ -168,17 +184,18 @@ function Get-CollectorFixture {
 
         $caseDistinctDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $caseDistinctDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
-        $caseDistinctDictionary = [System.Collections.Generic.Dictionary[string, object]]::new([System.StringComparer]::Ordinal)
+        $caseDistinctDictionary = [System.Collections.Generic.Dictionary[string, int]]::new([System.StringComparer]::Ordinal)
         $caseDistinctDictionary.Add('A', 1)
         $caseDistinctDictionary.Add('a', 2)
         $caseDistinctDictionaryDefault.Value = $caseDistinctDictionary
         $caseDistinctDictionaryAttributes.Add($caseDistinctDictionaryDefault)
-        $parameters.Add('CaseDistinctDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('CaseDistinctDictionary', [object], $caseDistinctDictionaryAttributes))
+        $parameters.Add('CaseDistinctDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('CaseDistinctDictionary', [System.Collections.Generic.Dictionary[string, int]], $caseDistinctDictionaryAttributes))
 
         $unsupportedCultureAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $unsupportedCultureDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $unsupportedCultureDefault.Value = [System.Globalization.CultureInfo]::new('en-US')
         $unsupportedCultureAttributes.Add($unsupportedCultureDefault)
+        $unsupportedCultureAttributes.Add([System.Management.Automation.ValidateSetAttribute]::new([string[]]@('One', 'Two')))
         $parameters.Add('UnsupportedCulture', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsupportedCulture', [object], $unsupportedCultureAttributes))
 
         $unsupportedAddressAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
@@ -348,6 +365,8 @@ function Get-AcceleratedOutput {
                 var switchValue = Assert.Single(command.Parameters, parameter => parameter.Name == "SwitchValue");
                 var pointerType = Assert.Single(command.Parameters, parameter => parameter.Name == "PointerType");
                 var byRefType = Assert.Single(command.Parameters, parameter => parameter.Name == "ByRefType");
+                var nonSzArrayType = Assert.Single(command.Parameters, parameter => parameter.Name == "NonSzArrayType");
+                var caseMode = Assert.Single(command.Parameters, parameter => parameter.Name == "CaseMode");
                 var uri = Assert.Single(command.Parameters, parameter => parameter.Name == "Uri");
                 var dictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "Dictionary");
                 var caseDistinctDictionary = Assert.Single(
@@ -397,6 +416,10 @@ function Get-AcceleratedOutput {
                     switchValue.DefaultValue);
                 Assert.Equal("[System.Int32].MakePointerType()", pointerType.DefaultValue);
                 Assert.Equal("[System.Int32].MakeByRefType()", byRefType.DefaultValue);
+                Assert.Equal("[System.Int32].MakeArrayType(1)", nonSzArrayType.DefaultValue);
+                Assert.Equal(
+                    "[System.Enum]::ToObject([CollectorFixture.CaseMode], ([System.Int32]1))",
+                    caseMode.DefaultValue);
                 Assert.Equal(
                     "[System.Uri]::new('https://example.com/a''b?x=1', [System.UriKind]::Absolute)",
                     uri.DefaultValue);
@@ -404,9 +427,10 @@ function Get-AcceleratedOutput {
                     "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new(); $dictionary.Add(('alpha'), (1)); $dictionary.Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
                     dictionary.DefaultValue);
                 Assert.Equal(
-                    "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new(); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); return ,$dictionary }",
+                    "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new(); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); return ,$dictionary }",
                     caseDistinctDictionary.DefaultValue);
                 Assert.True(string.IsNullOrEmpty(unsupportedCulture.DefaultValue));
+                Assert.Equal(new[] { "One", "Two" }, unsupportedCulture.PossibleValues);
                 Assert.True(string.IsNullOrEmpty(unsupportedAddress.DefaultValue));
                 Assert.True(string.IsNullOrEmpty(cyclicCollection.DefaultValue));
                 Assert.Equal(
