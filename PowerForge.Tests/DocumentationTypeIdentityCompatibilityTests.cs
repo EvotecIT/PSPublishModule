@@ -163,6 +163,10 @@ namespace System.Numerics {
 namespace System {
     public sealed class DateOnly { public int DayNumber { get { return 5; } } }
     public sealed class TimeOnly { public long Ticks { get { return 6L; } } }
+    public sealed class TaggedUri : System.Uri {
+        public TaggedUri() : base("https://example.com/", System.UriKind.Absolute) { }
+        public string Tag { get { return "tag"; } }
+    }
 }
 '@ -PassThru
 
@@ -173,9 +177,20 @@ function New-SpoofedValue([string]$fullName) {
 
 $script:statefulCollection = [System.Collections.ObjectModel.Collection[int]]::new(
     [System.Collections.Generic.IList[int]]([int[]](1, 2)))
+$reservedBacking = [System.Collections.Generic.List[int]]::new(100)
+$reservedBacking.Add(1)
+$reservedBacking.Add(2)
+$script:reservedBackingCollection = [System.Collections.ObjectModel.Collection[int]]::new($reservedBacking)
 $script:itemOnlyCollection = [System.Collections.ObjectModel.Collection[int]]::new()
 $script:itemOnlyCollection.Add(1)
 $script:itemOnlyCollection.Add(2)
+$script:reservedList = [System.Collections.Generic.List[int]]::new(100)
+$script:reservedList.Add(1)
+$script:reservedArrayList = [System.Collections.ArrayList]::new(100)
+[void]$script:reservedArrayList.Add(1)
+$script:invariantDictionary = [System.Collections.Generic.Dictionary[string,int]]::new(
+    [System.StringComparer]::Create([System.Globalization.CultureInfo]::InvariantCulture, $true))
+$script:invariantDictionary.Add('alpha', 1)
 
 function Get-RuntimeIdentityFixture {
     [CmdletBinding()]
@@ -188,8 +203,13 @@ function Get-RuntimeIdentityFixture {
             @('SpoofBigInteger', (New-SpoofedValue 'System.Numerics.BigInteger')),
             @('SpoofDateOnly', (New-SpoofedValue 'System.DateOnly')),
             @('SpoofTimeOnly', (New-SpoofedValue 'System.TimeOnly')),
+            @('TaggedUri', (New-SpoofedValue 'System.TaggedUri')),
             @('StatefulCollection', $script:statefulCollection),
-            @('ItemOnlyCollection', $script:itemOnlyCollection)
+            @('ReservedBackingCollection', $script:reservedBackingCollection),
+            @('ItemOnlyCollection', $script:itemOnlyCollection),
+            @('ReservedList', $script:reservedList),
+            @('ReservedArrayList', $script:reservedArrayList),
+            @('InvariantDictionary', $script:invariantDictionary)
         )) {
             $attributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
             $default = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -204,14 +224,31 @@ function Get-RuntimeIdentityFixture {
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             var evaluatorPath = Path.Combine(root, "EvaluateCollection.ps1");
             File.WriteAllText(evaluatorPath, """
-param([string]$ManifestPath, [string]$Expression)
+param(
+    [string]$ManifestPath,
+    [string]$CollectionExpression,
+    [string]$ListExpression,
+    [string]$ArrayListExpression,
+    [string]$DictionaryExpression)
 Import-Module -Name $ManifestPath -Force -ErrorAction Stop
-$collection = & ([scriptblock]::Create($Expression))
+$collection = & ([scriptblock]::Create($CollectionExpression))
 if ($collection.GetType() -ne [System.Collections.ObjectModel.Collection[int]]) {
     throw 'Collection type did not round-trip.'
 }
 $collection.Add(3)
 if ($collection.Count -ne 3) { throw 'Collection mutability did not round-trip.' }
+$list = & ([scriptblock]::Create($ListExpression))
+if ($list.GetType() -ne [System.Collections.Generic.List[int]] -or $list.Capacity -ne 100) {
+    throw 'List capacity did not round-trip.'
+}
+$arrayList = & ([scriptblock]::Create($ArrayListExpression))
+if ($arrayList.GetType() -ne [System.Collections.ArrayList] -or $arrayList.Capacity -ne 100) {
+    throw 'ArrayList capacity did not round-trip.'
+}
+$dictionary = & ([scriptblock]::Create($DictionaryExpression))
+if (-not $dictionary.Comparer.Equals('ALPHA', 'alpha')) {
+    throw 'Invariant dictionary comparer did not round-trip.'
+}
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             var hosts = OperatingSystem.IsWindows()
@@ -228,13 +265,21 @@ if ($collection.Count -ne 3) { throw 'Collection mutability did not round-trip.'
                 Assert.True(string.IsNullOrEmpty(Default("SpoofBigInteger")));
                 Assert.True(string.IsNullOrEmpty(Default("SpoofDateOnly")));
                 Assert.True(string.IsNullOrEmpty(Default("SpoofTimeOnly")));
+                Assert.True(string.IsNullOrEmpty(Default("TaggedUri")));
                 Assert.True(string.IsNullOrEmpty(Default("StatefulCollection")));
+                Assert.True(string.IsNullOrEmpty(Default("ReservedBackingCollection")));
                 var itemOnly = Default("ItemOnlyCollection");
                 Assert.StartsWith("& { $collection = [System.Collections.ObjectModel.Collection[System.Int32]]::new()", itemOnly, StringComparison.Ordinal);
+                var reservedList = Default("ReservedList");
+                var reservedArrayList = Default("ReservedArrayList");
+                var invariantDictionary = Default("InvariantDictionary");
+                Assert.Contains("::new(([int]100))", reservedList, StringComparison.Ordinal);
+                Assert.Contains("::new(([int]100))", reservedArrayList, StringComparison.Ordinal);
+                Assert.Contains("[System.StringComparer]::InvariantCultureIgnoreCase", invariantDictionary, StringComparison.Ordinal);
 
                 var execution = runner.Run(new PowerShellRunRequest(
                     evaluatorPath,
-                    new[] { manifestPath, itemOnly },
+                    new[] { manifestPath, itemOnly, reservedList, reservedArrayList, invariantDictionary },
                     TimeSpan.FromMinutes(1)));
                 Assert.True(execution.ExitCode == 0, execution.StdErr);
 

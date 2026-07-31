@@ -151,7 +151,7 @@ function ConvertToPowerShellDefaultValue(
     $versionText = $value.ToString().Replace("'", "''")
     return ("[System.Version]::Parse('" + $versionText + "')")
   }
-  if ($value -is [uri]) {
+  if (TestExactRuntimeValueType $value ([uri])) {
     if ($value.UserEscaped) {
       throw 'User-escaped Uri defaults are not supported.'
     }

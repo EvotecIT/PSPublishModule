@@ -156,8 +156,15 @@ function GetKnownDictionaryComparerName([object]$comparer, [type]$comparerType) 
       }
       $ignoreCase = ($options -band [System.Globalization.CompareOptions]::IgnoreCase) -ne 0
     }
-    if ($compareInfo -and -not [string]::IsNullOrWhiteSpace($compareInfo.Name)) {
-      return ('Culture|' + $compareInfo.Name + '|' + [string]$ignoreCase)
+    if ($compareInfo) {
+      if ([string]::IsNullOrWhiteSpace($compareInfo.Name)) {
+        if ($compareInfo.LCID -eq [System.Globalization.CultureInfo]::InvariantCulture.LCID) {
+          if ($ignoreCase) { return 'InvariantCultureIgnoreCase' }
+          return 'InvariantCulture'
+        }
+      } else {
+        return ('Culture|' + $compareInfo.Name + '|' + [string]$ignoreCase)
+      }
     }
   }
   throw ('Unsupported dictionary comparer: ' + $comparer.GetType().FullName)
