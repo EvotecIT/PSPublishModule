@@ -24,8 +24,19 @@ public sealed class WebVisualStoryBundle
     public DateTimeOffset? GeneratedAtUtc { get; set; }
     /// <summary>Optional producer name and version for provenance.</summary>
     public string? Producer { get; set; }
+    /// <summary>Artifact byte limits persisted by the trusted staging operation.</summary>
+    public WebVisualStoryResourceLimits? ResourceLimits { get; set; }
     /// <summary>Generated artifacts that make up the story.</summary>
     public WebVisualStoryArtifact[] Artifacts { get; set; } = Array.Empty<WebVisualStoryArtifact>();
+}
+
+/// <summary>Resource limits applied when a staged visual-story bundle is loaded.</summary>
+public sealed class WebVisualStoryResourceLimits
+{
+    /// <summary>Maximum size of any one artifact.</summary>
+    public long MaximumArtifactBytes { get; set; }
+    /// <summary>Maximum aggregate size of all artifacts in one bundle.</summary>
+    public long MaximumTotalArtifactBytes { get; set; }
 }
 
 /// <summary>One artifact in a portable visual-story bundle.</summary>

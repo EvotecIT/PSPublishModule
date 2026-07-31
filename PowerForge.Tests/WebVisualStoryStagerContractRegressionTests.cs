@@ -73,4 +73,64 @@ public class WebVisualStoryStagerContractRegressionTests
             Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public void Stage_PersistsConfiguredLimitsForSubsequentLoads()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var result = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = Path.Combine(root, "source", "story.json"),
+                OutputPath = Path.Combine(root, "published"),
+                MaximumArtifactBytes = 1024,
+                MaximumTotalArtifactBytes = 4096
+            });
+            var persisted = JsonNode.Parse(File.ReadAllText(result.ManifestPath))!;
+            Assert.Equal(1024, persisted["resourceLimits"]!["maximumArtifactBytes"]!.GetValue<long>());
+            Assert.Equal(4096, persisted["resourceLimits"]!["maximumTotalArtifactBytes"]!.GetValue<long>());
+
+            using (var stream = new FileStream(
+                       Path.Combine(root, "published", "demo.txt"),
+                       FileMode.Append,
+                       FileAccess.Write))
+            {
+                stream.SetLength(2048);
+            }
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Load(result.ManifestPath));
+
+            Assert.Contains("1024-byte limit", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Load_RejectsManifestBeyondTheManifestByteLimit()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var manifest = Path.Combine(root, "source", "story.json");
+            using (var stream = new FileStream(manifest, FileMode.Append, FileAccess.Write))
+            {
+                stream.SetLength(WebVisualStoryStager.MaximumManifestBytes + 1L);
+            }
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Load(manifest));
+
+            Assert.Contains("manifest exceeds", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("byte safety limit", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
 }

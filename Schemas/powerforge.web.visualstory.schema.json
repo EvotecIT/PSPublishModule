@@ -15,6 +15,15 @@
     "outcome": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
     "generatedAtUtc": { "type": ["string", "null"], "format": "date-time" },
     "producer": { "type": ["string", "null"] },
+    "resourceLimits": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["maximumArtifactBytes", "maximumTotalArtifactBytes"],
+      "properties": {
+        "maximumArtifactBytes": { "type": "integer", "minimum": 1 },
+        "maximumTotalArtifactBytes": { "type": "integer", "minimum": 1 }
+      }
+    },
     "artifacts": {
       "type": "array",
       "minItems": 1,

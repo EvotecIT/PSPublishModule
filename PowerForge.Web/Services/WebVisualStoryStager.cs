@@ -11,9 +11,11 @@ public static class WebVisualStoryStager
 {
     internal const long DefaultMaximumArtifactBytes = 25L * 1024L * 1024L;
     internal const long DefaultMaximumTotalArtifactBytes = 100L * 1024L * 1024L;
+    internal const int MaximumManifestBytes = 1024 * 1024;
     private const int MaximumArtifactCount = 64;
     private const string StagedManifestFileName = "visual-story.json";
     private static readonly JsonSerializerOptions ManifestJsonOptions = CreateManifestJsonOptions();
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
     private static readonly HashSet<string> SupportedFormats = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -63,6 +65,11 @@ public static class WebVisualStoryStager
             "output",
             allowRoot: true);
         var bundle = DeserializeManifest(manifestPath);
+        bundle.ResourceLimits = new WebVisualStoryResourceLimits
+        {
+            MaximumArtifactBytes = options.MaximumArtifactBytes,
+            MaximumTotalArtifactBytes = options.MaximumTotalArtifactBytes
+        };
 
         ValidateBundle(bundle);
         ValidateCompletedArtifact(bundle);
@@ -186,7 +193,7 @@ public static class WebVisualStoryStager
 
             File.WriteAllText(
                 Path.Combine(stagingRoot, StagedManifestFileName),
-                JsonSerializer.Serialize(bundle, WebJson.Options));
+                SerializeBoundedManifest(bundle));
             PromoteStagedDirectory(stagingRoot, outputRoot);
         }
         catch
@@ -283,6 +290,10 @@ public static class WebVisualStoryStager
         var bundle = DeserializeManifest(fullPath);
         ValidateBundle(bundle);
         ValidateCompletedArtifact(bundle);
+        var maximumArtifactBytes = bundle.ResourceLimits?.MaximumArtifactBytes
+                                   ?? DefaultMaximumArtifactBytes;
+        var maximumTotalArtifactBytes = bundle.ResourceLimits?.MaximumTotalArtifactBytes
+                                        ?? DefaultMaximumTotalArtifactBytes;
         var totalArtifactBytes = 0L;
         foreach (var artifact in bundle.Artifacts)
         {
@@ -297,8 +308,8 @@ public static class WebVisualStoryStager
             totalArtifactBytes = ReserveArtifactBytes(
                 totalArtifactBytes,
                 info.Length,
-                DefaultMaximumArtifactBytes,
-                DefaultMaximumTotalArtifactBytes,
+                maximumArtifactBytes,
+                maximumTotalArtifactBytes,
                 artifact.Path);
             var normalizedFormat = NormalizeFormat(artifact.Format);
             var extension = Path.GetExtension(artifactPath).TrimStart('.');
@@ -334,6 +345,19 @@ public static class WebVisualStoryStager
         Require(bundle.Title, "title");
         Require(bundle.Alt, "alt");
         Require(bundle.Outcome, "outcome");
+        if (bundle.ResourceLimits is not null)
+        {
+            if (bundle.ResourceLimits.MaximumArtifactBytes <= 0)
+            {
+                throw new InvalidOperationException(
+                    "Visual-story resourceLimits.maximumArtifactBytes must be positive.");
+            }
+            if (bundle.ResourceLimits.MaximumTotalArtifactBytes <= 0)
+            {
+                throw new InvalidOperationException(
+                    "Visual-story resourceLimits.maximumTotalArtifactBytes must be positive.");
+            }
+        }
         if (bundle.Artifacts is null || bundle.Artifacts.Length == 0)
             throw new InvalidOperationException("Visual-story manifest must declare artifacts.");
         if (bundle.Artifacts.Length > MaximumArtifactCount)
@@ -676,7 +700,7 @@ public static class WebVisualStoryStager
         try
         {
             return JsonSerializer.Deserialize<WebVisualStoryBundle>(
-                       File.ReadAllText(path),
+                       ReadBoundedManifestText(path),
                        ManifestJsonOptions)
                    ?? throw new InvalidOperationException("Visual-story manifest is empty or invalid.");
         }
@@ -684,5 +708,46 @@ public static class WebVisualStoryStager
         {
             throw new InvalidOperationException("Visual-story manifest does not match the published schema.", ex);
         }
+        catch (DecoderFallbackException ex)
+        {
+            throw new InvalidOperationException("Visual-story manifest must use valid UTF-8.", ex);
+        }
+    }
+
+    private static string ReadBoundedManifestText(string path)
+    {
+        using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 4096,
+            FileOptions.SequentialScan);
+        var bytes = new byte[MaximumManifestBytes + 1];
+        var totalBytes = 0;
+        while (totalBytes < bytes.Length)
+        {
+            var bytesRead = stream.Read(bytes, totalBytes, bytes.Length - totalBytes);
+            if (bytesRead == 0)
+                break;
+            totalBytes += bytesRead;
+        }
+        if (totalBytes > MaximumManifestBytes || stream.ReadByte() >= 0)
+        {
+            throw new InvalidOperationException(
+                $"Visual-story manifest exceeds the {MaximumManifestBytes}-byte safety limit.");
+        }
+        return StrictUtf8.GetString(bytes, 0, totalBytes);
+    }
+
+    private static string SerializeBoundedManifest(WebVisualStoryBundle bundle)
+    {
+        var manifest = JsonSerializer.Serialize(bundle, WebJson.Options);
+        if (StrictUtf8.GetByteCount(manifest) > MaximumManifestBytes)
+        {
+            throw new InvalidOperationException(
+                $"Visual-story manifest exceeds the {MaximumManifestBytes}-byte safety limit after staging.");
+        }
+        return manifest;
     }
 }
