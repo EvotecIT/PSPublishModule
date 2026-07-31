@@ -5,6 +5,7 @@
 )
 # <PowerForgeTypeIdentityHelpers />
 # <PowerForgeDefaultValueCollectionHelpers />
+# <PowerForgeDefaultValueScalarHelpers />
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
@@ -178,13 +179,7 @@ function ConvertToPowerShellDefaultValue(
     [void]$referenceStack.Add($value)
     try {
       if ($value -is [System.Collections.IDictionary]) {
-        $entries = [System.Collections.Generic.List[string]]::new()
-        foreach ($entry in $value.GetEnumerator()) {
-          $key = ConvertToPowerShellDefaultValue $entry.Key $referenceStack
-          $entryValue = ConvertToPowerShellDefaultValue $entry.Value $referenceStack
-          $entries.Add(('(' + $key + ') = ' + $entryValue))
-        }
-        return ('@{ ' + ($entries -join '; ') + ' }')
+        return ConvertDictionaryToPowerShellDefaultValue $value $referenceStack
       }
       if ($value -is [System.Array] -and
           ($value.Rank -gt 1 -or $value.GetType() -ne $value.GetType().GetElementType().MakeArrayType())) {
@@ -204,10 +199,7 @@ function ConvertToPowerShellDefaultValue(
       $referenceStack.RemoveAt($referenceStack.Count - 1)
     }
   }
-  if ($value -is [System.IFormattable]) {
-    return ([System.IFormattable]$value).ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
-  }
-  return [string]$value
+  return ConvertScalarToPowerShellDefaultValue $value
 }
 
 function GetOutputTypeMetadata([object]$outputType) {

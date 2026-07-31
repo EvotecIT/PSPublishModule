@@ -22,7 +22,7 @@ function ConvertMultidimensionalArrayToPowerShellDefaultValue(
       $_.ToString([System.Globalization.CultureInfo]::InvariantCulture)
     }) -join ', '
     $itemExpression = ConvertToPowerShellDefaultValue ($value.GetValue($indices)) $referenceStack
-    $statements.Add('$array.SetValue(' + $itemExpression + ', [int[]]@(' + $indexText + '))')
+    $statements.Add('$array.SetValue((' + $itemExpression + '), [int[]]@(' + $indexText + '))')
     for ($dimension = $rank - 1; $dimension -ge 0; $dimension--) {
       $indices[$dimension]++
       if ($indices[$dimension] -lt
@@ -30,7 +30,22 @@ function ConvertMultidimensionalArrayToPowerShellDefaultValue(
       $indices[$dimension] = $value.GetLowerBound($dimension)
     }
   }
-  $statements.Add('Write-Output -NoEnumerate $array')
+  $statements.Add('return ,$array')
+  return ('& { ' + ($statements -join '; ') + ' }')
+}
+
+function ConvertDictionaryToPowerShellDefaultValue(
+  [System.Collections.IDictionary]$value,
+  [System.Collections.IList]$referenceStack
+) {
+  $statements = [System.Collections.Generic.List[string]]::new()
+  $statements.Add('$dictionary = [System.Collections.Specialized.OrderedDictionary]::new()')
+  foreach ($entry in $value.GetEnumerator()) {
+    $keyExpression = ConvertToPowerShellDefaultValue $entry.Key $referenceStack
+    $valueExpression = ConvertToPowerShellDefaultValue $entry.Value $referenceStack
+    $statements.Add('$dictionary.Add((' + $keyExpression + '), (' + $valueExpression + '))')
+  }
+  $statements.Add('return ,$dictionary')
   return ('& { ' + ($statements -join '; ') + ' }')
 }
 
@@ -44,8 +59,8 @@ function ConvertCollectionItemsToPowerShellDefaultValue(
   $statements = [System.Collections.Generic.List[string]]::new()
   $statements.Add('$array = [object[]]::new(' + $items.Count + ')')
   for ($index = 0; $index -lt $items.Count; $index++) {
-    $statements.Add('$array.SetValue(' + $items[$index] + ', ' + $index + ')')
+    $statements.Add('$array.SetValue((' + $items[$index] + '), ' + $index + ')')
   }
-  $statements.Add('Write-Output -NoEnumerate $array')
+  $statements.Add('return ,$array')
   return ('& { ' + ($statements -join '; ') + ' }')
 }
