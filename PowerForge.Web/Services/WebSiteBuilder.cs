@@ -385,7 +385,23 @@ public static partial class WebSiteBuilder
     private static void CopyStaticAssets(SiteSpec spec, string rootPath, string outputRoot)
     {
         if (spec.StaticAssets is null || spec.StaticAssets.Length == 0)
+        {
+            var conventionalRoot = Path.GetFullPath(Path.Combine(rootPath, "static"));
+            if (!Directory.Exists(conventionalRoot))
+                return;
+
+            var normalizedConventionalRoot = NormalizeRootPathForSink(conventionalRoot);
+            var conventionalOutputRoot = NormalizeRootPathForSink(outputRoot);
+            if (IsPathWithinRoot(normalizedConventionalRoot, Path.GetFullPath(outputRoot)))
+            {
+                Trace.TraceWarning(
+                    $"Skipping conventional static asset copy because output is inside the source root: {conventionalRoot}");
+                return;
+            }
+
+            CopyDirectory(conventionalRoot, conventionalOutputRoot);
             return;
+        }
 
         var normalizedOutputRoot = NormalizeRootPathForSink(outputRoot);
 

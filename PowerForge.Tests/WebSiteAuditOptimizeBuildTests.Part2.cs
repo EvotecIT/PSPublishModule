@@ -1111,6 +1111,36 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void OptimizeDetailed_IgnoresUnrelatedSameNameJsonAssets()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-unrelated-story-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var unrelatedPath = Path.Combine(root, "visual-story.json");
+            File.WriteAllText(unrelatedPath, """{ "application": "download-catalog" }""");
+            File.WriteAllText(
+                Path.Combine(root, "index.html"),
+                "<!doctype html><html><body><p>Ready</p></body></html>");
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                MinifyHtml = true
+            });
+
+            Assert.Equal("""{ "application": "download-catalog" }""", File.ReadAllText(unrelatedPath));
+            Assert.True(result.HtmlFileCount == 1);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void OptimizeDetailed_PreservesIntegrityBoundVisualStoryArtifacts()
     {
         var bundleRoot = WebVisualStoryStagerTests.CreateBundle();
@@ -1177,14 +1207,69 @@ public partial class WebSiteAuditOptimizeBuildTests
                 ImageStripMetadata = true,
                 MinifyHtml = true,
                 HashAssets = true,
-                HashExtensions = [".html"]
+                HashExtensions = [".html", ".json"]
             });
 
             Assert.Equal(1, result.ImageFileCount);
             Assert.Equal(1, result.ImageOptimizedCount);
             Assert.Equal(completedBefore, File.ReadAllBytes(completedPath));
             Assert.Equal(htmlBefore, File.ReadAllBytes(htmlPath));
+            Assert.True(File.Exists(staged.ManifestPath));
             Assert.Equal(4, WebVisualStoryStager.Load(staged.ManifestPath).Artifacts.Length);
+        }
+        finally
+        {
+            Directory.Delete(bundleRoot, true);
+            Directory.Delete(siteRoot, true);
+        }
+    }
+
+    [Fact]
+    public void OptimizeDetailed_DoesNotRewriteReferencesWhenProtectedStoryCopyIsRejected()
+    {
+        var bundleRoot = WebVisualStoryStagerTests.CreateBundle();
+        var siteRoot = Path.Combine(Path.GetTempPath(), "pf-web-opt-story-rewrite-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(siteRoot);
+
+        try
+        {
+            var storyRoot = Path.Combine(siteRoot, "stories", "demo");
+            var staged = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = Path.Combine(bundleRoot, "source", "story.json"),
+                OutputPath = storyRoot
+            });
+            var completedPath = Path.Combine(storyRoot, "demo.png");
+            var completedBefore = File.ReadAllBytes(completedPath);
+            var replacementPath = Path.Combine(bundleRoot, "replacement.png");
+            File.WriteAllBytes(replacementPath, new byte[] { 1, 2, 3, 4 });
+            var htmlPath = Path.Combine(siteRoot, "index.html");
+            File.WriteAllText(
+                htmlPath,
+                "<!doctype html><html><body><img src=\"/old.png\" /></body></html>");
+
+            WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = siteRoot,
+                AssetPolicy = new AssetPolicySpec
+                {
+                    Rewrites =
+                    [
+                        new AssetRewriteSpec
+                        {
+                            Match = "/old.png",
+                            Replace = "/stories/demo/demo.png",
+                            MatchType = "exact",
+                            Source = replacementPath,
+                            Destination = "stories/demo/demo.png"
+                        }
+                    ]
+                }
+            });
+
+            Assert.Equal(completedBefore, File.ReadAllBytes(completedPath));
+            Assert.Contains("src=\"/old.png\"", File.ReadAllText(htmlPath), StringComparison.Ordinal);
+            Assert.Equal(3, WebVisualStoryStager.Load(staged.ManifestPath).Artifacts.Length);
         }
         finally
         {

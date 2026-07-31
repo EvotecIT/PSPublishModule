@@ -262,6 +262,12 @@ public class WebShortcodeMediaTests
                       ]
                     }
                     """);
+            },
+            assertOutput: output =>
+            {
+                Assert.True(File.Exists(Path.Combine(output, "visual-story.json")));
+                Assert.True(File.Exists(Path.Combine(output, "demo.svg")));
+                Assert.True(File.Exists(Path.Combine(output, "demo.png")));
             });
 
         Assert.Contains("src=\"/demo.svg\"", html, StringComparison.OrdinalIgnoreCase);
@@ -374,7 +380,8 @@ public class WebShortcodeMediaTests
         Action<SiteSpec>? configure = null,
         string pageRelativePath = "index.md",
         string outputRelativePath = "index.html",
-        bool includeIndexSlug = true)
+        bool includeIndexSlug = true,
+        Action<string>? assertOutput = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-shortcode-media-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -446,6 +453,7 @@ public class WebShortcodeMediaTests
 
             var indexHtml = Path.Combine(outPath, outputRelativePath);
             Assert.True(File.Exists(indexHtml), "Expected index.html to be generated.");
+            assertOutput?.Invoke(outPath);
             return File.ReadAllText(indexHtml);
         }
         finally

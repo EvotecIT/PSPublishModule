@@ -123,12 +123,15 @@ public static partial class WebAssetOptimizer
         var policy = options.AssetPolicy;
         if (policy?.Rewrites is { Length: > 0 })
         {
-            CopyRewriteAssets(policy.Rewrites, siteRoot, protectedStoryArtifacts);
+            var applicableRewrites = CopyRewriteAssets(
+                policy.Rewrites,
+                siteRoot,
+                protectedStoryArtifacts);
             foreach (var htmlFile in htmlFiles)
             {
                 var content = File.ReadAllText(htmlFile);
                 if (string.IsNullOrWhiteSpace(content)) continue;
-                var updated = RewriteHtmlAssets(content, policy.Rewrites);
+                var updated = RewriteHtmlAssets(content, applicableRewrites);
                 updated = WebSiteBuilder.OptimizeNetworkHints(updated);
                 if (!string.Equals(updated, content, StringComparison.Ordinal))
                 {
@@ -374,15 +377,28 @@ public static partial class WebAssetOptimizer
         return policy?.Hashing ?? new AssetHashSpec { Enabled = false };
     }
 
-    private static void CopyRewriteAssets(
+    private static AssetRewriteSpec[] CopyRewriteAssets(
         IEnumerable<AssetRewriteSpec> rewrites,
         string siteRoot,
         IReadOnlySet<string> protectedStoryArtifacts)
     {
+        var applicable = new List<AssetRewriteSpec>();
         foreach (var rewrite in rewrites)
         {
-            if (string.IsNullOrWhiteSpace(rewrite.Destination))
+            var hasCopySource =
+                !string.IsNullOrWhiteSpace(rewrite.Source) ||
+                !string.IsNullOrWhiteSpace(rewrite.SourceUrl);
+            if (!hasCopySource)
+            {
+                applicable.Add(rewrite);
                 continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(rewrite.Destination))
+            {
+                Trace.TraceWarning("Asset rewrite with a copy source requires a destination.");
+                continue;
+            }
 
             var destRelative = rewrite.Destination.TrimStart('/', '\\');
             if (!TryResolveUnderRoot(siteRoot, destRelative, out var dest))
@@ -400,38 +416,44 @@ public static partial class WebAssetOptimizer
             {
                 var source = Path.GetFullPath(rewrite.Source);
                 if (!File.Exists(source))
+                {
+                    Trace.TraceWarning($"Asset rewrite source file was not found: {rewrite.Source}");
                     continue;
+                }
 
                 var destinationDirectory = Path.GetDirectoryName(dest);
                 if (!string.IsNullOrWhiteSpace(destinationDirectory))
                     Directory.CreateDirectory(destinationDirectory);
                 File.Copy(source, dest, overwrite: true);
+                applicable.Add(rewrite);
                 continue;
             }
 
-            if (!string.IsNullOrWhiteSpace(rewrite.SourceUrl))
+            if (!string.IsNullOrWhiteSpace(rewrite.SourceUrl) &&
+                DownloadRewriteAsset(rewrite, dest))
             {
-                DownloadRewriteAsset(rewrite, dest);
+                applicable.Add(rewrite);
             }
         }
+        return applicable.ToArray();
     }
 
-    private static void DownloadRewriteAsset(AssetRewriteSpec rewrite, string destinationPath)
+    private static bool DownloadRewriteAsset(AssetRewriteSpec rewrite, string destinationPath)
     {
         if (string.IsNullOrWhiteSpace(rewrite.SourceUrl))
-            return;
+            return false;
 
         if (!Uri.TryCreate(rewrite.SourceUrl, UriKind.Absolute, out var sourceUri) ||
             sourceUri.Scheme != Uri.UriSchemeHttps)
         {
             Trace.TraceWarning($"Asset rewrite sourceUrl is not a valid https URL: {rewrite.SourceUrl}");
-            return;
+            return false;
         }
 
         if (!IsAllowedRewriteSourceUri(sourceUri, rewrite.SourceUrlAllowedHosts))
         {
             Trace.TraceWarning($"Asset rewrite sourceUrl host is not allowed for remote download: {sourceUri.Host}");
-            return;
+            return false;
         }
 
         try
@@ -446,15 +468,17 @@ public static partial class WebAssetOptimizer
                 if (rewrite.DownloadDependencies)
                     css = RewriteDownloadedCssDependencies(css, sourceUri, destinationPath, rewrite.UserAgent);
                 File.WriteAllText(destinationPath, css, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                return;
+                return true;
             }
 
             var bytes = DownloadBytes(sourceUri, rewrite.UserAgent);
             File.WriteAllBytes(destinationPath, bytes);
+            return true;
         }
         catch (Exception ex)
         {
             Trace.TraceWarning($"Asset rewrite download failed for {rewrite.SourceUrl}: {ex.GetType().Name}: {ex.Message}");
+            return false;
         }
     }
 

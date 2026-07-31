@@ -328,7 +328,11 @@ public static partial class WebAssetOptimizer
                      "visual-story.json",
                      SearchOption.AllDirectories))
         {
+            if (!WebVisualStoryManifestDiscovery.IsRecognizable(manifestPath))
+                continue;
+
             var bundle = WebVisualStoryStager.Load(manifestPath);
+            paths.Add(Path.GetFullPath(manifestPath));
             var bundleRoot = Path.GetDirectoryName(manifestPath)
                              ?? throw new InvalidOperationException("Visual-story manifest has no parent directory.");
             foreach (var artifact in bundle.Artifacts)
