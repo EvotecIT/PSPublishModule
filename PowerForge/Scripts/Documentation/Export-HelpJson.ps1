@@ -77,6 +77,10 @@ function ConvertToPowerShellDefaultValue(
     if ($value) { return '$true' }
     return '$false'
   }
+  if ($value.GetType().FullName -eq 'System.Management.Automation.SwitchParameter') {
+    $switchValue = if ($value.IsPresent) { '$true' } else { '$false' }
+    return ('[System.Management.Automation.SwitchParameter]::new(' + $switchValue + ')')
+  }
   if ($value -is [enum]) {
     $enumType = $value.GetType()
     $enumName = [System.Enum]::GetName($enumType, $value)
@@ -91,6 +95,12 @@ function ConvertToPowerShellDefaultValue(
     return ('[System.Enum]::ToObject([' + $enumType.FullName + '], ([' + $underlyingTypeName + ']' + [string]$underlyingValue + '))')
   }
   if ($value -is [type]) {
+    if ($value.IsPointer) {
+      return ((ConvertToPowerShellDefaultValue ($value.GetElementType())) + '.MakePointerType()')
+    }
+    if ($value.IsByRef) {
+      return ((ConvertToPowerShellDefaultValue ($value.GetElementType())) + '.MakeByRefType()')
+    }
     return ('[' + (GetCanonicalTypeNameFromType $value) + ']')
   }
   if ($value -is [double]) {
@@ -176,14 +186,20 @@ function ConvertToPowerShellDefaultValue(
         }
         return ('@{ ' + ($entries -join '; ') + ' }')
       }
-      if ($value -is [System.Array] -and $value.Rank -gt 1) {
+      if ($value -is [System.Array] -and
+          ($value.Rank -gt 1 -or $value.GetType() -ne $value.GetType().GetElementType().MakeArrayType())) {
         return ConvertMultidimensionalArrayToPowerShellDefaultValue $value $referenceStack
       }
       $items = [System.Collections.Generic.List[string]]::new()
+      $containsNestedCollection = $false
       foreach ($item in $value) {
+        if ($item -is [System.Collections.IDictionary] -or
+            ($item -is [System.Collections.IEnumerable] -and $item -isnot [string])) {
+          $containsNestedCollection = $true
+        }
         $items.Add((ConvertToPowerShellDefaultValue $item $referenceStack))
       }
-      return ('@(' + ($items -join ', ') + ')')
+      return ConvertCollectionItemsToPowerShellDefaultValue $items $containsNestedCollection
     } finally {
       $referenceStack.RemoveAt($referenceStack.Count - 1)
     }

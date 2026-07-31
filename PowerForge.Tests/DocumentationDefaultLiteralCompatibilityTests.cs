@@ -45,6 +45,12 @@ function Get-DefaultLiteralFixture {
         $bigIntegerAttributes.Add($bigIntegerDefault)
         $parameters.Add('BigInteger', [System.Management.Automation.RuntimeDefinedParameter]::new('BigInteger', [System.Numerics.BigInteger], $bigIntegerAttributes))
 
+        $switchAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $switchDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $switchDefault.Value = [System.Management.Automation.SwitchParameter]::new($true)
+        $switchAttributes.Add($switchDefault)
+        $parameters.Add('SwitchValue', [System.Management.Automation.RuntimeDefinedParameter]::new('SwitchValue', [System.Management.Automation.SwitchParameter], $switchAttributes))
+
         $guidAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $guidDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $guidDefault.Value = [guid]::ParseExact('01234567-89ab-cdef-0123-456789abcdef', 'D')
@@ -91,6 +97,23 @@ function Get-DefaultLiteralFixture {
         $matrixAttributes.Add($matrixDefault)
         $parameters.Add('Matrix', [System.Management.Automation.RuntimeDefinedParameter]::new('Matrix', [int[,]], $matrixAttributes))
 
+        $boundedArrayAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $boundedArrayDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $boundedArray = [System.Array]::CreateInstance([int], [int[]]@(2), [int[]]@(5))
+        $boundedArray.SetValue(7, 5)
+        $boundedArray.SetValue(8, 6)
+        $boundedArrayDefault.Value = $boundedArray
+        $boundedArrayAttributes.Add($boundedArrayDefault)
+        $parameters.Add('BoundedArray', [System.Management.Automation.RuntimeDefinedParameter]::new('BoundedArray', [System.Array], $boundedArrayAttributes))
+
+        $nestedCollectionAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $nestedCollectionDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $nestedCollection = [object[]]::new(1)
+        $nestedCollection[0] = [int[]](1, 2)
+        $nestedCollectionDefault.Value = $nestedCollection
+        $nestedCollectionAttributes.Add($nestedCollectionDefault)
+        $parameters.Add('NestedCollection', [System.Management.Automation.RuntimeDefinedParameter]::new('NestedCollection', [object[]], $nestedCollectionAttributes))
+
         $dateOnlyAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $dateOnlyDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $dateOnlyDefault.Value = [System.DateOnly]::FromDayNumber(739827)
@@ -126,6 +149,18 @@ function Get-DefaultLiteralFixture {
         $scriptDefault.Value = [scriptblock]::Create("1+2`n" + '```')
         $scriptAttributes.Add($scriptDefault)
         $parameters.Add('Script', [System.Management.Automation.RuntimeDefinedParameter]::new('Script', [scriptblock], $scriptAttributes))
+
+        $pointerTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $pointerTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $pointerTypeDefault.Value = [int].MakePointerType()
+        $pointerTypeAttributes.Add($pointerTypeDefault)
+        $parameters.Add('PointerType', [System.Management.Automation.RuntimeDefinedParameter]::new('PointerType', [type], $pointerTypeAttributes))
+
+        $byRefTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $byRefTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $byRefTypeDefault.Value = [int].MakeByRefType()
+        $byRefTypeAttributes.Add($byRefTypeDefault)
+        $parameters.Add('ByRefType', [System.Management.Automation.RuntimeDefinedParameter]::new('ByRefType', [type], $byRefTypeAttributes))
 
         $parameters
     }
@@ -183,6 +218,9 @@ function Get-DefaultLiteralFixture {
                 "[System.Numerics.BigInteger]::Parse('1234567890123456789012345678901234567890', [System.Globalization.CultureInfo]::InvariantCulture)",
                 Default("BigInteger"));
             Assert.Equal(
+                "[System.Management.Automation.SwitchParameter]::new($true)",
+                Default("SwitchValue"));
+            Assert.Equal(
                 "[System.Guid]::ParseExact('01234567-89ab-cdef-0123-456789abcdef', 'D')",
                 Default("Guid"));
             Assert.Equal(
@@ -198,6 +236,12 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue(1, [int[]]@(0, 0)); $array.SetValue(2, [int[]]@(0, 1)); $array.SetValue(3, [int[]]@(1, 0)); $array.SetValue(4, [int[]]@(1, 1)); Write-Output -NoEnumerate $array }",
                 Default("Matrix"));
+            Assert.Equal(
+                "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2), [int[]]@(5)); $array.SetValue(7, [int[]]@(5)); $array.SetValue(8, [int[]]@(6)); Write-Output -NoEnumerate $array }",
+                Default("BoundedArray"));
+            Assert.Equal(
+                "& { $array = [object[]]::new(1); $array.SetValue(@(1, 2), 0); Write-Output -NoEnumerate $array }",
+                Default("NestedCollection"));
             Assert.Equal(
                 "[System.DateOnly]::FromDayNumber(([int]739827))",
                 Default("DateOnly"));
@@ -216,6 +260,8 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 "[scriptblock]::Create((-join @('1+2', ([char]10), '```')))",
                 Default("Script"));
+            Assert.Equal("[System.Int32].MakePointerType()", Default("PointerType"));
+            Assert.Equal("[System.Int32].MakeByRefType()", Default("ByRefType"));
 
             string Default(string name)
                 => Assert.Single(command.Parameters, parameter => parameter.Name == name).DefaultValue;

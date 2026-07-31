@@ -33,3 +33,19 @@ function ConvertMultidimensionalArrayToPowerShellDefaultValue(
   $statements.Add('Write-Output -NoEnumerate $array')
   return ('& { ' + ($statements -join '; ') + ' }')
 }
+
+function ConvertCollectionItemsToPowerShellDefaultValue(
+  [System.Collections.Generic.IReadOnlyList[string]]$items,
+  [bool]$containsNestedCollection
+) {
+  if (-not $containsNestedCollection) {
+    return ('@(' + ($items -join ', ') + ')')
+  }
+  $statements = [System.Collections.Generic.List[string]]::new()
+  $statements.Add('$array = [object[]]::new(' + $items.Count + ')')
+  for ($index = 0; $index -lt $items.Count; $index++) {
+    $statements.Add('$array.SetValue(' + $items[$index] + ', ' + $index + ')')
+  }
+  $statements.Add('Write-Output -NoEnumerate $array')
+  return ('& { ' + ($statements -join '; ') + ' }')
+}
