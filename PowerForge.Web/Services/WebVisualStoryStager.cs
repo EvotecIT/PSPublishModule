@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ImageMagick;
@@ -159,6 +160,10 @@ public static class WebVisualStoryStager
                         item.RelativePath,
                         stagedFormat);
                 }
+                if (IsTranscriptArtifact(item.Artifact))
+                {
+                    ValidateTranscriptText(temporaryDestination, item.RelativePath);
+                }
                 item.Artifact.Role = item.Artifact.Role.Trim().ToLowerInvariant();
                 item.Artifact.Path = item.RelativePath;
                 item.Artifact.Format = stagedFormat;
@@ -226,6 +231,10 @@ public static class WebVisualStoryStager
             if (IsAnimatedArtifact(artifact))
             {
                 WebVisualStoryAnimatedArtifactValidator.Validate(artifactPath, artifact.Path, normalizedFormat);
+            }
+            if (IsTranscriptArtifact(artifact))
+            {
+                ValidateTranscriptText(artifactPath, artifact.Path);
             }
             if (artifact.Bytes is not null && artifact.Bytes.Value != info.Length)
                 throw new InvalidOperationException($"Visual-story artifact size does not match its manifest: {artifact.Path}");
@@ -340,6 +349,26 @@ public static class WebVisualStoryStager
 
     private static bool IsAnimatedArtifact(WebVisualStoryArtifact artifact)
         => string.Equals(artifact.Role, "animated", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsTranscriptArtifact(WebVisualStoryArtifact artifact)
+        => string.Equals(artifact.Role, "transcript", StringComparison.OrdinalIgnoreCase);
+
+    private static void ValidateTranscriptText(string path, string displayPath)
+    {
+        try
+        {
+            _ = new UTF8Encoding(
+                    encoderShouldEmitUTF8Identifier: false,
+                    throwOnInvalidBytes: true)
+                .GetString(File.ReadAllBytes(path));
+        }
+        catch (DecoderFallbackException ex)
+        {
+            throw new InvalidOperationException(
+                $"Visual-story transcript artifact must contain valid UTF-8 text: {displayPath}",
+                ex);
+        }
+    }
 
     private static void ValidateCompletedPng(string path, string displayPath)
     {

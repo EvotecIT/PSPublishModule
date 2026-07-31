@@ -98,6 +98,38 @@ public class WebVisualStoryAnimatedArtifactTests
         }
     }
 
+    [Fact]
+    public void Stage_RejectsUppercaseSvgRootElements()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            File.WriteAllText(
+                Path.Combine(source, "uppercase.svg"),
+                "<SVG xmlns=\"http://www.w3.org/2000/svg\"/>");
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = ReadBundle(manifest);
+            var animated = Assert.Single(bundle.Artifacts, artifact => artifact.Role == "animated");
+            animated.Format = "svg";
+            animated.Path = "uppercase.svg";
+            WriteBundle(manifest, bundle);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("valid SVG", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     [Theory]
     [InlineData("gif", "animated.gif", MagickFormat.Gif)]
     [InlineData("apng", "animated.png", MagickFormat.APng)]
@@ -209,6 +241,37 @@ public class WebVisualStoryAnimatedArtifactTests
     }
 
     [Fact]
+    public void Stage_RejectsIdatChunksForLaterApngFrames()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var animationPath = Path.Combine(source, "animated.png");
+            WriteTinyApng(animationPath, useIdatForSecondFrame: true);
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = ReadBundle(manifest);
+            var animated = Assert.Single(bundle.Artifacts, artifact => artifact.Role == "animated");
+            animated.Format = "apng";
+            animated.Path = "animated.png";
+            WriteBundle(manifest, bundle);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("later animation frame", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Stage_RejectsGifCollectionsBeyondTheFrameBudget()
     {
         var root = WebVisualStoryStagerTests.CreateBundle();
@@ -270,7 +333,8 @@ public class WebVisualStoryAnimatedArtifactTests
     internal static void WriteTinyApng(
         string path,
         bool completeSecondFrame = true,
-        byte secondFrameDisposal = 0)
+        byte secondFrameDisposal = 0,
+        bool useIdatForSecondFrame = false)
     {
         using var output = new MemoryStream();
         output.Write(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 });
@@ -290,10 +354,17 @@ public class WebVisualStoryAnimatedArtifactTests
         var compressedFrame = completeSecondFrame
             ? CompressPngPixel(60, 179, 113, 255)
             : CompressPngBytes(0);
-        var frameData = new byte[4 + compressedFrame.Length];
-        WriteUInt32(frameData, 0, 2);
-        compressedFrame.CopyTo(frameData, 4);
-        WritePngChunk(output, "fdAT", frameData);
+        if (useIdatForSecondFrame)
+        {
+            WritePngChunk(output, "IDAT", compressedFrame);
+        }
+        else
+        {
+            var frameData = new byte[4 + compressedFrame.Length];
+            WriteUInt32(frameData, 0, 2);
+            compressedFrame.CopyTo(frameData, 4);
+            WritePngChunk(output, "fdAT", frameData);
+        }
         WritePngChunk(output, "IEND", Array.Empty<byte>());
         File.WriteAllBytes(path, output.ToArray());
     }

@@ -113,7 +113,7 @@ internal static class WebVisualStoryAnimatedArtifactValidator
             using var stream = File.OpenRead(path);
             using var reader = XmlReader.Create(stream, settings);
             reader.MoveToContent();
-            if (!string.Equals(reader.LocalName, "svg", StringComparison.OrdinalIgnoreCase) ||
+            if (!string.Equals(reader.LocalName, "svg", StringComparison.Ordinal) ||
                 !string.Equals(reader.NamespaceURI, SvgNamespace, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
@@ -160,6 +160,7 @@ internal static class WebVisualStoryAnimatedArtifactValidator
         uint frameWidth = 0;
         uint frameHeight = 0;
         var decodedFrameBytes = 0L;
+        var currentFrameAllowsIdat = false;
         while (offset + 12 <= bytes.Length)
         {
             var length = ReadUInt32(bytes, offset);
@@ -248,10 +249,16 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                     displayPath);
                 frameData?.Dispose();
                 frameData = new MemoryStream();
+                currentFrameAllowsIdat = frameCount == 0 && !sawImageData;
                 frameCount++;
             }
             else if (first == 'I' && second == 'D' && third == 'A' && fourth == 'T')
             {
+                if (frameData is not null && !currentFrameAllowsIdat)
+                {
+                    throw new InvalidOperationException(
+                        $"Visual-story APNG uses image data for a later animation frame: {displayPath}");
+                }
                 sawImageData = true;
                 frameData?.Write(bytes, dataOffset, dataLength);
             }

@@ -280,6 +280,12 @@ public static partial class WebApiDocsGenerator
             throw new InvalidOperationException(
                 "API visual-story media requires a completed PNG poster for reduced-motion and print output.");
         }
+        if (type.Equals("story", StringComparison.OrdinalIgnoreCase) &&
+            !IsAnimatedStoryHref(url))
+        {
+            throw new InvalidOperationException(
+                "API visual-story media source must use animated SVG, GIF, or APNG content.");
+        }
         var alt = Normalize(element.Attribute("alt")?.Value ?? string.Empty);
         if (type.Equals("story", StringComparison.OrdinalIgnoreCase) &&
             string.IsNullOrWhiteSpace(alt))
@@ -676,6 +682,18 @@ public static partial class WebApiDocsGenerator
         if (delimiter >= 0)
             path = path[..delimiter];
         return path.EndsWith(".png", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAnimatedStoryHref(string href)
+    {
+        var path = href;
+        var delimiter = path.IndexOfAny(new[] { '?', '#' });
+        if (delimiter >= 0)
+            path = path[..delimiter];
+        return path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase) ||
+               path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) ||
+               path.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+               path.EndsWith(".apng", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string EncodeSrcSetUrl(string href)

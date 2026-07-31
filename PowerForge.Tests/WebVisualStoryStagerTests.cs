@@ -345,6 +345,30 @@ public class WebVisualStoryStagerTests
     }
 
     [Fact]
+    public void Stage_RejectsTranscriptArtifactsThatAreNotValidUtf8()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            File.WriteAllBytes(Path.Combine(source, "demo.txt"), new byte[] { 0x52, 0x75, 0x6E, 0xFF });
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = Path.Combine(source, "story.json"),
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("valid UTF-8 text", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Stage_RejectsArtifactPathThatConflictsWithStagedManifest()
     {
         var root = CreateBundle();
