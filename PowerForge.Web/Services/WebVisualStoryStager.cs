@@ -146,8 +146,7 @@ public static class WebVisualStoryStager
                     stagingRoot,
                     previousPath,
                     stillCurrent ? "case-replaced staged artifact" : "obsolete staged artifact");
-                if (File.Exists(replacedPath))
-                    File.Delete(replacedPath);
+                DeleteFileForReplacement(replacedPath);
                 DeleteEmptyParents(Path.GetDirectoryName(replacedPath), stagingRoot);
             }
 
@@ -158,7 +157,8 @@ public static class WebVisualStoryStager
                     item.RelativePath,
                     "temporary staged artifact");
                 EnsureDirectoryCasing(stagingRoot, item.RelativePath);
-                File.Copy(item.SourcePath, temporaryDestination, overwrite: true);
+                DeleteFileForReplacement(temporaryDestination);
+                File.Copy(item.SourcePath, temporaryDestination, overwrite: false);
                 var stagedInfo = new FileInfo(temporaryDestination);
                 var stagedSha256 = ComputeSha256(temporaryDestination);
                 if (stagedInfo.Length != item.Bytes ||
@@ -186,7 +186,7 @@ public static class WebVisualStoryStager
                 item.Artifact.Role = item.Artifact.Role.Trim().ToLowerInvariant();
                 item.Artifact.Path = item.RelativePath;
                 item.Artifact.Format = stagedFormat;
-                item.Artifact.MediaType ??= GetMediaType(item.Artifact.Format);
+                item.Artifact.MediaType = GetMediaType(item.Artifact.Format);
                 item.Artifact.Bytes = item.Bytes;
                 item.Artifact.Sha256 = item.Sha256;
             }
@@ -601,7 +601,7 @@ public static class WebVisualStoryStager
             if (movedExistingOutput && Directory.Exists(backupRoot))
             {
                 if (Directory.Exists(outputRoot))
-                    Directory.Delete(outputRoot, recursive: true);
+                    DeleteDirectoryTree(outputRoot);
                 Directory.Move(backupRoot, outputRoot);
             }
             throw;
@@ -615,7 +615,7 @@ public static class WebVisualStoryStager
         try
         {
             if (Directory.Exists(path))
-                Directory.Delete(path, recursive: true);
+                DeleteDirectoryTree(path);
         }
         catch (IOException)
         {
@@ -623,6 +623,17 @@ public static class WebVisualStoryStager
         catch (UnauthorizedAccessException)
         {
         }
+    }
+
+    private static void DeleteDirectoryTree(string path)
+    {
+        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+        {
+            var attributes = File.GetAttributes(file);
+            if ((attributes & FileAttributes.ReadOnly) != 0)
+                File.SetAttributes(file, attributes & ~FileAttributes.ReadOnly);
+        }
+        Directory.Delete(path, recursive: true);
     }
 
     private static bool SamePath(string left, string right)
@@ -643,6 +654,17 @@ public static class WebVisualStoryStager
             Directory.Delete(directory);
             directory = Path.GetDirectoryName(directory);
         }
+    }
+
+    private static void DeleteFileForReplacement(string path)
+    {
+        if (!File.Exists(path))
+            return;
+
+        var attributes = File.GetAttributes(path);
+        if ((attributes & FileAttributes.ReadOnly) != 0)
+            File.SetAttributes(path, attributes & ~FileAttributes.ReadOnly);
+        File.Delete(path);
     }
 
     private static void EnsureDirectoryCasing(string root, string relativeArtifactPath)
@@ -737,7 +759,13 @@ public static class WebVisualStoryStager
             throw new InvalidOperationException(
                 $"Visual-story manifest exceeds the {MaximumManifestBytes}-byte safety limit.");
         }
-        return StrictUtf8.GetString(bytes, 0, totalBytes);
+        var offset = totalBytes >= 3 &&
+                     bytes[0] == 0xEF &&
+                     bytes[1] == 0xBB &&
+                     bytes[2] == 0xBF
+            ? 3
+            : 0;
+        return StrictUtf8.GetString(bytes, offset, totalBytes - offset);
     }
 
     private static string SerializeBoundedManifest(WebVisualStoryBundle bundle)

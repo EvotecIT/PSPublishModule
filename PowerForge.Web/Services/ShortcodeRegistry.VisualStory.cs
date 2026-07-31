@@ -173,14 +173,8 @@ internal static partial class ShortcodeDefaults
                 .Replace('\\', '/');
             if (File.Exists(sourcePath))
             {
-                if (!PathsEqual(sourcePath, manifestPath))
-                    continue;
-                var publishedPath = string.IsNullOrWhiteSpace(destination)
-                    ? Path.GetFileName(sourcePath)
-                    : Path.HasExtension(destination)
-                        ? destination
-                        : destination.TrimEnd('/') + "/" + Path.GetFileName(sourcePath);
-                candidates.Add((sourcePath.Length, publishedPath));
+                // A file mapping publishes only the manifest. It cannot establish a URL
+                // base for the sibling artifacts referenced by that manifest.
                 continue;
             }
 

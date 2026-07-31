@@ -115,6 +115,36 @@ public class WebPipelineRunnerVisualStoryTests
     }
 
     [Fact]
+    public void RunPipeline_VisualStory_RejectsPipelineRootAsOutput()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "pipeline.json"),
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "visual-story",
+                      "manifest": "source/story.json",
+                      "out": "."
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(Path.Combine(root, "pipeline.json"), logger: null);
+
+            Assert.False(result.Success);
+            Assert.Contains("pipeline root", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_VisualStory_RejectsOutputThroughSymbolicLink()
     {
         var root = WebVisualStoryStagerTests.CreateBundle();

@@ -308,6 +308,11 @@ public class WebShortcodeMediaTests
                 [
                     new StaticAssetSpec
                     {
+                        Source = "generated/story/visual-story.json",
+                        Destination = "manifests/story.json"
+                    },
+                    new StaticAssetSpec
+                    {
                         Source = "generated/story",
                         Destination = "stories/demo"
                     }

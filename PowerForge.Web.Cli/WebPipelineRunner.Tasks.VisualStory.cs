@@ -65,10 +65,7 @@ internal static partial class WebPipelineRunner
                 baseDir,
                 path,
                 label,
-                allowRoot: string.Equals(
-                    Path.GetFullPath(baseDir),
-                    Path.GetFullPath(path),
-                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+                allowRoot: false);
         }
         catch (InvalidOperationException ex)
         {

@@ -39,6 +39,69 @@ public class WebVisualStoryStagerTests
     }
 
     [Fact]
+    public void Stage_AcceptsUtf8BomAndCanonicalizesArtifactMediaTypes()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var manifest = Path.Combine(root, "source", "story.json");
+            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(
+                File.ReadAllText(manifest),
+                WebJsonForTests.Options)!;
+            bundle.Artifacts[0].MediaType = "text/plain";
+            File.WriteAllText(
+                manifest,
+                JsonSerializer.Serialize(bundle, WebJsonForTests.Options),
+                new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+            var result = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = manifest,
+                OutputPath = Path.Combine(root, "published")
+            });
+
+            Assert.Equal("image/svg+xml", result.Bundle.Artifacts[0].MediaType);
+            Assert.Equal("image/svg+xml", WebVisualStoryStager.Load(result.ManifestPath).Artifacts[0].MediaType);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Stage_ReplacesReadOnlyDestinationArtifacts()
+    {
+        var root = CreateBundle();
+        var output = Path.Combine(root, "published");
+        var stagedSvg = Path.Combine(output, "demo.svg");
+        try
+        {
+            WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = Path.Combine(root, "source", "story.json"),
+                OutputPath = output
+            });
+            File.SetAttributes(stagedSvg, File.GetAttributes(stagedSvg) | FileAttributes.ReadOnly);
+
+            var result = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = Path.Combine(root, "source", "story.json"),
+                OutputPath = output
+            });
+
+            Assert.True(File.Exists(stagedSvg));
+            Assert.Equal(3, result.ArtifactCount);
+        }
+        finally
+        {
+            if (File.Exists(stagedSvg))
+                File.SetAttributes(stagedSvg, File.GetAttributes(stagedSvg) & ~FileAttributes.ReadOnly);
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Stage_AllowsNormalizingBundleInPlace_WithoutCopyingArtifactsOntoThemselves()
     {
         var root = CreateBundle();

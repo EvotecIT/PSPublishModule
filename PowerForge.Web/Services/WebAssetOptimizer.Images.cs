@@ -29,9 +29,11 @@ public static partial class WebAssetOptimizer
         var generatedVariants = new List<WebOptimizeImageVariantEntry>();
         var budgetWarnings = new List<string>();
         var rewritePlans = new Dictionary<string, ImageRewritePlan>(StringComparer.OrdinalIgnoreCase);
+        var protectedStoryArtifacts = FindVisualStoryArtifactPaths(siteRoot);
 
         foreach (var file in Directory.EnumerateFiles(siteRoot, "*.*", SearchOption.AllDirectories)
-                     .Where(path => extensionSet.Contains(Path.GetExtension(path))))
+                     .Where(path => extensionSet.Contains(Path.GetExtension(path)) &&
+                                    !protectedStoryArtifacts.Contains(Path.GetFullPath(path))))
         {
             var relative = ToRelative(siteRoot, file);
             if (options.ImageInclude is { Length: > 0 } && !IsIncluded(relative, options.ImageInclude))
@@ -316,6 +318,29 @@ public static partial class WebAssetOptimizer
             result.ImageHintedCount += hintedInFile;
             onUpdated?.Invoke(htmlFile);
         }
+    }
+
+    private static HashSet<string> FindVisualStoryArtifactPaths(string siteRoot)
+    {
+        var paths = new HashSet<string>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        foreach (var manifestPath in Directory.EnumerateFiles(
+                     siteRoot,
+                     "visual-story.json",
+                     SearchOption.AllDirectories))
+        {
+            var bundle = WebVisualStoryStager.Load(manifestPath);
+            var bundleRoot = Path.GetDirectoryName(manifestPath)
+                             ?? throw new InvalidOperationException("Visual-story manifest has no parent directory.");
+            foreach (var artifact in bundle.Artifacts)
+            {
+                paths.Add(VisualStoryPathGuard.ResolveRelativePath(
+                    bundleRoot,
+                    artifact.Path,
+                    "optimized visual-story artifact"));
+            }
+        }
+        return paths;
     }
 
     private static bool HasHtmlSelfClosingMarker(string attributes)

@@ -1110,6 +1110,57 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void OptimizeDetailed_PreservesIntegrityBoundVisualStoryArtifacts()
+    {
+        var bundleRoot = WebVisualStoryStagerTests.CreateBundle();
+        var siteRoot = Path.Combine(Path.GetTempPath(), "pf-web-opt-story-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(siteRoot);
+
+        try
+        {
+            var sourcePng = Path.Combine(bundleRoot, "source", "demo.png");
+            using (var image = new MagickImage(sourcePng))
+            {
+                image.Comment = new string('x', 40000);
+                image.Write(sourcePng, MagickFormat.Png);
+            }
+            var storyRoot = Path.Combine(siteRoot, "stories", "demo");
+            var staged = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = Path.Combine(bundleRoot, "source", "story.json"),
+                OutputPath = storyRoot
+            });
+            var completedPath = Path.Combine(storyRoot, "demo.png");
+            var completedBefore = File.ReadAllBytes(completedPath);
+
+            var heroPath = Path.Combine(siteRoot, "hero.png");
+            using (var image = new MagickImage(MagickColors.DeepSkyBlue, 512, 256))
+            {
+                image.Comment = new string('x', 40000);
+                image.Write(heroPath, MagickFormat.Png);
+            }
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = siteRoot,
+                OptimizeImages = true,
+                ImageExtensions = [".png"],
+                ImageStripMetadata = true
+            });
+
+            Assert.Equal(1, result.ImageFileCount);
+            Assert.Equal(1, result.ImageOptimizedCount);
+            Assert.Equal(completedBefore, File.ReadAllBytes(completedPath));
+            Assert.Equal(3, WebVisualStoryStager.Load(staged.ManifestPath).Artifacts.Length);
+        }
+        finally
+        {
+            Directory.Delete(bundleRoot, true);
+            Directory.Delete(siteRoot, true);
+        }
+    }
+
+    [Fact]
     public void OptimizeDetailed_GeneratesNextGenAndResponsiveVariantsWithHtmlHints()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-img-variants-" + Guid.NewGuid().ToString("N"));
