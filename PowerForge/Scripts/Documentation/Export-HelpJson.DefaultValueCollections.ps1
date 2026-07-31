@@ -15,7 +15,7 @@ function ConvertMultidimensionalArrayToPowerShellDefaultValue(
   $elementType = $value.GetType().GetElementType()
   $elementTypeName = GetCanonicalTypeNameFromType $elementType
   $elementTypeExpression = GetPowerShellTypeDefaultExpression $elementType
-  if (-not (TestPowerShellTypeLiteralName $elementTypeName)) {
+  if (-not (TestPowerShellTypeLiteral $elementType)) {
     $elementTypeExpression = '(' + $elementTypeExpression + ')'
   }
   $statements = [System.Collections.Generic.List[string]]::new()
@@ -79,7 +79,7 @@ function ConvertCollectionItemsToPowerShellDefaultValue(
   $statements = [System.Collections.Generic.List[string]]::new()
   if ($value -is [System.Array]) {
     $elementTypeName = GetCanonicalTypeNameFromType ($collectionType.GetElementType())
-    if (TestPowerShellTypeLiteralName $elementTypeName) {
+    if (TestPowerShellTypeLiteral ($collectionType.GetElementType())) {
       $statements.Add('$collection = [' + $collectionTypeName + ']::new(' + $items.Count + ')')
     } else {
       $elementTypeExpression = GetPowerShellTypeDefaultExpression ($collectionType.GetElementType())
@@ -89,7 +89,7 @@ function ConvertCollectionItemsToPowerShellDefaultValue(
       $statements.Add('$collection.SetValue((' + $items[$index] + '), ' + $index + ')')
     }
   } else {
-    if (TestPowerShellTypeLiteralName $collectionTypeName) {
+    if (TestPowerShellTypeLiteral $collectionType) {
       $statements.Add('$collection = [' + $collectionTypeName + ']::new()')
     } else {
       $collectionTypeExpression = GetPowerShellTypeDefaultExpression $collectionType

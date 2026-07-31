@@ -87,7 +87,7 @@ function ConvertToPowerShellDefaultValue(
     $enumType = $value.GetType()
     $enumName = GetPowerShellSafeEnumName $enumType $value
     $enumTypeExpression = GetPowerShellTypeDefaultExpression $enumType
-    $enumTypeIsLiteral = TestPowerShellTypeLiteralName (GetCanonicalTypeNameFromType $enumType)
+    $enumTypeIsLiteral = TestPowerShellTypeLiteral $enumType
     if ($enumName -and $enumTypeIsLiteral) {
       return ($enumTypeExpression + '::' + $enumName)
     }

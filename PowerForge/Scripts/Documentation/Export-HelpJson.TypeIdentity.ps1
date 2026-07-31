@@ -189,7 +189,7 @@ function GetDictionaryConstructorExpression([System.Collections.IDictionary]$val
   $comparer = GetDictionaryComparer $value ([ref]$comparerType)
   $comparerExpression = GetKnownDictionaryComparerExpression $comparer $comparerType
   $dictionaryTypeExpression = GetPowerShellTypeDefaultExpression $value.GetType()
-  $dictionaryTypeIsLiteral = TestPowerShellTypeLiteralName $dictionaryTypeName
+  $dictionaryTypeIsLiteral = TestPowerShellTypeLiteral $value.GetType()
   if ([string]::IsNullOrWhiteSpace($comparerExpression)) {
     if ($dictionaryTypeIsLiteral) { return ('[' + $dictionaryTypeName + ']::new()') }
     return ('[System.Activator]::CreateInstance((' + $dictionaryTypeExpression + '))')
@@ -212,8 +212,86 @@ function GetDictionaryConstructorExpression([System.Collections.IDictionary]$val
     '), [object[]]@((' + $comparerExpression + ')))')
 }
 
-function TestPowerShellTypeLiteralName([string]$canonicalTypeName) {
-  return $canonicalTypeName -match '^[A-Za-z_][A-Za-z0-9_.+`]*(?:\[[A-Za-z0-9_.+`,\[\]]+\])?$'
+function TestPowerShellSimpleTypeName([string]$typeName) {
+  if ([string]::IsNullOrWhiteSpace($typeName)) { return $false }
+  foreach ($segment in $typeName.Split([char[]]@('.', '+'))) {
+    if ($segment -notmatch '^[A-Za-z_][A-Za-z0-9_]*(?:`\d+)?$') { return $false }
+  }
+  return $true
+}
+
+function TestPowerShellTypeLiteralName([string]$typeName) {
+  if ([string]::IsNullOrWhiteSpace($typeName) -or $typeName -cne $typeName.Trim()) { return $false }
+  $lastOpen = $typeName.LastIndexOf('[')
+  if ($lastOpen -gt 0 -and $typeName.EndsWith(']', [System.StringComparison]::Ordinal)) {
+    $suffix = $typeName.Substring($lastOpen + 1, $typeName.Length - $lastOpen - 2)
+    if ($suffix -match '^(?:\*|,+)?$') {
+      return TestPowerShellTypeLiteralName $typeName.Substring(0, $lastOpen)
+    }
+  }
+  $genericOpen = $typeName.IndexOf('[')
+  if ($genericOpen -lt 0) { return TestPowerShellSimpleTypeName $typeName }
+  if (-not $typeName.EndsWith(']', [System.StringComparison]::Ordinal) -or
+      -not (TestPowerShellSimpleTypeName $typeName.Substring(0, $genericOpen))) { return $false }
+  $arguments = [System.Collections.Generic.List[string]]::new()
+  $depth = 0
+  $start = $genericOpen + 1
+  for ($index = $start; $index -lt ($typeName.Length - 1); $index++) {
+    $character = $typeName[$index]
+    if ($character -eq '[') { $depth++; continue }
+    if ($character -eq ']') {
+      if ($depth -eq 0) { return $false }
+      $depth--
+      continue
+    }
+    if ($character -eq ',' -and $depth -eq 0) {
+      $arguments.Add($typeName.Substring($start, $index - $start))
+      $start = $index + 1
+    }
+  }
+  if ($depth -ne 0) { return $false }
+  $arguments.Add($typeName.Substring($start, $typeName.Length - $start - 1))
+  if ($arguments.Count -eq 0) { return $false }
+  foreach ($argument in $arguments) {
+    if (-not (TestPowerShellTypeLiteralName $argument)) { return $false }
+  }
+  return $true
+}
+
+function TestPowerShellTypeLiteral([type]$type) {
+  if ($null -eq $type) { return $false }
+  $canonicalTypeName = GetCanonicalTypeNameFromType $type
+  if (-not (TestPowerShellTypeLiteralName $canonicalTypeName)) { return $false }
+  $resolvedType = $null
+  try { $resolvedType = $canonicalTypeName -as [type] } catch { $resolvedType = $null }
+  return $null -ne $resolvedType -and [object]::ReferenceEquals($resolvedType, $type)
+}
+
+function GetExactLoadedTypeMatches([string]$assemblyName, [string]$typeName) {
+  $matches = [System.Collections.Generic.List[type]]::new()
+  foreach ($assembly in [System.AppDomain]::CurrentDomain.GetAssemblies()) {
+    if ($assembly.FullName -ne $assemblyName) { continue }
+    $candidate = $null
+    try { $candidate = $assembly.GetType($typeName, $false, $false) } catch { $candidate = $null }
+    if ($null -eq $candidate) {
+      try {
+        $candidate = $assembly.GetTypes() |
+          Where-Object { $_.FullName -ceq $typeName } |
+          Select-Object -First 1
+      } catch {
+        $candidate = $null
+      }
+    }
+    if ($null -ne $candidate) { $matches.Add($candidate) }
+  }
+  return @($matches.ToArray())
+}
+
+function AssertExactLoadedTypeIdentity([type]$type) {
+  $matches = @(GetExactLoadedTypeMatches ([string]$type.Assembly.FullName) ([string]$type.FullName))
+  if ($matches.Count -ne 1 -or -not [object]::ReferenceEquals($matches[0], $type)) {
+    throw ('Type identity is unavailable or ambiguous across loaded assemblies: ' + [string]$type.FullName)
+  }
 }
 
 function ConvertToPowerShellTypeIdentityText([string]$text) {
@@ -269,7 +347,7 @@ function GetPowerShellTypeDefaultExpression([type]$type) {
     return ($elementExpression + '.MakeArrayType(1)')
   }
   $canonicalTypeName = GetCanonicalTypeNameFromType $type
-  if (TestPowerShellTypeLiteralName $canonicalTypeName) {
+  if (TestPowerShellTypeLiteral $type) {
     return ('[' + $canonicalTypeName + ']')
   }
   if ($type.IsGenericType -and -not $type.IsGenericTypeDefinition) {
@@ -292,15 +370,19 @@ function GetPowerShellTypeDefaultExpression([type]$type) {
       [string]::IsNullOrWhiteSpace($type.Assembly.FullName)) {
     throw ('Type has no safely resolvable runtime identity: ' + $canonicalTypeName)
   }
+  AssertExactLoadedTypeIdentity $type
   $typeNameExpression = ConvertToPowerShellTypeIdentityText ([string]$type.FullName)
   $assemblyNameExpression = ConvertToPowerShellTypeIdentityText ([string]$type.Assembly.FullName)
   return ("& { `$assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | " +
-    "Where-Object { `$_.FullName -eq " + $assemblyNameExpression + " } | Select-Object -First 1; " +
-    "if (`$null -eq `$assembly) { throw 'Type assembly is not loaded.' }; " +
-    "`$type = `$assembly.GetType(" + $typeNameExpression + ", `$false, `$false); " +
-    "if (`$null -eq `$type) { `$type = `$assembly.GetTypes() | " +
-    "Where-Object { `$_.FullName -ceq " + $typeNameExpression + " } | Select-Object -First 1 }; " +
-    "if (`$null -eq `$type) { throw 'Type is not available in the loaded assembly.' }; return `$type }")
+    "Where-Object { `$_.FullName -eq " + $assemblyNameExpression + " }; " +
+    "`$matches = [System.Collections.Generic.List[type]]::new(); " +
+    "foreach (`$candidateAssembly in @(`$assembly)) { " +
+    "`$type = `$candidateAssembly.GetType(" + $typeNameExpression + ", `$false, `$false); " +
+    "if (`$null -eq `$type) { try { `$type = `$candidateAssembly.GetTypes() | " +
+    "Where-Object { `$_.FullName -ceq " + $typeNameExpression + " } | Select-Object -First 1 } catch { `$type = `$null } }; " +
+    "if (`$null -ne `$type) { `$matches.Add(`$type) } }; " +
+    "if (`$matches.Count -ne 1) { throw 'Type identity is unavailable or ambiguous across loaded assemblies.' }; " +
+    "return `$matches[0] }")
 }
 
 function ResolveExactType([string]$candidate) {
