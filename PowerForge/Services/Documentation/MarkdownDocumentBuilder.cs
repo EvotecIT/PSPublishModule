@@ -95,6 +95,17 @@ internal sealed class MarkdownDocumentBuilder
         _body.AppendLine();
     }
 
+    public static string InlineCode(string text)
+    {
+        var normalized = (text ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Replace('\n', ' ');
+        var delimiter = new string('`', Math.Max(1, LongestBacktickRun(normalized) + 1));
+        var padding = normalized.StartsWith("`", StringComparison.Ordinal) ||
+                      normalized.EndsWith("`", StringComparison.Ordinal)
+            ? " "
+            : string.Empty;
+        return delimiter + padding + normalized + padding + delimiter;
+    }
+
     public void RawLine(string text)
     {
         _body.AppendLine(text ?? string.Empty);

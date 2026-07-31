@@ -4,6 +4,25 @@ function TestExactRuntimeValueType([object]$value, [object]$expectedType) {
     [object]::ReferenceEquals($value.GetType(), $expectedType)
 }
 
+function TestRecreatableScriptBlock([scriptblock]$value) {
+  if ($null -ne $value.Module) {
+    return $false
+  }
+
+  try {
+    $languageModeProperty = [scriptblock].GetProperty(
+      'LanguageMode',
+      [System.Reflection.BindingFlags]'Instance,Public,NonPublic')
+    if ($null -eq $languageModeProperty -or -not $languageModeProperty.CanRead) {
+      return $false
+    }
+    return $languageModeProperty.GetValue($value, $null) -eq
+      [System.Management.Automation.PSLanguageMode]::FullLanguage
+  } catch {
+    return $false
+  }
+}
+
 function GetCoreRuntimeType([string]$fullName) {
   return [datetime].Assembly.GetType($fullName, $false, $false)
 }

@@ -399,6 +399,15 @@ function Get-DefaultLiteralFixture {
         $statefulScriptAttributes.Add($statefulScriptDefault)
         $parameters.Add('StatefulScript', [System.Management.Automation.RuntimeDefinedParameter]::new('StatefulScript', [scriptblock], $statefulScriptAttributes))
 
+        $constrainedScriptAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $constrainedScriptDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $constrainedScript = [scriptblock]::Create("[System.IO.File]::ReadAllText('fixture.txt')")
+        $languageModeProperty = [scriptblock].GetProperty('LanguageMode', [System.Reflection.BindingFlags]'Instance,Public,NonPublic')
+        $languageModeProperty.SetValue($constrainedScript, [System.Management.Automation.PSLanguageMode]::ConstrainedLanguage, $null)
+        $constrainedScriptDefault.Value = $constrainedScript
+        $constrainedScriptAttributes.Add($constrainedScriptDefault)
+        $parameters.Add('ConstrainedScript', [System.Management.Automation.RuntimeDefinedParameter]::new('ConstrainedScript', [scriptblock], $constrainedScriptAttributes))
+
         $pointerTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $pointerTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $pointerTypeDefault.Value = [int].MakePointerType()
@@ -617,6 +626,7 @@ function Get-DefaultLiteralFixture {
                 "[scriptblock]::Create((-join @('1+2', ([char]10), '```')))",
                 Default("Script"));
             Assert.True(string.IsNullOrEmpty(Default("StatefulScript")));
+            Assert.True(string.IsNullOrEmpty(Default("ConstrainedScript")));
             Assert.Equal("[System.Int32].MakePointerType()", Default("PointerType"));
             Assert.Equal("[System.Int32].MakeByRefType()", Default("ByRefType"));
             Assert.Equal("[System.Int32].MakeArrayType(1)", Default("NonSzArrayType"));

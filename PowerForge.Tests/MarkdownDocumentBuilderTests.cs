@@ -75,4 +75,13 @@ public class MarkdownDocumentBuilderTests
             "````yaml\nDefault value: first\n```\nlast\n````\n".ReplaceLineEndings(Environment.NewLine),
             markdown);
     }
+
+    [Theory]
+    [InlineData("System.Collections.Generic.List`1", "``System.Collections.Generic.List`1``")]
+    [InlineData("`boundary`", "`` `boundary` ``")]
+    [InlineData("a``b", "```a``b```")]
+    public void InlineCode_UsesDelimiterLongerThanEmbeddedBackticks(string value, string expected)
+    {
+        Assert.Equal(expected, MarkdownDocumentBuilder.InlineCode(value));
+    }
 }

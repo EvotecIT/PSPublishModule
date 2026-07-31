@@ -134,7 +134,7 @@ public sealed class DocumentationBinaryFixtureTests
     Author = 'PowerForge.Tests'
     Description = 'Binary fixture module for empty-default extraction tests.'
     FunctionsToExport = @()
-    CmdletsToExport = @('Get-BinaryDocEmptyDefault', 'Get-BinaryDocAuthoredOutput', 'Get-BinaryDocConflictingOutput', 'Get-BinaryDocAmbiguousOutputs', 'Get-BinaryDocCaseInsensitiveOutput', 'Get-BinaryDocNestedOutput', 'Get-BinaryDocAssemblyDistinctOutputs')
+    CmdletsToExport = @('Get-BinaryDocEmptyDefault', 'Get-BinaryDocAuthoredOutput', 'Get-BinaryDocConflictingOutput', 'Get-BinaryDocAmbiguousOutputs', 'Get-BinaryDocCaseInsensitiveOutput', 'Get-BinaryDocNestedOutput', 'Get-BinaryDocAssemblyDistinctOutputs', 'Get-BinaryDocOpenGenericOutput')
     AliasesToExport = @()
     VariablesToExport = @()
 }
@@ -479,6 +479,13 @@ public sealed class DocumentationBinaryFixtureTests
                     "BinaryDocFixture.AssemblyDistinct.SameResult",
                     StringComparison.Ordinal)));
 
+            var openGenericOutputCommand = Assert.Single(
+                payload.Commands,
+                item => string.Equals(item.Name, "Get-BinaryDocOpenGenericOutput", StringComparison.Ordinal));
+            var openGenericOutput = Assert.Single(openGenericOutputCommand.Outputs);
+            Assert.Equal("System.Collections.Generic.List`1", openGenericOutput.Name);
+            Assert.Equal("System.Collections.Generic.List`1", openGenericOutput.ClrTypeName);
+
             var markdownDirectory = Path.Combine(tempRoot, "GeneratedDocs");
             var mamlDirectory = Path.Combine(tempRoot, "GeneratedHelp");
             new MarkdownHelpWriter().WriteCommandHelpFiles(payload, moduleName, markdownDirectory);
@@ -560,6 +567,10 @@ public sealed class DocumentationBinaryFixtureTests
             Assert.Contains(
                 "BinaryDocFixture.OutputB.Result",
                 generatedMaml,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "- ``System.Collections.Generic.List`1``",
+                File.ReadAllText(Path.Combine(markdownDirectory, "Get-BinaryDocOpenGenericOutput.md")),
                 StringComparison.Ordinal);
         }
         finally

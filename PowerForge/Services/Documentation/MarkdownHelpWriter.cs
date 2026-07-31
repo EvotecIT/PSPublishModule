@@ -235,12 +235,13 @@ internal sealed class MarkdownHelpWriter
         var inputs = (cmd.Inputs ?? Enumerable.Empty<DocumentationTypeHelp>())
             .Where(t => t is not null && (!string.IsNullOrWhiteSpace(t.Name) || !string.IsNullOrWhiteSpace(t.Description)))
             .ToArray();
-        if (inputs.Length == 0) doc.RawLine("- `None`");
+        if (inputs.Length == 0) doc.RawLine($"- {MarkdownDocumentBuilder.InlineCode("None")}");
         foreach (var i in inputs)
         {
             var name = string.IsNullOrWhiteSpace(i.Name) ? "None" : i.Name.Trim();
             var desc = (i.Description ?? string.Empty).Replace("\r\n", "\n").Replace("\n", " ").Trim();
-            doc.RawLine(string.IsNullOrWhiteSpace(desc) ? $"- `{name}`" : $"- `{name}` — {desc}");
+            var inlineName = MarkdownDocumentBuilder.InlineCode(name);
+            doc.RawLine(string.IsNullOrWhiteSpace(desc) ? $"- {inlineName}" : $"- {inlineName} — {desc}");
         }
         doc.BlankLine();
 
@@ -249,12 +250,13 @@ internal sealed class MarkdownHelpWriter
         var outputs = (cmd.Outputs ?? Enumerable.Empty<DocumentationTypeHelp>())
             .Where(t => t is not null && (!string.IsNullOrWhiteSpace(t.Name) || !string.IsNullOrWhiteSpace(t.Description)))
             .ToArray();
-        if (outputs.Length == 0) doc.RawLine("- `None`");
+        if (outputs.Length == 0) doc.RawLine($"- {MarkdownDocumentBuilder.InlineCode("None")}");
         foreach (var o in outputs)
         {
             var name = string.IsNullOrWhiteSpace(o.Name) ? "None" : o.Name.Trim();
             var desc = (o.Description ?? string.Empty).Replace("\r\n", "\n").Replace("\n", " ").Trim();
-            doc.RawLine(string.IsNullOrWhiteSpace(desc) ? $"- `{name}`" : $"- `{name}` — {desc}");
+            var inlineName = MarkdownDocumentBuilder.InlineCode(name);
+            doc.RawLine(string.IsNullOrWhiteSpace(desc) ? $"- {inlineName}" : $"- {inlineName} — {desc}");
         }
         doc.BlankLine();
 

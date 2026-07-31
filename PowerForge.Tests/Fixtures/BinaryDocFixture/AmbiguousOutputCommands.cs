@@ -88,4 +88,11 @@ namespace BinaryDocFixture
     public sealed class GetBinaryDocAssemblyDistinctOutputsCommand : PSCmdlet
     {
     }
+
+    /// <summary>Returns an open generic output whose CLR name contains a backtick.</summary>
+    [Cmdlet(VerbsCommon.Get, "BinaryDocOpenGenericOutput")]
+    [OutputType(typeof(System.Collections.Generic.List<>))]
+    public sealed class GetBinaryDocOpenGenericOutputCommand : PSCmdlet
+    {
+    }
 }

@@ -188,8 +188,8 @@ function ConvertToPowerShellDefaultValue(
     return ("[System.TimeSpan]::ParseExact('" + $timeText + "', 'c', [System.Globalization.CultureInfo]::InvariantCulture)")
   }
   if ($value -is [scriptblock]) {
-    if ($null -ne $value.Module) {
-      throw 'Stateful or module-bound ScriptBlock defaults are not supported.'
+    if (-not (TestRecreatableScriptBlock $value)) {
+      throw 'Stateful, module-bound, or constrained ScriptBlock defaults are not supported.'
     }
     $scriptText = ConvertToPowerShellDefaultValue ([string]$value.ToString())
     return ('[scriptblock]::Create(' + $scriptText + ')')
@@ -600,6 +600,8 @@ try {
         if (-not $typeName) { try { $typeName = [string]$rv.Type } catch { $typeName = '' } }
         try { $typeClrName = [string]$rv.Type.Type.FullName } catch { $typeClrName = '' }
         if (-not $typeClrName) { try { $typeClrName = [string]$rv.Type.FullName } catch { $typeClrName = '' } }
+        $typeName = $typeName.Trim()
+        $typeClrName = $typeClrName.Trim()
         if (-not $typeClrName) { $typeClrName = $typeName }
         if (-not $typeName) { continue }
 
