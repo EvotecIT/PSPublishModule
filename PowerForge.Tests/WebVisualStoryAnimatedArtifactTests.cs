@@ -272,6 +272,55 @@ public class WebVisualStoryAnimatedArtifactTests
     }
 
     [Fact]
+    public void Stage_RejectsInvalidApngScanlineFilters()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var animationPath = Path.Combine(source, "animated.png");
+            WriteTinyApng(animationPath, secondFrameFilter: 5);
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = ReadBundle(manifest);
+            var animated = Assert.Single(bundle.Artifacts, artifact => artifact.Role == "animated");
+            animated.Format = "apng";
+            animated.Path = "animated.png";
+            WriteBundle(manifest, bundle);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("scanline filter", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void PngScanlineFilterValidator_RejectsInvalidAdam7PassFilters()
+    {
+        var firstTwoPasses = new byte[10];
+        firstTwoPasses[5] = 5;
+        var validator = new PngScanlineFilterValidator(
+            width: 8,
+            height: 8,
+            bitDepth: 8,
+            colorType: 6,
+            interlaceMethod: 1);
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            validator.Consume(firstTwoPasses, firstTwoPasses.Length, "adam7.png"));
+
+        Assert.Contains("scanline filter", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Stage_RejectsGifCollectionsBeyondTheFrameBudget()
     {
         var root = WebVisualStoryStagerTests.CreateBundle();
@@ -334,7 +383,8 @@ public class WebVisualStoryAnimatedArtifactTests
         string path,
         bool completeSecondFrame = true,
         byte secondFrameDisposal = 0,
-        bool useIdatForSecondFrame = false)
+        bool useIdatForSecondFrame = false,
+        byte secondFrameFilter = 0)
     {
         using var output = new MemoryStream();
         output.Write(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 });
@@ -352,7 +402,7 @@ public class WebVisualStoryAnimatedArtifactTests
         WritePngChunk(output, "IDAT", CompressPngPixel(0, 191, 255, 255));
         WritePngChunk(output, "fcTL", FrameControl(sequence: 1, disposal: secondFrameDisposal));
         var compressedFrame = completeSecondFrame
-            ? CompressPngPixel(60, 179, 113, 255)
+            ? CompressPngBytes(secondFrameFilter, 60, 179, 113, 255)
             : CompressPngBytes(0);
         if (useIdatForSecondFrame)
         {

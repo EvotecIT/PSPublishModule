@@ -53,14 +53,15 @@ internal static partial class ShortcodeDefaults
 
         var requestedUrl = JoinVisualStoryUrl(baseUrl, requested.Path);
         var completedUrl = JoinVisualStoryUrl(baseUrl, completed.Path);
+        var completedSrcSetUrl = SrcSetUrlEncoder.Encode(completedUrl);
         var sb = new StringBuilder();
         sb.AppendLine($@"<figure class=""{System.Web.HttpUtility.HtmlEncode(className)}"" data-pf-story=""{System.Web.HttpUtility.HtmlEncode(bundle.Id)}"" style=""{System.Web.HttpUtility.HtmlEncode(style)}"">");
         sb.AppendLine(@"  <div class=""pf-story-frame"">");
         if (!ReferenceEquals(requested, completed))
         {
             sb.AppendLine("    <picture>");
-            sb.AppendLine($@"      <source media=""print"" srcset=""{System.Web.HttpUtility.HtmlEncode(completedUrl)}"" type=""image/png"" />");
-            sb.AppendLine($@"      <source media=""(prefers-reduced-motion: reduce)"" srcset=""{System.Web.HttpUtility.HtmlEncode(completedUrl)}"" type=""image/png"" />");
+            sb.AppendLine($@"      <source media=""print"" srcset=""{System.Web.HttpUtility.HtmlEncode(completedSrcSetUrl)}"" type=""image/png"" />");
+            sb.AppendLine($@"      <source media=""(prefers-reduced-motion: reduce)"" srcset=""{System.Web.HttpUtility.HtmlEncode(completedSrcSetUrl)}"" type=""image/png"" />");
             sb.AppendLine($@"      <img src=""{System.Web.HttpUtility.HtmlEncode(requestedUrl)}"" alt=""{System.Web.HttpUtility.HtmlEncode(alt)}"" loading=""{System.Web.HttpUtility.HtmlEncode(loading)}"" decoding=""async"" />");
             sb.AppendLine("    </picture>");
         }
@@ -155,4 +156,5 @@ internal static partial class ShortcodeDefaults
                 .Select(Uri.EscapeDataString));
         return baseUrl.TrimEnd('/') + "/" + encodedPath;
     }
+
 }

@@ -153,7 +153,7 @@ public class WebShortcodeMediaTests
     {
         var html = BuildSinglePageSite(
             """
-            {{< story manifest="static/stories/chart/visual-story.json" base="/stories/chart" transcript="expanded" >}}
+            {{< story manifest="static/stories/chart/visual-story.json" base="/stories/chart demo,1x" transcript="expanded" >}}
             """,
             root =>
             {
@@ -184,8 +184,8 @@ public class WebShortcodeMediaTests
 
         Assert.Contains("data-pf-story=\"chart-five-lines\"", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("prefers-reduced-motion: reduce", html, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("/stories/chart/demo.svg", html, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("/stories/chart/demo.png", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/stories/chart demo,1x/demo.svg", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("srcset=\"/stories/chart%20demo%2C1x/demo.png\"", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("<source media=\"print\"", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("The chart is visible.", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("<details class=\"pf-story-transcript\" open>", html, StringComparison.OrdinalIgnoreCase);

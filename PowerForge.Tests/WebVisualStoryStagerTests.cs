@@ -216,6 +216,40 @@ public class WebVisualStoryStagerTests
     }
 
     [Fact]
+    public void Stage_RejectsMixedCaseArtifactDirectoryCollisions()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var media = Path.Combine(source, "media");
+            Directory.CreateDirectory(media);
+            File.Move(Path.Combine(source, "demo.svg"), Path.Combine(media, "demo.svg"));
+            File.Move(Path.Combine(source, "demo.png"), Path.Combine(media, "demo.png"));
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(
+                File.ReadAllText(manifest),
+                WebJsonForTests.Options)!;
+            bundle.Artifacts[0].Path = "media/demo.svg";
+            bundle.Artifacts[1].Path = "Media/demo.png";
+            File.WriteAllText(manifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("consistent casing", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Stage_RequiresSchemaVersion()
     {
         var root = CreateBundle();

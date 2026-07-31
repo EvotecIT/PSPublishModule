@@ -343,17 +343,25 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                 bitDepth,
                 colorType,
                 interlaceMethod);
+            var filterValidator = new PngScanlineFilterValidator(
+                width,
+                height,
+                bitDepth,
+                colorType,
+                interlaceMethod);
             var total = 0L;
             while (true)
             {
                 var read = zlib.Read(buffer, 0, buffer.Length);
                 if (read == 0) break;
+                filterValidator.Consume(buffer, read, displayPath);
                 total += read;
                 if (total > expectedBytes)
                     throw new InvalidOperationException($"Visual-story APNG frame expands beyond its dimensions: {displayPath}");
             }
             if (total != expectedBytes)
                 throw new InvalidOperationException($"Visual-story APNG frame has incomplete pixel data: {displayPath}");
+            filterValidator.EnsureComplete(displayPath);
         }
         catch (InvalidDataException ex)
         {

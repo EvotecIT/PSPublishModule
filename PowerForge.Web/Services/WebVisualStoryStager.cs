@@ -68,6 +68,7 @@ public static class WebVisualStoryStager
 
         var resolved = new List<(WebVisualStoryArtifact Artifact, string SourcePath, string RelativePath, string DestinationPath, long Bytes, string Sha256)>();
         var relativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var directoryPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var artifact in bundle.Artifacts)
         {
             ValidateArtifact(artifact);
@@ -89,6 +90,7 @@ public static class WebVisualStoryStager
             ValidateReservedStagedPath(relativePath);
             if (!relativePaths.Add(relativePath))
                 throw new InvalidOperationException($"Visual-story artifact paths must be unique: {relativePath}");
+            ValidateDirectoryCasing(relativePath, directoryPaths);
             var destinationPath = VisualStoryPathGuard.ResolveRelativePath(outputRoot, relativePath, "staged artifact");
             resolved.Add((artifact, sourcePath, relativePath, destinationPath, info.Length, sha256));
         }
@@ -190,6 +192,28 @@ public static class WebVisualStoryStager
             ArtifactCount = resolved.Count,
             TotalBytes = resolved.Sum(static item => item.Bytes)
         };
+    }
+
+    private static void ValidateDirectoryCasing(
+        string relativeArtifactPath,
+        Dictionary<string, string> directoryPaths)
+    {
+        var segments = relativeArtifactPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var prefix = string.Empty;
+        for (var index = 0; index < segments.Length - 1; index++)
+        {
+            prefix = prefix.Length == 0 ? segments[index] : prefix + "/" + segments[index];
+            if (directoryPaths.TryGetValue(prefix, out var declaredPath))
+            {
+                if (!string.Equals(prefix, declaredPath, StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        $"Visual-story artifact directories must use consistent casing: {declaredPath} and {prefix}");
+            }
+            else
+            {
+                directoryPaths.Add(prefix, prefix);
+            }
+        }
     }
 
     /// <summary>Loads and validates a staged visual-story manifest without executing anything.</summary>
