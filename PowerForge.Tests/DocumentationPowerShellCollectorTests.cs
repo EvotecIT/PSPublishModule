@@ -127,6 +127,24 @@ function Get-CollectorFixture {
         $versionAttributes.Add($versionDefault)
         $parameters.Add('Version', [System.Management.Automation.RuntimeDefinedParameter]::new('Version', [version], $versionAttributes))
 
+        $dateOnlyType = 'System.DateOnly' -as [type]
+        if ($dateOnlyType) {
+            $dateOnlyAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+            $dateOnlyDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+            $dateOnlyDefault.Value = $dateOnlyType.GetMethod('FromDayNumber').Invoke($null, [object[]]([int]739827))
+            $dateOnlyAttributes.Add($dateOnlyDefault)
+            $parameters.Add('DateOnly', [System.Management.Automation.RuntimeDefinedParameter]::new('DateOnly', $dateOnlyType, $dateOnlyAttributes))
+        }
+
+        $timeOnlyType = 'System.TimeOnly' -as [type]
+        if ($timeOnlyType) {
+            $timeOnlyAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+            $timeOnlyDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+            $timeOnlyDefault.Value = [System.Activator]::CreateInstance($timeOnlyType, [object[]]([long]452961234567))
+            $timeOnlyAttributes.Add($timeOnlyDefault)
+            $parameters.Add('TimeOnly', [System.Management.Automation.RuntimeDefinedParameter]::new('TimeOnly', $timeOnlyType, $timeOnlyAttributes))
+        }
+
         $dateTimeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $dateTimeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $dateTimeDefault.Value = [datetime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)
@@ -222,6 +240,8 @@ function Get-AcceleratedOutput {
                 var negativeSingle = Assert.Single(command.Parameters, parameter => parameter.Name == "NegativeSingle");
                 var guid = Assert.Single(command.Parameters, parameter => parameter.Name == "Guid");
                 var version = Assert.Single(command.Parameters, parameter => parameter.Name == "Version");
+                var dateOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "DateOnly");
+                var timeOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "TimeOnly");
                 var dateTime = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTime");
                 var dateTimeOffset = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTimeOffset");
                 var timeSpan = Assert.Single(command.Parameters, parameter => parameter.Name == "TimeSpan");
@@ -243,6 +263,18 @@ function Get-AcceleratedOutput {
                     "[System.Guid]::ParseExact('01234567-89ab-cdef-0123-456789abcdef', 'D')",
                     guid.DefaultValue);
                 Assert.Equal("[System.Version]::Parse('1.2.3.4')", version.DefaultValue);
+                if (host.Contains("pwsh", StringComparison.OrdinalIgnoreCase))
+                {
+                    Assert.NotNull(dateOnly);
+                    Assert.NotNull(timeOnly);
+                    Assert.Equal("[System.DateOnly]::FromDayNumber(([int]739827))", dateOnly!.DefaultValue);
+                    Assert.Equal("[System.TimeOnly]::new(([long]452961234567))", timeOnly!.DefaultValue);
+                }
+                else
+                {
+                    Assert.Null(dateOnly);
+                    Assert.Null(timeOnly);
+                }
                 Assert.Equal(
                     "[System.DateTime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)",
                     dateTime.DefaultValue);

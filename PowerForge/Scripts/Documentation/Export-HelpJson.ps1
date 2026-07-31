@@ -126,6 +126,20 @@ function AddRuntimeDefaultValueTokens([object]$value, [System.Collections.IList]
     }) | Out-Null
     return
   }
+  if ($value.GetType().FullName -eq 'System.DateOnly') {
+    $tokens.Add([ordered]@{
+      kind = 'DateOnly'
+      text = $value.DayNumber.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    }) | Out-Null
+    return
+  }
+  if ($value.GetType().FullName -eq 'System.TimeOnly') {
+    $tokens.Add([ordered]@{
+      kind = 'TimeOnly'
+      text = $value.Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    }) | Out-Null
+    return
+  }
   if ($value -is [datetime]) {
     $tokens.Add([ordered]@{
       kind = 'DateTime'

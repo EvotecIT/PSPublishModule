@@ -55,6 +55,10 @@ internal static class PowerShellDefaultValueFormatter
                 return "[System.Guid]::ParseExact('" + (value.Text ?? string.Empty).Replace("'", "''") + "', 'D')";
             case "version":
                 return "[System.Version]::Parse('" + (value.Text ?? string.Empty).Replace("'", "''") + "')";
+            case "dateonly":
+                return "[System.DateOnly]::FromDayNumber(([int]" + (value.Text ?? string.Empty) + "))";
+            case "timeonly":
+                return "[System.TimeOnly]::new(([long]" + (value.Text ?? string.Empty) + "))";
             case "datetime":
                 return "[System.DateTime]::new(([long]" + (value.Text ?? string.Empty) +
                        "), [System.DateTimeKind]::" + (value.Name ?? string.Empty) + ")";

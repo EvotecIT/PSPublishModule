@@ -76,6 +76,20 @@ public sealed class DocumentationMetadataNormalizerTests
                 Text = "1.2.3.4"
             }));
         Assert.Equal(
+            "[System.DateOnly]::FromDayNumber(([int]739827))",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "DateOnly",
+                Text = "739827"
+            }));
+        Assert.Equal(
+            "[System.TimeOnly]::new(([long]452961234567))",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "TimeOnly",
+                Text = "452961234567"
+            }));
+        Assert.Equal(
             "[System.DateTime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)",
             PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
             {
