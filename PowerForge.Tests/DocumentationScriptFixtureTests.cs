@@ -56,7 +56,7 @@ function Get-DescribedOutput {
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>system.collections.generic.list[system.string]</maml:name>
+          <maml:name>list[system.string]</maml:name>
         </dev:type>
         <maml:description>
           <maml:para>A generic list whose authored output description must survive metadata extraction.</maml:para>

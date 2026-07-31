@@ -163,8 +163,8 @@ function ConvertToPowerShellDefaultValue(
     return ('[System.TimeOnly]::new(([long]' + $ticks + '))')
   }
   if ($value -is [datetime]) {
-    $ticks = $value.Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    return ('[System.DateTime]::new(([long]' + $ticks + '), [System.DateTimeKind]::' + $value.Kind + ')')
+    $binary = $value.ToBinary().ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    return ('[System.DateTime]::FromBinary(([long]' + $binary + '))')
   }
   if ($value -is [datetimeoffset]) {
     $dateText = $value.ToString('O', [System.Globalization.CultureInfo]::InvariantCulture)

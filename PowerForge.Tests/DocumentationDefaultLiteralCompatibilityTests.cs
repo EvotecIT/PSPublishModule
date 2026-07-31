@@ -368,8 +368,9 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 "[System.TimeOnly]::new(([long]452961234567))",
                 Default("TimeOnly"));
+            var localDateTime = new DateTime(639210116961234567, DateTimeKind.Local);
             Assert.Equal(
-                "[System.DateTime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)",
+                $"[System.DateTime]::FromBinary(([long]{localDateTime.ToBinary()}))",
                 Default("DateTime"));
             Assert.Equal(
                 "[System.DateTimeOffset]::ParseExact('2026-07-30T12:34:56.1234567+05:30', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",

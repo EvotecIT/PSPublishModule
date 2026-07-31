@@ -59,7 +59,10 @@ function GetUniqueUnqualifiedCaseInsensitiveTypeMatch(
   [object]$sourceFoldedCounts
 ) {
   foreach ($key in $keys) {
-    if ([string]::IsNullOrWhiteSpace($key) -or $key.Contains('.') -or $key.Contains('+')) { continue }
+    if ([string]::IsNullOrWhiteSpace($key)) { continue }
+    $genericIndex = $key.IndexOf('[')
+    $baseName = if ($genericIndex -ge 0) { $key.Substring(0, $genericIndex) } else { $key }
+    if ($baseName.Contains('.') -or $baseName.Contains('+')) { continue }
     if ($candidateByFoldedKey.ContainsKey($key) -and
         [int]$candidateFoldedCounts[$key] -eq 1 -and
         [int]$sourceFoldedCounts[$key] -eq 1) {
