@@ -119,6 +119,13 @@ function AddRuntimeDefaultValueTokens([object]$value, [System.Collections.IList]
     }) | Out-Null
     return
   }
+  if ($value -is [version]) {
+    $tokens.Add([ordered]@{
+      kind = 'Version'
+      text = $value.ToString()
+    }) | Out-Null
+    return
+  }
   if ($value -is [datetime]) {
     $tokens.Add([ordered]@{
       kind = 'DateTime'
@@ -159,7 +166,7 @@ function AddRuntimeDefaultValueTokens([object]$value, [System.Collections.IList]
   if ($value -is [System.IFormattable]) {
     $tokens.Add([ordered]@{
       kind = 'Formattable'
-      text = $value.ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
+      text = ([System.IFormattable]$value).ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
     }) | Out-Null
     return
   }

@@ -121,6 +121,12 @@ function Get-CollectorFixture {
         $guidAttributes.Add($guidDefault)
         $parameters.Add('Guid', [System.Management.Automation.RuntimeDefinedParameter]::new('Guid', [guid], $guidAttributes))
 
+        $versionAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $versionDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $versionDefault.Value = [version]::new(1, 2, 3, 4)
+        $versionAttributes.Add($versionDefault)
+        $parameters.Add('Version', [System.Management.Automation.RuntimeDefinedParameter]::new('Version', [version], $versionAttributes))
+
         $dateTimeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $dateTimeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $dateTimeDefault.Value = [datetime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)
@@ -215,6 +221,7 @@ function Get-AcceleratedOutput {
                 var negativeDouble = Assert.Single(command.Parameters, parameter => parameter.Name == "NegativeDouble");
                 var negativeSingle = Assert.Single(command.Parameters, parameter => parameter.Name == "NegativeSingle");
                 var guid = Assert.Single(command.Parameters, parameter => parameter.Name == "Guid");
+                var version = Assert.Single(command.Parameters, parameter => parameter.Name == "Version");
                 var dateTime = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTime");
                 var dateTimeOffset = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTimeOffset");
                 var timeSpan = Assert.Single(command.Parameters, parameter => parameter.Name == "TimeSpan");
@@ -235,6 +242,7 @@ function Get-AcceleratedOutput {
                 Assert.Equal(
                     "[System.Guid]::ParseExact('01234567-89ab-cdef-0123-456789abcdef', 'D')",
                     guid.DefaultValue);
+                Assert.Equal("[System.Version]::Parse('1.2.3.4')", version.DefaultValue);
                 Assert.Equal(
                     "[System.DateTime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)",
                     dateTime.DefaultValue);

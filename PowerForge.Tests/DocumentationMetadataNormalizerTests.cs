@@ -69,6 +69,13 @@ public sealed class DocumentationMetadataNormalizerTests
                 Text = "01234567-89ab-cdef-0123-456789abcdef"
             }));
         Assert.Equal(
+            "[System.Version]::Parse('1.2.3.4')",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "Version",
+                Text = "1.2.3.4"
+            }));
+        Assert.Equal(
             "[System.DateTime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)",
             PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
             {
