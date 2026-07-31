@@ -520,6 +520,13 @@ function ConvertToPowerShellTypeIdentityText([string]$text) {
   return ('(-join @(' + ($parts -join ', ') + '))')
 }
 
+function GetRuntimeIdentityType([type]$type) {
+  while ($type.IsPointer -or $type.IsByRef -or $type.IsArray) {
+    $type = $type.GetElementType()
+  }
+  return $type
+}
+
 function GetPowerShellTypeDefaultExpression([type]$type) {
   if ($type.IsGenericParameter) {
     throw 'Generic-parameter Type defaults are not supported.'

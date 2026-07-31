@@ -163,6 +163,12 @@ function Get-CollectorFixture {
         $negativeDoubleAttributes.Add($negativeDoubleDefault)
         $parameters.Add('NegativeDouble', [System.Management.Automation.RuntimeDefinedParameter]::new('NegativeDouble', [double], $negativeDoubleAttributes))
 
+        $payloadDoubleAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $payloadDoubleDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $payloadDoubleDefault.Value = [System.BitConverter]::Int64BitsToDouble(([long]0x7ff8000000001234))
+        $payloadDoubleAttributes.Add($payloadDoubleDefault)
+        $parameters.Add('PayloadDoubleNaN', [System.Management.Automation.RuntimeDefinedParameter]::new('PayloadDoubleNaN', [double], $payloadDoubleAttributes))
+
         $integralDoubleAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $integralDoubleDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $integralDoubleDefault.Value = [double]1
@@ -174,6 +180,18 @@ function Get-CollectorFixture {
         $negativeSingleDefault.Value = [System.BitConverter]::ToSingle([byte[]](0, 0, 0, 128), 0)
         $negativeSingleAttributes.Add($negativeSingleDefault)
         $parameters.Add('NegativeSingle', [System.Management.Automation.RuntimeDefinedParameter]::new('NegativeSingle', [single], $negativeSingleAttributes))
+
+        $payloadSingleAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $payloadSingleDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $payloadSingleDefault.Value = [System.BitConverter]::ToSingle([System.BitConverter]::GetBytes(([int]0x7fc01234)), 0)
+        $payloadSingleAttributes.Add($payloadSingleDefault)
+        $parameters.Add('PayloadSingleNaN', [System.Management.Automation.RuntimeDefinedParameter]::new('PayloadSingleNaN', [single], $payloadSingleAttributes))
+
+        $negativeDecimalAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $negativeDecimalDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $negativeDecimalDefault.Value = [decimal]::new(0, 0, 0, $true, ([byte]4))
+        $negativeDecimalAttributes.Add($negativeDecimalDefault)
+        $parameters.Add('NegativeDecimal', [System.Management.Automation.RuntimeDefinedParameter]::new('NegativeDecimal', [decimal], $negativeDecimalAttributes))
 
         $guidAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $guidDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -228,6 +246,18 @@ function Get-CollectorFixture {
         $unsafeTypeDefault.Value = $script:unsafeDefaultType
         $unsafeTypeAttributes.Add($unsafeTypeDefault)
         $parameters.Add('UnsafeType', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafeType', [type], $unsafeTypeAttributes))
+
+        $unsafePointerAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $unsafePointerDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $unsafePointerDefault.Value = $script:unsafeDefaultType.MakePointerType()
+        $unsafePointerAttributes.Add($unsafePointerDefault)
+        $parameters.Add('UnsafePointerType', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafePointerType', [type], $unsafePointerAttributes))
+
+        $unsafeArrayAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $unsafeArrayDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $unsafeArrayDefault.Value = [System.Array]::CreateInstance($script:unsafeDefaultType, 1)
+        $unsafeArrayAttributes.Add($unsafeArrayDefault)
+        $parameters.Add('UnsafeArray', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafeArray', $script:unsafeDefaultType.MakeArrayType(), $unsafeArrayAttributes))
 
         $unsafeEnumAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $unsafeEnumDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -370,6 +400,16 @@ function Get-CollectorFixture {
         $stackAttributes.Add($stackDefault)
         $parameters.Add('Stack', [System.Management.Automation.RuntimeDefinedParameter]::new('Stack', [System.Collections.Generic.Stack[int]], $stackAttributes))
 
+        $statefulListAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $statefulListDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $statefulList = [System.ComponentModel.BindingList[int]]::new()
+        $statefulList.Add(1)
+        $statefulList.RaiseListChangedEvents = $false
+        $statefulList.AllowEdit = $false
+        $statefulListDefault.Value = $statefulList
+        $statefulListAttributes.Add($statefulListDefault)
+        $parameters.Add('StatefulList', [System.Management.Automation.RuntimeDefinedParameter]::new('StatefulList', [System.ComponentModel.BindingList[int]], $statefulListAttributes))
+
         $dateOnlyType = 'System.DateOnly' -as [type]
         if ($dateOnlyType) {
             $dateOnlyAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
@@ -488,8 +528,11 @@ function Get-AcceleratedOutput {
                 var invalidText = Assert.Single(command.Parameters, parameter => parameter.Name == "InvalidText");
                 var longHelp = Assert.Single(command.Parameters, parameter => parameter.Name == "LongHelp");
                 var negativeDouble = Assert.Single(command.Parameters, parameter => parameter.Name == "NegativeDouble");
+                var payloadDouble = Assert.Single(command.Parameters, parameter => parameter.Name == "PayloadDoubleNaN");
                 var integralDouble = Assert.Single(command.Parameters, parameter => parameter.Name == "IntegralDouble");
                 var negativeSingle = Assert.Single(command.Parameters, parameter => parameter.Name == "NegativeSingle");
+                var payloadSingle = Assert.Single(command.Parameters, parameter => parameter.Name == "PayloadSingleNaN");
+                var negativeDecimal = Assert.Single(command.Parameters, parameter => parameter.Name == "NegativeDecimal");
                 var guid = Assert.Single(command.Parameters, parameter => parameter.Name == "Guid");
                 var version = Assert.Single(command.Parameters, parameter => parameter.Name == "Version");
                 var bigInteger = Assert.Single(command.Parameters, parameter => parameter.Name == "BigInteger");
@@ -499,6 +542,8 @@ function Get-AcceleratedOutput {
                 var nonSzArrayType = Assert.Single(command.Parameters, parameter => parameter.Name == "NonSzArrayType");
                 var genericParameterType = Assert.Single(command.Parameters, parameter => parameter.Name == "GenericParameterType");
                 var unsafeType = Assert.Single(command.Parameters, parameter => parameter.Name == "UnsafeType");
+                var unsafePointerType = Assert.Single(command.Parameters, parameter => parameter.Name == "UnsafePointerType");
+                var unsafeArray = Assert.Single(command.Parameters, parameter => parameter.Name == "UnsafeArray");
                 var unsafeEnum = Assert.Single(command.Parameters, parameter => parameter.Name == "UnsafeEnum");
                 var caseMode = Assert.Single(command.Parameters, parameter => parameter.Name == "CaseMode");
                 var weirdMode = Assert.Single(command.Parameters, parameter => parameter.Name == "WeirdMode");
@@ -525,6 +570,7 @@ function Get-AcceleratedOutput {
                 var nestedCollection = Assert.Single(command.Parameters, parameter => parameter.Name == "NestedCollection");
                 var nestedMatrix = Assert.Single(command.Parameters, parameter => parameter.Name == "NestedMatrix");
                 var stack = Assert.Single(command.Parameters, parameter => parameter.Name == "Stack");
+                var statefulList = Assert.Single(command.Parameters, parameter => parameter.Name == "StatefulList");
                 var dateOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "DateOnly");
                 var timeOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "TimeOnly");
                 var dateTime = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTime");
@@ -545,8 +591,11 @@ function Get-AcceleratedOutput {
                 Assert.Equal(80000, longHelp.DefaultValue.Length);
                 Assert.All(longHelp.DefaultValue, character => Assert.Equal('x', character));
                 Assert.Equal("([double]-0.0)", negativeDouble.DefaultValue);
+                Assert.Equal("[System.BitConverter]::Int64BitsToDouble(([long]9221120237041095220))", payloadDouble.DefaultValue);
                 Assert.Equal("([double]1)", integralDouble.DefaultValue);
                 Assert.Equal("([single]-0.0)", negativeSingle.DefaultValue);
+                Assert.Equal("[System.BitConverter]::ToSingle([System.BitConverter]::GetBytes(([int]2143294004)), 0)", payloadSingle.DefaultValue);
+                Assert.Equal("[System.Decimal]::new(([int]0), ([int]0), ([int]0), $true, ([byte]4))", negativeDecimal.DefaultValue);
                 Assert.Equal(
                     "[System.Guid]::ParseExact('01234567-89ab-cdef-0123-456789abcdef', 'D')",
                     guid.DefaultValue);
@@ -564,6 +613,15 @@ function Get-AcceleratedOutput {
                 Assert.StartsWith(
                     "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'CollectorFixtureDynamic",
                     unsafeType.DefaultValue,
+                    StringComparison.Ordinal);
+                Assert.StartsWith(
+                    "(& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'CollectorFixtureDynamic",
+                    unsafePointerType.DefaultValue,
+                    StringComparison.Ordinal);
+                Assert.Contains(").MakePointerType()", unsafePointerType.DefaultValue, StringComparison.Ordinal);
+                Assert.StartsWith(
+                    "& { $collection = [System.Array]::CreateInstance((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'CollectorFixtureDynamic",
+                    unsafeArray.DefaultValue,
                     StringComparison.Ordinal);
                 Assert.StartsWith(
                     "[System.Enum]::ToObject((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'CollectorFixtureDynamic",
@@ -610,6 +668,7 @@ function Get-AcceleratedOutput {
                     "& { $collection = [System.Object[]]::new(1); $collection.SetValue((& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }), 0); return ,$collection }",
                     nestedMatrix.DefaultValue);
                 Assert.True(string.IsNullOrEmpty(stack.DefaultValue));
+                Assert.True(string.IsNullOrEmpty(statefulList.DefaultValue));
                 if (host.Contains("pwsh", StringComparison.OrdinalIgnoreCase))
                 {
                     Assert.NotNull(dateOnly);

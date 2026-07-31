@@ -38,6 +38,10 @@ internal sealed class DocumentationRuntimeValue
     [DataMember(Name = "runtimeTypeNameCodeUnits")]
     public string? RuntimeTypeNameCodeUnits { get; set; }
 
+    /// <summary>Canonical CLR element type identity for an array container.</summary>
+    [DataMember(Name = "elementTypeName")]
+    public string? ElementTypeName { get; set; }
+
     /// <summary>Recursively captured collection elements.</summary>
     [DataMember(Name = "items")]
     public List<DocumentationRuntimeValue> Items { get; set; } = new();

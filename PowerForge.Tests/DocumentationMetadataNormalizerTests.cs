@@ -53,8 +53,14 @@ public sealed class DocumentationMetadataNormalizerTests
         }));
         const string unsafeTypeName = "Example.A-B";
         const string unsafeAssemblyName = "Example.Assembly, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null";
+        string ExactTypeExpression(string typeName)
+            => "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq '" +
+               unsafeAssemblyName + "' } | Select-Object -First 1; if ($null -eq $assembly) { throw 'Type assembly is not loaded.' }; " +
+               "$type = $assembly.GetType('" + typeName + "', $false, $false); if ($null -eq $type) { $type = $assembly.GetTypes() | " +
+               "Where-Object { $_.FullName -ceq '" + typeName + "' } | Select-Object -First 1 }; " +
+               "if ($null -eq $type) { throw 'Type is not available in the loaded assembly.' }; return $type }";
         Assert.Equal(
-            "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'Example.Assembly, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null' } | Select-Object -First 1; if ($null -eq $assembly) { throw 'Type assembly is not loaded.' }; return $assembly.GetType('Example.A-B', $true, $false) }",
+            ExactTypeExpression(unsafeTypeName),
             PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
             {
                 Kind = "Type",
@@ -62,8 +68,18 @@ public sealed class DocumentationMetadataNormalizerTests
                 Text = string.Join(",", unsafeTypeName.Select(character => (int)character)),
                 AssemblyNameCodeUnits = string.Join(",", unsafeAssemblyName.Select(character => (int)character))
             }));
+        const string whitespaceTypeName = " Example.Type ";
         Assert.Equal(
-            "[System.Enum]::ToObject((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'Example.Assembly, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null' } | Select-Object -First 1; if ($null -eq $assembly) { throw 'Type assembly is not loaded.' }; return $assembly.GetType('Example.A-B', $true, $false) }), ([System.Int32]1))",
+            ExactTypeExpression(whitespaceTypeName),
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "Type",
+                CanonicalTypeName = whitespaceTypeName,
+                Text = string.Join(",", whitespaceTypeName.Select(character => (int)character)),
+                AssemblyNameCodeUnits = string.Join(",", unsafeAssemblyName.Select(character => (int)character))
+            }));
+        Assert.Equal(
+            "[System.Enum]::ToObject((" + ExactTypeExpression(unsafeTypeName) + "), ([System.Int32]1))",
             PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
             {
                 Kind = "Enum",
@@ -80,6 +96,15 @@ public sealed class DocumentationMetadataNormalizerTests
             {
                 Kind = "Type",
                 CanonicalTypeName = "System.Int32*"
+            }));
+        Assert.Equal(
+            "(" + ExactTypeExpression(unsafeTypeName) + ").MakePointerType()",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "Type",
+                CanonicalTypeName = "Example.A-B*",
+                Text = string.Join(",", unsafeTypeName.Select(character => (int)character)),
+                AssemblyNameCodeUnits = string.Join(",", unsafeAssemblyName.Select(character => (int)character))
             }));
         Assert.Equal(
             "[System.Int32].MakeByRefType()",
@@ -119,6 +144,27 @@ public sealed class DocumentationMetadataNormalizerTests
             Kind = "Single",
             Text = "-0"
         }));
+        Assert.Equal(
+            "[System.BitConverter]::Int64BitsToDouble(([long]9221120237041095220))",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "DoubleBits",
+                Text = "9221120237041095220"
+            }));
+        Assert.Equal(
+            "[System.BitConverter]::ToSingle([System.BitConverter]::GetBytes(([int]2143294004)), 0)",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "SingleBits",
+                Text = "2143294004"
+            }));
+        Assert.Equal(
+            "[System.Decimal]::new(([int]0), ([int]0), ([int]0), $true, ([byte]4))",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "DecimalBits",
+                Text = "0,0,0,-2147221504"
+            }));
         Assert.Equal(
             "[System.Decimal]::Parse('79228162514264337593543950335', [System.Globalization.CultureInfo]::InvariantCulture)",
             PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
@@ -371,6 +417,62 @@ public sealed class DocumentationMetadataNormalizerTests
         Assert.Equal(
             "& { $collection = [System.Object[]]::new(1); $collection.SetValue((& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(1, 1), [int[]]@(0, 0)); $array.SetValue((9), [int[]]@(0, 0)); return ,$array }), 0); return ,$collection }",
             nestedArrayCollection);
+
+        var unsafeArray = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+        {
+            Tokens =
+            [
+                new DocumentationRuntimeValue
+                {
+                    Kind = "CollectionStart",
+                    CanonicalTypeName = "Example.A-B[]",
+                    ElementTypeName = "Example.A-B",
+                    RuntimeTypeNameCodeUnits = string.Join(",", "Example.A-B".Select(character => (int)character)),
+                    AssemblyNameCodeUnits = string.Join(",", "Example.Assembly, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null".Select(character => (int)character)),
+                    Name = "Array"
+                },
+                new DocumentationRuntimeValue { Kind = "Null" },
+                new DocumentationRuntimeValue { Kind = "CollectionEnd" }
+            ]
+        });
+        Assert.StartsWith(
+            "& { $collection = [System.Array]::CreateInstance((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies()",
+            unsafeArray,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DefaultValueFormatter_FormatsArrayCoordinatesInvariantly()
+    {
+        var originalCulture = System.Globalization.CultureInfo.CurrentCulture;
+        var customCulture = (System.Globalization.CultureInfo)System.Globalization.CultureInfo.InvariantCulture.Clone();
+        customCulture.NumberFormat.NegativeSign = "\u2212";
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = customCulture;
+            var formatted = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Tokens =
+                [
+                    new DocumentationRuntimeValue
+                    {
+                        Kind = "ArrayStart",
+                        CanonicalTypeName = "System.Int32",
+                        Text = "1",
+                        Name = "-2"
+                    },
+                    new DocumentationRuntimeValue { Kind = "Formattable", Text = "7", CanonicalTypeName = "System.Int32" },
+                    new DocumentationRuntimeValue { Kind = "ArrayEnd" }
+                ]
+            });
+
+            Assert.Contains("[int[]]@(-2)", formatted, StringComparison.Ordinal);
+            Assert.DoesNotContain('\u2212', formatted);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = originalCulture;
+        }
     }
 
     [Fact]

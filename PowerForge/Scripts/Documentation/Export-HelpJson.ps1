@@ -74,44 +74,16 @@ function AddRuntimeDefaultValueTokens(
     if ($value.IsGenericParameter) {
       throw 'Generic-parameter Type defaults are not supported.'
     }
+    $runtimeIdentityType = GetRuntimeIdentityType $value
     $tokens.Add([ordered]@{
       kind = 'Type'
       canonicalTypeName = GetCanonicalTypeNameFromType $value
-      text = ConvertToUtf16CodeUnits ([string]$value.FullName)
-      assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$value.Assembly.FullName)
+      text = ConvertToUtf16CodeUnits ([string]$runtimeIdentityType.FullName)
+      assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$runtimeIdentityType.Assembly.FullName)
     }) | Out-Null
     return
   }
-  if ($value -is [double]) {
-    $text = $value.ToString('G17', [System.Globalization.CultureInfo]::InvariantCulture)
-    if ($value -eq 0 -and [System.BitConverter]::DoubleToInt64Bits($value) -lt 0) {
-      $text = '-0'
-    }
-    $tokens.Add([ordered]@{
-      kind = 'Double'
-      text = $text
-    }) | Out-Null
-    return
-  }
-  if ($value -is [single]) {
-    $text = $value.ToString('G9', [System.Globalization.CultureInfo]::InvariantCulture)
-    if ($value -eq 0) {
-      $bits = [System.BitConverter]::ToInt32([System.BitConverter]::GetBytes([single]$value), 0)
-      if ($bits -lt 0) { $text = '-0' }
-    }
-    $tokens.Add([ordered]@{
-      kind = 'Single'
-      text = $text
-    }) | Out-Null
-    return
-  }
-  if ($value -is [decimal]) {
-    $tokens.Add([ordered]@{
-      kind = 'Decimal'
-      text = $value.ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    }) | Out-Null
-    return
-  }
+  if (AddRuntimeNumericDefaultValueToken $value $tokens) { return }
   if ($value.GetType().FullName -eq 'System.Numerics.BigInteger') {
     $tokens.Add([ordered]@{
       kind = 'BigInteger'
@@ -234,11 +206,15 @@ function AddRuntimeDefaultValueTokens(
           $lengths.Add($value.GetLength($dimension).ToString([System.Globalization.CultureInfo]::InvariantCulture))
           $lowerBounds.Add($value.GetLowerBound($dimension).ToString([System.Globalization.CultureInfo]::InvariantCulture))
         }
+        $elementType = $value.GetType().GetElementType()
+        $runtimeElementType = GetRuntimeIdentityType $elementType
         $tokens.Add([ordered]@{
           kind = 'ArrayStart'
           text = $lengths -join ','
           name = $lowerBounds -join ','
-          canonicalTypeName = GetCanonicalTypeNameFromType ($value.GetType().GetElementType())
+          canonicalTypeName = GetCanonicalTypeNameFromType $elementType
+          runtimeTypeNameCodeUnits = ConvertToUtf16CodeUnits ([string]$runtimeElementType.FullName)
+          assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$runtimeElementType.Assembly.FullName)
         }) | Out-Null
         foreach ($item in $value) {
           AddRuntimeDefaultValueTokens $item $tokens $referenceStack
@@ -248,14 +224,28 @@ function AddRuntimeDefaultValueTokens(
       }
       $collectionType = $value.GetType()
       if ($value -isnot [System.Array]) {
+        $supportedItemOnlyList = $collectionType -eq [System.Collections.ArrayList]
+        if (-not $supportedItemOnlyList -and $collectionType.IsGenericType) {
+          $genericDefinitionName = $collectionType.GetGenericTypeDefinition().FullName
+          $supportedItemOnlyList = $genericDefinitionName -eq 'System.Collections.Generic.List`1' -or
+            $genericDefinitionName -eq 'System.Collections.ObjectModel.Collection`1'
+        }
+        if (-not $supportedItemOnlyList) {
+          throw ('Collection type carries unsupported non-item state: ' + $collectionType.FullName)
+        }
         $constructor = $collectionType.GetConstructor([System.Type]::EmptyTypes)
         if ($collectionType.IsAbstract -or $collectionType.IsInterface -or $null -eq $constructor) {
           throw ('Collection type has no supported constructor: ' + $collectionType.FullName)
         }
       }
+      $elementType = if ($value -is [System.Array]) { $collectionType.GetElementType() } else { $null }
+      $runtimeElementType = if ($null -ne $elementType) { GetRuntimeIdentityType $elementType } else { $null }
       $tokens.Add([ordered]@{
         kind = 'CollectionStart'
         canonicalTypeName = GetCanonicalTypeNameFromType $collectionType
+        elementTypeName = if ($null -ne $elementType) { GetCanonicalTypeNameFromType $elementType } else { $null }
+        runtimeTypeNameCodeUnits = if ($null -ne $runtimeElementType) { ConvertToUtf16CodeUnits ([string]$runtimeElementType.FullName) } else { $null }
+        assemblyNameCodeUnits = if ($null -ne $runtimeElementType) { ConvertToUtf16CodeUnits ([string]$runtimeElementType.Assembly.FullName) } else { $null }
         name = if ($value -is [System.Array]) { 'Array' } else { 'List' }
       }) | Out-Null
       foreach ($item in $value) {
