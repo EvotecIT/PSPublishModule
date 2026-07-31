@@ -214,9 +214,13 @@ function AddRuntimeDefaultValueTokens(
         $comparerType = $null
         $comparer = GetDictionaryComparer $value ([ref]$comparerType)
         $comparerName = GetKnownDictionaryComparerName $comparer $comparerType
+        $dictionaryTypeName = GetConstructibleDictionaryTypeName $value
+        if ([string]::IsNullOrWhiteSpace($dictionaryTypeName)) {
+          throw ('Dictionary type has no supported constructor: ' + $value.GetType().FullName)
+        }
         $tokens.Add([ordered]@{
           kind = 'DictionaryStart'
-          canonicalTypeName = GetConstructibleDictionaryTypeName $value
+          canonicalTypeName = $dictionaryTypeName
           name = $comparerName
         }) | Out-Null
         foreach ($entry in $value.GetEnumerator()) {
@@ -227,6 +231,9 @@ function AddRuntimeDefaultValueTokens(
         }
         $tokens.Add([ordered]@{ kind = 'DictionaryEnd' }) | Out-Null
         return
+      }
+      if ($value -isnot [System.Collections.IList] -and $value -isnot [System.Array]) {
+        throw ('Unsupported enumerable default type: ' + $value.GetType().FullName)
       }
       if ($value -is [System.Array] -and
           ($value.Rank -gt 1 -or $value.GetType() -ne $value.GetType().GetElementType().MakeArrayType())) {

@@ -29,6 +29,33 @@ public sealed class DocumentationPowerShellCollectorTests
 if (-not ('CollectorFixture.CaseMode' -as [type])) {
     Add-Type -TypeDefinition 'namespace CollectorFixture { public enum CaseMode { A = 1, a = 2 } }'
 }
+if (-not ('CollectorFixture.WeirdMode' -as [type])) {
+    $assemblyName = [System.Reflection.AssemblyName]::new('CollectorFixtureDynamic')
+    $factory = [System.Reflection.Emit.AssemblyBuilder].GetMethods(
+        [System.Reflection.BindingFlags]'Public,Static') |
+        Where-Object { $_.Name -eq 'DefineDynamicAssembly' -and $_.GetParameters().Count -eq 2 } |
+        Select-Object -First 1
+    if ($factory) {
+        $assemblyBuilder = [System.Reflection.Emit.AssemblyBuilder]::DefineDynamicAssembly(
+            $assemblyName,
+            [System.Reflection.Emit.AssemblyBuilderAccess]::Run)
+    } else {
+        $assemblyBuilder = [System.AppDomain]::CurrentDomain.DefineDynamicAssembly(
+            $assemblyName,
+            [System.Reflection.Emit.AssemblyBuilderAccess]::Run)
+    }
+    $moduleBuilder = $assemblyBuilder.DefineDynamicModule('CollectorFixtureDynamic')
+    $enumBuilder = $moduleBuilder.DefineEnum(
+        'CollectorFixture.WeirdMode',
+        [System.Reflection.TypeAttributes]::Public,
+        [int])
+    [void]$enumBuilder.DefineLiteral('A-B', 1)
+    if ($enumBuilder.PSObject.Methods['CreateTypeInfo']) {
+        [void]$enumBuilder.CreateTypeInfo()
+    } else {
+        [void]$enumBuilder.CreateType()
+    }
+}
 
 class InvalidTextDefault {
     [string] ToString() {
@@ -179,6 +206,13 @@ function Get-CollectorFixture {
         $caseModeAttributes.Add($caseModeDefault)
         $parameters.Add('CaseMode', [System.Management.Automation.RuntimeDefinedParameter]::new('CaseMode', [CollectorFixture.CaseMode], $caseModeAttributes))
 
+        $weirdModeType = 'CollectorFixture.WeirdMode' -as [type]
+        $weirdModeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $weirdModeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $weirdModeDefault.Value = [System.Enum]::ToObject($weirdModeType, 1)
+        $weirdModeAttributes.Add($weirdModeDefault)
+        $parameters.Add('WeirdMode', [System.Management.Automation.RuntimeDefinedParameter]::new('WeirdMode', $weirdModeType, $weirdModeAttributes))
+
         $uriAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $uriDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $uriDefault.Value = [uri]::new("https://example.com/a'b?x=1")
@@ -202,6 +236,22 @@ function Get-CollectorFixture {
         $caseDistinctDictionaryDefault.Value = $caseDistinctDictionary
         $caseDistinctDictionaryAttributes.Add($caseDistinctDictionaryDefault)
         $parameters.Add('CaseDistinctDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('CaseDistinctDictionary', [System.Collections.Generic.Dictionary[string, int]], $caseDistinctDictionaryAttributes))
+
+        $concurrentDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $concurrentDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $concurrentDictionary = [System.Collections.Concurrent.ConcurrentDictionary[string, int]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        $concurrentDictionary['Alpha'] = 1
+        $concurrentDictionaryDefault.Value = $concurrentDictionary
+        $concurrentDictionaryAttributes.Add($concurrentDictionaryDefault)
+        $parameters.Add('ConcurrentDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('ConcurrentDictionary', [System.Collections.Concurrent.ConcurrentDictionary[string, int]], $concurrentDictionaryAttributes))
+
+        $readOnlyDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $readOnlyDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $readOnlyBacking = [System.Collections.Generic.Dictionary[string, int]]::new()
+        $readOnlyBacking['alpha'] = 1
+        $readOnlyDictionaryDefault.Value = [System.Collections.ObjectModel.ReadOnlyDictionary[string, int]]::new($readOnlyBacking)
+        $readOnlyDictionaryAttributes.Add($readOnlyDictionaryDefault)
+        $parameters.Add('ReadOnlyDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('ReadOnlyDictionary', [System.Collections.ObjectModel.ReadOnlyDictionary[string, int]], $readOnlyDictionaryAttributes))
 
         $unsupportedCultureAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $unsupportedCultureDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -259,6 +309,15 @@ function Get-CollectorFixture {
         $nestedMatrixDefault.Value = $nestedMatrix
         $nestedMatrixAttributes.Add($nestedMatrixDefault)
         $parameters.Add('NestedMatrix', [System.Management.Automation.RuntimeDefinedParameter]::new('NestedMatrix', [object[]], $nestedMatrixAttributes))
+
+        $stackAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $stackDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $stack = [System.Collections.Generic.Stack[int]]::new()
+        $stack.Push(1)
+        $stack.Push(2)
+        $stackDefault.Value = $stack
+        $stackAttributes.Add($stackDefault)
+        $parameters.Add('Stack', [System.Management.Automation.RuntimeDefinedParameter]::new('Stack', [System.Collections.Generic.Stack[int]], $stackAttributes))
 
         $dateOnlyType = 'System.DateOnly' -as [type]
         if ($dateOnlyType) {
@@ -381,11 +440,14 @@ function Get-AcceleratedOutput {
                 var nonSzArrayType = Assert.Single(command.Parameters, parameter => parameter.Name == "NonSzArrayType");
                 var genericParameterType = Assert.Single(command.Parameters, parameter => parameter.Name == "GenericParameterType");
                 var caseMode = Assert.Single(command.Parameters, parameter => parameter.Name == "CaseMode");
+                var weirdMode = Assert.Single(command.Parameters, parameter => parameter.Name == "WeirdMode");
                 var uri = Assert.Single(command.Parameters, parameter => parameter.Name == "Uri");
                 var dictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "Dictionary");
                 var caseDistinctDictionary = Assert.Single(
                     command.Parameters,
                     parameter => parameter.Name == "CaseDistinctDictionary");
+                var concurrentDictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "ConcurrentDictionary");
+                var readOnlyDictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "ReadOnlyDictionary");
                 var unsupportedCulture = Assert.Single(
                     command.Parameters,
                     parameter => parameter.Name == "UnsupportedCulture");
@@ -399,6 +461,7 @@ function Get-AcceleratedOutput {
                 var boundedArray = Assert.Single(command.Parameters, parameter => parameter.Name == "BoundedArray");
                 var nestedCollection = Assert.Single(command.Parameters, parameter => parameter.Name == "NestedCollection");
                 var nestedMatrix = Assert.Single(command.Parameters, parameter => parameter.Name == "NestedMatrix");
+                var stack = Assert.Single(command.Parameters, parameter => parameter.Name == "Stack");
                 var dateOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "DateOnly");
                 var timeOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "TimeOnly");
                 var dateTime = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTime");
@@ -437,17 +500,24 @@ function Get-AcceleratedOutput {
                     "[System.Enum]::ToObject([CollectorFixture.CaseMode], ([System.Int32]1))",
                     caseMode.DefaultValue);
                 Assert.Equal(
+                    "[System.Enum]::ToObject([CollectorFixture.WeirdMode], ([System.Int32]1))",
+                    weirdMode.DefaultValue);
+                Assert.Equal(
                     "[System.Uri]::new('https://example.com/a''b?x=1', [System.UriKind]::Absolute)",
                     uri.DefaultValue);
                 Assert.StartsWith(
                     "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new(",
                     dictionary.DefaultValue,
                     StringComparison.Ordinal);
-                Assert.Contains("$dictionary.Add(('alpha'), (1))", dictionary.DefaultValue, StringComparison.Ordinal);
-                Assert.Contains("$dictionary.Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative)))", dictionary.DefaultValue, StringComparison.Ordinal);
+                Assert.Contains("([System.Collections.IDictionary]$dictionary).Add(('alpha'), (1))", dictionary.DefaultValue, StringComparison.Ordinal);
+                Assert.Contains("([System.Collections.IDictionary]$dictionary).Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative)))", dictionary.DefaultValue, StringComparison.Ordinal);
                 Assert.Equal(
-                    "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Ordinal); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); return ,$dictionary }",
+                    "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Ordinal); ([System.Collections.IDictionary]$dictionary).Add(('A'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('a'), (2)); return ,$dictionary }",
                     caseDistinctDictionary.DefaultValue);
+                Assert.Equal(
+                    "& { $dictionary = [System.Collections.Concurrent.ConcurrentDictionary[System.String,System.Int32]]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('Alpha'), (1)); return ,$dictionary }",
+                    concurrentDictionary.DefaultValue);
+                Assert.True(string.IsNullOrEmpty(readOnlyDictionary.DefaultValue));
                 Assert.True(string.IsNullOrEmpty(unsupportedCulture.DefaultValue));
                 Assert.Equal(new[] { "One", "Two" }, unsupportedCulture.PossibleValues);
                 Assert.True(string.IsNullOrEmpty(unsupportedAddress.DefaultValue));
@@ -464,6 +534,7 @@ function Get-AcceleratedOutput {
                 Assert.Equal(
                     "& { $array = [object[]]::new(1); $array.SetValue((& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }), 0); return ,$array }",
                     nestedMatrix.DefaultValue);
+                Assert.True(string.IsNullOrEmpty(stack.DefaultValue));
                 if (host.Contains("pwsh", StringComparison.OrdinalIgnoreCase))
                 {
                     Assert.NotNull(dateOnly);

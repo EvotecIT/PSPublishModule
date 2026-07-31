@@ -255,7 +255,7 @@ public sealed class DocumentationMetadataNormalizerTests
         });
 
         Assert.Equal(
-            "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Object]]::new([System.StringComparer]::Ordinal); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); $dictionary.Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
+            "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Object]]::new([System.StringComparer]::Ordinal); ([System.Collections.IDictionary]$dictionary).Add(('A'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('a'), (2)); ([System.Collections.IDictionary]$dictionary).Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
             formatted);
 
         var array = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue

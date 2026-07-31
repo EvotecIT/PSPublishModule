@@ -364,9 +364,9 @@ internal static class PowerShellDefaultValueFormatter
 
         public DictionaryTokenFrame(string? dictionaryTypeName, string? comparerName)
         {
-            _dictionaryTypeName = string.IsNullOrWhiteSpace(dictionaryTypeName)
-                ? "System.Collections.Specialized.OrderedDictionary"
-                : dictionaryTypeName!.Trim();
+            if (string.IsNullOrWhiteSpace(dictionaryTypeName))
+                throw new FormatException("The runtime default token stream is missing a constructible dictionary type.");
+            _dictionaryTypeName = dictionaryTypeName!.Trim();
             _constructorArgument = FormatDictionaryComparer(comparerName);
         }
 
@@ -408,7 +408,7 @@ internal static class PowerShellDefaultValueFormatter
                 "$dictionary = [" + _dictionaryTypeName + "]::new(" + _constructorArgument + ")"
             };
             statements.AddRange(_entries.Select(entry =>
-                "$dictionary.Add((" + entry.Key + "), (" + entry.Value + "))"));
+                "([System.Collections.IDictionary]$dictionary).Add((" + entry.Key + "), (" + entry.Value + "))"));
             statements.Add("return ,$dictionary");
             return "& { " + string.Join("; ", statements) + " }";
         }
