@@ -20,9 +20,15 @@ public sealed partial class DocumentationPowerShellCollectorTests
     GUID = '12121212-1212-1212-1212-121212121212'
     FunctionsToExport = @('Get-HelperIsolationFixture', 'ConvertToUtf16CodeUnits')
     AliasesToExport = @('GetText')
+    VariablesToExport = @('collectorProtocol')
 }
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             File.WriteAllText(Path.Combine(root, "HelperIsolationFixture.psm1"), """
+$collectorProtocol = [pscustomobject]@{
+    RemoveHelperAliases = { throw 'The target module clobbered the collector protocol.' }
+    HelperFunctionNames = @('clobbered')
+}
+
 function ConvertToUtf16CodeUnits {
     throw 'The target module clobbered a documentation collector helper.'
 }
@@ -41,6 +47,9 @@ function Get-HelperIsolationFixture {
         $valueDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $valueDefault.Value = 'runtime value'
         $valueAttributes.Add($valueDefault)
+        $valueAlias = [System.Management.Automation.AliasAttribute]::new(
+            [string[]]@([string][char]0xD800))
+        $valueAttributes.Add($valueAlias)
         $parameters.Add('Value', [System.Management.Automation.RuntimeDefinedParameter]::new(
             'Value', [string], $valueAttributes))
 
@@ -56,7 +65,7 @@ function Get-HelperIsolationFixture {
     }
 }
 
-Export-ModuleMember -Function Get-HelperIsolationFixture, ConvertToUtf16CodeUnits -Alias GetText
+Export-ModuleMember -Function Get-HelperIsolationFixture, ConvertToUtf16CodeUnits -Alias GetText -Variable collectorProtocol
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             var hosts = OperatingSystem.IsWindows()
@@ -70,10 +79,21 @@ Export-ModuleMember -Function Get-HelperIsolationFixture, ConvertToUtf16CodeUnit
                     .ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
                 var command = Assert.Single(payload.Commands, candidate =>
                     candidate.Name == "Get-HelperIsolationFixture");
+                var valueParameter = Assert.Single(command.Parameters, parameter => parameter.Name == "Value");
                 Assert.Equal("'runtime value'", Default("Value"));
+                Assert.Equal("([char]55296)", Assert.Single(valueParameter.Aliases));
                 Assert.Equal("authored\nvalue", Default("HelpValue"));
                 Assert.Contains(command.Outputs, output =>
                     output.CanonicalTypeName == "System.Collections.Generic.List[System.String]");
+
+                var hostOutput = Path.Combine(root, host.Replace('.', '-'));
+                var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(
+                    payload,
+                    "HelperIsolationFixture",
+                    hostOutput);
+                var maml = File.ReadAllText(mamlPath);
+                Assert.Contains("([char]55296)", maml, StringComparison.Ordinal);
+                Assert.DoesNotContain('\uD800', maml);
 
                 string Default(string name)
                     => Assert.Single(command.Parameters, parameter => parameter.Name == name).DefaultValue;

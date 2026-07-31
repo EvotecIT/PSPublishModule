@@ -28,6 +28,7 @@ $result = [ordered]@{
         parameters = @([ordered]@{
             name = 'Mode'
             type = 'String'
+            aliases = @($surrogate)
             possibleValues = @($surrogate)
             enumPossibleValues = @()
             hasValidateSet = $true
@@ -69,10 +70,12 @@ $json = ConvertToUtf8SafeJsonText ($result | ConvertTo-Json -Depth 20)
                 var command = Assert.Single(payload.Commands);
                 var parameter = Assert.Single(command.Parameters);
                 var authoredOutput = Assert.Single(command.AuthoredOutputs);
+                Assert.Equal('\uD800', Assert.Single(parameter.Aliases)[0]);
                 Assert.Equal('\uD800', Assert.Single(parameter.PossibleValues)[0]);
                 Assert.Equal('\uD800', authoredOutput.Description[0]);
 
                 DocumentationMetadataNormalizer.Normalize(payload);
+                Assert.Equal("([char]55296)", Assert.Single(parameter.Aliases));
                 Assert.Equal("([char]55296)", Assert.Single(parameter.PossibleValues));
                 Assert.Equal("([char]55296)", Assert.Single(command.Outputs).Description);
 

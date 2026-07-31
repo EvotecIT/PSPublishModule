@@ -35,7 +35,10 @@ internal static class DocumentationMetadataNormalizer
         {
             if (parameter is null) continue;
 
-            parameter.Aliases = DistinctNonBlank(parameter.Aliases, StringComparer.OrdinalIgnoreCase);
+            parameter.Aliases = DistinctNonBlank(
+                (parameter.Aliases ?? new List<string>())
+                    .Select(alias => PowerShellDefaultValueFormatter.FormatDisplayText(alias ?? string.Empty)),
+                StringComparer.OrdinalIgnoreCase);
             if (!parameter.PossibleValuesNormalized)
             {
                 parameter.PossibleValues = MergePossibleValues(

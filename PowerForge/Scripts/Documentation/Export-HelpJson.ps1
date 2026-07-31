@@ -317,7 +317,7 @@ try {
   $m = $null
   try { $m = Import-PowerShellDataFile -Path $ManifestPath -ErrorAction Stop } catch { $m = $null }
 
-  $mod = Import-Module -Name $ManifestPath -Force -PassThru -ErrorAction Stop
+  $mod = & $collectorProtocol.ImportDocumentedModule $ManifestPath
   $moduleNameResolved = $mod.Name
   & $collectorProtocol.RemoveHelperAliases $moduleNameResolved $collectorProtocol.HelperFunctionNames
 

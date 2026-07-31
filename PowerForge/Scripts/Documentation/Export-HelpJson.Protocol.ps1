@@ -38,6 +38,7 @@ function GetCollectorHelperFunctionNames {
     'GetRuntimeTypeInstanceIdentity',
     'GetRuntimeTypeShape',
     'GetText',
+    'ImportDocumentedModule',
     'RemoveCollectorHelperAliases',
     'ResolveCanonicalTypeName',
     'ResolveExactType',
@@ -55,6 +56,14 @@ function GetCollectorHelperFunctionNames {
   )
 }
 
+function ImportDocumentedModule([string]$manifestPath) {
+  $variableImportFilter = '__PowerForgeDocumentationCollector_' +
+    [guid]::NewGuid().ToString('N')
+  return Import-Module -Name $manifestPath -Force -PassThru -Scope Global `
+    -Function '*' -Cmdlet '*' -Alias '*' -Variable $variableImportFilter `
+    -ErrorAction Stop
+}
+
 function NewCollectorProtocol([System.Management.Automation.PSModuleInfo]$helperModule) {
   return [pscustomobject]@{
     ConvertToRuntimeDefaultValue = $helperModule.ExportedFunctions['ConvertToRuntimeDefaultValue']
@@ -65,6 +74,7 @@ function NewCollectorProtocol([System.Management.Automation.PSModuleInfo]$helper
     GetOutputTypeSnapshot = $helperModule.ExportedFunctions['GetOutputTypeSnapshot']
     GetText = $helperModule.ExportedFunctions['GetText']
     HelperFunctionNames = GetCollectorHelperFunctionNames
+    ImportDocumentedModule = Get-Command ImportDocumentedModule -CommandType Function
     RemoveHelperAliases = Get-Command RemoveCollectorHelperAliases -CommandType Function
     ResolveCanonicalTypeName = $helperModule.ExportedFunctions['ResolveCanonicalTypeName']
     TestValidateSetCaseSensitive = $helperModule.ExportedFunctions['TestValidateSetCaseSensitive']
