@@ -44,6 +44,20 @@ function GetPowerShellSafeEnumName([type]$enumType, [object]$value) {
 
 function GetConstructibleDictionaryTypeName([System.Collections.IDictionary]$value) {
   $dictionaryType = $value.GetType()
+  $dictionaryTypeName = [string]$dictionaryType.FullName
+  $supported = @(
+    'System.Collections.Hashtable',
+    'System.Collections.Specialized.OrderedDictionary'
+  ) -contains $dictionaryTypeName
+  if (-not $supported -and $dictionaryType.IsGenericType) {
+    $supported = @(
+      'System.Collections.Generic.Dictionary`2',
+      'System.Collections.Generic.SortedDictionary`2',
+      'System.Collections.Generic.SortedList`2',
+      'System.Collections.Concurrent.ConcurrentDictionary`2'
+    ) -contains [string]$dictionaryType.GetGenericTypeDefinition().FullName
+  }
+  if (-not $supported) { return '' }
   if ($dictionaryType.IsAbstract -or $dictionaryType.IsInterface) { return '' }
   $constructor = $null
   try { $constructor = $dictionaryType.GetConstructor([System.Type]::EmptyTypes) } catch { $constructor = $null }

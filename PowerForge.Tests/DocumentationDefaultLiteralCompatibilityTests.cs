@@ -132,6 +132,12 @@ function Get-DefaultLiteralFixture {
         $uriAttributes.Add($uriDefault)
         $parameters.Add('Uri', [System.Management.Automation.RuntimeDefinedParameter]::new('Uri', [uri], $uriAttributes))
 
+        $userEscapedUriAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $userEscapedUriDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $userEscapedUriDefault.Value = [uri]::new('http://example.com/a%2Fb', $true)
+        $userEscapedUriAttributes.Add($userEscapedUriDefault)
+        $parameters.Add('UserEscapedUri', [System.Management.Automation.RuntimeDefinedParameter]::new('UserEscapedUri', [uri], $userEscapedUriAttributes))
+
         $dictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $dictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $dictionaryDefault.Value = [ordered]@{
@@ -166,6 +172,14 @@ function Get-DefaultLiteralFixture {
         $cultureDictionaryDefault.Value = $cultureDictionary
         $cultureDictionaryAttributes.Add($cultureDictionaryDefault)
         $parameters.Add('CultureDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('CultureDictionary', [System.Collections.Generic.Dictionary[string, int]], $cultureDictionaryAttributes))
+
+        $hybridDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $hybridDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $hybridDictionary = [System.Collections.Specialized.HybridDictionary]::new($true)
+        $hybridDictionary['A'] = 1
+        $hybridDictionaryDefault.Value = $hybridDictionary
+        $hybridDictionaryAttributes.Add($hybridDictionaryDefault)
+        $parameters.Add('HybridDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('HybridDictionary', [System.Collections.Specialized.HybridDictionary], $hybridDictionaryAttributes))
 
         $readOnlyDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $readOnlyDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -470,6 +484,7 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 "[System.Uri]::new('https://example.com/a''b?x=1', [System.UriKind]::Absolute)",
                 Default("Uri"));
+            Assert.True(string.IsNullOrEmpty(Default("UserEscapedUri")));
             Assert.Equal(
                 "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('alpha'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
                 Default("Dictionary"));
@@ -482,6 +497,7 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Create([System.Globalization.CultureInfo]::GetCultureInfo('tr-TR'), $true)); ([System.Collections.IDictionary]$dictionary).Add(('I'), (1)); return ,$dictionary }",
                 Default("CultureDictionary"));
+            Assert.True(string.IsNullOrEmpty(Default("HybridDictionary")));
             Assert.True(string.IsNullOrEmpty(Default("ReadOnlyDictionary")));
             Assert.True(string.IsNullOrEmpty(Default("ReadOnlyOrderedDictionary")));
             Assert.True(string.IsNullOrEmpty(Default("UnsupportedCulture")));

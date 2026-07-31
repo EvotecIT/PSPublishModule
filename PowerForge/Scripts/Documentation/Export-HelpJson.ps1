@@ -152,6 +152,9 @@ function ConvertToPowerShellDefaultValue(
     return ("[System.Version]::Parse('" + $versionText + "')")
   }
   if ($value -is [uri]) {
+    if ($value.UserEscaped) {
+      throw 'User-escaped Uri defaults are not supported.'
+    }
     $uriText = ConvertToPowerShellDefaultValue $value.OriginalString $referenceStack
     $uriKind = if ($value.IsAbsoluteUri) { 'Absolute' } else { 'Relative' }
     return ('[System.Uri]::new(' + $uriText + ', [System.UriKind]::' + $uriKind + ')')
