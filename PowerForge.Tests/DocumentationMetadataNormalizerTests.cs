@@ -81,10 +81,15 @@ public sealed class DocumentationMetadataNormalizerTests
                 UnderlyingTypeName = "System.Int32",
                 Text = "1"
             }));
-        Assert.Equal("-0.0", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+        Assert.Equal("([double]-0.0)", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
         {
             Kind = "Double",
             Text = "-0"
+        }));
+        Assert.Equal("([double]1)", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+        {
+            Kind = "Double",
+            Text = "1"
         }));
         Assert.Equal("([single]-0.0)", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
         {
@@ -225,7 +230,8 @@ public sealed class DocumentationMetadataNormalizerTests
                 new DocumentationRuntimeValue
                 {
                     Kind = "DictionaryStart",
-                    CanonicalTypeName = "System.Collections.Generic.Dictionary[System.String,System.Object]"
+                    CanonicalTypeName = "System.Collections.Generic.Dictionary[System.String,System.Object]",
+                    Name = "Ordinal"
                 },
                 new DocumentationRuntimeValue { Kind = "DictionaryEntryStart" },
                 new DocumentationRuntimeValue { Kind = "StringCodeUnits", Text = "65" },
@@ -249,7 +255,7 @@ public sealed class DocumentationMetadataNormalizerTests
         });
 
         Assert.Equal(
-            "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Object]]::new(); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); $dictionary.Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
+            "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Object]]::new([System.StringComparer]::Ordinal); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); $dictionary.Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
             formatted);
 
         var array = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue

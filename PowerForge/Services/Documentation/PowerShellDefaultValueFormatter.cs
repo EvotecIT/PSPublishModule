@@ -133,9 +133,9 @@ internal static class PowerShellDefaultValueFormatter
             else if (value.Equals("0", StringComparison.Ordinal)) value = "0.0";
             return "([single]" + value + ")";
         }
-        if (value.Equals("-0", StringComparison.Ordinal)) return "-0.0";
-        if (value.Equals("0", StringComparison.Ordinal)) return "0.0";
-        return value;
+        if (value.Equals("-0", StringComparison.Ordinal)) value = "-0.0";
+        else if (value.Equals("0", StringComparison.Ordinal)) value = "0.0";
+        return "([double]" + value + ")";
     }
 
     private static string FormatFormattable(DocumentationRuntimeValue value)
@@ -260,7 +260,7 @@ internal static class PowerShellDefaultValueFormatter
 
             if (kind.Equals("DictionaryStart", StringComparison.OrdinalIgnoreCase))
             {
-                frames.Push(new DictionaryTokenFrame(token.CanonicalTypeName));
+                frames.Push(new DictionaryTokenFrame(token.CanonicalTypeName, token.Name));
                 continue;
             }
 
@@ -360,11 +360,14 @@ internal static class PowerShellDefaultValueFormatter
         private string? _value;
         private bool _entryOpen;
 
-        public DictionaryTokenFrame(string? dictionaryTypeName)
+        private readonly string _constructorArgument;
+
+        public DictionaryTokenFrame(string? dictionaryTypeName, string? comparerName)
         {
             _dictionaryTypeName = string.IsNullOrWhiteSpace(dictionaryTypeName)
                 ? "System.Collections.Specialized.OrderedDictionary"
                 : dictionaryTypeName!.Trim();
+            _constructorArgument = FormatDictionaryComparer(comparerName);
         }
 
         public void BeginEntry()
@@ -402,12 +405,35 @@ internal static class PowerShellDefaultValueFormatter
                 throw new FormatException("The runtime default token stream ends inside a dictionary entry.");
             var statements = new List<string>
             {
-                "$dictionary = [" + _dictionaryTypeName + "]::new()"
+                "$dictionary = [" + _dictionaryTypeName + "]::new(" + _constructorArgument + ")"
             };
             statements.AddRange(_entries.Select(entry =>
                 "$dictionary.Add((" + entry.Key + "), (" + entry.Value + "))"));
             statements.Add("return ,$dictionary");
             return "& { " + string.Join("; ", statements) + " }";
+        }
+
+        private static string FormatDictionaryComparer(string? comparerName)
+        {
+            if (string.IsNullOrWhiteSpace(comparerName)) return string.Empty;
+            if (comparerName!.StartsWith("Culture|", StringComparison.Ordinal))
+            {
+                var parts = comparerName.Split('|');
+                if (parts.Length != 3 || !bool.TryParse(parts[2], out var ignoreCase))
+                    throw new FormatException("The runtime default token stream contains invalid culture comparer metadata.");
+                return "[System.StringComparer]::Create([System.Globalization.CultureInfo]::GetCultureInfo('" +
+                       parts[1].Replace("'", "''") + "'), " + (ignoreCase ? "$true" : "$false") + ")";
+            }
+            switch (comparerName!.Trim())
+            {
+                case "Ordinal":
+                case "OrdinalIgnoreCase":
+                case "InvariantCulture":
+                case "InvariantCultureIgnoreCase":
+                    return "[System.StringComparer]::" + comparerName.Trim();
+                default:
+                    throw new FormatException("The runtime default token stream contains an unsupported dictionary comparer.");
+            }
         }
     }
 

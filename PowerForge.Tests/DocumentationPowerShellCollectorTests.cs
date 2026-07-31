@@ -113,6 +113,12 @@ function Get-CollectorFixture {
         $negativeDoubleAttributes.Add($negativeDoubleDefault)
         $parameters.Add('NegativeDouble', [System.Management.Automation.RuntimeDefinedParameter]::new('NegativeDouble', [double], $negativeDoubleAttributes))
 
+        $integralDoubleAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $integralDoubleDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $integralDoubleDefault.Value = [double]1
+        $integralDoubleAttributes.Add($integralDoubleDefault)
+        $parameters.Add('IntegralDouble', [System.Management.Automation.RuntimeDefinedParameter]::new('IntegralDouble', [double], $integralDoubleAttributes))
+
         $negativeSingleAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $negativeSingleDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $negativeSingleDefault.Value = [System.BitConverter]::ToSingle([byte[]](0, 0, 0, 128), 0)
@@ -160,6 +166,12 @@ function Get-CollectorFixture {
         $nonSzArrayTypeDefault.Value = [int].MakeArrayType(1)
         $nonSzArrayTypeAttributes.Add($nonSzArrayTypeDefault)
         $parameters.Add('NonSzArrayType', [System.Management.Automation.RuntimeDefinedParameter]::new('NonSzArrayType', [type], $nonSzArrayTypeAttributes))
+
+        $genericParameterTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $genericParameterTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $genericParameterTypeDefault.Value = ([System.Collections.Generic.List[int]].GetGenericTypeDefinition()).GetGenericArguments()[0]
+        $genericParameterTypeAttributes.Add($genericParameterTypeDefault)
+        $parameters.Add('GenericParameterType', [System.Management.Automation.RuntimeDefinedParameter]::new('GenericParameterType', [type], $genericParameterTypeAttributes))
 
         $caseModeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $caseModeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -358,6 +370,7 @@ function Get-AcceleratedOutput {
                 var invalidText = Assert.Single(command.Parameters, parameter => parameter.Name == "InvalidText");
                 var longHelp = Assert.Single(command.Parameters, parameter => parameter.Name == "LongHelp");
                 var negativeDouble = Assert.Single(command.Parameters, parameter => parameter.Name == "NegativeDouble");
+                var integralDouble = Assert.Single(command.Parameters, parameter => parameter.Name == "IntegralDouble");
                 var negativeSingle = Assert.Single(command.Parameters, parameter => parameter.Name == "NegativeSingle");
                 var guid = Assert.Single(command.Parameters, parameter => parameter.Name == "Guid");
                 var version = Assert.Single(command.Parameters, parameter => parameter.Name == "Version");
@@ -366,6 +379,7 @@ function Get-AcceleratedOutput {
                 var pointerType = Assert.Single(command.Parameters, parameter => parameter.Name == "PointerType");
                 var byRefType = Assert.Single(command.Parameters, parameter => parameter.Name == "ByRefType");
                 var nonSzArrayType = Assert.Single(command.Parameters, parameter => parameter.Name == "NonSzArrayType");
+                var genericParameterType = Assert.Single(command.Parameters, parameter => parameter.Name == "GenericParameterType");
                 var caseMode = Assert.Single(command.Parameters, parameter => parameter.Name == "CaseMode");
                 var uri = Assert.Single(command.Parameters, parameter => parameter.Name == "Uri");
                 var dictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "Dictionary");
@@ -402,7 +416,8 @@ function Get-AcceleratedOutput {
                 Assert.True(string.IsNullOrEmpty(invalidText.DefaultValue));
                 Assert.Equal(80000, longHelp.DefaultValue.Length);
                 Assert.All(longHelp.DefaultValue, character => Assert.Equal('x', character));
-                Assert.Equal("-0.0", negativeDouble.DefaultValue);
+                Assert.Equal("([double]-0.0)", negativeDouble.DefaultValue);
+                Assert.Equal("([double]1)", integralDouble.DefaultValue);
                 Assert.Equal("([single]-0.0)", negativeSingle.DefaultValue);
                 Assert.Equal(
                     "[System.Guid]::ParseExact('01234567-89ab-cdef-0123-456789abcdef', 'D')",
@@ -417,17 +432,21 @@ function Get-AcceleratedOutput {
                 Assert.Equal("[System.Int32].MakePointerType()", pointerType.DefaultValue);
                 Assert.Equal("[System.Int32].MakeByRefType()", byRefType.DefaultValue);
                 Assert.Equal("[System.Int32].MakeArrayType(1)", nonSzArrayType.DefaultValue);
+                Assert.True(string.IsNullOrEmpty(genericParameterType.DefaultValue));
                 Assert.Equal(
                     "[System.Enum]::ToObject([CollectorFixture.CaseMode], ([System.Int32]1))",
                     caseMode.DefaultValue);
                 Assert.Equal(
                     "[System.Uri]::new('https://example.com/a''b?x=1', [System.UriKind]::Absolute)",
                     uri.DefaultValue);
+                Assert.StartsWith(
+                    "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new(",
+                    dictionary.DefaultValue,
+                    StringComparison.Ordinal);
+                Assert.Contains("$dictionary.Add(('alpha'), (1))", dictionary.DefaultValue, StringComparison.Ordinal);
+                Assert.Contains("$dictionary.Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative)))", dictionary.DefaultValue, StringComparison.Ordinal);
                 Assert.Equal(
-                    "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new(); $dictionary.Add(('alpha'), (1)); $dictionary.Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
-                    dictionary.DefaultValue);
-                Assert.Equal(
-                    "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new(); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); return ,$dictionary }",
+                    "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Ordinal); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); return ,$dictionary }",
                     caseDistinctDictionary.DefaultValue);
                 Assert.True(string.IsNullOrEmpty(unsupportedCulture.DefaultValue));
                 Assert.Equal(new[] { "One", "Two" }, unsupportedCulture.PossibleValues);

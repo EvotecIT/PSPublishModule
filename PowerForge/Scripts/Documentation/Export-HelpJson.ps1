@@ -90,6 +90,9 @@ function AddRuntimeDefaultValueTokens(
     return
   }
   if ($value -is [type]) {
+    if ($value.IsGenericParameter) {
+      throw 'Generic-parameter Type defaults are not supported.'
+    }
     $tokens.Add([ordered]@{
       kind = 'Type'
       canonicalTypeName = GetCanonicalTypeNameFromType $value
@@ -208,9 +211,13 @@ function AddRuntimeDefaultValueTokens(
     [void]$referenceStack.Add($value)
     try {
       if ($value -is [System.Collections.IDictionary]) {
+        $comparerType = $null
+        $comparer = GetDictionaryComparer $value ([ref]$comparerType)
+        $comparerName = GetKnownDictionaryComparerName $comparer $comparerType
         $tokens.Add([ordered]@{
           kind = 'DictionaryStart'
           canonicalTypeName = GetConstructibleDictionaryTypeName $value
+          name = $comparerName
         }) | Out-Null
         foreach ($entry in $value.GetEnumerator()) {
           $tokens.Add([ordered]@{ kind = 'DictionaryEntryStart' }) | Out-Null
