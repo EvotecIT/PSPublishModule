@@ -279,6 +279,17 @@ function AddRuntimeDefaultValueTokens(
       'System.UInt64',
       'System.IntPtr',
       'System.UIntPtr') -contains $runtimeTypeName) {
+    if ($runtimeTypeName -eq 'System.IntPtr') {
+      $pointerValue = $value.ToInt64()
+      if ($pointerValue -lt [int]::MinValue -or $pointerValue -gt [int]::MaxValue) {
+        throw 'IntPtr defaults outside the 32-bit range are not portable.'
+      }
+    } elseif ($runtimeTypeName -eq 'System.UIntPtr') {
+      $pointerValue = $value.ToUInt64()
+      if ($pointerValue -gt [uint32]::MaxValue) {
+        throw 'UIntPtr defaults outside the 32-bit range are not portable.'
+      }
+    }
     $tokens.Add([ordered]@{
       kind = 'Formattable'
       text = ([System.IFormattable]$value).ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)

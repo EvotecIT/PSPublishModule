@@ -204,8 +204,16 @@ internal static class PowerShellDefaultValueFormatter
             case "System.UInt32": return "([System.UInt32]" + text + ")";
             case "System.Int64": return "([System.Int64]" + text + ")";
             case "System.UInt64": return "([System.UInt64]" + text + ")";
-            case "System.IntPtr": return "[System.IntPtr]::new(([System.Int64]" + text + "))";
-            case "System.UIntPtr": return "[System.UIntPtr]::new(([System.UInt64]" + text + "))";
+            case "System.IntPtr":
+                return long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var signedPointer) &&
+                       signedPointer >= int.MinValue && signedPointer <= int.MaxValue
+                    ? "[System.IntPtr]::new(([System.Int64]" + text + "))"
+                    : string.Empty;
+            case "System.UIntPtr":
+                return ulong.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var unsignedPointer) &&
+                       unsignedPointer <= uint.MaxValue
+                    ? "[System.UIntPtr]::new(([System.UInt64]" + text + "))"
+                    : string.Empty;
             default: return string.Empty;
         }
     }
