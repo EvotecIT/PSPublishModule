@@ -233,6 +233,22 @@ function GetPowerShellTypeDefaultExpression([type]$type) {
   if (TestPowerShellTypeLiteralName $canonicalTypeName) {
     return ('[' + $canonicalTypeName + ']')
   }
+  if ($type.IsGenericType -and -not $type.IsGenericTypeDefinition) {
+    $definitionExpression = GetPowerShellTypeDefaultExpression ($type.GetGenericTypeDefinition())
+    if ($definitionExpression.StartsWith('& {', [System.StringComparison]::Ordinal)) {
+      $definitionExpression = '(' + $definitionExpression + ')'
+    }
+    $argumentExpressions = [System.Collections.Generic.List[string]]::new()
+    foreach ($argumentType in $type.GetGenericArguments()) {
+      $argumentExpression = GetPowerShellTypeDefaultExpression $argumentType
+      if ($argumentExpression.StartsWith('& {', [System.StringComparison]::Ordinal)) {
+        $argumentExpression = '(' + $argumentExpression + ')'
+      }
+      $argumentExpressions.Add($argumentExpression)
+    }
+    return ($definitionExpression + '.MakeGenericType([type[]]@(' +
+      ($argumentExpressions -join ', ') + '))')
+  }
   if ([string]::IsNullOrWhiteSpace($type.FullName) -or
       [string]::IsNullOrWhiteSpace($type.Assembly.FullName)) {
     throw ('Type has no safely resolvable runtime identity: ' + $canonicalTypeName)

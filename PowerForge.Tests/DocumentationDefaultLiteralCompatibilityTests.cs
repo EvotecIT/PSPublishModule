@@ -514,11 +514,11 @@ function Get-DefaultLiteralFixture {
                 Default("WhitespaceType"),
                 StringComparison.Ordinal);
             Assert.StartsWith(
-                "& { $collection = [System.Activator]::CreateInstance((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies()",
+                "& { $collection = [System.Activator]::CreateInstance(([System.Collections.Generic.List`1].MakeGenericType([type[]]@((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies()",
                 Default("UnsafeList"),
                 StringComparison.Ordinal);
             Assert.StartsWith(
-                "& { $dictionary = [System.Activator]::CreateInstance((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies()",
+                "& { $dictionary = [System.Activator]::CreateInstance(([System.Collections.Generic.Dictionary`2].MakeGenericType([type[]]@((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies()",
                 Default("UnsafeDictionary"),
                 StringComparison.Ordinal);
             Assert.StartsWith(
