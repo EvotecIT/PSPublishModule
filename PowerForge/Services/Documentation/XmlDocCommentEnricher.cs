@@ -329,24 +329,7 @@ internal sealed class XmlDocCommentEnricher
                 return exact;
 
             if (requested.IndexOf('.') >= 0 || requested.IndexOf('+') >= 0)
-            {
-                XmlDocMember? qualifiedMatch = null;
-                foreach (var pair in _members.OrderBy(pair => pair.Key, StringComparer.Ordinal))
-                {
-                    if (!pair.Key.StartsWith("T:", StringComparison.Ordinal))
-                        continue;
-
-                    var current = pair.Key.Substring(2);
-                    if (!current.Equals(requested, StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    if (qualifiedMatch is not null)
-                        return null;
-                    qualifiedMatch = pair.Value;
-                }
-
-                return qualifiedMatch;
-            }
+                return null;
 
             var simpleName = requested;
             var lastDot = simpleName.LastIndexOf('.');

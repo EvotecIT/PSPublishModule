@@ -1156,6 +1156,11 @@ Invoke-Demo -Settings {
                     {
                         Name = "RESULT",
                         ClrTypeName = "Demo.Namespace.RESULT"
+                    },
+                    new DocumentationTypeHelp
+                    {
+                        Name = "result",
+                        ClrTypeName = "Demo.Namespace.result"
                     }
                 ]
             };
@@ -1169,7 +1174,8 @@ Invoke-Demo -Settings {
             Assert.Collection(
                 command.Outputs,
                 output => Assert.Equal("Mixed-case result.", output.Description),
-                output => Assert.Equal("Upper-case result.", output.Description));
+                output => Assert.Equal("Upper-case result.", output.Description),
+                output => Assert.True(string.IsNullOrEmpty(output.Description)));
         }
         finally
         {

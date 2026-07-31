@@ -11,11 +11,15 @@ function MergeParameterPossibleValues(
     [System.StringComparer]::OrdinalIgnoreCase
   }
   $seenMetadata = [System.Collections.Generic.HashSet[string]]::new($metadataComparer)
+  $seenMetadataDisplay = [System.Collections.Generic.HashSet[string]]::new($metadataComparer)
   foreach ($value in @($metadataValues)) {
     if ($null -eq $value) { continue }
     $normalized = if ($preserveMetadataText) { [string]$value } else { ([string]$value).Trim() }
-    if (($preserveMetadataText -or $normalized) -and $seenMetadata.Add($normalized)) {
-      $result.Add($normalized)
+    $display = ConvertToXmlSafeDefaultHelpText $normalized
+    if (($preserveMetadataText -or $normalized) -and
+        $seenMetadata.Add($normalized) -and
+        $seenMetadataDisplay.Add($display)) {
+      $result.Add($display)
     }
   }
 
@@ -24,8 +28,9 @@ function MergeParameterPossibleValues(
   foreach ($value in @($enumValues)) {
     if ($null -eq $value) { continue }
     $normalized = ([string]$value).Trim()
-    if ($normalized -and $seenOrdinal.Add($normalized)) {
-      $result.Add($normalized)
+    $display = ConvertToXmlSafeDefaultHelpText $normalized
+    if ($normalized -and $seenOrdinal.Add($display)) {
+      $result.Add($display)
     }
   }
   return @($result.ToArray())

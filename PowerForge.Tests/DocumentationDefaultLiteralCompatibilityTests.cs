@@ -407,6 +407,18 @@ function Get-DefaultLiteralFixture {
         $xmlInvalidTypeAttributes.Add($xmlInvalidTypeDefault)
         $parameters.Add('XmlInvalidType', [System.Management.Automation.RuntimeDefinedParameter]::new('XmlInvalidType', [type], $xmlInvalidTypeAttributes))
 
+        $intPtrAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $intPtrDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $intPtrDefault.Value = [System.IntPtr]::new(([long]-42))
+        $intPtrAttributes.Add($intPtrDefault)
+        $parameters.Add('IntPtr', [System.Management.Automation.RuntimeDefinedParameter]::new('IntPtr', [System.IntPtr], $intPtrAttributes))
+
+        $uintPtrAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $uintPtrDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $uintPtrDefault.Value = [System.UIntPtr]::new(([uint64]42))
+        $uintPtrAttributes.Add($uintPtrDefault)
+        $parameters.Add('UIntPtr', [System.Management.Automation.RuntimeDefinedParameter]::new('UIntPtr', [System.UIntPtr], $uintPtrAttributes))
+
         $largeIntPtrAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $largeIntPtrDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $largeIntPtrDefault.Value = if ([System.IntPtr]::Size -eq 8) { [System.IntPtr]::new(([long]2147483648)) } else { [System.IntPtr]::new(([long]2147483647)) }
@@ -538,7 +550,8 @@ function Get-DefaultLiteralFixture {
             'RestrictedCaseMode', [DefaultLiteralFixture.CaseMode], $restrictedCaseModeAttributes))
 
         $caseSensitiveValidateSetAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
-        $caseSensitiveValidateSet = [System.Management.Automation.ValidateSetAttribute]::new([string[]]@(' A ', ' a '))
+        $caseSensitiveValidateSet = [System.Management.Automation.ValidateSetAttribute]::new(
+            [string[]]@(' A ', ' a ', ('bad' + [char]1 + 'value')))
         $caseSensitiveValidateSet.IgnoreCase = $false
         $caseSensitiveValidateSetAttributes.Add($caseSensitiveValidateSet)
         $parameters.Add('CaseSensitiveValidateSet', [System.Management.Automation.RuntimeDefinedParameter]::new(
@@ -615,8 +628,9 @@ $invalidOutputFunction = "function Get-InvalidOutputFixture { [OutputType('Bad" 
             Assert.DoesNotContain('\u0001', generatedMaml);
             Assert.Contains("> A </command:parameterValue>", generatedMaml, StringComparison.Ordinal);
             Assert.Contains("> a </command:parameterValue>", generatedMaml, StringComparison.Ordinal);
+            Assert.Contains(">bad([char]1)value</command:parameterValue>", generatedMaml, StringComparison.Ordinal);
             var generatedMarkdown = File.ReadAllText(Path.Combine(markdownDirectory, "Get-DefaultLiteralFixture.md"));
-            Assert.Contains("Possible values: ' A ', ' a '", generatedMarkdown, StringComparison.Ordinal);
+            Assert.Contains("Possible values: ' A ', ' a ', bad([char]1)value", generatedMarkdown, StringComparison.Ordinal);
             var invalidOutput = Assert.Single(invalidOutputCommand.Outputs);
             Assert.Equal("Bad([char]1)Name", invalidOutput.Name);
             Assert.Equal("Bad([char]1)Name", invalidOutput.ClrTypeName);
@@ -701,6 +715,8 @@ $invalidOutputFunction = "function Get-InvalidOutputFixture { [OutputType('Bad" 
                 StringComparison.Ordinal);
             Assert.DoesNotContain('\u0001', Default("XmlInvalidType"));
             Assert.Contains("([char]1)", Default("XmlInvalidType"), StringComparison.Ordinal);
+            Assert.Equal("[System.IntPtr]::new(([System.Int64]-42))", Default("IntPtr"));
+            Assert.Equal("[System.UIntPtr]::new(([System.UInt64]42))", Default("UIntPtr"));
             if (Environment.Is64BitProcess)
             {
                 Assert.True(string.IsNullOrEmpty(Default("LargeIntPtr")));
@@ -769,7 +785,7 @@ $invalidOutputFunction = "function Get-InvalidOutputFixture { [OutputType('Bad" 
                 new[] { "A" },
                 Assert.Single(command.Parameters, parameter => parameter.Name == "RestrictedCaseMode").PossibleValues);
             Assert.Equal(
-                new[] { " A ", " a " },
+                new[] { " A ", " a ", "bad([char]1)value" },
                 Assert.Single(command.Parameters, parameter => parameter.Name == "CaseSensitiveValidateSet").PossibleValues);
             Assert.Equal(
                 "[System.Enum]::ToObject([DefaultLiteralFixture.WeirdMode], ([System.Int32]1))",
