@@ -180,6 +180,10 @@ function GetDictionaryConstructorExpression([System.Collections.IDictionary]$val
   return ('[' + $dictionaryTypeName + ']::new(' + $comparerExpression + ')')
 }
 
+function TestPowerShellTypeLiteralName([string]$canonicalTypeName) {
+  return $canonicalTypeName -match '^[A-Za-z_][A-Za-z0-9_.+`]*(?:\[[A-Za-z0-9_.+`,\[\]]+\])?$'
+}
+
 function GetPowerShellTypeDefaultExpression([type]$type) {
   if ($type.IsGenericParameter) {
     throw 'Generic-parameter Type defaults are not supported.'
@@ -196,7 +200,7 @@ function GetPowerShellTypeDefaultExpression([type]$type) {
     return ((GetPowerShellTypeDefaultExpression ($type.GetElementType())) + '.MakeArrayType(1)')
   }
   $canonicalTypeName = GetCanonicalTypeNameFromType $type
-  if ($canonicalTypeName -match '^[A-Za-z_][A-Za-z0-9_.+`]*(?:\[[A-Za-z0-9_.+`,\[\]]+\])?$') {
+  if (TestPowerShellTypeLiteralName $canonicalTypeName) {
     return ('[' + $canonicalTypeName + ']')
   }
   if ([string]::IsNullOrWhiteSpace($type.FullName) -or

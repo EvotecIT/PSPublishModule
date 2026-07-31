@@ -86,15 +86,18 @@ function ConvertToPowerShellDefaultValue(
   if ($value -is [enum]) {
     $enumType = $value.GetType()
     $enumName = GetPowerShellSafeEnumName $enumType $value
-    if ($enumName) {
-      return ('[' + $enumType.FullName + ']::' + $enumName)
+    $enumTypeExpression = GetPowerShellTypeDefaultExpression $enumType
+    $enumTypeIsLiteral = TestPowerShellTypeLiteralName (GetCanonicalTypeNameFromType $enumType)
+    if ($enumName -and $enumTypeIsLiteral) {
+      return ($enumTypeExpression + '::' + $enumName)
     }
     $underlyingValue = [System.Convert]::ChangeType(
       $value,
       [System.Enum]::GetUnderlyingType($enumType),
       [System.Globalization.CultureInfo]::InvariantCulture)
     $underlyingTypeName = GetCanonicalTypeNameFromType ([System.Enum]::GetUnderlyingType($enumType))
-    return ('[System.Enum]::ToObject([' + $enumType.FullName + '], ([' + $underlyingTypeName + ']' + [string]$underlyingValue + '))')
+    $enumTypeArgument = if ($enumTypeIsLiteral) { $enumTypeExpression } else { '(' + $enumTypeExpression + ')' }
+    return ('[System.Enum]::ToObject(' + $enumTypeArgument + ', ([' + $underlyingTypeName + ']' + [string]$underlyingValue + '))')
   }
   if ($value -is [type]) {
     return GetPowerShellTypeDefaultExpression $value
@@ -149,8 +152,12 @@ function ConvertToPowerShellDefaultValue(
     return ('[System.TimeOnly]::new(([long]' + $ticks + '))')
   }
   if ($value -is [datetime]) {
-    $binary = $value.ToBinary().ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    return ('[System.DateTime]::FromBinary(([long]' + $binary + '))')
+    if ($value.Kind -eq [System.DateTimeKind]::Local -and
+        [System.TimeZoneInfo]::Local.IsAmbiguousTime($value)) {
+      throw 'Ambiguous local DateTime defaults cannot be represented portably.'
+    }
+    $ticks = $value.Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    return ('[System.DateTime]::new(([long]' + $ticks + '), [System.DateTimeKind]::' + $value.Kind + ')')
   }
   if ($value -is [datetimeoffset]) {
     $dateText = $value.ToString('O', [System.Globalization.CultureInfo]::InvariantCulture)
@@ -161,6 +168,9 @@ function ConvertToPowerShellDefaultValue(
     return ("[System.TimeSpan]::ParseExact('" + $timeText + "', 'c', [System.Globalization.CultureInfo]::InvariantCulture)")
   }
   if ($value -is [scriptblock]) {
+    if ($null -ne $value.Module) {
+      throw 'Stateful or module-bound ScriptBlock defaults are not supported.'
+    }
     $scriptText = ConvertToPowerShellDefaultValue ([string]$value.ToString())
     return ('[scriptblock]::Create(' + $scriptText + ')')
   }

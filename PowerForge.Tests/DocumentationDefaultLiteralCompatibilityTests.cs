@@ -29,9 +29,12 @@ if (-not ('DefaultLiteralFixture.WeirdMode' -as [type])) {
         [int])
     [void]$enumBuilder.DefineLiteral('A-B', 1)
     [void]$enumBuilder.CreateTypeInfo()
-    $script:unsafeDefaultType = $moduleBuilder.DefineType(
+    $unsafeTypeBuilder = $moduleBuilder.DefineEnum(
         'DefaultLiteralFixture.A-B',
-        [System.Reflection.TypeAttributes]::Public).CreateTypeInfo().AsType()
+        [System.Reflection.TypeAttributes]::Public,
+        [int])
+    [void]$unsafeTypeBuilder.DefineLiteral('X', 1)
+    $script:unsafeDefaultType = $unsafeTypeBuilder.CreateTypeInfo().AsType()
 }
 if ($null -eq $script:unsafeDefaultType) {
     $script:unsafeDefaultType = [System.AppDomain]::CurrentDomain.GetAssemblies() |
@@ -215,6 +218,12 @@ function Get-DefaultLiteralFixture {
         $unsafeTypeAttributes.Add($unsafeTypeDefault)
         $parameters.Add('UnsafeType', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafeType', [type], $unsafeTypeAttributes))
 
+        $unsafeEnumAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $unsafeEnumDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $unsafeEnumDefault.Value = [System.Enum]::ToObject($script:unsafeDefaultType, 1)
+        $unsafeEnumAttributes.Add($unsafeEnumDefault)
+        $parameters.Add('UnsafeEnum', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafeEnum', $script:unsafeDefaultType, $unsafeEnumAttributes))
+
         $dateOnlyAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $dateOnlyDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $dateOnlyDefault.Value = [System.DateOnly]::FromDayNumber(739827)
@@ -250,6 +259,13 @@ function Get-DefaultLiteralFixture {
         $scriptDefault.Value = [scriptblock]::Create("1+2`n" + '```')
         $scriptAttributes.Add($scriptDefault)
         $parameters.Add('Script', [System.Management.Automation.RuntimeDefinedParameter]::new('Script', [scriptblock], $scriptAttributes))
+
+        $statefulScriptAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $statefulScriptDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $capturedValue = 42
+        $statefulScriptDefault.Value = { $capturedValue }.GetNewClosure()
+        $statefulScriptAttributes.Add($statefulScriptDefault)
+        $parameters.Add('StatefulScript', [System.Management.Automation.RuntimeDefinedParameter]::new('StatefulScript', [scriptblock], $statefulScriptAttributes))
 
         $pointerTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $pointerTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -390,6 +406,10 @@ function Get-DefaultLiteralFixture {
                 "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
                 Default("UnsafeType"),
                 StringComparison.Ordinal);
+            Assert.StartsWith(
+                "[System.Enum]::ToObject((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
+                Default("UnsafeEnum"),
+                StringComparison.Ordinal);
             Assert.Equal(
                 "[System.DateOnly]::FromDayNumber(([int]739827))",
                 Default("DateOnly"));
@@ -398,7 +418,7 @@ function Get-DefaultLiteralFixture {
                 Default("TimeOnly"));
             var localDateTime = new DateTime(639210116961234567, DateTimeKind.Local);
             Assert.Equal(
-                $"[System.DateTime]::FromBinary(([long]{localDateTime.ToBinary()}))",
+                $"[System.DateTime]::new(([long]{localDateTime.Ticks}), [System.DateTimeKind]::Local)",
                 Default("DateTime"));
             Assert.Equal(
                 "[System.DateTimeOffset]::ParseExact('2026-07-30T12:34:56.1234567+05:30', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",
@@ -409,6 +429,7 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 "[scriptblock]::Create((-join @('1+2', ([char]10), '```')))",
                 Default("Script"));
+            Assert.True(string.IsNullOrEmpty(Default("StatefulScript")));
             Assert.Equal("[System.Int32].MakePointerType()", Default("PointerType"));
             Assert.Equal("[System.Int32].MakeByRefType()", Default("ByRefType"));
             Assert.Equal("[System.Int32].MakeArrayType(1)", Default("NonSzArrayType"));
