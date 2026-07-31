@@ -4,6 +4,7 @@
   [string]$OutputJsonPath
 )
 # <PowerForgeTypeIdentityHelpers />
+# <PowerForgeDefaultValueCollectionHelpers />
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
@@ -117,6 +118,10 @@ function ConvertToPowerShellDefaultValue(
     $decimalText = $value.ToString([System.Globalization.CultureInfo]::InvariantCulture)
     return ("[System.Decimal]::Parse('" + $decimalText + "', [System.Globalization.CultureInfo]::InvariantCulture)")
   }
+  if ($value.GetType().FullName -eq 'System.Numerics.BigInteger') {
+    $integerText = $value.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    return ("[System.Numerics.BigInteger]::Parse('" + $integerText + "', [System.Globalization.CultureInfo]::InvariantCulture)")
+  }
   if ($value -is [guid]) {
     return ("[System.Guid]::ParseExact('" + $value.ToString('D') + "', 'D')")
   }
@@ -170,6 +175,9 @@ function ConvertToPowerShellDefaultValue(
           $entries.Add(('(' + $key + ') = ' + $entryValue))
         }
         return ('@{ ' + ($entries -join '; ') + ' }')
+      }
+      if ($value -is [System.Array] -and $value.Rank -gt 1) {
+        return ConvertMultidimensionalArrayToPowerShellDefaultValue $value $referenceStack
       }
       $items = [System.Collections.Generic.List[string]]::new()
       foreach ($item in $value) {
@@ -372,6 +380,7 @@ try {
               $acceptWild = $true
             }
             if ($attr -is [System.Management.Automation.PSDefaultValueAttribute]) {
+              $hasMetadataDefault = $true
               $defaultHelp = [string]$attr.Help
               if (-not [string]::IsNullOrWhiteSpace($defaultHelp)) {
                 if (TestDefaultTextNeedsEncoding $defaultHelp) {
@@ -382,7 +391,6 @@ try {
               } else {
                 $defaultValue = ConvertToPowerShellDefaultValue $attr.Value
               }
-              $hasMetadataDefault = $true
             }
           }
         }

@@ -39,6 +39,12 @@ function Get-DefaultLiteralFixture {
         $decimalAttributes.Add($decimalDefault)
         $parameters.Add('PreciseDecimal', [System.Management.Automation.RuntimeDefinedParameter]::new('PreciseDecimal', [decimal], $decimalAttributes))
 
+        $bigIntegerAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $bigIntegerDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $bigIntegerDefault.Value = [System.Numerics.BigInteger]::Parse('1234567890123456789012345678901234567890', [System.Globalization.CultureInfo]::InvariantCulture)
+        $bigIntegerAttributes.Add($bigIntegerDefault)
+        $parameters.Add('BigInteger', [System.Management.Automation.RuntimeDefinedParameter]::new('BigInteger', [System.Numerics.BigInteger], $bigIntegerAttributes))
+
         $guidAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $guidDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $guidDefault.Value = [guid]::ParseExact('01234567-89ab-cdef-0123-456789abcdef', 'D')
@@ -73,6 +79,17 @@ function Get-DefaultLiteralFixture {
         $cyclicDefault.Value = $cyclicValue
         $cyclicAttributes.Add($cyclicDefault)
         $parameters.Add('CyclicCollection', [System.Management.Automation.RuntimeDefinedParameter]::new('CyclicCollection', [object], $cyclicAttributes))
+
+        $matrixAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $matrixDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $matrix = [int[,]]::new(2, 2)
+        $matrix[0, 0] = 1
+        $matrix[0, 1] = 2
+        $matrix[1, 0] = 3
+        $matrix[1, 1] = 4
+        $matrixDefault.Value = $matrix
+        $matrixAttributes.Add($matrixDefault)
+        $parameters.Add('Matrix', [System.Management.Automation.RuntimeDefinedParameter]::new('Matrix', [int[,]], $matrixAttributes))
 
         $dateOnlyAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $dateOnlyDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -125,6 +142,33 @@ function Get-DefaultLiteralFixture {
     VariablesToExport = @()
 }
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            var helpDirectory = Path.Combine(root, "en-US");
+            Directory.CreateDirectory(helpDirectory);
+            File.WriteAllText(Path.Combine(helpDirectory, "DefaultLiteralFixture-help.xml"), """
+<?xml version="1.0" encoding="utf-8"?>
+<helpItems schema="maml" xmlns="http://msh">
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Get-DefaultLiteralFixture</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>DefaultLiteralFixture</command:noun>
+      <maml:description><maml:para>Exercises typed defaults.</maml:para></maml:description>
+    </command:details>
+    <maml:description><maml:para>Exercises typed defaults.</maml:para></maml:description>
+    <command:syntax><command:syntaxItem><maml:name>Get-DefaultLiteralFixture</maml:name></command:syntaxItem></command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>CyclicCollection</maml:name>
+        <command:parameterValue required="false" variableLength="false">Object</command:parameterValue>
+        <dev:type><maml:name>Object</maml:name></dev:type>
+        <dev:defaultValue>Stale external-help default</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes />
+    <command:returnValues />
+  </command:command>
+</helpItems>
+""", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             var payload = new DocumentationEngine(new PowerShellRunner(), new NullLogger())
                 .ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
@@ -135,6 +179,9 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 "[System.Decimal]::Parse('0.1234567890123456789012345678', [System.Globalization.CultureInfo]::InvariantCulture)",
                 Default("PreciseDecimal"));
+            Assert.Equal(
+                "[System.Numerics.BigInteger]::Parse('1234567890123456789012345678901234567890', [System.Globalization.CultureInfo]::InvariantCulture)",
+                Default("BigInteger"));
             Assert.Equal(
                 "[System.Guid]::ParseExact('01234567-89ab-cdef-0123-456789abcdef', 'D')",
                 Default("Guid"));
@@ -148,6 +195,9 @@ function Get-DefaultLiteralFixture {
                 "@{ ('alpha') = 1; ('endpoint') = [System.Uri]::new('relative/path', [System.UriKind]::Relative) }",
                 Default("Dictionary"));
             Assert.True(string.IsNullOrEmpty(Default("CyclicCollection")));
+            Assert.Equal(
+                "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue(1, [int[]]@(0, 0)); $array.SetValue(2, [int[]]@(0, 1)); $array.SetValue(3, [int[]]@(1, 0)); $array.SetValue(4, [int[]]@(1, 1)); Write-Output -NoEnumerate $array }",
+                Default("Matrix"));
             Assert.Equal(
                 "[System.DateOnly]::FromDayNumber(([int]739827))",
                 Default("DateOnly"));

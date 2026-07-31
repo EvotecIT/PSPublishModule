@@ -517,8 +517,10 @@ public sealed class DocumentationEngine
     {
         var script = EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.ps1");
         var typeIdentityHelpers = EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.TypeIdentity.ps1");
-        return script.Replace(
-            "# <PowerForgeTypeIdentityHelpers />",
-            typeIdentityHelpers);
+        var defaultValueCollectionHelpers =
+            EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.DefaultValueCollections.ps1");
+        return script
+            .Replace("# <PowerForgeTypeIdentityHelpers />", typeIdentityHelpers)
+            .Replace("# <PowerForgeDefaultValueCollectionHelpers />", defaultValueCollectionHelpers);
     }
 }
