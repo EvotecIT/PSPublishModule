@@ -39,6 +39,10 @@ if (-not ('DefaultLiteralFixture.WeirdMode' -as [type])) {
         ' DefaultLiteralFixture.Edge ',
         [System.Reflection.TypeAttributes]::Public)
     $script:whitespaceDefaultType = $whitespaceTypeBuilder.CreateTypeInfo().AsType()
+    $xmlInvalidTypeBuilder = $moduleBuilder.DefineType(
+        ('DefaultLiteralFixture.Control' + [char]1),
+        [System.Reflection.TypeAttributes]::Public)
+    $script:xmlInvalidDefaultType = $xmlInvalidTypeBuilder.CreateTypeInfo().AsType()
 }
 if ($null -eq $script:unsafeDefaultType) {
     $script:unsafeDefaultType = [System.AppDomain]::CurrentDomain.GetAssemblies() |
@@ -50,6 +54,13 @@ if ($null -eq $script:whitespaceDefaultType) {
     $script:whitespaceDefaultType = [System.AppDomain]::CurrentDomain.GetAssemblies() |
         ForEach-Object { $_.GetTypes() } |
         Where-Object { $_.FullName -ceq ' DefaultLiteralFixture.Edge ' } |
+        Select-Object -First 1
+}
+if ($null -eq $script:xmlInvalidDefaultType) {
+    $xmlInvalidTypeName = 'DefaultLiteralFixture.Control' + [char]1
+    $script:xmlInvalidDefaultType = [System.AppDomain]::CurrentDomain.GetAssemblies() |
+        ForEach-Object { $_.GetTypes() } |
+        Where-Object { $_.FullName -ceq $xmlInvalidTypeName } |
         Select-Object -First 1
 }
 
@@ -309,6 +320,24 @@ function Get-DefaultLiteralFixture {
         $whitespaceTypeAttributes.Add($whitespaceTypeDefault)
         $parameters.Add('WhitespaceType', [System.Management.Automation.RuntimeDefinedParameter]::new('WhitespaceType', [type], $whitespaceTypeAttributes))
 
+        $xmlInvalidTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $xmlInvalidTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $xmlInvalidTypeDefault.Value = $script:xmlInvalidDefaultType
+        $xmlInvalidTypeAttributes.Add($xmlInvalidTypeDefault)
+        $parameters.Add('XmlInvalidType', [System.Management.Automation.RuntimeDefinedParameter]::new('XmlInvalidType', [type], $xmlInvalidTypeAttributes))
+
+        $largeIntPtrAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $largeIntPtrDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $largeIntPtrDefault.Value = if ([System.IntPtr]::Size -eq 8) { [System.IntPtr]::new(([long]2147483648)) } else { [System.IntPtr]::new(([long]2147483647)) }
+        $largeIntPtrAttributes.Add($largeIntPtrDefault)
+        $parameters.Add('LargeIntPtr', [System.Management.Automation.RuntimeDefinedParameter]::new('LargeIntPtr', [System.IntPtr], $largeIntPtrAttributes))
+
+        $largeUIntPtrAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $largeUIntPtrDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $largeUIntPtrDefault.Value = if ([System.IntPtr]::Size -eq 8) { [System.UIntPtr]::new(([uint64]4294967296)) } else { [System.UIntPtr]::new(([uint32]4294967295)) }
+        $largeUIntPtrAttributes.Add($largeUIntPtrDefault)
+        $parameters.Add('LargeUIntPtr', [System.Management.Automation.RuntimeDefinedParameter]::new('LargeUIntPtr', [System.UIntPtr], $largeUIntPtrAttributes))
+
         $unsafePointerAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $unsafePointerDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $unsafePointerDefault.Value = $script:unsafeDefaultType.MakePointerType()
@@ -529,6 +558,18 @@ function Get-DefaultLiteralFixture {
                 "Where-Object { $_.FullName -ceq ' DefaultLiteralFixture.Edge ' }",
                 Default("WhitespaceType"),
                 StringComparison.Ordinal);
+            Assert.DoesNotContain('\u0001', Default("XmlInvalidType"));
+            Assert.Contains("([char]1)", Default("XmlInvalidType"), StringComparison.Ordinal);
+            if (Environment.Is64BitProcess)
+            {
+                Assert.True(string.IsNullOrEmpty(Default("LargeIntPtr")));
+                Assert.True(string.IsNullOrEmpty(Default("LargeUIntPtr")));
+            }
+            else
+            {
+                Assert.Equal("[System.IntPtr]::new(([System.Int64]2147483647))", Default("LargeIntPtr"));
+                Assert.Equal("[System.UIntPtr]::new(([System.UInt64]4294967295))", Default("LargeUIntPtr"));
+            }
             Assert.StartsWith(
                 "& { $collection = [System.Activator]::CreateInstance(([System.Collections.Generic.List`1].MakeGenericType([type[]]@((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies()",
                 Default("UnsafeList"),

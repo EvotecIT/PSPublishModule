@@ -13,8 +13,20 @@ function ConvertScalarToPowerShellDefaultValue([object]$value) {
     'System.UInt32' { return ('([System.UInt32]' + $scalarText + ')') }
     'System.Int64' { return ('([System.Int64]' + $scalarText + ')') }
     'System.UInt64' { return ('([System.UInt64]' + $scalarText + ')') }
-    'System.IntPtr' { return ('[System.IntPtr]::new(([System.Int64]' + $scalarText + '))') }
-    'System.UIntPtr' { return ('[System.UIntPtr]::new(([System.UInt64]' + $scalarText + '))') }
+    'System.IntPtr' {
+      $pointerValue = $value.ToInt64()
+      if ($pointerValue -lt [int]::MinValue -or $pointerValue -gt [int]::MaxValue) {
+        throw 'IntPtr defaults outside the 32-bit range are not portable.'
+      }
+      return ('[System.IntPtr]::new(([System.Int64]' + $scalarText + '))')
+    }
+    'System.UIntPtr' {
+      $pointerValue = $value.ToUInt64()
+      if ($pointerValue -gt [uint32]::MaxValue) {
+        throw 'UIntPtr defaults outside the 32-bit range are not portable.'
+      }
+      return ('[System.UIntPtr]::new(([System.UInt64]' + $scalarText + '))')
+    }
   }
   throw ('Unsupported PSDefaultValue runtime type: ' + $value.GetType().FullName)
 }

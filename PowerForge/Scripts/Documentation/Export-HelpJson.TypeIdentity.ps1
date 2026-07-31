@@ -267,14 +267,14 @@ function GetPowerShellTypeDefaultExpression([type]$type) {
       [string]::IsNullOrWhiteSpace($type.Assembly.FullName)) {
     throw ('Type has no safely resolvable runtime identity: ' + $canonicalTypeName)
   }
-  $typeName = $type.FullName.Replace("'", "''")
-  $assemblyName = $type.Assembly.FullName.Replace("'", "''")
+  $typeNameExpression = ConvertToPowerShellDefaultValue ([string]$type.FullName)
+  $assemblyNameExpression = ConvertToPowerShellDefaultValue ([string]$type.Assembly.FullName)
   return ("& { `$assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | " +
-    "Where-Object { `$_.FullName -eq '" + $assemblyName + "' } | Select-Object -First 1; " +
+    "Where-Object { `$_.FullName -eq " + $assemblyNameExpression + " } | Select-Object -First 1; " +
     "if (`$null -eq `$assembly) { throw 'Type assembly is not loaded.' }; " +
-    "`$type = `$assembly.GetType('" + $typeName + "', `$false, `$false); " +
+    "`$type = `$assembly.GetType(" + $typeNameExpression + ", `$false, `$false); " +
     "if (`$null -eq `$type) { `$type = `$assembly.GetTypes() | " +
-    "Where-Object { `$_.FullName -ceq '" + $typeName + "' } | Select-Object -First 1 }; " +
+    "Where-Object { `$_.FullName -ceq " + $typeNameExpression + " } | Select-Object -First 1 }; " +
     "if (`$null -eq `$type) { throw 'Type is not available in the loaded assembly.' }; return `$type }")
 }
 
