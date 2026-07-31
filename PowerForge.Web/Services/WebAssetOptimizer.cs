@@ -202,7 +202,11 @@ public static partial class WebAssetOptimizer
                     MarkUpdated);
                 result.HtmlHashRewriteCount = rewrites.HtmlFilesRewritten;
                 result.CssHashRewriteCount = rewrites.CssFilesRewritten;
-                var manifestPath = WriteHashManifest(siteRoot, hashSpec, hashMap);
+                var manifestPath = WriteHashManifest(
+                    siteRoot,
+                    hashSpec,
+                    hashMap,
+                    protectedStoryArtifacts);
                 if (!string.IsNullOrWhiteSpace(manifestPath))
                 {
                     result.HashManifestPath = manifestPath;
@@ -300,7 +304,11 @@ public static partial class WebAssetOptimizer
 
         if (policy?.CacheHeaders?.Enabled == true)
         {
-            var headersPath = WriteCacheHeaders(siteRoot, policy.CacheHeaders, hashMap);
+            var headersPath = WriteCacheHeaders(
+                siteRoot,
+                policy.CacheHeaders,
+                hashMap,
+                protectedStoryArtifacts);
             if (!string.IsNullOrWhiteSpace(headersPath))
             {
                 result.CacheHeadersWritten = true;
@@ -327,21 +335,28 @@ public static partial class WebAssetOptimizer
         {
             if (TryResolveUnderRoot(siteRoot, options.ReportPath.TrimStart('/', '\\'), out var reportPath))
             {
-                result.ReportPath = reportPath;
-                var json = JsonSerializer.Serialize(result, new JsonSerializerOptions
+                if (protectedStoryArtifacts.Contains(Path.GetFullPath(reportPath)))
                 {
-                    WriteIndented = true
-                });
-                var write = true;
-                if (File.Exists(reportPath))
-                {
-                    var existing = File.ReadAllText(reportPath);
-                    write = !string.Equals(existing, json, StringComparison.Ordinal);
+                    Trace.TraceWarning($"Optimize report path is protected by a visual-story manifest: {options.ReportPath}");
                 }
-                if (write)
+                else
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
-                    File.WriteAllText(reportPath, json);
+                    result.ReportPath = reportPath;
+                    var json = JsonSerializer.Serialize(result, new JsonSerializerOptions
+                    {
+                        WriteIndented = true
+                    });
+                    var write = true;
+                    if (File.Exists(reportPath))
+                    {
+                        var existing = File.ReadAllText(reportPath);
+                        write = !string.Equals(existing, json, StringComparison.Ordinal);
+                    }
+                    if (write)
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
+                        File.WriteAllText(reportPath, json);
+                    }
                 }
             }
             else

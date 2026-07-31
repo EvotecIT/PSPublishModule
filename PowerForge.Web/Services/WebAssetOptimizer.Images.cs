@@ -604,7 +604,11 @@ public static partial class WebAssetOptimizer
         return Convert.ToHexString(hash).Substring(0, 8).ToLowerInvariant();
     }
 
-    private static string? WriteHashManifest(string siteRoot, AssetHashSpec spec, Dictionary<string, string> map)
+    private static string? WriteHashManifest(
+        string siteRoot,
+        AssetHashSpec spec,
+        Dictionary<string, string> map,
+        IReadOnlySet<string> protectedStoryArtifacts)
     {
         if (map.Count == 0) return null;
         var manifestRelative = string.IsNullOrWhiteSpace(spec.ManifestPath)
@@ -615,6 +619,11 @@ public static partial class WebAssetOptimizer
             Trace.TraceWarning($"Hash manifest path outside site root: {spec.ManifestPath}");
             return null;
         }
+        if (protectedStoryArtifacts.Contains(Path.GetFullPath(path)))
+        {
+            Trace.TraceWarning($"Hash manifest path is protected by a visual-story manifest: {spec.ManifestPath}");
+            return null;
+        }
         var json = System.Text.Json.JsonSerializer.Serialize(map, new System.Text.Json.JsonSerializerOptions
         {
             WriteIndented = true
@@ -623,12 +632,21 @@ public static partial class WebAssetOptimizer
         return path;
     }
 
-    private static string? WriteCacheHeaders(string siteRoot, CacheHeadersSpec headers, Dictionary<string, string>? map)
+    private static string? WriteCacheHeaders(
+        string siteRoot,
+        CacheHeadersSpec headers,
+        Dictionary<string, string>? map,
+        IReadOnlySet<string> protectedStoryArtifacts)
     {
         var output = string.IsNullOrWhiteSpace(headers.OutputPath) ? "_headers" : headers.OutputPath;
         if (!TryResolveUnderRoot(siteRoot, output.TrimStart('/', '\\'), out var outputPath))
         {
             Trace.TraceWarning($"Cache headers output path outside site root: {headers.OutputPath}");
+            return null;
+        }
+        if (protectedStoryArtifacts.Contains(Path.GetFullPath(outputPath)))
+        {
+            Trace.TraceWarning($"Cache headers output path is protected by a visual-story manifest: {headers.OutputPath}");
             return null;
         }
         var htmlCache = string.IsNullOrWhiteSpace(headers.HtmlCacheControl)
