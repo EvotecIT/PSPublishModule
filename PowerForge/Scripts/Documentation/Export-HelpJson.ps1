@@ -305,7 +305,7 @@ function AddRuntimeDefaultValueTokens(
 }
 Export-ModuleMember -Function @(
   'ConvertToRuntimeDefaultValue', 'ConvertToUtf16CodeUnits', 'ConvertToUtf8SafeJsonText',
-  'GetCanonicalTypeNameFromType', 'GetOutputTypeSnapshot', 'GetText', 'ResolveCanonicalTypeName', 'TestPSDefaultValueAutomationNull', 'TestValidateSetCaseSensitive')
+  'GetCanonicalTypeNameFromType', 'GetOutputTypeSnapshot', 'GetText', 'ResolveCanonicalTypeName', 'TestPSDefaultValueContainsAutomationNull', 'TestValidateSetCaseSensitive')
 }
 $collectorProtocol = NewCollectorProtocol $collectorHelperModule
 try {
@@ -478,7 +478,7 @@ try {
                   $metadataDefaultHelpCodeUnits = & $collectorProtocol.ConvertToUtf16CodeUnits $metadataDefaultHelp
                   $metadataDefaultHelp = $null
                 } else {
-                  if (& $collectorProtocol.TestPSDefaultValueAutomationNull $attr) { throw 'AutomationNull defaults cannot be represented as PowerShell expressions.' }
+                  if (& $collectorProtocol.TestPSDefaultValueContainsAutomationNull $attr) { throw 'AutomationNull defaults cannot be represented as PowerShell expressions.' }
                   $metadataDefaultValue = & $collectorProtocol.ConvertToRuntimeDefaultValue $attr.Value
                 }
               } catch {

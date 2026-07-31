@@ -21,6 +21,10 @@ function GetCollectorHelperFunctionNames {
     'ConvertToUtf8SafeJsonText',
     'EmitError',
     'GetCanonicalTypeNameFromType',
+    'GetAutomationNullArrayPredicate',
+    'GetAutomationNullDictionaryEntryPredicate',
+    'GetAutomationNullListPredicate',
+    'GetAutomationNullValueProperty',
     'GetCollectionCapacity',
     'GetCollectorHelperFunctionNames',
     'GetConstructibleDictionaryTypeName',
@@ -51,6 +55,7 @@ function GetCollectorHelperFunctionNames {
     'TestPowerShellTypeLiteral',
     'TestPowerShellTypeLiteralName',
     'TestPSDefaultValueAutomationNull',
+    'TestPSDefaultValueContainsAutomationNull',
     'TestRecreatableUri',
     'TestRecreatableScriptBlock',
     'TestValidateSetCaseSensitive'
@@ -60,8 +65,10 @@ function GetCollectorHelperFunctionNames {
 function ImportDocumentedModule([string]$manifestPath) {
   $variableImportFilter = '__PowerForgeDocumentationCollector_' +
     [guid]::NewGuid().ToString('N')
+  $aliasImportFilter = '__PowerForgeDocumentationCollector_' +
+    [guid]::NewGuid().ToString('N')
   return Import-Module -Name $manifestPath -Force -PassThru -Scope Global `
-    -Function '*' -Cmdlet '*' -Alias '*' -Variable $variableImportFilter `
+    -Function '*' -Cmdlet '*' -Alias $aliasImportFilter -Variable $variableImportFilter `
     -ErrorAction Stop
 }
 
@@ -79,7 +86,7 @@ function NewCollectorProtocol([System.Management.Automation.PSModuleInfo]$helper
     RemoveHelperAliases = Get-Command RemoveCollectorHelperAliases -CommandType Function
     ResolveCanonicalTypeName = $helperModule.ExportedFunctions['ResolveCanonicalTypeName']
     TestValidateSetCaseSensitive = $helperModule.ExportedFunctions['TestValidateSetCaseSensitive']
-    TestPSDefaultValueAutomationNull = $helperModule.ExportedFunctions['TestPSDefaultValueAutomationNull']
+    TestPSDefaultValueContainsAutomationNull = $helperModule.ExportedFunctions['TestPSDefaultValueContainsAutomationNull']
   }
 }
 
