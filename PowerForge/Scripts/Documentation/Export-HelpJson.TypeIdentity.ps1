@@ -224,7 +224,10 @@ function GetPowerShellTypeDefaultExpression([type]$type) {
   return ("& { `$assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | " +
     "Where-Object { `$_.FullName -eq '" + $assemblyName + "' } | Select-Object -First 1; " +
     "if (`$null -eq `$assembly) { throw 'Type assembly is not loaded.' }; " +
-    "return `$assembly.GetType('" + $typeName + "', `$true, `$false) }")
+    "`$type = `$assembly.GetType('" + $typeName + "', `$false, `$false); " +
+    "if (`$null -eq `$type) { `$type = `$assembly.GetTypes() | " +
+    "Where-Object { `$_.FullName -ceq '" + $typeName + "' } | Select-Object -First 1 }; " +
+    "if (`$null -eq `$type) { throw 'Type is not available in the loaded assembly.' }; return `$type }")
 }
 
 function ResolveExactType([string]$candidate) {

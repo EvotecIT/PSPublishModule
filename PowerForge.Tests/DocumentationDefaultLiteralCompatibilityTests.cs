@@ -35,11 +35,21 @@ if (-not ('DefaultLiteralFixture.WeirdMode' -as [type])) {
         [int])
     [void]$unsafeTypeBuilder.DefineLiteral('X', 1)
     $script:unsafeDefaultType = $unsafeTypeBuilder.CreateTypeInfo().AsType()
+    $whitespaceTypeBuilder = $moduleBuilder.DefineType(
+        ' DefaultLiteralFixture.Edge ',
+        [System.Reflection.TypeAttributes]::Public)
+    $script:whitespaceDefaultType = $whitespaceTypeBuilder.CreateTypeInfo().AsType()
 }
 if ($null -eq $script:unsafeDefaultType) {
     $script:unsafeDefaultType = [System.AppDomain]::CurrentDomain.GetAssemblies() |
         ForEach-Object { $_.GetType('DefaultLiteralFixture.A-B', $false, $false) } |
         Where-Object { $null -ne $_ } |
+        Select-Object -First 1
+}
+if ($null -eq $script:whitespaceDefaultType) {
+    $script:whitespaceDefaultType = [System.AppDomain]::CurrentDomain.GetAssemblies() |
+        ForEach-Object { $_.GetTypes() } |
+        Where-Object { $_.FullName -ceq ' DefaultLiteralFixture.Edge ' } |
         Select-Object -First 1
 }
 
@@ -245,6 +255,12 @@ function Get-DefaultLiteralFixture {
         $unsafeTypeDefault.Value = $script:unsafeDefaultType
         $unsafeTypeAttributes.Add($unsafeTypeDefault)
         $parameters.Add('UnsafeType', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafeType', [type], $unsafeTypeAttributes))
+
+        $whitespaceTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $whitespaceTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $whitespaceTypeDefault.Value = $script:whitespaceDefaultType
+        $whitespaceTypeAttributes.Add($whitespaceTypeDefault)
+        $parameters.Add('WhitespaceType', [System.Management.Automation.RuntimeDefinedParameter]::new('WhitespaceType', [type], $whitespaceTypeAttributes))
 
         $unsafePointerAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $unsafePointerDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -455,6 +471,10 @@ function Get-DefaultLiteralFixture {
             Assert.StartsWith(
                 "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
                 Default("UnsafeType"),
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "Where-Object { $_.FullName -ceq ' DefaultLiteralFixture.Edge ' }",
+                Default("WhitespaceType"),
                 StringComparison.Ordinal);
             Assert.StartsWith(
                 "(& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
