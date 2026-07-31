@@ -325,6 +325,7 @@ internal static class PowerShellDefaultValueFormatter
                     token.CanonicalTypeName,
                     token.Name,
                     token.ElementTypeName,
+                    token.Text,
                     DecodeUtf16CodeUnits(token.RuntimeTypeNameCodeUnits),
                     DecodeUtf16CodeUnits(token.AssemblyNameCodeUnits),
                     token.RuntimeTypeShape));
@@ -425,6 +426,7 @@ internal static class PowerShellDefaultValueFormatter
     {
         private readonly string _collectionTypeName;
         private readonly string _elementTypeName;
+        private readonly int? _capacity;
         private readonly string _runtimeTypeName;
         private readonly string _assemblyName;
         private readonly string? _runtimeTypeShape;
@@ -435,6 +437,7 @@ internal static class PowerShellDefaultValueFormatter
             string? collectionTypeName,
             string? collectionKind,
             string? elementTypeName,
+            string? capacity,
             string runtimeTypeName,
             string assemblyName,
             string? runtimeTypeShape)
@@ -447,6 +450,19 @@ internal static class PowerShellDefaultValueFormatter
                                (_isArray && _collectionTypeName.EndsWith("[]", StringComparison.Ordinal)
                                    ? _collectionTypeName.Substring(0, _collectionTypeName.Length - 2)
                                    : string.Empty);
+            if (string.IsNullOrWhiteSpace(capacity))
+            {
+                _capacity = null;
+            }
+            else if (int.TryParse(capacity, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedCapacity) &&
+                     parsedCapacity >= 0)
+            {
+                _capacity = parsedCapacity;
+            }
+            else
+            {
+                throw new FormatException("The runtime default token stream contains invalid collection capacity.");
+            }
             _runtimeTypeName = runtimeTypeName;
             _assemblyName = assemblyName;
             _runtimeTypeShape = runtimeTypeShape;
@@ -494,9 +510,15 @@ internal static class PowerShellDefaultValueFormatter
                     _runtimeTypeShape);
                 if (collectionTypeExpression.Length == 0)
                     throw new FormatException("The runtime default token stream contains an unresolved collection type.");
+                var capacityArgument = _capacity.HasValue
+                    ? "([int]" + _capacity.Value.ToString(CultureInfo.InvariantCulture) + ")"
+                    : string.Empty;
                 statements.Add(IsTypeLiteralExpression(collectionTypeExpression)
-                    ? "$collection = " + collectionTypeExpression + "::new()"
-                    : "$collection = [System.Activator]::CreateInstance((" + collectionTypeExpression + "))");
+                    ? "$collection = " + collectionTypeExpression + "::new(" + capacityArgument + ")"
+                    : capacityArgument.Length == 0
+                        ? "$collection = [System.Activator]::CreateInstance((" + collectionTypeExpression + "))"
+                        : "$collection = [System.Activator]::CreateInstance((" + collectionTypeExpression +
+                          "), [object[]]@((" + capacityArgument + ")))" );
                 statements.AddRange(_items.Select(item =>
                     "[void]([System.Collections.IList]$collection).Add((" + item + "))"));
             }

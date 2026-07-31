@@ -46,7 +46,25 @@ function TestCollectionHasItemOnlyBackingStore([object]$value) {
   if ($null -eq $backingStore) { return $false }
   $expectedType = [System.Collections.Generic.List``1].MakeGenericType(
     $collectionType.GetGenericArguments()[0])
-  return $backingStore.GetType() -eq $expectedType
+  if ($backingStore.GetType() -ne $expectedType) { return $false }
+  $expectedCollection = [System.Activator]::CreateInstance($collectionType)
+  foreach ($item in $value) {
+    [void]([System.Collections.IList]$expectedCollection).Add($item)
+  }
+  $expectedBackingStore = $itemsProperty.GetValue($expectedCollection, $null)
+  return $backingStore.Capacity -eq $expectedBackingStore.Capacity
+}
+
+function GetCollectionCapacity([object]$value) {
+  $collectionType = $value.GetType()
+  if ($collectionType -eq [System.Collections.ArrayList]) {
+    return [int]$value.Capacity
+  }
+  if ($collectionType.IsGenericType -and
+      $collectionType.GetGenericTypeDefinition() -eq [System.Collections.Generic.List``1]) {
+    return [int]$value.Capacity
+  }
+  return $null
 }
 
 function AddRuntimeTypeShapeTokens([type]$type, [System.Collections.IList]$tokens) {

@@ -108,7 +108,7 @@ function AddRuntimeDefaultValueTokens(
     }) | Out-Null
     return
   }
-  if ($value -is [uri]) {
+  if (TestExactRuntimeValueType $value ([uri])) {
     if ($value.UserEscaped) {
       throw 'User-escaped Uri defaults are not supported.'
     }
@@ -256,6 +256,7 @@ function AddRuntimeDefaultValueTokens(
       }
       $tokens.Add([ordered]@{
         kind = 'CollectionStart'
+        text = GetCollectionCapacity $value
         canonicalTypeName = GetCanonicalTypeNameFromType $collectionType
         elementTypeName = if ($null -ne $elementType) { GetCanonicalTypeNameFromType $elementType } else { $null }
         runtimeTypeNameCodeUnits = ConvertToUtf16CodeUnits ([string]$runtimeConstructionType.FullName)
