@@ -62,11 +62,19 @@ public sealed class DocumentationMetadataNormalizerTests
                 Text = "79228162514264337593543950335"
             }));
         Assert.Equal(
-            "[System.DateTime]::ParseExact('2026-07-30T12:34:56.1234567Z', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",
+            "[System.Guid]::ParseExact('01234567-89ab-cdef-0123-456789abcdef', 'D')",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "Guid",
+                Text = "01234567-89ab-cdef-0123-456789abcdef"
+            }));
+        Assert.Equal(
+            "[System.DateTime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)",
             PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
             {
                 Kind = "DateTime",
-                Text = "2026-07-30T12:34:56.1234567Z"
+                Text = "639210116961234567",
+                Name = "Local"
             }));
         Assert.Equal(
             "[System.DateTimeOffset]::ParseExact('2026-07-30T12:34:56.1234567+05:30', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",
@@ -132,6 +140,19 @@ public sealed class DocumentationMetadataNormalizerTests
 
         Assert.Equal(NestedExpression(120, "(-join @(([char]55296)))"), formatted);
         Assert.DoesNotContain('\uFFFD', formatted);
+    }
+
+    [Fact]
+    public void DefaultValueFormatter_XmlEncodesInvalidFallbackText()
+    {
+        var formatted = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+        {
+            Kind = "TextCodeUnits",
+            Text = "55296"
+        });
+
+        Assert.Equal("(-join @(([char]55296)))", formatted);
+        Assert.DoesNotContain('\uD800', formatted);
     }
 
     [Fact]

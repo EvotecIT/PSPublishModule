@@ -26,6 +26,12 @@ public sealed class DocumentationPowerShellCollectorTests
 }
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             File.WriteAllText(modulePath, """
+class InvalidTextDefault {
+    [string] ToString() {
+        return [string][char]0xD800
+    }
+}
+
 function Get-CollectorFixture {
     [CmdletBinding()]
     param()
@@ -84,9 +90,40 @@ function Get-CollectorFixture {
                 [string],
                 $surrogateHelpAttributes))
 
+        $invalidTextAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $invalidTextDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $invalidTextDefault.Value = [InvalidTextDefault]::new()
+        $invalidTextAttributes.Add($invalidTextDefault)
+        $parameters.Add('InvalidText', [System.Management.Automation.RuntimeDefinedParameter]::new('InvalidText', [object], $invalidTextAttributes))
+
+        $longHelpAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $longHelpDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $longHelpDefault.Help = 'x' * 80000
+        $longHelpDefault.Value = 'ignored'
+        $longHelpAttributes.Add($longHelpDefault)
+        $parameters.Add('LongHelp', [System.Management.Automation.RuntimeDefinedParameter]::new('LongHelp', [string], $longHelpAttributes))
+
+        $negativeDoubleAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $negativeDoubleDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $negativeDoubleDefault.Value = [System.BitConverter]::Int64BitsToDouble([long]::MinValue)
+        $negativeDoubleAttributes.Add($negativeDoubleDefault)
+        $parameters.Add('NegativeDouble', [System.Management.Automation.RuntimeDefinedParameter]::new('NegativeDouble', [double], $negativeDoubleAttributes))
+
+        $negativeSingleAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $negativeSingleDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $negativeSingleDefault.Value = [System.BitConverter]::ToSingle([byte[]](0, 0, 0, 128), 0)
+        $negativeSingleAttributes.Add($negativeSingleDefault)
+        $parameters.Add('NegativeSingle', [System.Management.Automation.RuntimeDefinedParameter]::new('NegativeSingle', [single], $negativeSingleAttributes))
+
+        $guidAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $guidDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $guidDefault.Value = [guid]::ParseExact('01234567-89ab-cdef-0123-456789abcdef', 'D')
+        $guidAttributes.Add($guidDefault)
+        $parameters.Add('Guid', [System.Management.Automation.RuntimeDefinedParameter]::new('Guid', [guid], $guidAttributes))
+
         $dateTimeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $dateTimeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
-        $dateTimeDefault.Value = [datetime]::ParseExact('2026-07-30T12:34:56.1234567Z', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)
+        $dateTimeDefault.Value = [datetime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)
         $dateTimeAttributes.Add($dateTimeDefault)
         $parameters.Add('DateTime', [System.Management.Automation.RuntimeDefinedParameter]::new('DateTime', [datetime], $dateTimeAttributes))
 
@@ -173,6 +210,11 @@ function Get-AcceleratedOutput {
                 var invalidSurrogateHelp = Assert.Single(
                     command.Parameters,
                     parameter => parameter.Name == "InvalidSurrogateHelp");
+                var invalidText = Assert.Single(command.Parameters, parameter => parameter.Name == "InvalidText");
+                var longHelp = Assert.Single(command.Parameters, parameter => parameter.Name == "LongHelp");
+                var negativeDouble = Assert.Single(command.Parameters, parameter => parameter.Name == "NegativeDouble");
+                var negativeSingle = Assert.Single(command.Parameters, parameter => parameter.Name == "NegativeSingle");
+                var guid = Assert.Single(command.Parameters, parameter => parameter.Name == "Guid");
                 var dateTime = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTime");
                 var dateTimeOffset = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTimeOffset");
                 var timeSpan = Assert.Single(command.Parameters, parameter => parameter.Name == "TimeSpan");
@@ -185,8 +227,16 @@ function Get-AcceleratedOutput {
                 Assert.Equal("authored display value", helpWins.DefaultValue);
                 Assert.Equal("(-join @(([char]55296)))", invalidSurrogate.DefaultValue);
                 Assert.Equal("(-join @(([char]55296)))", invalidSurrogateHelp.DefaultValue);
+                Assert.Equal("(-join @(([char]55296)))", invalidText.DefaultValue);
+                Assert.Equal(80000, longHelp.DefaultValue.Length);
+                Assert.All(longHelp.DefaultValue, character => Assert.Equal('x', character));
+                Assert.Equal("-0.0", negativeDouble.DefaultValue);
+                Assert.Equal("([single]-0.0)", negativeSingle.DefaultValue);
                 Assert.Equal(
-                    "[System.DateTime]::ParseExact('2026-07-30T12:34:56.1234567Z', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",
+                    "[System.Guid]::ParseExact('01234567-89ab-cdef-0123-456789abcdef', 'D')",
+                    guid.DefaultValue);
+                Assert.Equal(
+                    "[System.DateTime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)",
                     dateTime.DefaultValue);
                 Assert.Equal(
                     "[System.DateTimeOffset]::ParseExact('2026-07-30T12:34:56.1234567+05:30', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",

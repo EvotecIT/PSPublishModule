@@ -51,8 +51,11 @@ internal static class PowerShellDefaultValueFormatter
             case "decimal":
                 return "[System.Decimal]::Parse('" + (value.Text ?? string.Empty).Replace("'", "''") +
                        "', [System.Globalization.CultureInfo]::InvariantCulture)";
+            case "guid":
+                return "[System.Guid]::ParseExact('" + (value.Text ?? string.Empty).Replace("'", "''") + "', 'D')";
             case "datetime":
-                return FormatTemporalParseExact("System.DateTime", value.Text, "O", includeStyles: true);
+                return "[System.DateTime]::new(([long]" + (value.Text ?? string.Empty) +
+                       "), [System.DateTimeKind]::" + (value.Name ?? string.Empty) + ")";
             case "datetimeoffset":
                 return FormatTemporalParseExact("System.DateTimeOffset", value.Text, "O", includeStyles: true);
             case "timespan":
@@ -65,7 +68,7 @@ internal static class PowerShellDefaultValueFormatter
             case "text":
                 return value.Text ?? string.Empty;
             case "textcodeunits":
-                return DecodeUtf16CodeUnits(value.Text);
+                return FormatFallbackText(DecodeUtf16CodeUnits(value.Text));
             default:
                 return value.Text ?? string.Empty;
         }
@@ -133,6 +136,11 @@ internal static class PowerShellDefaultValueFormatter
             expression += ", [System.Globalization.DateTimeStyles]::RoundtripKind";
         return expression + ")";
     }
+
+    private static string FormatFallbackText(string text)
+        => NeedsEncoding(text)
+            ? FormatString(text, preserveCharacterType: false)
+            : text;
 
     private static string FormatString(string text, bool preserveCharacterType)
     {

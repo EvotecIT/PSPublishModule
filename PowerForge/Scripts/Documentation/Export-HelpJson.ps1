@@ -25,101 +25,14 @@ function GetText([object]$obj) {
   try { return [string]$obj } catch { return '' }
 }
 
-function GetCanonicalTypeNameFromType([type]$type) {
-  if ($null -eq $type) { return '' }
-  if ($type.IsArray) {
-    $elementName = GetCanonicalTypeNameFromType ($type.GetElementType())
-    $rank = $type.GetArrayRank()
-    if ($rank -le 1) { return ($elementName + '[]') }
-    return ($elementName + '[' + (',' * ($rank - 1)) + ']')
-  }
-  if ($type.IsGenericTypeDefinition) {
-    if ($type.FullName) { return [string]$type.FullName }
-    return [string]$type.Name
-  }
-  if ($type.IsGenericType) {
-    $definition = $type.GetGenericTypeDefinition()
-    $definitionName = [string]$definition.FullName
-    if (-not $definitionName) { $definitionName = [string]$definition.Name }
-    if ($definitionName.IndexOf('+') -lt 0) {
-      $definitionName = $definitionName -replace '`\d+$', ''
-    }
-    $arguments = @()
-    foreach ($argument in $type.GetGenericArguments()) {
-      $arguments += GetCanonicalTypeNameFromType $argument
-    }
-    return ($definitionName + '[' + ($arguments -join ',') + ']')
-  }
-  if ($type.FullName) { return [string]$type.FullName }
-  return [string]$type.Name
-}
-
-function ResolveExactType([string]$candidate) {
-  if ([string]::IsNullOrWhiteSpace($candidate)) { return $null }
-  $resolvedType = $null
-  try { $resolvedType = [System.Type]::GetType($candidate, $false, $false) } catch { $resolvedType = $null }
-  if ($resolvedType) { return $resolvedType }
-  foreach ($assembly in [System.AppDomain]::CurrentDomain.GetAssemblies()) {
-    try { $resolvedType = $assembly.GetType($candidate, $false, $false) } catch { $resolvedType = $null }
-  if ($resolvedType) { return $resolvedType }
-  }
-  return $null
-}
-
-function ResolveUniqueTypeCaseInsensitive([string]$candidate, [ref]$isAmbiguous) {
-  $isAmbiguous.Value = $false
-  if ([string]::IsNullOrWhiteSpace($candidate)) { return $null }
-  $matches = [System.Collections.Generic.Dictionary[string,System.Type]]::new([System.StringComparer]::Ordinal)
-  $ambiguous = $false
-  $resolvedType = $null
-  try {
-    $resolvedType = [System.Type]::GetType($candidate, $false, $true)
-  } catch [System.Reflection.AmbiguousMatchException] {
-    $ambiguous = $true
-  } catch {
-    $resolvedType = $null
-  }
-  if ($resolvedType) {
-    $matches[(GetCanonicalTypeNameFromType $resolvedType)] = $resolvedType
-  }
-  foreach ($assembly in [System.AppDomain]::CurrentDomain.GetAssemblies()) {
-    $resolvedType = $null
-    try {
-      $resolvedType = $assembly.GetType($candidate, $false, $true)
-    } catch [System.Reflection.AmbiguousMatchException] {
-      $ambiguous = $true
-    } catch {
-      $resolvedType = $null
-    }
-    if ($resolvedType) {
-      $matches[(GetCanonicalTypeNameFromType $resolvedType)] = $resolvedType
-    }
-  }
-  $isAmbiguous.Value = $ambiguous
-  if ($ambiguous -or $matches.Count -ne 1) { return $null }
-  foreach ($match in $matches.Values) { return $match }
-  return $null
-}
-
-function ResolveCanonicalTypeName([string]$candidate) {
-  if ([string]::IsNullOrWhiteSpace($candidate)) { return '' }
-  $trimmed = $candidate.Trim()
-  $resolvedType = ResolveExactType $trimmed
-  $ambiguous = $false
-  if (-not $resolvedType) { $resolvedType = ResolveUniqueTypeCaseInsensitive $trimmed ([ref]$ambiguous) }
-  if (-not $resolvedType -and -not $ambiguous) {
-    try { $resolvedType = $trimmed -as [type] } catch { $resolvedType = $null }
-  }
-  if ($resolvedType) { return GetCanonicalTypeNameFromType $resolvedType }
-  return ($trimmed -replace '\s+', '')
-}
-
 function ConvertToUtf16CodeUnits([string]$text) {
-  $units = @()
-  foreach ($character in $text.ToCharArray()) {
-    $units += ([int]$character).ToString([System.Globalization.CultureInfo]::InvariantCulture)
+  $builder = [System.Text.StringBuilder]::new()
+  for ($index = 0; $index -lt $text.Length; $index++) {
+    if ($index -gt 0) { [void]$builder.Append(',') }
+    [void]$builder.Append(
+      ([int]$text[$index]).ToString([System.Globalization.CultureInfo]::InvariantCulture))
   }
-  return ($units -join ',')
+  return $builder.ToString()
 }
 
 function AddRuntimeDefaultValueTokens([object]$value, [System.Collections.IList]$tokens) {
@@ -170,16 +83,25 @@ function AddRuntimeDefaultValueTokens([object]$value, [System.Collections.IList]
     return
   }
   if ($value -is [double]) {
+    $text = $value.ToString('G17', [System.Globalization.CultureInfo]::InvariantCulture)
+    if ($value -eq 0 -and [System.BitConverter]::DoubleToInt64Bits($value) -lt 0) {
+      $text = '-0'
+    }
     $tokens.Add([ordered]@{
       kind = 'Double'
-      text = $value.ToString('G17', [System.Globalization.CultureInfo]::InvariantCulture)
+      text = $text
     }) | Out-Null
     return
   }
   if ($value -is [single]) {
+    $text = $value.ToString('G9', [System.Globalization.CultureInfo]::InvariantCulture)
+    if ($value -eq 0) {
+      $bits = [System.BitConverter]::ToInt32([System.BitConverter]::GetBytes([single]$value), 0)
+      if ($bits -lt 0) { $text = '-0' }
+    }
     $tokens.Add([ordered]@{
       kind = 'Single'
-      text = $value.ToString('G9', [System.Globalization.CultureInfo]::InvariantCulture)
+      text = $text
     }) | Out-Null
     return
   }
@@ -190,10 +112,18 @@ function AddRuntimeDefaultValueTokens([object]$value, [System.Collections.IList]
     }) | Out-Null
     return
   }
+  if ($value -is [guid]) {
+    $tokens.Add([ordered]@{
+      kind = 'Guid'
+      text = $value.ToString('D')
+    }) | Out-Null
+    return
+  }
   if ($value -is [datetime]) {
     $tokens.Add([ordered]@{
       kind = 'DateTime'
-      text = $value.ToString('O', [System.Globalization.CultureInfo]::InvariantCulture)
+      text = $value.Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+      name = [string]$value.Kind
     }) | Out-Null
     return
   }
