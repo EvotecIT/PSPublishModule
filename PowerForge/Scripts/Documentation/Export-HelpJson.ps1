@@ -198,15 +198,10 @@ function ConvertToPowerShellDefaultValue(
         return ConvertMultidimensionalArrayToPowerShellDefaultValue $value $referenceStack
       }
       $items = [System.Collections.Generic.List[string]]::new()
-      $containsNestedCollection = $false
       foreach ($item in $value) {
-        if ($item -is [System.Collections.IDictionary] -or
-            ($item -is [System.Collections.IEnumerable] -and $item -isnot [string])) {
-          $containsNestedCollection = $true
-        }
         $items.Add((ConvertToPowerShellDefaultValue $item $referenceStack))
       }
-      return ConvertCollectionItemsToPowerShellDefaultValue $items $containsNestedCollection
+      return ConvertCollectionItemsToPowerShellDefaultValue $items $value
     } finally {
       $referenceStack.RemoveAt($referenceStack.Count - 1)
     }

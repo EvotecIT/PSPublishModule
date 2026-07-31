@@ -52,16 +52,28 @@ function ConvertDictionaryToPowerShellDefaultValue(
 
 function ConvertCollectionItemsToPowerShellDefaultValue(
   [System.Collections.Generic.IReadOnlyList[string]]$items,
-  [bool]$containsNestedCollection
+  [object]$value
 ) {
-  if (-not $containsNestedCollection) {
-    return ('@(' + ($items -join ', ') + ')')
+  $collectionType = $value.GetType()
+  $collectionTypeName = GetCanonicalTypeNameFromType $collectionType
+  if ($value -isnot [System.Array]) {
+    $constructor = $collectionType.GetConstructor([System.Type]::EmptyTypes)
+    if ($collectionType.IsAbstract -or $collectionType.IsInterface -or $null -eq $constructor) {
+      throw ('Collection type has no supported constructor: ' + $collectionType.FullName)
+    }
   }
   $statements = [System.Collections.Generic.List[string]]::new()
-  $statements.Add('$array = [object[]]::new(' + $items.Count + ')')
-  for ($index = 0; $index -lt $items.Count; $index++) {
-    $statements.Add('$array.SetValue((' + $items[$index] + '), ' + $index + ')')
+  if ($value -is [System.Array]) {
+    $statements.Add('$collection = [' + $collectionTypeName + ']::new(' + $items.Count + ')')
+    for ($index = 0; $index -lt $items.Count; $index++) {
+      $statements.Add('$collection.SetValue((' + $items[$index] + '), ' + $index + ')')
+    }
+  } else {
+    $statements.Add('$collection = [' + $collectionTypeName + ']::new()')
+    foreach ($item in $items) {
+      $statements.Add('[void]([System.Collections.IList]$collection).Add((' + $item + '))')
+    }
   }
-  $statements.Add('return ,$array')
+  $statements.Add('return ,$collection')
   return ('& { ' + ($statements -join '; ') + ' }')
 }

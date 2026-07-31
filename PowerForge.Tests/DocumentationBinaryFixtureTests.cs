@@ -364,13 +364,13 @@ public sealed class DocumentationBinaryFixtureTests
                 "', '",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Delimiter", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
-                "@('a', 'b c')",
+                "& { $collection = [System.String[]]::new(2); $collection.SetValue(('a'), 0); $collection.SetValue(('b c'), 1); return ,$collection }",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Names", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
-                "@($true, $false)",
+                "& { $collection = [System.Boolean[]]::new(2); $collection.SetValue(($true), 0); $collection.SetValue(($false), 1); return ,$collection }",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Switches", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
-                "@([BinaryDocFixture.BinaryDocMode]::Basic, [BinaryDocFixture.BinaryDocMode]::Advanced)",
+                "& { $collection = [BinaryDocFixture.BinaryDocMode[]]::new(2); $collection.SetValue(([BinaryDocFixture.BinaryDocMode]::Basic), 0); $collection.SetValue(([BinaryDocFixture.BinaryDocMode]::Advanced), 1); return ,$collection }",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Modes", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
                 "[System.Enum]::ToObject([BinaryDocFixture.BinaryDocMode], ([System.Int32]3))",
@@ -397,7 +397,7 @@ public sealed class DocumentationBinaryFixtureTests
                 "[BinaryDocFixture.BinaryDocOuter`1+BinaryDocInner`1[System.Int32,System.String]]",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "NestedGenericType", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
-                "@([System.String], [System.Int32])",
+                "& { $collection = [System.Type[]]::new(2); $collection.SetValue(([System.String]), 0); $collection.SetValue(([System.Int32]), 1); return ,$collection }",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "ValueTypes", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
                 "(-join @(([char]0)))",
@@ -409,7 +409,7 @@ public sealed class DocumentationBinaryFixtureTests
                 "[double]::NaN",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "NotANumber", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
-                "@([single]::PositiveInfinity, [single]::NegativeInfinity)",
+                "& { $collection = [System.Single[]]::new(2); $collection.SetValue(([single]::PositiveInfinity), 0); $collection.SetValue(([single]::NegativeInfinity), 1); return ,$collection }",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Infinities", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
                 "([double]0.84551240822557006)",
@@ -473,19 +473,19 @@ public sealed class DocumentationBinaryFixtureTests
             var generatedMaml = File.ReadAllText(generatedMamlPath);
             Assert.DoesNotContain('\0', generatedMaml);
             Assert.Contains(
-                "Default value: @('a', 'b c')",
+                "Default value: & { $collection = [System.String[]]::new(2); $collection.SetValue(('a'), 0); $collection.SetValue(('b c'), 1); return ,$collection }",
                 File.ReadAllText(Path.Combine(markdownDirectory, "Get-BinaryDocEmptyDefault.md")),
                 StringComparison.Ordinal);
             Assert.Contains(
-                "<dev:defaultValue>@('a', 'b c')</dev:defaultValue>",
+                "<dev:defaultValue>&amp; { $collection = [System.String[]]::new(2); $collection.SetValue(('a'), 0); $collection.SetValue(('b c'), 1); return ,$collection }</dev:defaultValue>",
                 File.ReadAllText(generatedMamlPath),
                 StringComparison.Ordinal);
             Assert.Contains(
-                "Default value: @($true, $false)",
+                "Default value: & { $collection = [System.Boolean[]]::new(2); $collection.SetValue(($true), 0); $collection.SetValue(($false), 1); return ,$collection }",
                 File.ReadAllText(Path.Combine(markdownDirectory, "Get-BinaryDocEmptyDefault.md")),
                 StringComparison.Ordinal);
             Assert.Contains(
-                "<dev:defaultValue>@([BinaryDocFixture.BinaryDocMode]::Basic, [BinaryDocFixture.BinaryDocMode]::Advanced)</dev:defaultValue>",
+                "<dev:defaultValue>&amp; { $collection = [BinaryDocFixture.BinaryDocMode[]]::new(2); $collection.SetValue(([BinaryDocFixture.BinaryDocMode]::Basic), 0); $collection.SetValue(([BinaryDocFixture.BinaryDocMode]::Advanced), 1); return ,$collection }</dev:defaultValue>",
                 generatedMaml,
                 StringComparison.Ordinal);
             Assert.Contains(
@@ -501,7 +501,7 @@ public sealed class DocumentationBinaryFixtureTests
                 generatedMaml,
                 StringComparison.Ordinal);
             Assert.Contains(
-                "<dev:defaultValue>@([System.String], [System.Int32])</dev:defaultValue>",
+                "<dev:defaultValue>&amp; { $collection = [System.Type[]]::new(2); $collection.SetValue(([System.String]), 0); $collection.SetValue(([System.Int32]), 1); return ,$collection }</dev:defaultValue>",
                 generatedMaml,
                 StringComparison.Ordinal);
             Assert.Contains(
@@ -517,7 +517,7 @@ public sealed class DocumentationBinaryFixtureTests
                 generatedMaml,
                 StringComparison.Ordinal);
             Assert.Contains(
-                "<dev:defaultValue>@([single]::PositiveInfinity, [single]::NegativeInfinity)</dev:defaultValue>",
+                "<dev:defaultValue>&amp; { $collection = [System.Single[]]::new(2); $collection.SetValue(([single]::PositiveInfinity), 0); $collection.SetValue(([single]::NegativeInfinity), 1); return ,$collection }</dev:defaultValue>",
                 generatedMaml,
                 StringComparison.Ordinal);
             Assert.Contains(

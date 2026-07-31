@@ -356,10 +356,10 @@ function Get-DefaultLiteralFixture {
                 "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2), [int[]]@(5)); $array.SetValue((7), [int[]]@(5)); $array.SetValue((8), [int[]]@(6)); return ,$array }",
                 Default("BoundedArray"));
             Assert.Equal(
-                "& { $array = [object[]]::new(1); $array.SetValue((@(1, 2)), 0); return ,$array }",
+                "& { $collection = [System.Object[]]::new(1); $collection.SetValue((& { $collection = [System.Int32[]]::new(2); $collection.SetValue((1), 0); $collection.SetValue((2), 1); return ,$collection }), 0); return ,$collection }",
                 Default("NestedCollection"));
             Assert.Equal(
-                "& { $array = [object[]]::new(1); $array.SetValue((& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }), 0); return ,$array }",
+                "& { $collection = [System.Object[]]::new(1); $collection.SetValue((& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }), 0); return ,$collection }",
                 Default("NestedMatrix"));
             Assert.True(string.IsNullOrEmpty(Default("Stack")));
             Assert.Equal(
