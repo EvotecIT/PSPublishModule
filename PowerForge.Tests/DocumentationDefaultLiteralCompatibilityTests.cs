@@ -13,7 +13,12 @@ public sealed class DocumentationDefaultLiteralCompatibilityTests
         try
         {
             var manifestPath = Path.Combine(root, "DefaultLiteralFixture.psd1");
+            File.WriteAllText(
+                Path.Combine(root, "FileBoundDefault.ps1"),
+                "{ $PSScriptRoot; $PSCommandPath }",
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             File.WriteAllText(Path.Combine(root, "DefaultLiteralFixture.psm1"), """
+$script:fileBoundDefault = & (Join-Path -Path $PSScriptRoot -ChildPath 'FileBoundDefault.ps1')
 if (-not ('DefaultLiteralFixture.CaseMode' -as [type])) {
     Add-Type -TypeDefinition 'namespace DefaultLiteralFixture { public enum CaseMode { A = 1, a = 2 } }'
 }
@@ -408,6 +413,12 @@ function Get-DefaultLiteralFixture {
         $constrainedScriptAttributes.Add($constrainedScriptDefault)
         $parameters.Add('ConstrainedScript', [System.Management.Automation.RuntimeDefinedParameter]::new('ConstrainedScript', [scriptblock], $constrainedScriptAttributes))
 
+        $fileBoundScriptAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $fileBoundScriptDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $fileBoundScriptDefault.Value = $script:fileBoundDefault
+        $fileBoundScriptAttributes.Add($fileBoundScriptDefault)
+        $parameters.Add('FileBoundScript', [System.Management.Automation.RuntimeDefinedParameter]::new('FileBoundScript', [scriptblock], $fileBoundScriptAttributes))
+
         $pointerTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $pointerTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $pointerTypeDefault.Value = [int].MakePointerType()
@@ -627,6 +638,7 @@ function Get-DefaultLiteralFixture {
                 Default("Script"));
             Assert.True(string.IsNullOrEmpty(Default("StatefulScript")));
             Assert.True(string.IsNullOrEmpty(Default("ConstrainedScript")));
+            Assert.True(string.IsNullOrEmpty(Default("FileBoundScript")));
             Assert.Equal("[System.Int32].MakePointerType()", Default("PointerType"));
             Assert.Equal("[System.Int32].MakeByRefType()", Default("ByRefType"));
             Assert.Equal("[System.Int32].MakeArrayType(1)", Default("NonSzArrayType"));

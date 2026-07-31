@@ -98,11 +98,14 @@ function ConvertCollectionItemsToPowerShellDefaultValue(
   $collectionType = $value.GetType()
   $collectionTypeName = GetCanonicalTypeNameFromType $collectionType
   if ($value -isnot [System.Array]) {
-    $supportedItemOnlyList = $collectionType -eq [System.Collections.ArrayList]
+    $supportedItemOnlyList = [object]::ReferenceEquals(
+      $collectionType,
+      [System.Collections.ArrayList])
     if (-not $supportedItemOnlyList -and $collectionType.IsGenericType) {
-      $genericDefinitionName = $collectionType.GetGenericTypeDefinition().FullName
-      $supportedItemOnlyList = $genericDefinitionName -eq 'System.Collections.Generic.List`1' -or
-        ($genericDefinitionName -eq 'System.Collections.ObjectModel.Collection`1' -and
+      $genericDefinition = $collectionType.GetGenericTypeDefinition()
+      $supportedItemOnlyList =
+        [object]::ReferenceEquals($genericDefinition, [System.Collections.Generic.List``1]) -or
+        ([object]::ReferenceEquals($genericDefinition, [System.Collections.ObjectModel.Collection``1]) -and
           (TestCollectionHasItemOnlyBackingStore $value))
     }
     if (-not $supportedItemOnlyList) {

@@ -49,8 +49,9 @@ function TestGenuineRuntimeTypeValue([object]$value) {
 
 function GetConstructibleDictionaryTypeName([System.Collections.IDictionary]$value) {
   $dictionaryType = $value.GetType()
-  $supported = [object]::ReferenceEquals($dictionaryType, [System.Collections.Hashtable]) -or
-    [object]::ReferenceEquals($dictionaryType, [System.Collections.Specialized.OrderedDictionary])
+  $supported = [object]::ReferenceEquals(
+    $dictionaryType,
+    [System.Collections.Specialized.OrderedDictionary])
   if (-not $supported -and $dictionaryType.IsGenericType) {
     $definition = $dictionaryType.GetGenericTypeDefinition()
     $supported = [object]::ReferenceEquals($definition, [System.Collections.Generic.Dictionary``2]) -or

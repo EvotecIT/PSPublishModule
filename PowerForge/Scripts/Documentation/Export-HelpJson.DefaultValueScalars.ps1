@@ -10,6 +10,14 @@ function TestRecreatableScriptBlock([scriptblock]$value) {
   }
 
   try {
+    if (-not [string]::IsNullOrEmpty([string]$value.File)) {
+      return $false
+    }
+  } catch {
+    return $false
+  }
+
+  try {
     $languageModeProperty = [scriptblock].GetProperty(
       'LanguageMode',
       [System.Reflection.BindingFlags]'Instance,Public,NonPublic')

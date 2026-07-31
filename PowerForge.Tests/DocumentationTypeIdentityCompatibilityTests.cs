@@ -223,6 +223,22 @@ function Complete-RuntimeIdentityType([System.Reflection.Emit.TypeBuilder]$build
     return $builder.CreateType()
 }
 
+function New-SpoofedGenericCollectionValue(
+    [System.Reflection.Emit.ModuleBuilder]$module,
+    [string]$fullName,
+    [type]$frameworkDefinition) {
+    $builder = $module.DefineType($fullName, [System.Reflection.TypeAttributes]::Public)
+    $genericParameter = $builder.DefineGenericParameters([string[]]@('T'))[0]
+    $builder.SetParent($frameworkDefinition.MakeGenericType([type[]]@($genericParameter)))
+    [void]$builder.DefineDefaultConstructor([System.Reflection.MethodAttributes]::Public)
+    [void]$builder.DefineField('Tag', [string], [System.Reflection.FieldAttributes]::Public)
+    $definition = Complete-RuntimeIdentityType $builder
+    $closedType = $definition.MakeGenericType([type[]]@([int]))
+    $instance = [System.Activator]::CreateInstance($closedType)
+    $closedType.GetField('Tag').SetValue($instance, 'tag')
+    return ,$instance
+}
+
 $dictionaryAssembly = New-RuntimeIdentityAssembly 'RuntimeIdentityFixtureDictionary'
 $dictionaryModule = $dictionaryAssembly.DefineDynamicModule('RuntimeIdentityFixtureDictionary')
 $dictionaryBuilder = $dictionaryModule.DefineType(
@@ -234,6 +250,10 @@ $tagField = $dictionaryBuilder.DefineField('Tag', [string], [System.Reflection.F
 $spoofHashtableType = Complete-RuntimeIdentityType $dictionaryBuilder
 $script:spoofHashtable = [System.Activator]::CreateInstance($spoofHashtableType)
 $spoofHashtableType.GetField('Tag').SetValue($script:spoofHashtable, 'tag')
+$script:spoofList = New-SpoofedGenericCollectionValue -module $dictionaryModule -fullName 'System.Collections.Generic.List`1' -frameworkDefinition ([System.Collections.Generic.List``1])
+$script:spoofCollection = New-SpoofedGenericCollectionValue -module $dictionaryModule -fullName 'System.Collections.ObjectModel.Collection`1' -frameworkDefinition ([System.Collections.ObjectModel.Collection``1])
+$script:unorderedHashtable = [System.Collections.Hashtable]::new()
+foreach ($index in 0..5) { $script:unorderedHashtable.Add(('key' + $index), $index) }
 
 $script:statefulCollection = [System.Collections.ObjectModel.Collection[int]]::new(
     [System.Collections.Generic.IList[int]]([int[]](1, 2)))
@@ -279,6 +299,9 @@ function Get-RuntimeIdentityFixture {
             @('SpoofTimeOnly', (New-SpoofedValue 'System.TimeOnly')),
             @('TaggedUri', (New-SpoofedValue 'System.TaggedUri')),
             @('SpoofHashtable', $script:spoofHashtable),
+            @('SpoofList', $script:spoofList),
+            @('SpoofCollection', $script:spoofCollection),
+            @('UnorderedHashtable', $script:unorderedHashtable),
             @('StatefulCollection', $script:statefulCollection),
             @('ReservedBackingCollection', $script:reservedBackingCollection),
             @('ItemOnlyCollection', $script:itemOnlyCollection),
@@ -354,6 +377,9 @@ if ($sortedList.GetType() -ne [System.Collections.Generic.SortedList[string,int]
                 Assert.True(string.IsNullOrEmpty(Default("SpoofTimeOnly")));
                 Assert.True(string.IsNullOrEmpty(Default("TaggedUri")));
                 Assert.True(string.IsNullOrEmpty(Default("SpoofHashtable")));
+                Assert.True(string.IsNullOrEmpty(Default("SpoofList")));
+                Assert.True(string.IsNullOrEmpty(Default("SpoofCollection")));
+                Assert.True(string.IsNullOrEmpty(Default("UnorderedHashtable")));
                 Assert.True(string.IsNullOrEmpty(Default("StatefulCollection")));
                 Assert.True(string.IsNullOrEmpty(Default("ReservedBackingCollection")));
                 Assert.True(string.IsNullOrEmpty(Default("DelegatedArrayType")));
