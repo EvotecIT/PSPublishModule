@@ -33,6 +33,14 @@ function TestRecreatableScriptBlock([scriptblock]$value) {
   }
 
   try {
+    if (-not [string]::IsNullOrEmpty([string]$value.File)) {
+      return $false
+    }
+  } catch {
+    return $false
+  }
+
+  try {
     $languageModeProperty = [scriptblock].GetProperty(
       'LanguageMode',
       [System.Reflection.BindingFlags]'Instance,Public,NonPublic')
@@ -53,7 +61,9 @@ function GetCoreRuntimeType([string]$fullName) {
 function TestCollectionHasItemOnlyBackingStore([object]$value) {
   $collectionType = $value.GetType()
   if (-not $collectionType.IsGenericType -or
-      $collectionType.GetGenericTypeDefinition() -ne [System.Collections.ObjectModel.Collection``1]) {
+      -not [object]::ReferenceEquals(
+        $collectionType.GetGenericTypeDefinition(),
+        [System.Collections.ObjectModel.Collection``1])) {
     return $true
   }
   $itemsProperty = $collectionType.GetProperty(
@@ -76,11 +86,13 @@ function TestCollectionHasItemOnlyBackingStore([object]$value) {
 
 function GetCollectionCapacity([object]$value) {
   $collectionType = $value.GetType()
-  if ($collectionType -eq [System.Collections.ArrayList]) {
+  if ([object]::ReferenceEquals($collectionType, [System.Collections.ArrayList])) {
     return [int]$value.Capacity
   }
   if ($collectionType.IsGenericType -and
-      $collectionType.GetGenericTypeDefinition() -eq [System.Collections.Generic.List``1]) {
+      [object]::ReferenceEquals(
+        $collectionType.GetGenericTypeDefinition(),
+        [System.Collections.Generic.List``1])) {
     return [int]$value.Capacity
   }
   return $null

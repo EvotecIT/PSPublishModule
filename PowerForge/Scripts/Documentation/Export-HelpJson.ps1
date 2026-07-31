@@ -3,19 +3,14 @@
   [string]$ManifestPath,
   [string]$OutputJsonPath
 )
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+# <PowerForgeCollectorProtocolHelpers />
+$collectorHelperModule = New-Module -Name ('PowerForgeDocumentationCollectorHelpers_' +
+  [guid]::NewGuid().ToString('N')) -ScriptBlock {
 # <PowerForgeTypeIdentityHelpers />
 # <PowerForgeRuntimeValueHelpers />
 # <PowerForgeOutputSnapshotHelpers />
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-function EmitError([string]$msg) {
-  try {
-    $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$msg))
-    Write-Output ('PFDOCS::ERROR::' + $b64)
-  } catch {
-    Write-Output 'PFDOCS::ERROR::'
-  }
-}
 function AddRuntimeDefaultValueTokens(
   [object]$value,
   [System.Collections.IList]$tokens,
@@ -237,11 +232,14 @@ function AddRuntimeDefaultValueTokens(
       }
       $collectionType = $value.GetType()
       if ($value -isnot [System.Array]) {
-        $supportedItemOnlyList = $collectionType -eq [System.Collections.ArrayList]
+        $supportedItemOnlyList = [object]::ReferenceEquals(
+          $collectionType,
+          [System.Collections.ArrayList])
         if (-not $supportedItemOnlyList -and $collectionType.IsGenericType) {
-          $genericDefinitionName = $collectionType.GetGenericTypeDefinition().FullName
-          $supportedItemOnlyList = $genericDefinitionName -eq 'System.Collections.Generic.List`1' -or
-            ($genericDefinitionName -eq 'System.Collections.ObjectModel.Collection`1' -and
+          $genericDefinition = $collectionType.GetGenericTypeDefinition()
+          $supportedItemOnlyList =
+            [object]::ReferenceEquals($genericDefinition, [System.Collections.Generic.List``1]) -or
+            ([object]::ReferenceEquals($genericDefinition, [System.Collections.ObjectModel.Collection``1]) -and
               (TestCollectionHasItemOnlyBackingStore $value))
         }
         if (-not $supportedItemOnlyList) {
@@ -306,7 +304,12 @@ function AddRuntimeDefaultValueTokens(
   }
   throw ('Unsupported PSDefaultValue runtime type: ' + $runtimeType.FullName)
 }
-
+Export-ModuleMember -Function @(
+  'ConvertToRuntimeDefaultValue', 'ConvertToUtf16CodeUnits',
+  'GetCanonicalTypeNameFromType', 'GetOutputTypeSnapshot',
+  'GetText', 'ResolveCanonicalTypeName')
+}
+$collectorProtocol = NewCollectorProtocol $collectorHelperModule
 try {
   if ([string]::IsNullOrWhiteSpace($ManifestPath) -or -not (Test-Path -LiteralPath $ManifestPath)) {
     throw ('Manifest not found: ' + $ManifestPath)
@@ -315,13 +318,9 @@ try {
   $m = $null
   try { $m = Import-PowerShellDataFile -Path $ManifestPath -ErrorAction Stop } catch { $m = $null }
 
-  $collectorHelperFunctions = GetCollectorHelperFunctionSnapshot
-  $restoreCollectorHelpers = Get-Command RestoreCollectorHelperFunctions -CommandType Function
-  $targetVariableImportFilter = '__PowerForgeDocumentationCollector_' + [guid]::NewGuid().ToString('N')
-  $targetAliasImportFilter = '__PowerForgeDocumentationCollector_' + [guid]::NewGuid().ToString('N')
-  $mod = Import-Module -Name $ManifestPath -Force -PassThru -Function '*' -Cmdlet '*' -Alias $targetAliasImportFilter -Variable $targetVariableImportFilter -ErrorAction Stop
-  & $restoreCollectorHelpers $collectorHelperFunctions
+  $mod = Import-Module -Name $ManifestPath -Force -PassThru -ErrorAction Stop
   $moduleNameResolved = $mod.Name
+  & $collectorProtocol.RemoveHelperAliases $moduleNameResolved $collectorProtocol.HelperFunctionNames
 
   $commands = Get-Command -Module $moduleNameResolved -ErrorAction SilentlyContinue | Where-Object {
     $_.CommandType -eq 'Cmdlet' -or $_.CommandType -eq 'Function'
@@ -472,10 +471,10 @@ try {
               try {
                 $metadataDefaultHelp = [string]$attr.Help
                 if (-not [string]::IsNullOrWhiteSpace($metadataDefaultHelp)) {
-                  $metadataDefaultHelpCodeUnits = ConvertToUtf16CodeUnits $metadataDefaultHelp
+                  $metadataDefaultHelpCodeUnits = & $collectorProtocol.ConvertToUtf16CodeUnits $metadataDefaultHelp
                   $metadataDefaultHelp = $null
                 } else {
-                  $metadataDefaultValue = ConvertToRuntimeDefaultValue $attr.Value
+                  $metadataDefaultValue = & $collectorProtocol.ConvertToRuntimeDefaultValue $attr.Value
                 }
               } catch {
                 $metadataDefaultHelp = $null
@@ -506,7 +505,7 @@ try {
       if ($hp) {
         $desc = ''
         foreach ($d in @($hp.Description)) {
-          $t = (GetText $d).Trim()
+          $t = (& $collectorProtocol.GetText $d).Trim()
           if ($t) { if ($desc) { $desc += "`n`n" }; $desc += $t }
         }
         if (-not $typeName) { try { $typeName = [string]$hp.Type.Name } catch {
@@ -591,11 +590,11 @@ try {
       $remarks = ''
       $introduction = ''
       foreach ($r in @($ex.Remarks)) {
-        $t = (GetText $r).Trim()
+        $t = (& $collectorProtocol.GetText $r).Trim()
         if ($t) { if ($remarks) { $remarks += "`n`n" }; $remarks += $t }      
       }
       foreach ($intro in @($ex.Introduction)) {
-        $text = GetText $intro
+        $text = (& $collectorProtocol.GetText $intro)
         if ($null -eq $text) { continue }
         $value = [string]$text
         if ($value -eq '') { continue }
@@ -615,7 +614,7 @@ try {
     $helpDescriptions = @()
     try { if ($help -and $help.Description) { $helpDescriptions = @($help.Description) } } catch { $helpDescriptions = @() }
     foreach ($d in $helpDescriptions) {
-      $t = (GetText $d).Trim()
+      $t = (& $collectorProtocol.GetText $d).Trim()
       if ($t) { if ($descMain) { $descMain += "`n`n" }; $descMain += $t }     
     }
 
@@ -635,7 +634,7 @@ try {
         $typeDesc = ''
         try {
           foreach ($d in @($it.Description)) {
-            $t = (GetText $d).Trim()
+            $t = (& $collectorProtocol.GetText $d).Trim()
             if ($t) { if ($typeDesc) { $typeDesc += "`n`n" }; $typeDesc += $t }
           }
         } catch {
@@ -702,7 +701,7 @@ try {
         try { $runtimeType = $rv.Type.Type } catch { $runtimeType = $null }
         if ($runtimeType -is [type]) {
           $typeClrName = [string]$runtimeType.FullName
-          $canonicalTypeName = GetCanonicalTypeNameFromType $runtimeType
+          $canonicalTypeName = & $collectorProtocol.GetCanonicalTypeNameFromType $runtimeType
         }
         if (-not $typeClrName) { try { $typeClrName = [string]$rv.Type.FullName } catch { $typeClrName = '' } }
         $typeName = $typeName.Trim()
@@ -711,7 +710,7 @@ try {
         if (-not $typeName) { continue }
         if (-not $canonicalTypeName) {
           foreach ($candidate in @($typeClrName, $typeName)) {
-            $canonicalTypeName = ResolveCanonicalTypeName $candidate
+            $canonicalTypeName = & $collectorProtocol.ResolveCanonicalTypeName $candidate
             if ($canonicalTypeName) { break }
           }
         }
@@ -719,7 +718,7 @@ try {
         $typeDesc = ''
         try {
           foreach ($d in @($rv.Description)) {
-            $t = (GetText $d).Trim()
+            $t = (& $collectorProtocol.GetText $d).Trim()
             if ($t) { if ($typeDesc) { $typeDesc += "`n`n" }; $typeDesc += $t }
           }
         } catch {
@@ -740,7 +739,7 @@ try {
     $runtimeOutputs = @()
     try {
       foreach ($outputType in @($c.OutputType)) {
-        $snapshot = GetOutputTypeSnapshot $outputType
+        $snapshot = & $collectorProtocol.GetOutputTypeSnapshot $outputType
         if ($snapshot) { $runtimeOutputs += $snapshot }
       }
     } catch {
@@ -754,8 +753,8 @@ try {
       foreach ($l in $helpLinks) {
         $text = ''
         $uri = ''
-        try { $text = (GetText $l.LinkText).Trim() } catch { $text = '' }
-        try { $uri = (GetText $l.Uri).Trim() } catch { $uri = '' }
+        try { $text = (& $collectorProtocol.GetText $l.LinkText).Trim() } catch { $text = '' }
+        try { $uri = (& $collectorProtocol.GetText $l.Uri).Trim() } catch { $uri = '' }
         if ($text -or $uri) {
           $links += [ordered]@{ text = $text; uri = $uri }
         }
@@ -792,6 +791,6 @@ try {
   Write-Output 'PFDOCS::OK'
   exit 0
 } catch {
-  EmitError $_.Exception.Message
+  & $collectorProtocol.EmitError $_.Exception.Message
   exit 1
 }

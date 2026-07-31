@@ -50,6 +50,9 @@ function GetRuntimeTypeInstanceIdentity([type]$type) {
     if ($rank -eq 1 -and $type -eq $type.GetElementType().MakeArrayType()) {
       return ($elementIdentity + '[]')
     }
+    if ($rank -eq 1) {
+      return ($elementIdentity + '[*]')
+    }
     return ($elementIdentity + '[' + (',' * ($rank - 1)) + ']')
   }
   if ($type.IsGenericType -and -not $type.IsGenericTypeDefinition) {

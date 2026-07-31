@@ -518,10 +518,13 @@ public sealed class DocumentationEngine
     private static string BuildHelpExportScript()
     {
         var script = EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.ps1");
+        var protocolHelpers = EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.Protocol.ps1");
         var typeIdentityHelpers = EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.TypeIdentity.ps1");
         var runtimeValueHelpers = EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.RuntimeValueHelpers.ps1");
         var outputSnapshotHelpers = EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.OutputSnapshot.ps1");
         return script.Replace(
+            "# <PowerForgeCollectorProtocolHelpers />",
+            protocolHelpers).Replace(
             "# <PowerForgeTypeIdentityHelpers />",
             typeIdentityHelpers).Replace(
             "# <PowerForgeRuntimeValueHelpers />",
