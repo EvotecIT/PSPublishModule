@@ -4,6 +4,65 @@ function TestExactRuntimeValueType([object]$value, [object]$expectedType) {
     [object]::ReferenceEquals($value.GetType(), $expectedType)
 }
 
+function ConvertPSDefaultValueAttribute(
+  [System.Management.Automation.PSDefaultValueAttribute]$attribute
+) {
+  $help = [string]$attribute.Help
+  if (-not [string]::IsNullOrWhiteSpace($help)) {
+    return ConvertToXmlSafeDefaultHelpText $help
+  }
+
+  if (TestPSDefaultValueAutomationNull $attribute) {
+    throw 'AutomationNull defaults cannot be represented as PowerShell expressions.'
+  }
+  return ConvertToPowerShellDefaultValue $attribute.Value
+}
+
+function TestPSDefaultValueAutomationNull(
+  [System.Management.Automation.PSDefaultValueAttribute]$attribute
+) {
+  $flags = [System.Reflection.BindingFlags]'Instance,Public,NonPublic'
+  $valueField = $attribute.GetType().GetField('<Value>k__BackingField', $flags)
+  $automationNullType = [System.Management.Automation.PSObject].Assembly.GetType(
+    'System.Management.Automation.Internal.AutomationNull', $false)
+  if ($null -eq $valueField -or $null -eq $automationNullType) { return $false }
+  $valueProperty = $automationNullType.GetProperty(
+    'Value',
+    [System.Reflection.BindingFlags]'Static,Public')
+  if ($null -eq $valueProperty) { return $false }
+
+  $attributeParameter = [System.Linq.Expressions.Expression]::Parameter(
+    [System.Management.Automation.PSDefaultValueAttribute], 'attribute')
+  $fieldExpression = [System.Linq.Expressions.Expression]::Field(
+    $attributeParameter, $valueField)
+  $sentinelExpression = [System.Linq.Expressions.Expression]::Property(
+    $null, $valueProperty)
+  $body = [System.Linq.Expressions.Expression]::ReferenceEqual(
+    $fieldExpression, $sentinelExpression)
+  $delegateType = [System.Func[System.Management.Automation.PSDefaultValueAttribute,bool]]
+  $lambda = [System.Linq.Expressions.Expression]::Lambda(
+    $delegateType, $body, [System.Linq.Expressions.ParameterExpression[]]@($attributeParameter))
+  return $lambda.Compile().Invoke($attribute)
+}
+
+function GetCollectorHelperFunctionSnapshot {
+  $snapshot = @{}
+  foreach ($command in Get-Command -CommandType Function) {
+    if ($null -ne $command.ScriptBlock -and
+        $command.ScriptBlock.File -eq $PSCommandPath) {
+      $snapshot[$command.Name] = $command.ScriptBlock
+    }
+  }
+  return ,$snapshot
+}
+
+function RestoreCollectorHelperFunctions([hashtable]$snapshot) {
+  foreach ($entry in $snapshot.GetEnumerator()) {
+    Microsoft.PowerShell.Management\Set-Item `
+      -LiteralPath ('Function:' + $entry.Key) -Value $entry.Value -Force
+  }
+}
+
 function AddDefaultValueReference(
   [object]$value,
   [System.Collections.IList]$references

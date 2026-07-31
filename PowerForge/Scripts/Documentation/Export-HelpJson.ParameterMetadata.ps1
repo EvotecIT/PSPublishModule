@@ -11,16 +11,32 @@ function MergeParameterPossibleValues(
     [System.StringComparer]::OrdinalIgnoreCase
   }
   $seenMetadata = [System.Collections.Generic.HashSet[string]]::new($metadataComparer)
-  $seenMetadataDisplay = [System.Collections.Generic.HashSet[string]]::new($metadataComparer)
+  $metadataEntries = [System.Collections.Generic.List[object]]::new()
   foreach ($value in @($metadataValues)) {
     if ($null -eq $value) { continue }
     $normalized = if ($preserveMetadataText) { [string]$value } else { ([string]$value).Trim() }
     $display = ConvertToXmlSafeDefaultHelpText $normalized
     if (($preserveMetadataText -or $normalized) -and
-        $seenMetadata.Add($normalized) -and
-        $seenMetadataDisplay.Add($display)) {
-      $result.Add($display)
+        $seenMetadata.Add($normalized)) {
+      $metadataEntries.Add([pscustomobject]@{ Original = $normalized; Display = $display })
     }
+  }
+
+  $displayCounts = [System.Collections.Generic.Dictionary[string,int]]::new($metadataComparer)
+  foreach ($entry in $metadataEntries) {
+    if ($displayCounts.ContainsKey($entry.Display)) {
+      $displayCounts[$entry.Display]++
+    } else {
+      $displayCounts.Add($entry.Display, 1)
+    }
+  }
+  foreach ($entry in $metadataEntries) {
+    $display = if ($displayCounts[$entry.Display] -gt 1) {
+      ConvertToPowerShellDefaultValue ([string]$entry.Original)
+    } else {
+      [string]$entry.Display
+    }
+    $result.Add($display)
   }
 
   $seenOrdinal = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)

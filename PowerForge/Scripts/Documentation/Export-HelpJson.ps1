@@ -224,7 +224,7 @@ function ConvertToPowerShellDefaultValue(
     foreach ($item in $value) {
       $items.Add((ConvertToPowerShellDefaultValue $item $referenceStack))
     }
-    return ConvertCollectionItemsToPowerShellDefaultValue $items $value
+    return ConvertCollectionItemsToPowerShellDefaultValue $items $value $referenceStack
   }
   return ConvertScalarToPowerShellDefaultValue $value
 }
@@ -237,7 +237,11 @@ try {
   $m = $null
   try { $m = Import-PowerShellDataFile -Path $ManifestPath -ErrorAction Stop } catch { $m = $null }
 
-  $mod = Import-Module -Name $ManifestPath -Force -PassThru -ErrorAction Stop
+  $collectorHelperFunctions = GetCollectorHelperFunctionSnapshot
+  $restoreCollectorHelpers = Get-Command RestoreCollectorHelperFunctions -CommandType Function
+  $targetVariableImportFilter = '__PowerForgeDocumentationCollector_' + [guid]::NewGuid().ToString('N')
+  $mod = Import-Module -Name $ManifestPath -Force -PassThru -Function '*' -Cmdlet '*' -Alias '*' -Variable $targetVariableImportFilter -ErrorAction Stop
+  & $restoreCollectorHelpers $collectorHelperFunctions
   $moduleNameResolved = $mod.Name
 
   $commands = Get-Command -Module $moduleNameResolved -ErrorAction SilentlyContinue | Where-Object {
@@ -388,12 +392,7 @@ try {
             if ($attr -is [System.Management.Automation.PSDefaultValueAttribute]) {
               $hasMetadataDefault = $true
               try {
-                $defaultHelp = [string]$attr.Help
-                if (-not [string]::IsNullOrWhiteSpace($defaultHelp)) {
-                  $defaultValue = ConvertToXmlSafeDefaultHelpText $defaultHelp
-                } else {
-                  $defaultValue = ConvertToPowerShellDefaultValue $attr.Value
-                }
+                $defaultValue = ConvertPSDefaultValueAttribute $attr
               } catch {
                 $defaultValue = ''
               }

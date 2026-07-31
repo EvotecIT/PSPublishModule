@@ -226,8 +226,38 @@ function GetKnownDictionaryComparerName([object]$comparer, [type]$comparerType) 
   throw ('Unsupported dictionary comparer: ' + $comparer.GetType().FullName)
 }
 
-function GetKnownDictionaryComparerExpression([object]$comparer, [type]$comparerType) {
+function TestDictionaryComparerIsSingleton([object]$comparer, [type]$comparerType) {
+  if ($null -eq $comparer) { return $true }
+  if ($comparerType -and $comparerType.IsGenericType) {
+    $definition = $comparerType.GetGenericTypeDefinition()
+    $argument = $comparerType.GetGenericArguments()[0]
+    $defaultComparerType = if ($definition -eq [System.Collections.Generic.IEqualityComparer``1]) {
+      [System.Collections.Generic.EqualityComparer``1].MakeGenericType($argument)
+    } elseif ($definition -eq [System.Collections.Generic.IComparer``1]) {
+      [System.Collections.Generic.Comparer``1].MakeGenericType($argument)
+    } else { $null }
+    if ($defaultComparerType) {
+      $defaultComparer = $defaultComparerType.GetProperty('Default').GetValue($null, $null)
+      if ([object]::ReferenceEquals($comparer, $defaultComparer)) { return $true }
+    }
+  }
+  foreach ($name in @('Ordinal', 'OrdinalIgnoreCase', 'InvariantCulture', 'InvariantCultureIgnoreCase')) {
+    $knownComparer = [System.StringComparer].GetProperty($name).GetValue($null, $null)
+    if ([object]::ReferenceEquals($comparer, $knownComparer)) { return $true }
+  }
+  return $false
+}
+
+function GetKnownDictionaryComparerExpression(
+  [object]$comparer,
+  [type]$comparerType,
+  [System.Collections.IList]$referenceStack = $null
+) {
   $name = GetKnownDictionaryComparerName $comparer $comparerType
+  if ($null -ne $referenceStack -and
+      -not (TestDictionaryComparerIsSingleton $comparer $comparerType)) {
+    AddDefaultValueReference $comparer $referenceStack
+  }
   if ([string]::IsNullOrWhiteSpace($name)) { return '' }
   if ($name.StartsWith('Culture|', [System.StringComparison]::Ordinal)) {
     $parts = $name.Split('|')
@@ -240,7 +270,10 @@ function GetKnownDictionaryComparerExpression([object]$comparer, [type]$comparer
   return ('[System.StringComparer]::' + $name)
 }
 
-function GetDictionaryConstructorExpression([System.Collections.IDictionary]$value) {
+function GetDictionaryConstructorExpression(
+  [System.Collections.IDictionary]$value,
+  [System.Collections.IList]$referenceStack = $null
+) {
   if ($value.IsReadOnly -or $value.IsFixedSize) {
     throw ('Read-only or fixed-size dictionary defaults are not supported: ' + $value.GetType().FullName)
   }
@@ -250,7 +283,7 @@ function GetDictionaryConstructorExpression([System.Collections.IDictionary]$val
   }
   $comparerType = $null
   $comparer = GetDictionaryComparer $value ([ref]$comparerType)
-  $comparerExpression = GetKnownDictionaryComparerExpression $comparer $comparerType
+  $comparerExpression = GetKnownDictionaryComparerExpression $comparer $comparerType $referenceStack
   $dictionaryTypeExpression = GetPowerShellTypeDefaultExpression $value.GetType()
   $dictionaryTypeIsLiteral = TestPowerShellTypeLiteral $value.GetType()
   $capacity = GetDictionaryCapacity $value

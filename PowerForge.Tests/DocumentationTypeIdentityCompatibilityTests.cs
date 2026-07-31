@@ -2,6 +2,7 @@ using System.Text;
 
 namespace PowerForge.Tests;
 
+[Collection("DocumentationPowerShellHost")]
 public sealed class DocumentationTypeIdentityCompatibilityTests
 {
     [Fact]
@@ -387,7 +388,7 @@ if ($sortedList.GetType() -ne [System.Collections.Generic.SortedList[string,int]
             {
                 var runner = new ExecutablePowerShellRunner(host, root);
                 var payload = new DocumentationEngine(runner, new NullLogger())
-                    .ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
+                    .ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(2));
                 var command = Assert.Single(payload.Commands);
 
                 Assert.True(string.IsNullOrEmpty(Default("SpoofSwitch")));

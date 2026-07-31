@@ -44,7 +44,7 @@ function ConvertDictionaryToPowerShellDefaultValue(
   [System.Collections.IList]$referenceStack
 ) {
   $statements = [System.Collections.Generic.List[string]]::new()
-  $constructorExpression = GetDictionaryConstructorExpression $value
+  $constructorExpression = GetDictionaryConstructorExpression $value $referenceStack
   $statements.Add('$dictionary = ' + $constructorExpression)
   foreach ($entry in $value.GetEnumerator()) {
     $keyExpression = ConvertToPowerShellDefaultValue $entry.Key $referenceStack
@@ -55,7 +55,10 @@ function ConvertDictionaryToPowerShellDefaultValue(
   return ('& { ' + ($statements -join '; ') + ' }')
 }
 
-function TestCollectionHasItemOnlyBackingStore([object]$value) {
+function TestCollectionHasItemOnlyBackingStore(
+  [object]$value,
+  [System.Collections.IList]$referenceStack = $null
+) {
   $collectionType = $value.GetType()
   if (-not $collectionType.IsGenericType -or
       $collectionType.GetGenericTypeDefinition() -ne [System.Collections.ObjectModel.Collection``1]) {
@@ -71,6 +74,9 @@ function TestCollectionHasItemOnlyBackingStore([object]$value) {
   $expectedType = [System.Collections.Generic.List``1].MakeGenericType(
     $collectionType.GetGenericArguments()[0])
   if ($backingStore.GetType() -ne $expectedType) { return $false }
+  if ($null -ne $referenceStack) {
+    AddDefaultValueReference $backingStore $referenceStack
+  }
   $expectedCollection = [System.Activator]::CreateInstance($collectionType)
   foreach ($item in $value) {
     [void]([System.Collections.IList]$expectedCollection).Add($item)
@@ -93,7 +99,8 @@ function GetCollectionCapacity([object]$value) {
 
 function ConvertCollectionItemsToPowerShellDefaultValue(
   [System.Collections.Generic.IReadOnlyList[string]]$items,
-  [object]$value
+  [object]$value,
+  [System.Collections.IList]$referenceStack = $null
 ) {
   $collectionType = $value.GetType()
   $collectionTypeName = GetCanonicalTypeNameFromType $collectionType
@@ -106,7 +113,7 @@ function ConvertCollectionItemsToPowerShellDefaultValue(
       $supportedItemOnlyList =
         [object]::ReferenceEquals($genericDefinition, [System.Collections.Generic.List``1]) -or
         ([object]::ReferenceEquals($genericDefinition, [System.Collections.ObjectModel.Collection``1]) -and
-          (TestCollectionHasItemOnlyBackingStore $value))
+          (TestCollectionHasItemOnlyBackingStore $value $referenceStack))
     }
     if (-not $supportedItemOnlyList) {
       throw ('Collection type carries unsupported non-item state: ' + $collectionType.FullName)
