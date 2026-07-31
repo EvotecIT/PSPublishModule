@@ -36,7 +36,13 @@ function TestDefaultTextNeedsEncoding([string]$text) {
   return $false
 }
 
-function ConvertToPowerShellDefaultValue([object]$value) {
+function ConvertToPowerShellDefaultValue(
+  [object]$value,
+  [System.Collections.IList]$referenceStack = $null
+) {
+  if ($null -eq $referenceStack) {
+    $referenceStack = [System.Collections.ArrayList]::new()
+  }
   if ($null -eq $value) { return '$null' }
   if ($value -is [char]) {
     return ('([char]' + [int][char]$value + ')')
@@ -118,6 +124,11 @@ function ConvertToPowerShellDefaultValue([object]$value) {
     $versionText = $value.ToString().Replace("'", "''")
     return ("[System.Version]::Parse('" + $versionText + "')")
   }
+  if ($value -is [uri]) {
+    $uriText = ConvertToPowerShellDefaultValue $value.OriginalString $referenceStack
+    $uriKind = if ($value.IsAbsoluteUri) { 'Absolute' } else { 'Relative' }
+    return ('[System.Uri]::new(' + $uriText + ', [System.UriKind]::' + $uriKind + ')')
+  }
   if ($value.GetType().FullName -eq 'System.DateOnly') {
     $dayNumber = $value.DayNumber.ToString([System.Globalization.CultureInfo]::InvariantCulture)
     return ('[System.DateOnly]::FromDayNumber(([int]' + $dayNumber + '))')
@@ -142,12 +153,32 @@ function ConvertToPowerShellDefaultValue([object]$value) {
     $scriptText = ConvertToPowerShellDefaultValue ([string]$value.ToString())
     return ('[scriptblock]::Create(' + $scriptText + ')')
   }
-  if ($value -is [System.Collections.IEnumerable]) {
-    $items = @()
-    foreach ($item in $value) {
-      $items += ConvertToPowerShellDefaultValue $item
+  if ($value -is [System.Collections.IDictionary] -or
+      $value -is [System.Collections.IEnumerable]) {
+    foreach ($ancestor in $referenceStack) {
+      if ([object]::ReferenceEquals($ancestor, $value)) {
+        throw 'Circular default-value collections are not supported.'
+      }
     }
-    return ('@(' + ($items -join ', ') + ')')
+    [void]$referenceStack.Add($value)
+    try {
+      if ($value -is [System.Collections.IDictionary]) {
+        $entries = [System.Collections.Generic.List[string]]::new()
+        foreach ($entry in $value.GetEnumerator()) {
+          $key = ConvertToPowerShellDefaultValue $entry.Key $referenceStack
+          $entryValue = ConvertToPowerShellDefaultValue $entry.Value $referenceStack
+          $entries.Add(('(' + $key + ') = ' + $entryValue))
+        }
+        return ('@{ ' + ($entries -join '; ') + ' }')
+      }
+      $items = [System.Collections.Generic.List[string]]::new()
+      foreach ($item in $value) {
+        $items.Add((ConvertToPowerShellDefaultValue $item $referenceStack))
+      }
+      return ('@(' + ($items -join ', ') + ')')
+    } finally {
+      $referenceStack.RemoveAt($referenceStack.Count - 1)
+    }
   }
   if ($value -is [System.IFormattable]) {
     return ([System.IFormattable]$value).ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)

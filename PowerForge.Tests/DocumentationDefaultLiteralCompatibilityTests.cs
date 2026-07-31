@@ -51,6 +51,29 @@ function Get-DefaultLiteralFixture {
         $versionAttributes.Add($versionDefault)
         $parameters.Add('Version', [System.Management.Automation.RuntimeDefinedParameter]::new('Version', [version], $versionAttributes))
 
+        $uriAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $uriDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $uriDefault.Value = [uri]::new("https://example.com/a'b?x=1")
+        $uriAttributes.Add($uriDefault)
+        $parameters.Add('Uri', [System.Management.Automation.RuntimeDefinedParameter]::new('Uri', [uri], $uriAttributes))
+
+        $dictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $dictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $dictionaryDefault.Value = [ordered]@{
+            alpha = 1
+            endpoint = [uri]::new('relative/path', [System.UriKind]::Relative)
+        }
+        $dictionaryAttributes.Add($dictionaryDefault)
+        $parameters.Add('Dictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('Dictionary', [System.Collections.IDictionary], $dictionaryAttributes))
+
+        $cyclicAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $cyclicDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $cyclicValue = [System.Collections.ArrayList]::new()
+        [void]$cyclicValue.Add($cyclicValue)
+        $cyclicDefault.Value = $cyclicValue
+        $cyclicAttributes.Add($cyclicDefault)
+        $parameters.Add('CyclicCollection', [System.Management.Automation.RuntimeDefinedParameter]::new('CyclicCollection', [object], $cyclicAttributes))
+
         $dateOnlyAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $dateOnlyDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $dateOnlyDefault.Value = [System.DateOnly]::FromDayNumber(739827)
@@ -118,6 +141,13 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 "[System.Version]::Parse('1.2.3.4')",
                 Default("Version"));
+            Assert.Equal(
+                "[System.Uri]::new('https://example.com/a''b?x=1', [System.UriKind]::Absolute)",
+                Default("Uri"));
+            Assert.Equal(
+                "@{ ('alpha') = 1; ('endpoint') = [System.Uri]::new('relative/path', [System.UriKind]::Relative) }",
+                Default("Dictionary"));
+            Assert.True(string.IsNullOrEmpty(Default("CyclicCollection")));
             Assert.Equal(
                 "[System.DateOnly]::FromDayNumber(([int]739827))",
                 Default("DateOnly"));
