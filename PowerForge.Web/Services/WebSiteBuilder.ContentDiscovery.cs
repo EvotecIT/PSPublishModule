@@ -102,6 +102,19 @@ public static partial class WebSiteBuilder
                 if (matter is not null)
                     matter.EditUrl = editUrl;
                 var dataForShortcodes = ResolveDataForProject(data, projectSlug);
+                var relativePath = ResolveRelativePath(collectionRoot, file);
+                var resolvedLanguage = ResolveItemLanguage(spec, relativePath, matter, out var localizedRelativePath, out var localizedRelativeDir);
+                var resolvedAliases = ResolveAliasesForLanguage(matter, resolvedLanguage, localization);
+                var relativeDir = localizedRelativeDir;
+                var isSectionIndex = IsSectionIndex(file);
+                var isBundleIndex = IsLeafBundleIndex(file);
+                var slugPath = ResolveSlugPath(localizedRelativePath, relativeDir, matter?.Slug);
+                if (isSectionIndex || isBundleIndex)
+                    slugPath = ApplySlugOverride(relativeDir, matter?.Slug);
+                var baseOutput = ReplaceProjectPlaceholder(resolvedCollection.Output, projectSlug);
+                var route = BuildRoute(baseOutput, slugPath, spec.TrailingSlash);
+                route = ApplyLanguagePrefixToRoute(spec, route, resolvedLanguage);
+                var kind = ResolvePageKind(route, resolvedCollection, isSectionIndex);
                 var shortcodeContext = new ShortcodeRenderContext
                 {
                     Site = spec,
@@ -110,6 +123,7 @@ public static partial class WebSiteBuilder
                     EditUrl = editUrl,
                     Project = projectSpec,
                     SourcePath = file,
+                    PageResourceBaseUrl = isSectionIndex || isBundleIndex ? route : string.Empty,
                     Data = dataForShortcodes,
                     ThemeManifest = manifest,
                     ThemeRoot = themeRoot,
@@ -144,19 +158,6 @@ public static partial class WebSiteBuilder
 
                 var title = matter?.Title ?? FrontMatterParser.ExtractTitleFromMarkdown(processedBody) ?? Path.GetFileNameWithoutExtension(file);
                 var description = matter?.Description ?? string.Empty;
-                var relativePath = ResolveRelativePath(collectionRoot, file);
-                var resolvedLanguage = ResolveItemLanguage(spec, relativePath, matter, out var localizedRelativePath, out var localizedRelativeDir);
-                var resolvedAliases = ResolveAliasesForLanguage(matter, resolvedLanguage, localization);
-                var relativeDir = localizedRelativeDir;
-                var isSectionIndex = IsSectionIndex(file);
-                var isBundleIndex = IsLeafBundleIndex(file);
-                var slugPath = ResolveSlugPath(localizedRelativePath, relativeDir, matter?.Slug);
-                if (isSectionIndex || isBundleIndex)
-                    slugPath = ApplySlugOverride(relativeDir, matter?.Slug);
-                var baseOutput = ReplaceProjectPlaceholder(resolvedCollection.Output, projectSlug);
-                var route = BuildRoute(baseOutput, slugPath, spec.TrailingSlash);
-                route = ApplyLanguagePrefixToRoute(spec, route, resolvedLanguage);
-                var kind = ResolvePageKind(route, resolvedCollection, isSectionIndex);
                 var layout = matter?.Layout;
                 if (string.IsNullOrWhiteSpace(layout))
                 {

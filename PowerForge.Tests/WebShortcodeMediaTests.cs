@@ -324,10 +324,57 @@ public class WebShortcodeMediaTests
         Assert.True(html.Contains("href=\"/stories/demo/demo.svg\"", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void Build_DerivesStoryUrlsFromPublishedPageBundleResources()
+    {
+        var html = BuildSinglePageSite(
+            """
+            {{< story manifest="content/pages/demo/story/visual-story.json" transcript="hidden" >}}
+            """,
+            root =>
+            {
+                var bundleRoot = Path.Combine(root, "content", "pages", "demo", "story");
+                Directory.CreateDirectory(bundleRoot);
+                File.WriteAllText(
+                    Path.Combine(bundleRoot, "demo.svg"),
+                    "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+                using (var completed = new MagickImage(MagickColors.Transparent, 2, 2))
+                {
+                    completed.Write(Path.Combine(bundleRoot, "demo.png"), MagickFormat.Png);
+                }
+                File.WriteAllText(
+                    Path.Combine(bundleRoot, "visual-story.json"),
+                    """
+                    {
+                      "schemaVersion": 1,
+                      "id": "page-bundle-story",
+                      "title": "Page bundle story",
+                      "alt": "The page bundle result appears.",
+                      "outcome": "The page bundle result is visible.",
+                      "artifacts": [
+                        { "role": "animated", "format": "svg", "path": "demo.svg" },
+                        { "role": "completed", "format": "png", "path": "demo.png" }
+                      ]
+                    }
+                    """);
+            },
+            spec => spec.Collections[0].Output = "/blog",
+            pageRelativePath: Path.Combine("demo", "index.md"),
+            outputRelativePath: Path.Combine("blog", "demo", "index.html"),
+            includeIndexSlug: false);
+
+        Assert.Contains("src=\"/blog/demo/story/demo.svg\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("srcset=\"/blog/demo/story/demo.png\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("/content/pages/demo/story/", html, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string BuildSinglePageSite(
         string markdown,
         Action<string>? setup = null,
-        Action<SiteSpec>? configure = null)
+        Action<SiteSpec>? configure = null,
+        string pageRelativePath = "index.md",
+        string outputRelativePath = "index.html",
+        bool includeIndexSlug = true)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-shortcode-media-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -338,11 +385,14 @@ public class WebShortcodeMediaTests
 
             var pagesPath = Path.Combine(root, "content", "pages");
             Directory.CreateDirectory(pagesPath);
-            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+            var pagePath = Path.Combine(pagesPath, pageRelativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(pagePath)!);
+            var slugLine = includeIndexSlug ? "slug: index" : string.Empty;
+            File.WriteAllText(pagePath,
                 $$"""
                 ---
                 title: Home
-                slug: index
+                {{slugLine}}
                 ---
 
                 {{markdown}}
@@ -394,7 +444,7 @@ public class WebShortcodeMediaTests
             var outPath = Path.Combine(root, "_site");
             WebSiteBuilder.Build(spec, plan, outPath);
 
-            var indexHtml = Path.Combine(outPath, "index.html");
+            var indexHtml = Path.Combine(outPath, outputRelativePath);
             Assert.True(File.Exists(indexHtml), "Expected index.html to be generated.");
             return File.ReadAllText(indexHtml);
         }

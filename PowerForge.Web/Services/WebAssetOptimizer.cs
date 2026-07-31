@@ -88,8 +88,12 @@ public static partial class WebAssetOptimizer
                 result.UpdatedCount++;
         }
 
+        var protectedStoryArtifacts = FindVisualStoryArtifactPaths(siteRoot);
         var allHtmlFiles = Directory.EnumerateFiles(siteRoot, "*.html", SearchOption.AllDirectories).ToArray();
-        var htmlFiles = allHtmlFiles;
+        var mutableHtmlFiles = allHtmlFiles
+            .Where(path => !protectedStoryArtifacts.Contains(Path.GetFullPath(path)))
+            .ToArray();
+        var htmlFiles = mutableHtmlFiles;
         var cssFiles = Directory.EnumerateFiles(siteRoot, "*.css", SearchOption.AllDirectories).ToArray();
         var jsFiles = Directory.EnumerateFiles(siteRoot, "*.js", SearchOption.AllDirectories).ToArray();
         result.HtmlFileCount = allHtmlFiles.Length;
@@ -119,7 +123,7 @@ public static partial class WebAssetOptimizer
         var policy = options.AssetPolicy;
         if (policy?.Rewrites is { Length: > 0 })
         {
-            CopyRewriteAssets(policy.Rewrites, siteRoot);
+            CopyRewriteAssets(policy.Rewrites, siteRoot, protectedStoryArtifacts);
             foreach (var htmlFile in htmlFiles)
             {
                 var content = File.ReadAllText(htmlFile);
@@ -165,7 +169,7 @@ public static partial class WebAssetOptimizer
         // Optimize images before hashing so hashed filenames always match final image bytes.
         if (options.OptimizeImages)
         {
-            OptimizeImages(siteRoot, htmlFiles, options, result, MarkUpdated);
+            OptimizeImages(siteRoot, htmlFiles, protectedStoryArtifacts, options, result, MarkUpdated);
         }
 
         var hashSpec = ResolveHashSpec(options, policy);
@@ -173,15 +177,26 @@ public static partial class WebAssetOptimizer
         // Fingerprinting moves shared assets and therefore requires every generated HTML
         // reference to be rewritten in the same pass. A sampled/incremental HTML scope
         // must never hash assets because untouched pages would retain broken old URLs.
-        var hasCompleteHtmlScope = htmlFiles.Length == allHtmlFiles.Length;
+        var hasCompleteHtmlScope = htmlFiles.Length == mutableHtmlFiles.Length;
         if (hashSpec.Enabled && hasCompleteHtmlScope)
         {
-            hashMap = HashAssets(siteRoot, hashSpec, out var hashedAssetCount, out var hashedAssets, MarkUpdated);
+            hashMap = HashAssets(
+                siteRoot,
+                hashSpec,
+                protectedStoryArtifacts,
+                out var hashedAssetCount,
+                out var hashedAssets,
+                MarkUpdated);
             result.HashedAssetCount = hashedAssetCount;
             result.HashedAssets = hashedAssets.ToArray();
             if (hashMap.Count > 0)
             {
-                var rewrites = RewriteHashedReferences(siteRoot, htmlFiles, hashMap, MarkUpdated);
+                var rewrites = RewriteHashedReferences(
+                    siteRoot,
+                    htmlFiles,
+                    hashMap,
+                    protectedStoryArtifacts,
+                    MarkUpdated);
                 result.HtmlHashRewriteCount = rewrites.HtmlFilesRewritten;
                 result.CssHashRewriteCount = rewrites.CssFilesRewritten;
                 var manifestPath = WriteHashManifest(siteRoot, hashSpec, hashMap);
@@ -224,7 +239,8 @@ public static partial class WebAssetOptimizer
 
         if (options.MinifyCss)
         {
-            foreach (var cssFile in Directory.EnumerateFiles(siteRoot, "*.css", SearchOption.AllDirectories))
+            foreach (var cssFile in Directory.EnumerateFiles(siteRoot, "*.css", SearchOption.AllDirectories)
+                         .Where(path => !protectedStoryArtifacts.Contains(Path.GetFullPath(path))))
             {
                 var css = File.ReadAllText(cssFile);
                 if (string.IsNullOrWhiteSpace(css)) continue;
@@ -252,7 +268,8 @@ public static partial class WebAssetOptimizer
 
         if (options.MinifyJs)
         {
-            foreach (var jsFile in Directory.EnumerateFiles(siteRoot, "*.js", SearchOption.AllDirectories))
+            foreach (var jsFile in Directory.EnumerateFiles(siteRoot, "*.js", SearchOption.AllDirectories)
+                         .Where(path => !protectedStoryArtifacts.Contains(Path.GetFullPath(path))))
             {
                 var js = File.ReadAllText(jsFile);
                 if (string.IsNullOrWhiteSpace(js)) continue;
@@ -357,7 +374,10 @@ public static partial class WebAssetOptimizer
         return policy?.Hashing ?? new AssetHashSpec { Enabled = false };
     }
 
-    private static void CopyRewriteAssets(IEnumerable<AssetRewriteSpec> rewrites, string siteRoot)
+    private static void CopyRewriteAssets(
+        IEnumerable<AssetRewriteSpec> rewrites,
+        string siteRoot,
+        IReadOnlySet<string> protectedStoryArtifacts)
     {
         foreach (var rewrite in rewrites)
         {
@@ -368,6 +388,11 @@ public static partial class WebAssetOptimizer
             if (!TryResolveUnderRoot(siteRoot, destRelative, out var dest))
             {
                 Trace.TraceWarning($"Asset rewrite destination outside site root: {rewrite.Destination}");
+                continue;
+            }
+            if (protectedStoryArtifacts.Contains(Path.GetFullPath(dest)))
+            {
+                Trace.TraceWarning($"Asset rewrite destination is protected by a visual-story manifest: {rewrite.Destination}");
                 continue;
             }
 
@@ -717,6 +742,7 @@ public static partial class WebAssetOptimizer
     private static Dictionary<string, string> HashAssets(
         string siteRoot,
         AssetHashSpec spec,
+        IReadOnlySet<string> protectedStoryArtifacts,
         out int hashedAssetCount,
         out List<WebOptimizeHashedAssetEntry> hashedAssets,
         Action<string>? onUpdated = null)
@@ -731,6 +757,8 @@ public static partial class WebAssetOptimizer
 
         foreach (var file in files)
         {
+            if (protectedStoryArtifacts.Contains(Path.GetFullPath(file)))
+                continue;
             var relative = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
             if (IsExcluded(relative, spec.Exclude))
                 continue;
@@ -762,6 +790,7 @@ public static partial class WebAssetOptimizer
         string siteRoot,
         string[] htmlFiles,
         Dictionary<string, string> map,
+        IReadOnlySet<string> protectedStoryArtifacts,
         Action<string>? onUpdated = null)
     {
         var htmlFilesRewritten = 0;
@@ -781,6 +810,8 @@ public static partial class WebAssetOptimizer
 
         foreach (var cssFile in Directory.EnumerateFiles(siteRoot, "*.css", SearchOption.AllDirectories))
         {
+            if (protectedStoryArtifacts.Contains(Path.GetFullPath(cssFile)))
+                continue;
             var css = File.ReadAllText(cssFile);
             if (string.IsNullOrWhiteSpace(css)) continue;
             var updated = RewriteCssUrls(css, map);

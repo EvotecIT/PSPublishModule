@@ -133,6 +133,9 @@ internal static partial class ShortcodeDefaults
     {
         var root = Path.GetFullPath(string.IsNullOrWhiteSpace(context.RootPath) ? "." : context.RootPath);
         var publishedPath = ResolvePublishedVisualStoryManifestPath(context.Site, root, manifestPath);
+        if (publishedPath is null &&
+            TryResolvePageBundleVisualStoryBaseUrl(context, manifestPath, out var pageBundleBaseUrl))
+            return pageBundleBaseUrl;
         var normalized = publishedPath ?? Path.GetRelativePath(root, manifestPath).Replace('\\', '/');
         var directory = normalized.Contains('/')
             ? normalized[..normalized.LastIndexOf('/')]
@@ -150,6 +153,35 @@ internal static partial class ShortcodeDefaults
             directory.Split('/', StringSplitOptions.RemoveEmptyEntries)
                 .Select(Uri.EscapeDataString));
         return "/" + encodedDirectory;
+    }
+
+    private static bool TryResolvePageBundleVisualStoryBaseUrl(
+        ShortcodeRenderContext context,
+        string manifestPath,
+        out string baseUrl)
+    {
+        baseUrl = string.Empty;
+        if (string.IsNullOrWhiteSpace(context.PageResourceBaseUrl) ||
+            string.IsNullOrWhiteSpace(context.SourcePath))
+            return false;
+
+        var bundleRoot = Path.GetDirectoryName(Path.GetFullPath(context.SourcePath));
+        if (string.IsNullOrWhiteSpace(bundleRoot) ||
+            !TryGetContainedRelativePath(bundleRoot, manifestPath, out var relativeManifestPath))
+            return false;
+
+        var directory = relativeManifestPath.Contains('/')
+            ? relativeManifestPath[..relativeManifestPath.LastIndexOf('/')]
+            : string.Empty;
+        var encodedDirectory = string.Join(
+            "/",
+            directory.Split('/', StringSplitOptions.RemoveEmptyEntries)
+                .Select(Uri.EscapeDataString));
+        var pageBase = "/" + context.PageResourceBaseUrl.Trim('/');
+        baseUrl = encodedDirectory.Length == 0
+            ? pageBase
+            : pageBase.TrimEnd('/') + "/" + encodedDirectory;
+        return true;
     }
 
     private static string? ResolvePublishedVisualStoryManifestPath(

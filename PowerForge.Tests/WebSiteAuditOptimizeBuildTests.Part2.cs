@@ -1,5 +1,6 @@
 using PowerForge.Web;
 using ImageMagick;
+using System.Text.Json;
 using System.Xml.Linq;
 
 namespace PowerForge.Tests;
@@ -1119,6 +1120,32 @@ public partial class WebSiteAuditOptimizeBuildTests
         try
         {
             var sourcePng = Path.Combine(bundleRoot, "source", "demo.png");
+            var sourceManifest = Path.Combine(bundleRoot, "source", "story.json");
+            var sourceHtml = Path.Combine(bundleRoot, "source", "demo.html");
+            var htmlBytes = System.Text.Encoding.UTF8.GetBytes(
+                "<!doctype html>\n<html>\n  <body>\n    <img src=\"/hero.png\" />\n  </body>\n</html>\n");
+            File.WriteAllBytes(sourceHtml, htmlBytes);
+            var sourceBundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(
+                File.ReadAllText(sourceManifest),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+            sourceBundle.Artifacts = sourceBundle.Artifacts
+                .Append(new WebVisualStoryArtifact
+                {
+                    Role = "html",
+                    Format = "html",
+                    Path = "demo.html",
+                    MediaType = "text/html"
+                })
+                .ToArray();
+            File.WriteAllText(
+                sourceManifest,
+                JsonSerializer.Serialize(
+                    sourceBundle,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                        WriteIndented = true
+                    }));
             using (var image = new MagickImage(sourcePng))
             {
                 image.Comment = new string('x', 40000);
@@ -1132,6 +1159,8 @@ public partial class WebSiteAuditOptimizeBuildTests
             });
             var completedPath = Path.Combine(storyRoot, "demo.png");
             var completedBefore = File.ReadAllBytes(completedPath);
+            var htmlPath = Path.Combine(storyRoot, "demo.html");
+            var htmlBefore = File.ReadAllBytes(htmlPath);
 
             var heroPath = Path.Combine(siteRoot, "hero.png");
             using (var image = new MagickImage(MagickColors.DeepSkyBlue, 512, 256))
@@ -1145,13 +1174,17 @@ public partial class WebSiteAuditOptimizeBuildTests
                 SiteRoot = siteRoot,
                 OptimizeImages = true,
                 ImageExtensions = [".png"],
-                ImageStripMetadata = true
+                ImageStripMetadata = true,
+                MinifyHtml = true,
+                HashAssets = true,
+                HashExtensions = [".html"]
             });
 
             Assert.Equal(1, result.ImageFileCount);
             Assert.Equal(1, result.ImageOptimizedCount);
             Assert.Equal(completedBefore, File.ReadAllBytes(completedPath));
-            Assert.Equal(3, WebVisualStoryStager.Load(staged.ManifestPath).Artifacts.Length);
+            Assert.Equal(htmlBefore, File.ReadAllBytes(htmlPath));
+            Assert.Equal(4, WebVisualStoryStager.Load(staged.ManifestPath).Artifacts.Length);
         }
         finally
         {

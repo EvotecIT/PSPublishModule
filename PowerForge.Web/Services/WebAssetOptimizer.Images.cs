@@ -13,6 +13,7 @@ public static partial class WebAssetOptimizer
     private static void OptimizeImages(
         string siteRoot,
         string[] htmlFiles,
+        IReadOnlySet<string> protectedStoryArtifacts,
         WebAssetOptimizerOptions options,
         WebOptimizeResult result,
         Action<string>? onUpdated = null)
@@ -29,8 +30,6 @@ public static partial class WebAssetOptimizer
         var generatedVariants = new List<WebOptimizeImageVariantEntry>();
         var budgetWarnings = new List<string>();
         var rewritePlans = new Dictionary<string, ImageRewritePlan>(StringComparer.OrdinalIgnoreCase);
-        var protectedStoryArtifacts = FindVisualStoryArtifactPaths(siteRoot);
-
         foreach (var file in Directory.EnumerateFiles(siteRoot, "*.*", SearchOption.AllDirectories)
                      .Where(path => extensionSet.Contains(Path.GetExtension(path)) &&
                                     !protectedStoryArtifacts.Contains(Path.GetFullPath(path))))
