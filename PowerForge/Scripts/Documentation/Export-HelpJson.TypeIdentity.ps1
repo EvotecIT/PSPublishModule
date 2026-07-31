@@ -33,6 +33,7 @@ function GetCanonicalTypeNameFromType([type]$type) {
 function GetPowerShellSafeEnumName([type]$enumType, [object]$value) {
   $enumName = [System.Enum]::GetName($enumType, $value)
   if ([string]::IsNullOrWhiteSpace($enumName)) { return '' }
+  if ($enumName -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') { return '' }
   $caseInsensitiveMatches = 0
   foreach ($candidate in [System.Enum]::GetNames($enumType)) {
     if ($candidate -ieq $enumName) { $caseInsensitiveMatches++ }
@@ -129,7 +130,7 @@ function GetKnownDictionaryComparerExpression([object]$comparer, [type]$comparer
 function GetDictionaryConstructorExpression([System.Collections.IDictionary]$value) {
   $dictionaryTypeName = GetConstructibleDictionaryTypeName $value
   if ([string]::IsNullOrWhiteSpace($dictionaryTypeName)) {
-    return '[System.Collections.Specialized.OrderedDictionary]::new()'
+    throw ('Dictionary type has no supported constructor: ' + $value.GetType().FullName)
   }
   $comparerType = $null
   $comparer = GetDictionaryComparer $value ([ref]$comparerType)

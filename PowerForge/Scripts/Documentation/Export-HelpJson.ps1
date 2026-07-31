@@ -190,6 +190,9 @@ function ConvertToPowerShellDefaultValue(
       if ($value -is [System.Collections.IDictionary]) {
         return ConvertDictionaryToPowerShellDefaultValue $value $referenceStack
       }
+      if ($value -isnot [System.Collections.IList] -and $value -isnot [System.Array]) {
+        throw ('Unsupported enumerable default type: ' + $value.GetType().FullName)
+      }
       if ($value -is [System.Array] -and
           ($value.Rank -gt 1 -or $value.GetType() -ne $value.GetType().GetElementType().MakeArrayType())) {
         return ConvertMultidimensionalArrayToPowerShellDefaultValue $value $referenceStack

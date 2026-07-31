@@ -17,6 +17,19 @@ public sealed class DocumentationDefaultLiteralCompatibilityTests
 if (-not ('DefaultLiteralFixture.CaseMode' -as [type])) {
     Add-Type -TypeDefinition 'namespace DefaultLiteralFixture { public enum CaseMode { A = 1, a = 2 } }'
 }
+if (-not ('DefaultLiteralFixture.WeirdMode' -as [type])) {
+    $assemblyName = [System.Reflection.AssemblyName]::new('DefaultLiteralFixtureDynamic')
+    $assemblyBuilder = [System.Reflection.Emit.AssemblyBuilder]::DefineDynamicAssembly(
+        $assemblyName,
+        [System.Reflection.Emit.AssemblyBuilderAccess]::Run)
+    $moduleBuilder = $assemblyBuilder.DefineDynamicModule('DefaultLiteralFixtureDynamic')
+    $enumBuilder = $moduleBuilder.DefineEnum(
+        'DefaultLiteralFixture.WeirdMode',
+        [System.Reflection.TypeAttributes]::Public,
+        [int])
+    [void]$enumBuilder.DefineLiteral('A-B', 1)
+    [void]$enumBuilder.CreateTypeInfo()
+}
 
 function Get-DefaultLiteralFixture {
     [CmdletBinding()]
@@ -97,6 +110,22 @@ function Get-DefaultLiteralFixture {
         $caseDistinctDictionaryAttributes.Add($caseDistinctDictionaryDefault)
         $parameters.Add('CaseDistinctDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('CaseDistinctDictionary', [System.Collections.Generic.Dictionary[string, int]], $caseDistinctDictionaryAttributes))
 
+        $concurrentDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $concurrentDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $concurrentDictionary = [System.Collections.Concurrent.ConcurrentDictionary[string, int]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        $concurrentDictionary['Alpha'] = 1
+        $concurrentDictionaryDefault.Value = $concurrentDictionary
+        $concurrentDictionaryAttributes.Add($concurrentDictionaryDefault)
+        $parameters.Add('ConcurrentDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('ConcurrentDictionary', [System.Collections.Concurrent.ConcurrentDictionary[string, int]], $concurrentDictionaryAttributes))
+
+        $readOnlyDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $readOnlyDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $readOnlyBacking = [System.Collections.Generic.Dictionary[string, int]]::new()
+        $readOnlyBacking['alpha'] = 1
+        $readOnlyDictionaryDefault.Value = [System.Collections.ObjectModel.ReadOnlyDictionary[string, int]]::new($readOnlyBacking)
+        $readOnlyDictionaryAttributes.Add($readOnlyDictionaryDefault)
+        $parameters.Add('ReadOnlyDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('ReadOnlyDictionary', [System.Collections.ObjectModel.ReadOnlyDictionary[string, int]], $readOnlyDictionaryAttributes))
+
         $unsupportedCultureAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $unsupportedCultureDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $unsupportedCultureDefault.Value = [System.Globalization.CultureInfo]::new('en-US')
@@ -153,6 +182,15 @@ function Get-DefaultLiteralFixture {
         $nestedMatrixDefault.Value = $nestedMatrix
         $nestedMatrixAttributes.Add($nestedMatrixDefault)
         $parameters.Add('NestedMatrix', [System.Management.Automation.RuntimeDefinedParameter]::new('NestedMatrix', [object[]], $nestedMatrixAttributes))
+
+        $stackAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $stackDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $stack = [System.Collections.Generic.Stack[int]]::new()
+        $stack.Push(1)
+        $stack.Push(2)
+        $stackDefault.Value = $stack
+        $stackAttributes.Add($stackDefault)
+        $parameters.Add('Stack', [System.Management.Automation.RuntimeDefinedParameter]::new('Stack', [System.Collections.Generic.Stack[int]], $stackAttributes))
 
         $dateOnlyAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $dateOnlyDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -219,6 +257,13 @@ function Get-DefaultLiteralFixture {
         $caseModeDefault.Value = [System.Enum]::ToObject([DefaultLiteralFixture.CaseMode], 1)
         $caseModeAttributes.Add($caseModeDefault)
         $parameters.Add('CaseMode', [System.Management.Automation.RuntimeDefinedParameter]::new('CaseMode', [DefaultLiteralFixture.CaseMode], $caseModeAttributes))
+
+        $weirdModeType = 'DefaultLiteralFixture.WeirdMode' -as [type]
+        $weirdModeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $weirdModeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $weirdModeDefault.Value = [System.Enum]::ToObject($weirdModeType, 1)
+        $weirdModeAttributes.Add($weirdModeDefault)
+        $parameters.Add('WeirdMode', [System.Management.Automation.RuntimeDefinedParameter]::new('WeirdMode', $weirdModeType, $weirdModeAttributes))
 
         $parameters
     }
@@ -289,11 +334,15 @@ function Get-DefaultLiteralFixture {
                 "[System.Uri]::new('https://example.com/a''b?x=1', [System.UriKind]::Absolute)",
                 Default("Uri"));
             Assert.Equal(
-                "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::OrdinalIgnoreCase); $dictionary.Add(('alpha'), (1)); $dictionary.Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
+                "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('alpha'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
                 Default("Dictionary"));
             Assert.Equal(
-                "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Ordinal); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); return ,$dictionary }",
+                "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Ordinal); ([System.Collections.IDictionary]$dictionary).Add(('A'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('a'), (2)); return ,$dictionary }",
                 Default("CaseDistinctDictionary"));
+            Assert.Equal(
+                "& { $dictionary = [System.Collections.Concurrent.ConcurrentDictionary[System.String,System.Int32]]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('Alpha'), (1)); return ,$dictionary }",
+                Default("ConcurrentDictionary"));
+            Assert.True(string.IsNullOrEmpty(Default("ReadOnlyDictionary")));
             Assert.True(string.IsNullOrEmpty(Default("UnsupportedCulture")));
             Assert.Equal(
                 new[] { "One", "Two" },
@@ -312,6 +361,7 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 "& { $array = [object[]]::new(1); $array.SetValue((& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }), 0); return ,$array }",
                 Default("NestedMatrix"));
+            Assert.True(string.IsNullOrEmpty(Default("Stack")));
             Assert.Equal(
                 "[System.DateOnly]::FromDayNumber(([int]739827))",
                 Default("DateOnly"));
@@ -337,6 +387,9 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 "[System.Enum]::ToObject([DefaultLiteralFixture.CaseMode], ([System.Int32]1))",
                 Default("CaseMode"));
+            Assert.Equal(
+                "[System.Enum]::ToObject([DefaultLiteralFixture.WeirdMode], ([System.Int32]1))",
+                Default("WeirdMode"));
 
             string Default(string name)
                 => Assert.Single(command.Parameters, parameter => parameter.Name == name).DefaultValue;

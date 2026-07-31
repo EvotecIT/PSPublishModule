@@ -44,7 +44,7 @@ function ConvertDictionaryToPowerShellDefaultValue(
   foreach ($entry in $value.GetEnumerator()) {
     $keyExpression = ConvertToPowerShellDefaultValue $entry.Key $referenceStack
     $valueExpression = ConvertToPowerShellDefaultValue $entry.Value $referenceStack
-    $statements.Add('$dictionary.Add((' + $keyExpression + '), (' + $valueExpression + '))')
+    $statements.Add('([System.Collections.IDictionary]$dictionary).Add((' + $keyExpression + '), (' + $valueExpression + '))')
   }
   $statements.Add('return ,$dictionary')
   return ('& { ' + ($statements -join '; ') + ' }')
