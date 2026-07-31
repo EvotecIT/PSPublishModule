@@ -246,7 +246,7 @@ internal static class PowerShellDefaultValueFormatter
             var kind = (token.Kind ?? string.Empty).Trim();
             if (kind.Equals("CollectionStart", StringComparison.OrdinalIgnoreCase))
             {
-                frames.Push(new CollectionTokenFrame());
+                frames.Push(new CollectionTokenFrame(token.CanonicalTypeName, token.Name));
                 continue;
             }
 
@@ -331,23 +331,41 @@ internal static class PowerShellDefaultValueFormatter
 
     private sealed class CollectionTokenFrame : TokenFrame
     {
+        private readonly string _collectionTypeName;
+        private readonly bool _isArray;
         private readonly List<string> _items = new();
-        private bool _containsNestedContainer;
+
+        public CollectionTokenFrame(string? collectionTypeName, string? collectionKind)
+        {
+            if (string.IsNullOrWhiteSpace(collectionTypeName))
+                throw new FormatException("The runtime default token stream is missing a constructible collection type.");
+            _collectionTypeName = collectionTypeName!.Trim();
+            _isArray = string.Equals(collectionKind, "Array", StringComparison.Ordinal);
+            if (!_isArray && !string.Equals(collectionKind, "List", StringComparison.Ordinal))
+                throw new FormatException("The runtime default token stream contains an unsupported collection kind.");
+        }
 
         public override void Add(string value, bool isContainer)
         {
-            _containsNestedContainer |= isContainer;
             _items.Add(value);
         }
 
         public override string Complete()
         {
-            if (!_containsNestedContainer)
-                return "@(" + string.Join(", ", _items) + ")";
-            var statements = new List<string> { "$array = [object[]]::new(" + _items.Count + ")" };
-            for (var index = 0; index < _items.Count; index++)
-                statements.Add("$array.SetValue((" + _items[index] + "), " + index + ")");
-            statements.Add("return ,$array");
+            var statements = new List<string>();
+            if (_isArray)
+            {
+                statements.Add("$collection = [" + _collectionTypeName + "]::new(" + _items.Count + ")");
+                for (var index = 0; index < _items.Count; index++)
+                    statements.Add("$collection.SetValue((" + _items[index] + "), " + index + ")");
+            }
+            else
+            {
+                statements.Add("$collection = [" + _collectionTypeName + "]::new()");
+                statements.AddRange(_items.Select(item =>
+                    "[void]([System.Collections.IList]$collection).Add((" + item + "))"));
+            }
+            statements.Add("return ,$collection");
             return "& { " + string.Join("; ", statements) + " }";
         }
     }
@@ -487,9 +505,12 @@ internal static class PowerShellDefaultValueFormatter
         {
             for (var dimension = indices.Length - 1; dimension >= 0; dimension--)
             {
-                indices[dimension]++;
-                if (indices[dimension] < _lowerBounds[dimension] + _lengths[dimension])
+                var offset = (long)indices[dimension] - _lowerBounds[dimension];
+                if (offset + 1L < _lengths[dimension])
+                {
+                    indices[dimension]++;
                     return;
+                }
                 indices[dimension] = _lowerBounds[dimension];
             }
         }

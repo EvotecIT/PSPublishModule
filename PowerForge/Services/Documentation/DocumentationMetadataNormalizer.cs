@@ -229,14 +229,16 @@ internal static class DocumentationMetadataNormalizer
     private static List<string> GetKeys(DocumentationTypeHelp value)
     {
         var keys = new HashSet<string>(StringComparer.Ordinal);
-        AddCandidate(value.Name);
-        AddCandidate(value.ClrTypeName);
-        AddCandidate(value.CanonicalTypeName);
+        AddCandidate(value.Name, preserveWhitespace: false);
+        AddCandidate(value.ClrTypeName, preserveWhitespace: false);
+        AddCandidate(value.CanonicalTypeName, preserveWhitespace: true);
         return keys.ToList();
 
-        void AddCandidate(string? candidate)
+        void AddCandidate(string? candidate, bool preserveWhitespace)
         {
-            var canonical = Canonicalize(candidate);
+            var canonical = preserveWhitespace && !string.IsNullOrWhiteSpace(candidate)
+                ? candidate!
+                : Canonicalize(candidate);
             if (canonical.Length == 0) return;
             keys.Add(canonical);
 
@@ -251,7 +253,9 @@ internal static class DocumentationMetadataNormalizer
 
     private static string GetIdentity(DocumentationTypeHelp value)
     {
-        foreach (var candidate in new[] { value.CanonicalTypeName, value.ClrTypeName, value.Name })
+        if (!string.IsNullOrWhiteSpace(value.CanonicalTypeName))
+            return value.CanonicalTypeName!;
+        foreach (var candidate in new[] { value.ClrTypeName, value.Name })
         {
             var identity = Canonicalize(candidate);
             if (identity.Length > 0) return identity;

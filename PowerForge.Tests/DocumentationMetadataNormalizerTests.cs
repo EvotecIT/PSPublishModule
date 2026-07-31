@@ -206,7 +206,12 @@ public sealed class DocumentationMetadataNormalizerTests
     {
         var tokens = new List<DocumentationRuntimeValue>();
         for (var index = 0; index < 120; index++)
-            tokens.Add(new DocumentationRuntimeValue { Kind = "CollectionStart" });
+            tokens.Add(new DocumentationRuntimeValue
+            {
+                Kind = "CollectionStart",
+                CanonicalTypeName = "System.Object[]",
+                Name = "Array"
+            });
         tokens.Add(new DocumentationRuntimeValue { Kind = "StringCodeUnits", Text = "55296" });
         for (var index = 0; index < 120; index++)
             tokens.Add(new DocumentationRuntimeValue { Kind = "CollectionEnd" });
@@ -289,7 +294,7 @@ public sealed class DocumentationMetadataNormalizerTests
                     Kind = "ArrayStart",
                     CanonicalTypeName = "System.Int32",
                     Text = "2",
-                    Name = "5"
+                    Name = "2147483646"
                 },
                 new DocumentationRuntimeValue { Kind = "Formattable", Text = "7", CanonicalTypeName = "System.Int32" },
                 new DocumentationRuntimeValue { Kind = "Formattable", Text = "8", CanonicalTypeName = "System.Int32" },
@@ -297,15 +302,15 @@ public sealed class DocumentationMetadataNormalizerTests
             ]
         });
         Assert.Equal(
-            "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2), [int[]]@(5)); $array.SetValue((7), [int[]]@(5)); $array.SetValue((8), [int[]]@(6)); return ,$array }",
+            "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2), [int[]]@(2147483646)); $array.SetValue((7), [int[]]@(2147483646)); $array.SetValue((8), [int[]]@(2147483647)); return ,$array }",
             boundedArray);
 
         var nestedCollection = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
         {
             Tokens =
             [
-                new DocumentationRuntimeValue { Kind = "CollectionStart" },
-                new DocumentationRuntimeValue { Kind = "CollectionStart" },
+                new DocumentationRuntimeValue { Kind = "CollectionStart", CanonicalTypeName = "System.Object[]", Name = "Array" },
+                new DocumentationRuntimeValue { Kind = "CollectionStart", CanonicalTypeName = "System.Int32[]", Name = "Array" },
                 new DocumentationRuntimeValue { Kind = "Formattable", Text = "1", CanonicalTypeName = "System.Int32" },
                 new DocumentationRuntimeValue { Kind = "Formattable", Text = "2", CanonicalTypeName = "System.Int32" },
                 new DocumentationRuntimeValue { Kind = "CollectionEnd" },
@@ -313,14 +318,14 @@ public sealed class DocumentationMetadataNormalizerTests
             ]
         });
         Assert.Equal(
-            "& { $array = [object[]]::new(1); $array.SetValue((@(1, 2)), 0); return ,$array }",
+            "& { $collection = [System.Object[]]::new(1); $collection.SetValue((& { $collection = [System.Int32[]]::new(2); $collection.SetValue((1), 0); $collection.SetValue((2), 1); return ,$collection }), 0); return ,$collection }",
             nestedCollection);
 
         var nestedArrayCollection = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
         {
             Tokens =
             [
-                new DocumentationRuntimeValue { Kind = "CollectionStart" },
+                new DocumentationRuntimeValue { Kind = "CollectionStart", CanonicalTypeName = "System.Object[]", Name = "Array" },
                 new DocumentationRuntimeValue
                 {
                     Kind = "ArrayStart",
@@ -334,7 +339,7 @@ public sealed class DocumentationMetadataNormalizerTests
             ]
         });
         Assert.Equal(
-            "& { $array = [object[]]::new(1); $array.SetValue((& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(1, 1), [int[]]@(0, 0)); $array.SetValue((9), [int[]]@(0, 0)); return ,$array }), 0); return ,$array }",
+            "& { $collection = [System.Object[]]::new(1); $collection.SetValue((& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(1, 1), [int[]]@(0, 0)); $array.SetValue((9), [int[]]@(0, 0)); return ,$array }), 0); return ,$collection }",
             nestedArrayCollection);
     }
 
@@ -453,6 +458,28 @@ public sealed class DocumentationMetadataNormalizerTests
     }
 
     [Fact]
+    public void Normalize_PreservesResolvedClrOutputIdentitiesThatDifferByWhitespace()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Get-WhitespaceVariants",
+            CommandType = "Cmdlet",
+            RuntimeOutputs =
+            [
+                Type("Foo Bar", "Demo.Foo Bar"),
+                Type("FooBar", "Demo.FooBar")
+            ]
+        };
+
+        DocumentationMetadataNormalizer.Normalize(PayloadWith(command));
+
+        Assert.Collection(
+            command.Outputs,
+            output => Assert.Equal("Demo.Foo Bar", output.CanonicalTypeName),
+            output => Assert.Equal("Demo.FooBar", output.CanonicalTypeName));
+    }
+
+    [Fact]
     public void Normalize_MatchesUniqueUnqualifiedOutputNamesCaseInsensitively()
     {
         var command = new DocumentationCommandHelp
@@ -530,10 +557,10 @@ public sealed class DocumentationMetadataNormalizerTests
     private static string NestedExpression(int depth, string value)
     {
         if (depth <= 0) return value;
-        var result = "@(" + value + ")";
-        for (var index = 1; index < depth; index++)
-            result = "& { $array = [object[]]::new(1); $array.SetValue((" + result +
-                     "), 0); return ,$array }";
+        var result = value;
+        for (var index = 0; index < depth; index++)
+            result = "& { $collection = [System.Object[]]::new(1); $collection.SetValue((" + result +
+                     "), 0); return ,$collection }";
         return result;
     }
 }

@@ -27,7 +27,7 @@ public sealed class DocumentationPowerShellCollectorTests
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             File.WriteAllText(modulePath, """
 if (-not ('CollectorFixture.CaseMode' -as [type])) {
-    Add-Type -TypeDefinition 'namespace CollectorFixture { public enum CaseMode { A = 1, a = 2 } }'
+    Add-Type -TypeDefinition 'namespace CollectorFixture { public enum CaseMode { A = 1, a = 2 } public sealed class FixedComparerDictionary : System.Collections.Generic.Dictionary<string, int> { public FixedComparerDictionary() : base(System.StringComparer.Ordinal) { } } }'
 }
 if (-not ('CollectorFixture.WeirdMode' -as [type])) {
     $assemblyName = [System.Reflection.AssemblyName]::new('CollectorFixtureDynamic')
@@ -236,6 +236,14 @@ function Get-CollectorFixture {
         $caseDistinctDictionaryDefault.Value = $caseDistinctDictionary
         $caseDistinctDictionaryAttributes.Add($caseDistinctDictionaryDefault)
         $parameters.Add('CaseDistinctDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('CaseDistinctDictionary', [System.Collections.Generic.Dictionary[string, int]], $caseDistinctDictionaryAttributes))
+
+        $fixedComparerDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $fixedComparerDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $fixedComparerDictionary = [CollectorFixture.FixedComparerDictionary]::new()
+        $fixedComparerDictionary['A'] = 1
+        $fixedComparerDictionaryDefault.Value = $fixedComparerDictionary
+        $fixedComparerDictionaryAttributes.Add($fixedComparerDictionaryDefault)
+        $parameters.Add('FixedComparerDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('FixedComparerDictionary', [CollectorFixture.FixedComparerDictionary], $fixedComparerDictionaryAttributes))
 
         $concurrentDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $concurrentDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -446,6 +454,7 @@ function Get-AcceleratedOutput {
                 var caseDistinctDictionary = Assert.Single(
                     command.Parameters,
                     parameter => parameter.Name == "CaseDistinctDictionary");
+                var fixedComparerDictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "FixedComparerDictionary");
                 var concurrentDictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "ConcurrentDictionary");
                 var readOnlyDictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "ReadOnlyDictionary");
                 var unsupportedCulture = Assert.Single(
@@ -514,6 +523,7 @@ function Get-AcceleratedOutput {
                 Assert.Equal(
                     "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Ordinal); ([System.Collections.IDictionary]$dictionary).Add(('A'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('a'), (2)); return ,$dictionary }",
                     caseDistinctDictionary.DefaultValue);
+                Assert.True(string.IsNullOrEmpty(fixedComparerDictionary.DefaultValue));
                 Assert.Equal(
                     "& { $dictionary = [System.Collections.Concurrent.ConcurrentDictionary[System.String,System.Int32]]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('Alpha'), (1)); return ,$dictionary }",
                     concurrentDictionary.DefaultValue);
@@ -529,10 +539,10 @@ function Get-AcceleratedOutput {
                     "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2), [int[]]@(5)); $array.SetValue((7), [int[]]@(5)); $array.SetValue((8), [int[]]@(6)); return ,$array }",
                     boundedArray.DefaultValue);
                 Assert.Equal(
-                    "& { $array = [object[]]::new(1); $array.SetValue((@(1, 2)), 0); return ,$array }",
+                    "& { $collection = [System.Object[]]::new(1); $collection.SetValue((& { $collection = [System.Int32[]]::new(2); $collection.SetValue((1), 0); $collection.SetValue((2), 1); return ,$collection }), 0); return ,$collection }",
                     nestedCollection.DefaultValue);
                 Assert.Equal(
-                    "& { $array = [object[]]::new(1); $array.SetValue((& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }), 0); return ,$array }",
+                    "& { $collection = [System.Object[]]::new(1); $collection.SetValue((& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }), 0); return ,$collection }",
                     nestedMatrix.DefaultValue);
                 Assert.True(string.IsNullOrEmpty(stack.DefaultValue));
                 if (host.Contains("pwsh", StringComparison.OrdinalIgnoreCase))
@@ -577,10 +587,10 @@ function Get-AcceleratedOutput {
     private static string NestedExpression(int depth, string value)
     {
         if (depth <= 0) return value;
-        var result = "@(" + value + ")";
-        for (var index = 1; index < depth; index++)
-            result = "& { $array = [object[]]::new(1); $array.SetValue((" + result +
-                     "), 0); return ,$array }";
+        var result = value;
+        for (var index = 0; index < depth; index++)
+            result = "& { $collection = [System.Object[]]::new(1); $collection.SetValue((" + result +
+                     "), 0); return ,$collection }";
         return result;
     }
 

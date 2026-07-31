@@ -209,6 +209,7 @@ function AddRuntimeDefaultValueTokens(
         if ([string]::IsNullOrWhiteSpace($dictionaryTypeName)) {
           throw ('Dictionary type has no supported constructor: ' + $value.GetType().FullName)
         }
+        [void](GetDictionaryConstructorExpression $value)
         $tokens.Add([ordered]@{
           kind = 'DictionaryStart'
           canonicalTypeName = $dictionaryTypeName
@@ -246,7 +247,18 @@ function AddRuntimeDefaultValueTokens(
         $tokens.Add([ordered]@{ kind = 'ArrayEnd' }) | Out-Null
         return
       }
-      $tokens.Add([ordered]@{ kind = 'CollectionStart' }) | Out-Null
+      $collectionType = $value.GetType()
+      if ($value -isnot [System.Array]) {
+        $constructor = $collectionType.GetConstructor([System.Type]::EmptyTypes)
+        if ($collectionType.IsAbstract -or $collectionType.IsInterface -or $null -eq $constructor) {
+          throw ('Collection type has no supported constructor: ' + $collectionType.FullName)
+        }
+      }
+      $tokens.Add([ordered]@{
+        kind = 'CollectionStart'
+        canonicalTypeName = GetCanonicalTypeNameFromType $collectionType
+        name = if ($value -is [System.Array]) { 'Array' } else { 'List' }
+      }) | Out-Null
       foreach ($item in $value) {
         AddRuntimeDefaultValueTokens $item $tokens $referenceStack
       }
