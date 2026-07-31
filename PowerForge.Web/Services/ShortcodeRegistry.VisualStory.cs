@@ -17,7 +17,7 @@ internal static partial class ShortcodeDefaults
         var bundle = WebVisualStoryStager.Load(manifestPath);
         var baseUrl = ReadAttr(attrs, "base", "baseUrl", "base-url");
         if (string.IsNullOrWhiteSpace(baseUrl))
-            baseUrl = DeriveVisualStoryBaseUrl(context.RootPath, manifestPath);
+            baseUrl = DeriveVisualStoryBaseUrl(context, manifestPath);
 
         var animated = SelectStoryArtifact(bundle, "animated", "svg") ??
                        SelectStoryArtifact(bundle, "animated", "gif") ??
@@ -129,16 +129,21 @@ internal static partial class ShortcodeDefaults
         return VisualStoryPathGuard.ResolveRelativePath(root, artifactPath, "shortcode artifact");
     }
 
-    private static string DeriveVisualStoryBaseUrl(string rootPath, string manifestPath)
+    private static string DeriveVisualStoryBaseUrl(ShortcodeRenderContext context, string manifestPath)
     {
-        var root = Path.GetFullPath(string.IsNullOrWhiteSpace(rootPath) ? "." : rootPath);
-        var normalized = Path.GetRelativePath(root, manifestPath).Replace('\\', '/');
+        var root = Path.GetFullPath(string.IsNullOrWhiteSpace(context.RootPath) ? "." : context.RootPath);
+        var publishedPath = ResolvePublishedVisualStoryManifestPath(context.Site, root, manifestPath);
+        var normalized = publishedPath ?? Path.GetRelativePath(root, manifestPath).Replace('\\', '/');
         var directory = normalized.Contains('/')
             ? normalized[..normalized.LastIndexOf('/')]
             : string.Empty;
-        if (directory.Equals("static", StringComparison.OrdinalIgnoreCase))
+        if (publishedPath is null &&
+            normalized.StartsWith("static/", StringComparison.OrdinalIgnoreCase) &&
+            directory.Equals("static", StringComparison.OrdinalIgnoreCase))
             directory = string.Empty;
-        else if (directory.StartsWith("static/", StringComparison.OrdinalIgnoreCase))
+        else if (publishedPath is null &&
+                 normalized.StartsWith("static/", StringComparison.OrdinalIgnoreCase) &&
+                 directory.StartsWith("static/", StringComparison.OrdinalIgnoreCase))
             directory = directory["static/".Length..];
         var encodedDirectory = string.Join(
             "/",
@@ -146,6 +151,71 @@ internal static partial class ShortcodeDefaults
                 .Select(Uri.EscapeDataString));
         return "/" + encodedDirectory;
     }
+
+    private static string? ResolvePublishedVisualStoryManifestPath(
+        SiteSpec site,
+        string root,
+        string manifestPath)
+    {
+        var mappings = site.StaticAssets ?? Array.Empty<StaticAssetSpec>();
+        var candidates = new List<(int Specificity, string PublishedPath)>();
+        foreach (var mapping in mappings)
+        {
+            if (string.IsNullOrWhiteSpace(mapping.Source))
+                continue;
+
+            var sourcePath = Path.GetFullPath(
+                Path.IsPathRooted(mapping.Source)
+                    ? mapping.Source
+                    : Path.Combine(root, mapping.Source));
+            var destination = (mapping.Destination ?? string.Empty)
+                .TrimStart('/', '\\')
+                .Replace('\\', '/');
+            if (File.Exists(sourcePath))
+            {
+                if (!PathsEqual(sourcePath, manifestPath))
+                    continue;
+                var publishedPath = string.IsNullOrWhiteSpace(destination)
+                    ? Path.GetFileName(sourcePath)
+                    : Path.HasExtension(destination)
+                        ? destination
+                        : destination.TrimEnd('/') + "/" + Path.GetFileName(sourcePath);
+                candidates.Add((sourcePath.Length, publishedPath));
+                continue;
+            }
+
+            if (!TryGetContainedRelativePath(sourcePath, manifestPath, out var relative))
+                continue;
+            var published = string.IsNullOrWhiteSpace(destination)
+                ? relative
+                : destination.TrimEnd('/') + "/" + relative;
+            candidates.Add((sourcePath.Length, published));
+        }
+
+        return candidates
+            .OrderByDescending(static candidate => candidate.Specificity)
+            .Select(static candidate => candidate.PublishedPath)
+            .FirstOrDefault();
+    }
+
+    private static bool TryGetContainedRelativePath(
+        string root,
+        string path,
+        out string relativePath)
+    {
+        relativePath = Path.GetRelativePath(root, path).Replace('\\', '/');
+        return relativePath.Length > 0 &&
+               relativePath != "." &&
+               !relativePath.Equals("..", StringComparison.Ordinal) &&
+               !relativePath.StartsWith("../", StringComparison.Ordinal) &&
+               !Path.IsPathRooted(relativePath);
+    }
+
+    private static bool PathsEqual(string left, string right)
+        => string.Equals(
+            Path.GetFullPath(left),
+            Path.GetFullPath(right),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     private static string JoinVisualStoryUrl(string baseUrl, string path)
     {

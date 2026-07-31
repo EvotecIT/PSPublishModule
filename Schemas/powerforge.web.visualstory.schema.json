@@ -18,6 +18,7 @@
     "artifacts": {
       "type": "array",
       "minItems": 1,
+      "maxItems": 64,
       "contains": {
         "type": "object",
         "required": ["role"],
@@ -34,7 +35,11 @@
         "properties": {
           "role": { "enum": ["animated", "completed", "transcript", "source", "html"] },
           "format": { "enum": ["svg", "gif", "apng", "png", "html", "text", "txt"] },
-          "path": { "type": "string", "minLength": 1 },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?![A-Za-z]:)(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+          },
           "mediaType": { "type": ["string", "null"] },
           "bytes": { "type": ["integer", "null"], "minimum": 0 },
           "sha256": { "type": ["string", "null"], "pattern": "^[0-9a-fA-F]{64}$" }

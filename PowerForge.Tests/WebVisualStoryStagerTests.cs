@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ImageMagick;
+using Json.Schema;
 using PowerForge.Web;
 
 namespace PowerForge.Tests;
@@ -336,6 +337,7 @@ public class WebVisualStoryStagerTests
             "powerforge.web.visualstory.schema.json"));
         var schemaDocument = JsonNode.Parse(File.ReadAllText(schemaPath))!;
         var artifacts = schemaDocument["properties"]!["artifacts"]!;
+        Assert.Equal(64, artifacts["maxItems"]!.GetValue<int>());
         Assert.Equal(1, artifacts["minContains"]!.GetValue<int>());
         Assert.Equal(1, artifacts["maxContains"]!.GetValue<int>());
         Assert.Equal(
@@ -348,6 +350,94 @@ public class WebVisualStoryStagerTests
         Assert.Equal(new[] { "text", "txt" }, transcriptFormats.AsArray().Select(node => node!.GetValue<string>()));
         var animatedFormats = artifacts["items"]!["allOf"]![2]!["then"]!["properties"]!["format"]!["enum"]!;
         Assert.Equal(new[] { "svg", "gif", "apng" }, animatedFormats.AsArray().Select(node => node!.GetValue<string>()));
+    }
+
+    [Theory]
+    [InlineData("demo.png", true)]
+    [InlineData("media/demo.png", true)]
+    [InlineData("media\\demo.png", true)]
+    [InlineData("../demo.png", false)]
+    [InlineData("media/../../demo.png", false)]
+    [InlineData("/demo.png", false)]
+    [InlineData("C:\\demo.png", false)]
+    public void PublishedSchemaRequiresBundleRelativeArtifactPaths(string path, bool expected)
+    {
+        var schemaPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..",
+            "Schemas",
+            "powerforge.web.visualstory.schema.json"));
+        var schemaDocument = JsonNode.Parse(File.ReadAllText(schemaPath))!;
+        var pathSchema = schemaDocument["properties"]!["artifacts"]!["items"]!["properties"]!["path"]!;
+        var schema = JsonSchema.FromText(pathSchema.ToJsonString());
+        var result = schema.Evaluate(
+            JsonValue.Create(path),
+            new EvaluationOptions { OutputFormat = OutputFormat.List });
+
+        Assert.Equal(expected, result.IsValid);
+    }
+
+    [Fact]
+    public void Stage_RejectsBundlesBeyondTheArtifactCountLimit()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(
+                File.ReadAllText(manifest),
+                WebJsonForTests.Options)!;
+            var artifacts = bundle.Artifacts.ToList();
+            for (var index = artifacts.Count; index <= 64; index++)
+            {
+                var fileName = $"transcript-{index}.txt";
+                File.WriteAllText(Path.Combine(source, fileName), "Story transcript.");
+                artifacts.Add(new WebVisualStoryArtifact
+                {
+                    Role = "transcript",
+                    Format = "text",
+                    Path = fileName
+                });
+            }
+            bundle.Artifacts = artifacts.ToArray();
+            File.WriteAllText(manifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("64-artifact safety limit", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Stage_RejectsBundlesBeyondTheAggregateByteLimit()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = Path.Combine(root, "source", "story.json"),
+                    OutputPath = Path.Combine(root, "published"),
+                    MaximumTotalArtifactBytes = 1
+                }));
+
+            Assert.Contains("aggregate limit", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
     }
 
     [Fact]
@@ -472,7 +562,35 @@ public class WebVisualStoryStagerTests
                     ManifestPath = manifest,
                     OutputPath = Path.Combine(root, "published")
                 }));
-            Assert.Contains("escapes", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("parent traversal", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Stage_RejectsParentTraversalEvenWhenItResolvesInsideTheBundle()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var manifest = Path.Combine(root, "source", "story.json");
+            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(
+                File.ReadAllText(manifest),
+                WebJsonForTests.Options)!;
+            bundle.Artifacts[0].Path = "media/../demo.svg";
+            File.WriteAllText(manifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("parent traversal", error.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -569,6 +687,31 @@ public class WebVisualStoryStagerTests
             var error = Assert.Throws<InvalidOperationException>(() => WebVisualStoryStager.Load(manifest));
 
             Assert.Contains("decodable PNG", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Load_RejectsDeclaredIntegrityBeforeDecodingCorruptArtifacts()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var result = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = Path.Combine(root, "source", "story.json"),
+                OutputPath = Path.Combine(root, "published")
+            });
+            File.WriteAllText(Path.Combine(root, "published", "demo.png"), "not a PNG");
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Load(result.ManifestPath));
+
+            Assert.Contains("size does not match", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("decodable PNG", error.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

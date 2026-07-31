@@ -1316,6 +1316,8 @@
         "output-path": { "type": "string", "description": "Alias for out." },
         "maximumArtifactBytes": { "type": "integer", "minimum": 1 },
         "maximum-artifact-bytes": { "type": "integer", "minimum": 1, "description": "Alias for maximumArtifactBytes." },
+        "maximumTotalArtifactBytes": { "type": "integer", "minimum": 1 },
+        "maximum-total-artifact-bytes": { "type": "integer", "minimum": 1, "description": "Alias for maximumTotalArtifactBytes." },
         "overwrite": { "type": "boolean" },
         "command": { "type": "string", "description": "Optional trusted producer command. No command is run when omitted." },
         "cmd": { "type": "string", "description": "Alias for command." },

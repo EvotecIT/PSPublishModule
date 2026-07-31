@@ -9,6 +9,7 @@ namespace PowerForge.Web;
 /// <summary>Validates producer output and stages a portable visual-story bundle.</summary>
 public static class WebVisualStoryStager
 {
+    private const int MaximumArtifactCount = 64;
     private const string StagedManifestFileName = "visual-story.json";
     private static readonly JsonSerializerOptions ManifestJsonOptions = CreateManifestJsonOptions();
 
@@ -39,6 +40,8 @@ public static class WebVisualStoryStager
             throw new ArgumentException("A visual-story output path is required.", nameof(options));
         if (options.MaximumArtifactBytes <= 0)
             throw new ArgumentOutOfRangeException(nameof(options), "MaximumArtifactBytes must be positive.");
+        if (options.MaximumTotalArtifactBytes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "MaximumTotalArtifactBytes must be positive.");
 
         var manifestPath = Path.GetFullPath(options.ManifestPath);
         if (!File.Exists(manifestPath))
@@ -69,6 +72,7 @@ public static class WebVisualStoryStager
         var resolved = new List<(WebVisualStoryArtifact Artifact, string SourcePath, string RelativePath, string DestinationPath, long Bytes, string Sha256)>();
         var relativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var directoryPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var totalArtifactBytes = 0L;
         foreach (var artifact in bundle.Artifacts)
         {
             ValidateArtifact(artifact);
@@ -80,6 +84,12 @@ public static class WebVisualStoryStager
             if (info.Length > options.MaximumArtifactBytes)
                 throw new InvalidOperationException(
                     $"Visual-story artifact exceeds the {options.MaximumArtifactBytes}-byte limit: {artifact.Path}");
+            totalArtifactBytes = checked(totalArtifactBytes + info.Length);
+            if (totalArtifactBytes > options.MaximumTotalArtifactBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Visual-story artifacts exceed the {options.MaximumTotalArtifactBytes}-byte aggregate limit.");
+            }
 
             var extension = Path.GetExtension(sourcePath).TrimStart('.');
             var normalizedFormat = NormalizeFormat(artifact.Format);
@@ -248,6 +258,11 @@ public static class WebVisualStoryStager
             var normalizedFormat = NormalizeFormat(artifact.Format);
             var extension = Path.GetExtension(artifactPath).TrimStart('.');
             ValidateArtifactFormat(artifact, artifactPath, normalizedFormat, extension);
+            if (artifact.Bytes is not null && artifact.Bytes.Value != info.Length)
+                throw new InvalidOperationException($"Visual-story artifact size does not match its manifest: {artifact.Path}");
+            if (!string.IsNullOrWhiteSpace(artifact.Sha256) &&
+                !string.Equals(artifact.Sha256, ComputeSha256(artifactPath), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Visual-story artifact digest does not match its manifest: {artifact.Path}");
             if (IsCompletedArtifact(artifact))
             {
                 ValidateCompletedPng(artifactPath, artifact.Path);
@@ -260,11 +275,6 @@ public static class WebVisualStoryStager
             {
                 ValidateTranscriptText(artifactPath, artifact.Path);
             }
-            if (artifact.Bytes is not null && artifact.Bytes.Value != info.Length)
-                throw new InvalidOperationException($"Visual-story artifact size does not match its manifest: {artifact.Path}");
-            if (!string.IsNullOrWhiteSpace(artifact.Sha256) &&
-                !string.Equals(artifact.Sha256, ComputeSha256(artifactPath), StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException($"Visual-story artifact digest does not match its manifest: {artifact.Path}");
         }
         return bundle;
     }
@@ -281,6 +291,11 @@ public static class WebVisualStoryStager
         Require(bundle.Outcome, "outcome");
         if (bundle.Artifacts is null || bundle.Artifacts.Length == 0)
             throw new InvalidOperationException("Visual-story manifest must declare artifacts.");
+        if (bundle.Artifacts.Length > MaximumArtifactCount)
+        {
+            throw new InvalidOperationException(
+                $"Visual-story manifest exceeds the {MaximumArtifactCount}-artifact safety limit.");
+        }
     }
 
     private static void ValidateArtifact(WebVisualStoryArtifact artifact)

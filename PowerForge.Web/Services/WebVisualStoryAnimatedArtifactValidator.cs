@@ -161,6 +161,7 @@ internal static class WebVisualStoryAnimatedArtifactValidator
         uint frameHeight = 0;
         var decodedFrameBytes = 0L;
         var currentFrameAllowsIdat = false;
+        using var defaultImageData = new MemoryStream();
         while (offset + 12 <= bytes.Length)
         {
             var length = ReadUInt32(bytes, offset);
@@ -213,6 +214,26 @@ internal static class WebVisualStoryAnimatedArtifactValidator
             }
             else if (first == 'f' && second == 'c' && third == 'T' && fourth == 'L')
             {
+                if (frameCount == 0 && sawImageData && defaultImageData.Length > 0)
+                {
+                    decodedFrameBytes = ReserveApngDecodedBytes(
+                        decodedFrameBytes,
+                        ComputeDecodedFrameBytes(
+                            canvasWidth,
+                            canvasHeight,
+                            bitDepth,
+                            colorType,
+                            interlaceMethod),
+                        displayPath);
+                    ValidateFrameData(
+                        defaultImageData,
+                        canvasWidth,
+                        canvasHeight,
+                        bitDepth,
+                        colorType,
+                        interlaceMethod,
+                        displayPath);
+                }
                 ValidateFrameData(
                     frameData,
                     frameWidth,
@@ -260,7 +281,10 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                         $"Visual-story APNG uses image data for a later animation frame: {displayPath}");
                 }
                 sawImageData = true;
-                frameData?.Write(bytes, dataOffset, dataLength);
+                if (frameData is null)
+                    defaultImageData.Write(bytes, dataOffset, dataLength);
+                else
+                    frameData.Write(bytes, dataOffset, dataLength);
             }
             else if (first == 'f' && second == 'd' && third == 'A' && fourth == 'T')
             {

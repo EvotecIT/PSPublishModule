@@ -38,6 +38,9 @@ internal static partial class WebPipelineRunner
         var maximumArtifactBytes = GetLong(step, "maximumArtifactBytes") ??
                                    GetLong(step, "maximum-artifact-bytes") ??
                                    25L * 1024L * 1024L;
+        var maximumTotalArtifactBytes = GetLong(step, "maximumTotalArtifactBytes") ??
+                                        GetLong(step, "maximum-total-artifact-bytes") ??
+                                        100L * 1024L * 1024L;
         var overwrite = GetBool(step, "overwrite") ?? true;
 
         var result = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
@@ -45,6 +48,7 @@ internal static partial class WebPipelineRunner
             ManifestPath = manifestPath,
             OutputPath = outputPath,
             MaximumArtifactBytes = maximumArtifactBytes,
+            MaximumTotalArtifactBytes = maximumTotalArtifactBytes,
             Overwrite = overwrite
         });
 

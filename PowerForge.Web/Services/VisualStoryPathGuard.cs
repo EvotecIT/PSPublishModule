@@ -13,6 +13,14 @@ internal static class VisualStoryPathGuard
     {
         if (Path.IsPathRooted(relativePath))
             throw new InvalidOperationException($"Visual-story {label} path must be relative: {relativePath}");
+        if (relativePath.Split(
+                [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                StringSplitOptions.RemoveEmptyEntries)
+            .Any(static segment => string.Equals(segment, "..", StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                $"Visual-story {label} path cannot contain parent traversal: {relativePath}");
+        }
 
         var fullRoot = Path.GetFullPath(root);
         var fullPath = Path.GetFullPath(Path.Combine(fullRoot, relativePath));

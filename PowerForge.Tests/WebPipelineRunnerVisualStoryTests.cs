@@ -53,6 +53,37 @@ public class WebPipelineRunnerVisualStoryTests
     }
 
     [Fact]
+    public void RunPipeline_VisualStory_AppliesAggregateArtifactBudget()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "pipeline.json"),
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "visual-story",
+                      "manifest": "source/story.json",
+                      "out": "static/stories/chart-five-lines",
+                      "maximumTotalArtifactBytes": 1
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(Path.Combine(root, "pipeline.json"), logger: null);
+
+            Assert.False(result.Success);
+            Assert.Contains("aggregate limit", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_VisualStory_RejectsOutputOutsidePipelineRoot()
     {
         var root = WebVisualStoryStagerTests.CreateBundle();

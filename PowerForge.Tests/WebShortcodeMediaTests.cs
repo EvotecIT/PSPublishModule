@@ -268,7 +268,61 @@ public class WebShortcodeMediaTests
         Assert.DoesNotContain("/static/demo.svg", html, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string BuildSinglePageSite(string markdown, Action<string>? setup = null)
+    [Fact]
+    public void Build_DerivesStoryUrlsFromConfiguredStaticAssetMapping()
+    {
+        var html = BuildSinglePageSite(
+            """
+            {{< story manifest="generated/story/visual-story.json" transcript="hidden" >}}
+            """,
+            root =>
+            {
+                var bundleRoot = Path.Combine(root, "generated", "story");
+                Directory.CreateDirectory(bundleRoot);
+                File.WriteAllText(
+                    Path.Combine(bundleRoot, "demo.svg"),
+                    "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+                using (var completed = new MagickImage(MagickColors.Transparent, 2, 2))
+                {
+                    completed.Write(Path.Combine(bundleRoot, "demo.png"), MagickFormat.Png);
+                }
+                File.WriteAllText(
+                    Path.Combine(bundleRoot, "visual-story.json"),
+                    """
+                    {
+                      "schemaVersion": 1,
+                      "id": "mapped-story",
+                      "title": "Mapped story",
+                      "alt": "The mapped result appears.",
+                      "outcome": "The mapped result is visible.",
+                      "artifacts": [
+                        { "role": "animated", "format": "svg", "path": "demo.svg" },
+                        { "role": "completed", "format": "png", "path": "demo.png" }
+                      ]
+                    }
+                    """);
+            },
+            spec =>
+            {
+                spec.StaticAssets =
+                [
+                    new StaticAssetSpec
+                    {
+                        Source = "generated/story",
+                        Destination = "stories/demo"
+                    }
+                ];
+            });
+
+        Assert.Contains("src=\"/stories/demo/demo.svg\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("srcset=\"/stories/demo/demo.png\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.True(html.Contains("href=\"/stories/demo/demo.svg\"", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string BuildSinglePageSite(
+        string markdown,
+        Action<string>? setup = null,
+        Action<SiteSpec>? configure = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-shortcode-media-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -326,6 +380,7 @@ public class WebShortcodeMediaTests
                     }
                 }
             };
+            configure?.Invoke(spec);
 
             var configPath = Path.Combine(root, "site.json");
             File.WriteAllText(configPath, "{}");

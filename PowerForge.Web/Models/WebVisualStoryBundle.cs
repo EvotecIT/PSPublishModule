@@ -54,6 +54,8 @@ public sealed class WebVisualStoryStageOptions
     public string OutputPath { get; set; } = string.Empty;
     /// <summary>Maximum size of any one artifact.</summary>
     public long MaximumArtifactBytes { get; set; } = 25L * 1024L * 1024L;
+    /// <summary>Maximum aggregate size of all artifacts in one bundle.</summary>
+    public long MaximumTotalArtifactBytes { get; set; } = 100L * 1024L * 1024L;
     /// <summary>Overwrite an existing destination bundle.</summary>
     public bool Overwrite { get; set; } = true;
 }
