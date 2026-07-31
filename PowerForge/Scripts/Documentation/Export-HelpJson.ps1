@@ -108,6 +108,9 @@ function AddRuntimeDefaultValueTokens(
     return
   }
   if ($value -is [uri]) {
+    if ($value.UserEscaped) {
+      throw 'User-escaped Uri defaults are not supported.'
+    }
     $tokens.Add([ordered]@{
       kind = 'UriCodeUnits'
       text = ConvertToUtf16CodeUnits $value.OriginalString

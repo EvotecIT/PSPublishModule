@@ -2,7 +2,7 @@ using System.Text;
 
 namespace PowerForge.Tests;
 
-public sealed class DocumentationPowerShellCollectorTests
+public sealed partial class DocumentationPowerShellCollectorTests
 {
     [Fact]
     public void DocumentationEngine_TransfersNestedDefaultsWithoutSerializingIgnoredValues()
@@ -298,6 +298,12 @@ function Get-CollectorFixture {
         $uriAttributes.Add($uriDefault)
         $parameters.Add('Uri', [System.Management.Automation.RuntimeDefinedParameter]::new('Uri', [uri], $uriAttributes))
 
+        $userEscapedUriAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $userEscapedUriDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $userEscapedUriDefault.Value = [uri]::new('http://example.com/a%2Fb', $true)
+        $userEscapedUriAttributes.Add($userEscapedUriDefault)
+        $parameters.Add('UserEscapedUri', [System.Management.Automation.RuntimeDefinedParameter]::new('UserEscapedUri', [uri], $userEscapedUriAttributes))
+
         $dictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $dictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $dictionaryDefault.Value = [ordered]@{
@@ -340,6 +346,14 @@ function Get-CollectorFixture {
         $cultureDictionaryDefault.Value = $cultureDictionary
         $cultureDictionaryAttributes.Add($cultureDictionaryDefault)
         $parameters.Add('CultureDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('CultureDictionary', [System.Collections.Generic.Dictionary[string, int]], $cultureDictionaryAttributes))
+
+        $hybridDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $hybridDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $hybridDictionary = [System.Collections.Specialized.HybridDictionary]::new($true)
+        $hybridDictionary['A'] = 1
+        $hybridDictionaryDefault.Value = $hybridDictionary
+        $hybridDictionaryAttributes.Add($hybridDictionaryDefault)
+        $parameters.Add('HybridDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('HybridDictionary', [System.Collections.Specialized.HybridDictionary], $hybridDictionaryAttributes))
 
         $readOnlyDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $readOnlyDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -583,6 +597,7 @@ function Get-AcceleratedOutput {
                 var caseMode = Assert.Single(command.Parameters, parameter => parameter.Name == "CaseMode");
                 var weirdMode = Assert.Single(command.Parameters, parameter => parameter.Name == "WeirdMode");
                 var uri = Assert.Single(command.Parameters, parameter => parameter.Name == "Uri");
+                var userEscapedUri = Assert.Single(command.Parameters, parameter => parameter.Name == "UserEscapedUri");
                 var dictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "Dictionary");
                 var caseDistinctDictionary = Assert.Single(
                     command.Parameters,
@@ -590,6 +605,7 @@ function Get-AcceleratedOutput {
                 var fixedComparerDictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "FixedComparerDictionary");
                 var concurrentDictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "ConcurrentDictionary");
                 var cultureDictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "CultureDictionary");
+                var hybridDictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "HybridDictionary");
                 var readOnlyDictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "ReadOnlyDictionary");
                 var readOnlyOrderedDictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "ReadOnlyOrderedDictionary");
                 var unsupportedCulture = Assert.Single(
@@ -681,6 +697,7 @@ function Get-AcceleratedOutput {
                 Assert.Equal(
                     "[System.Uri]::new('https://example.com/a''b?x=1', [System.UriKind]::Absolute)",
                     uri.DefaultValue);
+                Assert.True(string.IsNullOrEmpty(userEscapedUri.DefaultValue));
                 Assert.StartsWith(
                     "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new(",
                     dictionary.DefaultValue,
@@ -697,6 +714,7 @@ function Get-AcceleratedOutput {
                 Assert.Equal(
                     "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Create([System.Globalization.CultureInfo]::GetCultureInfo('tr-TR'), $true)); ([System.Collections.IDictionary]$dictionary).Add(('I'), (1)); return ,$dictionary }",
                     cultureDictionary.DefaultValue);
+                Assert.True(string.IsNullOrEmpty(hybridDictionary.DefaultValue));
                 Assert.True(string.IsNullOrEmpty(readOnlyDictionary.DefaultValue));
                 Assert.True(string.IsNullOrEmpty(readOnlyOrderedDictionary.DefaultValue));
                 Assert.True(string.IsNullOrEmpty(unsupportedCulture.DefaultValue));
@@ -759,40 +777,4 @@ function Get-AcceleratedOutput {
         }
     }
 
-    private static string NestedExpression(int depth, string value)
-    {
-        if (depth <= 0) return value;
-        var result = value;
-        for (var index = 0; index < depth; index++)
-            result = "& { $collection = [System.Object[]]::new(1); $collection.SetValue((" + result +
-                     "), 0); return ,$collection }";
-        return result;
-    }
-
-    private sealed class ExecutablePowerShellRunner : IPowerShellRunner
-    {
-        private readonly string _executable;
-        private readonly string _workingDirectory;
-        private readonly PowerShellRunner _inner = new();
-
-        public ExecutablePowerShellRunner(string executable, string workingDirectory)
-        {
-            _executable = executable;
-            _workingDirectory = workingDirectory;
-        }
-
-        public PowerShellRunResult Run(PowerShellRunRequest request)
-            => _inner.Run(new PowerShellRunRequest(
-                request.ScriptPath!,
-                request.Arguments,
-                request.Timeout,
-                request.PreferPwsh,
-                request.WorkingDirectory ?? _workingDirectory,
-                request.EnvironmentVariables,
-                _executable,
-                request.CaptureOutput,
-                request.CaptureError,
-                request.OutputLineReceived,
-                request.ErrorLineReceived));
-    }
 }
