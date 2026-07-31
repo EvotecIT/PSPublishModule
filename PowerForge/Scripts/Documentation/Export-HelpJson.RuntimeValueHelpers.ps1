@@ -23,6 +23,12 @@ function ConvertRuntimeTypeTextToBase64([string]$text) {
 
 function AddRuntimeTypeShapeTokens([type]$type, [System.Collections.IList]$tokens) {
   if ($type.IsGenericParameter) { throw 'Generic-parameter runtime type shapes are not supported.' }
+  if (TestPowerShellTypeLiteral $type) {
+    [void]$tokens.Add('N:L:' +
+      (ConvertRuntimeTypeTextToBase64 (GetCanonicalTypeNameFromType $type)) + ':' +
+      (ConvertRuntimeTypeTextToBase64 ([string]$type.Assembly.FullName)))
+    return
+  }
   if ($type.IsPointer) {
     [void]$tokens.Add('P')
     AddRuntimeTypeShapeTokens ($type.GetElementType()) $tokens
@@ -51,7 +57,9 @@ function AddRuntimeTypeShapeTokens([type]$type, [System.Collections.IList]$token
       [string]::IsNullOrWhiteSpace($type.Assembly.FullName)) {
     throw ('Runtime type shape has no exact loaded-assembly identity: ' + [string]$type)
   }
-  [void]$tokens.Add('N:' + (ConvertRuntimeTypeTextToBase64 ([string]$type.FullName)) + ':' +
+  AssertExactLoadedTypeIdentity $type
+  [void]$tokens.Add('N:E:' +
+    (ConvertRuntimeTypeTextToBase64 ([string]$type.FullName)) + ':' +
     (ConvertRuntimeTypeTextToBase64 ([string]$type.Assembly.FullName)))
 }
 

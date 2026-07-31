@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -11,10 +10,6 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellRuntimeTypeFormatter
 {
-    private static readonly Regex SafeTypeLiteralName = new(
-        @"^[A-Za-z_][A-Za-z0-9_.+`]*(?:\[[A-Za-z0-9_.+`,\[\]]+\])?$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
     /// <summary>
     /// Formats a canonical type identity and its optional structural runtime shape.
     /// </summary>
@@ -24,8 +19,7 @@ internal static class PowerShellRuntimeTypeFormatter
         string assemblyName,
         string? runtimeTypeShape = null)
     {
-        if (!SafeTypeLiteralName.IsMatch(canonicalTypeName) &&
-            !string.IsNullOrWhiteSpace(runtimeTypeShape))
+        if (!string.IsNullOrWhiteSpace(runtimeTypeShape))
             return FormatRuntimeTypeShape(runtimeTypeShape!);
         if (canonicalTypeName.EndsWith("*", StringComparison.Ordinal))
             return FormatModifiedType(canonicalTypeName.Substring(0, canonicalTypeName.Length - 1), runtimeTypeName, assemblyName, ".MakePointerType()");
@@ -35,7 +29,7 @@ internal static class PowerShellRuntimeTypeFormatter
             return FormatModifiedType(canonicalTypeName.Substring(0, canonicalTypeName.Length - 3), runtimeTypeName, assemblyName, ".MakeArrayType(1)");
         if (canonicalTypeName.EndsWith("[]", StringComparison.Ordinal))
             return FormatModifiedType(canonicalTypeName.Substring(0, canonicalTypeName.Length - 2), runtimeTypeName, assemblyName, ".MakeArrayType()");
-        if (!SafeTypeLiteralName.IsMatch(canonicalTypeName))
+        if (!PowerShellTypeLiteralName.IsSafe(canonicalTypeName))
             return FormatExactLoadedType(runtimeTypeName, assemblyName);
         return "[" + canonicalTypeName + "]";
     }
@@ -84,12 +78,17 @@ internal static class PowerShellRuntimeTypeFormatter
         }
         if (!token.StartsWith("N:", StringComparison.Ordinal))
             throw new FormatException("The runtime type shape contains an unknown token.");
-        var namedParts = token.Split(new[] { ':' }, 3);
-        if (namedParts.Length != 3)
+        var namedParts = token.Split(':');
+        if (namedParts.Length != 3 && namedParts.Length != 4)
             throw new FormatException("The runtime type shape contains invalid named-type metadata.");
-        var typeName = DecodeRuntimeTypeText(namedParts[1]);
-        var assemblyName = DecodeRuntimeTypeText(namedParts[2]);
-        if (SafeTypeLiteralName.IsMatch(typeName)) return "[" + typeName + "]";
+        var hasResolution = namedParts.Length == 4;
+        var resolution = hasResolution ? namedParts[1] : string.Empty;
+        var typeName = DecodeRuntimeTypeText(namedParts[hasResolution ? 2 : 1]);
+        var assemblyName = DecodeRuntimeTypeText(namedParts[hasResolution ? 3 : 2]);
+        if (resolution == "L" || (!hasResolution && PowerShellTypeLiteralName.IsSafe(typeName)))
+            return "[" + typeName + "]";
+        if (hasResolution && resolution != "E")
+            throw new FormatException("The runtime type shape contains an unknown named-type resolution mode.");
         return FormatExactLoadedType(typeName, assemblyName);
     }
 
@@ -115,11 +114,12 @@ internal static class PowerShellRuntimeTypeFormatter
         var formattedRuntimeTypeName = PowerShellDefaultValueFormatter.FormatString(runtimeTypeName, preserveCharacterType: false);
         return "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | " +
                "Where-Object { $_.FullName -eq " + PowerShellDefaultValueFormatter.FormatString(assemblyName, preserveCharacterType: false) +
-               " } | Select-Object -First 1; if ($null -eq $assembly) { throw 'Type assembly is not loaded.' }; " +
-               "$type = $assembly.GetType(" + formattedRuntimeTypeName + ", $false, $false); " +
-               "if ($null -eq $type) { $type = $assembly.GetTypes() | Where-Object { $_.FullName -ceq " +
-               formattedRuntimeTypeName + " } | Select-Object -First 1 }; " +
-               "if ($null -eq $type) { throw 'Type is not available in the loaded assembly.' }; return $type }";
+               " }; $matches = [System.Collections.Generic.List[type]]::new(); foreach ($candidateAssembly in @($assembly)) { " +
+               "$type = $candidateAssembly.GetType(" + formattedRuntimeTypeName + ", $false, $false); " +
+               "if ($null -eq $type) { try { $type = $candidateAssembly.GetTypes() | Where-Object { $_.FullName -ceq " +
+               formattedRuntimeTypeName + " } | Select-Object -First 1 } catch { $type = $null } }; " +
+               "if ($null -ne $type) { $matches.Add($type) } }; if ($matches.Count -ne 1) { " +
+               "throw 'Type identity is unavailable or ambiguous across loaded assemblies.' }; return $matches[0] }";
     }
 
     private static string FormatModifiedType(string elementTypeName, string runtimeTypeName, string assemblyName, string modifier)

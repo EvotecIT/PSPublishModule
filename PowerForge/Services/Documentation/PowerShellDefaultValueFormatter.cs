@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Xml;
 
 namespace PowerForge;
@@ -13,10 +12,6 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellDefaultValueFormatter
 {
-    private static readonly Regex SafeTypeLiteralName = new(
-        @"^[A-Za-z_][A-Za-z0-9_.+`]*(?:\[[A-Za-z0-9_.+`,\[\]]+\])?$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
     /// <summary>
     /// Formats a captured runtime value for Markdown and MAML default-value metadata.
     /// </summary>
@@ -154,14 +149,15 @@ internal static class PowerShellDefaultValueFormatter
     {
         var typeName = value.CanonicalTypeName ?? string.Empty;
         if (typeName.Length == 0) return value.Text ?? string.Empty;
-        var typeIsLiteral = SafeTypeLiteralName.IsMatch(typeName);
-        if (typeIsLiteral && !string.IsNullOrWhiteSpace(value.Name))
-            return "[" + typeName + "]::" + value.Name!.Trim();
         var typeExpression = PowerShellRuntimeTypeFormatter.Format(
             typeName,
             DecodeUtf16CodeUnits(value.RuntimeTypeNameCodeUnits),
-            DecodeUtf16CodeUnits(value.AssemblyNameCodeUnits));
+            DecodeUtf16CodeUnits(value.AssemblyNameCodeUnits),
+            value.RuntimeTypeShape);
         if (typeExpression.Length == 0) return string.Empty;
+        var typeIsLiteral = IsTypeLiteralExpression(typeExpression);
+        if (typeIsLiteral && !string.IsNullOrWhiteSpace(value.Name))
+            return typeExpression + "::" + value.Name!.Trim();
         if (!typeIsLiteral) typeExpression = "(" + typeExpression + ")";
         var numericValue = value.Text ?? string.Empty;
         var underlyingTypeName = (value.UnderlyingTypeName ?? string.Empty).Trim();
@@ -468,18 +464,18 @@ internal static class PowerShellDefaultValueFormatter
             var statements = new List<string>();
             if (_isArray)
             {
-                if (SafeTypeLiteralName.IsMatch(_elementTypeName))
+                var elementExpression = PowerShellRuntimeTypeFormatter.Format(
+                    _elementTypeName,
+                    _runtimeTypeName,
+                    _assemblyName,
+                    _runtimeTypeShape);
+                if (IsTypeLiteralExpression(elementExpression))
                 {
                     statements.Add("$collection = [" + _collectionTypeName + "]::new(" +
                                    _items.Count.ToString(CultureInfo.InvariantCulture) + ")");
                 }
                 else
                 {
-                    var elementExpression = PowerShellRuntimeTypeFormatter.Format(
-                        _elementTypeName,
-                        _runtimeTypeName,
-                        _assemblyName,
-                        _runtimeTypeShape);
                     if (elementExpression.Length == 0)
                         throw new FormatException("The runtime default token stream contains an unresolved array element type.");
                     statements.Add("$collection = [System.Array]::CreateInstance((" + elementExpression + "), " +
@@ -498,7 +494,7 @@ internal static class PowerShellDefaultValueFormatter
                     _runtimeTypeShape);
                 if (collectionTypeExpression.Length == 0)
                     throw new FormatException("The runtime default token stream contains an unresolved collection type.");
-                statements.Add(SafeTypeLiteralName.IsMatch(_collectionTypeName)
+                statements.Add(IsTypeLiteralExpression(collectionTypeExpression)
                     ? "$collection = " + collectionTypeExpression + "::new()"
                     : "$collection = [System.Activator]::CreateInstance((" + collectionTypeExpression + "))");
                 statements.AddRange(_items.Select(item =>
@@ -578,7 +574,7 @@ internal static class PowerShellDefaultValueFormatter
                 _runtimeTypeShape);
             if (dictionaryTypeExpression.Length == 0)
                 throw new FormatException("The runtime default token stream contains an unresolved dictionary type.");
-            var constructorExpression = SafeTypeLiteralName.IsMatch(_dictionaryTypeName)
+            var constructorExpression = IsTypeLiteralExpression(dictionaryTypeExpression)
                 ? dictionaryTypeExpression + "::new(" + _constructorArgument + ")"
                 : _constructorArgument.Length == 0
                     ? "[System.Activator]::CreateInstance((" + dictionaryTypeExpression + "))"
@@ -730,4 +726,7 @@ internal static class PowerShellDefaultValueFormatter
         }
         return new string(characters);
     }
+
+    private static bool IsTypeLiteralExpression(string expression)
+        => expression.Length >= 2 && expression[0] == '[' && expression[expression.Length - 1] == ']';
 }

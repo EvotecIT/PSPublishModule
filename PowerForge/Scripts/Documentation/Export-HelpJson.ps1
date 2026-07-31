@@ -68,6 +68,7 @@ function AddRuntimeDefaultValueTokens(
       underlyingTypeName = GetCanonicalTypeNameFromType $underlyingType
       runtimeTypeNameCodeUnits = ConvertToUtf16CodeUnits ([string]$enumType.FullName)
       assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$enumType.Assembly.FullName)
+      runtimeTypeShape = GetRuntimeTypeShape $enumType
     }) | Out-Null
     return
   }
