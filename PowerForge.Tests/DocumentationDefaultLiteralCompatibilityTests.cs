@@ -527,6 +527,13 @@ function Get-DefaultLiteralFixture {
         $parameters.Add('RestrictedCaseMode', [System.Management.Automation.RuntimeDefinedParameter]::new(
             'RestrictedCaseMode', [DefaultLiteralFixture.CaseMode], $restrictedCaseModeAttributes))
 
+        $caseSensitiveValidateSetAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $caseSensitiveValidateSet = [System.Management.Automation.ValidateSetAttribute]::new([string[]]@('A', 'a'))
+        $caseSensitiveValidateSet.IgnoreCase = $false
+        $caseSensitiveValidateSetAttributes.Add($caseSensitiveValidateSet)
+        $parameters.Add('CaseSensitiveValidateSet', [System.Management.Automation.RuntimeDefinedParameter]::new(
+            'CaseSensitiveValidateSet', [string], $caseSensitiveValidateSetAttributes))
+
         $weirdModeType = 'DefaultLiteralFixture.WeirdMode' -as [type]
         $weirdModeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $weirdModeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -541,13 +548,15 @@ function Get-DefaultLiteralFixture {
         $parameters
     }
 }
+$invalidOutputFunction = "function Get-InvalidOutputFixture { [OutputType('Bad" + [char]1 + "Name')] param() }"
+. ([scriptblock]::Create($invalidOutputFunction))
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             File.WriteAllText(manifestPath, """
 @{
     RootModule = 'DefaultLiteralFixture.psm1'
     ModuleVersion = '1.0.0'
     GUID = '99999999-9999-9999-9999-999999999999'
-    FunctionsToExport = @('Get-DefaultLiteralFixture')
+    FunctionsToExport = @('Get-DefaultLiteralFixture', 'Get-InvalidOutputFixture')
     CmdletsToExport = @()
     AliasesToExport = @()
     VariablesToExport = @()
@@ -587,9 +596,13 @@ function Get-DefaultLiteralFixture {
                 payload,
                 "DefaultLiteralFixture",
                 Path.Combine(root, "generated"));
-            var command = Assert.Single(payload.Commands);
+            var command = Assert.Single(payload.Commands, item => item.Name == "Get-DefaultLiteralFixture");
+            var invalidOutputCommand = Assert.Single(payload.Commands, item => item.Name == "Get-InvalidOutputFixture");
 
             Assert.DoesNotContain('\u0001', File.ReadAllText(generatedMamlPath));
+            var invalidOutput = Assert.Single(invalidOutputCommand.Outputs);
+            Assert.Equal("Bad([char]1)Name", invalidOutput.Name);
+            Assert.Equal("Bad([char]1)Name", invalidOutput.ClrTypeName);
 
             Assert.Equal("([double]-0.0)", Default("NegativeDouble"));
             Assert.Equal(
@@ -739,6 +752,9 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 new[] { "A" },
                 Assert.Single(command.Parameters, parameter => parameter.Name == "RestrictedCaseMode").PossibleValues);
+            Assert.Equal(
+                new[] { "A", "a" },
+                Assert.Single(command.Parameters, parameter => parameter.Name == "CaseSensitiveValidateSet").PossibleValues);
             Assert.Equal(
                 "[System.Enum]::ToObject([DefaultLiteralFixture.WeirdMode], ([System.Int32]1))",
                 Default("WeirdMode"));

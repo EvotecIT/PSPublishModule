@@ -1,13 +1,19 @@
 function MergeParameterPossibleValues(
   [object[]]$metadataValues,
-  [object[]]$enumValues
+  [object[]]$enumValues,
+  [bool]$metadataCaseSensitive = $false
 ) {
   $result = [System.Collections.Generic.List[string]]::new()
-  $seenFolded = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+  $metadataComparer = if ($metadataCaseSensitive) {
+    [System.StringComparer]::Ordinal
+  } else {
+    [System.StringComparer]::OrdinalIgnoreCase
+  }
+  $seenMetadata = [System.Collections.Generic.HashSet[string]]::new($metadataComparer)
   foreach ($value in @($metadataValues)) {
     if ($null -eq $value) { continue }
     $normalized = ([string]$value).Trim()
-    if ($normalized -and $seenFolded.Add($normalized)) {
+    if ($normalized -and $seenMetadata.Add($normalized)) {
       $result.Add($normalized)
     }
   }
@@ -22,4 +28,14 @@ function MergeParameterPossibleValues(
     }
   }
   return @($result.ToArray())
+}
+
+function TestValidateSetCaseSensitive(
+  [System.Management.Automation.ValidateSetAttribute]$attribute
+) {
+  try {
+    return $attribute.PSObject.Properties['IgnoreCase'] -and -not [bool]$attribute.IgnoreCase
+  } catch {
+    return $false
+  }
 }

@@ -61,6 +61,15 @@ function GetOutputTypeMetadata([object]$outputType) {
   }
 }
 
+function ConvertOutputsToXmlSafeDocumentationText([object[]]$outputs) {
+  foreach ($output in @($outputs)) {
+    $output.name = ConvertToXmlSafeDefaultHelpText ([string]$output.name)
+    $output.clrTypeName = ConvertToXmlSafeDefaultHelpText ([string]$output.clrTypeName)
+    $output.description = ConvertToXmlSafeDefaultHelpText ([string]$output.description)
+  }
+  return @($outputs)
+}
+
 function AddTypeKeysToIndexes(
   [object]$value,
   [string[]]$keys,

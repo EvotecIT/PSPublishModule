@@ -338,6 +338,7 @@ try {
       $possibleValues = @()
       $enumPossibleValues = @()
       $hasValidateSet = $false
+      $validateSetCaseSensitive = $false
 
       $required = $false
       $parameterSetRequired = @{}
@@ -376,6 +377,7 @@ try {
             if ($null -eq $attr) { continue }
             if ($attr -is [System.Management.Automation.ValidateSetAttribute]) {
               $hasValidateSet = $true
+              if (TestValidateSetCaseSensitive $attr) { $validateSetCaseSensitive = $true }
               foreach ($value in @($attr.ValidValues)) {
                 if ($null -ne $value) { $possibleValues += [string]$value }
               }
@@ -463,7 +465,7 @@ try {
         }
       }
       if ($hasValidateSet) { $enumPossibleValues = @() }
-      $possibleValues = @(MergeParameterPossibleValues @($possibleValues) @($enumPossibleValues))
+      $possibleValues = @(MergeParameterPossibleValues @($possibleValues) @($enumPossibleValues) $validateSetCaseSensitive)
 
       $sets = @()
       if ($paramSets.ContainsKey($pn)) { $sets = @($paramSets[$pn]) }
@@ -747,6 +749,7 @@ try {
         }
       }
     }
+    $outputs = @(ConvertOutputsToXmlSafeDocumentationText @($outputs))
 
     $links = @()
     try {
