@@ -55,6 +55,24 @@ function ConvertDictionaryToPowerShellDefaultValue(
   return ('& { ' + ($statements -join '; ') + ' }')
 }
 
+function TestCollectionHasItemOnlyBackingStore([object]$value) {
+  $collectionType = $value.GetType()
+  if (-not $collectionType.IsGenericType -or
+      $collectionType.GetGenericTypeDefinition() -ne [System.Collections.ObjectModel.Collection``1]) {
+    return $true
+  }
+  $itemsProperty = $collectionType.GetProperty(
+    'Items',
+    [System.Reflection.BindingFlags]'Instance,NonPublic')
+  if ($null -eq $itemsProperty) { return $false }
+  $backingStore = $null
+  try { $backingStore = $itemsProperty.GetValue($value, $null) } catch { return $false }
+  if ($null -eq $backingStore) { return $false }
+  $expectedType = [System.Collections.Generic.List``1].MakeGenericType(
+    $collectionType.GetGenericArguments()[0])
+  return $backingStore.GetType() -eq $expectedType
+}
+
 function ConvertCollectionItemsToPowerShellDefaultValue(
   [System.Collections.Generic.IReadOnlyList[string]]$items,
   [object]$value
@@ -66,7 +84,8 @@ function ConvertCollectionItemsToPowerShellDefaultValue(
     if (-not $supportedItemOnlyList -and $collectionType.IsGenericType) {
       $genericDefinitionName = $collectionType.GetGenericTypeDefinition().FullName
       $supportedItemOnlyList = $genericDefinitionName -eq 'System.Collections.Generic.List`1' -or
-        $genericDefinitionName -eq 'System.Collections.ObjectModel.Collection`1'
+        ($genericDefinitionName -eq 'System.Collections.ObjectModel.Collection`1' -and
+          (TestCollectionHasItemOnlyBackingStore $value))
     }
     if (-not $supportedItemOnlyList) {
       throw ('Collection type carries unsupported non-item state: ' + $collectionType.FullName)

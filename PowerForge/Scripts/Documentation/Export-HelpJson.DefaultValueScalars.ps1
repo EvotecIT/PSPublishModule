@@ -1,34 +1,43 @@
+function TestExactRuntimeValueType([object]$value, [object]$expectedType) {
+  return $null -ne $value -and
+    $null -ne $expectedType -and
+    [object]::ReferenceEquals($value.GetType(), $expectedType)
+}
+
+function GetCoreRuntimeType([string]$fullName) {
+  return [datetime].Assembly.GetType($fullName, $false, $false)
+}
+
 function ConvertScalarToPowerShellDefaultValue([object]$value) {
   $scalarText = if ($value -is [System.IFormattable]) {
     ([System.IFormattable]$value).ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
   } else {
     ''
   }
-  switch ($value.GetType().FullName) {
-    'System.SByte' { return ('([System.SByte]' + $scalarText + ')') }
-    'System.Byte' { return ('([System.Byte]' + $scalarText + ')') }
-    'System.Int16' { return ('([System.Int16]' + $scalarText + ')') }
-    'System.UInt16' { return ('([System.UInt16]' + $scalarText + ')') }
-    'System.Int32' { return $scalarText }
-    'System.UInt32' { return ('([System.UInt32]' + $scalarText + ')') }
-    'System.Int64' { return ('([System.Int64]' + $scalarText + ')') }
-    'System.UInt64' { return ('([System.UInt64]' + $scalarText + ')') }
-    'System.IntPtr' {
-      $pointerValue = $value.ToInt64()
-      if ($pointerValue -lt [int]::MinValue -or $pointerValue -gt [int]::MaxValue) {
-        throw 'IntPtr defaults outside the 32-bit range are not portable.'
-      }
-      return ('[System.IntPtr]::new(([System.Int64]' + $scalarText + '))')
+  $runtimeType = $value.GetType()
+  if ($runtimeType -eq [sbyte]) { return ('([System.SByte]' + $scalarText + ')') }
+  if ($runtimeType -eq [byte]) { return ('([System.Byte]' + $scalarText + ')') }
+  if ($runtimeType -eq [int16]) { return ('([System.Int16]' + $scalarText + ')') }
+  if ($runtimeType -eq [uint16]) { return ('([System.UInt16]' + $scalarText + ')') }
+  if ($runtimeType -eq [int32]) { return $scalarText }
+  if ($runtimeType -eq [uint32]) { return ('([System.UInt32]' + $scalarText + ')') }
+  if ($runtimeType -eq [int64]) { return ('([System.Int64]' + $scalarText + ')') }
+  if ($runtimeType -eq [uint64]) { return ('([System.UInt64]' + $scalarText + ')') }
+  if ($runtimeType -eq [intptr]) {
+    $pointerValue = $value.ToInt64()
+    if ($pointerValue -lt [int]::MinValue -or $pointerValue -gt [int]::MaxValue) {
+      throw 'IntPtr defaults outside the 32-bit range are not portable.'
     }
-    'System.UIntPtr' {
-      $pointerValue = $value.ToUInt64()
-      if ($pointerValue -gt [uint32]::MaxValue) {
-        throw 'UIntPtr defaults outside the 32-bit range are not portable.'
-      }
-      return ('[System.UIntPtr]::new(([System.UInt64]' + $scalarText + '))')
-    }
+    return ('[System.IntPtr]::new(([System.Int64]' + $scalarText + '))')
   }
-  throw ('Unsupported PSDefaultValue runtime type: ' + $value.GetType().FullName)
+  if ($runtimeType -eq [uintptr]) {
+    $pointerValue = $value.ToUInt64()
+    if ($pointerValue -gt [uint32]::MaxValue) {
+      throw 'UIntPtr defaults outside the 32-bit range are not portable.'
+    }
+    return ('[System.UIntPtr]::new(([System.UInt64]' + $scalarText + '))')
+  }
+  throw ('Unsupported PSDefaultValue runtime type: ' + $runtimeType.FullName)
 }
 
 function ConvertToXmlSafeDefaultHelpText([string]$text) {

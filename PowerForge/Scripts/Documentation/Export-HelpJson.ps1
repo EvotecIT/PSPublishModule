@@ -79,7 +79,7 @@ function ConvertToPowerShellDefaultValue(
     if ($value) { return '$true' }
     return '$false'
   }
-  if ($value.GetType().FullName -eq 'System.Management.Automation.SwitchParameter') {
+  if (TestExactRuntimeValueType $value ([System.Management.Automation.SwitchParameter])) {
     $switchValue = if ($value.IsPresent) { '$true' } else { '$false' }
     return ('[System.Management.Automation.SwitchParameter]::new(' + $switchValue + ')')
   }
@@ -140,7 +140,7 @@ function ConvertToPowerShellDefaultValue(
       '), ([int]' + $bits[2].ToString([System.Globalization.CultureInfo]::InvariantCulture) +
       '), ' + $isNegative + ', ([byte]' + $scale.ToString([System.Globalization.CultureInfo]::InvariantCulture) + '))')
   }
-  if ($value.GetType().FullName -eq 'System.Numerics.BigInteger') {
+  if (TestExactRuntimeValueType $value ([System.Numerics.BigInteger])) {
     $integerText = $value.ToString([System.Globalization.CultureInfo]::InvariantCulture)
     return ("[System.Numerics.BigInteger]::Parse('" + $integerText + "', [System.Globalization.CultureInfo]::InvariantCulture)")
   }
@@ -159,11 +159,11 @@ function ConvertToPowerShellDefaultValue(
     $uriKind = if ($value.IsAbsoluteUri) { 'Absolute' } else { 'Relative' }
     return ('[System.Uri]::new(' + $uriText + ', [System.UriKind]::' + $uriKind + ')')
   }
-  if ($value.GetType().FullName -eq 'System.DateOnly') {
+  if (TestExactRuntimeValueType $value (GetCoreRuntimeType 'System.DateOnly')) {
     $dayNumber = $value.DayNumber.ToString([System.Globalization.CultureInfo]::InvariantCulture)
     return ('[System.DateOnly]::FromDayNumber(([int]' + $dayNumber + '))')
   }
-  if ($value.GetType().FullName -eq 'System.TimeOnly') {
+  if (TestExactRuntimeValueType $value (GetCoreRuntimeType 'System.TimeOnly')) {
     $ticks = $value.Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
     return ('[System.TimeOnly]::new(([long]' + $ticks + '))')
   }

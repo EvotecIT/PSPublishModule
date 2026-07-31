@@ -132,4 +132,153 @@ if ($unique.FullName -cne 'N.Target-Type') { throw 'Duplicate-assembly type did 
             }
         }
     }
+
+    [Fact]
+    public void DocumentationEngine_RejectsSpoofedScalarsAndStatefulCollectionBackingStores()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-doc-runtime-identity-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var manifestPath = Path.Combine(root, "RuntimeIdentityFixture.psd1");
+            File.WriteAllText(manifestPath, """
+@{
+    RootModule = 'RuntimeIdentityFixture.psm1'
+    ModuleVersion = '1.0.0'
+    GUID = '55555555-5555-5555-5555-555555555555'
+    FunctionsToExport = @('Get-RuntimeIdentityFixture')
+}
+""", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            File.WriteAllText(Path.Combine(root, "RuntimeIdentityFixture.psm1"), """
+$spoofTypes = Add-Type -TypeDefinition @'
+namespace System.Management.Automation {
+    public sealed class SwitchParameter { public bool IsPresent { get { return true; } } }
+}
+namespace System.Numerics {
+    public sealed class BigInteger : System.IFormattable {
+        public string ToString(string format, System.IFormatProvider provider) { return "7"; }
+    }
+}
+namespace System {
+    public sealed class DateOnly { public int DayNumber { get { return 5; } } }
+    public sealed class TimeOnly { public long Ticks { get { return 6L; } } }
+}
+'@ -PassThru
+
+function New-SpoofedValue([string]$fullName) {
+    $type = $spoofTypes | Where-Object { $_.FullName -ceq $fullName } | Select-Object -First 1
+    return [System.Activator]::CreateInstance($type)
+}
+
+$script:statefulCollection = [System.Collections.ObjectModel.Collection[int]]::new(
+    [System.Collections.Generic.IList[int]]([int[]](1, 2)))
+$script:itemOnlyCollection = [System.Collections.ObjectModel.Collection[int]]::new()
+$script:itemOnlyCollection.Add(1)
+$script:itemOnlyCollection.Add(2)
+
+function Get-RuntimeIdentityFixture {
+    [CmdletBinding()]
+    param()
+
+    dynamicparam {
+        $parameters = [System.Management.Automation.RuntimeDefinedParameterDictionary]::new()
+        foreach ($entry in @(
+            @('SpoofSwitch', (New-SpoofedValue 'System.Management.Automation.SwitchParameter')),
+            @('SpoofBigInteger', (New-SpoofedValue 'System.Numerics.BigInteger')),
+            @('SpoofDateOnly', (New-SpoofedValue 'System.DateOnly')),
+            @('SpoofTimeOnly', (New-SpoofedValue 'System.TimeOnly')),
+            @('StatefulCollection', $script:statefulCollection),
+            @('ItemOnlyCollection', $script:itemOnlyCollection)
+        )) {
+            $attributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+            $default = [System.Management.Automation.PSDefaultValueAttribute]::new()
+            $default.Value = $entry[1]
+            $attributes.Add($default)
+            $parameters.Add($entry[0], [System.Management.Automation.RuntimeDefinedParameter]::new(
+                $entry[0], [object], $attributes))
+        }
+        $parameters
+    }
+}
+""", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            var evaluatorPath = Path.Combine(root, "EvaluateCollection.ps1");
+            File.WriteAllText(evaluatorPath, """
+param([string]$ManifestPath, [string]$Expression)
+Import-Module -Name $ManifestPath -Force -ErrorAction Stop
+$collection = & ([scriptblock]::Create($Expression))
+if ($collection.GetType() -ne [System.Collections.ObjectModel.Collection[int]]) {
+    throw 'Collection type did not round-trip.'
+}
+$collection.Add(3)
+if ($collection.Count -ne 3) { throw 'Collection mutability did not round-trip.' }
+""", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            var hosts = OperatingSystem.IsWindows()
+                ? new[] { "pwsh.exe", "powershell.exe" }
+                : new[] { "pwsh" };
+            foreach (var host in hosts)
+            {
+                var runner = new ExecutablePowerShellRunner(host, root);
+                var payload = new DocumentationEngine(runner, new NullLogger())
+                    .ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
+                var command = Assert.Single(payload.Commands);
+
+                Assert.True(string.IsNullOrEmpty(Default("SpoofSwitch")));
+                Assert.True(string.IsNullOrEmpty(Default("SpoofBigInteger")));
+                Assert.True(string.IsNullOrEmpty(Default("SpoofDateOnly")));
+                Assert.True(string.IsNullOrEmpty(Default("SpoofTimeOnly")));
+                Assert.True(string.IsNullOrEmpty(Default("StatefulCollection")));
+                var itemOnly = Default("ItemOnlyCollection");
+                Assert.StartsWith("& { $collection = [System.Collections.ObjectModel.Collection[System.Int32]]::new()", itemOnly, StringComparison.Ordinal);
+
+                var execution = runner.Run(new PowerShellRunRequest(
+                    evaluatorPath,
+                    new[] { manifestPath, itemOnly },
+                    TimeSpan.FromMinutes(1)));
+                Assert.True(execution.ExitCode == 0, execution.StdErr);
+
+                string Default(string name)
+                    => Assert.Single(command.Parameters, parameter => parameter.Name == name).DefaultValue;
+            }
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // Best effort cleanup; do not mask assertion failures.
+            }
+        }
+    }
+
+    private sealed class ExecutablePowerShellRunner : IPowerShellRunner
+    {
+        private readonly string _executable;
+        private readonly string _workingDirectory;
+        private readonly PowerShellRunner _inner = new();
+
+        public ExecutablePowerShellRunner(string executable, string workingDirectory)
+        {
+            _executable = executable;
+            _workingDirectory = workingDirectory;
+        }
+
+        public PowerShellRunResult Run(PowerShellRunRequest request)
+            => _inner.Run(new PowerShellRunRequest(
+                request.ScriptPath!,
+                request.Arguments,
+                request.Timeout,
+                request.PreferPwsh,
+                request.WorkingDirectory ?? _workingDirectory,
+                request.EnvironmentVariables,
+                _executable,
+                request.CaptureOutput,
+                request.CaptureError,
+                request.OutputLineReceived,
+                request.ErrorLineReceived));
+    }
 }
