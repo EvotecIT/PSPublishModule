@@ -157,8 +157,7 @@ function AddRuntimeDefaultValueTokens(
   if ($value -is [datetime]) {
     $tokens.Add([ordered]@{
       kind = 'DateTime'
-      text = $value.Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
-      name = [string]$value.Kind
+      text = $value.ToBinary().ToString([System.Globalization.CultureInfo]::InvariantCulture)
     }) | Out-Null
     return
   }

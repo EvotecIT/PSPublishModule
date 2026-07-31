@@ -147,12 +147,11 @@ public sealed class DocumentationMetadataNormalizerTests
                 Text = "452961234567"
             }));
         Assert.Equal(
-            "[System.DateTime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)",
+            "[System.DateTime]::FromBinary(([long]639210116961234567))",
             PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
             {
                 Kind = "DateTime",
-                Text = "639210116961234567",
-                Name = "Local"
+                Text = "639210116961234567"
             }));
         Assert.Equal(
             "[System.DateTimeOffset]::ParseExact('2026-07-30T12:34:56.1234567+05:30', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",
@@ -479,21 +478,26 @@ public sealed class DocumentationMetadataNormalizerTests
             output => Assert.Equal("Demo.FooBar", output.CanonicalTypeName));
     }
 
-    [Fact]
-    public void Normalize_MatchesUniqueUnqualifiedOutputNamesCaseInsensitively()
+    [Theory]
+    [InlineData("Widget", "Demo.Widget", "widget")]
+    [InlineData("Box[System.String]", "Demo.Box[System.String]", "box[System.String]")]
+    public void Normalize_MatchesUniqueUnqualifiedOutputNamesCaseInsensitively(
+        string runtimeName,
+        string runtimeIdentity,
+        string authoredName)
     {
         var command = new DocumentationCommandHelp
         {
             Name = "Get-Widget",
             CommandType = "Cmdlet",
-            RuntimeOutputs = [Type("Widget", "Demo.Widget")],
-            AuthoredOutputs = [Type("widget", "widget", "Unique widget description.")]
+            RuntimeOutputs = [Type(runtimeName, runtimeIdentity)],
+            AuthoredOutputs = [Type(authoredName, authoredName, "Unique widget description.")]
         };
 
         DocumentationMetadataNormalizer.Normalize(PayloadWith(command));
 
         var output = Assert.Single(command.Outputs);
-        Assert.Equal("Demo.Widget", output.CanonicalTypeName);
+        Assert.Equal(runtimeIdentity, output.CanonicalTypeName);
         Assert.Equal("Unique widget description.", output.Description);
     }
 

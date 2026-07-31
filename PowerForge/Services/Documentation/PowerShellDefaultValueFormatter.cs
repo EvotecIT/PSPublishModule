@@ -68,8 +68,7 @@ internal static class PowerShellDefaultValueFormatter
             case "timeonly":
                 return "[System.TimeOnly]::new(([long]" + (value.Text ?? string.Empty) + "))";
             case "datetime":
-                return "[System.DateTime]::new(([long]" + (value.Text ?? string.Empty) +
-                       "), [System.DateTimeKind]::" + (value.Name ?? string.Empty) + ")";
+                return "[System.DateTime]::FromBinary(([long]" + (value.Text ?? string.Empty) + "))";
             case "datetimeoffset":
                 return FormatTemporalParseExact("System.DateTimeOffset", value.Text, "O", includeStyles: true);
             case "timespan":
