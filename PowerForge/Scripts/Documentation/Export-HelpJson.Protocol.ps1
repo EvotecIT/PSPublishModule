@@ -18,6 +18,7 @@ function GetCollectorHelperFunctionNames {
     'ConvertToPowerShellTypeIdentityText',
     'ConvertToRuntimeDefaultValue',
     'ConvertToUtf16CodeUnits',
+    'ConvertToUtf8SafeJsonText',
     'EmitError',
     'GetCanonicalTypeNameFromType',
     'GetCollectionCapacity',
@@ -58,6 +59,7 @@ function NewCollectorProtocol([System.Management.Automation.PSModuleInfo]$helper
   return [pscustomobject]@{
     ConvertToRuntimeDefaultValue = $helperModule.ExportedFunctions['ConvertToRuntimeDefaultValue']
     ConvertToUtf16CodeUnits = $helperModule.ExportedFunctions['ConvertToUtf16CodeUnits']
+    ConvertToUtf8SafeJsonText = $helperModule.ExportedFunctions['ConvertToUtf8SafeJsonText']
     EmitError = Get-Command EmitError -CommandType Function
     GetCanonicalTypeNameFromType = $helperModule.ExportedFunctions['GetCanonicalTypeNameFromType']
     GetOutputTypeSnapshot = $helperModule.ExportedFunctions['GetOutputTypeSnapshot']

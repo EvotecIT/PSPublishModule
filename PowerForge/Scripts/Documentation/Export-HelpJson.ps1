@@ -304,7 +304,7 @@ function AddRuntimeDefaultValueTokens(
   throw ('Unsupported PSDefaultValue runtime type: ' + $runtimeType.FullName)
 }
 Export-ModuleMember -Function @(
-  'ConvertToRuntimeDefaultValue', 'ConvertToUtf16CodeUnits',
+  'ConvertToRuntimeDefaultValue', 'ConvertToUtf16CodeUnits', 'ConvertToUtf8SafeJsonText',
   'GetCanonicalTypeNameFromType', 'GetOutputTypeSnapshot',
   'GetText', 'ResolveCanonicalTypeName', 'TestValidateSetCaseSensitive')
 }
@@ -792,7 +792,7 @@ try {
 
   $outDir = Split-Path -Path $OutputJsonPath -Parent
   if ($outDir) { [System.IO.Directory]::CreateDirectory($outDir) | Out-Null }
-  $json = $result | ConvertTo-Json -Depth 100
+  $json = & $collectorProtocol.ConvertToUtf8SafeJsonText ($result | ConvertTo-Json -Depth 100)
   [System.IO.File]::WriteAllText($OutputJsonPath, $json, [System.Text.UTF8Encoding]::new($false))
 
   Write-Output 'PFDOCS::OK'

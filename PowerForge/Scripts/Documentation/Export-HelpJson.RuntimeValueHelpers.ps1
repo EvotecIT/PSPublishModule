@@ -17,6 +17,23 @@ function ConvertToUtf16CodeUnits([string]$text) {
   return $builder.ToString()
 }
 
+# Escape every surrogate code unit in the JSON text before the UTF-8 file boundary.
+# JSON readers reconstruct valid pairs and retain isolated surrogates without U+FFFD loss.
+function ConvertToUtf8SafeJsonText([string]$json) {
+  $builder = [System.Text.StringBuilder]::new($json.Length)
+  for ($index = 0; $index -lt $json.Length; $index++) {
+    $codeUnit = [int]$json[$index]
+    if ($codeUnit -ge 0xD800 -and $codeUnit -le 0xDFFF) {
+      [void]$builder.Append('\u')
+      [void]$builder.Append(
+        $codeUnit.ToString('X4', [System.Globalization.CultureInfo]::InvariantCulture))
+    } else {
+      [void]$builder.Append($json[$index])
+    }
+  }
+  return $builder.ToString()
+}
+
 function ConvertRuntimeTypeTextToBase64([string]$text) {
   return [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($text))
 }
@@ -32,7 +49,7 @@ function AddRuntimeDefaultValueReference(
   [System.Collections.IList]$references
 ) {
   if ($null -eq $value -or $value.GetType().IsValueType -or
-      $value -is [string] -or $value -is [type]) {
+      $value -is [type]) {
     return
   }
   foreach ($seenReference in $references) {
