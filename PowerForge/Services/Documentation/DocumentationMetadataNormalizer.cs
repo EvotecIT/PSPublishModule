@@ -34,8 +34,15 @@ internal static class DocumentationMetadataNormalizer
         {
             if (parameter is null) continue;
 
-            parameter.Aliases = DistinctNonBlank(parameter.Aliases);
-            parameter.PossibleValues = DistinctNonBlank(parameter.PossibleValues);
+            parameter.Aliases = DistinctNonBlank(parameter.Aliases, StringComparer.OrdinalIgnoreCase);
+            if (!parameter.PossibleValuesNormalized)
+            {
+                parameter.PossibleValues = MergePossibleValues(
+                    parameter.PossibleValues,
+                    parameter.EnumPossibleValues);
+                parameter.EnumPossibleValues = new List<string>();
+                parameter.PossibleValuesNormalized = true;
+            }
 
             if (parameter.HasMetadataDefault)
             {
@@ -57,7 +64,7 @@ internal static class DocumentationMetadataNormalizer
     private static void NormalizeOutputs(DocumentationCommandHelp command)
     {
         var authoredOutputs = command.AuthoredOutputs ?? new List<DocumentationTypeHelp>();
-        var runtimeOutputs = DeduplicateByIdentity(command.RuntimeOutputs ?? new List<DocumentationTypeHelp>());
+        var runtimeOutputs = DeduplicateRuntimeOutputs(command.RuntimeOutputs ?? new List<DocumentationTypeHelp>());
         if (authoredOutputs.Count == 0 && runtimeOutputs.Count == 0)
         {
             command.Outputs ??= new List<DocumentationTypeHelp>();
@@ -68,11 +75,15 @@ internal static class DocumentationMetadataNormalizer
         var runtimeIndex = BuildIndex(runtimeOutputs);
         var outputs = new List<DocumentationTypeHelp>();
         var seenIdentities = new HashSet<string>(StringComparer.Ordinal);
+        var seenRuntimeIdentities = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var runtimeOutput in runtimeOutputs)
         {
             var identity = GetIdentity(runtimeOutput);
-            if (identity.Length == 0 || !seenIdentities.Add(identity)) continue;
+            var runtimeIdentity = GetRuntimeIdentity(runtimeOutput);
+            if (identity.Length == 0 || runtimeIdentity.Length == 0 || !seenRuntimeIdentities.Add(runtimeIdentity))
+                continue;
+            seenIdentities.Add(identity);
 
             var description = string.Empty;
             var displayName = runtimeOutput.Name ?? string.Empty;
@@ -155,14 +166,14 @@ internal static class DocumentationMetadataNormalizer
         command.RuntimeOutputs = new List<DocumentationTypeHelp>();
     }
 
-    private static List<DocumentationTypeHelp> DeduplicateByIdentity(IEnumerable<DocumentationTypeHelp> values)
+    private static List<DocumentationTypeHelp> DeduplicateRuntimeOutputs(IEnumerable<DocumentationTypeHelp> values)
     {
         var result = new List<DocumentationTypeHelp>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var value in values)
         {
             if (value is null) continue;
-            var identity = GetIdentity(value);
+            var identity = GetRuntimeIdentity(value);
             if (identity.Length == 0 || !seen.Add(identity)) continue;
             result.Add(value);
         }
@@ -268,6 +279,11 @@ internal static class DocumentationMetadataNormalizer
         return string.Empty;
     }
 
+    private static string GetRuntimeIdentity(DocumentationTypeHelp value)
+        => !string.IsNullOrWhiteSpace(value.RuntimeIdentity)
+            ? value.RuntimeIdentity
+            : GetIdentity(value);
+
     private static string Canonicalize(string? candidate)
         => string.IsNullOrWhiteSpace(candidate)
             ? string.Empty
@@ -286,10 +302,25 @@ internal static class DocumentationMetadataNormalizer
         return baseName.IndexOf('.') >= 0 || baseName.IndexOf('+') >= 0;
     }
 
-    private static List<string> DistinctNonBlank(IEnumerable<string>? values)
+    private static List<string> MergePossibleValues(
+        IEnumerable<string>? metadataValues,
+        IEnumerable<string>? enumValues)
+    {
+        var result = DistinctNonBlank(metadataValues, StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(result, StringComparer.Ordinal);
+        foreach (var value in DistinctNonBlank(enumValues, StringComparer.Ordinal))
+        {
+            if (seen.Add(value)) result.Add(value);
+        }
+        return result;
+    }
+
+    private static List<string> DistinctNonBlank(
+        IEnumerable<string>? values,
+        IEqualityComparer<string> comparer)
     {
         var result = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(comparer);
         foreach (var value in values ?? Array.Empty<string>())
         {
             var normalized = (value ?? string.Empty).Trim();
@@ -308,6 +339,7 @@ internal static class DocumentationMetadataNormalizer
             Name = name ?? source.Name ?? string.Empty,
             ClrTypeName = source.ClrTypeName ?? string.Empty,
             CanonicalTypeName = source.CanonicalTypeName ?? string.Empty,
+            RuntimeIdentity = string.Empty,
             Description = description
         };
 

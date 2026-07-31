@@ -135,6 +135,10 @@ internal sealed class DocumentationTypeHelp
     [DataMember(Name = "canonicalTypeName")]
     public string CanonicalTypeName { get; set; } = string.Empty;
 
+    /// <summary>Process-local structural identity used to retain distinct runtime Type instances.</summary>
+    [DataMember(Name = "runtimeIdentity")]
+    public string RuntimeIdentity { get; set; } = string.Empty;
+
     /// <summary>Type description.</summary>
     [DataMember(Name = "description")]
     public string Description { get; set; } = string.Empty;
@@ -222,6 +226,13 @@ internal sealed class DocumentationParameterHelp
     /// <summary>Allowed values from ValidateSet or enum parameter types.</summary>
     [DataMember(Name = "possibleValues")]
     public List<string> PossibleValues { get; set; } = new();
+
+    /// <summary>Case-sensitive enum member names captured from the target PowerShell host.</summary>
+    [DataMember(Name = "enumPossibleValues")]
+    public List<string> EnumPossibleValues { get; set; } = new();
+
+    /// <summary>Tracks whether provenance-sensitive possible-value normalization already ran.</summary>
+    internal bool PossibleValuesNormalized { get; set; }
 
     /// <summary>True when the parameter is required.</summary>
     [DataMember(Name = "required")]

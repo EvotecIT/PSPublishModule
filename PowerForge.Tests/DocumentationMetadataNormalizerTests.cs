@@ -1,6 +1,6 @@
 namespace PowerForge.Tests;
 
-public sealed class DocumentationMetadataNormalizerTests
+public sealed partial class DocumentationMetadataNormalizerTests
 {
     [Fact]
     public void DefaultValueFormatter_FormatsTypedValuesAsPowerShellExpressions()
@@ -727,12 +727,17 @@ public sealed class DocumentationMetadataNormalizerTests
             Commands = [command]
         };
 
-    private static DocumentationTypeHelp Type(string name, string canonicalTypeName, string description = "")
+    private static DocumentationTypeHelp Type(
+        string name,
+        string canonicalTypeName,
+        string description = "",
+        string runtimeIdentity = "")
         => new()
         {
             Name = name,
             ClrTypeName = canonicalTypeName,
             CanonicalTypeName = canonicalTypeName,
+            RuntimeIdentity = runtimeIdentity,
             Description = description
         };
 

@@ -73,6 +73,9 @@ function AddRuntimeDefaultValueTokens(
     return
   }
   if ($value -is [type]) {
+    if (-not (TestGenuineRuntimeTypeValue $value)) {
+      throw 'Delegated or custom Type defaults are not supported.'
+    }
     if ($value.IsGenericParameter) {
       throw 'Generic-parameter Type defaults are not supported.'
     }
@@ -416,6 +419,7 @@ try {
         $typeName = ''
       }
       $possibleValues = @()
+      $enumPossibleValues = @()
 
       $required = $false
       $parameterSetRequired = @{}
@@ -489,7 +493,7 @@ try {
         if ($enumType -and $enumType.IsArray) { $enumType = $enumType.GetElementType() }
         if ($enumType -and $enumType.IsEnum) {
           foreach ($enumName in [System.Enum]::GetNames($enumType)) {
-            if ($enumName) { $possibleValues += [string]$enumName }
+            if ($enumName) { $enumPossibleValues += [string]$enumName }
           }
         }
       } catch {
@@ -561,6 +565,7 @@ try {
         parameterSets = @($sets)
         aliases = @($aliases)
         possibleValues = @($possibleValues)
+        enumPossibleValues = @($enumPossibleValues)
         required = [bool]$required
         parameterSetRequired = $parameterSetRequired
         position = $positionText
