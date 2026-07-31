@@ -30,6 +30,10 @@ internal sealed class DocumentationRuntimeValue
     [DataMember(Name = "underlyingTypeName")]
     public string? UnderlyingTypeName { get; set; }
 
+    /// <summary>UTF-16 code units for the defining assembly identity of a Type value.</summary>
+    [DataMember(Name = "assemblyNameCodeUnits")]
+    public string? AssemblyNameCodeUnits { get; set; }
+
     /// <summary>Recursively captured collection elements.</summary>
     [DataMember(Name = "items")]
     public List<DocumentationRuntimeValue> Items { get; set; } = new();

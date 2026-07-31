@@ -43,13 +43,7 @@ internal static class DocumentationMetadataNormalizer
                     ? PowerShellDefaultValueFormatter.DecodeUtf16CodeUnits(parameter.MetadataDefaultHelpCodeUnits)
                     : parameter.MetadataDefaultHelp;
                 parameter.DefaultValue = !string.IsNullOrWhiteSpace(help)
-                    ? PowerShellDefaultValueFormatter.NeedsEncoding(help)
-                        ? PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
-                        {
-                            Kind = "String",
-                            Text = help
-                        })
-                        : help!
+                    ? PowerShellDefaultValueFormatter.FormatDisplayText(help!)
                     : PowerShellDefaultValueFormatter.Format(parameter.MetadataDefaultValue);
             }
 

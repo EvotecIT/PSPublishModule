@@ -55,6 +55,20 @@ if (-not ('CollectorFixture.WeirdMode' -as [type])) {
     } else {
         [void]$enumBuilder.CreateType()
     }
+    $typeBuilder = $moduleBuilder.DefineType(
+        'CollectorFixture.A-B',
+        [System.Reflection.TypeAttributes]::Public)
+    if ($typeBuilder.PSObject.Methods['CreateTypeInfo']) {
+        $script:unsafeDefaultType = $typeBuilder.CreateTypeInfo().AsType()
+    } else {
+        $script:unsafeDefaultType = $typeBuilder.CreateType()
+    }
+}
+if ($null -eq $script:unsafeDefaultType) {
+    $script:unsafeDefaultType = [System.AppDomain]::CurrentDomain.GetAssemblies() |
+        ForEach-Object { $_.GetType('CollectorFixture.A-B', $false, $false) } |
+        Where-Object { $null -ne $_ } |
+        Select-Object -First 1
 }
 
 class InvalidTextDefault {
@@ -97,6 +111,13 @@ function Get-CollectorFixture {
                 'HelpWins',
                 [object],
                 $helpAttributes))
+
+        $multilineHelpAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $multilineHelpDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $multilineHelpDefault.Help = "first`nsecond " + [char]0xD83D + [char]0xDE00
+        $multilineHelpDefault.Value = 'ignored'
+        $multilineHelpAttributes.Add($multilineHelpDefault)
+        $parameters.Add('MultilineHelp', [System.Management.Automation.RuntimeDefinedParameter]::new('MultilineHelp', [string], $multilineHelpAttributes))
 
         $surrogateAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $surrogateDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -200,6 +221,12 @@ function Get-CollectorFixture {
         $genericParameterTypeAttributes.Add($genericParameterTypeDefault)
         $parameters.Add('GenericParameterType', [System.Management.Automation.RuntimeDefinedParameter]::new('GenericParameterType', [type], $genericParameterTypeAttributes))
 
+        $unsafeTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $unsafeTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $unsafeTypeDefault.Value = $script:unsafeDefaultType
+        $unsafeTypeAttributes.Add($unsafeTypeDefault)
+        $parameters.Add('UnsafeType', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafeType', [type], $unsafeTypeAttributes))
+
         $caseModeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $caseModeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $caseModeDefault.Value = [System.Enum]::ToObject([CollectorFixture.CaseMode], 1)
@@ -260,6 +287,14 @@ function Get-CollectorFixture {
         $readOnlyDictionaryDefault.Value = [System.Collections.ObjectModel.ReadOnlyDictionary[string, int]]::new($readOnlyBacking)
         $readOnlyDictionaryAttributes.Add($readOnlyDictionaryDefault)
         $parameters.Add('ReadOnlyDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('ReadOnlyDictionary', [System.Collections.ObjectModel.ReadOnlyDictionary[string, int]], $readOnlyDictionaryAttributes))
+
+        $readOnlyOrderedDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $readOnlyOrderedDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $readOnlyOrderedDictionary = [System.Collections.Specialized.OrderedDictionary]::new()
+        $readOnlyOrderedDictionary.Add('alpha', 1)
+        $readOnlyOrderedDictionaryDefault.Value = $readOnlyOrderedDictionary.AsReadOnly()
+        $readOnlyOrderedDictionaryAttributes.Add($readOnlyOrderedDictionaryDefault)
+        $parameters.Add('ReadOnlyOrderedDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('ReadOnlyOrderedDictionary', [System.Collections.Specialized.OrderedDictionary], $readOnlyOrderedDictionaryAttributes))
 
         $unsupportedCultureAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $unsupportedCultureDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -428,6 +463,7 @@ function Get-AcceleratedOutput {
                     item => item.Name == "Get-CollectorFixture");
                 var nested = Assert.Single(command.Parameters, parameter => parameter.Name == "Nested");
                 var helpWins = Assert.Single(command.Parameters, parameter => parameter.Name == "HelpWins");
+                var multilineHelp = Assert.Single(command.Parameters, parameter => parameter.Name == "MultilineHelp");
                 var invalidSurrogate = Assert.Single(
                     command.Parameters,
                     parameter => parameter.Name == "InvalidSurrogate");
@@ -447,6 +483,7 @@ function Get-AcceleratedOutput {
                 var byRefType = Assert.Single(command.Parameters, parameter => parameter.Name == "ByRefType");
                 var nonSzArrayType = Assert.Single(command.Parameters, parameter => parameter.Name == "NonSzArrayType");
                 var genericParameterType = Assert.Single(command.Parameters, parameter => parameter.Name == "GenericParameterType");
+                var unsafeType = Assert.Single(command.Parameters, parameter => parameter.Name == "UnsafeType");
                 var caseMode = Assert.Single(command.Parameters, parameter => parameter.Name == "CaseMode");
                 var weirdMode = Assert.Single(command.Parameters, parameter => parameter.Name == "WeirdMode");
                 var uri = Assert.Single(command.Parameters, parameter => parameter.Name == "Uri");
@@ -457,6 +494,7 @@ function Get-AcceleratedOutput {
                 var fixedComparerDictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "FixedComparerDictionary");
                 var concurrentDictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "ConcurrentDictionary");
                 var readOnlyDictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "ReadOnlyDictionary");
+                var readOnlyOrderedDictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "ReadOnlyOrderedDictionary");
                 var unsupportedCulture = Assert.Single(
                     command.Parameters,
                     parameter => parameter.Name == "UnsupportedCulture");
@@ -483,8 +521,9 @@ function Get-AcceleratedOutput {
 
                 Assert.Equal(NestedExpression(80, "1"), nested.DefaultValue);
                 Assert.Equal("authored display value", helpWins.DefaultValue);
+                Assert.Equal("first\nsecond 😀", multilineHelp.DefaultValue);
                 Assert.Equal("(-join @(([char]55296)))", invalidSurrogate.DefaultValue);
-                Assert.Equal("(-join @(([char]55296)))", invalidSurrogateHelp.DefaultValue);
+                Assert.Equal("([char]55296)", invalidSurrogateHelp.DefaultValue);
                 Assert.True(string.IsNullOrEmpty(invalidText.DefaultValue));
                 Assert.Equal(80000, longHelp.DefaultValue.Length);
                 Assert.All(longHelp.DefaultValue, character => Assert.Equal('x', character));
@@ -505,6 +544,10 @@ function Get-AcceleratedOutput {
                 Assert.Equal("[System.Int32].MakeByRefType()", byRefType.DefaultValue);
                 Assert.Equal("[System.Int32].MakeArrayType(1)", nonSzArrayType.DefaultValue);
                 Assert.True(string.IsNullOrEmpty(genericParameterType.DefaultValue));
+                Assert.StartsWith(
+                    "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'CollectorFixtureDynamic",
+                    unsafeType.DefaultValue,
+                    StringComparison.Ordinal);
                 Assert.Equal(
                     "[System.Enum]::ToObject([CollectorFixture.CaseMode], ([System.Int32]1))",
                     caseMode.DefaultValue);
@@ -528,6 +571,7 @@ function Get-AcceleratedOutput {
                     "& { $dictionary = [System.Collections.Concurrent.ConcurrentDictionary[System.String,System.Int32]]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('Alpha'), (1)); return ,$dictionary }",
                     concurrentDictionary.DefaultValue);
                 Assert.True(string.IsNullOrEmpty(readOnlyDictionary.DefaultValue));
+                Assert.True(string.IsNullOrEmpty(readOnlyOrderedDictionary.DefaultValue));
                 Assert.True(string.IsNullOrEmpty(unsupportedCulture.DefaultValue));
                 Assert.Equal(new[] { "One", "Two" }, unsupportedCulture.PossibleValues);
                 Assert.True(string.IsNullOrEmpty(unsupportedAddress.DefaultValue));

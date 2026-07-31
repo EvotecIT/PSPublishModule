@@ -51,6 +51,17 @@ public sealed class DocumentationMetadataNormalizerTests
             Kind = "Type",
             CanonicalTypeName = "System.String"
         }));
+        const string unsafeTypeName = "Example.A-B";
+        const string unsafeAssemblyName = "Example.Assembly, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null";
+        Assert.Equal(
+            "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'Example.Assembly, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null' } | Select-Object -First 1; if ($null -eq $assembly) { throw 'Type assembly is not loaded.' }; return $assembly.GetType('Example.A-B', $true, $false) }",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "Type",
+                CanonicalTypeName = "Example.A-B",
+                Text = string.Join(",", unsafeTypeName.Select(character => (int)character)),
+                AssemblyNameCodeUnits = string.Join(",", unsafeAssemblyName.Select(character => (int)character))
+            }));
         Assert.Equal(
             "[System.Int32].MakePointerType()",
             PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
@@ -183,6 +194,13 @@ public sealed class DocumentationMetadataNormalizerTests
                 new DocumentationRuntimeValue { Kind = "Boolean", Text = "False" }
             ]
         }));
+    }
+
+    [Fact]
+    public void DefaultValueFormatter_PreservesValidAuthoredHelpText()
+    {
+        Assert.Equal("first\nsecond 😀", PowerShellDefaultValueFormatter.FormatDisplayText("first\nsecond 😀"));
+        Assert.Equal("([char]55296)", PowerShellDefaultValueFormatter.FormatDisplayText(new string('\uD800', 1)));
     }
 
     [Fact]

@@ -78,6 +78,8 @@ function AddRuntimeDefaultValueTokens(
     $tokens.Add([ordered]@{
       kind = 'Type'
       canonicalTypeName = GetCanonicalTypeNameFromType $value
+      text = ConvertToUtf16CodeUnits ([string]$value.FullName)
+      assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$value.Assembly.FullName)
     }) | Out-Null
     return
   }

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Xml;
 
 namespace PowerForge;
@@ -11,6 +13,10 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellDefaultValueFormatter
 {
+    private static readonly Regex SafeTypeLiteralName = new(
+        @"^[A-Za-z_][A-Za-z0-9_.+`]*(?:\[[A-Za-z0-9_.+`,\[\]]+\])?$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     /// <summary>
     /// Formats a captured runtime value for Markdown and MAML default-value metadata.
     /// </summary>
@@ -46,7 +52,10 @@ internal static class PowerShellDefaultValueFormatter
             case "type":
                 return string.IsNullOrWhiteSpace(value.CanonicalTypeName)
                     ? string.Empty
-                    : FormatTypeExpression(value.CanonicalTypeName!.Trim());
+                    : FormatTypeExpression(
+                        value.CanonicalTypeName!.Trim(),
+                        DecodeUtf16CodeUnits(value.Text),
+                        DecodeUtf16CodeUnits(value.AssemblyNameCodeUnits));
             case "double":
                 return FormatFloatingPoint(value.Text, "double");
             case "single":
@@ -101,6 +110,36 @@ internal static class PowerShellDefaultValueFormatter
                 return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Preserves authored display text while replacing only XML-invalid UTF-16
+    /// code units with readable markers.
+    /// </summary>
+    internal static string FormatDisplayText(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+        var builder = new StringBuilder(text.Length);
+        for (var index = 0; index < text.Length; index++)
+        {
+            var character = text[index];
+            if (char.IsHighSurrogate(character) &&
+                index + 1 < text.Length &&
+                char.IsLowSurrogate(text[index + 1]))
+            {
+                builder.Append(character);
+                builder.Append(text[++index]);
+            }
+            else if (XmlConvert.IsXmlChar(character))
+            {
+                builder.Append(character);
+            }
+            else
+            {
+                builder.Append("([char]").Append((int)character).Append(')');
+            }
+        }
+        return builder.ToString();
     }
 
     private static string FormatEnum(DocumentationRuntimeValue value)
@@ -179,17 +218,33 @@ internal static class PowerShellDefaultValueFormatter
                ", [System.UriKind]::" + uriKind + ")";
     }
 
-    private static string FormatTypeExpression(string canonicalTypeName)
+    private static string FormatTypeExpression(
+        string canonicalTypeName,
+        string runtimeTypeName,
+        string assemblyName)
     {
-        if (canonicalTypeName.EndsWith("*", StringComparison.Ordinal))
-            return FormatTypeExpression(canonicalTypeName.Substring(0, canonicalTypeName.Length - 1)) +
+        if (canonicalTypeName.EndsWith("*", StringComparison.Ordinal) &&
+            SafeTypeLiteralName.IsMatch(canonicalTypeName.Substring(0, canonicalTypeName.Length - 1)))
+            return FormatTypeExpression(canonicalTypeName.Substring(0, canonicalTypeName.Length - 1), string.Empty, string.Empty) +
                    ".MakePointerType()";
-        if (canonicalTypeName.EndsWith("&", StringComparison.Ordinal))
-            return FormatTypeExpression(canonicalTypeName.Substring(0, canonicalTypeName.Length - 1)) +
+        if (canonicalTypeName.EndsWith("&", StringComparison.Ordinal) &&
+            SafeTypeLiteralName.IsMatch(canonicalTypeName.Substring(0, canonicalTypeName.Length - 1)))
+            return FormatTypeExpression(canonicalTypeName.Substring(0, canonicalTypeName.Length - 1), string.Empty, string.Empty) +
                    ".MakeByRefType()";
-        if (canonicalTypeName.EndsWith("[*]", StringComparison.Ordinal))
-            return FormatTypeExpression(canonicalTypeName.Substring(0, canonicalTypeName.Length - 3)) +
+        if (canonicalTypeName.EndsWith("[*]", StringComparison.Ordinal) &&
+            SafeTypeLiteralName.IsMatch(canonicalTypeName.Substring(0, canonicalTypeName.Length - 3)))
+            return FormatTypeExpression(canonicalTypeName.Substring(0, canonicalTypeName.Length - 3), string.Empty, string.Empty) +
                    ".MakeArrayType(1)";
+        if (!SafeTypeLiteralName.IsMatch(canonicalTypeName))
+        {
+            if (string.IsNullOrWhiteSpace(runtimeTypeName) || string.IsNullOrWhiteSpace(assemblyName))
+                return string.Empty;
+            return "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | " +
+                   "Where-Object { $_.FullName -eq " + FormatString(assemblyName, preserveCharacterType: false) +
+                   " } | Select-Object -First 1; if ($null -eq $assembly) { throw 'Type assembly is not loaded.' }; " +
+                   "return $assembly.GetType(" + FormatString(runtimeTypeName, preserveCharacterType: false) +
+                   ", $true, $false) }";
+        }
         return "[" + canonicalTypeName + "]";
     }
 
