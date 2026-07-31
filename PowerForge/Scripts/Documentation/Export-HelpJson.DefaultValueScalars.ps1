@@ -4,6 +4,22 @@ function TestExactRuntimeValueType([object]$value, [object]$expectedType) {
     [object]::ReferenceEquals($value.GetType(), $expectedType)
 }
 
+function AddDefaultValueReference(
+  [object]$value,
+  [System.Collections.IList]$references
+) {
+  if ($null -eq $value -or $value.GetType().IsValueType -or
+      $value -is [string] -or $value -is [type]) {
+    return
+  }
+  foreach ($seenReference in $references) {
+    if ([object]::ReferenceEquals($seenReference, $value)) {
+      throw 'Repeated or circular default-value object references are not supported.'
+    }
+  }
+  [void]$references.Add($value)
+}
+
 function TestRecreatableScriptBlock([scriptblock]$value) {
   if ($null -ne $value.Module) {
     return $false

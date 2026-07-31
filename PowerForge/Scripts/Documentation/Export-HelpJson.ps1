@@ -48,6 +48,7 @@ function ConvertToPowerShellDefaultValue(
     $referenceStack = [System.Collections.ArrayList]::new()
   }
   if ($null -eq $value) { return '$null' }
+  AddDefaultValueReference $value $referenceStack
   if ($value -is [char]) {
     return ('([char]' + [int][char]$value + ')')
   }
@@ -209,12 +210,6 @@ function ConvertToPowerShellDefaultValue(
   }
   if ($value -is [System.Collections.IDictionary] -or
       $value -is [System.Collections.IEnumerable]) {
-    foreach ($seenReference in $referenceStack) {
-      if ([object]::ReferenceEquals($seenReference, $value)) {
-        throw 'Repeated or circular default-value collection references are not supported.'
-      }
-    }
-    [void]$referenceStack.Add($value)
     if ($value -is [System.Collections.IDictionary]) {
       return ConvertDictionaryToPowerShellDefaultValue $value $referenceStack
     }
@@ -342,6 +337,7 @@ try {
       }
       $possibleValues = @()
       $enumPossibleValues = @()
+      $hasValidateSet = $false
 
       $required = $false
       $parameterSetRequired = @{}
@@ -379,6 +375,7 @@ try {
           foreach ($attr in @($pmeta.Attributes)) {
             if ($null -eq $attr) { continue }
             if ($attr -is [System.Management.Automation.ValidateSetAttribute]) {
+              $hasValidateSet = $true
               foreach ($value in @($attr.ValidValues)) {
                 if ($null -ne $value) { $possibleValues += [string]$value }
               }
@@ -465,6 +462,7 @@ try {
           # keep the metadata-derived default when Get-Help omits or reshapes Globbing
         }
       }
+      if ($hasValidateSet) { $enumPossibleValues = @() }
       $possibleValues = @(MergeParameterPossibleValues @($possibleValues) @($enumPossibleValues))
 
       $sets = @()

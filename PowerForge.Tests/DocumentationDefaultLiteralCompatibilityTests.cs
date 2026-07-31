@@ -301,6 +301,15 @@ function Get-DefaultLiteralFixture {
         $sharedCollectionAttributes.Add($sharedCollectionDefault)
         $parameters.Add('SharedCollection', [System.Management.Automation.RuntimeDefinedParameter]::new('SharedCollection', [object[]], $sharedCollectionAttributes))
 
+        $sharedScalarAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $sharedScalarDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $sharedUri = [uri]::new('relative/path', [System.UriKind]::Relative)
+        $sharedVersion = [version]::new(1, 2, 3, 4)
+        $sharedScalarDefault.Value = [object[]]@($sharedUri, $sharedUri, $sharedVersion, $sharedVersion)
+        $sharedScalarAttributes.Add($sharedScalarDefault)
+        $parameters.Add('SharedScalarReferences', [System.Management.Automation.RuntimeDefinedParameter]::new(
+            'SharedScalarReferences', [object[]], $sharedScalarAttributes))
+
         $matrixAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $matrixDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $matrix = [int[,]]::new(2, 2)
@@ -512,6 +521,12 @@ function Get-DefaultLiteralFixture {
         $caseModeAttributes.Add($caseModeDefault)
         $parameters.Add('CaseMode', [System.Management.Automation.RuntimeDefinedParameter]::new('CaseMode', [DefaultLiteralFixture.CaseMode], $caseModeAttributes))
 
+        $restrictedCaseModeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $restrictedCaseModeAttributes.Add(
+            [System.Management.Automation.ValidateSetAttribute]::new([string[]]@('A')))
+        $parameters.Add('RestrictedCaseMode', [System.Management.Automation.RuntimeDefinedParameter]::new(
+            'RestrictedCaseMode', [DefaultLiteralFixture.CaseMode], $restrictedCaseModeAttributes))
+
         $weirdModeType = 'DefaultLiteralFixture.WeirdMode' -as [type]
         $weirdModeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $weirdModeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -632,6 +647,7 @@ function Get-DefaultLiteralFixture {
             Assert.True(string.IsNullOrEmpty(Default("UnsupportedAddress")));
             Assert.True(string.IsNullOrEmpty(Default("CyclicCollection")));
             Assert.True(string.IsNullOrEmpty(Default("SharedCollection")));
+            Assert.True(string.IsNullOrEmpty(Default("SharedScalarReferences")));
             Assert.Equal(
                 "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }",
                 Default("Matrix"));
@@ -720,6 +736,9 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 new[] { "A", "a" },
                 Assert.Single(command.Parameters, parameter => parameter.Name == "CaseMode").PossibleValues);
+            Assert.Equal(
+                new[] { "A" },
+                Assert.Single(command.Parameters, parameter => parameter.Name == "RestrictedCaseMode").PossibleValues);
             Assert.Equal(
                 "[System.Enum]::ToObject([DefaultLiteralFixture.WeirdMode], ([System.Int32]1))",
                 Default("WeirdMode"));
