@@ -5,6 +5,7 @@
 )
 # <PowerForgeTypeIdentityHelpers />
 # <PowerForgeRuntimeValueHelpers />
+# <PowerForgeOutputSnapshotHelpers />
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 function EmitError([string]$msg) {
@@ -80,6 +81,7 @@ function AddRuntimeDefaultValueTokens(
       canonicalTypeName = GetCanonicalTypeNameFromType $value
       text = ConvertToUtf16CodeUnits ([string]$runtimeIdentityType.FullName)
       assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$runtimeIdentityType.Assembly.FullName)
+      runtimeTypeShape = GetRuntimeTypeShape $value
     }) | Out-Null
     return
   }
@@ -165,13 +167,12 @@ function AddRuntimeDefaultValueTokens(
   }
   if ($value -is [System.Collections.IDictionary] -or
       $value -is [System.Collections.IEnumerable]) {
-    foreach ($ancestor in $referenceStack) {
-      if ([object]::ReferenceEquals($ancestor, $value)) {
-        throw 'Circular default-value collections are not supported.'
+    foreach ($seenReference in $referenceStack) {
+      if ([object]::ReferenceEquals($seenReference, $value)) {
+        throw 'Repeated or circular default-value collection references are not supported.'
       }
     }
     [void]$referenceStack.Add($value)
-    try {
       if ($value -is [System.Collections.IDictionary]) {
         $comparerType = $null
         $comparer = GetDictionaryComparer $value ([ref]$comparerType)
@@ -185,6 +186,9 @@ function AddRuntimeDefaultValueTokens(
           kind = 'DictionaryStart'
           canonicalTypeName = $dictionaryTypeName
           name = $comparerName
+          runtimeTypeNameCodeUnits = ConvertToUtf16CodeUnits ([string]$value.GetType().FullName)
+          assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$value.GetType().Assembly.FullName)
+          runtimeTypeShape = GetRuntimeTypeShape ($value.GetType())
         }) | Out-Null
         foreach ($entry in $value.GetEnumerator()) {
           $tokens.Add([ordered]@{ kind = 'DictionaryEntryStart' }) | Out-Null
@@ -215,6 +219,7 @@ function AddRuntimeDefaultValueTokens(
           canonicalTypeName = GetCanonicalTypeNameFromType $elementType
           runtimeTypeNameCodeUnits = ConvertToUtf16CodeUnits ([string]$runtimeElementType.FullName)
           assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$runtimeElementType.Assembly.FullName)
+          runtimeTypeShape = GetRuntimeTypeShape $elementType
         }) | Out-Null
         foreach ($item in $value) {
           AddRuntimeDefaultValueTokens $item $tokens $referenceStack
@@ -239,13 +244,18 @@ function AddRuntimeDefaultValueTokens(
         }
       }
       $elementType = if ($value -is [System.Array]) { $collectionType.GetElementType() } else { $null }
-      $runtimeElementType = if ($null -ne $elementType) { GetRuntimeIdentityType $elementType } else { $null }
+      $runtimeConstructionType = if ($null -ne $elementType) {
+        GetRuntimeIdentityType $elementType
+      } else {
+        GetRuntimeIdentityType $collectionType
+      }
       $tokens.Add([ordered]@{
         kind = 'CollectionStart'
         canonicalTypeName = GetCanonicalTypeNameFromType $collectionType
         elementTypeName = if ($null -ne $elementType) { GetCanonicalTypeNameFromType $elementType } else { $null }
-        runtimeTypeNameCodeUnits = if ($null -ne $runtimeElementType) { ConvertToUtf16CodeUnits ([string]$runtimeElementType.FullName) } else { $null }
-        assemblyNameCodeUnits = if ($null -ne $runtimeElementType) { ConvertToUtf16CodeUnits ([string]$runtimeElementType.Assembly.FullName) } else { $null }
+        runtimeTypeNameCodeUnits = ConvertToUtf16CodeUnits ([string]$runtimeConstructionType.FullName)
+        assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$runtimeConstructionType.Assembly.FullName)
+        runtimeTypeShape = GetRuntimeTypeShape $(if ($null -ne $elementType) { $elementType } else { $collectionType })
         name = if ($value -is [System.Array]) { 'Array' } else { 'List' }
       }) | Out-Null
       foreach ($item in $value) {
@@ -253,9 +263,6 @@ function AddRuntimeDefaultValueTokens(
       }
       $tokens.Add([ordered]@{ kind = 'CollectionEnd' }) | Out-Null
       return
-    } finally {
-      $referenceStack.RemoveAt($referenceStack.Count - 1)
-    }
   }
   $runtimeTypeName = $value.GetType().FullName
   if (@(
@@ -277,38 +284,6 @@ function AddRuntimeDefaultValueTokens(
     return
   }
   throw ('Unsupported PSDefaultValue runtime type: ' + $runtimeTypeName)
-}
-
-function GetOutputTypeSnapshot([object]$outputType) {
-  $outputTypeName = ''
-  $outputTypeClrName = ''
-  $canonicalTypeName = ''
-  $runtimeType = $null
-  try { $outputTypeName = [string]$outputType.Name } catch { $outputTypeName = '' }
-  try { $runtimeType = $outputType.Type } catch { $runtimeType = $null }
-  if ($runtimeType -is [type]) {
-    $outputTypeClrName = [string]$runtimeType.FullName
-    $canonicalTypeName = GetCanonicalTypeNameFromType $runtimeType
-  }
-  if (-not $outputTypeClrName) {
-    try { $outputTypeClrName = [string]$outputType.TypeName.FullName } catch { $outputTypeClrName = '' }
-  }
-  if (-not $outputTypeClrName) { $outputTypeClrName = $outputTypeName }
-  if (-not $outputTypeName) { $outputTypeName = $outputTypeClrName }
-  if (-not $outputTypeName) { return $null }
-  if (-not $canonicalTypeName) {
-    foreach ($candidate in @($outputTypeClrName, $outputTypeName)) {
-      $canonicalTypeName = ResolveCanonicalTypeName $candidate
-      if ($canonicalTypeName) { break }
-    }
-  }
-
-  return [pscustomobject][ordered]@{
-    name = $outputTypeName
-    clrTypeName = $outputTypeClrName
-    canonicalTypeName = $canonicalTypeName
-    description = ''
-  }
 }
 
 try {

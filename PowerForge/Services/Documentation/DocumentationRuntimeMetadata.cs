@@ -38,6 +38,10 @@ internal sealed class DocumentationRuntimeValue
     [DataMember(Name = "runtimeTypeNameCodeUnits")]
     public string? RuntimeTypeNameCodeUnits { get; set; }
 
+    /// <summary>Flat structural description of an exact runtime type, including constructed generics.</summary>
+    [DataMember(Name = "runtimeTypeShape")]
+    public string? RuntimeTypeShape { get; set; }
+
     /// <summary>Canonical CLR element type identity for an array container.</summary>
     [DataMember(Name = "elementTypeName")]
     public string? ElementTypeName { get; set; }

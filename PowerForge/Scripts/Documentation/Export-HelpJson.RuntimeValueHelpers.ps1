@@ -17,6 +17,50 @@ function ConvertToUtf16CodeUnits([string]$text) {
   return $builder.ToString()
 }
 
+function ConvertRuntimeTypeTextToBase64([string]$text) {
+  return [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($text))
+}
+
+function AddRuntimeTypeShapeTokens([type]$type, [System.Collections.IList]$tokens) {
+  if ($type.IsGenericParameter) { throw 'Generic-parameter runtime type shapes are not supported.' }
+  if ($type.IsPointer) {
+    [void]$tokens.Add('P')
+    AddRuntimeTypeShapeTokens ($type.GetElementType()) $tokens
+    return
+  }
+  if ($type.IsByRef) {
+    [void]$tokens.Add('R')
+    AddRuntimeTypeShapeTokens ($type.GetElementType()) $tokens
+    return
+  }
+  if ($type.IsArray) {
+    $isSzArray = $type.GetArrayRank() -eq 1 -and $type -eq $type.GetElementType().MakeArrayType()
+    [void]$tokens.Add('A:' + $type.GetArrayRank().ToString([System.Globalization.CultureInfo]::InvariantCulture) +
+      ':' + $(if ($isSzArray) { '1' } else { '0' }))
+    AddRuntimeTypeShapeTokens ($type.GetElementType()) $tokens
+    return
+  }
+  if ($type.IsGenericType -and -not $type.IsGenericTypeDefinition) {
+    $arguments = $type.GetGenericArguments()
+    [void]$tokens.Add('G:' + $arguments.Count.ToString([System.Globalization.CultureInfo]::InvariantCulture))
+    AddRuntimeTypeShapeTokens ($type.GetGenericTypeDefinition()) $tokens
+    foreach ($argument in $arguments) { AddRuntimeTypeShapeTokens $argument $tokens }
+    return
+  }
+  if ([string]::IsNullOrWhiteSpace($type.FullName) -or
+      [string]::IsNullOrWhiteSpace($type.Assembly.FullName)) {
+    throw ('Runtime type shape has no exact loaded-assembly identity: ' + [string]$type)
+  }
+  [void]$tokens.Add('N:' + (ConvertRuntimeTypeTextToBase64 ([string]$type.FullName)) + ':' +
+    (ConvertRuntimeTypeTextToBase64 ([string]$type.Assembly.FullName)))
+}
+
+function GetRuntimeTypeShape([type]$type) {
+  $tokens = [System.Collections.Generic.List[string]]::new()
+  AddRuntimeTypeShapeTokens $type $tokens
+  return ($tokens -join ';')
+}
+
 function AddRuntimeNumericDefaultValueToken(
   [object]$value,
   [System.Collections.IList]$tokens

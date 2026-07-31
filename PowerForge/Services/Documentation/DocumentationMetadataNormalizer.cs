@@ -75,6 +75,7 @@ internal static class DocumentationMetadataNormalizer
             if (identity.Length == 0 || !seenIdentities.Add(identity)) continue;
 
             var description = string.Empty;
+            var displayName = runtimeOutput.Name ?? string.Empty;
             var matched = false;
             foreach (var key in GetKeys(runtimeOutput))
             {
@@ -87,6 +88,8 @@ internal static class DocumentationMetadataNormalizer
                     continue;
 
                 description = authoredOutput.Description ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(authoredOutput.Name))
+                    displayName = authoredOutput.Name;
                 matched = true;
                 break;
             }
@@ -96,9 +99,11 @@ internal static class DocumentationMetadataNormalizer
                 !HasConflictingQualifiedIdentity(identity, GetIdentity(foldedAuthoredOutput)))
             {
                 description = foldedAuthoredOutput.Description ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(foldedAuthoredOutput.Name))
+                    displayName = foldedAuthoredOutput.Name;
             }
 
-            outputs.Add(Copy(runtimeOutput, description));
+            outputs.Add(Copy(runtimeOutput, description, displayName));
         }
 
         var allowHelpOnlyOutputs =
@@ -294,10 +299,13 @@ internal static class DocumentationMetadataNormalizer
         return result;
     }
 
-    private static DocumentationTypeHelp Copy(DocumentationTypeHelp source, string description)
+    private static DocumentationTypeHelp Copy(
+        DocumentationTypeHelp source,
+        string description,
+        string? name = null)
         => new()
         {
-            Name = source.Name ?? string.Empty,
+            Name = name ?? source.Name ?? string.Empty,
             ClrTypeName = source.ClrTypeName ?? string.Empty,
             CanonicalTypeName = source.CanonicalTypeName ?? string.Empty,
             Description = description

@@ -52,10 +52,11 @@ internal static class PowerShellDefaultValueFormatter
             case "type":
                 return string.IsNullOrEmpty(value.CanonicalTypeName)
                     ? string.Empty
-                    : FormatTypeExpression(
+                    : PowerShellRuntimeTypeFormatter.Format(
                         value.CanonicalTypeName!,
                         DecodeUtf16CodeUnits(value.Text),
-                        DecodeUtf16CodeUnits(value.AssemblyNameCodeUnits));
+                        DecodeUtf16CodeUnits(value.AssemblyNameCodeUnits),
+                        value.RuntimeTypeShape);
             case "doublebits":
                 return FormatDoubleBits(value.Text);
             case "double":
@@ -156,7 +157,7 @@ internal static class PowerShellDefaultValueFormatter
         var typeIsLiteral = SafeTypeLiteralName.IsMatch(typeName);
         if (typeIsLiteral && !string.IsNullOrWhiteSpace(value.Name))
             return "[" + typeName + "]::" + value.Name!.Trim();
-        var typeExpression = FormatTypeExpression(
+        var typeExpression = PowerShellRuntimeTypeFormatter.Format(
             typeName,
             DecodeUtf16CodeUnits(value.RuntimeTypeNameCodeUnits),
             DecodeUtf16CodeUnits(value.AssemblyNameCodeUnits));
@@ -232,44 +233,6 @@ internal static class PowerShellDefaultValueFormatter
                ", [System.UriKind]::" + uriKind + ")";
     }
 
-    private static string FormatTypeExpression(
-        string canonicalTypeName,
-        string runtimeTypeName,
-        string assemblyName)
-    {
-        if (canonicalTypeName.EndsWith("*", StringComparison.Ordinal))
-            return FormatModifiedType(canonicalTypeName.Substring(0, canonicalTypeName.Length - 1), runtimeTypeName, assemblyName, ".MakePointerType()");
-        if (canonicalTypeName.EndsWith("&", StringComparison.Ordinal))
-            return FormatModifiedType(canonicalTypeName.Substring(0, canonicalTypeName.Length - 1), runtimeTypeName, assemblyName, ".MakeByRefType()");
-        if (canonicalTypeName.EndsWith("[*]", StringComparison.Ordinal))
-            return FormatModifiedType(canonicalTypeName.Substring(0, canonicalTypeName.Length - 3), runtimeTypeName, assemblyName, ".MakeArrayType(1)");
-        if (canonicalTypeName.EndsWith("[]", StringComparison.Ordinal))
-            return FormatModifiedType(canonicalTypeName.Substring(0, canonicalTypeName.Length - 2), runtimeTypeName, assemblyName, ".MakeArrayType()");
-        if (!SafeTypeLiteralName.IsMatch(canonicalTypeName))
-        {
-            if (string.IsNullOrWhiteSpace(runtimeTypeName) || string.IsNullOrWhiteSpace(assemblyName))
-                return string.Empty;
-            var formattedRuntimeTypeName = FormatString(runtimeTypeName, preserveCharacterType: false);
-            return "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | " +
-                   "Where-Object { $_.FullName -eq " + FormatString(assemblyName, preserveCharacterType: false) +
-                   " } | Select-Object -First 1; if ($null -eq $assembly) { throw 'Type assembly is not loaded.' }; " +
-                   "$type = $assembly.GetType(" + formattedRuntimeTypeName + ", $false, $false); " +
-                   "if ($null -eq $type) { $type = $assembly.GetTypes() | Where-Object { $_.FullName -ceq " +
-                   formattedRuntimeTypeName + " } | Select-Object -First 1 }; " +
-                   "if ($null -eq $type) { throw 'Type is not available in the loaded assembly.' }; return $type }";
-        }
-        return "[" + canonicalTypeName + "]";
-    }
-
-    private static string FormatModifiedType(string elementTypeName, string runtimeTypeName, string assemblyName, string modifier)
-    {
-        var elementExpression = FormatTypeExpression(elementTypeName, runtimeTypeName, assemblyName);
-        if (elementExpression.Length == 0) return string.Empty;
-        if (elementExpression.StartsWith("& {", StringComparison.Ordinal))
-            elementExpression = "(" + elementExpression + ")";
-        return elementExpression + modifier;
-    }
-
     private static string FormatDoubleBits(string? text)
     {
         if (!long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var bits))
@@ -307,7 +270,7 @@ internal static class PowerShellDefaultValueFormatter
             ? FormatString(text, preserveCharacterType: false)
             : text;
 
-    private static string FormatString(string text, bool preserveCharacterType)
+    internal static string FormatString(string text, bool preserveCharacterType)
     {
         if (preserveCharacterType)
         {
@@ -359,7 +322,8 @@ internal static class PowerShellDefaultValueFormatter
                     token.Name,
                     token.ElementTypeName,
                     DecodeUtf16CodeUnits(token.RuntimeTypeNameCodeUnits),
-                    DecodeUtf16CodeUnits(token.AssemblyNameCodeUnits)));
+                    DecodeUtf16CodeUnits(token.AssemblyNameCodeUnits),
+                    token.RuntimeTypeShape));
                 continue;
             }
 
@@ -373,7 +337,12 @@ internal static class PowerShellDefaultValueFormatter
 
             if (kind.Equals("DictionaryStart", StringComparison.OrdinalIgnoreCase))
             {
-                frames.Push(new DictionaryTokenFrame(token.CanonicalTypeName, token.Name));
+                frames.Push(new DictionaryTokenFrame(
+                    token.CanonicalTypeName,
+                    token.Name,
+                    DecodeUtf16CodeUnits(token.RuntimeTypeNameCodeUnits),
+                    DecodeUtf16CodeUnits(token.AssemblyNameCodeUnits),
+                    token.RuntimeTypeShape));
                 continue;
             }
 
@@ -384,7 +353,8 @@ internal static class PowerShellDefaultValueFormatter
                     token.Text,
                     token.Name,
                     DecodeUtf16CodeUnits(token.RuntimeTypeNameCodeUnits),
-                    DecodeUtf16CodeUnits(token.AssemblyNameCodeUnits)));
+                    DecodeUtf16CodeUnits(token.AssemblyNameCodeUnits),
+                    token.RuntimeTypeShape));
                 continue;
             }
 
@@ -453,6 +423,7 @@ internal static class PowerShellDefaultValueFormatter
         private readonly string _elementTypeName;
         private readonly string _runtimeTypeName;
         private readonly string _assemblyName;
+        private readonly string? _runtimeTypeShape;
         private readonly bool _isArray;
         private readonly List<string> _items = new();
 
@@ -461,7 +432,8 @@ internal static class PowerShellDefaultValueFormatter
             string? collectionKind,
             string? elementTypeName,
             string runtimeTypeName,
-            string assemblyName)
+            string assemblyName,
+            string? runtimeTypeShape)
         {
             if (string.IsNullOrWhiteSpace(collectionTypeName))
                 throw new FormatException("The runtime default token stream is missing a constructible collection type.");
@@ -473,6 +445,7 @@ internal static class PowerShellDefaultValueFormatter
                                    : string.Empty);
             _runtimeTypeName = runtimeTypeName;
             _assemblyName = assemblyName;
+            _runtimeTypeShape = runtimeTypeShape;
             if (!_isArray && !string.Equals(collectionKind, "List", StringComparison.Ordinal))
                 throw new FormatException("The runtime default token stream contains an unsupported collection kind.");
         }
@@ -494,7 +467,11 @@ internal static class PowerShellDefaultValueFormatter
                 }
                 else
                 {
-                    var elementExpression = FormatTypeExpression(_elementTypeName, _runtimeTypeName, _assemblyName);
+                    var elementExpression = PowerShellRuntimeTypeFormatter.Format(
+                        _elementTypeName,
+                        _runtimeTypeName,
+                        _assemblyName,
+                        _runtimeTypeShape);
                     if (elementExpression.Length == 0)
                         throw new FormatException("The runtime default token stream contains an unresolved array element type.");
                     statements.Add("$collection = [System.Array]::CreateInstance((" + elementExpression + "), " +
@@ -506,7 +483,16 @@ internal static class PowerShellDefaultValueFormatter
             }
             else
             {
-                statements.Add("$collection = [" + _collectionTypeName + "]::new()");
+                var collectionTypeExpression = PowerShellRuntimeTypeFormatter.Format(
+                    _collectionTypeName,
+                    _runtimeTypeName,
+                    _assemblyName,
+                    _runtimeTypeShape);
+                if (collectionTypeExpression.Length == 0)
+                    throw new FormatException("The runtime default token stream contains an unresolved collection type.");
+                statements.Add(SafeTypeLiteralName.IsMatch(_collectionTypeName)
+                    ? "$collection = " + collectionTypeExpression + "::new()"
+                    : "$collection = [System.Activator]::CreateInstance((" + collectionTypeExpression + "))");
                 statements.AddRange(_items.Select(item =>
                     "[void]([System.Collections.IList]$collection).Add((" + item + "))"));
             }
@@ -518,6 +504,9 @@ internal static class PowerShellDefaultValueFormatter
     private sealed class DictionaryTokenFrame : TokenFrame
     {
         private readonly string _dictionaryTypeName;
+        private readonly string _runtimeTypeName;
+        private readonly string _assemblyName;
+        private readonly string? _runtimeTypeShape;
         private readonly List<KeyValuePair<string, string>> _entries = new();
         private string? _key;
         private string? _value;
@@ -525,12 +514,20 @@ internal static class PowerShellDefaultValueFormatter
 
         private readonly string _constructorArgument;
 
-        public DictionaryTokenFrame(string? dictionaryTypeName, string? comparerName)
+        public DictionaryTokenFrame(
+            string? dictionaryTypeName,
+            string? comparerName,
+            string runtimeTypeName,
+            string assemblyName,
+            string? runtimeTypeShape)
         {
             if (string.IsNullOrWhiteSpace(dictionaryTypeName))
                 throw new FormatException("The runtime default token stream is missing a constructible dictionary type.");
             _dictionaryTypeName = dictionaryTypeName!.Trim();
             _constructorArgument = FormatDictionaryComparer(comparerName);
+            _runtimeTypeName = runtimeTypeName;
+            _assemblyName = assemblyName;
+            _runtimeTypeShape = runtimeTypeShape;
         }
 
         public void BeginEntry()
@@ -566,10 +563,20 @@ internal static class PowerShellDefaultValueFormatter
         {
             if (_entryOpen)
                 throw new FormatException("The runtime default token stream ends inside a dictionary entry.");
-            var statements = new List<string>
-            {
-                "$dictionary = [" + _dictionaryTypeName + "]::new(" + _constructorArgument + ")"
-            };
+            var dictionaryTypeExpression = PowerShellRuntimeTypeFormatter.Format(
+                _dictionaryTypeName,
+                _runtimeTypeName,
+                _assemblyName,
+                _runtimeTypeShape);
+            if (dictionaryTypeExpression.Length == 0)
+                throw new FormatException("The runtime default token stream contains an unresolved dictionary type.");
+            var constructorExpression = SafeTypeLiteralName.IsMatch(_dictionaryTypeName)
+                ? dictionaryTypeExpression + "::new(" + _constructorArgument + ")"
+                : _constructorArgument.Length == 0
+                    ? "[System.Activator]::CreateInstance((" + dictionaryTypeExpression + "))"
+                    : "[System.Activator]::CreateInstance((" + dictionaryTypeExpression +
+                      "), [object[]]@((" + _constructorArgument + ")))";
+            var statements = new List<string> { "$dictionary = " + constructorExpression };
             statements.AddRange(_entries.Select(entry =>
                 "([System.Collections.IDictionary]$dictionary).Add((" + entry.Key + "), (" + entry.Value + "))"));
             statements.Add("return ,$dictionary");
@@ -605,6 +612,7 @@ internal static class PowerShellDefaultValueFormatter
         private readonly string _elementTypeName;
         private readonly string _runtimeTypeName;
         private readonly string _assemblyName;
+        private readonly string? _runtimeTypeShape;
         private readonly int[] _lengths;
         private readonly int[] _lowerBounds;
         private readonly List<string> _items = new();
@@ -614,11 +622,13 @@ internal static class PowerShellDefaultValueFormatter
             string? lengths,
             string? lowerBounds,
             string runtimeTypeName,
-            string assemblyName)
+            string assemblyName,
+            string? runtimeTypeShape)
         {
             _elementTypeName = elementTypeName ?? string.Empty;
             _runtimeTypeName = runtimeTypeName;
             _assemblyName = assemblyName;
+            _runtimeTypeShape = runtimeTypeShape;
             _lengths = ParseDimensions(lengths);
             _lowerBounds = ParseDimensions(lowerBounds);
             if (string.IsNullOrEmpty(_elementTypeName) ||
@@ -640,7 +650,11 @@ internal static class PowerShellDefaultValueFormatter
             if (expectedCount != _items.Count)
                 throw new FormatException("The runtime default token stream contains the wrong number of array elements.");
 
-            var elementExpression = FormatTypeExpression(_elementTypeName, _runtimeTypeName, _assemblyName);
+            var elementExpression = PowerShellRuntimeTypeFormatter.Format(
+                _elementTypeName,
+                _runtimeTypeName,
+                _assemblyName,
+                _runtimeTypeShape);
             if (elementExpression.Length == 0)
                 throw new FormatException("The runtime default token stream contains an unresolved array element type.");
             if (elementExpression.StartsWith("& {", StringComparison.Ordinal))
