@@ -15,6 +15,8 @@ function GetOutputTypeSnapshot([object]$outputType) {
   if (-not $outputTypeClrName) {
     try { $outputTypeClrName = [string]$outputType.TypeName.FullName } catch { $outputTypeClrName = '' }
   }
+  $outputTypeName = $outputTypeName.Trim()
+  $outputTypeClrName = $outputTypeClrName.Trim()
   if (-not $outputTypeClrName) { $outputTypeClrName = $outputTypeName }
   if (-not $outputTypeName) { $outputTypeName = $outputTypeClrName }
   if (-not $outputTypeName) { return $null }
@@ -24,6 +26,7 @@ function GetOutputTypeSnapshot([object]$outputType) {
       if ($canonicalTypeName) { break }
     }
   }
+  $canonicalTypeName = $canonicalTypeName.Trim()
 
   return [pscustomobject][ordered]@{
     name = $outputTypeName

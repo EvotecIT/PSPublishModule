@@ -163,8 +163,8 @@ function AddRuntimeDefaultValueTokens(
     return
   }
   if ($value -is [scriptblock]) {
-    if ($null -ne $value.Module) {
-      throw 'Stateful or module-bound ScriptBlock defaults are not supported.'
+    if (-not (TestRecreatableScriptBlock $value)) {
+      throw 'Stateful, module-bound, or constrained ScriptBlock defaults are not supported.'
     }
     $tokens.Add([ordered]@{
       kind = 'ScriptBlockCodeUnits'
@@ -705,6 +705,8 @@ try {
           $canonicalTypeName = GetCanonicalTypeNameFromType $runtimeType
         }
         if (-not $typeClrName) { try { $typeClrName = [string]$rv.Type.FullName } catch { $typeClrName = '' } }
+        $typeName = $typeName.Trim()
+        $typeClrName = $typeClrName.Trim()
         if (-not $typeClrName) { $typeClrName = $typeName }
         if (-not $typeName) { continue }
         if (-not $canonicalTypeName) {
