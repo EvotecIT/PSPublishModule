@@ -4,6 +4,7 @@
   [string]$OutputJsonPath
 )
 # <PowerForgeTypeIdentityHelpers />
+# <PowerForgeRuntimeValueHelpers />
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
@@ -23,16 +24,6 @@ function GetText([object]$obj) {
     # best effort: Get-Help payload shapes vary across PowerShell versions and object types
   }
   try { return [string]$obj } catch { return '' }
-}
-
-function ConvertToUtf16CodeUnits([string]$text) {
-  $builder = [System.Text.StringBuilder]::new()
-  for ($index = 0; $index -lt $text.Length; $index++) {
-    if ($index -gt 0) { [void]$builder.Append(',') }
-    [void]$builder.Append(
-      ([int]$text[$index]).ToString([System.Globalization.CultureInfo]::InvariantCulture))
-  }
-  return $builder.ToString()
 }
 
 function AddRuntimeDefaultValueTokens(
