@@ -77,7 +77,7 @@ function GetDictionaryComparer([System.Collections.IDictionary]$value, [ref]$com
   return $null
 }
 
-function GetKnownDictionaryComparerExpression([object]$comparer, [type]$comparerType) {
+function GetKnownDictionaryComparerName([object]$comparer, [type]$comparerType) {
   if ($null -eq $comparer) { return '' }
   if ($comparerType -and $comparerType.IsGenericType) {
     $definition = $comparerType.GetGenericTypeDefinition()
@@ -96,10 +96,34 @@ function GetKnownDictionaryComparerExpression([object]$comparer, [type]$comparer
   foreach ($name in @('Ordinal', 'OrdinalIgnoreCase', 'InvariantCulture', 'InvariantCultureIgnoreCase')) {
     $knownComparer = [System.StringComparer].GetProperty($name).GetValue($null, $null)
     if ([object]::ReferenceEquals($comparer, $knownComparer)) {
-      return ('[System.StringComparer]::' + $name)
+      return $name
+    }
+  }
+  $flags = [System.Reflection.BindingFlags]'Instance,Public,NonPublic'
+  $compareInfoField = $comparer.GetType().GetField('_compareInfo', $flags)
+  $ignoreCaseField = $comparer.GetType().GetField('_ignoreCase', $flags)
+  if ($compareInfoField -and $ignoreCaseField) {
+    $compareInfo = $compareInfoField.GetValue($comparer)
+    $ignoreCase = [bool]$ignoreCaseField.GetValue($comparer)
+    if ($compareInfo -and -not [string]::IsNullOrWhiteSpace($compareInfo.Name)) {
+      return ('Culture|' + $compareInfo.Name + '|' + [string]$ignoreCase)
     }
   }
   throw ('Unsupported dictionary comparer: ' + $comparer.GetType().FullName)
+}
+
+function GetKnownDictionaryComparerExpression([object]$comparer, [type]$comparerType) {
+  $name = GetKnownDictionaryComparerName $comparer $comparerType
+  if ([string]::IsNullOrWhiteSpace($name)) { return '' }
+  if ($name.StartsWith('Culture|', [System.StringComparison]::Ordinal)) {
+    $parts = $name.Split('|')
+    if ($parts.Count -ne 3) { throw ('Invalid culture comparer metadata: ' + $name) }
+    $cultureName = $parts[1].Replace("'", "''")
+    $ignoreCase = if ([bool]::Parse($parts[2])) { '$true' } else { '$false' }
+    return ("[System.StringComparer]::Create([System.Globalization.CultureInfo]::GetCultureInfo('" +
+      $cultureName + "'), " + $ignoreCase + ')')
+  }
+  return ('[System.StringComparer]::' + $name)
 }
 
 function GetDictionaryConstructorExpression([System.Collections.IDictionary]$value) {
