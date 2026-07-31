@@ -84,6 +84,7 @@ function Get-DescribedOutput {
             var engine = new DocumentationEngine(new PowerShellRunner(), new NullLogger());
             var payload = engine.ExtractHelpPayload(tempRoot, manifestPath, TimeSpan.FromMinutes(1));
             var output = Assert.Single(Assert.Single(payload.Commands).Outputs);
+            Assert.Equal("list[system.string]", output.Name);
             Assert.StartsWith("System.Collections.Generic.List`1[[System.String,", output.ClrTypeName, StringComparison.Ordinal);
             Assert.Contains(
                 "authored output description must survive metadata extraction",
@@ -96,6 +97,10 @@ function Get-DescribedOutput {
             var generatedMamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, moduleName, mamlDirectory);
             Assert.Contains(
                 "authored output description must survive metadata extraction",
+                File.ReadAllText(Path.Combine(markdownDirectory, "Get-DescribedOutput.md")),
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                "System.Collections.Generic.List`1[[System.String,",
                 File.ReadAllText(Path.Combine(markdownDirectory, "Get-DescribedOutput.md")),
                 StringComparison.Ordinal);
             Assert.Contains(

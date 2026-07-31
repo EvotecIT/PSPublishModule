@@ -158,6 +158,15 @@ function Get-DefaultLiteralFixture {
         $concurrentDictionaryAttributes.Add($concurrentDictionaryDefault)
         $parameters.Add('ConcurrentDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('ConcurrentDictionary', [System.Collections.Concurrent.ConcurrentDictionary[string, int]], $concurrentDictionaryAttributes))
 
+        $cultureDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $cultureDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $cultureComparer = [System.StringComparer]::Create([System.Globalization.CultureInfo]::GetCultureInfo('tr-TR'), $true)
+        $cultureDictionary = [System.Collections.Generic.Dictionary[string, int]]::new($cultureComparer)
+        $cultureDictionary['I'] = 1
+        $cultureDictionaryDefault.Value = $cultureDictionary
+        $cultureDictionaryAttributes.Add($cultureDictionaryDefault)
+        $parameters.Add('CultureDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('CultureDictionary', [System.Collections.Generic.Dictionary[string, int]], $cultureDictionaryAttributes))
+
         $readOnlyDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $readOnlyDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $readOnlyBacking = [System.Collections.Generic.Dictionary[string, int]]::new()
@@ -194,6 +203,16 @@ function Get-DefaultLiteralFixture {
         $cyclicDefault.Value = $cyclicValue
         $cyclicAttributes.Add($cyclicDefault)
         $parameters.Add('CyclicCollection', [System.Management.Automation.RuntimeDefinedParameter]::new('CyclicCollection', [object], $cyclicAttributes))
+
+        $sharedCollectionAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $sharedCollectionDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $sharedItem = [int[]](1, 2)
+        $sharedCollection = [object[]]::new(2)
+        $sharedCollection[0] = $sharedItem
+        $sharedCollection[1] = $sharedItem
+        $sharedCollectionDefault.Value = $sharedCollection
+        $sharedCollectionAttributes.Add($sharedCollectionDefault)
+        $parameters.Add('SharedCollection', [System.Management.Automation.RuntimeDefinedParameter]::new('SharedCollection', [object[]], $sharedCollectionAttributes))
 
         $matrixAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $matrixDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -255,6 +274,20 @@ function Get-DefaultLiteralFixture {
         $unsafeTypeDefault.Value = $script:unsafeDefaultType
         $unsafeTypeAttributes.Add($unsafeTypeDefault)
         $parameters.Add('UnsafeType', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafeType', [type], $unsafeTypeAttributes))
+
+        $unsafeListAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $unsafeListDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $unsafeListType = [System.Collections.Generic.List``1].MakeGenericType($script:unsafeDefaultType)
+        $unsafeListDefault.Value = [System.Activator]::CreateInstance($unsafeListType)
+        $unsafeListAttributes.Add($unsafeListDefault)
+        $parameters.Add('UnsafeList', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafeList', $unsafeListType, $unsafeListAttributes))
+
+        $unsafeDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $unsafeDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $unsafeDictionaryType = [System.Collections.Generic.Dictionary``2].MakeGenericType([type[]]@($script:unsafeDefaultType, [int]))
+        $unsafeDictionaryDefault.Value = [System.Activator]::CreateInstance($unsafeDictionaryType)
+        $unsafeDictionaryAttributes.Add($unsafeDictionaryDefault)
+        $parameters.Add('UnsafeDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafeDictionary', $unsafeDictionaryType, $unsafeDictionaryAttributes))
 
         $whitespaceTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $whitespaceTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -446,6 +479,9 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 "& { $dictionary = [System.Collections.Concurrent.ConcurrentDictionary[System.String,System.Int32]]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('Alpha'), (1)); return ,$dictionary }",
                 Default("ConcurrentDictionary"));
+            Assert.Equal(
+                "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Create([System.Globalization.CultureInfo]::GetCultureInfo('tr-TR'), $true)); ([System.Collections.IDictionary]$dictionary).Add(('I'), (1)); return ,$dictionary }",
+                Default("CultureDictionary"));
             Assert.True(string.IsNullOrEmpty(Default("ReadOnlyDictionary")));
             Assert.True(string.IsNullOrEmpty(Default("ReadOnlyOrderedDictionary")));
             Assert.True(string.IsNullOrEmpty(Default("UnsupportedCulture")));
@@ -454,6 +490,7 @@ function Get-DefaultLiteralFixture {
                 Assert.Single(command.Parameters, parameter => parameter.Name == "UnsupportedCulture").PossibleValues);
             Assert.True(string.IsNullOrEmpty(Default("UnsupportedAddress")));
             Assert.True(string.IsNullOrEmpty(Default("CyclicCollection")));
+            Assert.True(string.IsNullOrEmpty(Default("SharedCollection")));
             Assert.Equal(
                 "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }",
                 Default("Matrix"));
@@ -475,6 +512,14 @@ function Get-DefaultLiteralFixture {
             Assert.Contains(
                 "Where-Object { $_.FullName -ceq ' DefaultLiteralFixture.Edge ' }",
                 Default("WhitespaceType"),
+                StringComparison.Ordinal);
+            Assert.StartsWith(
+                "& { $collection = [System.Activator]::CreateInstance((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies()",
+                Default("UnsafeList"),
+                StringComparison.Ordinal);
+            Assert.StartsWith(
+                "& { $dictionary = [System.Activator]::CreateInstance((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies()",
+                Default("UnsafeDictionary"),
                 StringComparison.Ordinal);
             Assert.StartsWith(
                 "(& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",

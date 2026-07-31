@@ -21,6 +21,9 @@ function GetOutputTypeMetadata([object]$outputType) {
   } else {
     GetTypeIdentity $outputTypeName $outputTypeClrName
   }
+  if ($outputRuntimeType -is [type] -and $outputRuntimeType.IsGenericType) {
+    $outputTypeName = $outputIdentity
+  }
   return [pscustomobject][ordered]@{
     name = $outputTypeName
     clrTypeName = $outputTypeClrName

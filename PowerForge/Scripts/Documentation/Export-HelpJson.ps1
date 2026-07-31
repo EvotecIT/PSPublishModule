@@ -189,31 +189,27 @@ function ConvertToPowerShellDefaultValue(
   }
   if ($value -is [System.Collections.IDictionary] -or
       $value -is [System.Collections.IEnumerable]) {
-    foreach ($ancestor in $referenceStack) {
-      if ([object]::ReferenceEquals($ancestor, $value)) {
-        throw 'Circular default-value collections are not supported.'
+    foreach ($seenReference in $referenceStack) {
+      if ([object]::ReferenceEquals($seenReference, $value)) {
+        throw 'Repeated or circular default-value collection references are not supported.'
       }
     }
     [void]$referenceStack.Add($value)
-    try {
-      if ($value -is [System.Collections.IDictionary]) {
-        return ConvertDictionaryToPowerShellDefaultValue $value $referenceStack
-      }
-      if ($value -isnot [System.Collections.IList] -and $value -isnot [System.Array]) {
-        throw ('Unsupported enumerable default type: ' + $value.GetType().FullName)
-      }
-      if ($value -is [System.Array] -and
-          ($value.Rank -gt 1 -or $value.GetType() -ne $value.GetType().GetElementType().MakeArrayType())) {
-        return ConvertMultidimensionalArrayToPowerShellDefaultValue $value $referenceStack
-      }
-      $items = [System.Collections.Generic.List[string]]::new()
-      foreach ($item in $value) {
-        $items.Add((ConvertToPowerShellDefaultValue $item $referenceStack))
-      }
-      return ConvertCollectionItemsToPowerShellDefaultValue $items $value
-    } finally {
-      $referenceStack.RemoveAt($referenceStack.Count - 1)
+    if ($value -is [System.Collections.IDictionary]) {
+      return ConvertDictionaryToPowerShellDefaultValue $value $referenceStack
     }
+    if ($value -isnot [System.Collections.IList] -and $value -isnot [System.Array]) {
+      throw ('Unsupported enumerable default type: ' + $value.GetType().FullName)
+    }
+    if ($value -is [System.Array] -and
+        ($value.Rank -gt 1 -or $value.GetType() -ne $value.GetType().GetElementType().MakeArrayType())) {
+      return ConvertMultidimensionalArrayToPowerShellDefaultValue $value $referenceStack
+    }
+    $items = [System.Collections.Generic.List[string]]::new()
+    foreach ($item in $value) {
+      $items.Add((ConvertToPowerShellDefaultValue $item $referenceStack))
+    }
+    return ConvertCollectionItemsToPowerShellDefaultValue $items $value
   }
   return ConvertScalarToPowerShellDefaultValue $value
 }
@@ -651,6 +647,7 @@ try {
 
       foreach ($metadata in $runtimeOutputMetadata) {
         $typeDesc = ''
+        $displayName = [string]$metadata.name
         $exactHelpMatch = $null
         foreach ($key in @($metadata.keys)) {
           if ($helpOutputByKey.ContainsKey($key) -and
@@ -663,6 +660,9 @@ try {
             }
             $exactHelpMatch = $matchedHelpOutput
             $typeDesc = [string]$matchedHelpOutput.description
+            if (-not [string]::IsNullOrWhiteSpace([string]$matchedHelpOutput.name)) {
+              $displayName = [string]$matchedHelpOutput.name
+            }
             break
           }
         }
@@ -673,12 +673,15 @@ try {
             $matchedHelpIdentity = GetTypeIdentity ([string]$matchedHelpOutput.name) ([string]$matchedHelpOutput.clrTypeName)
             if (-not (TestConflictingQualifiedTypeIdentity ([string]$metadata.identity) $matchedHelpIdentity)) {
               $typeDesc = [string]$matchedHelpOutput.description
+              if (-not [string]::IsNullOrWhiteSpace([string]$matchedHelpOutput.name)) {
+                $displayName = [string]$matchedHelpOutput.name
+              }
             }
           }
         }
 
         $outputs += [ordered]@{
-          name = [string]$metadata.name
+          name = $displayName
           clrTypeName = [string]$metadata.clrTypeName
           description = $typeDesc
         }

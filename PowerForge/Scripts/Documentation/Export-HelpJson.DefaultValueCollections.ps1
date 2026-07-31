@@ -89,7 +89,12 @@ function ConvertCollectionItemsToPowerShellDefaultValue(
       $statements.Add('$collection.SetValue((' + $items[$index] + '), ' + $index + ')')
     }
   } else {
-    $statements.Add('$collection = [' + $collectionTypeName + ']::new()')
+    if (TestPowerShellTypeLiteralName $collectionTypeName) {
+      $statements.Add('$collection = [' + $collectionTypeName + ']::new()')
+    } else {
+      $collectionTypeExpression = GetPowerShellTypeDefaultExpression $collectionType
+      $statements.Add('$collection = [System.Activator]::CreateInstance((' + $collectionTypeExpression + '))')
+    }
     foreach ($item in $items) {
       $statements.Add('[void]([System.Collections.IList]$collection).Add((' + $item + '))')
     }

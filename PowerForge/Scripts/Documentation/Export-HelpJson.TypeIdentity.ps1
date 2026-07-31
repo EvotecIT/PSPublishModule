@@ -128,9 +128,20 @@ function GetKnownDictionaryComparerName([object]$comparer, [type]$comparerType) 
   $flags = [System.Reflection.BindingFlags]'Instance,Public,NonPublic'
   $compareInfoField = $comparer.GetType().GetField('_compareInfo', $flags)
   $ignoreCaseField = $comparer.GetType().GetField('_ignoreCase', $flags)
-  if ($compareInfoField -and $ignoreCaseField) {
+  $optionsField = $comparer.GetType().GetField('_options', $flags)
+  if ($compareInfoField -and ($ignoreCaseField -or $optionsField)) {
     $compareInfo = $compareInfoField.GetValue($comparer)
-    $ignoreCase = [bool]$ignoreCaseField.GetValue($comparer)
+    $ignoreCase = $false
+    if ($ignoreCaseField) {
+      $ignoreCase = [bool]$ignoreCaseField.GetValue($comparer)
+    } else {
+      $options = [System.Globalization.CompareOptions]$optionsField.GetValue($comparer)
+      $supportedOptions = [System.Globalization.CompareOptions]::None -bor [System.Globalization.CompareOptions]::IgnoreCase
+      if (($options -band (-bnot $supportedOptions)) -ne 0) {
+        throw ('Unsupported dictionary culture comparer options: ' + [string]$options)
+      }
+      $ignoreCase = ($options -band [System.Globalization.CompareOptions]::IgnoreCase) -ne 0
+    }
     if ($compareInfo -and -not [string]::IsNullOrWhiteSpace($compareInfo.Name)) {
       return ('Culture|' + $compareInfo.Name + '|' + [string]$ignoreCase)
     }
@@ -163,8 +174,11 @@ function GetDictionaryConstructorExpression([System.Collections.IDictionary]$val
   $comparerType = $null
   $comparer = GetDictionaryComparer $value ([ref]$comparerType)
   $comparerExpression = GetKnownDictionaryComparerExpression $comparer $comparerType
+  $dictionaryTypeExpression = GetPowerShellTypeDefaultExpression $value.GetType()
+  $dictionaryTypeIsLiteral = TestPowerShellTypeLiteralName $dictionaryTypeName
   if ([string]::IsNullOrWhiteSpace($comparerExpression)) {
-    return ('[' + $dictionaryTypeName + ']::new()')
+    if ($dictionaryTypeIsLiteral) { return ('[' + $dictionaryTypeName + ']::new()') }
+    return ('[System.Activator]::CreateInstance((' + $dictionaryTypeExpression + '))')
   }
   $constructor = $null
   foreach ($candidate in $value.GetType().GetConstructors()) {
@@ -177,7 +191,11 @@ function GetDictionaryConstructorExpression([System.Collections.IDictionary]$val
   if ($null -eq $constructor) {
     throw ('Dictionary type cannot reconstruct comparer: ' + $value.GetType().FullName)
   }
-  return ('[' + $dictionaryTypeName + ']::new(' + $comparerExpression + ')')
+  if ($dictionaryTypeIsLiteral) {
+    return ('[' + $dictionaryTypeName + ']::new(' + $comparerExpression + ')')
+  }
+  return ('[System.Activator]::CreateInstance((' + $dictionaryTypeExpression +
+    '), [object[]]@((' + $comparerExpression + ')))')
 }
 
 function TestPowerShellTypeLiteralName([string]$canonicalTypeName) {
