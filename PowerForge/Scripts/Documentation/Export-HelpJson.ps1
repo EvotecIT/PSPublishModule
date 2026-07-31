@@ -645,6 +645,7 @@ try {
 
       foreach ($metadata in $runtimeOutputMetadata) {
         $typeDesc = ''
+        $exactHelpMatch = $null
         foreach ($key in @($metadata.keys)) {
           if ($helpOutputByKey.ContainsKey($key) -and
               [int]$helpOutputKeyCounts[$key] -eq 1 -and
@@ -654,11 +655,12 @@ try {
             if (TestConflictingQualifiedTypeIdentity ([string]$metadata.identity) $matchedHelpIdentity) {
               continue
             }
+            $exactHelpMatch = $matchedHelpOutput
             $typeDesc = [string]$matchedHelpOutput.description
             break
           }
         }
-        if ([string]::IsNullOrWhiteSpace($typeDesc)) {
+        if ($null -eq $exactHelpMatch) {
           $matchedHelpOutput = GetUniqueUnqualifiedCaseInsensitiveTypeMatch @($metadata.keys) `
             $helpOutputByFoldedKey $helpOutputFoldedKeyCounts $runtimeOutputFoldedKeyCounts
           if ($matchedHelpOutput) {
