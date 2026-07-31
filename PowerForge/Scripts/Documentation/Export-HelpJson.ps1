@@ -517,7 +517,7 @@ try {
           foreach ($a in @($hp.Aliases)) { $aliases += [string]$a }
         }
         try {
-          if ($hp.ValidValues) {
+          if (-not $hasValidateSet -and $hp.ValidValues) {
             foreach ($value in @($hp.ValidValues)) {
               if ($null -ne $value) { $possibleValues += [string]$value }
             }

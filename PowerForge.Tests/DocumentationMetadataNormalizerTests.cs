@@ -303,6 +303,25 @@ public sealed partial class DocumentationMetadataNormalizerTests
     }
 
     [Fact]
+    public void DefaultValueFormatter_RejectsConcurrentDictionaryTokens()
+    {
+        var value = new DocumentationRuntimeValue
+        {
+            Tokens =
+            [
+                new DocumentationRuntimeValue
+                {
+                    Kind = "DictionaryStart",
+                    CanonicalTypeName = "System.Collections.Concurrent.ConcurrentDictionary[System.String,System.Int32]"
+                },
+                new DocumentationRuntimeValue { Kind = "DictionaryEnd" }
+            ]
+        };
+
+        Assert.Throws<FormatException>(() => PowerShellDefaultValueFormatter.Format(value));
+    }
+
+    [Fact]
     public void DefaultValueFormatter_DecodesContainerTokens()
     {
         var formatted = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
@@ -523,7 +542,7 @@ public sealed partial class DocumentationMetadataNormalizerTests
     {
         var parameter = new DocumentationParameterHelp
         {
-            PossibleValues = ["A", "a"],
+            PossibleValues = [" A ", " a "],
             EnumPossibleValues = ["A", "a", "Advanced"],
             HasValidateSet = true,
             ValidateSetCaseSensitive = true
@@ -537,7 +556,7 @@ public sealed partial class DocumentationMetadataNormalizerTests
         DocumentationMetadataNormalizer.Normalize(payload);
         DocumentationMetadataNormalizer.Normalize(payload);
 
-        Assert.Equal(["A", "a"], parameter.PossibleValues);
+        Assert.Equal([" A ", " a "], parameter.PossibleValues);
         Assert.Empty(parameter.EnumPossibleValues);
         Assert.False(parameter.HasValidateSet);
         Assert.False(parameter.ValidateSetCaseSensitive);

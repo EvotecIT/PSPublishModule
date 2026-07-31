@@ -316,7 +316,9 @@ internal static class DocumentationMetadataNormalizer
         var metadataComparer = validateSetCaseSensitive
             ? StringComparer.Ordinal
             : StringComparer.OrdinalIgnoreCase;
-        var result = DistinctNonBlank(metadataValues, metadataComparer)
+        var result = (hasValidateSet
+                ? DistinctPreserved(metadataValues, metadataComparer)
+                : DistinctNonBlank(metadataValues, metadataComparer))
             .Where(IsXmlSafePossibleValue)
             .ToList();
         if (hasValidateSet) return result;
@@ -354,6 +356,20 @@ internal static class DocumentationMetadataNormalizer
             var normalized = (value ?? string.Empty).Trim();
             if (normalized.Length == 0 || !seen.Add(normalized)) continue;
             result.Add(normalized);
+        }
+        return result;
+    }
+
+    private static List<string> DistinctPreserved(
+        IEnumerable<string>? values,
+        IEqualityComparer<string> comparer)
+    {
+        var result = new List<string>();
+        var seen = new HashSet<string>(comparer);
+        foreach (var value in values ?? Array.Empty<string>())
+        {
+            var exact = value ?? string.Empty;
+            if (seen.Add(exact)) result.Add(exact);
         }
         return result;
     }

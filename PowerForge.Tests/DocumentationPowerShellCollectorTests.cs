@@ -712,9 +712,7 @@ function Get-AcceleratedOutput {
                         "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new(([int]3), [System.StringComparer]::Ordinal); ([System.Collections.IDictionary]$dictionary).Add(('A'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('a'), (2)); return ,$dictionary }"
                     });
                 Assert.True(string.IsNullOrEmpty(fixedComparerDictionary.DefaultValue));
-                Assert.Equal(
-                    "& { $dictionary = [System.Collections.Concurrent.ConcurrentDictionary[System.String,System.Int32]]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('Alpha'), (1)); return ,$dictionary }",
-                    concurrentDictionary.DefaultValue);
+                Assert.True(string.IsNullOrEmpty(concurrentDictionary.DefaultValue));
                 Assert.Contains(
                     cultureDictionary.DefaultValue,
                     new[]

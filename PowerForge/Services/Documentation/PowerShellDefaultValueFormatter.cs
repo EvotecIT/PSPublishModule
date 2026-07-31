@@ -553,6 +553,10 @@ internal static class PowerShellDefaultValueFormatter
             if (string.IsNullOrWhiteSpace(dictionaryTypeName))
                 throw new FormatException("The runtime default token stream is missing a constructible dictionary type.");
             _dictionaryTypeName = dictionaryTypeName!.Trim();
+            if (_dictionaryTypeName.StartsWith(
+                    "System.Collections.Concurrent.ConcurrentDictionary[",
+                    StringComparison.Ordinal))
+                throw new FormatException("ConcurrentDictionary defaults contain unsupported constructor state.");
             if (!string.IsNullOrWhiteSpace(capacity))
             {
                 if (!int.TryParse(capacity, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedCapacity) ||
