@@ -14,6 +14,10 @@ public sealed class DocumentationDefaultLiteralCompatibilityTests
         {
             var manifestPath = Path.Combine(root, "DefaultLiteralFixture.psd1");
             File.WriteAllText(Path.Combine(root, "DefaultLiteralFixture.psm1"), """
+if (-not ('DefaultLiteralFixture.CaseMode' -as [type])) {
+    Add-Type -TypeDefinition 'namespace DefaultLiteralFixture { public enum CaseMode { A = 1, a = 2 } }'
+}
+
 function Get-DefaultLiteralFixture {
     [CmdletBinding()]
     param()
@@ -80,17 +84,18 @@ function Get-DefaultLiteralFixture {
 
         $caseDistinctDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $caseDistinctDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
-        $caseDistinctDictionary = [System.Collections.Generic.Dictionary[string, object]]::new([System.StringComparer]::Ordinal)
+        $caseDistinctDictionary = [System.Collections.Generic.Dictionary[string, int]]::new([System.StringComparer]::Ordinal)
         $caseDistinctDictionary.Add('A', 1)
         $caseDistinctDictionary.Add('a', 2)
         $caseDistinctDictionaryDefault.Value = $caseDistinctDictionary
         $caseDistinctDictionaryAttributes.Add($caseDistinctDictionaryDefault)
-        $parameters.Add('CaseDistinctDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('CaseDistinctDictionary', [System.Collections.IDictionary], $caseDistinctDictionaryAttributes))
+        $parameters.Add('CaseDistinctDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('CaseDistinctDictionary', [System.Collections.Generic.Dictionary[string, int]], $caseDistinctDictionaryAttributes))
 
         $unsupportedCultureAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $unsupportedCultureDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $unsupportedCultureDefault.Value = [System.Globalization.CultureInfo]::new('en-US')
         $unsupportedCultureAttributes.Add($unsupportedCultureDefault)
+        $unsupportedCultureAttributes.Add([System.Management.Automation.ValidateSetAttribute]::new([string[]]@('One', 'Two')))
         $parameters.Add('UnsupportedCulture', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsupportedCulture', [System.Globalization.CultureInfo], $unsupportedCultureAttributes))
 
         $unsupportedAddressAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
@@ -191,6 +196,18 @@ function Get-DefaultLiteralFixture {
         $byRefTypeAttributes.Add($byRefTypeDefault)
         $parameters.Add('ByRefType', [System.Management.Automation.RuntimeDefinedParameter]::new('ByRefType', [type], $byRefTypeAttributes))
 
+        $nonSzArrayTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $nonSzArrayTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $nonSzArrayTypeDefault.Value = [int].MakeArrayType(1)
+        $nonSzArrayTypeAttributes.Add($nonSzArrayTypeDefault)
+        $parameters.Add('NonSzArrayType', [System.Management.Automation.RuntimeDefinedParameter]::new('NonSzArrayType', [type], $nonSzArrayTypeAttributes))
+
+        $caseModeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $caseModeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $caseModeDefault.Value = [System.Enum]::ToObject([DefaultLiteralFixture.CaseMode], 1)
+        $caseModeAttributes.Add($caseModeDefault)
+        $parameters.Add('CaseMode', [System.Management.Automation.RuntimeDefinedParameter]::new('CaseMode', [DefaultLiteralFixture.CaseMode], $caseModeAttributes))
+
         $parameters
     }
 }
@@ -262,9 +279,12 @@ function Get-DefaultLiteralFixture {
                 "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new(); $dictionary.Add(('alpha'), (1)); $dictionary.Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
                 Default("Dictionary"));
             Assert.Equal(
-                "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new(); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); return ,$dictionary }",
+                "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new(); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); return ,$dictionary }",
                 Default("CaseDistinctDictionary"));
             Assert.True(string.IsNullOrEmpty(Default("UnsupportedCulture")));
+            Assert.Equal(
+                new[] { "One", "Two" },
+                Assert.Single(command.Parameters, parameter => parameter.Name == "UnsupportedCulture").PossibleValues);
             Assert.True(string.IsNullOrEmpty(Default("UnsupportedAddress")));
             Assert.True(string.IsNullOrEmpty(Default("CyclicCollection")));
             Assert.Equal(
@@ -299,6 +319,10 @@ function Get-DefaultLiteralFixture {
                 Default("Script"));
             Assert.Equal("[System.Int32].MakePointerType()", Default("PointerType"));
             Assert.Equal("[System.Int32].MakeByRefType()", Default("ByRefType"));
+            Assert.Equal("[System.Int32].MakeArrayType(1)", Default("NonSzArrayType"));
+            Assert.Equal(
+                "[System.Enum]::ToObject([DefaultLiteralFixture.CaseMode], ([System.Int32]1))",
+                Default("CaseMode"));
 
             string Default(string name)
                 => Assert.Single(command.Parameters, parameter => parameter.Name == name).DefaultValue;

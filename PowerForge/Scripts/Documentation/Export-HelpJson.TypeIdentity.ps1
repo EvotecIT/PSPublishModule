@@ -3,7 +3,10 @@ function GetCanonicalTypeNameFromType([type]$type) {
   if ($type.IsArray) {
     $elementName = GetCanonicalTypeNameFromType ($type.GetElementType())
     $rank = $type.GetArrayRank()
-    if ($rank -le 1) { return ($elementName + '[]') }
+    if ($rank -le 1) {
+      if ($type -eq $type.GetElementType().MakeArrayType()) { return ($elementName + '[]') }
+      return ($elementName + '[*]')
+    }
     return ($elementName + '[' + (',' * ($rank - 1)) + ']')
   }
   if ($type.IsGenericTypeDefinition) {
@@ -25,6 +28,26 @@ function GetCanonicalTypeNameFromType([type]$type) {
   }
   if ($type.FullName) { return [string]$type.FullName }
   return [string]$type.Name
+}
+
+function GetPowerShellSafeEnumName([type]$enumType, [object]$value) {
+  $enumName = [System.Enum]::GetName($enumType, $value)
+  if ([string]::IsNullOrWhiteSpace($enumName)) { return '' }
+  $caseInsensitiveMatches = 0
+  foreach ($candidate in [System.Enum]::GetNames($enumType)) {
+    if ($candidate -ieq $enumName) { $caseInsensitiveMatches++ }
+  }
+  if ($caseInsensitiveMatches -eq 1) { return $enumName }
+  return ''
+}
+
+function GetConstructibleDictionaryTypeName([System.Collections.IDictionary]$value) {
+  $dictionaryType = $value.GetType()
+  if ($dictionaryType.IsAbstract -or $dictionaryType.IsInterface) { return '' }
+  $constructor = $null
+  try { $constructor = $dictionaryType.GetConstructor([System.Type]::EmptyTypes) } catch { $constructor = $null }
+  if ($null -eq $constructor) { return '' }
+  return GetCanonicalTypeNameFromType $dictionaryType
 }
 
 function ResolveExactType([string]$candidate) {

@@ -4,6 +4,7 @@
   [string]$OutputJsonPath
 )
 # <PowerForgeTypeIdentityHelpers />
+# <PowerForgeOutputMatchingHelpers />
 # <PowerForgeDefaultValueCollectionHelpers />
 # <PowerForgeDefaultValueScalarHelpers />
 $ErrorActionPreference = 'Stop'
@@ -84,7 +85,7 @@ function ConvertToPowerShellDefaultValue(
   }
   if ($value -is [enum]) {
     $enumType = $value.GetType()
-    $enumName = [System.Enum]::GetName($enumType, $value)
+    $enumName = GetPowerShellSafeEnumName $enumType $value
     if ($enumName) {
       return ('[' + $enumType.FullName + ']::' + $enumName)
     }
@@ -101,6 +102,11 @@ function ConvertToPowerShellDefaultValue(
     }
     if ($value.IsByRef) {
       return ((ConvertToPowerShellDefaultValue ($value.GetElementType())) + '.MakeByRefType()')
+    }
+    if ($value.IsArray -and
+        $value.GetArrayRank() -eq 1 -and
+        $value -ne $value.GetElementType().MakeArrayType()) {
+      return ((ConvertToPowerShellDefaultValue ($value.GetElementType())) + '.MakeArrayType(1)')
     }
     return ('[' + (GetCanonicalTypeNameFromType $value) + ']')
   }
@@ -200,40 +206,6 @@ function ConvertToPowerShellDefaultValue(
     }
   }
   return ConvertScalarToPowerShellDefaultValue $value
-}
-
-function GetOutputTypeMetadata([object]$outputType) {
-  $outputTypeName = ''
-  $outputTypeClrName = ''
-  $outputRuntimeType = $null
-  try { $outputTypeName = [string]$outputType.Name } catch { $outputTypeName = '' }
-  try { $outputRuntimeType = $outputType.Type } catch { $outputRuntimeType = $null }
-  if ($outputRuntimeType -is [type]) {
-    $outputTypeClrName = [string]$outputRuntimeType.FullName
-  }
-  if (-not $outputTypeClrName) {
-    try { $outputTypeClrName = [string]$outputType.TypeName.FullName } catch { $outputTypeClrName = '' }
-  }
-  if (-not $outputTypeClrName) {
-    try { $outputTypeClrName = [string]$outputType.Type.FullName } catch {
-      # best effort: OutputType wrappers differ between hosts and command kinds
-    }
-  }
-  if (-not $outputTypeClrName) { $outputTypeClrName = $outputTypeName }
-  if (-not $outputTypeName) { $outputTypeName = $outputTypeClrName }
-  if (-not $outputTypeName) { return $null }
-  $outputIdentity = if ($outputRuntimeType -is [type]) {
-    GetCanonicalTypeNameFromType $outputRuntimeType
-  } else {
-    GetTypeIdentity $outputTypeName $outputTypeClrName
-  }
-
-  return [pscustomobject][ordered]@{
-    name = $outputTypeName
-    clrTypeName = $outputTypeClrName
-    identity = $outputIdentity
-    keys = @(GetTypeKeys $outputTypeName $outputTypeClrName)
-  }
 }
 
 try {
@@ -389,15 +361,19 @@ try {
             }
             if ($attr -is [System.Management.Automation.PSDefaultValueAttribute]) {
               $hasMetadataDefault = $true
-              $defaultHelp = [string]$attr.Help
-              if (-not [string]::IsNullOrWhiteSpace($defaultHelp)) {
-                if (TestDefaultTextNeedsEncoding $defaultHelp) {
-                  $defaultValue = ConvertToPowerShellDefaultValue $defaultHelp
+              try {
+                $defaultHelp = [string]$attr.Help
+                if (-not [string]::IsNullOrWhiteSpace($defaultHelp)) {
+                  if (TestDefaultTextNeedsEncoding $defaultHelp) {
+                    $defaultValue = ConvertToPowerShellDefaultValue $defaultHelp
+                  } else {
+                    $defaultValue = $defaultHelp
+                  }
                 } else {
-                  $defaultValue = $defaultHelp
+                  $defaultValue = ConvertToPowerShellDefaultValue $attr.Value
                 }
-              } else {
-                $defaultValue = ConvertToPowerShellDefaultValue $attr.Value
+              } catch {
+                $defaultValue = ''
               }
             }
           }
@@ -614,6 +590,8 @@ try {
     $helpOutputs = @()
     $helpOutputByKey = [System.Collections.Generic.Dictionary[string,object]]::new([System.StringComparer]::Ordinal)
     $helpOutputKeyCounts = [System.Collections.Generic.Dictionary[string,int]]::new([System.StringComparer]::Ordinal)
+    $helpOutputByFoldedKey = [System.Collections.Generic.Dictionary[string,object]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $helpOutputFoldedKeyCounts = [System.Collections.Generic.Dictionary[string,int]]::new([System.StringComparer]::OrdinalIgnoreCase)
     try {
       $helpReturnValues = @()
       try { if ($help -and $help.ReturnValues -and $help.ReturnValues.ReturnValue) { $helpReturnValues = @($help.ReturnValues.ReturnValue) } } catch { $helpReturnValues = @() }
@@ -639,16 +617,8 @@ try {
 
         $helpOutput = [pscustomobject][ordered]@{ name = $typeName; clrTypeName = $typeClrName; description = $typeDesc }
         $helpOutputs += $helpOutput
-        foreach ($key in @(GetTypeKeys $typeName $typeClrName)) {
-          if ($helpOutputKeyCounts.ContainsKey($key)) {
-            $helpOutputKeyCounts[$key] = [int]$helpOutputKeyCounts[$key] + 1
-          } else {
-            $helpOutputKeyCounts[$key] = 1
-          }
-          if (-not $helpOutputByKey.ContainsKey($key)) {
-            $helpOutputByKey[$key] = $helpOutput
-          }
-        }
+        AddTypeKeysToIndexes $helpOutput @(GetTypeKeys $typeName $typeClrName) `
+          $helpOutputByKey $helpOutputKeyCounts $helpOutputByFoldedKey $helpOutputFoldedKeyCounts
       }
     } catch {
       # best effort: older hosts can omit or reshape ReturnValues entirely
@@ -659,6 +629,8 @@ try {
     $runtimeOutputKeys = [System.Collections.Generic.Dictionary[string,bool]]::new([System.StringComparer]::Ordinal)
     $runtimeOutputByKey = [System.Collections.Generic.Dictionary[string,object]]::new([System.StringComparer]::Ordinal)
     $runtimeOutputKeyCounts = [System.Collections.Generic.Dictionary[string,int]]::new([System.StringComparer]::Ordinal)
+    $runtimeOutputByFoldedKey = [System.Collections.Generic.Dictionary[string,object]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $runtimeOutputFoldedKeyCounts = [System.Collections.Generic.Dictionary[string,int]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $runtimeOutputMetadata = @()
     try {
       foreach ($outputType in @($c.OutputType)) {
@@ -666,17 +638,9 @@ try {
         if (-not $metadata -or -not $metadata.identity) { continue }
         if (-not $seenOutputIdentities.Add([string]$metadata.identity)) { continue }
         $runtimeOutputMetadata += $metadata
-        foreach ($key in @($metadata.keys)) {
-          $runtimeOutputKeys[$key] = $true
-          if (-not $runtimeOutputByKey.ContainsKey($key)) {
-            $runtimeOutputByKey[$key] = $metadata
-          }
-          if ($runtimeOutputKeyCounts.ContainsKey($key)) {
-            $runtimeOutputKeyCounts[$key] = [int]$runtimeOutputKeyCounts[$key] + 1
-          } else {
-            $runtimeOutputKeyCounts[$key] = 1
-          }
-        }
+        foreach ($key in @($metadata.keys)) { $runtimeOutputKeys[$key] = $true }
+        AddTypeKeysToIndexes $metadata @($metadata.keys) `
+          $runtimeOutputByKey $runtimeOutputKeyCounts $runtimeOutputByFoldedKey $runtimeOutputFoldedKeyCounts
       }
 
       foreach ($metadata in $runtimeOutputMetadata) {
@@ -692,6 +656,16 @@ try {
             }
             $typeDesc = [string]$matchedHelpOutput.description
             break
+          }
+        }
+        if ([string]::IsNullOrWhiteSpace($typeDesc)) {
+          $matchedHelpOutput = GetUniqueUnqualifiedCaseInsensitiveTypeMatch @($metadata.keys) `
+            $helpOutputByFoldedKey $helpOutputFoldedKeyCounts $runtimeOutputFoldedKeyCounts
+          if ($matchedHelpOutput) {
+            $matchedHelpIdentity = GetTypeIdentity ([string]$matchedHelpOutput.name) ([string]$matchedHelpOutput.clrTypeName)
+            if (-not (TestConflictingQualifiedTypeIdentity ([string]$metadata.identity) $matchedHelpIdentity)) {
+              $typeDesc = [string]$matchedHelpOutput.description
+            }
           }
         }
 
@@ -726,6 +700,15 @@ try {
             }
             $matchesRuntimeOutput = $true
             break
+          }
+        }
+        if (-not $matchesRuntimeOutput) {
+          $matchedRuntimeOutput = GetUniqueUnqualifiedCaseInsensitiveTypeMatch `
+            @(GetTypeKeys ([string]$helpOutput.name) ([string]$helpOutput.clrTypeName)) `
+            $runtimeOutputByFoldedKey $runtimeOutputFoldedKeyCounts $helpOutputFoldedKeyCounts
+          if ($matchedRuntimeOutput -and
+              -not (TestConflictingQualifiedTypeIdentity ([string]$matchedRuntimeOutput.identity) $helpOutputIdentity)) {
+            $matchesRuntimeOutput = $true
           }
         }
         if ($matchesRuntimeOutput) { continue }

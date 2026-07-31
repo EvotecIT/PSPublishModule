@@ -517,12 +517,14 @@ public sealed class DocumentationEngine
     {
         var script = EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.ps1");
         var typeIdentityHelpers = EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.TypeIdentity.ps1");
+        var outputMatchingHelpers = EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.OutputMatching.ps1");
         var defaultValueCollectionHelpers =
             EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.DefaultValueCollections.ps1");
         var defaultValueScalarHelpers =
             EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.DefaultValueScalars.ps1");
         return script
             .Replace("# <PowerForgeTypeIdentityHelpers />", typeIdentityHelpers)
+            .Replace("# <PowerForgeOutputMatchingHelpers />", outputMatchingHelpers)
             .Replace("# <PowerForgeDefaultValueCollectionHelpers />", defaultValueCollectionHelpers)
             .Replace("# <PowerForgeDefaultValueScalarHelpers />", defaultValueScalarHelpers);
     }

@@ -1,0 +1,70 @@
+function GetOutputTypeMetadata([object]$outputType) {
+  $outputTypeName = ''
+  $outputTypeClrName = ''
+  $outputRuntimeType = $null
+  try { $outputTypeName = [string]$outputType.Name } catch { $outputTypeName = '' }
+  try { $outputRuntimeType = $outputType.Type } catch { $outputRuntimeType = $null }
+  if ($outputRuntimeType -is [type]) { $outputTypeClrName = [string]$outputRuntimeType.FullName }
+  if (-not $outputTypeClrName) {
+    try { $outputTypeClrName = [string]$outputType.TypeName.FullName } catch { $outputTypeClrName = '' }
+  }
+  if (-not $outputTypeClrName) {
+    try { $outputTypeClrName = [string]$outputType.Type.FullName } catch {
+      # best effort: OutputType wrappers differ between hosts and command kinds
+    }
+  }
+  if (-not $outputTypeClrName) { $outputTypeClrName = $outputTypeName }
+  if (-not $outputTypeName) { $outputTypeName = $outputTypeClrName }
+  if (-not $outputTypeName) { return $null }
+  $outputIdentity = if ($outputRuntimeType -is [type]) {
+    GetCanonicalTypeNameFromType $outputRuntimeType
+  } else {
+    GetTypeIdentity $outputTypeName $outputTypeClrName
+  }
+  return [pscustomobject][ordered]@{
+    name = $outputTypeName
+    clrTypeName = $outputTypeClrName
+    identity = $outputIdentity
+    keys = @(GetTypeKeys $outputTypeName $outputTypeClrName)
+  }
+}
+
+function AddTypeKeysToIndexes(
+  [object]$value,
+  [string[]]$keys,
+  [object]$byExactKey,
+  [object]$exactCounts,
+  [object]$byFoldedKey,
+  [object]$foldedCounts
+) {
+  $seenExact = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+  $seenFolded = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+  foreach ($key in $keys) {
+    if ([string]::IsNullOrWhiteSpace($key)) { continue }
+    if ($seenExact.Add($key)) {
+      $exactCounts[$key] = if ($exactCounts.ContainsKey($key)) { [int]$exactCounts[$key] + 1 } else { 1 }
+      if (-not $byExactKey.ContainsKey($key)) { $byExactKey[$key] = $value }
+    }
+    if ($seenFolded.Add($key)) {
+      $foldedCounts[$key] = if ($foldedCounts.ContainsKey($key)) { [int]$foldedCounts[$key] + 1 } else { 1 }
+      if (-not $byFoldedKey.ContainsKey($key)) { $byFoldedKey[$key] = $value }
+    }
+  }
+}
+
+function GetUniqueUnqualifiedCaseInsensitiveTypeMatch(
+  [string[]]$keys,
+  [object]$candidateByFoldedKey,
+  [object]$candidateFoldedCounts,
+  [object]$sourceFoldedCounts
+) {
+  foreach ($key in $keys) {
+    if ([string]::IsNullOrWhiteSpace($key) -or $key.Contains('.') -or $key.Contains('+')) { continue }
+    if ($candidateByFoldedKey.ContainsKey($key) -and
+        [int]$candidateFoldedCounts[$key] -eq 1 -and
+        [int]$sourceFoldedCounts[$key] -eq 1) {
+      return $candidateByFoldedKey[$key]
+    }
+  }
+  return $null
+}

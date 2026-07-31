@@ -39,7 +39,11 @@ function ConvertDictionaryToPowerShellDefaultValue(
   [System.Collections.IList]$referenceStack
 ) {
   $statements = [System.Collections.Generic.List[string]]::new()
-  $statements.Add('$dictionary = [System.Collections.Specialized.OrderedDictionary]::new()')
+  $dictionaryTypeName = GetConstructibleDictionaryTypeName $value
+  if ([string]::IsNullOrWhiteSpace($dictionaryTypeName)) {
+    $dictionaryTypeName = 'System.Collections.Specialized.OrderedDictionary'
+  }
+  $statements.Add('$dictionary = [' + $dictionaryTypeName + ']::new()')
   foreach ($entry in $value.GetEnumerator()) {
     $keyExpression = ConvertToPowerShellDefaultValue $entry.Key $referenceStack
     $valueExpression = ConvertToPowerShellDefaultValue $entry.Value $referenceStack

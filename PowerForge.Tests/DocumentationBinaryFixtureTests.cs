@@ -287,11 +287,11 @@ public sealed class DocumentationBinaryFixtureTests
       <command:verb>Get</command:verb>
       <command:noun>BinaryDocCaseInsensitiveOutput</command:noun>
       <maml:description>
-        <maml:para>Matches an authored qualified output whose casing differs.</maml:para>
+        <maml:para>Matches an authored unique short output whose casing differs.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Matches an authored qualified output whose casing differs.</maml:para>
+      <maml:para>Matches an authored unique short output whose casing differs.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -303,7 +303,7 @@ public sealed class DocumentationBinaryFixtureTests
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>binarydocfixture.canonicaloutput.result</maml:name>
+          <maml:name>result</maml:name>
         </dev:type>
         <maml:description>
           <maml:para>The canonical qualified result description survives authored casing.</maml:para>
