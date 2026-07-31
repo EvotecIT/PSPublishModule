@@ -704,16 +704,24 @@ function Get-AcceleratedOutput {
                     StringComparison.Ordinal);
                 Assert.Contains("([System.Collections.IDictionary]$dictionary).Add(('alpha'), (1))", dictionary.DefaultValue, StringComparison.Ordinal);
                 Assert.Contains("([System.Collections.IDictionary]$dictionary).Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative)))", dictionary.DefaultValue, StringComparison.Ordinal);
-                Assert.Equal(
-                    "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Ordinal); ([System.Collections.IDictionary]$dictionary).Add(('A'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('a'), (2)); return ,$dictionary }",
-                    caseDistinctDictionary.DefaultValue);
+                Assert.Contains(
+                    caseDistinctDictionary.DefaultValue,
+                    new[]
+                    {
+                        "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Ordinal); ([System.Collections.IDictionary]$dictionary).Add(('A'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('a'), (2)); return ,$dictionary }",
+                        "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new(([int]3), [System.StringComparer]::Ordinal); ([System.Collections.IDictionary]$dictionary).Add(('A'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('a'), (2)); return ,$dictionary }"
+                    });
                 Assert.True(string.IsNullOrEmpty(fixedComparerDictionary.DefaultValue));
                 Assert.Equal(
                     "& { $dictionary = [System.Collections.Concurrent.ConcurrentDictionary[System.String,System.Int32]]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('Alpha'), (1)); return ,$dictionary }",
                     concurrentDictionary.DefaultValue);
-                Assert.Equal(
-                    "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Create([System.Globalization.CultureInfo]::GetCultureInfo('tr-TR'), $true)); ([System.Collections.IDictionary]$dictionary).Add(('I'), (1)); return ,$dictionary }",
-                    cultureDictionary.DefaultValue);
+                Assert.Contains(
+                    cultureDictionary.DefaultValue,
+                    new[]
+                    {
+                        "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Create([System.Globalization.CultureInfo]::GetCultureInfo('tr-TR'), $true)); ([System.Collections.IDictionary]$dictionary).Add(('I'), (1)); return ,$dictionary }",
+                        "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new(([int]3), [System.StringComparer]::Create([System.Globalization.CultureInfo]::GetCultureInfo('tr-TR'), $true)); ([System.Collections.IDictionary]$dictionary).Add(('I'), (1)); return ,$dictionary }"
+                    });
                 Assert.True(string.IsNullOrEmpty(hybridDictionary.DefaultValue));
                 Assert.True(string.IsNullOrEmpty(readOnlyDictionary.DefaultValue));
                 Assert.True(string.IsNullOrEmpty(readOnlyOrderedDictionary.DefaultValue));

@@ -345,6 +345,7 @@ internal static class PowerShellDefaultValueFormatter
                 frames.Push(new DictionaryTokenFrame(
                     token.CanonicalTypeName,
                     token.Name,
+                    token.Text,
                     DecodeUtf16CodeUnits(token.RuntimeTypeNameCodeUnits),
                     DecodeUtf16CodeUnits(token.AssemblyNameCodeUnits),
                     token.RuntimeTypeShape));
@@ -538,11 +539,13 @@ internal static class PowerShellDefaultValueFormatter
         private string? _value;
         private bool _entryOpen;
 
-        private readonly string _constructorArgument;
+        private readonly int? _capacity;
+        private readonly string _comparerArgument;
 
         public DictionaryTokenFrame(
             string? dictionaryTypeName,
             string? comparerName,
+            string? capacity,
             string runtimeTypeName,
             string assemblyName,
             string? runtimeTypeShape)
@@ -550,7 +553,14 @@ internal static class PowerShellDefaultValueFormatter
             if (string.IsNullOrWhiteSpace(dictionaryTypeName))
                 throw new FormatException("The runtime default token stream is missing a constructible dictionary type.");
             _dictionaryTypeName = dictionaryTypeName!.Trim();
-            _constructorArgument = FormatDictionaryComparer(comparerName);
+            if (!string.IsNullOrWhiteSpace(capacity))
+            {
+                if (!int.TryParse(capacity, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedCapacity) ||
+                    parsedCapacity < 0)
+                    throw new FormatException("The runtime default token stream contains invalid dictionary capacity metadata.");
+                _capacity = parsedCapacity;
+            }
+            _comparerArgument = FormatDictionaryComparer(comparerName);
             _runtimeTypeName = runtimeTypeName;
             _assemblyName = assemblyName;
             _runtimeTypeShape = runtimeTypeShape;
@@ -596,12 +606,17 @@ internal static class PowerShellDefaultValueFormatter
                 _runtimeTypeShape);
             if (dictionaryTypeExpression.Length == 0)
                 throw new FormatException("The runtime default token stream contains an unresolved dictionary type.");
+            var constructorArguments = new List<string>();
+            if (_capacity.HasValue)
+                constructorArguments.Add("([int]" + _capacity.Value.ToString(CultureInfo.InvariantCulture) + ")");
+            if (_comparerArgument.Length > 0)
+                constructorArguments.Add(_comparerArgument);
             var constructorExpression = IsTypeLiteralExpression(dictionaryTypeExpression)
-                ? dictionaryTypeExpression + "::new(" + _constructorArgument + ")"
-                : _constructorArgument.Length == 0
+                ? dictionaryTypeExpression + "::new(" + string.Join(", ", constructorArguments) + ")"
+                : constructorArguments.Count == 0
                     ? "[System.Activator]::CreateInstance((" + dictionaryTypeExpression + "))"
                     : "[System.Activator]::CreateInstance((" + dictionaryTypeExpression +
-                      "), [object[]]@((" + _constructorArgument + ")))";
+                      "), [object[]]@(" + string.Join(", ", constructorArguments.Select(argument => "(" + argument + ")")) + "))";
             var statements = new List<string> { "$dictionary = " + constructorExpression };
             statements.AddRange(_entries.Select(entry =>
                 "([System.Collections.IDictionary]$dictionary).Add((" + entry.Key + "), (" + entry.Value + "))"));

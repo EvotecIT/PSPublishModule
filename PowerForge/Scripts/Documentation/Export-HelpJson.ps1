@@ -188,6 +188,7 @@ function AddRuntimeDefaultValueTokens(
         [void](GetDictionaryConstructorExpression $value)
         $tokens.Add([ordered]@{
           kind = 'DictionaryStart'
+          text = GetDictionaryCapacity $value
           canonicalTypeName = $dictionaryTypeName
           name = $comparerName
           runtimeTypeNameCodeUnits = ConvertToUtf16CodeUnits ([string]$value.GetType().FullName)

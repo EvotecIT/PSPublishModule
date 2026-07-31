@@ -621,6 +621,41 @@ public sealed class DocumentationMetadataNormalizerTests
             });
     }
 
+    [Fact]
+    public void Normalize_PreservesUnresolvedOutputNamesThatDifferByWhitespace()
+    {
+        var command = new DocumentationCommandHelp
+        {
+            Name = "Get-UnresolvedWhitespaceVariants",
+            CommandType = "Cmdlet",
+            RuntimeOutputs =
+            [
+                Type("Foo Bar", "Foo Bar"),
+                Type("FooBar", "FooBar")
+            ],
+            AuthoredOutputs =
+            [
+                Type("Foo Bar", "Foo Bar", "Spaced output description."),
+                Type("FooBar", "FooBar", "Compact output description.")
+            ]
+        };
+
+        DocumentationMetadataNormalizer.Normalize(PayloadWith(command));
+
+        Assert.Collection(
+            command.Outputs,
+            output =>
+            {
+                Assert.Equal("Foo Bar", output.CanonicalTypeName);
+                Assert.Equal("Spaced output description.", output.Description);
+            },
+            output =>
+            {
+                Assert.Equal("FooBar", output.CanonicalTypeName);
+                Assert.Equal("Compact output description.", output.Description);
+            });
+    }
+
     [Theory]
     [InlineData("Widget", "Demo.Widget", "widget")]
     [InlineData("Box[System.String]", "Demo.Box[System.String]", "box[System.String]")]
