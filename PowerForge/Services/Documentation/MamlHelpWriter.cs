@@ -330,8 +330,7 @@ internal sealed class MamlHelpWriter
         }
 
         var possibleValues = (p.PossibleValues ?? Enumerable.Empty<string>())
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => value.Trim())
+            .Where(value => value is not null)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         if (possibleValues.Length > 0)

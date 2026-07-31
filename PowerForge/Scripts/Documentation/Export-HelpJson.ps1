@@ -434,7 +434,7 @@ try {
           foreach ($a in @($hp.Aliases)) { $aliases += [string]$a }
         }
         try {
-          if ($hp.ValidValues) {
+          if (-not $hasValidateSet -and $hp.ValidValues) {
             foreach ($value in @($hp.ValidValues)) {
               if ($null -ne $value) { $possibleValues += [string]$value }
             }
@@ -465,7 +465,7 @@ try {
         }
       }
       if ($hasValidateSet) { $enumPossibleValues = @() }
-      $possibleValues = @(MergeParameterPossibleValues @($possibleValues) @($enumPossibleValues) $validateSetCaseSensitive)
+      $possibleValues = @(MergeParameterPossibleValues @($possibleValues) @($enumPossibleValues) $validateSetCaseSensitive $hasValidateSet)
 
       $sets = @()
       if ($paramSets.ContainsKey($pn)) { $sets = @($paramSets[$pn]) }

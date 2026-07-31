@@ -1,7 +1,8 @@
 function MergeParameterPossibleValues(
   [object[]]$metadataValues,
   [object[]]$enumValues,
-  [bool]$metadataCaseSensitive = $false
+  [bool]$metadataCaseSensitive = $false,
+  [bool]$preserveMetadataText = $false
 ) {
   $result = [System.Collections.Generic.List[string]]::new()
   $metadataComparer = if ($metadataCaseSensitive) {
@@ -12,8 +13,8 @@ function MergeParameterPossibleValues(
   $seenMetadata = [System.Collections.Generic.HashSet[string]]::new($metadataComparer)
   foreach ($value in @($metadataValues)) {
     if ($null -eq $value) { continue }
-    $normalized = ([string]$value).Trim()
-    if ($normalized -and $seenMetadata.Add($normalized)) {
+    $normalized = if ($preserveMetadataText) { [string]$value } else { ([string]$value).Trim() }
+    if (($preserveMetadataText -or $normalized) -and $seenMetadata.Add($normalized)) {
       $result.Add($normalized)
     }
   }

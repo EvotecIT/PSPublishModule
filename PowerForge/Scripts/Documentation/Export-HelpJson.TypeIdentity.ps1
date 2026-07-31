@@ -56,8 +56,7 @@ function GetConstructibleDictionaryTypeName([System.Collections.IDictionary]$val
     $definition = $dictionaryType.GetGenericTypeDefinition()
     $supported = [object]::ReferenceEquals($definition, [System.Collections.Generic.Dictionary``2]) -or
       [object]::ReferenceEquals($definition, [System.Collections.Generic.SortedDictionary``2]) -or
-      [object]::ReferenceEquals($definition, [System.Collections.Generic.SortedList``2]) -or
-      [object]::ReferenceEquals($definition, [System.Collections.Concurrent.ConcurrentDictionary``2])
+      [object]::ReferenceEquals($definition, [System.Collections.Generic.SortedList``2])
   }
   if (-not $supported) { return '' }
   if ($dictionaryType.IsAbstract -or $dictionaryType.IsInterface) { return '' }

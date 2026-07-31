@@ -337,8 +337,8 @@ internal sealed class MarkdownHelpWriter
     private static string FormatPossibleValues(DocumentationParameterHelp p)
     {
         var values = (p.PossibleValues ?? Enumerable.Empty<string>())
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => value.Trim())
+            .Where(value => value is not null)
+            .Select(value => value.Length == value.Trim().Length ? value : "'" + value.Replace("'", "''") + "'")
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 

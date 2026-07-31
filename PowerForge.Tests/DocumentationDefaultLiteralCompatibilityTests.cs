@@ -237,6 +237,16 @@ function Get-DefaultLiteralFixture {
         $concurrentDictionaryAttributes.Add($concurrentDictionaryDefault)
         $parameters.Add('ConcurrentDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('ConcurrentDictionary', [System.Collections.Concurrent.ConcurrentDictionary[string, int]], $concurrentDictionaryAttributes))
 
+        $statefulConcurrentDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $statefulConcurrentDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $statefulConcurrentDictionary = [System.Collections.Concurrent.ConcurrentDictionary[string, int]]::new(
+            1, 200, [System.StringComparer]::Ordinal)
+        foreach ($index in 0..20) { $statefulConcurrentDictionary[('key' + $index)] = $index }
+        $statefulConcurrentDictionaryDefault.Value = $statefulConcurrentDictionary
+        $statefulConcurrentDictionaryAttributes.Add($statefulConcurrentDictionaryDefault)
+        $parameters.Add('StatefulConcurrentDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new(
+            'StatefulConcurrentDictionary', [System.Collections.Concurrent.ConcurrentDictionary[string, int]], $statefulConcurrentDictionaryAttributes))
+
         $cultureDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $cultureDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $cultureComparer = [System.StringComparer]::Create([System.Globalization.CultureInfo]::GetCultureInfo('tr-TR'), $true)
@@ -528,7 +538,7 @@ function Get-DefaultLiteralFixture {
             'RestrictedCaseMode', [DefaultLiteralFixture.CaseMode], $restrictedCaseModeAttributes))
 
         $caseSensitiveValidateSetAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
-        $caseSensitiveValidateSet = [System.Management.Automation.ValidateSetAttribute]::new([string[]]@('A', 'a'))
+        $caseSensitiveValidateSet = [System.Management.Automation.ValidateSetAttribute]::new([string[]]@(' A ', ' a '))
         $caseSensitiveValidateSet.IgnoreCase = $false
         $caseSensitiveValidateSetAttributes.Add($caseSensitiveValidateSet)
         $parameters.Add('CaseSensitiveValidateSet', [System.Management.Automation.RuntimeDefinedParameter]::new(
@@ -596,10 +606,17 @@ $invalidOutputFunction = "function Get-InvalidOutputFixture { [OutputType('Bad" 
                 payload,
                 "DefaultLiteralFixture",
                 Path.Combine(root, "generated"));
+            var markdownDirectory = Path.Combine(root, "markdown");
+            new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "DefaultLiteralFixture", markdownDirectory);
             var command = Assert.Single(payload.Commands, item => item.Name == "Get-DefaultLiteralFixture");
             var invalidOutputCommand = Assert.Single(payload.Commands, item => item.Name == "Get-InvalidOutputFixture");
 
-            Assert.DoesNotContain('\u0001', File.ReadAllText(generatedMamlPath));
+            var generatedMaml = File.ReadAllText(generatedMamlPath);
+            Assert.DoesNotContain('\u0001', generatedMaml);
+            Assert.Contains("> A </command:parameterValue>", generatedMaml, StringComparison.Ordinal);
+            Assert.Contains("> a </command:parameterValue>", generatedMaml, StringComparison.Ordinal);
+            var generatedMarkdown = File.ReadAllText(Path.Combine(markdownDirectory, "Get-DefaultLiteralFixture.md"));
+            Assert.Contains("Possible values: ' A ', ' a '", generatedMarkdown, StringComparison.Ordinal);
             var invalidOutput = Assert.Single(invalidOutputCommand.Outputs);
             Assert.Equal("Bad([char]1)Name", invalidOutput.Name);
             Assert.Equal("Bad([char]1)Name", invalidOutput.ClrTypeName);
@@ -644,9 +661,8 @@ $invalidOutputFunction = "function Get-InvalidOutputFixture { [OutputType('Bad" 
                 Default("CaseDistinctDictionary"));
             Assert.Contains("::new(([int]107))", Default("ReservedDictionary"), StringComparison.Ordinal);
             Assert.True(string.IsNullOrEmpty(Default("RemovedDictionary")));
-            Assert.Equal(
-                "& { $dictionary = [System.Collections.Concurrent.ConcurrentDictionary[System.String,System.Int32]]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('Alpha'), (1)); return ,$dictionary }",
-                Default("ConcurrentDictionary"));
+            Assert.True(string.IsNullOrEmpty(Default("ConcurrentDictionary")));
+            Assert.True(string.IsNullOrEmpty(Default("StatefulConcurrentDictionary")));
             Assert.Equal(
                 "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new(([int]3), [System.StringComparer]::Create([System.Globalization.CultureInfo]::GetCultureInfo('tr-TR'), $true)); ([System.Collections.IDictionary]$dictionary).Add(('I'), (1)); return ,$dictionary }",
                 Default("CultureDictionary"));
@@ -753,7 +769,7 @@ $invalidOutputFunction = "function Get-InvalidOutputFixture { [OutputType('Bad" 
                 new[] { "A" },
                 Assert.Single(command.Parameters, parameter => parameter.Name == "RestrictedCaseMode").PossibleValues);
             Assert.Equal(
-                new[] { "A", "a" },
+                new[] { " A ", " a " },
                 Assert.Single(command.Parameters, parameter => parameter.Name == "CaseSensitiveValidateSet").PossibleValues);
             Assert.Equal(
                 "[System.Enum]::ToObject([DefaultLiteralFixture.WeirdMode], ([System.Int32]1))",
