@@ -55,13 +55,15 @@ if (-not ('CollectorFixture.WeirdMode' -as [type])) {
     } else {
         [void]$enumBuilder.CreateType()
     }
-    $typeBuilder = $moduleBuilder.DefineType(
+    $unsafeEnumBuilder = $moduleBuilder.DefineEnum(
         'CollectorFixture.A-B',
-        [System.Reflection.TypeAttributes]::Public)
-    if ($typeBuilder.PSObject.Methods['CreateTypeInfo']) {
-        $script:unsafeDefaultType = $typeBuilder.CreateTypeInfo().AsType()
+        [System.Reflection.TypeAttributes]::Public,
+        [int])
+    [void]$unsafeEnumBuilder.DefineLiteral('X', 1)
+    if ($unsafeEnumBuilder.PSObject.Methods['CreateTypeInfo']) {
+        $script:unsafeDefaultType = $unsafeEnumBuilder.CreateTypeInfo().AsType()
     } else {
-        $script:unsafeDefaultType = $typeBuilder.CreateType()
+        $script:unsafeDefaultType = $unsafeEnumBuilder.CreateType()
     }
 }
 if ($null -eq $script:unsafeDefaultType) {
@@ -227,6 +229,12 @@ function Get-CollectorFixture {
         $unsafeTypeAttributes.Add($unsafeTypeDefault)
         $parameters.Add('UnsafeType', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafeType', [type], $unsafeTypeAttributes))
 
+        $unsafeEnumAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $unsafeEnumDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $unsafeEnumDefault.Value = [System.Enum]::ToObject($script:unsafeDefaultType, 1)
+        $unsafeEnumAttributes.Add($unsafeEnumDefault)
+        $parameters.Add('UnsafeEnum', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafeEnum', $script:unsafeDefaultType, $unsafeEnumAttributes))
+
         $caseModeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $caseModeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $caseModeDefault.Value = [System.Enum]::ToObject([CollectorFixture.CaseMode], 1)
@@ -386,6 +394,13 @@ function Get-CollectorFixture {
         $dateTimeAttributes.Add($dateTimeDefault)
         $parameters.Add('DateTime', [System.Management.Automation.RuntimeDefinedParameter]::new('DateTime', [datetime], $dateTimeAttributes))
 
+        $statefulScriptAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $statefulScriptDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $capturedValue = 42
+        $statefulScriptDefault.Value = { $capturedValue }.GetNewClosure()
+        $statefulScriptAttributes.Add($statefulScriptDefault)
+        $parameters.Add('StatefulScript', [System.Management.Automation.RuntimeDefinedParameter]::new('StatefulScript', [scriptblock], $statefulScriptAttributes))
+
         $dateTimeOffsetAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $dateTimeOffsetDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $dateTimeOffsetDefault.Value = [datetimeoffset]::ParseExact('2026-07-30T12:34:56.1234567+05:30', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)
@@ -484,6 +499,7 @@ function Get-AcceleratedOutput {
                 var nonSzArrayType = Assert.Single(command.Parameters, parameter => parameter.Name == "NonSzArrayType");
                 var genericParameterType = Assert.Single(command.Parameters, parameter => parameter.Name == "GenericParameterType");
                 var unsafeType = Assert.Single(command.Parameters, parameter => parameter.Name == "UnsafeType");
+                var unsafeEnum = Assert.Single(command.Parameters, parameter => parameter.Name == "UnsafeEnum");
                 var caseMode = Assert.Single(command.Parameters, parameter => parameter.Name == "CaseMode");
                 var weirdMode = Assert.Single(command.Parameters, parameter => parameter.Name == "WeirdMode");
                 var uri = Assert.Single(command.Parameters, parameter => parameter.Name == "Uri");
@@ -512,6 +528,7 @@ function Get-AcceleratedOutput {
                 var dateOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "DateOnly");
                 var timeOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "TimeOnly");
                 var dateTime = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTime");
+                var statefulScript = Assert.Single(command.Parameters, parameter => parameter.Name == "StatefulScript");
                 var dateTimeOffset = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTimeOffset");
                 var timeSpan = Assert.Single(command.Parameters, parameter => parameter.Name == "TimeSpan");
                 var accelerated = Assert.Single(
@@ -547,6 +564,10 @@ function Get-AcceleratedOutput {
                 Assert.StartsWith(
                     "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'CollectorFixtureDynamic",
                     unsafeType.DefaultValue,
+                    StringComparison.Ordinal);
+                Assert.StartsWith(
+                    "[System.Enum]::ToObject((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'CollectorFixtureDynamic",
+                    unsafeEnum.DefaultValue,
                     StringComparison.Ordinal);
                 Assert.Equal(
                     "[System.Enum]::ToObject([CollectorFixture.CaseMode], ([System.Int32]1))",
@@ -603,8 +624,9 @@ function Get-AcceleratedOutput {
                 }
                 var localDateTime = new DateTime(639210116961234567, DateTimeKind.Local);
                 Assert.Equal(
-                    $"[System.DateTime]::FromBinary(([long]{localDateTime.ToBinary()}))",
+                    $"[System.DateTime]::new(([long]{localDateTime.Ticks}), [System.DateTimeKind]::Local)",
                     dateTime.DefaultValue);
+                Assert.True(string.IsNullOrEmpty(statefulScript.DefaultValue));
                 Assert.Equal(
                     "[System.DateTimeOffset]::ParseExact('2026-07-30T12:34:56.1234567+05:30', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",
                     dateTimeOffset.DefaultValue);

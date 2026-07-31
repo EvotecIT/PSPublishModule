@@ -63,6 +63,18 @@ public sealed class DocumentationMetadataNormalizerTests
                 AssemblyNameCodeUnits = string.Join(",", unsafeAssemblyName.Select(character => (int)character))
             }));
         Assert.Equal(
+            "[System.Enum]::ToObject((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'Example.Assembly, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null' } | Select-Object -First 1; if ($null -eq $assembly) { throw 'Type assembly is not loaded.' }; return $assembly.GetType('Example.A-B', $true, $false) }), ([System.Int32]1))",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "Enum",
+                CanonicalTypeName = "Example.A-B",
+                Name = "X",
+                Text = "1",
+                UnderlyingTypeName = "System.Int32",
+                RuntimeTypeNameCodeUnits = string.Join(",", unsafeTypeName.Select(character => (int)character)),
+                AssemblyNameCodeUnits = string.Join(",", unsafeAssemblyName.Select(character => (int)character))
+            }));
+        Assert.Equal(
             "[System.Int32].MakePointerType()",
             PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
             {
@@ -158,11 +170,12 @@ public sealed class DocumentationMetadataNormalizerTests
                 Text = "452961234567"
             }));
         Assert.Equal(
-            "[System.DateTime]::FromBinary(([long]639210116961234567))",
+            "[System.DateTime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)",
             PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
             {
                 Kind = "DateTime",
-                Text = "639210116961234567"
+                Text = "639210116961234567",
+                Name = "Local"
             }));
         Assert.Equal(
             "[System.DateTimeOffset]::ParseExact('2026-07-30T12:34:56.1234567+05:30', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",
@@ -485,15 +498,24 @@ public sealed class DocumentationMetadataNormalizerTests
             [
                 Type("Foo Bar", "Demo.Foo Bar"),
                 Type("FooBar", "Demo.FooBar")
-            ]
+            ],
+            AuthoredOutputs = [Type("FooBar", "FooBar", "Compact output description.")]
         };
 
         DocumentationMetadataNormalizer.Normalize(PayloadWith(command));
 
         Assert.Collection(
             command.Outputs,
-            output => Assert.Equal("Demo.Foo Bar", output.CanonicalTypeName),
-            output => Assert.Equal("Demo.FooBar", output.CanonicalTypeName));
+            output =>
+            {
+                Assert.Equal("Demo.Foo Bar", output.CanonicalTypeName);
+                Assert.True(string.IsNullOrEmpty(output.Description));
+            },
+            output =>
+            {
+                Assert.Equal("Demo.FooBar", output.CanonicalTypeName);
+                Assert.Equal("Compact output description.", output.Description);
+            });
     }
 
     [Theory]

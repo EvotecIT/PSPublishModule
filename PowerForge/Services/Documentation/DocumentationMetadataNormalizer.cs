@@ -223,9 +223,15 @@ internal static class DocumentationMetadataNormalizer
     private static List<string> GetKeys(DocumentationTypeHelp value)
     {
         var keys = new HashSet<string>(StringComparer.Ordinal);
-        AddCandidate(value.Name, preserveWhitespace: false);
-        AddCandidate(value.ClrTypeName, preserveWhitespace: false);
-        AddCandidate(value.CanonicalTypeName, preserveWhitespace: true);
+        if (!string.IsNullOrWhiteSpace(value.CanonicalTypeName))
+        {
+            AddCandidate(value.CanonicalTypeName, preserveWhitespace: true);
+        }
+        else
+        {
+            AddCandidate(value.Name, preserveWhitespace: false);
+            AddCandidate(value.ClrTypeName, preserveWhitespace: false);
+        }
         return keys.ToList();
 
         void AddCandidate(string? candidate, bool preserveWhitespace)

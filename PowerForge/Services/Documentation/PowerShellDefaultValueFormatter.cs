@@ -77,7 +77,8 @@ internal static class PowerShellDefaultValueFormatter
             case "timeonly":
                 return "[System.TimeOnly]::new(([long]" + (value.Text ?? string.Empty) + "))";
             case "datetime":
-                return "[System.DateTime]::FromBinary(([long]" + (value.Text ?? string.Empty) + "))";
+                return "[System.DateTime]::new(([long]" + (value.Text ?? string.Empty) +
+                       "), [System.DateTimeKind]::" + (value.Name ?? string.Empty) + ")";
             case "datetimeoffset":
                 return FormatTemporalParseExact("System.DateTimeOffset", value.Text, "O", includeStyles: true);
             case "timespan":
@@ -146,13 +147,20 @@ internal static class PowerShellDefaultValueFormatter
     {
         var typeName = (value.CanonicalTypeName ?? string.Empty).Trim();
         if (typeName.Length == 0) return value.Text ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(value.Name))
+        var typeIsLiteral = SafeTypeLiteralName.IsMatch(typeName);
+        if (typeIsLiteral && !string.IsNullOrWhiteSpace(value.Name))
             return "[" + typeName + "]::" + value.Name!.Trim();
+        var typeExpression = FormatTypeExpression(
+            typeName,
+            DecodeUtf16CodeUnits(value.RuntimeTypeNameCodeUnits),
+            DecodeUtf16CodeUnits(value.AssemblyNameCodeUnits));
+        if (typeExpression.Length == 0) return string.Empty;
+        if (!typeIsLiteral) typeExpression = "(" + typeExpression + ")";
         var numericValue = value.Text ?? string.Empty;
         var underlyingTypeName = (value.UnderlyingTypeName ?? string.Empty).Trim();
         if (underlyingTypeName.Length > 0)
             numericValue = "([" + underlyingTypeName + "]" + numericValue + ")";
-        return "[System.Enum]::ToObject([" + typeName + "], " + numericValue + ")";
+        return "[System.Enum]::ToObject(" + typeExpression + ", " + numericValue + ")";
     }
 
     private static string FormatFloatingPoint(string? text, string powerShellType)

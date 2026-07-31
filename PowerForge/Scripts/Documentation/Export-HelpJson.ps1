@@ -7,7 +7,6 @@
 # <PowerForgeRuntimeValueHelpers />
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-
 function EmitError([string]$msg) {
   try {
     $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$msg))
@@ -16,7 +15,6 @@ function EmitError([string]$msg) {
     Write-Output 'PFDOCS::ERROR::'
   }
 }
-
 function AddRuntimeDefaultValueTokens(
   [object]$value,
   [System.Collections.IList]$tokens,
@@ -29,7 +27,6 @@ function AddRuntimeDefaultValueTokens(
     $tokens.Add([ordered]@{ kind = 'Null' }) | Out-Null
     return
   }
-
   if ($value -is [string]) {
     $tokens.Add([ordered]@{
       kind = 'StringCodeUnits'
@@ -68,6 +65,8 @@ function AddRuntimeDefaultValueTokens(
       name = GetPowerShellSafeEnumName $enumType $value
       canonicalTypeName = GetCanonicalTypeNameFromType $enumType
       underlyingTypeName = GetCanonicalTypeNameFromType $underlyingType
+      runtimeTypeNameCodeUnits = ConvertToUtf16CodeUnits ([string]$enumType.FullName)
+      assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$enumType.Assembly.FullName)
     }) | Out-Null
     return
   }
@@ -157,9 +156,14 @@ function AddRuntimeDefaultValueTokens(
     return
   }
   if ($value -is [datetime]) {
+    if ($value.Kind -eq [System.DateTimeKind]::Local -and
+        [System.TimeZoneInfo]::Local.IsAmbiguousTime($value)) {
+      throw 'Ambiguous local DateTime defaults cannot be represented portably.'
+    }
     $tokens.Add([ordered]@{
       kind = 'DateTime'
-      text = $value.ToBinary().ToString([System.Globalization.CultureInfo]::InvariantCulture)
+      text = $value.Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+      name = [string]$value.Kind
     }) | Out-Null
     return
   }
@@ -178,6 +182,9 @@ function AddRuntimeDefaultValueTokens(
     return
   }
   if ($value -is [scriptblock]) {
+    if ($null -ne $value.Module) {
+      throw 'Stateful or module-bound ScriptBlock defaults are not supported.'
+    }
     $tokens.Add([ordered]@{
       kind = 'ScriptBlockCodeUnits'
       text = ConvertToUtf16CodeUnits ([string]$value.ToString())
