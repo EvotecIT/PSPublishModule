@@ -216,6 +216,31 @@ function TestPowerShellTypeLiteralName([string]$canonicalTypeName) {
   return $canonicalTypeName -match '^[A-Za-z_][A-Za-z0-9_.+`]*(?:\[[A-Za-z0-9_.+`,\[\]]+\])?$'
 }
 
+function ConvertToPowerShellTypeIdentityText([string]$text) {
+  $parts = [System.Collections.Generic.List[string]]::new()
+  $segment = [System.Text.StringBuilder]::new()
+  foreach ($character in $text.ToCharArray()) {
+    if ($character -ne "`r" -and
+        $character -ne "`n" -and
+        [System.Xml.XmlConvert]::IsXmlChar($character)) {
+      [void]$segment.Append($character)
+      continue
+    }
+    if ($segment.Length -gt 0) {
+      $parts.Add("'" + $segment.ToString().Replace("'", "''") + "'")
+      [void]$segment.Clear()
+    }
+    $parts.Add('([char]' + [int]$character + ')')
+  }
+  if ($segment.Length -gt 0) {
+    $parts.Add("'" + $segment.ToString().Replace("'", "''") + "'")
+  }
+  if ($parts.Count -eq 1 -and -not $parts[0].StartsWith('([char]', [System.StringComparison]::Ordinal)) {
+    return $parts[0]
+  }
+  return ('(-join @(' + ($parts -join ', ') + '))')
+}
+
 function GetPowerShellTypeDefaultExpression([type]$type) {
   if ($type.IsGenericParameter) {
     throw 'Generic-parameter Type defaults are not supported.'
@@ -267,8 +292,8 @@ function GetPowerShellTypeDefaultExpression([type]$type) {
       [string]::IsNullOrWhiteSpace($type.Assembly.FullName)) {
     throw ('Type has no safely resolvable runtime identity: ' + $canonicalTypeName)
   }
-  $typeNameExpression = ConvertToPowerShellDefaultValue ([string]$type.FullName)
-  $assemblyNameExpression = ConvertToPowerShellDefaultValue ([string]$type.Assembly.FullName)
+  $typeNameExpression = ConvertToPowerShellTypeIdentityText ([string]$type.FullName)
+  $assemblyNameExpression = ConvertToPowerShellTypeIdentityText ([string]$type.Assembly.FullName)
   return ("& { `$assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | " +
     "Where-Object { `$_.FullName -eq " + $assemblyNameExpression + " } | Select-Object -First 1; " +
     "if (`$null -eq `$assembly) { throw 'Type assembly is not loaded.' }; " +
