@@ -896,6 +896,48 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void OptimizeDetailed_DoesNotOverwriteProtectedStoryHashDestination()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var siteRoot = Path.Combine(root, "source");
+            var manifestPath = Path.Combine(siteRoot, "story.json");
+            var manifest = JsonSerializer.Deserialize<WebVisualStoryBundle>(
+                File.ReadAllText(manifestPath),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+            var sourcePng = File.ReadAllBytes(Path.Combine(siteRoot, "demo.png"));
+            using var replacement = new ImageMagick.MagickImage(ImageMagick.MagickColors.Red, 2, 2);
+            var ordinaryPng = replacement.ToByteArray(ImageMagick.MagickFormat.Png);
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(ordinaryPng))
+                .Substring(0, 8)
+                .ToLowerInvariant();
+            var protectedName = $"demo.{hash}.png";
+            File.WriteAllBytes(Path.Combine(siteRoot, protectedName), sourcePng);
+            File.WriteAllBytes(Path.Combine(siteRoot, "demo.png"), ordinaryPng);
+            Assert.Single(manifest.Artifacts, artifact => artifact.Role == "completed").Path = protectedName;
+            var visualManifest = Path.Combine(siteRoot, "visual-story.json");
+            File.WriteAllText(visualManifest, JsonSerializer.Serialize(manifest));
+            File.Delete(manifestPath);
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = siteRoot,
+                HashAssets = true,
+                HashExtensions = new[] { ".png" }
+            });
+
+            Assert.Equal(0, result.HashedAssetCount);
+            Assert.Equal(ordinaryPng, File.ReadAllBytes(Path.Combine(siteRoot, "demo.png")));
+            Assert.Equal(sourcePng, File.ReadAllBytes(Path.Combine(siteRoot, protectedName)));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void OptimizeDetailed_HashedImages_RewritesSrcSetReferencesWithoutChangingDataUrls()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-hash-srcset-" + Guid.NewGuid().ToString("N"));

@@ -384,7 +384,8 @@ public static partial class WebSiteBuilder
 
     private static void CopyStaticAssets(SiteSpec spec, string rootPath, string outputRoot)
     {
-        CopyConventionalStaticAssets(rootPath, outputRoot);
+        if (!HasExplicitConventionalStaticMapping(spec, rootPath))
+            CopyConventionalStaticAssets(rootPath, outputRoot);
         if (spec.StaticAssets is null || spec.StaticAssets.Length == 0)
             return;
 
@@ -436,6 +437,34 @@ public static partial class WebSiteBuilder
             }
             CopyDirectory(sourcePath, targetRoot);
         }
+    }
+
+    private static bool HasExplicitConventionalStaticMapping(SiteSpec spec, string rootPath)
+    {
+        if (spec.StaticAssets is null || spec.StaticAssets.Length == 0)
+            return false;
+
+        var conventionalRoot = NormalizeRootPathForSink(Path.Combine(rootPath, "static"));
+        foreach (var asset in spec.StaticAssets)
+        {
+            if (string.IsNullOrWhiteSpace(asset.Source))
+                continue;
+
+            try
+            {
+                var sourcePath = Path.IsPathRooted(asset.Source)
+                    ? asset.Source
+                    : Path.Combine(rootPath, asset.Source);
+                if (NormalizeRootPathForSink(sourcePath).Equals(conventionalRoot, FileSystemPathComparison))
+                    return true;
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                Trace.TraceWarning($"Skipping invalid static asset source path: {asset.Source}");
+            }
+        }
+
+        return false;
     }
 
     private static void CopyConventionalStaticAssets(string rootPath, string outputRoot)

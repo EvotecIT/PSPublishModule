@@ -130,6 +130,37 @@ public class WebVisualStoryAnimatedArtifactTests
         }
     }
 
+    [Fact]
+    public void Stage_RejectsStaticSvgForAnimatedRole()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            File.WriteAllText(
+                Path.Combine(source, "static.svg"),
+                "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1\" height=\"1\"/></svg>");
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = ReadBundle(manifest);
+            var animated = Assert.Single(bundle.Artifacts, artifact => artifact.Role == "animated");
+            animated.Path = "static.svg";
+            WriteBundle(manifest, bundle);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     [Theory]
     [InlineData("gif", "animated.gif", MagickFormat.Gif)]
     [InlineData("apng", "animated.png", MagickFormat.APng)]

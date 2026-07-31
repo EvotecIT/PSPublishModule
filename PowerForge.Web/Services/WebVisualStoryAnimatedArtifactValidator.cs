@@ -121,8 +121,44 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                 throw new InvalidOperationException(
                     $"Visual-story animated artifact is not a valid SVG: {displayPath}");
             }
+            var sawDeclarativeAnimation = false;
+            var sawCssKeyframes = false;
+            var sawCssAnimationDeclaration = false;
+            var insideStyle = false;
             while (reader.Read())
             {
+                if (reader.NodeType is XmlNodeType.Text or XmlNodeType.CDATA && insideStyle)
+                {
+                    sawCssKeyframes |=
+                        reader.Value.IndexOf("@keyframes", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        reader.Value.IndexOf("@-webkit-keyframes", StringComparison.OrdinalIgnoreCase) >= 0;
+                    sawCssAnimationDeclaration |= ContainsCssAnimationDeclaration(reader.Value);
+                    continue;
+                }
+                if (reader.NodeType == XmlNodeType.EndElement &&
+                    string.Equals(reader.LocalName, "style", StringComparison.Ordinal) &&
+                    string.Equals(reader.NamespaceURI, SvgNamespace, StringComparison.Ordinal))
+                {
+                    insideStyle = false;
+                    continue;
+                }
+                if (reader.NodeType != XmlNodeType.Element ||
+                    !string.Equals(reader.NamespaceURI, SvgNamespace, StringComparison.Ordinal))
+                    continue;
+
+                if (IsDeclarativeAnimationElement(reader))
+                    sawDeclarativeAnimation = true;
+
+                var inlineStyle = reader.GetAttribute("style");
+                if (!string.IsNullOrWhiteSpace(inlineStyle) && ContainsCssAnimationDeclaration(inlineStyle))
+                    sawCssAnimationDeclaration = true;
+
+                insideStyle = string.Equals(reader.LocalName, "style", StringComparison.Ordinal) && !reader.IsEmptyElement;
+            }
+            if (!sawDeclarativeAnimation && !(sawCssKeyframes && sawCssAnimationDeclaration))
+            {
+                throw new InvalidOperationException(
+                    $"Visual-story animated SVG artifact does not contain a supported animation: {displayPath}");
             }
         }
         catch (XmlException ex)
@@ -132,6 +168,61 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                 ex);
         }
     }
+
+    private static bool IsDeclarativeAnimationElement(XmlReader reader)
+    {
+        switch (reader.LocalName)
+        {
+            case "set":
+                return reader.GetAttribute("attributeName") is { Length: > 0 } &&
+                       reader.GetAttribute("to") is { Length: > 0 };
+            case "animate":
+            case "animateTransform":
+                return reader.GetAttribute("attributeName") is { Length: > 0 } &&
+                       reader.GetAttribute("dur") is { Length: > 0 } &&
+                       HasAnimationValue(reader);
+            case "animateMotion":
+                return reader.GetAttribute("dur") is { Length: > 0 } &&
+                       (reader.GetAttribute("path") is { Length: > 0 } || HasAnimationValue(reader));
+            default:
+                return false;
+        }
+    }
+
+    private static bool HasAnimationValue(XmlReader reader)
+        => reader.GetAttribute("values") is { Length: > 0 } ||
+           reader.GetAttribute("to") is { Length: > 0 } ||
+           reader.GetAttribute("by") is { Length: > 0 };
+
+    private static bool ContainsCssAnimationDeclaration(string css)
+    {
+        const string property = "animation";
+        for (var searchFrom = 0; searchFrom < css.Length;)
+        {
+            var index = css.IndexOf(property, searchFrom, StringComparison.OrdinalIgnoreCase);
+            if (index < 0)
+                return false;
+
+            var beforeIsIdentifier = index > 0 && IsCssIdentifierCharacter(css[index - 1]);
+            var cursor = index + property.Length;
+            if (cursor + 5 <= css.Length &&
+                string.Equals(css.Substring(cursor, 5), "-name", StringComparison.OrdinalIgnoreCase))
+            {
+                cursor += 5;
+            }
+            while (cursor < css.Length && char.IsWhiteSpace(css[cursor]))
+                cursor++;
+            if (!beforeIsIdentifier && cursor < css.Length && css[cursor] == ':')
+                return true;
+
+            searchFrom = index + property.Length;
+        }
+
+        return false;
+    }
+
+    private static bool IsCssIdentifierCharacter(char value)
+        => char.IsLetterOrDigit(value) || value is '-' or '_';
 
     private static void ValidateApng(string path, string displayPath)
     {

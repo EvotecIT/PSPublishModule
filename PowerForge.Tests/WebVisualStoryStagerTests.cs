@@ -883,7 +883,9 @@ public class WebVisualStoryStagerTests
         var root = Path.Combine(Path.GetTempPath(), "pf-story-" + Guid.NewGuid().ToString("N"));
         var source = Path.Combine(root, "source");
         Directory.CreateDirectory(source);
-        File.WriteAllText(Path.Combine(source, "demo.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+        File.WriteAllText(
+            Path.Combine(source, "demo.svg"),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes pulse{from{opacity:.5}to{opacity:1}}rect{animation:pulse 1s infinite}</style><rect width=\"1\" height=\"1\"/></svg>");
         using (var image = new MagickImage(MagickColors.Transparent, 2, 2))
         {
             image.Write(Path.Combine(source, "demo.png"), MagickFormat.Png);

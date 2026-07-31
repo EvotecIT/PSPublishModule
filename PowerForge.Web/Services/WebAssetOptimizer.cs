@@ -807,7 +807,12 @@ public static partial class WebAssetOptimizer
             if (relative.Length <= ext.Length) continue;
             var without = relative.Substring(0, relative.Length - ext.Length);
             var hashedName = $"{without}.{hash}{ext}";
-            var target = Path.Combine(siteRoot, hashedName.Replace('/', Path.DirectorySeparatorChar));
+            var target = Path.GetFullPath(Path.Combine(siteRoot, hashedName.Replace('/', Path.DirectorySeparatorChar)));
+            if (protectedStoryArtifacts.Contains(target))
+            {
+                Trace.TraceWarning($"Hashed asset destination is protected by a visual-story manifest: {hashedName}");
+                continue;
+            }
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Move(file, target, overwrite: true);
             onUpdated?.Invoke(target);
