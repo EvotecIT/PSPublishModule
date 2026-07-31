@@ -46,7 +46,7 @@ function AddRuntimeDefaultValueTokens(
     $tokens.Add([ordered]@{ kind = 'Boolean'; text = [string]$value }) | Out-Null
     return
   }
-  if ($value.GetType().FullName -eq 'System.Management.Automation.SwitchParameter') {
+  if (TestExactRuntimeValueType $value ([System.Management.Automation.SwitchParameter])) {
     $tokens.Add([ordered]@{
       kind = 'SwitchParameter'
       text = if ($value.IsPresent) { 'True' } else { 'False' }
@@ -87,7 +87,7 @@ function AddRuntimeDefaultValueTokens(
     return
   }
   if (AddRuntimeNumericDefaultValueToken $value $tokens) { return }
-  if ($value.GetType().FullName -eq 'System.Numerics.BigInteger') {
+  if (TestExactRuntimeValueType $value ([System.Numerics.BigInteger])) {
     $tokens.Add([ordered]@{
       kind = 'BigInteger'
       text = $value.ToString([System.Globalization.CultureInfo]::InvariantCulture)
@@ -119,14 +119,14 @@ function AddRuntimeDefaultValueTokens(
     }) | Out-Null
     return
   }
-  if ($value.GetType().FullName -eq 'System.DateOnly') {
+  if (TestExactRuntimeValueType $value (GetCoreRuntimeType 'System.DateOnly')) {
     $tokens.Add([ordered]@{
       kind = 'DateOnly'
       text = $value.DayNumber.ToString([System.Globalization.CultureInfo]::InvariantCulture)
     }) | Out-Null
     return
   }
-  if ($value.GetType().FullName -eq 'System.TimeOnly') {
+  if (TestExactRuntimeValueType $value (GetCoreRuntimeType 'System.TimeOnly')) {
     $tokens.Add([ordered]@{
       kind = 'TimeOnly'
       text = $value.Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
@@ -237,7 +237,8 @@ function AddRuntimeDefaultValueTokens(
         if (-not $supportedItemOnlyList -and $collectionType.IsGenericType) {
           $genericDefinitionName = $collectionType.GetGenericTypeDefinition().FullName
           $supportedItemOnlyList = $genericDefinitionName -eq 'System.Collections.Generic.List`1' -or
-            $genericDefinitionName -eq 'System.Collections.ObjectModel.Collection`1'
+            ($genericDefinitionName -eq 'System.Collections.ObjectModel.Collection`1' -and
+              (TestCollectionHasItemOnlyBackingStore $value))
         }
         if (-not $supportedItemOnlyList) {
           throw ('Collection type carries unsupported non-item state: ' + $collectionType.FullName)
@@ -268,24 +269,24 @@ function AddRuntimeDefaultValueTokens(
       $tokens.Add([ordered]@{ kind = 'CollectionEnd' }) | Out-Null
       return
   }
-  $runtimeTypeName = $value.GetType().FullName
+  $runtimeType = $value.GetType()
   if (@(
-      'System.SByte',
-      'System.Byte',
-      'System.Int16',
-      'System.UInt16',
-      'System.Int32',
-      'System.UInt32',
-      'System.Int64',
-      'System.UInt64',
-      'System.IntPtr',
-      'System.UIntPtr') -contains $runtimeTypeName) {
-    if ($runtimeTypeName -eq 'System.IntPtr') {
+      [sbyte],
+      [byte],
+      [int16],
+      [uint16],
+      [int32],
+      [uint32],
+      [int64],
+      [uint64],
+      [intptr],
+      [uintptr]) -contains $runtimeType) {
+    if ($runtimeType -eq [intptr]) {
       $pointerValue = $value.ToInt64()
       if ($pointerValue -lt [int]::MinValue -or $pointerValue -gt [int]::MaxValue) {
         throw 'IntPtr defaults outside the 32-bit range are not portable.'
       }
-    } elseif ($runtimeTypeName -eq 'System.UIntPtr') {
+    } elseif ($runtimeType -eq [uintptr]) {
       $pointerValue = $value.ToUInt64()
       if ($pointerValue -gt [uint32]::MaxValue) {
         throw 'UIntPtr defaults outside the 32-bit range are not portable.'
@@ -298,7 +299,7 @@ function AddRuntimeDefaultValueTokens(
     }) | Out-Null
     return
   }
-  throw ('Unsupported PSDefaultValue runtime type: ' + $runtimeTypeName)
+  throw ('Unsupported PSDefaultValue runtime type: ' + $runtimeType.FullName)
 }
 
 try {

@@ -21,6 +21,34 @@ function ConvertRuntimeTypeTextToBase64([string]$text) {
   return [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($text))
 }
 
+function TestExactRuntimeValueType([object]$value, [object]$expectedType) {
+  return $null -ne $value -and
+    $null -ne $expectedType -and
+    [object]::ReferenceEquals($value.GetType(), $expectedType)
+}
+
+function GetCoreRuntimeType([string]$fullName) {
+  return [datetime].Assembly.GetType($fullName, $false, $false)
+}
+
+function TestCollectionHasItemOnlyBackingStore([object]$value) {
+  $collectionType = $value.GetType()
+  if (-not $collectionType.IsGenericType -or
+      $collectionType.GetGenericTypeDefinition() -ne [System.Collections.ObjectModel.Collection``1]) {
+    return $true
+  }
+  $itemsProperty = $collectionType.GetProperty(
+    'Items',
+    [System.Reflection.BindingFlags]'Instance,NonPublic')
+  if ($null -eq $itemsProperty) { return $false }
+  $backingStore = $null
+  try { $backingStore = $itemsProperty.GetValue($value, $null) } catch { return $false }
+  if ($null -eq $backingStore) { return $false }
+  $expectedType = [System.Collections.Generic.List``1].MakeGenericType(
+    $collectionType.GetGenericArguments()[0])
+  return $backingStore.GetType() -eq $expectedType
+}
+
 function AddRuntimeTypeShapeTokens([type]$type, [System.Collections.IList]$tokens) {
   if ($type.IsGenericParameter) { throw 'Generic-parameter runtime type shapes are not supported.' }
   if (TestPowerShellTypeLiteral $type) {
