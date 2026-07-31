@@ -118,6 +118,14 @@ function ConvertToPowerShellDefaultValue([object]$value) {
     $versionText = $value.ToString().Replace("'", "''")
     return ("[System.Version]::Parse('" + $versionText + "')")
   }
+  if ($value.GetType().FullName -eq 'System.DateOnly') {
+    $dayNumber = $value.DayNumber.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    return ('[System.DateOnly]::FromDayNumber(([int]' + $dayNumber + '))')
+  }
+  if ($value.GetType().FullName -eq 'System.TimeOnly') {
+    $ticks = $value.Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    return ('[System.TimeOnly]::new(([long]' + $ticks + '))')
+  }
   if ($value -is [datetime]) {
     $ticks = $value.Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
     return ('[System.DateTime]::new(([long]' + $ticks + '), [System.DateTimeKind]::' + $value.Kind + ')')

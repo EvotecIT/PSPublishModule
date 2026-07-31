@@ -51,6 +51,18 @@ function Get-DefaultLiteralFixture {
         $versionAttributes.Add($versionDefault)
         $parameters.Add('Version', [System.Management.Automation.RuntimeDefinedParameter]::new('Version', [version], $versionAttributes))
 
+        $dateOnlyAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $dateOnlyDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $dateOnlyDefault.Value = [System.DateOnly]::FromDayNumber(739827)
+        $dateOnlyAttributes.Add($dateOnlyDefault)
+        $parameters.Add('DateOnly', [System.Management.Automation.RuntimeDefinedParameter]::new('DateOnly', [System.DateOnly], $dateOnlyAttributes))
+
+        $timeOnlyAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $timeOnlyDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $timeOnlyDefault.Value = [System.TimeOnly]::new(([long]452961234567))
+        $timeOnlyAttributes.Add($timeOnlyDefault)
+        $parameters.Add('TimeOnly', [System.Management.Automation.RuntimeDefinedParameter]::new('TimeOnly', [System.TimeOnly], $timeOnlyAttributes))
+
         $dateTimeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $dateTimeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $dateTimeDefault.Value = [datetime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)
@@ -106,6 +118,12 @@ function Get-DefaultLiteralFixture {
             Assert.Equal(
                 "[System.Version]::Parse('1.2.3.4')",
                 Default("Version"));
+            Assert.Equal(
+                "[System.DateOnly]::FromDayNumber(([int]739827))",
+                Default("DateOnly"));
+            Assert.Equal(
+                "[System.TimeOnly]::new(([long]452961234567))",
+                Default("TimeOnly"));
             Assert.Equal(
                 "[System.DateTime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)",
                 Default("DateTime"));
