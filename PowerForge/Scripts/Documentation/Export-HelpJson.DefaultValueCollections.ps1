@@ -12,11 +12,16 @@ function ConvertMultidimensionalArrayToPowerShellDefaultValue(
     $lowerBounds.Add($indices[$dimension].ToString([System.Globalization.CultureInfo]::InvariantCulture))
   }
 
-  $elementTypeName = GetCanonicalTypeNameFromType ($value.GetType().GetElementType())
+  $elementType = $value.GetType().GetElementType()
+  $elementTypeName = GetCanonicalTypeNameFromType $elementType
+  $elementTypeExpression = GetPowerShellTypeDefaultExpression $elementType
+  if (-not (TestPowerShellTypeLiteralName $elementTypeName)) {
+    $elementTypeExpression = '(' + $elementTypeExpression + ')'
+  }
   $statements = [System.Collections.Generic.List[string]]::new()
   $statements.Add(
-    '$array = [System.Array]::CreateInstance([' + $elementTypeName +
-    '], [int[]]@(' + ($lengths -join ', ') + '), [int[]]@(' + ($lowerBounds -join ', ') + '))')
+    '$array = [System.Array]::CreateInstance(' + $elementTypeExpression +
+    ', [int[]]@(' + ($lengths -join ', ') + '), [int[]]@(' + ($lowerBounds -join ', ') + '))')
   for ($position = 0; $position -lt $value.Length; $position++) {
     $indexText = ($indices | ForEach-Object {
       $_.ToString([System.Globalization.CultureInfo]::InvariantCulture)
@@ -57,6 +62,15 @@ function ConvertCollectionItemsToPowerShellDefaultValue(
   $collectionType = $value.GetType()
   $collectionTypeName = GetCanonicalTypeNameFromType $collectionType
   if ($value -isnot [System.Array]) {
+    $supportedItemOnlyList = $collectionType -eq [System.Collections.ArrayList]
+    if (-not $supportedItemOnlyList -and $collectionType.IsGenericType) {
+      $genericDefinitionName = $collectionType.GetGenericTypeDefinition().FullName
+      $supportedItemOnlyList = $genericDefinitionName -eq 'System.Collections.Generic.List`1' -or
+        $genericDefinitionName -eq 'System.Collections.ObjectModel.Collection`1'
+    }
+    if (-not $supportedItemOnlyList) {
+      throw ('Collection type carries unsupported non-item state: ' + $collectionType.FullName)
+    }
     $constructor = $collectionType.GetConstructor([System.Type]::EmptyTypes)
     if ($collectionType.IsAbstract -or $collectionType.IsInterface -or $null -eq $constructor) {
       throw ('Collection type has no supported constructor: ' + $collectionType.FullName)
@@ -64,7 +78,13 @@ function ConvertCollectionItemsToPowerShellDefaultValue(
   }
   $statements = [System.Collections.Generic.List[string]]::new()
   if ($value -is [System.Array]) {
-    $statements.Add('$collection = [' + $collectionTypeName + ']::new(' + $items.Count + ')')
+    $elementTypeName = GetCanonicalTypeNameFromType ($collectionType.GetElementType())
+    if (TestPowerShellTypeLiteralName $elementTypeName) {
+      $statements.Add('$collection = [' + $collectionTypeName + ']::new(' + $items.Count + ')')
+    } else {
+      $elementTypeExpression = GetPowerShellTypeDefaultExpression ($collectionType.GetElementType())
+      $statements.Add('$collection = [System.Array]::CreateInstance((' + $elementTypeExpression + '), ' + $items.Count + ')')
+    }
     for ($index = 0; $index -lt $items.Count; $index++) {
       $statements.Add('$collection.SetValue((' + $items[$index] + '), ' + $index + ')')
     }

@@ -56,6 +56,12 @@ function Get-DefaultLiteralFixture {
         $negativeDoubleAttributes.Add($negativeDoubleDefault)
         $parameters.Add('NegativeDouble', [System.Management.Automation.RuntimeDefinedParameter]::new('NegativeDouble', [double], $negativeDoubleAttributes))
 
+        $payloadDoubleAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $payloadDoubleDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $payloadDoubleDefault.Value = [System.BitConverter]::Int64BitsToDouble(([long]0x7ff8000000001234))
+        $payloadDoubleAttributes.Add($payloadDoubleDefault)
+        $parameters.Add('PayloadDoubleNaN', [System.Management.Automation.RuntimeDefinedParameter]::new('PayloadDoubleNaN', [double], $payloadDoubleAttributes))
+
         $integralDoubleAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $integralDoubleDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $integralDoubleDefault.Value = [double]1
@@ -68,11 +74,23 @@ function Get-DefaultLiteralFixture {
         $negativeSingleAttributes.Add($negativeSingleDefault)
         $parameters.Add('NegativeSingle', [System.Management.Automation.RuntimeDefinedParameter]::new('NegativeSingle', [single], $negativeSingleAttributes))
 
+        $payloadSingleAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $payloadSingleDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $payloadSingleDefault.Value = [System.BitConverter]::ToSingle([System.BitConverter]::GetBytes(([int]0x7fc01234)), 0)
+        $payloadSingleAttributes.Add($payloadSingleDefault)
+        $parameters.Add('PayloadSingleNaN', [System.Management.Automation.RuntimeDefinedParameter]::new('PayloadSingleNaN', [single], $payloadSingleAttributes))
+
         $decimalAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $decimalDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $decimalDefault.Value = [decimal]::Parse('0.1234567890123456789012345678', [System.Globalization.CultureInfo]::InvariantCulture)
         $decimalAttributes.Add($decimalDefault)
         $parameters.Add('PreciseDecimal', [System.Management.Automation.RuntimeDefinedParameter]::new('PreciseDecimal', [decimal], $decimalAttributes))
+
+        $negativeDecimalAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $negativeDecimalDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $negativeDecimalDefault.Value = [decimal]::new(0, 0, 0, $true, ([byte]4))
+        $negativeDecimalAttributes.Add($negativeDecimalDefault)
+        $parameters.Add('NegativeDecimal', [System.Management.Automation.RuntimeDefinedParameter]::new('NegativeDecimal', [decimal], $negativeDecimalAttributes))
 
         $bigIntegerAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $bigIntegerDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -212,11 +230,33 @@ function Get-DefaultLiteralFixture {
         $stackAttributes.Add($stackDefault)
         $parameters.Add('Stack', [System.Management.Automation.RuntimeDefinedParameter]::new('Stack', [System.Collections.Generic.Stack[int]], $stackAttributes))
 
+        $statefulListAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $statefulListDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $statefulList = [System.ComponentModel.BindingList[int]]::new()
+        $statefulList.Add(1)
+        $statefulList.RaiseListChangedEvents = $false
+        $statefulList.AllowEdit = $false
+        $statefulListDefault.Value = $statefulList
+        $statefulListAttributes.Add($statefulListDefault)
+        $parameters.Add('StatefulList', [System.Management.Automation.RuntimeDefinedParameter]::new('StatefulList', [System.ComponentModel.BindingList[int]], $statefulListAttributes))
+
         $unsafeTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $unsafeTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $unsafeTypeDefault.Value = $script:unsafeDefaultType
         $unsafeTypeAttributes.Add($unsafeTypeDefault)
         $parameters.Add('UnsafeType', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafeType', [type], $unsafeTypeAttributes))
+
+        $unsafePointerAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $unsafePointerDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $unsafePointerDefault.Value = $script:unsafeDefaultType.MakePointerType()
+        $unsafePointerAttributes.Add($unsafePointerDefault)
+        $parameters.Add('UnsafePointerType', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafePointerType', [type], $unsafePointerAttributes))
+
+        $unsafeArrayAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $unsafeArrayDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $unsafeArrayDefault.Value = [System.Array]::CreateInstance($script:unsafeDefaultType, 1)
+        $unsafeArrayAttributes.Add($unsafeArrayDefault)
+        $parameters.Add('UnsafeArray', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafeArray', $script:unsafeDefaultType.MakeArrayType(), $unsafeArrayAttributes))
 
         $unsafeEnumAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $unsafeEnumDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -352,11 +392,20 @@ function Get-DefaultLiteralFixture {
             var command = Assert.Single(payload.Commands);
 
             Assert.Equal("([double]-0.0)", Default("NegativeDouble"));
+            Assert.Equal(
+                "[System.BitConverter]::Int64BitsToDouble(([long]9221120237041095220))",
+                Default("PayloadDoubleNaN"));
             Assert.Equal("([double]1)", Default("IntegralDouble"));
             Assert.Equal("([single]-0.0)", Default("NegativeSingle"));
             Assert.Equal(
-                "[System.Decimal]::Parse('0.1234567890123456789012345678', [System.Globalization.CultureInfo]::InvariantCulture)",
+                "[System.BitConverter]::ToSingle([System.BitConverter]::GetBytes(([int]2143294004)), 0)",
+                Default("PayloadSingleNaN"));
+            Assert.Equal(
+                "[System.Decimal]::new(([int]-1103563954), ([int]1836677777), ([int]66926059), $false, ([byte]28))",
                 Default("PreciseDecimal"));
+            Assert.Equal(
+                "[System.Decimal]::new(([int]0), ([int]0), ([int]0), $true, ([byte]4))",
+                Default("NegativeDecimal"));
             Assert.Equal(
                 "[System.Numerics.BigInteger]::Parse('1234567890123456789012345678901234567890', [System.Globalization.CultureInfo]::InvariantCulture)",
                 Default("BigInteger"));
@@ -402,9 +451,19 @@ function Get-DefaultLiteralFixture {
                 "& { $collection = [System.Object[]]::new(1); $collection.SetValue((& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }), 0); return ,$collection }",
                 Default("NestedMatrix"));
             Assert.True(string.IsNullOrEmpty(Default("Stack")));
+            Assert.True(string.IsNullOrEmpty(Default("StatefulList")));
             Assert.StartsWith(
                 "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
                 Default("UnsafeType"),
+                StringComparison.Ordinal);
+            Assert.StartsWith(
+                "(& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
+                Default("UnsafePointerType"),
+                StringComparison.Ordinal);
+            Assert.Contains(").MakePointerType()", Default("UnsafePointerType"), StringComparison.Ordinal);
+            Assert.StartsWith(
+                "& { $collection = [System.Array]::CreateInstance((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
+                Default("UnsafeArray"),
                 StringComparison.Ordinal);
             Assert.StartsWith(
                 "[System.Enum]::ToObject((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",

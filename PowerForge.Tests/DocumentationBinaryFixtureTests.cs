@@ -406,10 +406,10 @@ public sealed class DocumentationBinaryFixtureTests
                 "first\nsecond 😀",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "MultilineHelp", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
-                "(-join @('first', ([char]10), '```', ([char]10), 'last'))",
+                "first\n```\nlast",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "FenceText", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
-                "[double]::NaN",
+                "[System.BitConverter]::Int64BitsToDouble(([long]-2251799813685248))",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "NotANumber", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
                 "& { $collection = [System.Single[]]::new(2); $collection.SetValue(([single]::PositiveInfinity), 0); $collection.SetValue(([single]::NegativeInfinity), 1); return ,$collection }",
@@ -516,7 +516,7 @@ public sealed class DocumentationBinaryFixtureTests
                 generatedMaml,
                 StringComparison.Ordinal);
             Assert.Contains(
-                "<dev:defaultValue>[double]::NaN</dev:defaultValue>",
+                "<dev:defaultValue>[System.BitConverter]::Int64BitsToDouble(([long]-2251799813685248))</dev:defaultValue>",
                 generatedMaml,
                 StringComparison.Ordinal);
             Assert.Contains(
@@ -528,8 +528,12 @@ public sealed class DocumentationBinaryFixtureTests
                 generatedMaml,
                 StringComparison.Ordinal);
             Assert.Contains(
-                "Default value: (-join @('first', ([char]10), '```', ([char]10), 'last'))",
-                File.ReadAllText(Path.Combine(markdownDirectory, "Get-BinaryDocEmptyDefault.md")),
+                "````yaml\nType: String",
+                File.ReadAllText(Path.Combine(markdownDirectory, "Get-BinaryDocEmptyDefault.md")).ReplaceLineEndings("\n"),
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "Default value: first\n```\nlast\nAccept pipeline input:",
+                File.ReadAllText(Path.Combine(markdownDirectory, "Get-BinaryDocEmptyDefault.md")).ReplaceLineEndings("\n"),
                 StringComparison.Ordinal);
             Assert.Contains(
                 "An authored binary output description.",

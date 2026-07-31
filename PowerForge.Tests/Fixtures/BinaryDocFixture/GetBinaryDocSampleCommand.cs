@@ -148,8 +148,8 @@ public sealed class GetBinaryDocEmptyDefaultCommand : PSCmdlet
 
     /// <summary>An optional multiline value containing a Markdown fence line.</summary>
     [Parameter]
-    [PSDefaultValue(Value = "first\n```\nlast")]
-    public string FenceText { get; set; } = "first\n```\nlast";
+    [PSDefaultValue(Value = "unused", Help = "first\n```\nlast")]
+    public string FenceText { get; set; } = "unused";
 
     /// <summary>An optional non-finite double value.</summary>
     [Parameter]

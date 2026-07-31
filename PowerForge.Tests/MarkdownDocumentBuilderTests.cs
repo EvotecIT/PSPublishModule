@@ -62,4 +62,17 @@ public class MarkdownDocumentBuilderTests
             .ReplaceLineEndings(Environment.NewLine) + Environment.NewLine,
             markdown);
     }
+
+    [Fact]
+    public void CodeFence_UsesDelimiterLongerThanEmbeddedBackticks()
+    {
+        var document = new MarkdownDocumentBuilder();
+        document.CodeFence("yaml", "Default value: first\n```\nlast");
+
+        var markdown = document.ToString();
+
+        Assert.Equal(
+            "````yaml\nDefault value: first\n```\nlast\n````\n".ReplaceLineEndings(Environment.NewLine),
+            markdown);
+    }
 }

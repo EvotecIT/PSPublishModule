@@ -103,7 +103,11 @@ function ConvertToPowerShellDefaultValue(
     return GetPowerShellTypeDefaultExpression $value
   }
   if ($value -is [double]) {
-    if ([double]::IsNaN($value)) { return '[double]::NaN' }
+    if ([double]::IsNaN($value)) {
+      $bits = [System.BitConverter]::DoubleToInt64Bits($value)
+      return ('[System.BitConverter]::Int64BitsToDouble(([long]' +
+        $bits.ToString([System.Globalization.CultureInfo]::InvariantCulture) + '))')
+    }
     if ([double]::IsPositiveInfinity($value)) { return '[double]::PositiveInfinity' }
     if ([double]::IsNegativeInfinity($value)) { return '[double]::NegativeInfinity' }
     if ($value -eq 0) {
@@ -113,7 +117,11 @@ function ConvertToPowerShellDefaultValue(
     return ('([double]' + $value.ToString('G17', [System.Globalization.CultureInfo]::InvariantCulture) + ')')
   }
   if ($value -is [single]) {
-    if ([single]::IsNaN($value)) { return '[single]::NaN' }
+    if ([single]::IsNaN($value)) {
+      $bits = [System.BitConverter]::ToInt32([System.BitConverter]::GetBytes([single]$value), 0)
+      return ('[System.BitConverter]::ToSingle([System.BitConverter]::GetBytes(([int]' +
+        $bits.ToString([System.Globalization.CultureInfo]::InvariantCulture) + ')), 0)')
+    }
     if ([single]::IsPositiveInfinity($value)) { return '[single]::PositiveInfinity' }
     if ([single]::IsNegativeInfinity($value)) { return '[single]::NegativeInfinity' }
     if ($value -eq 0) {
@@ -124,8 +132,13 @@ function ConvertToPowerShellDefaultValue(
     return ('([single]' + $value.ToString('G9', [System.Globalization.CultureInfo]::InvariantCulture) + ')')
   }
   if ($value -is [decimal]) {
-    $decimalText = $value.ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    return ("[System.Decimal]::Parse('" + $decimalText + "', [System.Globalization.CultureInfo]::InvariantCulture)")
+    $bits = [System.Decimal]::GetBits($value)
+    $isNegative = if ($bits[3] -lt 0) { '$true' } else { '$false' }
+    $scale = (($bits[3] -shr 16) -band 0xFF)
+    return ('[System.Decimal]::new(([int]' + $bits[0].ToString([System.Globalization.CultureInfo]::InvariantCulture) +
+      '), ([int]' + $bits[1].ToString([System.Globalization.CultureInfo]::InvariantCulture) +
+      '), ([int]' + $bits[2].ToString([System.Globalization.CultureInfo]::InvariantCulture) +
+      '), ' + $isNegative + ', ([byte]' + $scale.ToString([System.Globalization.CultureInfo]::InvariantCulture) + '))')
   }
   if ($value.GetType().FullName -eq 'System.Numerics.BigInteger') {
     $integerText = $value.ToString([System.Globalization.CultureInfo]::InvariantCulture)

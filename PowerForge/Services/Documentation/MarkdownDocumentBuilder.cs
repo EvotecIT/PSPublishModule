@@ -85,12 +85,13 @@ internal sealed class MarkdownDocumentBuilder
 
     public void CodeFence(string infoString, string content)
     {
-        _body.Append("```");
-        _body.AppendLine(infoString?.Trim() ?? string.Empty);
         var normalized = NormalizeCodeFence(content);
+        var fence = new string('`', Math.Max(3, LongestBacktickRun(normalized) + 1));
+        _body.Append(fence);
+        _body.AppendLine(infoString?.Trim() ?? string.Empty);
         if (!string.IsNullOrWhiteSpace(normalized))
             _body.AppendLine(normalized);
-        _body.AppendLine("```");
+        _body.AppendLine(fence);
         _body.AppendLine();
     }
 
@@ -125,4 +126,23 @@ internal sealed class MarkdownDocumentBuilder
 
     private static string NormalizeCodeFence(string text)
         => (text ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').TrimEnd().Replace("\n", Environment.NewLine);
+
+    private static int LongestBacktickRun(string text)
+    {
+        var longest = 0;
+        var current = 0;
+        foreach (var character in text)
+        {
+            if (character == '`')
+            {
+                current++;
+                longest = Math.Max(longest, current);
+            }
+            else
+            {
+                current = 0;
+            }
+        }
+        return longest;
+    }
 }

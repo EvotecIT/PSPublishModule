@@ -189,15 +189,27 @@ function GetPowerShellTypeDefaultExpression([type]$type) {
     throw 'Generic-parameter Type defaults are not supported.'
   }
   if ($type.IsPointer) {
-    return ((GetPowerShellTypeDefaultExpression ($type.GetElementType())) + '.MakePointerType()')
+    $elementExpression = GetPowerShellTypeDefaultExpression ($type.GetElementType())
+    if ($elementExpression.StartsWith('& {', [System.StringComparison]::Ordinal)) {
+      $elementExpression = '(' + $elementExpression + ')'
+    }
+    return ($elementExpression + '.MakePointerType()')
   }
   if ($type.IsByRef) {
-    return ((GetPowerShellTypeDefaultExpression ($type.GetElementType())) + '.MakeByRefType()')
+    $elementExpression = GetPowerShellTypeDefaultExpression ($type.GetElementType())
+    if ($elementExpression.StartsWith('& {', [System.StringComparison]::Ordinal)) {
+      $elementExpression = '(' + $elementExpression + ')'
+    }
+    return ($elementExpression + '.MakeByRefType()')
   }
   if ($type.IsArray -and
       $type.GetArrayRank() -eq 1 -and
       $type -ne $type.GetElementType().MakeArrayType()) {
-    return ((GetPowerShellTypeDefaultExpression ($type.GetElementType())) + '.MakeArrayType(1)')
+    $elementExpression = GetPowerShellTypeDefaultExpression ($type.GetElementType())
+    if ($elementExpression.StartsWith('& {', [System.StringComparison]::Ordinal)) {
+      $elementExpression = '(' + $elementExpression + ')'
+    }
+    return ($elementExpression + '.MakeArrayType(1)')
   }
   $canonicalTypeName = GetCanonicalTypeNameFromType $type
   if (TestPowerShellTypeLiteralName $canonicalTypeName) {
