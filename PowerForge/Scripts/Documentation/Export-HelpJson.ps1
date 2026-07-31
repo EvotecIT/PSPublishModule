@@ -66,6 +66,13 @@ function AddRuntimeDefaultValueTokens(
     $tokens.Add([ordered]@{ kind = 'Boolean'; text = [string]$value }) | Out-Null
     return
   }
+  if ($value.GetType().FullName -eq 'System.Management.Automation.SwitchParameter') {
+    $tokens.Add([ordered]@{
+      kind = 'SwitchParameter'
+      text = if ($value.IsPresent) { 'True' } else { 'False' }
+    }) | Out-Null
+    return
+  }
   if ($value -is [enum]) {
     $enumType = $value.GetType()
     $underlyingType = [System.Enum]::GetUnderlyingType($enumType)
@@ -211,7 +218,8 @@ function AddRuntimeDefaultValueTokens(
         $tokens.Add([ordered]@{ kind = 'DictionaryEnd' }) | Out-Null
         return
       }
-      if ($value -is [System.Array] -and $value.Rank -gt 1) {
+      if ($value -is [System.Array] -and
+          ($value.Rank -gt 1 -or $value.GetType() -ne $value.GetType().GetElementType().MakeArrayType())) {
         $lengths = [System.Collections.Generic.List[string]]::new()
         $lowerBounds = [System.Collections.Generic.List[string]]::new()
         for ($dimension = 0; $dimension -lt $value.Rank; $dimension++) {

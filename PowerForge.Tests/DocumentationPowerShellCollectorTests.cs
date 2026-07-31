@@ -133,6 +133,24 @@ function Get-CollectorFixture {
         $bigIntegerAttributes.Add($bigIntegerDefault)
         $parameters.Add('BigInteger', [System.Management.Automation.RuntimeDefinedParameter]::new('BigInteger', [System.Numerics.BigInteger], $bigIntegerAttributes))
 
+        $switchAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $switchDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $switchDefault.Value = [System.Management.Automation.SwitchParameter]::new($true)
+        $switchAttributes.Add($switchDefault)
+        $parameters.Add('SwitchValue', [System.Management.Automation.RuntimeDefinedParameter]::new('SwitchValue', [System.Management.Automation.SwitchParameter], $switchAttributes))
+
+        $pointerTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $pointerTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $pointerTypeDefault.Value = [int].MakePointerType()
+        $pointerTypeAttributes.Add($pointerTypeDefault)
+        $parameters.Add('PointerType', [System.Management.Automation.RuntimeDefinedParameter]::new('PointerType', [type], $pointerTypeAttributes))
+
+        $byRefTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $byRefTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $byRefTypeDefault.Value = [int].MakeByRefType()
+        $byRefTypeAttributes.Add($byRefTypeDefault)
+        $parameters.Add('ByRefType', [System.Management.Automation.RuntimeDefinedParameter]::new('ByRefType', [type], $byRefTypeAttributes))
+
         $uriAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $uriDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $uriDefault.Value = [uri]::new("https://example.com/a'b?x=1")
@@ -166,6 +184,23 @@ function Get-CollectorFixture {
         $matrixDefault.Value = $matrix
         $matrixAttributes.Add($matrixDefault)
         $parameters.Add('Matrix', [System.Management.Automation.RuntimeDefinedParameter]::new('Matrix', [int[,]], $matrixAttributes))
+
+        $boundedArrayAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $boundedArrayDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $boundedArray = [System.Array]::CreateInstance([int], [int[]]@(2), [int[]]@(5))
+        $boundedArray.SetValue(7, 5)
+        $boundedArray.SetValue(8, 6)
+        $boundedArrayDefault.Value = $boundedArray
+        $boundedArrayAttributes.Add($boundedArrayDefault)
+        $parameters.Add('BoundedArray', [System.Management.Automation.RuntimeDefinedParameter]::new('BoundedArray', [System.Array], $boundedArrayAttributes))
+
+        $nestedCollectionAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $nestedCollectionDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $nestedCollection = [object[]]::new(1)
+        $nestedCollection[0] = [int[]](1, 2)
+        $nestedCollectionDefault.Value = $nestedCollection
+        $nestedCollectionAttributes.Add($nestedCollectionDefault)
+        $parameters.Add('NestedCollection', [System.Management.Automation.RuntimeDefinedParameter]::new('NestedCollection', [object[]], $nestedCollectionAttributes))
 
         $dateOnlyType = 'System.DateOnly' -as [type]
         if ($dateOnlyType) {
@@ -281,12 +316,17 @@ function Get-AcceleratedOutput {
                 var guid = Assert.Single(command.Parameters, parameter => parameter.Name == "Guid");
                 var version = Assert.Single(command.Parameters, parameter => parameter.Name == "Version");
                 var bigInteger = Assert.Single(command.Parameters, parameter => parameter.Name == "BigInteger");
+                var switchValue = Assert.Single(command.Parameters, parameter => parameter.Name == "SwitchValue");
+                var pointerType = Assert.Single(command.Parameters, parameter => parameter.Name == "PointerType");
+                var byRefType = Assert.Single(command.Parameters, parameter => parameter.Name == "ByRefType");
                 var uri = Assert.Single(command.Parameters, parameter => parameter.Name == "Uri");
                 var dictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "Dictionary");
                 var cyclicCollection = Assert.Single(
                     command.Parameters,
                     parameter => parameter.Name == "CyclicCollection");
                 var matrix = Assert.Single(command.Parameters, parameter => parameter.Name == "Matrix");
+                var boundedArray = Assert.Single(command.Parameters, parameter => parameter.Name == "BoundedArray");
+                var nestedCollection = Assert.Single(command.Parameters, parameter => parameter.Name == "NestedCollection");
                 var dateOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "DateOnly");
                 var timeOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "TimeOnly");
                 var dateTime = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTime");
@@ -314,6 +354,11 @@ function Get-AcceleratedOutput {
                     "[System.Numerics.BigInteger]::Parse('1234567890123456789012345678901234567890', [System.Globalization.CultureInfo]::InvariantCulture)",
                     bigInteger.DefaultValue);
                 Assert.Equal(
+                    "[System.Management.Automation.SwitchParameter]::new($true)",
+                    switchValue.DefaultValue);
+                Assert.Equal("[System.Int32].MakePointerType()", pointerType.DefaultValue);
+                Assert.Equal("[System.Int32].MakeByRefType()", byRefType.DefaultValue);
+                Assert.Equal(
                     "[System.Uri]::new('https://example.com/a''b?x=1', [System.UriKind]::Absolute)",
                     uri.DefaultValue);
                 Assert.Equal(
@@ -323,6 +368,12 @@ function Get-AcceleratedOutput {
                 Assert.Equal(
                     "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue(1, [int[]]@(0, 0)); $array.SetValue(2, [int[]]@(0, 1)); $array.SetValue(3, [int[]]@(1, 0)); $array.SetValue(4, [int[]]@(1, 1)); Write-Output -NoEnumerate $array }",
                     matrix.DefaultValue);
+                Assert.Equal(
+                    "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2), [int[]]@(5)); $array.SetValue(7, [int[]]@(5)); $array.SetValue(8, [int[]]@(6)); Write-Output -NoEnumerate $array }",
+                    boundedArray.DefaultValue);
+                Assert.Equal(
+                    "& { $array = [object[]]::new(1); $array.SetValue(@(1, 2), 0); Write-Output -NoEnumerate $array }",
+                    nestedCollection.DefaultValue);
                 if (host.Contains("pwsh", StringComparison.OrdinalIgnoreCase))
                 {
                     Assert.NotNull(dateOnly);
@@ -364,9 +415,11 @@ function Get-AcceleratedOutput {
 
     private static string NestedExpression(int depth, string value)
     {
-        var result = value;
-        for (var index = 0; index < depth; index++)
-            result = "@(" + result + ")";
+        if (depth <= 0) return value;
+        var result = "@(" + value + ")";
+        for (var index = 1; index < depth; index++)
+            result = "& { $array = [object[]]::new(1); $array.SetValue(" + result +
+                     ", 0); Write-Output -NoEnumerate $array }";
         return result;
     }
 

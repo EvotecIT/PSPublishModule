@@ -14,6 +14,13 @@ public sealed class DocumentationMetadataNormalizerTests
             Kind = "Boolean",
             Text = "True"
         }));
+        Assert.Equal(
+            "[System.Management.Automation.SwitchParameter]::new($true)",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "SwitchParameter",
+                Text = "True"
+            }));
         Assert.Equal("[Example.Mode]::Advanced", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
         {
             Kind = "Enum",
@@ -44,6 +51,20 @@ public sealed class DocumentationMetadataNormalizerTests
             Kind = "Type",
             CanonicalTypeName = "System.String"
         }));
+        Assert.Equal(
+            "[System.Int32].MakePointerType()",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "Type",
+                CanonicalTypeName = "System.Int32*"
+            }));
+        Assert.Equal(
+            "[System.Int32].MakeByRefType()",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "Type",
+                CanonicalTypeName = "System.Int32&"
+            }));
         Assert.Equal("-0.0", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
         {
             Kind = "Double",
@@ -228,6 +249,42 @@ public sealed class DocumentationMetadataNormalizerTests
         Assert.Equal(
             "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue(1, [int[]]@(0, 0)); $array.SetValue(2, [int[]]@(0, 1)); $array.SetValue(3, [int[]]@(1, 0)); $array.SetValue(4, [int[]]@(1, 1)); Write-Output -NoEnumerate $array }",
             array);
+
+        var boundedArray = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+        {
+            Tokens =
+            [
+                new DocumentationRuntimeValue
+                {
+                    Kind = "ArrayStart",
+                    CanonicalTypeName = "System.Int32",
+                    Text = "2",
+                    Name = "5"
+                },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "7" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "8" },
+                new DocumentationRuntimeValue { Kind = "ArrayEnd" }
+            ]
+        });
+        Assert.Equal(
+            "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2), [int[]]@(5)); $array.SetValue(7, [int[]]@(5)); $array.SetValue(8, [int[]]@(6)); Write-Output -NoEnumerate $array }",
+            boundedArray);
+
+        var nestedCollection = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+        {
+            Tokens =
+            [
+                new DocumentationRuntimeValue { Kind = "CollectionStart" },
+                new DocumentationRuntimeValue { Kind = "CollectionStart" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "1" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "2" },
+                new DocumentationRuntimeValue { Kind = "CollectionEnd" },
+                new DocumentationRuntimeValue { Kind = "CollectionEnd" }
+            ]
+        });
+        Assert.Equal(
+            "& { $array = [object[]]::new(1); $array.SetValue(@(1, 2), 0); Write-Output -NoEnumerate $array }",
+            nestedCollection);
     }
 
     [Fact]
@@ -403,9 +460,11 @@ public sealed class DocumentationMetadataNormalizerTests
 
     private static string NestedExpression(int depth, string value)
     {
-        var result = value;
-        for (var index = 0; index < depth; index++)
-            result = "@(" + result + ")";
+        if (depth <= 0) return value;
+        var result = "@(" + value + ")";
+        for (var index = 1; index < depth; index++)
+            result = "& { $array = [object[]]::new(1); $array.SetValue(" + result +
+                     ", 0); Write-Output -NoEnumerate $array }";
         return result;
     }
 }

@@ -38,12 +38,15 @@ internal static class PowerShellDefaultValueFormatter
                 return string.Equals(value.Text, "True", StringComparison.OrdinalIgnoreCase)
                     ? "$true"
                     : "$false";
+            case "switchparameter":
+                return "[System.Management.Automation.SwitchParameter]::new(" +
+                       (string.Equals(value.Text, "True", StringComparison.OrdinalIgnoreCase) ? "$true" : "$false") + ")";
             case "enum":
                 return FormatEnum(value);
             case "type":
                 return string.IsNullOrWhiteSpace(value.CanonicalTypeName)
                     ? string.Empty
-                    : "[" + value.CanonicalTypeName!.Trim() + "]";
+                    : FormatTypeExpression(value.CanonicalTypeName!.Trim());
             case "double":
                 return FormatFloatingPoint(value.Text, "double");
             case "single":
@@ -157,6 +160,17 @@ internal static class PowerShellDefaultValueFormatter
                ", [System.UriKind]::" + uriKind + ")";
     }
 
+    private static string FormatTypeExpression(string canonicalTypeName)
+    {
+        if (canonicalTypeName.EndsWith("*", StringComparison.Ordinal))
+            return FormatTypeExpression(canonicalTypeName.Substring(0, canonicalTypeName.Length - 1)) +
+                   ".MakePointerType()";
+        if (canonicalTypeName.EndsWith("&", StringComparison.Ordinal))
+            return FormatTypeExpression(canonicalTypeName.Substring(0, canonicalTypeName.Length - 1)) +
+                   ".MakeByRefType()";
+        return "[" + canonicalTypeName + "]";
+    }
+
     private static string FormatFallbackText(string text)
         => NeedsEncoding(text)
             ? FormatString(text, preserveCharacterType: false)
@@ -217,7 +231,7 @@ internal static class PowerShellDefaultValueFormatter
             {
                 if (frames.Count == 0 || !(frames.Peek() is CollectionTokenFrame))
                     throw new FormatException("The runtime default token stream contains an unexpected collection terminator.");
-                Append(frames.Pop().Complete());
+                Append(frames.Pop().Complete(), isContainer: true);
                 continue;
             }
 
@@ -237,7 +251,7 @@ internal static class PowerShellDefaultValueFormatter
             {
                 if (frames.Count == 0 || !(frames.Peek() is ArrayTokenFrame))
                     throw new FormatException("The runtime default token stream contains an unexpected array terminator.");
-                Append(frames.Pop().Complete());
+                Append(frames.Pop().Complete(), isContainer: true);
                 continue;
             }
 
@@ -261,7 +275,7 @@ internal static class PowerShellDefaultValueFormatter
             {
                 if (frames.Count == 0 || !(frames.Peek() is DictionaryTokenFrame))
                     throw new FormatException("The runtime default token stream contains an unexpected dictionary terminator.");
-                Append(frames.Pop().Complete());
+                Append(frames.Pop().Complete(), isContainer: true);
                 continue;
             }
 
@@ -272,11 +286,11 @@ internal static class PowerShellDefaultValueFormatter
             throw new FormatException("The runtime default token stream is missing a container terminator.");
         return result ?? throw new FormatException("The runtime default token stream is empty.");
 
-        void Append(string value)
+        void Append(string value, bool isContainer = false)
         {
             if (frames.Count > 0)
             {
-                frames.Peek().Add(value);
+                frames.Peek().Add(value, isContainer);
                 return;
             }
 
@@ -288,17 +302,31 @@ internal static class PowerShellDefaultValueFormatter
 
     private abstract class TokenFrame
     {
-        public abstract void Add(string value);
+        public abstract void Add(string value, bool isContainer);
         public abstract string Complete();
     }
 
     private sealed class CollectionTokenFrame : TokenFrame
     {
         private readonly List<string> _items = new();
+        private bool _containsNestedContainer;
 
-        public override void Add(string value) => _items.Add(value);
+        public override void Add(string value, bool isContainer)
+        {
+            _containsNestedContainer |= isContainer;
+            _items.Add(value);
+        }
 
-        public override string Complete() => "@(" + string.Join(", ", _items) + ")";
+        public override string Complete()
+        {
+            if (!_containsNestedContainer)
+                return "@(" + string.Join(", ", _items) + ")";
+            var statements = new List<string> { "$array = [object[]]::new(" + _items.Count + ")" };
+            for (var index = 0; index < _items.Count; index++)
+                statements.Add("$array.SetValue(" + _items[index] + ", " + index + ")");
+            statements.Add("Write-Output -NoEnumerate $array");
+            return "& { " + string.Join("; ", statements) + " }";
+        }
     }
 
     private sealed class DictionaryTokenFrame : TokenFrame
@@ -317,7 +345,7 @@ internal static class PowerShellDefaultValueFormatter
             _value = null;
         }
 
-        public override void Add(string value)
+        public override void Add(string value, bool isContainer)
         {
             if (!_entryOpen)
                 throw new FormatException("The runtime default token stream contains a dictionary value outside an entry.");
@@ -358,7 +386,7 @@ internal static class PowerShellDefaultValueFormatter
             _lengths = ParseDimensions(lengths);
             _lowerBounds = ParseDimensions(lowerBounds);
             if (string.IsNullOrEmpty(_elementTypeName) ||
-                _lengths.Length < 2 ||
+                _lengths.Length < 1 ||
                 _lengths.Length != _lowerBounds.Length ||
                 _lengths.Any(length => length < 0))
             {
@@ -366,7 +394,7 @@ internal static class PowerShellDefaultValueFormatter
             }
         }
 
-        public override void Add(string value) => _items.Add(value);
+        public override void Add(string value, bool isContainer) => _items.Add(value);
 
         public override string Complete()
         {
