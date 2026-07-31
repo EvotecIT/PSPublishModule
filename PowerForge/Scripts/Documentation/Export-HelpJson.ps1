@@ -119,6 +119,13 @@ function AddRuntimeDefaultValueTokens(
     }) | Out-Null
     return
   }
+  if ($value.GetType().FullName -eq 'System.Numerics.BigInteger') {
+    $tokens.Add([ordered]@{
+      kind = 'BigInteger'
+      text = $value.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    }) | Out-Null
+    return
+  }
   if ($value -is [guid]) {
     $tokens.Add([ordered]@{
       kind = 'Guid'
@@ -202,6 +209,25 @@ function AddRuntimeDefaultValueTokens(
           $tokens.Add([ordered]@{ kind = 'DictionaryEntryEnd' }) | Out-Null
         }
         $tokens.Add([ordered]@{ kind = 'DictionaryEnd' }) | Out-Null
+        return
+      }
+      if ($value -is [System.Array] -and $value.Rank -gt 1) {
+        $lengths = [System.Collections.Generic.List[string]]::new()
+        $lowerBounds = [System.Collections.Generic.List[string]]::new()
+        for ($dimension = 0; $dimension -lt $value.Rank; $dimension++) {
+          $lengths.Add($value.GetLength($dimension).ToString([System.Globalization.CultureInfo]::InvariantCulture))
+          $lowerBounds.Add($value.GetLowerBound($dimension).ToString([System.Globalization.CultureInfo]::InvariantCulture))
+        }
+        $tokens.Add([ordered]@{
+          kind = 'ArrayStart'
+          text = $lengths -join ','
+          name = $lowerBounds -join ','
+          canonicalTypeName = GetCanonicalTypeNameFromType ($value.GetType().GetElementType())
+        }) | Out-Null
+        foreach ($item in $value) {
+          AddRuntimeDefaultValueTokens $item $tokens $referenceStack
+        }
+        $tokens.Add([ordered]@{ kind = 'ArrayEnd' }) | Out-Null
         return
       }
       $tokens.Add([ordered]@{ kind = 'CollectionStart' }) | Out-Null

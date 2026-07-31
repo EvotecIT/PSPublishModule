@@ -51,6 +51,9 @@ internal static class PowerShellDefaultValueFormatter
             case "decimal":
                 return "[System.Decimal]::Parse('" + (value.Text ?? string.Empty).Replace("'", "''") +
                        "', [System.Globalization.CultureInfo]::InvariantCulture)";
+            case "biginteger":
+                return "[System.Numerics.BigInteger]::Parse('" + (value.Text ?? string.Empty).Replace("'", "''") +
+                       "', [System.Globalization.CultureInfo]::InvariantCulture)";
             case "guid":
                 return "[System.Guid]::ParseExact('" + (value.Text ?? string.Empty).Replace("'", "''") + "', 'D')";
             case "version":
@@ -224,6 +227,20 @@ internal static class PowerShellDefaultValueFormatter
                 continue;
             }
 
+            if (kind.Equals("ArrayStart", StringComparison.OrdinalIgnoreCase))
+            {
+                frames.Push(new ArrayTokenFrame(token.CanonicalTypeName, token.Text, token.Name));
+                continue;
+            }
+
+            if (kind.Equals("ArrayEnd", StringComparison.OrdinalIgnoreCase))
+            {
+                if (frames.Count == 0 || !(frames.Peek() is ArrayTokenFrame))
+                    throw new FormatException("The runtime default token stream contains an unexpected array terminator.");
+                Append(frames.Pop().Complete());
+                continue;
+            }
+
             if (kind.Equals("DictionaryEntryStart", StringComparison.OrdinalIgnoreCase))
             {
                 if (frames.Count == 0 || !(frames.Peek() is DictionaryTokenFrame dictionary))
@@ -325,6 +342,74 @@ internal static class PowerShellDefaultValueFormatter
             if (_entryOpen)
                 throw new FormatException("The runtime default token stream ends inside a dictionary entry.");
             return "@{ " + string.Join("; ", _entries.Select(entry => "(" + entry.Key + ") = " + entry.Value)) + " }";
+        }
+    }
+
+    private sealed class ArrayTokenFrame : TokenFrame
+    {
+        private readonly string _elementTypeName;
+        private readonly int[] _lengths;
+        private readonly int[] _lowerBounds;
+        private readonly List<string> _items = new();
+
+        public ArrayTokenFrame(string? elementTypeName, string? lengths, string? lowerBounds)
+        {
+            _elementTypeName = elementTypeName?.Trim() ?? string.Empty;
+            _lengths = ParseDimensions(lengths);
+            _lowerBounds = ParseDimensions(lowerBounds);
+            if (string.IsNullOrEmpty(_elementTypeName) ||
+                _lengths.Length < 2 ||
+                _lengths.Length != _lowerBounds.Length ||
+                _lengths.Any(length => length < 0))
+            {
+                throw new FormatException("The runtime default token stream contains invalid multidimensional array metadata.");
+            }
+        }
+
+        public override void Add(string value) => _items.Add(value);
+
+        public override string Complete()
+        {
+            long expectedCount = 1;
+            foreach (var length in _lengths)
+                expectedCount = checked(expectedCount * length);
+            if (expectedCount != _items.Count)
+                throw new FormatException("The runtime default token stream contains the wrong number of array elements.");
+
+            var statements = new List<string>
+            {
+                "$array = [System.Array]::CreateInstance([" + _elementTypeName + "], [int[]]@(" +
+                string.Join(", ", _lengths) + "), [int[]]@(" + string.Join(", ", _lowerBounds) + "))"
+            };
+            var indices = (int[])_lowerBounds.Clone();
+            foreach (var item in _items)
+            {
+                statements.Add("$array.SetValue(" + item + ", [int[]]@(" + string.Join(", ", indices) + "))");
+                IncrementIndices(indices);
+            }
+            statements.Add("Write-Output -NoEnumerate $array");
+            return "& { " + string.Join("; ", statements) + " }";
+        }
+
+        private void IncrementIndices(int[] indices)
+        {
+            for (var dimension = indices.Length - 1; dimension >= 0; dimension--)
+            {
+                indices[dimension]++;
+                if (indices[dimension] < _lowerBounds[dimension] + _lengths[dimension])
+                    return;
+                indices[dimension] = _lowerBounds[dimension];
+            }
+        }
+
+        private static int[] ParseDimensions(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return Array.Empty<int>();
+            return value!.Split(',')
+                .Select(part => int.TryParse(part, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                    ? parsed
+                    : throw new FormatException("The runtime default token stream contains a non-integer array dimension."))
+                .ToArray();
         }
     }
 

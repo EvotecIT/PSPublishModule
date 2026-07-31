@@ -62,6 +62,13 @@ public sealed class DocumentationMetadataNormalizerTests
                 Text = "79228162514264337593543950335"
             }));
         Assert.Equal(
+            "[System.Numerics.BigInteger]::Parse('1234567890123456789012345678901234567890', [System.Globalization.CultureInfo]::InvariantCulture)",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "BigInteger",
+                Text = "1234567890123456789012345678901234567890"
+            }));
+        Assert.Equal(
             "[System.Guid]::ParseExact('01234567-89ab-cdef-0123-456789abcdef', 'D')",
             PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
             {
@@ -172,7 +179,7 @@ public sealed class DocumentationMetadataNormalizerTests
     }
 
     [Fact]
-    public void DefaultValueFormatter_DecodesDictionaryTokens()
+    public void DefaultValueFormatter_DecodesContainerTokens()
     {
         var formatted = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
         {
@@ -199,6 +206,28 @@ public sealed class DocumentationMetadataNormalizerTests
         Assert.Equal(
             "@{ ('alpha') = 1; ('endpoint') = [System.Uri]::new('relative/path', [System.UriKind]::Relative) }",
             formatted);
+
+        var array = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+        {
+            Tokens =
+            [
+                new DocumentationRuntimeValue
+                {
+                    Kind = "ArrayStart",
+                    CanonicalTypeName = "System.Int32",
+                    Text = "2,2",
+                    Name = "0,0"
+                },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "1" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "2" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "3" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "4" },
+                new DocumentationRuntimeValue { Kind = "ArrayEnd" }
+            ]
+        });
+        Assert.Equal(
+            "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue(1, [int[]]@(0, 0)); $array.SetValue(2, [int[]]@(0, 1)); $array.SetValue(3, [int[]]@(1, 0)); $array.SetValue(4, [int[]]@(1, 1)); Write-Output -NoEnumerate $array }",
+            array);
     }
 
     [Fact]

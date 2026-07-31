@@ -127,6 +127,12 @@ function Get-CollectorFixture {
         $versionAttributes.Add($versionDefault)
         $parameters.Add('Version', [System.Management.Automation.RuntimeDefinedParameter]::new('Version', [version], $versionAttributes))
 
+        $bigIntegerAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $bigIntegerDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $bigIntegerDefault.Value = [System.Numerics.BigInteger]::Parse('1234567890123456789012345678901234567890', [System.Globalization.CultureInfo]::InvariantCulture)
+        $bigIntegerAttributes.Add($bigIntegerDefault)
+        $parameters.Add('BigInteger', [System.Management.Automation.RuntimeDefinedParameter]::new('BigInteger', [System.Numerics.BigInteger], $bigIntegerAttributes))
+
         $uriAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $uriDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $uriDefault.Value = [uri]::new("https://example.com/a'b?x=1")
@@ -149,6 +155,17 @@ function Get-CollectorFixture {
         $cyclicDefault.Value = $cyclicValue
         $cyclicAttributes.Add($cyclicDefault)
         $parameters.Add('CyclicCollection', [System.Management.Automation.RuntimeDefinedParameter]::new('CyclicCollection', [object], $cyclicAttributes))
+
+        $matrixAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $matrixDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $matrix = [int[,]]::new(2, 2)
+        $matrix[0, 0] = 1
+        $matrix[0, 1] = 2
+        $matrix[1, 0] = 3
+        $matrix[1, 1] = 4
+        $matrixDefault.Value = $matrix
+        $matrixAttributes.Add($matrixDefault)
+        $parameters.Add('Matrix', [System.Management.Automation.RuntimeDefinedParameter]::new('Matrix', [int[,]], $matrixAttributes))
 
         $dateOnlyType = 'System.DateOnly' -as [type]
         if ($dateOnlyType) {
@@ -263,11 +280,13 @@ function Get-AcceleratedOutput {
                 var negativeSingle = Assert.Single(command.Parameters, parameter => parameter.Name == "NegativeSingle");
                 var guid = Assert.Single(command.Parameters, parameter => parameter.Name == "Guid");
                 var version = Assert.Single(command.Parameters, parameter => parameter.Name == "Version");
+                var bigInteger = Assert.Single(command.Parameters, parameter => parameter.Name == "BigInteger");
                 var uri = Assert.Single(command.Parameters, parameter => parameter.Name == "Uri");
                 var dictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "Dictionary");
                 var cyclicCollection = Assert.Single(
                     command.Parameters,
                     parameter => parameter.Name == "CyclicCollection");
+                var matrix = Assert.Single(command.Parameters, parameter => parameter.Name == "Matrix");
                 var dateOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "DateOnly");
                 var timeOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "TimeOnly");
                 var dateTime = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTime");
@@ -292,12 +311,18 @@ function Get-AcceleratedOutput {
                     guid.DefaultValue);
                 Assert.Equal("[System.Version]::Parse('1.2.3.4')", version.DefaultValue);
                 Assert.Equal(
+                    "[System.Numerics.BigInteger]::Parse('1234567890123456789012345678901234567890', [System.Globalization.CultureInfo]::InvariantCulture)",
+                    bigInteger.DefaultValue);
+                Assert.Equal(
                     "[System.Uri]::new('https://example.com/a''b?x=1', [System.UriKind]::Absolute)",
                     uri.DefaultValue);
                 Assert.Equal(
                     "@{ ('alpha') = 1; ('endpoint') = [System.Uri]::new('relative/path', [System.UriKind]::Relative) }",
                     dictionary.DefaultValue);
                 Assert.True(string.IsNullOrEmpty(cyclicCollection.DefaultValue));
+                Assert.Equal(
+                    "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue(1, [int[]]@(0, 0)); $array.SetValue(2, [int[]]@(0, 1)); $array.SetValue(3, [int[]]@(1, 0)); $array.SetValue(4, [int[]]@(1, 1)); Write-Output -NoEnumerate $array }",
+                    matrix.DefaultValue);
                 if (host.Contains("pwsh", StringComparison.OrdinalIgnoreCase))
                 {
                     Assert.NotNull(dateOnly);
