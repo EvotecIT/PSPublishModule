@@ -625,6 +625,9 @@ function Get-DefaultLiteralFixture {
                 "[System.Enum]::ToObject([DefaultLiteralFixture.CaseMode], ([System.Int32]1))",
                 Default("CaseMode"));
             Assert.Equal(
+                new[] { "A", "a" },
+                Assert.Single(command.Parameters, parameter => parameter.Name == "CaseMode").PossibleValues);
+            Assert.Equal(
                 "[System.Enum]::ToObject([DefaultLiteralFixture.WeirdMode], ([System.Int32]1))",
                 Default("WeirdMode"));
 

@@ -5,6 +5,7 @@
 )
 # <PowerForgeTypeIdentityHelpers />
 # <PowerForgeOutputMatchingHelpers />
+# <PowerForgeParameterMetadataHelpers />
 # <PowerForgeDefaultValueCollectionHelpers />
 # <PowerForgeDefaultValueScalarHelpers />
 $ErrorActionPreference = 'Stop'
@@ -100,6 +101,9 @@ function ConvertToPowerShellDefaultValue(
     return ('[System.Enum]::ToObject(' + $enumTypeArgument + ', ([' + $underlyingTypeName + ']' + [string]$underlyingValue + '))')
   }
   if ($value -is [type]) {
+    if (-not (TestGenuineRuntimeTypeValue $value)) {
+      throw 'Delegated or custom Type defaults are not supported.'
+    }
     return GetPowerShellTypeDefaultExpression $value
   }
   if ($value -is [double]) {
@@ -324,6 +328,7 @@ try {
         $typeName = ''
       }
       $possibleValues = @()
+      $enumPossibleValues = @()
 
       $required = $false
       $parameterSetRequired = @{}
@@ -391,7 +396,7 @@ try {
         if ($enumType -and $enumType.IsArray) { $enumType = $enumType.GetElementType() }
         if ($enumType -and $enumType.IsEnum) {
           foreach ($enumName in [System.Enum]::GetNames($enumType)) {
-            if ($enumName) { $possibleValues += [string]$enumName }
+            if ($enumName) { $enumPossibleValues += [string]$enumName }
           }
         }
       } catch {
@@ -444,19 +449,7 @@ try {
           # keep the metadata-derived default when Get-Help omits or reshapes Globbing
         }
       }
-      $possibleValuesNormalized = @()
-      $seenPossibleValues = @{}
-      foreach ($value in @($possibleValues)) {
-        if (-not $value) { continue }
-        $normalized = ([string]$value).Trim()
-        if (-not $normalized) { continue }
-        $key = $normalized.ToLowerInvariant()
-        if (-not $seenPossibleValues.ContainsKey($key)) {
-          $seenPossibleValues[$key] = $true
-          $possibleValuesNormalized += $normalized
-        }
-      }
-      $possibleValues = @($possibleValuesNormalized)
+      $possibleValues = @(MergeParameterPossibleValues @($possibleValues) @($enumPossibleValues))
 
       $sets = @()
       if ($paramSets.ContainsKey($pn)) { $sets = @($paramSets[$pn]) }
@@ -631,6 +624,7 @@ try {
 
     $outputs = @()
     $seenOutputIdentities = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    $seenRuntimeOutputIdentities = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     $runtimeOutputKeys = [System.Collections.Generic.Dictionary[string,bool]]::new([System.StringComparer]::Ordinal)
     $runtimeOutputByKey = [System.Collections.Generic.Dictionary[string,object]]::new([System.StringComparer]::Ordinal)
     $runtimeOutputKeyCounts = [System.Collections.Generic.Dictionary[string,int]]::new([System.StringComparer]::Ordinal)
@@ -641,7 +635,9 @@ try {
       foreach ($outputType in @($c.OutputType)) {
         $metadata = GetOutputTypeMetadata $outputType
         if (-not $metadata -or -not $metadata.identity) { continue }
-        if (-not $seenOutputIdentities.Add([string]$metadata.identity)) { continue }
+        $runtimeIdentity = if ($metadata.runtimeIdentity) { [string]$metadata.runtimeIdentity } else { [string]$metadata.identity }
+        if (-not $seenRuntimeOutputIdentities.Add($runtimeIdentity)) { continue }
+        [void]$seenOutputIdentities.Add([string]$metadata.identity)
         $runtimeOutputMetadata += $metadata
         foreach ($key in @($metadata.keys)) { $runtimeOutputKeys[$key] = $true }
         AddTypeKeysToIndexes $metadata @($metadata.keys) `

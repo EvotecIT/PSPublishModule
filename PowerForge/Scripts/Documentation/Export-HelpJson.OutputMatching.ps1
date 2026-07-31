@@ -1,3 +1,28 @@
+function GetRuntimeTypeInstanceIdentity([type]$type) {
+  if ($type.IsPointer) { return 'pointer:' + (GetRuntimeTypeInstanceIdentity ($type.GetElementType())) }
+  if ($type.IsByRef) { return 'byref:' + (GetRuntimeTypeInstanceIdentity ($type.GetElementType())) }
+  if ($type.IsArray) {
+    $arrayKind = if ($type.GetArrayRank() -eq 1 -and $type -eq $type.GetElementType().MakeArrayType()) { 'sz' } else { [string]$type.GetArrayRank() }
+    return 'array:' + $arrayKind + ':' + (GetRuntimeTypeInstanceIdentity ($type.GetElementType()))
+  }
+  if ($type.IsGenericType -and -not $type.IsGenericTypeDefinition) {
+    $parts = [System.Collections.Generic.List[string]]::new()
+    $parts.Add((GetRuntimeTypeInstanceIdentity ($type.GetGenericTypeDefinition())))
+    foreach ($argument in $type.GetGenericArguments()) {
+      $parts.Add((GetRuntimeTypeInstanceIdentity $argument))
+    }
+    return 'generic:' + ($parts -join '|')
+  }
+
+  $assemblies = [System.AppDomain]::CurrentDomain.GetAssemblies()
+  for ($index = 0; $index -lt $assemblies.Count; $index++) {
+    if ([object]::ReferenceEquals($assemblies[$index], $type.Assembly)) {
+      return 'type:' + $index.ToString([System.Globalization.CultureInfo]::InvariantCulture) + ':' + (GetCanonicalTypeNameFromType $type)
+    }
+  }
+  throw ('Runtime type assembly is not loaded: ' + [string]$type.FullName)
+}
+
 function GetOutputTypeMetadata([object]$outputType) {
   $outputTypeName = ''
   $outputTypeClrName = ''
@@ -28,6 +53,7 @@ function GetOutputTypeMetadata([object]$outputType) {
     name = $outputTypeName
     clrTypeName = $outputTypeClrName
     identity = $outputIdentity
+    runtimeIdentity = if ($outputRuntimeType -is [type]) { GetRuntimeTypeInstanceIdentity $outputRuntimeType } else { '' }
     keys = @(GetTypeKeys $outputTypeName $outputTypeClrName)
   }
 }

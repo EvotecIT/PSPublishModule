@@ -337,7 +337,7 @@ internal sealed class MarkdownHelpWriter
         var values = (p.PossibleValues ?? Enumerable.Empty<string>())
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Select(value => value.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(StringComparer.Ordinal)
             .ToArray();
 
         return values.Length == 0 ? string.Empty : string.Join(", ", values);

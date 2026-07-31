@@ -332,7 +332,7 @@ internal sealed class MamlHelpWriter
         var possibleValues = (p.PossibleValues ?? Enumerable.Empty<string>())
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Select(value => value.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(StringComparer.Ordinal)
             .ToArray();
         if (possibleValues.Length > 0)
         {

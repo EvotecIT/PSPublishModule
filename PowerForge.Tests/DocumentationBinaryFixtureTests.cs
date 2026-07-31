@@ -24,7 +24,7 @@ public sealed class DocumentationBinaryFixtureTests
             Assert.True(File.Exists(assemblyPath), $"Expected built fixture assembly at '{assemblyPath}'.");
             Assert.True(File.Exists(xmlPath), $"Expected built fixture XML docs at '{xmlPath}'.");
 
-            File.Copy(assemblyPath, Path.Combine(tempRoot, Path.GetFileName(assemblyPath)), overwrite: true);
+            CopyFixtureAssemblies(outputDirectory, tempRoot);
             File.Copy(xmlPath, Path.Combine(tempRoot, Path.GetFileName(xmlPath)), overwrite: true);
 
             File.WriteAllText(manifestPath, """
@@ -124,7 +124,7 @@ public sealed class DocumentationBinaryFixtureTests
         {
             const string moduleName = "BinaryDocFixture";
             var manifestPath = Path.Combine(tempRoot, moduleName + ".psd1");
-            File.Copy(Path.Combine(outputDirectory, moduleName + ".dll"), Path.Combine(tempRoot, moduleName + ".dll"));
+            CopyFixtureAssemblies(outputDirectory, tempRoot);
             File.Copy(Path.Combine(outputDirectory, moduleName + ".xml"), Path.Combine(tempRoot, moduleName + ".xml"));
             File.WriteAllText(manifestPath, """
 @{
@@ -134,7 +134,7 @@ public sealed class DocumentationBinaryFixtureTests
     Author = 'PowerForge.Tests'
     Description = 'Binary fixture module for empty-default extraction tests.'
     FunctionsToExport = @()
-    CmdletsToExport = @('Get-BinaryDocEmptyDefault', 'Get-BinaryDocAuthoredOutput', 'Get-BinaryDocConflictingOutput', 'Get-BinaryDocAmbiguousOutputs', 'Get-BinaryDocCaseInsensitiveOutput', 'Get-BinaryDocNestedOutput')
+    CmdletsToExport = @('Get-BinaryDocEmptyDefault', 'Get-BinaryDocAuthoredOutput', 'Get-BinaryDocConflictingOutput', 'Get-BinaryDocAmbiguousOutputs', 'Get-BinaryDocCaseInsensitiveOutput', 'Get-BinaryDocNestedOutput', 'Get-BinaryDocAssemblyDistinctOutputs')
     AliasesToExport = @()
     VariablesToExport = @()
 }
@@ -469,6 +469,16 @@ public sealed class DocumentationBinaryFixtureTests
             Assert.Equal("BinaryDocFixture.NestedOutputs.Outer+Result", nestedOutput.ClrTypeName);
             Assert.Contains("nested result keeps", nestedOutput.Description, StringComparison.OrdinalIgnoreCase);
 
+            var assemblyDistinctOutputCommand = Assert.Single(
+                payload.Commands,
+                item => string.Equals(item.Name, "Get-BinaryDocAssemblyDistinctOutputs", StringComparison.Ordinal));
+            Assert.Equal(
+                2,
+                assemblyDistinctOutputCommand.Outputs.Count(output => string.Equals(
+                    output.ClrTypeName,
+                    "BinaryDocFixture.AssemblyDistinct.SameResult",
+                    StringComparison.Ordinal)));
+
             var markdownDirectory = Path.Combine(tempRoot, "GeneratedDocs");
             var mamlDirectory = Path.Combine(tempRoot, "GeneratedHelp");
             new MarkdownHelpWriter().WriteCommandHelpFiles(payload, moduleName, markdownDirectory);
@@ -607,6 +617,17 @@ public sealed class DocumentationBinaryFixtureTests
         Assert.True(process.ExitCode == 0, $"Fixture build failed.{Environment.NewLine}STDOUT:{Environment.NewLine}{stdOut}{Environment.NewLine}STDERR:{Environment.NewLine}{stdErr}");
 
         return outputDirectory;
+    }
+
+    private static void CopyFixtureAssemblies(string outputDirectory, string destinationDirectory)
+    {
+        foreach (var assemblyPath in Directory.GetFiles(outputDirectory, "BinaryDoc*.dll"))
+        {
+            File.Copy(
+                assemblyPath,
+                Path.Combine(destinationDirectory, Path.GetFileName(assemblyPath)),
+                overwrite: true);
+        }
     }
 
     private static string NormalizeText(string text)

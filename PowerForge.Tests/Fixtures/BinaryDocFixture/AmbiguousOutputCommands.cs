@@ -1,3 +1,6 @@
+extern alias DistinctA;
+extern alias DistinctB;
+
 using System.Management.Automation;
 
 namespace BinaryDocFixture.OutputA
@@ -74,6 +77,15 @@ namespace BinaryDocFixture
     [Cmdlet(VerbsCommon.Get, "BinaryDocNestedOutput")]
     [OutputType(typeof(NestedOutputs.Outer.Result))]
     public sealed class GetBinaryDocNestedOutputCommand : PSCmdlet
+    {
+    }
+
+    /// <summary>Returns assembly-distinct CLR types that share one namespace-qualified display name.</summary>
+    [Cmdlet(VerbsCommon.Get, "BinaryDocAssemblyDistinctOutputs")]
+    [OutputType(
+        typeof(DistinctA::BinaryDocFixture.AssemblyDistinct.SameResult),
+        typeof(DistinctB::BinaryDocFixture.AssemblyDistinct.SameResult))]
+    public sealed class GetBinaryDocAssemblyDistinctOutputsCommand : PSCmdlet
     {
     }
 }

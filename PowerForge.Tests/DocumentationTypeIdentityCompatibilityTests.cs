@@ -191,6 +191,12 @@ namespace System {
         public string Tag { get { return "tag"; } }
     }
 }
+namespace RuntimeIdentityFixture {
+    public sealed class TaggedTypeDelegator : System.Reflection.TypeDelegator {
+        public TaggedTypeDelegator(System.Type type, string tag) : base(type) { Tag = tag; }
+        public string Tag { get; private set; }
+    }
+}
 '@ -PassThru
 
 function New-SpoofedValue([string]$fullName) {
@@ -248,6 +254,16 @@ $script:invariantDictionary.Add('alpha', 1)
 $script:reservedSortedList = [System.Collections.Generic.SortedList[string,int]]::new(
     100, [System.StringComparer]::InvariantCultureIgnoreCase)
 $script:reservedSortedList.Add('alpha', 1)
+$typeDelegator = $spoofTypes |
+    Where-Object { $_.FullName -ceq 'RuntimeIdentityFixture.TaggedTypeDelegator' } |
+    Select-Object -First 1
+function New-TaggedTypeDelegator([type]$type, [string]$tag) {
+    return [System.Activator]::CreateInstance($typeDelegator, [object[]]@($type, $tag))
+}
+$script:delegatedArrayType = New-TaggedTypeDelegator ([string].MakeArrayType()) 'array'
+$script:delegatedPointerType = New-TaggedTypeDelegator ([int].MakePointerType()) 'pointer'
+$script:delegatedByRefType = New-TaggedTypeDelegator ([int].MakeByRefType()) 'byref'
+$script:delegatedGenericType = New-TaggedTypeDelegator ([System.Collections.Generic.List[string]]) 'generic'
 
 function Get-RuntimeIdentityFixture {
     [CmdletBinding()]
@@ -269,7 +285,11 @@ function Get-RuntimeIdentityFixture {
             @('ReservedList', $script:reservedList),
             @('ReservedArrayList', $script:reservedArrayList),
             @('InvariantDictionary', $script:invariantDictionary),
-            @('ReservedSortedList', $script:reservedSortedList)
+            @('ReservedSortedList', $script:reservedSortedList),
+            @('DelegatedArrayType', $script:delegatedArrayType),
+            @('DelegatedPointerType', $script:delegatedPointerType),
+            @('DelegatedByRefType', $script:delegatedByRefType),
+            @('DelegatedGenericType', $script:delegatedGenericType)
         )) {
             $attributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
             $default = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -336,6 +356,10 @@ if ($sortedList.GetType() -ne [System.Collections.Generic.SortedList[string,int]
                 Assert.True(string.IsNullOrEmpty(Default("SpoofHashtable")));
                 Assert.True(string.IsNullOrEmpty(Default("StatefulCollection")));
                 Assert.True(string.IsNullOrEmpty(Default("ReservedBackingCollection")));
+                Assert.True(string.IsNullOrEmpty(Default("DelegatedArrayType")));
+                Assert.True(string.IsNullOrEmpty(Default("DelegatedPointerType")));
+                Assert.True(string.IsNullOrEmpty(Default("DelegatedByRefType")));
+                Assert.True(string.IsNullOrEmpty(Default("DelegatedGenericType")));
                 var itemOnly = Default("ItemOnlyCollection");
                 Assert.StartsWith("& { $collection = [System.Collections.ObjectModel.Collection[System.Int32]]::new()", itemOnly, StringComparison.Ordinal);
                 var reservedList = Default("ReservedList");

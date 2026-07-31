@@ -42,6 +42,11 @@ function GetPowerShellSafeEnumName([type]$enumType, [object]$value) {
   return ''
 }
 
+function TestGenuineRuntimeTypeValue([object]$value) {
+  if ($value -isnot [type]) { return $false }
+  return [object]::ReferenceEquals($value.GetType(), [string].GetType())
+}
+
 function GetConstructibleDictionaryTypeName([System.Collections.IDictionary]$value) {
   $dictionaryType = $value.GetType()
   $supported = [object]::ReferenceEquals($dictionaryType, [System.Collections.Hashtable]) -or

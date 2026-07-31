@@ -186,7 +186,7 @@ EXAMPLES
                                 Name = "Mode",
                                 Type = "String",
                                 ParameterSets = new List<string> { "ByMode" },
-                                PossibleValues = new List<string> { "Basic", "Advanced" }
+                                PossibleValues = new List<string> { "Basic", "basic", "Advanced" }
                             }
                         }
                     }
@@ -216,8 +216,14 @@ EXAMPLES
                 .Select(v => v.Value)
                 .ToArray();
             Assert.NotNull(possibleValues);
-            Assert.Contains("Basic", possibleValues!);
-            Assert.Contains("Advanced", possibleValues!);
+            Assert.Equal(new[] { "Basic", "basic", "Advanced" }, possibleValues);
+
+            var markdownRoot = Path.Combine(root, "markdown");
+            new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "TestModule", markdownRoot);
+            Assert.Contains(
+                "Possible values: Basic, basic, Advanced",
+                File.ReadAllText(Path.Combine(markdownRoot, "Invoke-Thing.md")),
+                StringComparison.Ordinal);
         }
         finally
         {
