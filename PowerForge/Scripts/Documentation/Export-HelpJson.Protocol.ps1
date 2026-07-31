@@ -50,6 +50,7 @@ function GetCollectorHelperFunctionNames {
     'TestPowerShellSimpleTypeName',
     'TestPowerShellTypeLiteral',
     'TestPowerShellTypeLiteralName',
+    'TestPSDefaultValueAutomationNull',
     'TestRecreatableUri',
     'TestRecreatableScriptBlock',
     'TestValidateSetCaseSensitive'
@@ -78,6 +79,7 @@ function NewCollectorProtocol([System.Management.Automation.PSModuleInfo]$helper
     RemoveHelperAliases = Get-Command RemoveCollectorHelperAliases -CommandType Function
     ResolveCanonicalTypeName = $helperModule.ExportedFunctions['ResolveCanonicalTypeName']
     TestValidateSetCaseSensitive = $helperModule.ExportedFunctions['TestValidateSetCaseSensitive']
+    TestPSDefaultValueAutomationNull = $helperModule.ExportedFunctions['TestPSDefaultValueAutomationNull']
   }
 }
 

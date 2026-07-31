@@ -321,10 +321,19 @@ internal static class DocumentationMetadataNormalizer
             : StringComparer.OrdinalIgnoreCase;
         if (hasValidateSet)
         {
-            return DistinctPreserved(
-                DistinctPreserved(metadataValues, metadataComparer)
-                    .Select(PowerShellDefaultValueFormatter.FormatDisplayText),
-                metadataComparer);
+            var authoredValues = DistinctPreserved(metadataValues, metadataComparer);
+            var displays = authoredValues
+                .Select(PowerShellDefaultValueFormatter.FormatDisplayText)
+                .ToList();
+            var displayCounts = new Dictionary<string, int>(metadataComparer);
+            foreach (var display in displays)
+                displayCounts[display] = displayCounts.TryGetValue(display, out var count) ? count + 1 : 1;
+
+            return authoredValues.Select((value, index) =>
+                    displayCounts[displays[index]] > 1
+                        ? PowerShellDefaultValueFormatter.FormatString(value, preserveCharacterType: false)
+                        : displays[index])
+                .ToList();
         }
 
         var result = DistinctNonBlank(metadataValues, metadataComparer)

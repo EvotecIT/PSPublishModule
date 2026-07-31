@@ -133,7 +133,10 @@ function GetCoreRuntimeType([string]$fullName) {
   return [datetime].Assembly.GetType($fullName, $false, $false)
 }
 
-function TestCollectionHasItemOnlyBackingStore([object]$value) {
+function TestCollectionHasItemOnlyBackingStore(
+  [object]$value,
+  [System.Collections.IList]$referenceStack = $null
+) {
   $collectionType = $value.GetType()
   if (-not $collectionType.IsGenericType -or
       -not [object]::ReferenceEquals(
@@ -151,12 +154,41 @@ function TestCollectionHasItemOnlyBackingStore([object]$value) {
   $expectedType = [System.Collections.Generic.List``1].MakeGenericType(
     $collectionType.GetGenericArguments()[0])
   if ($backingStore.GetType() -ne $expectedType) { return $false }
+  if ($null -ne $referenceStack) {
+    AddRuntimeDefaultValueReference $backingStore $referenceStack
+  }
   $expectedCollection = [System.Activator]::CreateInstance($collectionType)
   foreach ($item in $value) {
     [void]([System.Collections.IList]$expectedCollection).Add($item)
   }
   $expectedBackingStore = $itemsProperty.GetValue($expectedCollection, $null)
   return $backingStore.Capacity -eq $expectedBackingStore.Capacity
+}
+
+function TestPSDefaultValueAutomationNull(
+  [System.Management.Automation.PSDefaultValueAttribute]$attribute
+) {
+  $flags = [System.Reflection.BindingFlags]'Instance,Public,NonPublic'
+  $valueField = $attribute.GetType().GetField('<Value>k__BackingField', $flags)
+  $automationNullType = [System.Management.Automation.PSObject].Assembly.GetType(
+    'System.Management.Automation.Internal.AutomationNull', $false)
+  if ($null -eq $valueField -or $null -eq $automationNullType) { return $false }
+  $valueProperty = $automationNullType.GetProperty(
+    'Value', [System.Reflection.BindingFlags]'Static,Public')
+  if ($null -eq $valueProperty) { return $false }
+
+  $attributeParameter = [System.Linq.Expressions.Expression]::Parameter(
+    [System.Management.Automation.PSDefaultValueAttribute], 'attribute')
+  $fieldExpression = [System.Linq.Expressions.Expression]::Field(
+    $attributeParameter, $valueField)
+  $sentinelExpression = [System.Linq.Expressions.Expression]::Property(
+    $null, $valueProperty)
+  $body = [System.Linq.Expressions.Expression]::ReferenceEqual(
+    $fieldExpression, $sentinelExpression)
+  $delegateType = [System.Func[System.Management.Automation.PSDefaultValueAttribute,bool]]
+  $lambda = [System.Linq.Expressions.Expression]::Lambda(
+    $delegateType, $body, [System.Linq.Expressions.ParameterExpression[]]@($attributeParameter))
+  return $lambda.Compile().Invoke($attribute)
 }
 
 function GetCollectionCapacity([object]$value) {

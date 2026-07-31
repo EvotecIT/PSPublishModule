@@ -323,7 +323,7 @@ function GetKnownDictionaryComparerExpression(
   $name = GetKnownDictionaryComparerName $comparer $comparerType
   if ($null -ne $referenceStack -and
       -not (TestDictionaryComparerIsSingleton $comparer $comparerType)) {
-    AddDefaultValueReference $comparer $referenceStack
+    AddRuntimeDefaultValueReference $comparer $referenceStack
   }
   if ([string]::IsNullOrWhiteSpace($name)) { return '' }
   if ($name.StartsWith('Culture|', [System.StringComparison]::Ordinal)) {

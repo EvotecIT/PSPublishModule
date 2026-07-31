@@ -179,7 +179,7 @@ function AddRuntimeDefaultValueTokens(
         if ([string]::IsNullOrWhiteSpace($dictionaryTypeName)) {
           throw ('Dictionary type has no supported constructor: ' + $value.GetType().FullName)
         }
-        [void](GetDictionaryConstructorExpression $value)
+        [void](GetDictionaryConstructorExpression $value $referenceStack)
         $tokens.Add([ordered]@{
           kind = 'DictionaryStart'
           text = GetDictionaryCapacity $value
@@ -236,7 +236,7 @@ function AddRuntimeDefaultValueTokens(
           $supportedItemOnlyList =
             [object]::ReferenceEquals($genericDefinition, [System.Collections.Generic.List``1]) -or
             ([object]::ReferenceEquals($genericDefinition, [System.Collections.ObjectModel.Collection``1]) -and
-              (TestCollectionHasItemOnlyBackingStore $value))
+              (TestCollectionHasItemOnlyBackingStore $value $referenceStack))
         }
         if (-not $supportedItemOnlyList) {
           throw ('Collection type carries unsupported non-item state: ' + $collectionType.FullName)
@@ -305,8 +305,7 @@ function AddRuntimeDefaultValueTokens(
 }
 Export-ModuleMember -Function @(
   'ConvertToRuntimeDefaultValue', 'ConvertToUtf16CodeUnits', 'ConvertToUtf8SafeJsonText',
-  'GetCanonicalTypeNameFromType', 'GetOutputTypeSnapshot',
-  'GetText', 'ResolveCanonicalTypeName', 'TestValidateSetCaseSensitive')
+  'GetCanonicalTypeNameFromType', 'GetOutputTypeSnapshot', 'GetText', 'ResolveCanonicalTypeName', 'TestPSDefaultValueAutomationNull', 'TestValidateSetCaseSensitive')
 }
 $collectorProtocol = NewCollectorProtocol $collectorHelperModule
 try {
@@ -479,6 +478,7 @@ try {
                   $metadataDefaultHelpCodeUnits = & $collectorProtocol.ConvertToUtf16CodeUnits $metadataDefaultHelp
                   $metadataDefaultHelp = $null
                 } else {
+                  if (& $collectorProtocol.TestPSDefaultValueAutomationNull $attr) { throw 'AutomationNull defaults cannot be represented as PowerShell expressions.' }
                   $metadataDefaultValue = & $collectorProtocol.ConvertToRuntimeDefaultValue $attr.Value
                 }
               } catch {
