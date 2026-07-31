@@ -79,12 +79,13 @@ internal static class PowerShellDefaultValueFormatter
             case "collection":
                 return "@(" + string.Join(", ", (value.Items ?? new List<DocumentationRuntimeValue>()).Select(Format)) + ")";
             case "formattable":
+                return FormatFormattable(value);
             case "text":
-                return value.Text ?? string.Empty;
+                return string.Empty;
             case "textcodeunits":
                 return FormatFallbackText(DecodeUtf16CodeUnits(value.Text));
             default:
-                return value.Text ?? string.Empty;
+                return string.Empty;
         }
     }
 
@@ -135,6 +136,25 @@ internal static class PowerShellDefaultValueFormatter
         if (value.Equals("-0", StringComparison.Ordinal)) return "-0.0";
         if (value.Equals("0", StringComparison.Ordinal)) return "0.0";
         return value;
+    }
+
+    private static string FormatFormattable(DocumentationRuntimeValue value)
+    {
+        var text = value.Text ?? string.Empty;
+        switch ((value.CanonicalTypeName ?? string.Empty).Trim())
+        {
+            case "System.SByte": return "([System.SByte]" + text + ")";
+            case "System.Byte": return "([System.Byte]" + text + ")";
+            case "System.Int16": return "([System.Int16]" + text + ")";
+            case "System.UInt16": return "([System.UInt16]" + text + ")";
+            case "System.Int32": return text;
+            case "System.UInt32": return "([System.UInt32]" + text + ")";
+            case "System.Int64": return "([System.Int64]" + text + ")";
+            case "System.UInt64": return "([System.UInt64]" + text + ")";
+            case "System.IntPtr": return "[System.IntPtr]::new(([System.Int64]" + text + "))";
+            case "System.UIntPtr": return "[System.UIntPtr]::new(([System.UInt64]" + text + "))";
+            default: return string.Empty;
+        }
     }
 
     private static string FormatTemporalParseExact(
@@ -323,8 +343,8 @@ internal static class PowerShellDefaultValueFormatter
                 return "@(" + string.Join(", ", _items) + ")";
             var statements = new List<string> { "$array = [object[]]::new(" + _items.Count + ")" };
             for (var index = 0; index < _items.Count; index++)
-                statements.Add("$array.SetValue(" + _items[index] + ", " + index + ")");
-            statements.Add("Write-Output -NoEnumerate $array");
+                statements.Add("$array.SetValue((" + _items[index] + "), " + index + ")");
+            statements.Add("return ,$array");
             return "& { " + string.Join("; ", statements) + " }";
         }
     }
@@ -369,7 +389,14 @@ internal static class PowerShellDefaultValueFormatter
         {
             if (_entryOpen)
                 throw new FormatException("The runtime default token stream ends inside a dictionary entry.");
-            return "@{ " + string.Join("; ", _entries.Select(entry => "(" + entry.Key + ") = " + entry.Value)) + " }";
+            var statements = new List<string>
+            {
+                "$dictionary = [System.Collections.Specialized.OrderedDictionary]::new()"
+            };
+            statements.AddRange(_entries.Select(entry =>
+                "$dictionary.Add((" + entry.Key + "), (" + entry.Value + "))"));
+            statements.Add("return ,$dictionary");
+            return "& { " + string.Join("; ", statements) + " }";
         }
     }
 
@@ -412,10 +439,10 @@ internal static class PowerShellDefaultValueFormatter
             var indices = (int[])_lowerBounds.Clone();
             foreach (var item in _items)
             {
-                statements.Add("$array.SetValue(" + item + ", [int[]]@(" + string.Join(", ", indices) + "))");
+                statements.Add("$array.SetValue((" + item + "), [int[]]@(" + string.Join(", ", indices) + "))");
                 IncrementIndices(indices);
             }
-            statements.Add("Write-Output -NoEnumerate $array");
+            statements.Add("return ,$array");
             return "& { " + string.Join("; ", statements) + " }";
         }
 

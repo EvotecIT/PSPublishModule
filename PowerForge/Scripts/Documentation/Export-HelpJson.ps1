@@ -248,17 +248,26 @@ function AddRuntimeDefaultValueTokens(
       $referenceStack.RemoveAt($referenceStack.Count - 1)
     }
   }
-  if ($value -is [System.IFormattable]) {
+  $runtimeTypeName = $value.GetType().FullName
+  if (@(
+      'System.SByte',
+      'System.Byte',
+      'System.Int16',
+      'System.UInt16',
+      'System.Int32',
+      'System.UInt32',
+      'System.Int64',
+      'System.UInt64',
+      'System.IntPtr',
+      'System.UIntPtr') -contains $runtimeTypeName) {
     $tokens.Add([ordered]@{
       kind = 'Formattable'
       text = ([System.IFormattable]$value).ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
+      canonicalTypeName = GetCanonicalTypeNameFromType ($value.GetType())
     }) | Out-Null
     return
   }
-  $tokens.Add([ordered]@{
-    kind = 'TextCodeUnits'
-    text = ConvertToUtf16CodeUnits ([string]$value)
-  }) | Out-Null
+  throw ('Unsupported PSDefaultValue runtime type: ' + $runtimeTypeName)
 }
 
 function ConvertToRuntimeDefaultValue([object]$value) {

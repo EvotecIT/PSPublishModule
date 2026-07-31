@@ -208,8 +208,12 @@ public sealed class DocumentationMetadataNormalizerTests
             [
                 new DocumentationRuntimeValue { Kind = "DictionaryStart" },
                 new DocumentationRuntimeValue { Kind = "DictionaryEntryStart" },
-                new DocumentationRuntimeValue { Kind = "StringCodeUnits", Text = "97,108,112,104,97" },
-                new DocumentationRuntimeValue { Kind = "Formattable", Text = "1" },
+                new DocumentationRuntimeValue { Kind = "StringCodeUnits", Text = "65" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "1", CanonicalTypeName = "System.Int32" },
+                new DocumentationRuntimeValue { Kind = "DictionaryEntryEnd" },
+                new DocumentationRuntimeValue { Kind = "DictionaryEntryStart" },
+                new DocumentationRuntimeValue { Kind = "StringCodeUnits", Text = "97" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "2", CanonicalTypeName = "System.Int32" },
                 new DocumentationRuntimeValue { Kind = "DictionaryEntryEnd" },
                 new DocumentationRuntimeValue { Kind = "DictionaryEntryStart" },
                 new DocumentationRuntimeValue { Kind = "StringCodeUnits", Text = "101,110,100,112,111,105,110,116" },
@@ -225,7 +229,7 @@ public sealed class DocumentationMetadataNormalizerTests
         });
 
         Assert.Equal(
-            "@{ ('alpha') = 1; ('endpoint') = [System.Uri]::new('relative/path', [System.UriKind]::Relative) }",
+            "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new(); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); $dictionary.Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
             formatted);
 
         var array = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
@@ -239,15 +243,15 @@ public sealed class DocumentationMetadataNormalizerTests
                     Text = "2,2",
                     Name = "0,0"
                 },
-                new DocumentationRuntimeValue { Kind = "Formattable", Text = "1" },
-                new DocumentationRuntimeValue { Kind = "Formattable", Text = "2" },
-                new DocumentationRuntimeValue { Kind = "Formattable", Text = "3" },
-                new DocumentationRuntimeValue { Kind = "Formattable", Text = "4" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "1", CanonicalTypeName = "System.Int32" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "2", CanonicalTypeName = "System.Int32" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "3", CanonicalTypeName = "System.Int32" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "4", CanonicalTypeName = "System.Int32" },
                 new DocumentationRuntimeValue { Kind = "ArrayEnd" }
             ]
         });
         Assert.Equal(
-            "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue(1, [int[]]@(0, 0)); $array.SetValue(2, [int[]]@(0, 1)); $array.SetValue(3, [int[]]@(1, 0)); $array.SetValue(4, [int[]]@(1, 1)); Write-Output -NoEnumerate $array }",
+            "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }",
             array);
 
         var boundedArray = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
@@ -261,13 +265,13 @@ public sealed class DocumentationMetadataNormalizerTests
                     Text = "2",
                     Name = "5"
                 },
-                new DocumentationRuntimeValue { Kind = "Formattable", Text = "7" },
-                new DocumentationRuntimeValue { Kind = "Formattable", Text = "8" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "7", CanonicalTypeName = "System.Int32" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "8", CanonicalTypeName = "System.Int32" },
                 new DocumentationRuntimeValue { Kind = "ArrayEnd" }
             ]
         });
         Assert.Equal(
-            "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2), [int[]]@(5)); $array.SetValue(7, [int[]]@(5)); $array.SetValue(8, [int[]]@(6)); Write-Output -NoEnumerate $array }",
+            "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2), [int[]]@(5)); $array.SetValue((7), [int[]]@(5)); $array.SetValue((8), [int[]]@(6)); return ,$array }",
             boundedArray);
 
         var nestedCollection = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
@@ -276,15 +280,36 @@ public sealed class DocumentationMetadataNormalizerTests
             [
                 new DocumentationRuntimeValue { Kind = "CollectionStart" },
                 new DocumentationRuntimeValue { Kind = "CollectionStart" },
-                new DocumentationRuntimeValue { Kind = "Formattable", Text = "1" },
-                new DocumentationRuntimeValue { Kind = "Formattable", Text = "2" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "1", CanonicalTypeName = "System.Int32" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "2", CanonicalTypeName = "System.Int32" },
                 new DocumentationRuntimeValue { Kind = "CollectionEnd" },
                 new DocumentationRuntimeValue { Kind = "CollectionEnd" }
             ]
         });
         Assert.Equal(
-            "& { $array = [object[]]::new(1); $array.SetValue(@(1, 2), 0); Write-Output -NoEnumerate $array }",
+            "& { $array = [object[]]::new(1); $array.SetValue((@(1, 2)), 0); return ,$array }",
             nestedCollection);
+
+        var nestedArrayCollection = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+        {
+            Tokens =
+            [
+                new DocumentationRuntimeValue { Kind = "CollectionStart" },
+                new DocumentationRuntimeValue
+                {
+                    Kind = "ArrayStart",
+                    CanonicalTypeName = "System.Int32",
+                    Text = "1,1",
+                    Name = "0,0"
+                },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "9", CanonicalTypeName = "System.Int32" },
+                new DocumentationRuntimeValue { Kind = "ArrayEnd" },
+                new DocumentationRuntimeValue { Kind = "CollectionEnd" }
+            ]
+        });
+        Assert.Equal(
+            "& { $array = [object[]]::new(1); $array.SetValue((& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(1, 1), [int[]]@(0, 0)); $array.SetValue((9), [int[]]@(0, 0)); return ,$array }), 0); return ,$array }",
+            nestedArrayCollection);
     }
 
     [Fact]
@@ -463,8 +488,8 @@ public sealed class DocumentationMetadataNormalizerTests
         if (depth <= 0) return value;
         var result = "@(" + value + ")";
         for (var index = 1; index < depth; index++)
-            result = "& { $array = [object[]]::new(1); $array.SetValue(" + result +
-                     ", 0); Write-Output -NoEnumerate $array }";
+            result = "& { $array = [object[]]::new(1); $array.SetValue((" + result +
+                     "), 0); return ,$array }";
         return result;
     }
 }

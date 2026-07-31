@@ -166,6 +166,27 @@ function Get-CollectorFixture {
         $dictionaryAttributes.Add($dictionaryDefault)
         $parameters.Add('Dictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('Dictionary', [object], $dictionaryAttributes))
 
+        $caseDistinctDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $caseDistinctDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $caseDistinctDictionary = [System.Collections.Generic.Dictionary[string, object]]::new([System.StringComparer]::Ordinal)
+        $caseDistinctDictionary.Add('A', 1)
+        $caseDistinctDictionary.Add('a', 2)
+        $caseDistinctDictionaryDefault.Value = $caseDistinctDictionary
+        $caseDistinctDictionaryAttributes.Add($caseDistinctDictionaryDefault)
+        $parameters.Add('CaseDistinctDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('CaseDistinctDictionary', [object], $caseDistinctDictionaryAttributes))
+
+        $unsupportedCultureAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $unsupportedCultureDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $unsupportedCultureDefault.Value = [System.Globalization.CultureInfo]::new('en-US')
+        $unsupportedCultureAttributes.Add($unsupportedCultureDefault)
+        $parameters.Add('UnsupportedCulture', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsupportedCulture', [object], $unsupportedCultureAttributes))
+
+        $unsupportedAddressAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $unsupportedAddressDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $unsupportedAddressDefault.Value = [System.Net.IPAddress]::Parse('192.0.2.1')
+        $unsupportedAddressAttributes.Add($unsupportedAddressDefault)
+        $parameters.Add('UnsupportedAddress', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsupportedAddress', [object], $unsupportedAddressAttributes))
+
         $cyclicAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $cyclicDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $cyclicValue = [System.Collections.ArrayList]::new()
@@ -201,6 +222,14 @@ function Get-CollectorFixture {
         $nestedCollectionDefault.Value = $nestedCollection
         $nestedCollectionAttributes.Add($nestedCollectionDefault)
         $parameters.Add('NestedCollection', [System.Management.Automation.RuntimeDefinedParameter]::new('NestedCollection', [object[]], $nestedCollectionAttributes))
+
+        $nestedMatrixAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $nestedMatrixDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $nestedMatrix = [object[]]::new(1)
+        $nestedMatrix[0] = $matrix
+        $nestedMatrixDefault.Value = $nestedMatrix
+        $nestedMatrixAttributes.Add($nestedMatrixDefault)
+        $parameters.Add('NestedMatrix', [System.Management.Automation.RuntimeDefinedParameter]::new('NestedMatrix', [object[]], $nestedMatrixAttributes))
 
         $dateOnlyType = 'System.DateOnly' -as [type]
         if ($dateOnlyType) {
@@ -321,12 +350,22 @@ function Get-AcceleratedOutput {
                 var byRefType = Assert.Single(command.Parameters, parameter => parameter.Name == "ByRefType");
                 var uri = Assert.Single(command.Parameters, parameter => parameter.Name == "Uri");
                 var dictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "Dictionary");
+                var caseDistinctDictionary = Assert.Single(
+                    command.Parameters,
+                    parameter => parameter.Name == "CaseDistinctDictionary");
+                var unsupportedCulture = Assert.Single(
+                    command.Parameters,
+                    parameter => parameter.Name == "UnsupportedCulture");
+                var unsupportedAddress = Assert.Single(
+                    command.Parameters,
+                    parameter => parameter.Name == "UnsupportedAddress");
                 var cyclicCollection = Assert.Single(
                     command.Parameters,
                     parameter => parameter.Name == "CyclicCollection");
                 var matrix = Assert.Single(command.Parameters, parameter => parameter.Name == "Matrix");
                 var boundedArray = Assert.Single(command.Parameters, parameter => parameter.Name == "BoundedArray");
                 var nestedCollection = Assert.Single(command.Parameters, parameter => parameter.Name == "NestedCollection");
+                var nestedMatrix = Assert.Single(command.Parameters, parameter => parameter.Name == "NestedMatrix");
                 var dateOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "DateOnly");
                 var timeOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "TimeOnly");
                 var dateTime = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTime");
@@ -341,7 +380,7 @@ function Get-AcceleratedOutput {
                 Assert.Equal("authored display value", helpWins.DefaultValue);
                 Assert.Equal("(-join @(([char]55296)))", invalidSurrogate.DefaultValue);
                 Assert.Equal("(-join @(([char]55296)))", invalidSurrogateHelp.DefaultValue);
-                Assert.Equal("(-join @(([char]55296)))", invalidText.DefaultValue);
+                Assert.True(string.IsNullOrEmpty(invalidText.DefaultValue));
                 Assert.Equal(80000, longHelp.DefaultValue.Length);
                 Assert.All(longHelp.DefaultValue, character => Assert.Equal('x', character));
                 Assert.Equal("-0.0", negativeDouble.DefaultValue);
@@ -362,18 +401,26 @@ function Get-AcceleratedOutput {
                     "[System.Uri]::new('https://example.com/a''b?x=1', [System.UriKind]::Absolute)",
                     uri.DefaultValue);
                 Assert.Equal(
-                    "@{ ('alpha') = 1; ('endpoint') = [System.Uri]::new('relative/path', [System.UriKind]::Relative) }",
+                    "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new(); $dictionary.Add(('alpha'), (1)); $dictionary.Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
                     dictionary.DefaultValue);
+                Assert.Equal(
+                    "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new(); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); return ,$dictionary }",
+                    caseDistinctDictionary.DefaultValue);
+                Assert.True(string.IsNullOrEmpty(unsupportedCulture.DefaultValue));
+                Assert.True(string.IsNullOrEmpty(unsupportedAddress.DefaultValue));
                 Assert.True(string.IsNullOrEmpty(cyclicCollection.DefaultValue));
                 Assert.Equal(
-                    "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue(1, [int[]]@(0, 0)); $array.SetValue(2, [int[]]@(0, 1)); $array.SetValue(3, [int[]]@(1, 0)); $array.SetValue(4, [int[]]@(1, 1)); Write-Output -NoEnumerate $array }",
+                    "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }",
                     matrix.DefaultValue);
                 Assert.Equal(
-                    "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2), [int[]]@(5)); $array.SetValue(7, [int[]]@(5)); $array.SetValue(8, [int[]]@(6)); Write-Output -NoEnumerate $array }",
+                    "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2), [int[]]@(5)); $array.SetValue((7), [int[]]@(5)); $array.SetValue((8), [int[]]@(6)); return ,$array }",
                     boundedArray.DefaultValue);
                 Assert.Equal(
-                    "& { $array = [object[]]::new(1); $array.SetValue(@(1, 2), 0); Write-Output -NoEnumerate $array }",
+                    "& { $array = [object[]]::new(1); $array.SetValue((@(1, 2)), 0); return ,$array }",
                     nestedCollection.DefaultValue);
+                Assert.Equal(
+                    "& { $array = [object[]]::new(1); $array.SetValue((& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }), 0); return ,$array }",
+                    nestedMatrix.DefaultValue);
                 if (host.Contains("pwsh", StringComparison.OrdinalIgnoreCase))
                 {
                     Assert.NotNull(dateOnly);
@@ -418,8 +465,8 @@ function Get-AcceleratedOutput {
         if (depth <= 0) return value;
         var result = "@(" + value + ")";
         for (var index = 1; index < depth; index++)
-            result = "& { $array = [object[]]::new(1); $array.SetValue(" + result +
-                     ", 0); Write-Output -NoEnumerate $array }";
+            result = "& { $array = [object[]]::new(1); $array.SetValue((" + result +
+                     "), 0); return ,$array }";
         return result;
     }
 
