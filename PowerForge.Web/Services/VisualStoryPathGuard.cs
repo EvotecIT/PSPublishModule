@@ -11,9 +11,13 @@ internal static class VisualStoryPathGuard
         string label,
         bool allowRoot = false)
     {
-        if (Path.IsPathRooted(relativePath))
+        var portablePath = relativePath
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
+        if (Path.IsPathRooted(portablePath) ||
+            portablePath.Length >= 2 && char.IsLetter(portablePath[0]) && portablePath[1] == ':')
             throw new InvalidOperationException($"Visual-story {label} path must be relative: {relativePath}");
-        if (relativePath.Split(
+        if (portablePath.Split(
                 [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
                 StringSplitOptions.RemoveEmptyEntries)
             .Any(static segment => string.Equals(segment, "..", StringComparison.Ordinal)))
@@ -23,7 +27,7 @@ internal static class VisualStoryPathGuard
         }
 
         var fullRoot = Path.GetFullPath(root);
-        var fullPath = Path.GetFullPath(Path.Combine(fullRoot, relativePath));
+        var fullPath = Path.GetFullPath(Path.Combine(fullRoot, portablePath));
         EnsureContainedPath(fullRoot, fullPath, label, allowRoot);
         return fullPath;
     }

@@ -91,7 +91,7 @@ public static partial class WebAssetOptimizer
                 if (options.ImageGenerateWebp && TryEncodeVariant(image, null, MagickFormat.WebP, quality, out var webpBytes))
                 {
                     if (webpBytes.LongLength > 0 && webpBytes.LongLength < finalBytes &&
-                        TryWriteVariant(siteRoot, relative, null, "webp", webpBytes, out var webpRelative, onUpdated))
+                        TryWriteVariant(siteRoot, relative, null, "webp", webpBytes, protectedStoryArtifacts, out var webpRelative, onUpdated))
                     {
                         generatedVariants.Add(new WebOptimizeImageVariantEntry
                         {
@@ -112,7 +112,7 @@ public static partial class WebAssetOptimizer
                 if (options.ImageGenerateAvif && TryEncodeVariant(image, null, MagickFormat.Avif, quality, out var avifBytes))
                 {
                     if (avifBytes.LongLength > 0 && avifBytes.LongLength < finalBytes &&
-                        TryWriteVariant(siteRoot, relative, null, "avif", avifBytes, out var avifRelative, onUpdated))
+                        TryWriteVariant(siteRoot, relative, null, "avif", avifBytes, protectedStoryArtifacts, out var avifRelative, onUpdated))
                     {
                         generatedVariants.Add(new WebOptimizeImageVariantEntry
                         {
@@ -142,7 +142,7 @@ public static partial class WebAssetOptimizer
                             continue;
                         if (responsiveBytes.LongLength <= 0 || responsiveBytes.LongLength >= preferredBytes)
                             continue;
-                        if (!TryWriteVariant(siteRoot, plan.PreferredRelativePath, width, responsiveExtension, responsiveBytes, out var variantRelative, onUpdated))
+                        if (!TryWriteVariant(siteRoot, plan.PreferredRelativePath, width, responsiveExtension, responsiveBytes, protectedStoryArtifacts, out var variantRelative, onUpdated))
                             continue;
 
                         plan.ResponsiveVariants.Add(new ImageVariantPlan
@@ -500,6 +500,7 @@ public static partial class WebAssetOptimizer
         int? width,
         string formatExtension,
         byte[] bytes,
+        IReadOnlySet<string> protectedStoryArtifacts,
         out string variantRelativePath,
         Action<string>? onUpdated = null)
     {
@@ -524,7 +525,9 @@ public static partial class WebAssetOptimizer
             ? $"{relativeNoExt}.w{width.Value}.{ext}"
             : $"{relativeNoExt}.{ext}";
 
-        var variantPath = Path.Combine(siteRoot, variantName.Replace('/', Path.DirectorySeparatorChar));
+        var variantPath = Path.GetFullPath(Path.Combine(siteRoot, variantName.Replace('/', Path.DirectorySeparatorChar)));
+        if (protectedStoryArtifacts.Contains(variantPath))
+            return false;
         Directory.CreateDirectory(Path.GetDirectoryName(variantPath)!);
         File.WriteAllBytes(variantPath, bytes);
         onUpdated?.Invoke(variantPath);

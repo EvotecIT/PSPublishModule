@@ -34,20 +34,22 @@ internal static class WebVisualStoryAnimatedArtifactValidator
             return;
         }
 
-        ValidateGif(path, displayPath);
+        ValidateGif(path, displayPath, requireMultipleFrames: true);
     }
 
-    private static void ValidateGif(string path, string displayPath)
+    internal static void ValidateGif(string path, string displayPath, bool requireMultipleFrames)
     {
         try
         {
             using (var metadata = new MagickImageCollection())
             {
                 metadata.Ping(path);
-                if (metadata.Count < 2)
+                if (metadata.Count < (requireMultipleFrames ? 2 : 1))
                 {
                     throw new InvalidOperationException(
-                        $"Visual-story animated artifact must contain multiple decodable frames: {displayPath}");
+                        requireMultipleFrames
+                            ? $"Visual-story animated artifact must contain multiple decodable frames: {displayPath}"
+                            : $"Visual-story GIF artifact must contain a decodable frame: {displayPath}");
                 }
                 if (metadata.Count > MaximumGifFrames)
                 {

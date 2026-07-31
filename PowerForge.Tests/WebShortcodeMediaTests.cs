@@ -275,6 +275,54 @@ public class WebShortcodeMediaTests
     }
 
     [Fact]
+    public void Build_PublishesConventionalStaticStoriesAlongsideUnrelatedMappings()
+    {
+        var html = BuildSinglePageSite(
+            "{{< story manifest=\"static/visual-story.json\" transcript=\"hidden\" >}}",
+            root =>
+            {
+                var bundleRoot = Path.Combine(root, "static");
+                Directory.CreateDirectory(bundleRoot);
+                File.WriteAllText(Path.Combine(root, "favicon.ico"), "icon");
+                File.WriteAllText(
+                    Path.Combine(bundleRoot, "demo.svg"),
+                    "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+                using (var completed = new MagickImage(MagickColors.Transparent, 2, 2))
+                {
+                    completed.Write(Path.Combine(bundleRoot, "demo.png"), MagickFormat.Png);
+                }
+                File.WriteAllText(
+                    Path.Combine(bundleRoot, "visual-story.json"),
+                    """
+                    {
+                      "schemaVersion": 1,
+                      "id": "root-story",
+                      "title": "Root story",
+                      "alt": "The result appears.",
+                      "outcome": "The result is visible.",
+                      "artifacts": [
+                        { "role": "animated", "format": "svg", "path": "demo.svg" },
+                        { "role": "completed", "format": "png", "path": "demo.png" }
+                      ]
+                    }
+                    """);
+            },
+            spec => spec.StaticAssets =
+            [
+                new StaticAssetSpec { Source = "favicon.ico", Destination = "favicon.ico" }
+            ],
+            assertOutput: output =>
+            {
+                Assert.True(File.Exists(Path.Combine(output, "visual-story.json")));
+                Assert.True(File.Exists(Path.Combine(output, "demo.svg")));
+                Assert.True(File.Exists(Path.Combine(output, "demo.png")));
+                Assert.True(File.Exists(Path.Combine(output, "favicon.ico")));
+            });
+
+        Assert.Contains("src=\"/demo.svg\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Build_DerivesStoryUrlsFromConfiguredStaticAssetMapping()
     {
         var html = BuildSinglePageSite(

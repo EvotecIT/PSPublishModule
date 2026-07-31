@@ -120,9 +120,19 @@ public static class WebVisualStoryStager
                 throw new IOException($"Visual-story artifact already exists: {collision.DestinationPath}");
         }
 
-        var previousPaths = options.Overwrite && File.Exists(stagedManifestPath)
-            ? LoadDeclaredArtifactPaths(stagedManifestPath, outputRoot)
-            : Array.Empty<string>();
+        var preserveExistingOutput = true;
+        var previousPaths = Array.Empty<string>();
+        if (options.Overwrite && File.Exists(stagedManifestPath))
+        {
+            try
+            {
+                previousPaths = LoadDeclaredArtifactPaths(stagedManifestPath, outputRoot);
+            }
+            catch (InvalidOperationException)
+            {
+                preserveExistingOutput = false;
+            }
+        }
         var currentPathByIdentity = resolved.ToDictionary(
             static item => item.RelativePath,
             static item => item.RelativePath,
@@ -131,7 +141,7 @@ public static class WebVisualStoryStager
         var stagingRoot = CreateSiblingPath(outputRoot, "stage");
         try
         {
-            if (Directory.Exists(outputRoot))
+            if (preserveExistingOutput && Directory.Exists(outputRoot))
                 CopyDirectoryContents(outputRoot, stagingRoot);
             else
                 Directory.CreateDirectory(stagingRoot);
@@ -168,21 +178,7 @@ public static class WebVisualStoryStager
                         $"Visual-story artifact changed while it was being staged: {item.RelativePath}");
                 }
                 var stagedFormat = NormalizeFormat(item.Artifact.Format);
-                if (IsCompletedArtifact(item.Artifact))
-                {
-                    ValidateCompletedPng(temporaryDestination, item.RelativePath);
-                }
-                if (IsAnimatedArtifact(item.Artifact))
-                {
-                    WebVisualStoryAnimatedArtifactValidator.Validate(
-                        temporaryDestination,
-                        item.RelativePath,
-                        stagedFormat);
-                }
-                if (IsTranscriptArtifact(item.Artifact))
-                {
-                    ValidateTranscriptText(temporaryDestination, item.RelativePath);
-                }
+                ValidateArtifactContent(item.Artifact, temporaryDestination, item.RelativePath, stagedFormat);
                 item.Artifact.Role = item.Artifact.Role.Trim().ToLowerInvariant();
                 item.Artifact.Path = item.RelativePath;
                 item.Artifact.Format = stagedFormat;
@@ -319,18 +315,7 @@ public static class WebVisualStoryStager
             if (!string.IsNullOrWhiteSpace(artifact.Sha256) &&
                 !string.Equals(artifact.Sha256, ComputeSha256(artifactPath), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Visual-story artifact digest does not match its manifest: {artifact.Path}");
-            if (IsCompletedArtifact(artifact))
-            {
-                ValidateCompletedPng(artifactPath, artifact.Path);
-            }
-            if (IsAnimatedArtifact(artifact))
-            {
-                WebVisualStoryAnimatedArtifactValidator.Validate(artifactPath, artifact.Path, normalizedFormat);
-            }
-            if (IsTranscriptArtifact(artifact))
-            {
-                ValidateTranscriptText(artifactPath, artifact.Path);
-            }
+            ValidateArtifactContent(artifact, artifactPath, artifact.Path, normalizedFormat);
         }
         return bundle;
     }
@@ -458,10 +443,38 @@ public static class WebVisualStoryStager
     private static bool IsAnimatedArtifact(WebVisualStoryArtifact artifact)
         => string.Equals(artifact.Role, "animated", StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsTranscriptArtifact(WebVisualStoryArtifact artifact)
-        => string.Equals(artifact.Role, "transcript", StringComparison.OrdinalIgnoreCase);
+    private static void ValidateArtifactContent(
+        WebVisualStoryArtifact artifact,
+        string path,
+        string displayPath,
+        string normalizedFormat)
+    {
+        if (IsAnimatedArtifact(artifact))
+        {
+            WebVisualStoryAnimatedArtifactValidator.Validate(path, displayPath, normalizedFormat);
+            return;
+        }
 
-    private static void ValidateTranscriptText(string path, string displayPath)
+        switch (normalizedFormat)
+        {
+            case "svg":
+            case "apng":
+                WebVisualStoryAnimatedArtifactValidator.Validate(path, displayPath, normalizedFormat);
+                break;
+            case "gif":
+                WebVisualStoryAnimatedArtifactValidator.ValidateGif(path, displayPath, requireMultipleFrames: false);
+                break;
+            case "png":
+                ValidatePng(path, displayPath);
+                break;
+            case "html":
+            case "text":
+                ValidateUtf8Text(path, displayPath);
+                break;
+        }
+    }
+
+    private static void ValidateUtf8Text(string path, string displayPath)
     {
         try
         {
@@ -473,19 +486,19 @@ public static class WebVisualStoryStager
         catch (DecoderFallbackException ex)
         {
             throw new InvalidOperationException(
-                $"Visual-story transcript artifact must contain valid UTF-8 text: {displayPath}",
+                $"Visual-story text artifact must contain valid UTF-8 text: {displayPath}",
                 ex);
         }
     }
 
-    private static void ValidateCompletedPng(string path, string displayPath)
+    private static void ValidatePng(string path, string displayPath)
     {
         try
         {
             var info = new MagickImageInfo(path);
             if (info.Format != MagickFormat.Png || info.Width == 0 || info.Height == 0)
             {
-                throw new InvalidOperationException($"Visual-story completed artifact is not a decodable PNG: {displayPath}");
+                throw new InvalidOperationException($"Visual-story artifact is not a decodable PNG: {displayPath}");
             }
             if ((ulong)info.Width * info.Height > 100_000_000UL)
             {
@@ -496,13 +509,13 @@ public static class WebVisualStoryStager
             using var image = new MagickImage(path);
             if (image.Format != MagickFormat.Png || image.Width == 0 || image.Height == 0)
             {
-                throw new InvalidOperationException($"Visual-story completed artifact is not a decodable PNG: {displayPath}");
+                throw new InvalidOperationException($"Visual-story artifact is not a decodable PNG: {displayPath}");
             }
         }
         catch (MagickException ex)
         {
             throw new InvalidOperationException(
-                $"Visual-story completed artifact is not a decodable PNG: {displayPath}",
+                $"Visual-story artifact is not a decodable PNG: {displayPath}",
                 ex);
         }
     }

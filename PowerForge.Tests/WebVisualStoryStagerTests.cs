@@ -186,6 +186,36 @@ public class WebVisualStoryStagerTests
     }
 
     [Fact]
+    public void Stage_NormalizesPortableBackslashArtifactPaths()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var media = Path.Combine(source, "media");
+            Directory.CreateDirectory(media);
+            File.Move(Path.Combine(source, "demo.svg"), Path.Combine(media, "demo.svg"));
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(manifest), WebJsonForTests.Options)!;
+            bundle.Artifacts[0].Path = "media\\demo.svg";
+            File.WriteAllText(manifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
+
+            var result = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = manifest,
+                OutputPath = Path.Combine(root, "published")
+            });
+
+            Assert.Equal("media/demo.svg", result.Bundle.Artifacts[0].Path);
+            Assert.True(File.Exists(Path.Combine(root, "published", "media", "demo.svg")));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Stage_HonorsOverwriteForManifestAndRemovesObsoleteDeclaredArtifacts()
     {
         var root = CreateBundle();
@@ -217,6 +247,72 @@ public class WebVisualStoryStagerTests
             });
 
             Assert.False(File.Exists(Path.Combine(output, "demo.txt")));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Stage_OverwriteRecoversFromInvalidPriorManifest()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var sourceManifest = Path.Combine(root, "source", "story.json");
+            var output = Path.Combine(root, "published");
+            var first = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = sourceManifest,
+                OutputPath = output
+            });
+            File.WriteAllText(first.ManifestPath, "{ truncated");
+            File.WriteAllText(Path.Combine(output, "stale.bin"), "stale");
+
+            var replacement = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = sourceManifest,
+                OutputPath = output,
+                Overwrite = true
+            });
+
+            Assert.Equal(3, WebVisualStoryStager.Load(replacement.ManifestPath).Artifacts.Length);
+            Assert.False(File.Exists(Path.Combine(output, "stale.bin")));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Theory]
+    [InlineData("svg", "invalid.svg")]
+    [InlineData("gif", "invalid.gif")]
+    [InlineData("apng", "invalid.apng")]
+    [InlineData("png", "invalid.png")]
+    [InlineData("html", "invalid.html")]
+    [InlineData("text", "invalid.txt")]
+    public void Stage_ValidatesContentForEveryDeclaredArtifactFormat(string format, string fileName)
+    {
+        var root = CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            File.WriteAllBytes(Path.Combine(source, fileName), [0xFF, 0xFE, 0xFD]);
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(manifest), WebJsonForTests.Options)!;
+            bundle.Artifacts = bundle.Artifacts
+                .Append(new WebVisualStoryArtifact { Role = "source", Format = format, Path = fileName })
+                .ToArray();
+            File.WriteAllText(manifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
+
+            Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
         }
         finally
         {
