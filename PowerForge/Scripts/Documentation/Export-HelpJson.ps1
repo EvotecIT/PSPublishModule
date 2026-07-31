@@ -35,7 +35,14 @@ function ConvertToUtf16CodeUnits([string]$text) {
   return $builder.ToString()
 }
 
-function AddRuntimeDefaultValueTokens([object]$value, [System.Collections.IList]$tokens) {
+function AddRuntimeDefaultValueTokens(
+  [object]$value,
+  [System.Collections.IList]$tokens,
+  [System.Collections.IList]$referenceStack = $null
+) {
+  if ($null -eq $referenceStack) {
+    $referenceStack = [System.Collections.ArrayList]::new()
+  }
   if ($null -eq $value) {
     $tokens.Add([ordered]@{ kind = 'Null' }) | Out-Null
     return
@@ -126,6 +133,14 @@ function AddRuntimeDefaultValueTokens([object]$value, [System.Collections.IList]
     }) | Out-Null
     return
   }
+  if ($value -is [uri]) {
+    $tokens.Add([ordered]@{
+      kind = 'UriCodeUnits'
+      text = ConvertToUtf16CodeUnits $value.OriginalString
+      name = if ($value.IsAbsoluteUri) { 'Absolute' } else { 'Relative' }
+    }) | Out-Null
+    return
+  }
   if ($value.GetType().FullName -eq 'System.DateOnly') {
     $tokens.Add([ordered]@{
       kind = 'DateOnly'
@@ -169,13 +184,35 @@ function AddRuntimeDefaultValueTokens([object]$value, [System.Collections.IList]
     }) | Out-Null
     return
   }
-  if ($value -is [System.Collections.IEnumerable]) {
-    $tokens.Add([ordered]@{ kind = 'CollectionStart' }) | Out-Null
-    foreach ($item in $value) {
-      AddRuntimeDefaultValueTokens $item $tokens
+  if ($value -is [System.Collections.IDictionary] -or
+      $value -is [System.Collections.IEnumerable]) {
+    foreach ($ancestor in $referenceStack) {
+      if ([object]::ReferenceEquals($ancestor, $value)) {
+        throw 'Circular default-value collections are not supported.'
+      }
     }
-    $tokens.Add([ordered]@{ kind = 'CollectionEnd' }) | Out-Null
-    return
+    [void]$referenceStack.Add($value)
+    try {
+      if ($value -is [System.Collections.IDictionary]) {
+        $tokens.Add([ordered]@{ kind = 'DictionaryStart' }) | Out-Null
+        foreach ($entry in $value.GetEnumerator()) {
+          $tokens.Add([ordered]@{ kind = 'DictionaryEntryStart' }) | Out-Null
+          AddRuntimeDefaultValueTokens $entry.Key $tokens $referenceStack
+          AddRuntimeDefaultValueTokens $entry.Value $tokens $referenceStack
+          $tokens.Add([ordered]@{ kind = 'DictionaryEntryEnd' }) | Out-Null
+        }
+        $tokens.Add([ordered]@{ kind = 'DictionaryEnd' }) | Out-Null
+        return
+      }
+      $tokens.Add([ordered]@{ kind = 'CollectionStart' }) | Out-Null
+      foreach ($item in $value) {
+        AddRuntimeDefaultValueTokens $item $tokens $referenceStack
+      }
+      $tokens.Add([ordered]@{ kind = 'CollectionEnd' }) | Out-Null
+      return
+    } finally {
+      $referenceStack.RemoveAt($referenceStack.Count - 1)
+    }
   }
   if ($value -is [System.IFormattable]) {
     $tokens.Add([ordered]@{

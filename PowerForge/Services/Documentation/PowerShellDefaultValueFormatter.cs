@@ -55,6 +55,8 @@ internal static class PowerShellDefaultValueFormatter
                 return "[System.Guid]::ParseExact('" + (value.Text ?? string.Empty).Replace("'", "''") + "', 'D')";
             case "version":
                 return "[System.Version]::Parse('" + (value.Text ?? string.Empty).Replace("'", "''") + "')";
+            case "uricodeunits":
+                return FormatUri(DecodeUtf16CodeUnits(value.Text), value.Name);
             case "dateonly":
                 return "[System.DateOnly]::FromDayNumber(([int]" + (value.Text ?? string.Empty) + "))";
             case "timeonly":
@@ -143,6 +145,15 @@ internal static class PowerShellDefaultValueFormatter
         return expression + ")";
     }
 
+    private static string FormatUri(string text, string? kind)
+    {
+        var uriKind = string.Equals(kind, "Absolute", StringComparison.OrdinalIgnoreCase)
+            ? "Absolute"
+            : "Relative";
+        return "[System.Uri]::new(" + FormatString(text, preserveCharacterType: false) +
+               ", [System.UriKind]::" + uriKind + ")";
+    }
+
     private static string FormatFallbackText(string text)
         => NeedsEncoding(text)
             ? FormatString(text, preserveCharacterType: false)
@@ -187,7 +198,7 @@ internal static class PowerShellDefaultValueFormatter
 
     private static string FormatTokens(IReadOnlyList<DocumentationRuntimeValue> tokens)
     {
-        var collections = new Stack<List<string>>();
+        var frames = new Stack<TokenFrame>();
         string? result = null;
 
         foreach (var token in tokens)
@@ -195,36 +206,125 @@ internal static class PowerShellDefaultValueFormatter
             var kind = (token.Kind ?? string.Empty).Trim();
             if (kind.Equals("CollectionStart", StringComparison.OrdinalIgnoreCase))
             {
-                collections.Push(new List<string>());
+                frames.Push(new CollectionTokenFrame());
                 continue;
             }
 
             if (kind.Equals("CollectionEnd", StringComparison.OrdinalIgnoreCase))
             {
-                if (collections.Count == 0)
+                if (frames.Count == 0 || !(frames.Peek() is CollectionTokenFrame))
                     throw new FormatException("The runtime default token stream contains an unexpected collection terminator.");
-                Append("@(" + string.Join(", ", collections.Pop()) + ")");
+                Append(frames.Pop().Complete());
+                continue;
+            }
+
+            if (kind.Equals("DictionaryStart", StringComparison.OrdinalIgnoreCase))
+            {
+                frames.Push(new DictionaryTokenFrame());
+                continue;
+            }
+
+            if (kind.Equals("DictionaryEntryStart", StringComparison.OrdinalIgnoreCase))
+            {
+                if (frames.Count == 0 || !(frames.Peek() is DictionaryTokenFrame dictionary))
+                    throw new FormatException("The runtime default token stream contains a dictionary entry outside a dictionary.");
+                dictionary.BeginEntry();
+                continue;
+            }
+
+            if (kind.Equals("DictionaryEntryEnd", StringComparison.OrdinalIgnoreCase))
+            {
+                if (frames.Count == 0 || !(frames.Peek() is DictionaryTokenFrame dictionary))
+                    throw new FormatException("The runtime default token stream contains a dictionary entry terminator outside a dictionary.");
+                dictionary.EndEntry();
+                continue;
+            }
+
+            if (kind.Equals("DictionaryEnd", StringComparison.OrdinalIgnoreCase))
+            {
+                if (frames.Count == 0 || !(frames.Peek() is DictionaryTokenFrame))
+                    throw new FormatException("The runtime default token stream contains an unexpected dictionary terminator.");
+                Append(frames.Pop().Complete());
                 continue;
             }
 
             Append(Format(token));
         }
 
-        if (collections.Count > 0)
-            throw new FormatException("The runtime default token stream is missing a collection terminator.");
+        if (frames.Count > 0)
+            throw new FormatException("The runtime default token stream is missing a container terminator.");
         return result ?? throw new FormatException("The runtime default token stream is empty.");
 
         void Append(string value)
         {
-            if (collections.Count > 0)
+            if (frames.Count > 0)
             {
-                collections.Peek().Add(value);
+                frames.Peek().Add(value);
                 return;
             }
 
             if (result is not null)
                 throw new FormatException("The runtime default token stream contains trailing values.");
             result = value;
+        }
+    }
+
+    private abstract class TokenFrame
+    {
+        public abstract void Add(string value);
+        public abstract string Complete();
+    }
+
+    private sealed class CollectionTokenFrame : TokenFrame
+    {
+        private readonly List<string> _items = new();
+
+        public override void Add(string value) => _items.Add(value);
+
+        public override string Complete() => "@(" + string.Join(", ", _items) + ")";
+    }
+
+    private sealed class DictionaryTokenFrame : TokenFrame
+    {
+        private readonly List<KeyValuePair<string, string>> _entries = new();
+        private string? _key;
+        private string? _value;
+        private bool _entryOpen;
+
+        public void BeginEntry()
+        {
+            if (_entryOpen)
+                throw new FormatException("The runtime default token stream contains nested dictionary entry markers.");
+            _entryOpen = true;
+            _key = null;
+            _value = null;
+        }
+
+        public override void Add(string value)
+        {
+            if (!_entryOpen)
+                throw new FormatException("The runtime default token stream contains a dictionary value outside an entry.");
+            if (_key is null)
+                _key = value;
+            else if (_value is null)
+                _value = value;
+            else
+                throw new FormatException("The runtime default token stream contains more than two values in a dictionary entry.");
+        }
+
+        public void EndEntry()
+        {
+            if (!_entryOpen || _key is null || _value is null)
+                throw new FormatException("The runtime default token stream contains an incomplete dictionary entry.");
+            _entries.Add(new KeyValuePair<string, string>(_key, _value));
+            _entryOpen = false;
+        }
+
+        public override string Complete()
+        {
+            if (_entryOpen)
+                throw new FormatException("The runtime default token stream ends inside a dictionary entry.");
+            return "@{ " + string.Join("; ", _entries.Select(entry => "(" + entry.Key + ") = " + entry.Value)) + " }";
         }
     }
 

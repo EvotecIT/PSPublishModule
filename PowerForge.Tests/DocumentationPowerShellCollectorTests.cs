@@ -127,6 +127,29 @@ function Get-CollectorFixture {
         $versionAttributes.Add($versionDefault)
         $parameters.Add('Version', [System.Management.Automation.RuntimeDefinedParameter]::new('Version', [version], $versionAttributes))
 
+        $uriAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $uriDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $uriDefault.Value = [uri]::new("https://example.com/a'b?x=1")
+        $uriAttributes.Add($uriDefault)
+        $parameters.Add('Uri', [System.Management.Automation.RuntimeDefinedParameter]::new('Uri', [uri], $uriAttributes))
+
+        $dictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $dictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $dictionaryDefault.Value = [ordered]@{
+            alpha = 1
+            endpoint = [uri]::new('relative/path', [System.UriKind]::Relative)
+        }
+        $dictionaryAttributes.Add($dictionaryDefault)
+        $parameters.Add('Dictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('Dictionary', [object], $dictionaryAttributes))
+
+        $cyclicAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $cyclicDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $cyclicValue = [System.Collections.ArrayList]::new()
+        [void] $cyclicValue.Add($cyclicValue)
+        $cyclicDefault.Value = $cyclicValue
+        $cyclicAttributes.Add($cyclicDefault)
+        $parameters.Add('CyclicCollection', [System.Management.Automation.RuntimeDefinedParameter]::new('CyclicCollection', [object], $cyclicAttributes))
+
         $dateOnlyType = 'System.DateOnly' -as [type]
         if ($dateOnlyType) {
             $dateOnlyAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
@@ -240,6 +263,11 @@ function Get-AcceleratedOutput {
                 var negativeSingle = Assert.Single(command.Parameters, parameter => parameter.Name == "NegativeSingle");
                 var guid = Assert.Single(command.Parameters, parameter => parameter.Name == "Guid");
                 var version = Assert.Single(command.Parameters, parameter => parameter.Name == "Version");
+                var uri = Assert.Single(command.Parameters, parameter => parameter.Name == "Uri");
+                var dictionary = Assert.Single(command.Parameters, parameter => parameter.Name == "Dictionary");
+                var cyclicCollection = Assert.Single(
+                    command.Parameters,
+                    parameter => parameter.Name == "CyclicCollection");
                 var dateOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "DateOnly");
                 var timeOnly = command.Parameters.SingleOrDefault(parameter => parameter.Name == "TimeOnly");
                 var dateTime = Assert.Single(command.Parameters, parameter => parameter.Name == "DateTime");
@@ -263,6 +291,13 @@ function Get-AcceleratedOutput {
                     "[System.Guid]::ParseExact('01234567-89ab-cdef-0123-456789abcdef', 'D')",
                     guid.DefaultValue);
                 Assert.Equal("[System.Version]::Parse('1.2.3.4')", version.DefaultValue);
+                Assert.Equal(
+                    "[System.Uri]::new('https://example.com/a''b?x=1', [System.UriKind]::Absolute)",
+                    uri.DefaultValue);
+                Assert.Equal(
+                    "@{ ('alpha') = 1; ('endpoint') = [System.Uri]::new('relative/path', [System.UriKind]::Relative) }",
+                    dictionary.DefaultValue);
+                Assert.True(string.IsNullOrEmpty(cyclicCollection.DefaultValue));
                 if (host.Contains("pwsh", StringComparison.OrdinalIgnoreCase))
                 {
                     Assert.NotNull(dateOnly);

@@ -76,6 +76,14 @@ public sealed class DocumentationMetadataNormalizerTests
                 Text = "1.2.3.4"
             }));
         Assert.Equal(
+            "[System.Uri]::new('https://example.com/a''b?x=1', [System.UriKind]::Absolute)",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "UriCodeUnits",
+                Name = "Absolute",
+                Text = string.Join(",", "https://example.com/a'b?x=1".Select(character => (int)character))
+            }));
+        Assert.Equal(
             "[System.DateOnly]::FromDayNumber(([int]739827))",
             PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
             {
@@ -161,6 +169,36 @@ public sealed class DocumentationMetadataNormalizerTests
 
         Assert.Equal(NestedExpression(120, "(-join @(([char]55296)))"), formatted);
         Assert.DoesNotContain('\uFFFD', formatted);
+    }
+
+    [Fact]
+    public void DefaultValueFormatter_DecodesDictionaryTokens()
+    {
+        var formatted = PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+        {
+            Tokens =
+            [
+                new DocumentationRuntimeValue { Kind = "DictionaryStart" },
+                new DocumentationRuntimeValue { Kind = "DictionaryEntryStart" },
+                new DocumentationRuntimeValue { Kind = "StringCodeUnits", Text = "97,108,112,104,97" },
+                new DocumentationRuntimeValue { Kind = "Formattable", Text = "1" },
+                new DocumentationRuntimeValue { Kind = "DictionaryEntryEnd" },
+                new DocumentationRuntimeValue { Kind = "DictionaryEntryStart" },
+                new DocumentationRuntimeValue { Kind = "StringCodeUnits", Text = "101,110,100,112,111,105,110,116" },
+                new DocumentationRuntimeValue
+                {
+                    Kind = "UriCodeUnits",
+                    Name = "Relative",
+                    Text = "114,101,108,97,116,105,118,101,47,112,97,116,104"
+                },
+                new DocumentationRuntimeValue { Kind = "DictionaryEntryEnd" },
+                new DocumentationRuntimeValue { Kind = "DictionaryEnd" }
+            ]
+        });
+
+        Assert.Equal(
+            "@{ ('alpha') = 1; ('endpoint') = [System.Uri]::new('relative/path', [System.UriKind]::Relative) }",
+            formatted);
     }
 
     [Fact]
