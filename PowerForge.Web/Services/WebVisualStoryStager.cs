@@ -9,6 +9,8 @@ namespace PowerForge.Web;
 /// <summary>Validates producer output and stages a portable visual-story bundle.</summary>
 public static class WebVisualStoryStager
 {
+    internal const long DefaultMaximumArtifactBytes = 25L * 1024L * 1024L;
+    internal const long DefaultMaximumTotalArtifactBytes = 100L * 1024L * 1024L;
     private const int MaximumArtifactCount = 64;
     private const string StagedManifestFileName = "visual-story.json";
     private static readonly JsonSerializerOptions ManifestJsonOptions = CreateManifestJsonOptions();
@@ -71,7 +73,8 @@ public static class WebVisualStoryStager
 
         var resolved = new List<(WebVisualStoryArtifact Artifact, string SourcePath, string RelativePath, string DestinationPath, long Bytes, string Sha256)>();
         var relativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var directoryPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var portablePaths = new Dictionary<string, (string DeclaredPath, bool IsDirectory)>(
+            StringComparer.OrdinalIgnoreCase);
         var totalArtifactBytes = 0L;
         foreach (var artifact in bundle.Artifacts)
         {
@@ -81,15 +84,12 @@ public static class WebVisualStoryStager
                 throw new FileNotFoundException($"Visual-story artifact was not found: {artifact.Path}", sourcePath);
 
             var info = new FileInfo(sourcePath);
-            if (info.Length > options.MaximumArtifactBytes)
-                throw new InvalidOperationException(
-                    $"Visual-story artifact exceeds the {options.MaximumArtifactBytes}-byte limit: {artifact.Path}");
-            totalArtifactBytes = checked(totalArtifactBytes + info.Length);
-            if (totalArtifactBytes > options.MaximumTotalArtifactBytes)
-            {
-                throw new InvalidOperationException(
-                    $"Visual-story artifacts exceed the {options.MaximumTotalArtifactBytes}-byte aggregate limit.");
-            }
+            totalArtifactBytes = ReserveArtifactBytes(
+                totalArtifactBytes,
+                info.Length,
+                options.MaximumArtifactBytes,
+                options.MaximumTotalArtifactBytes,
+                artifact.Path);
 
             var extension = Path.GetExtension(sourcePath).TrimStart('.');
             var normalizedFormat = NormalizeFormat(artifact.Format);
@@ -100,7 +100,7 @@ public static class WebVisualStoryStager
             ValidateReservedStagedPath(relativePath);
             if (!relativePaths.Add(relativePath))
                 throw new InvalidOperationException($"Visual-story artifact paths must be unique: {relativePath}");
-            ValidateDirectoryCasing(relativePath, directoryPaths);
+            ValidatePortablePathTopology(relativePath, portablePaths);
             var destinationPath = VisualStoryPathGuard.ResolveRelativePath(outputRoot, relativePath, "staged artifact");
             resolved.Add((artifact, sourcePath, relativePath, destinationPath, info.Length, sha256));
         }
@@ -204,26 +204,64 @@ public static class WebVisualStoryStager
         };
     }
 
-    private static void ValidateDirectoryCasing(
+    private static void ValidatePortablePathTopology(
         string relativeArtifactPath,
-        Dictionary<string, string> directoryPaths)
+        Dictionary<string, (string DeclaredPath, bool IsDirectory)> portablePaths)
     {
         var segments = relativeArtifactPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         var prefix = string.Empty;
-        for (var index = 0; index < segments.Length - 1; index++)
+        for (var index = 0; index < segments.Length; index++)
         {
             prefix = prefix.Length == 0 ? segments[index] : prefix + "/" + segments[index];
-            if (directoryPaths.TryGetValue(prefix, out var declaredPath))
+            var isDirectory = index < segments.Length - 1;
+            if (portablePaths.TryGetValue(prefix, out var declared))
             {
-                if (!string.Equals(prefix, declaredPath, StringComparison.Ordinal))
+                if (declared.IsDirectory != isDirectory)
+                {
                     throw new InvalidOperationException(
-                        $"Visual-story artifact directories must use consistent casing: {declaredPath} and {prefix}");
+                        $"Visual-story artifact paths cannot use the same portable path as both a file and directory: {declared.DeclaredPath} and {prefix}");
+                }
+                if (!string.Equals(prefix, declared.DeclaredPath, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Visual-story artifact paths must use consistent casing: {declared.DeclaredPath} and {prefix}");
+                }
             }
             else
             {
-                directoryPaths.Add(prefix, prefix);
+                portablePaths.Add(prefix, (prefix, isDirectory));
             }
         }
+    }
+
+    internal static void ValidatePortablePathTopologyForTesting(params string[] relativeArtifactPaths)
+    {
+        var portablePaths = new Dictionary<string, (string DeclaredPath, bool IsDirectory)>(
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var relativeArtifactPath in relativeArtifactPaths)
+            ValidatePortablePathTopology(relativeArtifactPath, portablePaths);
+    }
+
+    internal static long ReserveArtifactBytes(
+        long currentTotalBytes,
+        long artifactBytes,
+        long maximumArtifactBytes,
+        long maximumTotalArtifactBytes,
+        string displayPath)
+    {
+        if (artifactBytes > maximumArtifactBytes)
+        {
+            throw new InvalidOperationException(
+                $"Visual-story artifact exceeds the {maximumArtifactBytes}-byte limit: {displayPath}");
+        }
+
+        var nextTotalBytes = checked(currentTotalBytes + artifactBytes);
+        if (nextTotalBytes > maximumTotalArtifactBytes)
+        {
+            throw new InvalidOperationException(
+                $"Visual-story artifacts exceed the {maximumTotalArtifactBytes}-byte aggregate limit.");
+        }
+        return nextTotalBytes;
     }
 
     /// <summary>Loads and validates a staged visual-story manifest without executing anything.</summary>
@@ -245,6 +283,7 @@ public static class WebVisualStoryStager
         var bundle = DeserializeManifest(fullPath);
         ValidateBundle(bundle);
         ValidateCompletedArtifact(bundle);
+        var totalArtifactBytes = 0L;
         foreach (var artifact in bundle.Artifacts)
         {
             ValidateArtifact(artifact);
@@ -255,6 +294,12 @@ public static class WebVisualStoryStager
             if (!File.Exists(artifactPath))
                 throw new FileNotFoundException($"Visual-story artifact was not found: {artifact.Path}", artifactPath);
             var info = new FileInfo(artifactPath);
+            totalArtifactBytes = ReserveArtifactBytes(
+                totalArtifactBytes,
+                info.Length,
+                DefaultMaximumArtifactBytes,
+                DefaultMaximumTotalArtifactBytes,
+                artifact.Path);
             var normalizedFormat = NormalizeFormat(artifact.Format);
             var extension = Path.GetExtension(artifactPath).TrimStart('.');
             ValidateArtifactFormat(artifact, artifactPath, normalizedFormat, extension);

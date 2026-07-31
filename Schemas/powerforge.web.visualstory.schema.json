@@ -8,11 +8,11 @@
   "properties": {
     "$schema": { "type": "string" },
     "schemaVersion": { "const": 1 },
-    "id": { "type": "string", "minLength": 1 },
-    "title": { "type": "string", "minLength": 1 },
-    "alt": { "type": "string", "minLength": 1 },
+    "id": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "title": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "alt": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
     "caption": { "type": ["string", "null"] },
-    "outcome": { "type": "string", "minLength": 1 },
+    "outcome": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
     "generatedAtUtc": { "type": ["string", "null"], "format": "date-time" },
     "producer": { "type": ["string", "null"] },
     "artifacts": {

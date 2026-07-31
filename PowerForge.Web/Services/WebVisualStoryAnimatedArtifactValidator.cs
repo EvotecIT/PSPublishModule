@@ -133,7 +133,6 @@ internal static class WebVisualStoryAnimatedArtifactValidator
 
     private static void ValidateApng(string path, string displayPath)
     {
-        ValidatePngEnvelope(path, displayPath);
         var bytes = File.ReadAllBytes(path);
         if (bytes.Length < 45 ||
             bytes[0] != 137 || bytes[1] != 80 || bytes[2] != 78 || bytes[3] != 71 ||
@@ -288,7 +287,7 @@ internal static class WebVisualStoryAnimatedArtifactValidator
             }
             else if (first == 'f' && second == 'd' && third == 'A' && fourth == 'T')
             {
-                if (frameData is null || dataLength < 5 ||
+                if (frameData is null || currentFrameAllowsIdat || dataLength < 5 ||
                     ReadUInt32(bytes, dataOffset) != expectedSequence++)
                 {
                     throw new InvalidOperationException($"Visual-story APNG has invalid frame data: {displayPath}");
@@ -321,6 +320,7 @@ internal static class WebVisualStoryAnimatedArtifactValidator
             throw new InvalidOperationException(
                 $"Visual-story animated artifact is not a complete APNG: {displayPath}");
         }
+        ValidatePngEnvelope(path, displayPath);
     }
 
     private static void ValidatePngEnvelope(string path, string displayPath)

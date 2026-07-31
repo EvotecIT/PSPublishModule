@@ -272,6 +272,37 @@ public class WebVisualStoryAnimatedArtifactTests
     }
 
     [Fact]
+    public void Stage_RejectsFdatForTheFirstIncludedApngFrame()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var animationPath = Path.Combine(source, "animated.png");
+            WriteApngWithFdatForFirstIncludedFrame(animationPath);
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = ReadBundle(manifest);
+            var animated = Assert.Single(bundle.Artifacts, artifact => artifact.Role == "animated");
+            animated.Format = "apng";
+            animated.Path = "animated.png";
+            WriteBundle(manifest, bundle);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("invalid frame data", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Stage_RejectsInvalidApngScanlineFilters()
     {
         var root = WebVisualStoryStagerTests.CreateBundle();
@@ -466,6 +497,28 @@ public class WebVisualStoryAnimatedArtifactTests
         WritePngChunk(output, "acTL", animation);
         WritePngChunk(output, "IDAT", CompressPngBytes(defaultImageFilter, 0, 0, 0, 255));
 
+        WritePngChunk(output, "fcTL", FrameControl(sequence: 0));
+        WriteFrameData(output, sequence: 1, CompressPngPixel(0, 191, 255, 255));
+        WritePngChunk(output, "fcTL", FrameControl(sequence: 2));
+        WriteFrameData(output, sequence: 3, CompressPngPixel(60, 179, 113, 255));
+        WritePngChunk(output, "IEND", Array.Empty<byte>());
+        File.WriteAllBytes(path, output.ToArray());
+    }
+
+    private static void WriteApngWithFdatForFirstIncludedFrame(string path)
+    {
+        using var output = new MemoryStream();
+        output.Write(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 });
+        var header = new byte[13];
+        WriteUInt32(header, 0, 1);
+        WriteUInt32(header, 4, 1);
+        header[8] = 8;
+        header[9] = 6;
+        WritePngChunk(output, "IHDR", header);
+
+        var animation = new byte[8];
+        WriteUInt32(animation, 0, 2);
+        WritePngChunk(output, "acTL", animation);
         WritePngChunk(output, "fcTL", FrameControl(sequence: 0));
         WriteFrameData(output, sequence: 1, CompressPngPixel(0, 191, 255, 255));
         WritePngChunk(output, "fcTL", FrameControl(sequence: 2));

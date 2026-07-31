@@ -57,10 +57,12 @@ public sealed class InstallModuleScriptCommand : PSCmdlet
 
     /// <summary>Wildcard include filters (relative to the scripts folder). Defaults to '*.ps1'.</summary>
     [Parameter]
+    [SupportsWildcards]
     public string[]? Include { get; set; }
 
     /// <summary>Wildcard exclude filters (relative to the scripts folder).</summary>
     [Parameter]
+    [SupportsWildcards]
     public string[]? Exclude { get; set; }
 
     /// <summary>Conflict handling when a destination file already exists. Defaults to Merge (keep existing).</summary>

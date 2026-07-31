@@ -18302,7 +18302,7 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
     <command:syntax>
       <command:syntaxItem parameterSetName="ByName">
         <maml:name>Install-ModuleScript</maml:name>
-        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Exclude</maml:name>
           <maml:description>
             <maml:para>Wildcard exclude filters (relative to the scripts folder).</maml:para>
@@ -18326,7 +18326,7 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Include</maml:name>
           <maml:description>
             <maml:para>Wildcard include filters (relative to the scripts folder). Defaults to '*.ps1'.</maml:para>
@@ -18432,7 +18432,7 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
       </command:syntaxItem>
       <command:syntaxItem parameterSetName="ByModule">
         <maml:name>Install-ModuleScript</maml:name>
-        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Exclude</maml:name>
           <maml:description>
             <maml:para>Wildcard exclude filters (relative to the scripts folder).</maml:para>
@@ -18456,7 +18456,7 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Include</maml:name>
           <maml:description>
             <maml:para>Wildcard include filters (relative to the scripts folder). Defaults to '*.ps1'.</maml:para>
@@ -18562,7 +18562,7 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
-      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Exclude</maml:name>
         <maml:description>
           <maml:para>Wildcard exclude filters (relative to the scripts folder).</maml:para>
@@ -18586,7 +18586,7 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Include</maml:name>
         <maml:description>
           <maml:para>Wildcard include filters (relative to the scripts folder). Defaults to '*.ps1'.</maml:para>
