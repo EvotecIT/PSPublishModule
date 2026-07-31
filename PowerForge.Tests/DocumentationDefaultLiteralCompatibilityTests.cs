@@ -524,13 +524,13 @@ function Get-DefaultLiteralFixture {
                 "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('alpha'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
                 Default("Dictionary"));
             Assert.Equal(
-                "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Ordinal); ([System.Collections.IDictionary]$dictionary).Add(('A'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('a'), (2)); return ,$dictionary }",
+                "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new(([int]3), [System.StringComparer]::Ordinal); ([System.Collections.IDictionary]$dictionary).Add(('A'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('a'), (2)); return ,$dictionary }",
                 Default("CaseDistinctDictionary"));
             Assert.Equal(
                 "& { $dictionary = [System.Collections.Concurrent.ConcurrentDictionary[System.String,System.Int32]]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('Alpha'), (1)); return ,$dictionary }",
                 Default("ConcurrentDictionary"));
             Assert.Equal(
-                "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Create([System.Globalization.CultureInfo]::GetCultureInfo('tr-TR'), $true)); ([System.Collections.IDictionary]$dictionary).Add(('I'), (1)); return ,$dictionary }",
+                "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new(([int]3), [System.StringComparer]::Create([System.Globalization.CultureInfo]::GetCultureInfo('tr-TR'), $true)); ([System.Collections.IDictionary]$dictionary).Add(('I'), (1)); return ,$dictionary }",
                 Default("CultureDictionary"));
             Assert.True(string.IsNullOrEmpty(Default("HybridDictionary")));
             Assert.True(string.IsNullOrEmpty(Default("ReadOnlyDictionary")));

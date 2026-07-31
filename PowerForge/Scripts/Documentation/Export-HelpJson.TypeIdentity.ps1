@@ -44,18 +44,14 @@ function GetPowerShellSafeEnumName([type]$enumType, [object]$value) {
 
 function GetConstructibleDictionaryTypeName([System.Collections.IDictionary]$value) {
   $dictionaryType = $value.GetType()
-  $dictionaryTypeName = [string]$dictionaryType.FullName
-  $supported = @(
-    'System.Collections.Hashtable',
-    'System.Collections.Specialized.OrderedDictionary'
-  ) -contains $dictionaryTypeName
+  $supported = [object]::ReferenceEquals($dictionaryType, [System.Collections.Hashtable]) -or
+    [object]::ReferenceEquals($dictionaryType, [System.Collections.Specialized.OrderedDictionary])
   if (-not $supported -and $dictionaryType.IsGenericType) {
-    $supported = @(
-      'System.Collections.Generic.Dictionary`2',
-      'System.Collections.Generic.SortedDictionary`2',
-      'System.Collections.Generic.SortedList`2',
-      'System.Collections.Concurrent.ConcurrentDictionary`2'
-    ) -contains [string]$dictionaryType.GetGenericTypeDefinition().FullName
+    $definition = $dictionaryType.GetGenericTypeDefinition()
+    $supported = [object]::ReferenceEquals($definition, [System.Collections.Generic.Dictionary``2]) -or
+      [object]::ReferenceEquals($definition, [System.Collections.Generic.SortedDictionary``2]) -or
+      [object]::ReferenceEquals($definition, [System.Collections.Generic.SortedList``2]) -or
+      [object]::ReferenceEquals($definition, [System.Collections.Concurrent.ConcurrentDictionary``2])
   }
   if (-not $supported) { return '' }
   if ($dictionaryType.IsAbstract -or $dictionaryType.IsInterface) { return '' }
@@ -63,6 +59,20 @@ function GetConstructibleDictionaryTypeName([System.Collections.IDictionary]$val
   try { $constructor = $dictionaryType.GetConstructor([System.Type]::EmptyTypes) } catch { $constructor = $null }
   if ($null -eq $constructor) { return '' }
   return GetCanonicalTypeNameFromType $dictionaryType
+}
+
+function GetDictionaryCapacity([System.Collections.IDictionary]$value) {
+  $capacityProperty = $value.GetType().GetProperty(
+    'Capacity',
+    [System.Reflection.BindingFlags]'Instance,Public')
+  if ($null -eq $capacityProperty -or
+      $capacityProperty.PropertyType -ne [int] -or
+      $capacityProperty.GetIndexParameters().Count -ne 0) {
+    return $null
+  }
+  try { return [int]$capacityProperty.GetValue($value, $null) } catch {
+    throw ('Dictionary capacity is unavailable: ' + $value.GetType().FullName)
+  }
 }
 
 function GetDictionaryComparer([System.Collections.IDictionary]$value, [ref]$comparerType) {
@@ -197,26 +207,60 @@ function GetDictionaryConstructorExpression([System.Collections.IDictionary]$val
   $comparerExpression = GetKnownDictionaryComparerExpression $comparer $comparerType
   $dictionaryTypeExpression = GetPowerShellTypeDefaultExpression $value.GetType()
   $dictionaryTypeIsLiteral = TestPowerShellTypeLiteral $value.GetType()
+  $capacity = GetDictionaryCapacity $value
+  $capacityExpression = if ($null -eq $capacity) {
+    ''
+  } else {
+    '([int]' + $capacity.ToString([System.Globalization.CultureInfo]::InvariantCulture) + ')'
+  }
   if ([string]::IsNullOrWhiteSpace($comparerExpression)) {
-    if ($dictionaryTypeIsLiteral) { return ('[' + $dictionaryTypeName + ']::new()') }
-    return ('[System.Activator]::CreateInstance((' + $dictionaryTypeExpression + '))')
+    if ([string]::IsNullOrWhiteSpace($capacityExpression)) {
+      if ($dictionaryTypeIsLiteral) { return ('[' + $dictionaryTypeName + ']::new()') }
+      return ('[System.Activator]::CreateInstance((' + $dictionaryTypeExpression + '))')
+    }
+    $capacityConstructor = $value.GetType().GetConstructor([type[]]@([int]))
+    if ($null -eq $capacityConstructor) {
+      throw ('Dictionary type cannot reconstruct capacity: ' + $value.GetType().FullName)
+    }
+    if ($dictionaryTypeIsLiteral) {
+      return ('[' + $dictionaryTypeName + ']::new(' + $capacityExpression + ')')
+    }
+    return ('[System.Activator]::CreateInstance((' + $dictionaryTypeExpression +
+      '), [object[]]@((' + $capacityExpression + ')))')
   }
   $constructor = $null
   foreach ($candidate in $value.GetType().GetConstructors()) {
     $parameters = $candidate.GetParameters()
-    if ($parameters.Count -eq 1 -and $parameters[0].ParameterType.IsInstanceOfType($comparer)) {
+    $matchesComparerOnly = [string]::IsNullOrWhiteSpace($capacityExpression) -and
+      $parameters.Count -eq 1 -and
+      $parameters[0].ParameterType.IsInstanceOfType($comparer)
+    $matchesCapacityAndComparer = -not [string]::IsNullOrWhiteSpace($capacityExpression) -and
+      $parameters.Count -eq 2 -and
+      $parameters[0].ParameterType -eq [int] -and
+      $parameters[1].ParameterType.IsInstanceOfType($comparer)
+    if ($matchesComparerOnly -or $matchesCapacityAndComparer) {
       $constructor = $candidate
       break
     }
   }
   if ($null -eq $constructor) {
-    throw ('Dictionary type cannot reconstruct comparer: ' + $value.GetType().FullName)
+    throw ('Dictionary type cannot reconstruct comparer and capacity: ' + $value.GetType().FullName)
+  }
+  $constructorArguments = if ([string]::IsNullOrWhiteSpace($capacityExpression)) {
+    $comparerExpression
+  } else {
+    $capacityExpression + ', ' + $comparerExpression
   }
   if ($dictionaryTypeIsLiteral) {
-    return ('[' + $dictionaryTypeName + ']::new(' + $comparerExpression + ')')
+    return ('[' + $dictionaryTypeName + ']::new(' + $constructorArguments + ')')
+  }
+  $activatorArguments = if ([string]::IsNullOrWhiteSpace($capacityExpression)) {
+    '(' + $comparerExpression + ')'
+  } else {
+    '(' + $capacityExpression + '), (' + $comparerExpression + ')'
   }
   return ('[System.Activator]::CreateInstance((' + $dictionaryTypeExpression +
-    '), [object[]]@((' + $comparerExpression + ')))')
+    '), [object[]]@(' + $activatorArguments + '))')
 }
 
 function TestPowerShellSimpleTypeName([string]$typeName) {
@@ -344,14 +388,17 @@ function GetPowerShellTypeDefaultExpression([type]$type) {
     }
     return ($elementExpression + '.MakeByRefType()')
   }
-  if ($type.IsArray -and
-      $type.GetArrayRank() -eq 1 -and
-      $type -ne $type.GetElementType().MakeArrayType()) {
+  if ($type.IsArray) {
     $elementExpression = GetPowerShellTypeDefaultExpression ($type.GetElementType())
     if ($elementExpression.StartsWith('& {', [System.StringComparison]::Ordinal)) {
       $elementExpression = '(' + $elementExpression + ')'
     }
-    return ($elementExpression + '.MakeArrayType(1)')
+    $rank = $type.GetArrayRank()
+    if ($rank -eq 1 -and $type -eq $type.GetElementType().MakeArrayType()) {
+      return ($elementExpression + '.MakeArrayType()')
+    }
+    return ($elementExpression + '.MakeArrayType(' +
+      $rank.ToString([System.Globalization.CultureInfo]::InvariantCulture) + ')')
   }
   $canonicalTypeName = GetCanonicalTypeNameFromType $type
   if (TestPowerShellTypeLiteral $type) {
@@ -494,7 +541,7 @@ function ResolveCanonicalTypeName([string]$candidate) {
     try { $resolvedType = $trimmed -as [type] } catch { $resolvedType = $null }
   }
   if ($resolvedType) { return GetCanonicalTypeNameFromType $resolvedType }
-  return ($trimmed -replace '\s+', '')
+  return $trimmed
 }
 
 function GetCanonicalTypeName([string]$candidate) {

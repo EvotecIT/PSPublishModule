@@ -45,6 +45,9 @@ $segmentAssembly = New-TypeIdentityAssembly 'TypeIdentityFixtureSegments'
 $segmentModule = $segmentAssembly.DefineDynamicModule('TypeIdentityFixtureSegments')
 $script:invalidSegmentType = Complete-TypeIdentityType ($segmentModule.DefineType(
     'N.1Bad', [System.Reflection.TypeAttributes]::Public))
+$unsafeGenericType = [System.Collections.Generic.List``1].MakeGenericType($script:invalidSegmentType)
+$script:unsafeSzArrayType = $unsafeGenericType.MakeArrayType()
+$script:unsafeMultidimensionalArrayType = $unsafeGenericType.MakeArrayType(2)
 
 $uniqueFirstAssembly = New-TypeIdentityAssembly 'TypeIdentityFixtureDuplicateUnique'
 $uniqueFirstModule = $uniqueFirstAssembly.DefineDynamicModule('TypeIdentityFixtureDuplicateUnique.First')
@@ -70,6 +73,8 @@ function Get-TypeIdentityFixture {
         $parameters = [System.Management.Automation.RuntimeDefinedParameterDictionary]::new()
         foreach ($entry in @(
             @('InvalidSegmentType', $script:invalidSegmentType),
+            @('UnsafeSzArrayType', $script:unsafeSzArrayType),
+            @('UnsafeMultidimensionalArrayType', $script:unsafeMultidimensionalArrayType),
             @('UniqueDuplicateType', $script:uniqueDuplicateType),
             @('AmbiguousDuplicateType', $script:ambiguousDuplicateType)
         )) {
@@ -86,10 +91,24 @@ function Get-TypeIdentityFixture {
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             var evaluatorPath = Path.Combine(root, "EvaluateTypeIdentities.ps1");
             File.WriteAllText(evaluatorPath, """
-param([string]$ManifestPath, [string]$SegmentExpression, [string]$UniqueExpression)
+param(
+    [string]$ManifestPath,
+    [string]$SegmentExpression,
+    [string]$SzArrayExpression,
+    [string]$MultidimensionalArrayExpression,
+    [string]$UniqueExpression)
 Import-Module -Name $ManifestPath -Force -ErrorAction Stop
 $segment = & ([scriptblock]::Create($SegmentExpression))
 if ($segment.FullName -cne 'N.1Bad') { throw 'Invalid-segment type did not round-trip.' }
+$szArray = & ([scriptblock]::Create($SzArrayExpression))
+if (-not $szArray.IsSZArray -or $szArray.GetElementType().GetGenericArguments()[0].FullName -cne 'N.1Bad') {
+    throw 'Unsafe SZ array Type did not round-trip.'
+}
+$multidimensionalArray = & ([scriptblock]::Create($MultidimensionalArrayExpression))
+if ($multidimensionalArray.GetArrayRank() -ne 2 -or
+    $multidimensionalArray.GetElementType().GetGenericArguments()[0].FullName -cne 'N.1Bad') {
+    throw 'Unsafe multidimensional array Type did not round-trip.'
+}
 $unique = & ([scriptblock]::Create($UniqueExpression))
 if ($unique.FullName -cne 'N.Target-Type') { throw 'Duplicate-assembly type did not round-trip.' }
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
@@ -98,16 +117,20 @@ if ($unique.FullName -cne 'N.Target-Type') { throw 'Duplicate-assembly type did 
                 .ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
             var command = Assert.Single(payload.Commands);
             var invalidSegment = Default("InvalidSegmentType");
+            var unsafeSzArray = Default("UnsafeSzArrayType");
+            var unsafeMultidimensionalArray = Default("UnsafeMultidimensionalArrayType");
             var uniqueDuplicate = Default("UniqueDuplicateType");
 
             Assert.StartsWith("& { $assembly = ", invalidSegment, StringComparison.Ordinal);
             Assert.DoesNotContain("[N.1Bad]", invalidSegment, StringComparison.Ordinal);
             Assert.StartsWith("& { $assembly = ", uniqueDuplicate, StringComparison.Ordinal);
             Assert.True(string.IsNullOrEmpty(Default("AmbiguousDuplicateType")));
+            Assert.Contains(".MakeArrayType()", unsafeSzArray, StringComparison.Ordinal);
+            Assert.Contains(".MakeArrayType(2)", unsafeMultidimensionalArray, StringComparison.Ordinal);
 
             var execution = new PowerShellRunner().Run(new PowerShellRunRequest(
                 evaluatorPath,
-                new[] { manifestPath, invalidSegment, uniqueDuplicate },
+                new[] { manifestPath, invalidSegment, unsafeSzArray, unsafeMultidimensionalArray, uniqueDuplicate },
                 TimeSpan.FromMinutes(1)));
             Assert.True(execution.ExitCode == 0, execution.StdErr);
 
@@ -175,6 +198,37 @@ function New-SpoofedValue([string]$fullName) {
     return [System.Activator]::CreateInstance($type)
 }
 
+function New-RuntimeIdentityAssembly([string]$name) {
+    $assemblyName = [System.Reflection.AssemblyName]::new($name)
+    $factory = [System.Reflection.Emit.AssemblyBuilder].GetMethods(
+        [System.Reflection.BindingFlags]'Public,Static') |
+        Where-Object { $_.Name -eq 'DefineDynamicAssembly' -and $_.GetParameters().Count -eq 2 } |
+        Select-Object -First 1
+    if ($factory) {
+        return [System.Reflection.Emit.AssemblyBuilder]::DefineDynamicAssembly(
+            $assemblyName, [System.Reflection.Emit.AssemblyBuilderAccess]::Run)
+    }
+    return [System.AppDomain]::CurrentDomain.DefineDynamicAssembly(
+        $assemblyName, [System.Reflection.Emit.AssemblyBuilderAccess]::Run)
+}
+
+function Complete-RuntimeIdentityType([System.Reflection.Emit.TypeBuilder]$builder) {
+    if ($builder.PSObject.Methods['CreateTypeInfo']) { return $builder.CreateTypeInfo().AsType() }
+    return $builder.CreateType()
+}
+
+$dictionaryAssembly = New-RuntimeIdentityAssembly 'RuntimeIdentityFixtureDictionary'
+$dictionaryModule = $dictionaryAssembly.DefineDynamicModule('RuntimeIdentityFixtureDictionary')
+$dictionaryBuilder = $dictionaryModule.DefineType(
+    'System.Collections.Hashtable',
+    [System.Reflection.TypeAttributes]'Public,Sealed',
+    [System.Collections.Hashtable])
+[void]$dictionaryBuilder.DefineDefaultConstructor([System.Reflection.MethodAttributes]::Public)
+$tagField = $dictionaryBuilder.DefineField('Tag', [string], [System.Reflection.FieldAttributes]::Public)
+$spoofHashtableType = Complete-RuntimeIdentityType $dictionaryBuilder
+$script:spoofHashtable = [System.Activator]::CreateInstance($spoofHashtableType)
+$spoofHashtableType.GetField('Tag').SetValue($script:spoofHashtable, 'tag')
+
 $script:statefulCollection = [System.Collections.ObjectModel.Collection[int]]::new(
     [System.Collections.Generic.IList[int]]([int[]](1, 2)))
 $reservedBacking = [System.Collections.Generic.List[int]]::new(100)
@@ -191,9 +245,13 @@ $script:reservedArrayList = [System.Collections.ArrayList]::new(100)
 $script:invariantDictionary = [System.Collections.Generic.Dictionary[string,int]]::new(
     [System.StringComparer]::Create([System.Globalization.CultureInfo]::InvariantCulture, $true))
 $script:invariantDictionary.Add('alpha', 1)
+$script:reservedSortedList = [System.Collections.Generic.SortedList[string,int]]::new(
+    100, [System.StringComparer]::InvariantCultureIgnoreCase)
+$script:reservedSortedList.Add('alpha', 1)
 
 function Get-RuntimeIdentityFixture {
     [CmdletBinding()]
+    [OutputType('A B', 'AB')]
     param()
 
     dynamicparam {
@@ -204,12 +262,14 @@ function Get-RuntimeIdentityFixture {
             @('SpoofDateOnly', (New-SpoofedValue 'System.DateOnly')),
             @('SpoofTimeOnly', (New-SpoofedValue 'System.TimeOnly')),
             @('TaggedUri', (New-SpoofedValue 'System.TaggedUri')),
+            @('SpoofHashtable', $script:spoofHashtable),
             @('StatefulCollection', $script:statefulCollection),
             @('ReservedBackingCollection', $script:reservedBackingCollection),
             @('ItemOnlyCollection', $script:itemOnlyCollection),
             @('ReservedList', $script:reservedList),
             @('ReservedArrayList', $script:reservedArrayList),
-            @('InvariantDictionary', $script:invariantDictionary)
+            @('InvariantDictionary', $script:invariantDictionary),
+            @('ReservedSortedList', $script:reservedSortedList)
         )) {
             $attributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
             $default = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -229,7 +289,8 @@ param(
     [string]$CollectionExpression,
     [string]$ListExpression,
     [string]$ArrayListExpression,
-    [string]$DictionaryExpression)
+    [string]$DictionaryExpression,
+    [string]$SortedListExpression)
 Import-Module -Name $ManifestPath -Force -ErrorAction Stop
 $collection = & ([scriptblock]::Create($CollectionExpression))
 if ($collection.GetType() -ne [System.Collections.ObjectModel.Collection[int]]) {
@@ -249,6 +310,12 @@ $dictionary = & ([scriptblock]::Create($DictionaryExpression))
 if (-not $dictionary.Comparer.Equals('ALPHA', 'alpha')) {
     throw 'Invariant dictionary comparer did not round-trip.'
 }
+$sortedList = & ([scriptblock]::Create($SortedListExpression))
+if ($sortedList.GetType() -ne [System.Collections.Generic.SortedList[string,int]] -or
+    $sortedList.Capacity -ne 100 -or
+    $sortedList.Comparer.Compare('ALPHA', 'alpha') -ne 0) {
+    throw 'SortedList capacity and comparer did not round-trip.'
+}
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             var hosts = OperatingSystem.IsWindows()
@@ -266,6 +333,7 @@ if (-not $dictionary.Comparer.Equals('ALPHA', 'alpha')) {
                 Assert.True(string.IsNullOrEmpty(Default("SpoofDateOnly")));
                 Assert.True(string.IsNullOrEmpty(Default("SpoofTimeOnly")));
                 Assert.True(string.IsNullOrEmpty(Default("TaggedUri")));
+                Assert.True(string.IsNullOrEmpty(Default("SpoofHashtable")));
                 Assert.True(string.IsNullOrEmpty(Default("StatefulCollection")));
                 Assert.True(string.IsNullOrEmpty(Default("ReservedBackingCollection")));
                 var itemOnly = Default("ItemOnlyCollection");
@@ -273,13 +341,17 @@ if (-not $dictionary.Comparer.Equals('ALPHA', 'alpha')) {
                 var reservedList = Default("ReservedList");
                 var reservedArrayList = Default("ReservedArrayList");
                 var invariantDictionary = Default("InvariantDictionary");
+                var reservedSortedList = Default("ReservedSortedList");
                 Assert.Contains("::new(([int]100))", reservedList, StringComparison.Ordinal);
                 Assert.Contains("::new(([int]100))", reservedArrayList, StringComparison.Ordinal);
                 Assert.Contains("[System.StringComparer]::InvariantCultureIgnoreCase", invariantDictionary, StringComparison.Ordinal);
+                Assert.Contains("::new(([int]100), [System.StringComparer]::InvariantCultureIgnoreCase)", reservedSortedList, StringComparison.Ordinal);
+                Assert.Contains(command.Outputs, output => output.Name == "A B");
+                Assert.Contains(command.Outputs, output => output.Name == "AB");
 
                 var execution = runner.Run(new PowerShellRunRequest(
                     evaluatorPath,
-                    new[] { manifestPath, itemOnly, reservedList, reservedArrayList, invariantDictionary },
+                    new[] { manifestPath, itemOnly, reservedList, reservedArrayList, invariantDictionary, reservedSortedList },
                     TimeSpan.FromMinutes(1)));
                 Assert.True(execution.ExitCode == 0, execution.StdErr);
 
