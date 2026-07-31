@@ -387,7 +387,7 @@ function Get-DefaultLiteralFixture {
                 Default("NestedMatrix"));
             Assert.True(string.IsNullOrEmpty(Default("Stack")));
             Assert.StartsWith(
-                "[System.Type]::GetType('DefaultLiteralFixture.A-B, DefaultLiteralFixtureDynamic",
+                "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
                 Default("UnsafeType"),
                 StringComparison.Ordinal);
             Assert.Equal(

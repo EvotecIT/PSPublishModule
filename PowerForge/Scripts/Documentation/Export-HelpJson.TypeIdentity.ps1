@@ -199,11 +199,16 @@ function GetPowerShellTypeDefaultExpression([type]$type) {
   if ($canonicalTypeName -match '^[A-Za-z_][A-Za-z0-9_.+`]*(?:\[[A-Za-z0-9_.+`,\[\]]+\])?$') {
     return ('[' + $canonicalTypeName + ']')
   }
-  if ([string]::IsNullOrWhiteSpace($type.AssemblyQualifiedName)) {
-    throw ('Type has no safely resolvable assembly-qualified name: ' + $canonicalTypeName)
+  if ([string]::IsNullOrWhiteSpace($type.FullName) -or
+      [string]::IsNullOrWhiteSpace($type.Assembly.FullName)) {
+    throw ('Type has no safely resolvable runtime identity: ' + $canonicalTypeName)
   }
-  $assemblyQualifiedName = $type.AssemblyQualifiedName.Replace("'", "''")
-  return ("[System.Type]::GetType('" + $assemblyQualifiedName + "', `$true, `$false)")
+  $typeName = $type.FullName.Replace("'", "''")
+  $assemblyName = $type.Assembly.FullName.Replace("'", "''")
+  return ("& { `$assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | " +
+    "Where-Object { `$_.FullName -eq '" + $assemblyName + "' } | Select-Object -First 1; " +
+    "if (`$null -eq `$assembly) { throw 'Type assembly is not loaded.' }; " +
+    "return `$assembly.GetType('" + $typeName + "', `$true, `$false) }")
 }
 
 function ResolveExactType([string]$candidate) {
