@@ -9,7 +9,7 @@ function AddDefaultValueReference(
   [System.Collections.IList]$references
 ) {
   if ($null -eq $value -or $value.GetType().IsValueType -or
-      $value -is [string] -or $value -is [type]) {
+      $value -is [type]) {
     return
   }
   foreach ($seenReference in $references) {

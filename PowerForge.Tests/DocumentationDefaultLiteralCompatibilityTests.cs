@@ -320,6 +320,14 @@ function Get-DefaultLiteralFixture {
         $parameters.Add('SharedScalarReferences', [System.Management.Automation.RuntimeDefinedParameter]::new(
             'SharedScalarReferences', [object[]], $sharedScalarAttributes))
 
+        $sharedStringAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $sharedStringDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $sharedString = -join @('shared', '-', 'string')
+        $sharedStringDefault.Value = [object[]]@($sharedString, $sharedString)
+        $sharedStringAttributes.Add($sharedStringDefault)
+        $parameters.Add('SharedStringReferences', [System.Management.Automation.RuntimeDefinedParameter]::new(
+            'SharedStringReferences', [object[]], $sharedStringAttributes))
+
         $matrixAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $matrixDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $matrix = [int[,]]::new(2, 2)
@@ -691,6 +699,7 @@ $invalidOutputFunction = "function Get-InvalidOutputFixture { [OutputType('Bad" 
             Assert.True(string.IsNullOrEmpty(Default("CyclicCollection")));
             Assert.True(string.IsNullOrEmpty(Default("SharedCollection")));
             Assert.True(string.IsNullOrEmpty(Default("SharedScalarReferences")));
+            Assert.True(string.IsNullOrEmpty(Default("SharedStringReferences")));
             Assert.Equal(
                 "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }",
                 Default("Matrix"));
