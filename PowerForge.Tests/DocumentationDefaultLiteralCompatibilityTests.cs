@@ -481,7 +481,13 @@ function Get-DefaultLiteralFixture {
 
             var payload = new DocumentationEngine(new PowerShellRunner(), new NullLogger())
                 .ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
+            var generatedMamlPath = new MamlHelpWriter().WriteExternalHelpFile(
+                payload,
+                "DefaultLiteralFixture",
+                Path.Combine(root, "generated"));
             var command = Assert.Single(payload.Commands);
+
+            Assert.DoesNotContain('\u0001', File.ReadAllText(generatedMamlPath));
 
             Assert.Equal("([double]-0.0)", Default("NegativeDouble"));
             Assert.Equal(
