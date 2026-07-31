@@ -1,3 +1,6 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Management.Automation;
 using PowerForge;
@@ -9,7 +12,7 @@ namespace PSPublishModule;
 /// </summary>
 /// <example>
 /// <summary>Reserve a BenchmarkDotNet artifact directory before measurement</summary>
-/// <code>$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts</code>
+/// <code>$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts -Metadata @{ 'benchmark.workload.id' = 'tabular-65k-v1' } -RunMode full</code>
 /// </example>
 [Cmdlet(VerbsLifecycle.Start, "BenchmarkProvenanceCapture")]
 [OutputType(typeof(BenchmarkProvenanceCaptureSession))]
@@ -25,11 +28,42 @@ public sealed class StartBenchmarkProvenanceCaptureCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string ArtifactRoot { get; set; } = string.Empty;
 
+    /// <summary>Optional workload metadata to bind before measurement. Publishable evidence requires <c>benchmark.workload.id</c>.</summary>
+    [Parameter]
+    public Hashtable? Metadata { get; set; }
+
+    /// <summary>Optional for diagnostic captures; publishable evidence requires a run mode bound before measurement.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? RunMode { get; set; }
+
     /// <summary>Starts the source-bound capture.</summary>
     protected override void ProcessRecord()
     {
         string sourceRoot = SessionState.Path.GetUnresolvedProviderPathFromPSPath(SourceRoot);
         string artifactRoot = SessionState.Path.GetUnresolvedProviderPathFromPSPath(ArtifactRoot);
-        WriteObject(new BenchmarkArtifactProvenanceService().Start(sourceRoot, artifactRoot));
+        var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (Metadata is not null)
+        {
+            foreach (DictionaryEntry item in Metadata)
+            {
+                string key = LanguagePrimitives.ConvertTo<string>(item.Key);
+                string value = LanguagePrimitives.ConvertTo<string>(item.Value);
+                if (metadata.ContainsKey(key))
+                    ThrowTerminatingError(new ErrorRecord(
+                        new ArgumentException(
+                            $"Benchmark provenance metadata contains duplicate key '{key}'.",
+                            nameof(Metadata)),
+                        "DuplicateBenchmarkProvenanceMetadata",
+                        ErrorCategory.InvalidArgument,
+                        Metadata));
+                metadata.Add(key, value);
+            }
+        }
+        WriteObject(new BenchmarkArtifactProvenanceService().Start(
+            sourceRoot,
+            artifactRoot,
+            metadata,
+            RunMode));
     }
 }

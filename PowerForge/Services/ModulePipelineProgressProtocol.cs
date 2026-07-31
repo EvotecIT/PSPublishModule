@@ -62,18 +62,7 @@ internal static class ModulePipelineProgressProtocol
 
         internal ProtocolReporter(ModulePipelinePlan plan)
         {
-            var steps = ModulePipelineStep.Create(plan);
-            var items = steps
-                .Select((step, index) => new PowerForgeReleaseProgressItem
-                {
-                    Phase = PowerForgeReleaseProgressPhase.Module,
-                    Key = step.Key,
-                    Title = step.Title,
-                    Kind = step.Kind.ToString(),
-                    Position = index + 1,
-                    Total = steps.Length
-                })
-                .ToArray();
+            var items = ModulePipelineProgressItemFactory.Create(plan);
             _items = items.ToDictionary(item => item.Key, StringComparer.OrdinalIgnoreCase);
             Write(new ModulePipelineProgressProtocolMessage { Items = items });
         }

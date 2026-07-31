@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Collections.ObjectModel;
 
 namespace PowerForge;
 
@@ -16,10 +17,14 @@ public sealed class BenchmarkArtifactProvenanceService
     /// </summary>
     /// <param name="sourceRoot">Git repository root being measured.</param>
     /// <param name="artifactRoot">Fresh directory where the benchmark process will write artifacts.</param>
+    /// <param name="metadata">Optional workload metadata declared before measurement.</param>
+    /// <param name="runMode">Optional run mode declared before measurement.</param>
     /// <returns>Capture session to complete after measurement.</returns>
     public BenchmarkProvenanceCaptureSession Start(
         string sourceRoot,
-        string artifactRoot)
+        string artifactRoot,
+        IReadOnlyDictionary<string, string>? metadata = null,
+        string? runMode = null)
     {
         if (string.IsNullOrWhiteSpace(sourceRoot))
             throw new ArgumentException("Source root is required.", nameof(sourceRoot));
@@ -28,6 +33,8 @@ public sealed class BenchmarkArtifactProvenanceService
 
         string fullSourceRoot = Path.GetFullPath(sourceRoot);
         string fullArtifactRoot = Path.GetFullPath(artifactRoot);
+        Dictionary<string, string> declaredMetadata = NormalizeDeclaredMetadata(metadata);
+        string normalizedRunMode = NormalizeDeclaredRunMode(runMode);
         if (!Directory.Exists(fullSourceRoot))
             throw new DirectoryNotFoundException($"Benchmark source root was not found: {fullSourceRoot}");
         GitSourceState state = CaptureGitState(fullSourceRoot);
@@ -54,6 +61,8 @@ public sealed class BenchmarkArtifactProvenanceService
                 StartedUtc = DateTimeOffset.UtcNow,
                 SourceCommit = state.Commit,
                 SourceBranch = state.Branch,
+                Metadata = new ReadOnlyDictionary<string, string>(declaredMetadata),
+                RunMode = normalizedRunMode,
                 ArtifactRootLease = artifactRootLease
             };
             artifactRootLease = null;
@@ -111,6 +120,11 @@ public sealed class BenchmarkArtifactProvenanceService
                 GitWorktreeClean = true,
                 StartedUtc = session.StartedUtc,
                 FinishedUtc = DateTimeOffset.UtcNow,
+                Metadata = session.Metadata.ToDictionary(
+                    item => item.Key,
+                    item => item.Value,
+                    StringComparer.OrdinalIgnoreCase),
+                RunMode = session.RunMode,
                 Artifacts = artifacts
             };
             BenchmarkJson.Write(sidecarPath, document);
@@ -149,6 +163,8 @@ public sealed class BenchmarkArtifactProvenanceService
             throw new InvalidOperationException(
                 $"Benchmark provenance sidecar is incomplete or unsupported: {sidecarPath}");
         }
+        provenance.Metadata = NormalizeDeclaredMetadata(provenance.Metadata);
+        provenance.RunMode = NormalizeDeclaredRunMode(provenance.RunMode);
 
         string[] actualFiles = EnumerateArtifactFiles(resolvedArtifactRoot)
             .Select(path => NormalizeRelativePath(
@@ -484,6 +500,53 @@ public sealed class BenchmarkArtifactProvenanceService
 
     private static bool IsFullGitObjectId(string value)
         => (value.Length == 40 || value.Length == 64) && value.All(Uri.IsHexDigit);
+
+    private static Dictionary<string, string> NormalizeDeclaredMetadata(
+        IReadOnlyDictionary<string, string>? metadata)
+    {
+        var normalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, string> item in
+                 metadata ?? new Dictionary<string, string>())
+        {
+            string key = item.Key?.Trim() ?? string.Empty;
+            if (key.Length == 0)
+                throw new ArgumentException("Benchmark provenance metadata keys cannot be empty.", nameof(metadata));
+            if (item.Value is null)
+                throw new ArgumentException(
+                    $"Benchmark provenance metadata value '{key}' cannot be null.",
+                    nameof(metadata));
+            if (IsCaptureOwnedMetadataKey(key))
+            {
+                throw new ArgumentException(
+                    $"Benchmark provenance metadata key '{key}' is owned by the capture service.",
+                    nameof(metadata));
+            }
+            if (normalized.ContainsKey(key))
+            {
+                throw new ArgumentException(
+                    $"Benchmark provenance metadata contains duplicate key '{key}'.",
+                    nameof(metadata));
+            }
+            normalized.Add(key, item.Value);
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizeDeclaredRunMode(string? runMode)
+    {
+        if (string.IsNullOrWhiteSpace(runMode))
+            return string.Empty;
+        return runMode!.Trim().ToLowerInvariant();
+    }
+
+    private static bool IsCaptureOwnedMetadataKey(string key)
+        => key.StartsWith("benchmark.provenance.", StringComparison.OrdinalIgnoreCase) ||
+           key.Equals("gitSha", StringComparison.OrdinalIgnoreCase) ||
+           key.Equals("gitBranch", StringComparison.OrdinalIgnoreCase) ||
+           key.Equals("gitWorktreeClean", StringComparison.OrdinalIgnoreCase) ||
+           key.Equals("importedUtc", StringComparison.OrdinalIgnoreCase) ||
+           key.Equals("runMode", StringComparison.OrdinalIgnoreCase);
 
     private sealed class GitSourceState
     {

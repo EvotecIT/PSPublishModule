@@ -15,6 +15,7 @@ metadata with any table that is committed or shared.
 | `Invoke-BenchmarkSuite` | Runs a `.benchmark.ps1` suite, writes artifacts, updates declared README blocks, and returns a `BenchmarkRunResult`. |
 | `Start-BenchmarkProvenanceCapture` / `Complete-BenchmarkProvenanceCapture` | Bind a fresh external benchmark artifact directory to clean, unchanged Git source state and per-file hashes. |
 | `Import-BenchmarkResult` | Imports BenchmarkDotNet CSV/JSON artifacts or normalized benchmark JSON/CSV into the common result schema. |
+| `Merge-BenchmarkEvidenceCatalog` | Verifies and consolidates portable evidence bundles produced by independent platform runners. |
 | `Update-BenchmarkEvidenceCatalog` | Records an independent Windows, Linux, or macOS result lane and exposes missing or incompatible platform evidence. |
 | `Update-BenchmarkDocument` | Replaces one marker-delimited Markdown block from a normalized summary or comparison file. |
 | `Test-BenchmarkGate` | Verifies benchmark summary metrics against a JSON baseline with tolerance rules. |
@@ -302,9 +303,17 @@ number. Import each run, attach exact workload provenance, and update the shared
 catalog:
 
 ```powershell
+$metadata = @{
+    'benchmark.workload.id' = 'markpflug-65k-sales-v1'
+    'benchmark.fixture.csv' = 'AC959F43...'
+    'benchmark.package.officeimo' = '3.0.4'
+    'benchmark.package.sylvan' = '0.5.7'
+}
 $capture = Start-BenchmarkProvenanceCapture `
     -SourceRoot . `
-    -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts
+    -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts `
+    -Metadata $metadata `
+    -RunMode full
 
 dotnet run -c Release --project .\Benchmarks -- `
     --artifacts .\Build\BenchmarkDotNet.Artifacts
@@ -314,11 +323,6 @@ $capture | Complete-BenchmarkProvenanceCapture
 $result = Import-BenchmarkResult `
     -Path .\Build\BenchmarkDotNet.Artifacts `
     -Suite tabular-65k
-
-$result.Metadata['benchmark.workload.id'] = 'markpflug-65k-sales-v1'
-$result.Metadata['benchmark.fixture.csv'] = 'AC959F43...'
-$result.Metadata['benchmark.package.officeimo'] = '3.0.4'
-$result.Metadata['benchmark.package.sylvan'] = '0.5.7'
 
 Update-BenchmarkEvidenceCatalog `
     -InputObject $result `
@@ -330,6 +334,15 @@ Update-BenchmarkEvidenceCatalog `
     -Publish
 ```
 
+Declare workload identity, fixture hashes, package versions, and run mode when
+starting the capture. PowerForge stores those declarations in the sidecar and
+applies them before sealing the imported result. Changing measurements or
+provenance-bound metadata after import is rejected for publishable evidence.
+Publishing also requires the sidecar-bound `benchmark.workload.id` to exactly
+match the catalog comparison ID and the sidecar-bound run mode to exactly match
+the requested lane. Diagnostic captures may omit those declarations, but they
+cannot later be relabeled as public Full evidence.
+
 Directory imports reject reports that identify more than one operating system.
 External imports are publishable only when their fresh artifact directory has a
 completed production sidecar; adding the current checkout SHA after a run is not
@@ -337,6 +350,30 @@ accepted as provenance. Catalog updates use a cross-process lease and
 metadata-preserving same-directory replacement, write the exact validated
 normalized result beside the catalog, and record its SHA-256, so concurrent
 platform jobs cannot silently discard, substitute, or truncate another lane.
+Each platform runner should write an isolated portable bundle: one catalog plus
+its normalized result files in the same directory. Consolidate independently
+produced bundles only after every runner finishes:
+
+```powershell
+Merge-BenchmarkEvidenceCatalog `
+    -SourcePath `
+        .\artifacts\windows\index.json, `
+        .\artifacts\linux\index.json, `
+        .\artifacts\macos\index.json `
+    -Path .\Website\static\data\benchmarks\tabular\index.json `
+    -ExpectedPlatform windows,linux,macos
+```
+
+The merge verifies every normalized result against the SHA-256 and lane metadata
+recorded by its source catalog and rejects conflicting copies of the same lane.
+Verified results are written beside the destination catalog under immutable,
+content-addressed file names before the catalog is atomically switched. An older
+catalog therefore continues to reference unchanged bytes even if a process stops
+during publication. This is the cross-machine convergence step; the update lock
+only coordinates writers that actually share one filesystem. Schema 1 catalogs
+must first be updated by the current PowerForge version so legacy publish flags
+are demoted and revalidated.
+
 The catalog replaces only the matching comparison/platform/run-mode lane.
 Windows, Linux, and macOS remain separate entries. `availability` lists missing
 platforms explicitly. A publishable lane must contain successful measurements,

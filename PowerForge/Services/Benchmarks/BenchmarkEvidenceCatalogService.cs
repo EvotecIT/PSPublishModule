@@ -37,6 +37,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         if (string.IsNullOrWhiteSpace(comparisonId)) throw new ArgumentException("Comparison identifier is required.", nameof(comparisonId));
         if (string.IsNullOrWhiteSpace(resultPath)) throw new ArgumentException("Result path is required.", nameof(resultPath));
         if (string.IsNullOrWhiteSpace(runMode)) throw new ArgumentException("Run mode is required.", nameof(runMode));
+        string normalizedComparisonId = comparisonId.Trim();
         string normalizedRunMode = runMode.Trim().ToLowerInvariant();
         if (publish && !string.Equals(normalizedRunMode, "full", StringComparison.Ordinal))
         {
@@ -47,6 +48,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
         {
             ValidateEmbeddedRunModes(result, normalizedRunMode);
             ValidatePublishableResult(result);
+            ValidateBoundPublishIdentity(
+                result,
+                normalizedComparisonId,
+                normalizedRunMode);
         }
 
         ValidateCatalogSchema(catalog);
@@ -64,7 +69,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
 
         var entry = new BenchmarkEvidenceEntry
         {
-            ComparisonId = comparisonId.Trim(),
+            ComparisonId = normalizedComparisonId,
             Platform = resolvedPlatform,
             RunMode = normalizedRunMode,
             GeneratedUtc = generatedUtc,
@@ -128,6 +133,16 @@ public sealed partial class BenchmarkEvidenceCatalogService
         string? resultArtifactPath = null)
     {
         if (string.IsNullOrWhiteSpace(catalogPath)) throw new ArgumentException("Catalog path is required.", nameof(catalogPath));
+        if (result is null) throw new ArgumentNullException(nameof(result));
+        if (result.FinishedUtc == default)
+        {
+            if (result.HasValidatedProductionProvenance)
+            {
+                throw new InvalidOperationException(
+                    "Validated production benchmark evidence must preserve its sidecar-bound completion timestamp.");
+            }
+            result.FinishedUtc = ResolveGeneratedUtc(result);
+        }
         string fullPath = BenchmarkJson.ResolveWritePath(catalogPath);
         using var fileLease = BenchmarkFileUpdateLock.Acquire(fullPath);
         var catalog = File.Exists(fullPath)
@@ -171,6 +186,11 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 artifactDestinationSha256,
                 writtenEntry);
             writtenEntry.ArtifactDestinationSha256 = artifactDestinationSha256;
+            writtenEntry.ArtifactFileName = Path.GetFileName(artifactPath);
+            writtenEntry.ArtifactRelativePath = ResolveArtifactRelativePath(
+                fullPath,
+                artifactPath,
+                resultPath);
             artifactSelected = true;
             artifactExisted = File.Exists(artifactPath);
             if (artifactExisted)
@@ -305,15 +325,37 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 catalogDirectory,
                 artifactPath)
             .Replace(Path.DirectorySeparatorChar, '/')
-            .Replace(Path.AltDirectorySeparatorChar, '/');
-        if (FrameworkCompatibility.GetPathStringComparison(artifactPath) ==
-            StringComparison.OrdinalIgnoreCase)
-        {
-            normalizedDestination = normalizedDestination.ToLowerInvariant();
-        }
+            .Replace(Path.AltDirectorySeparatorChar, '/')
+            .ToLowerInvariant();
         using SHA256 sha256 = SHA256.Create();
         byte[] hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(normalizedDestination));
         return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static string ResolveArtifactRelativePath(
+        string catalogPath,
+        string artifactPath,
+        string resultPath)
+    {
+        string catalogDirectory = Path.GetDirectoryName(catalogPath)
+                                  ?? throw new InvalidOperationException(
+                                      $"Unable to determine the evidence catalog directory for '{catalogPath}'.");
+        string relativePath = FrameworkCompatibility.GetRelativePath(
+            catalogDirectory,
+            artifactPath);
+        if (!Path.IsPathRooted(relativePath) &&
+            !relativePath.Equals("..", StringComparison.Ordinal) &&
+            !relativePath.StartsWith(
+                ".." + Path.DirectorySeparatorChar,
+                StringComparison.Ordinal) &&
+            !relativePath.StartsWith(
+                ".." + Path.AltDirectorySeparatorChar,
+                StringComparison.Ordinal))
+        {
+            return NormalizeBundleArtifactRelativePath(relativePath, resultPath);
+        }
+
+        return Path.GetFileName(artifactPath);
     }
 
     private static bool TryResolveExistingArtifactPath(
@@ -567,9 +609,12 @@ public sealed partial class BenchmarkEvidenceCatalogService
         return issues.ToArray();
     }
 
-    private static void ValidatePublishableResult(BenchmarkRunResult result)
+    private static void ValidatePublishableResult(
+        BenchmarkRunResult result,
+        bool requireValidatedImportProvenance = true)
     {
-        if (!string.IsNullOrWhiteSpace(MetadataValue(result.Metadata, "importedUtc")) &&
+        if (requireValidatedImportProvenance &&
+            !string.IsNullOrWhiteSpace(MetadataValue(result.Metadata, "importedUtc")) &&
             !result.HasValidatedProductionProvenance)
         {
             throw new InvalidOperationException(
@@ -789,6 +834,12 @@ public sealed partial class BenchmarkEvidenceCatalogService
         foreach (BenchmarkComparisonRow row in result.Comparison)
             AddRunMode(modes, row.RunMode);
 
+        if (result.HasValidatedProductionProvenance && modes.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Publishable production benchmark evidence requires an explicit run mode bound into the provenance sidecar or measured artifact.");
+        }
+
         string[] conflicting = modes
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Where(mode => !string.Equals(mode, expectedRunMode, StringComparison.OrdinalIgnoreCase))
@@ -800,6 +851,47 @@ public sealed partial class BenchmarkEvidenceCatalogService
         throw new InvalidOperationException(
             $"Publishable benchmark evidence declares embedded run mode(s) {string.Join(", ", conflicting.Select(mode => $"'{mode}'"))}, " +
             $"which conflict with requested run mode '{expectedRunMode}'.");
+    }
+
+    private static void ValidateBoundPublishIdentity(
+        BenchmarkRunResult result,
+        string comparisonId,
+        string runMode)
+    {
+        bool sidecarBound =
+            result.HasValidatedProductionProvenance ||
+            string.Equals(
+                MetadataValue(result.Metadata, "benchmark.provenance.source"),
+                "sidecar",
+                StringComparison.OrdinalIgnoreCase);
+        if (!sidecarBound)
+            return;
+
+        string? boundRunMode = MetadataValue(
+            result.Metadata,
+            "benchmark.provenance.runMode");
+        if (string.IsNullOrWhiteSpace(boundRunMode))
+        {
+            throw new InvalidOperationException(
+                "Publishable production benchmark evidence requires a run mode bound into its provenance sidecar before measurement.");
+        }
+        if (!string.Equals(boundRunMode, runMode, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Publishable benchmark run mode '{runMode}' must exactly match the provenance-bound run mode '{boundRunMode}'.");
+        }
+
+        string? workloadId = MetadataValue(result.Metadata, "benchmark.workload.id");
+        if (string.IsNullOrWhiteSpace(workloadId))
+        {
+            throw new InvalidOperationException(
+                "Publishable production benchmark evidence requires metadata key 'benchmark.workload.id' to be bound before measurement.");
+        }
+        if (!string.Equals(workloadId, comparisonId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Publishable benchmark comparison ID '{comparisonId}' must exactly match the provenance-bound workload ID '{workloadId}'.");
+        }
     }
 
     private static void AddRunMode(ICollection<string> modes, string? value)

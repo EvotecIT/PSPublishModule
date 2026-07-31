@@ -252,6 +252,9 @@ Executes a repository-wide .NET build/release pipeline from a JSON configuration
 ### [Invoke-ProjectRelease](Invoke-ProjectRelease.md)
 Executes a PowerShell-authored project release object through the unified PowerForge release engine.
 
+### [Merge-BenchmarkEvidenceCatalog](Merge-BenchmarkEvidenceCatalog.md)
+Consolidates independently produced platform benchmark evidence bundles.
+
 ### [New-AppleAppArchive](New-AppleAppArchive.md)
 Creates an Apple app .xcarchive using xcodebuild.
 

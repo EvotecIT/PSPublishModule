@@ -400,7 +400,19 @@ public sealed partial class BenchmarkServicesTests
 
         var service = new BenchmarkArtifactProvenanceService();
         BenchmarkProvenanceCaptureSession capture =
-            service.Start(sourceRoot, artifactRoot);
+            service.Start(
+                sourceRoot,
+                artifactRoot,
+                new Dictionary<string, string>
+                {
+                    ["benchmark.workload.id"] = "markpflug-65k-xlsx-net10.0",
+                    ["benchmark.workload.framework"] = "net10.0"
+                },
+                runMode: "Full");
+        IDictionary<string, string> immutableMetadata =
+            Assert.IsAssignableFrom<IDictionary<string, string>>(capture.Metadata);
+        Assert.Throws<NotSupportedException>(() =>
+            immutableMetadata["benchmark.workload.id"] = "changed-after-start");
         string reportPath = Path.Combine(artifactRoot, "Case-report-full.json");
         File.WriteAllText(reportPath, BenchmarkDotNetReport("Windows"));
         string sidecarPath = service.Complete(capture);
@@ -412,7 +424,53 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(capture.SourceCommit, imported.Metadata["gitSha"]);
         Assert.Equal("true", imported.Metadata["gitWorktreeClean"]);
         Assert.Equal("sidecar", imported.Metadata["benchmark.provenance.source"]);
+        Assert.Equal("markpflug-65k-xlsx-net10.0", imported.Metadata["benchmark.workload.id"]);
+        Assert.Equal("net10.0", imported.Metadata["benchmark.workload.framework"]);
+        Assert.Equal("full", imported.Metadata["runMode"]);
+        Assert.Equal("full", imported.Metadata["benchmark.provenance.runMode"]);
+        Assert.All(imported.Samples, sample => Assert.Equal("full", sample.RunMode));
+        Assert.All(imported.Summary, row => Assert.Equal("full", row.RunMode));
+        Assert.True(BenchmarkResultImporter.HasUnchangedValidatedProductionMetadata(imported));
+        Assert.Equal(
+            imported.ValidatedProductionContentSha256,
+            BenchmarkResultImporter.ComputeValidatedProductionContentSha256(imported));
         Assert.Equal(capture.StartedUtc, imported.StartedUtc);
+
+        BenchmarkEvidenceCatalog catalog = new BenchmarkEvidenceCatalogService().Update(
+            null,
+            imported,
+            "markpflug-65k-xlsx-net10.0",
+            "windows.json",
+            "full",
+            publish: true);
+
+        BenchmarkEvidenceEntry entry = Assert.Single(catalog.Entries);
+        Assert.True(entry.Publish);
+        Assert.Equal(capture.SourceCommit, entry.Compatibility["gitSha"]);
+    }
+
+    [Fact]
+    public void BenchmarkProvenanceCapture_RejectsCaptureOwnedMetadata()
+    {
+        string root = CreateTempRoot();
+        string sourceRoot = Path.Combine(root, "source");
+        string artifactRoot = Path.Combine(root, "artifacts");
+        Directory.CreateDirectory(sourceRoot);
+        RunGit(sourceRoot, "init");
+        RunGit(sourceRoot, "config user.email benchmark@example.test");
+        RunGit(sourceRoot, "config user.name Benchmark");
+        File.WriteAllText(Path.Combine(sourceRoot, "source.txt"), "measured");
+        RunGit(sourceRoot, "add source.txt");
+        RunGit(sourceRoot, "commit -m measured");
+
+        ArgumentException exception = Assert.Throws<ArgumentException>(() =>
+            new BenchmarkArtifactProvenanceService().Start(
+                sourceRoot,
+                artifactRoot,
+                new Dictionary<string, string> { ["gitSha"] = new string('a', 40) },
+                runMode: "full"));
+
+        Assert.Contains("owned by the capture service", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -546,6 +604,84 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(12.5, row.Metrics["P95Ms"]);
         Assert.Equal(13.5, row.Metrics["P99Ms"]);
         Assert.Equal(0.75, row.Metrics["StdDevMs"]);
+    }
+
+    [Fact]
+    public void BenchmarkImporter_DoesNotInventMissingBenchmarkDotNetPercentiles()
+    {
+        string root = CreateTempRoot();
+        string reportPath = Path.Combine(root, "Case-report-full.json");
+        File.WriteAllText(
+            reportPath,
+            """
+            {
+              "Title": "demo",
+              "Benchmarks": [
+                {
+                  "Method": "Read",
+                  "Statistics": {
+                    "Mean": 1100000,
+                    "Median": 1000000,
+                    "Min": 900000,
+                    "Max": 2000000,
+                    "Percentiles": {
+                      "P95": 1500000
+                    }
+                  }
+                }
+              ]
+            }
+            """);
+
+        BenchmarkSummaryRow row = Assert.Single(
+            new BenchmarkResultImporter().Import(reportPath).Summary);
+
+        Assert.Equal(1, row.MedianMs);
+        Assert.InRange(row.MeanMs.GetValueOrDefault(), 1.099999, 1.100001);
+        Assert.InRange(row.MinMs.GetValueOrDefault(), 0.899999, 0.900001);
+        Assert.Equal(2, row.MaxMs);
+        Assert.InRange(row.P95Ms.GetValueOrDefault(), 1.499999, 1.500001);
+        Assert.Null(row.P99Ms);
+    }
+
+    [Fact]
+    public void BenchmarkImporter_UsesBenchmarkDotNetOriginalValuesAsRawSamples()
+    {
+        string root = CreateTempRoot();
+        string reportPath = Path.Combine(root, "Case-report-full.json");
+        File.WriteAllText(
+            reportPath,
+            """
+            {
+              "Title": "demo",
+              "Benchmarks": [
+                {
+                  "Method": "Read",
+                  "Statistics": {
+                    "OriginalValues": [1000000, 2000000, 3000000, 4000000, 5000000],
+                    "Mean": 3000000,
+                    "Median": 3000000,
+                    "Min": 1000000,
+                    "Max": 5000000,
+                    "Percentiles": {
+                      "P95": 4800000
+                    }
+                  }
+                }
+              ]
+            }
+            """);
+
+        BenchmarkRunResult result =
+            new BenchmarkResultImporter().Import(reportPath);
+        BenchmarkSummaryRow row = Assert.Single(result.Summary);
+
+        Assert.Equal(5, result.Samples.Length);
+        Assert.Equal([1D, 2D, 3D, 4D, 5D], result.Samples.Select(sample => sample.DurationMs));
+        Assert.Equal(5, row.SampleCount);
+        Assert.Equal(3, row.MedianMs);
+        Assert.InRange(row.P95Ms.GetValueOrDefault(), 4.799999, 4.800001);
+        Assert.InRange(row.P99Ms.GetValueOrDefault(), 4.959999, 4.960001);
     }
 
     [Fact]

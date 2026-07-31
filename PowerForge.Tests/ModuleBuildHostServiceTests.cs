@@ -524,6 +524,7 @@ public sealed class ModuleBuildHostServiceTests
                 Key = "build:stage",
                 Title = "Stage to staging",
                 Kind = ModulePipelineStepKind.Build.ToString(),
+                Target = "staging",
                 Position = 1,
                 Total = 1
             };
@@ -562,6 +563,7 @@ public sealed class ModuleBuildHostServiceTests
         Assert.NotNull(captured.OutputLineReceived);
         var plannedItem = Assert.Single(progress.Planned);
         Assert.Equal("build:stage", plannedItem.Key);
+        Assert.Equal("staging", plannedItem.Target);
         var update = Assert.Single(progress.Updates);
         Assert.Equal(PowerForgeReleaseProgressItemState.Completed, update.State);
     }

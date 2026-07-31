@@ -39,7 +39,9 @@
     <Compile Include="..\PowerForge.ConsoleShared\PipelinePublishSummary.cs" Link="PowerForge.ConsoleShared\PipelinePublishSummary.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreConsoleLogger.cs" Link="PowerForge.ConsoleShared\SpectreConsoleLogger.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreBuildProgressColumns.cs" Link="PowerForge.ConsoleShared\SpectreBuildProgressColumns.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressPresentation.cs" Link="PowerForge.ConsoleShared\SpectreProgressPresentation.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressDisplay.cs" Link="PowerForge.ConsoleShared\SpectreProgressDisplay.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressViewport.cs" Link="PowerForge.ConsoleShared\SpectreProgressViewport.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressLedger.cs" Link="PowerForge.ConsoleShared\SpectreProgressLedger.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreModulePipelineConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreModulePipelineConsoleUi.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProjectBuildConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreProjectBuildConsoleUi.cs" />

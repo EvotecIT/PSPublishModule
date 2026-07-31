@@ -58,6 +58,9 @@ public sealed class PowerForgeReleaseProgressItem
     /// <summary>Optional work item kind used by presentation hosts.</summary>
     public string? Kind { get; set; }
 
+    /// <summary>Optional semantic destination or artifact target shown separately from the action title.</summary>
+    public string? Target { get; set; }
+
     /// <summary>One-based position in the owning plan.</summary>
     public int Position { get; set; }
 
