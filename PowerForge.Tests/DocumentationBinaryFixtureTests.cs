@@ -412,7 +412,7 @@ public sealed class DocumentationBinaryFixtureTests
                 "@([single]::PositiveInfinity, [single]::NegativeInfinity)",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Infinities", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
-                "0.84551240822557006",
+                "([double]0.84551240822557006)",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "PreciseDouble", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
                 "([single]1.23456776)",

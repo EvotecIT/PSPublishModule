@@ -97,6 +97,9 @@ function ConvertToPowerShellDefaultValue(
     return ('[System.Enum]::ToObject([' + $enumType.FullName + '], ([' + $underlyingTypeName + ']' + [string]$underlyingValue + '))')
   }
   if ($value -is [type]) {
+    if ($value.IsGenericParameter) {
+      throw 'Generic-parameter Type defaults are not supported.'
+    }
     if ($value.IsPointer) {
       return ((ConvertToPowerShellDefaultValue ($value.GetElementType())) + '.MakePointerType()')
     }
@@ -115,10 +118,10 @@ function ConvertToPowerShellDefaultValue(
     if ([double]::IsPositiveInfinity($value)) { return '[double]::PositiveInfinity' }
     if ([double]::IsNegativeInfinity($value)) { return '[double]::NegativeInfinity' }
     if ($value -eq 0) {
-      if ([System.BitConverter]::DoubleToInt64Bits($value) -lt 0) { return '-0.0' }
-      return '0.0'
+      if ([System.BitConverter]::DoubleToInt64Bits($value) -lt 0) { return '([double]-0.0)' }
+      return '([double]0.0)'
     }
-    return $value.ToString('G17', [System.Globalization.CultureInfo]::InvariantCulture)
+    return ('([double]' + $value.ToString('G17', [System.Globalization.CultureInfo]::InvariantCulture) + ')')
   }
   if ($value -is [single]) {
     if ([single]::IsNaN($value)) { return '[single]::NaN' }

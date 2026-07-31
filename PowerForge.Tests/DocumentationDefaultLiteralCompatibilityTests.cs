@@ -31,6 +31,12 @@ function Get-DefaultLiteralFixture {
         $negativeDoubleAttributes.Add($negativeDoubleDefault)
         $parameters.Add('NegativeDouble', [System.Management.Automation.RuntimeDefinedParameter]::new('NegativeDouble', [double], $negativeDoubleAttributes))
 
+        $integralDoubleAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $integralDoubleDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $integralDoubleDefault.Value = [double]1
+        $integralDoubleAttributes.Add($integralDoubleDefault)
+        $parameters.Add('IntegralDouble', [System.Management.Automation.RuntimeDefinedParameter]::new('IntegralDouble', [double], $integralDoubleAttributes))
+
         $negativeSingleAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $negativeSingleDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $negativeSingleDefault.Value = [System.BitConverter]::ToSingle([byte[]](0, 0, 0, 128), 0)
@@ -202,6 +208,12 @@ function Get-DefaultLiteralFixture {
         $nonSzArrayTypeAttributes.Add($nonSzArrayTypeDefault)
         $parameters.Add('NonSzArrayType', [System.Management.Automation.RuntimeDefinedParameter]::new('NonSzArrayType', [type], $nonSzArrayTypeAttributes))
 
+        $genericParameterTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $genericParameterTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $genericParameterTypeDefault.Value = ([System.Collections.Generic.List[int]].GetGenericTypeDefinition()).GetGenericArguments()[0]
+        $genericParameterTypeAttributes.Add($genericParameterTypeDefault)
+        $parameters.Add('GenericParameterType', [System.Management.Automation.RuntimeDefinedParameter]::new('GenericParameterType', [type], $genericParameterTypeAttributes))
+
         $caseModeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $caseModeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $caseModeDefault.Value = [System.Enum]::ToObject([DefaultLiteralFixture.CaseMode], 1)
@@ -255,7 +267,8 @@ function Get-DefaultLiteralFixture {
                 .ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
             var command = Assert.Single(payload.Commands);
 
-            Assert.Equal("-0.0", Default("NegativeDouble"));
+            Assert.Equal("([double]-0.0)", Default("NegativeDouble"));
+            Assert.Equal("([double]1)", Default("IntegralDouble"));
             Assert.Equal("([single]-0.0)", Default("NegativeSingle"));
             Assert.Equal(
                 "[System.Decimal]::Parse('0.1234567890123456789012345678', [System.Globalization.CultureInfo]::InvariantCulture)",
@@ -276,10 +289,10 @@ function Get-DefaultLiteralFixture {
                 "[System.Uri]::new('https://example.com/a''b?x=1', [System.UriKind]::Absolute)",
                 Default("Uri"));
             Assert.Equal(
-                "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new(); $dictionary.Add(('alpha'), (1)); $dictionary.Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
+                "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::OrdinalIgnoreCase); $dictionary.Add(('alpha'), (1)); $dictionary.Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
                 Default("Dictionary"));
             Assert.Equal(
-                "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new(); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); return ,$dictionary }",
+                "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new([System.StringComparer]::Ordinal); $dictionary.Add(('A'), (1)); $dictionary.Add(('a'), (2)); return ,$dictionary }",
                 Default("CaseDistinctDictionary"));
             Assert.True(string.IsNullOrEmpty(Default("UnsupportedCulture")));
             Assert.Equal(
@@ -320,6 +333,7 @@ function Get-DefaultLiteralFixture {
             Assert.Equal("[System.Int32].MakePointerType()", Default("PointerType"));
             Assert.Equal("[System.Int32].MakeByRefType()", Default("ByRefType"));
             Assert.Equal("[System.Int32].MakeArrayType(1)", Default("NonSzArrayType"));
+            Assert.True(string.IsNullOrEmpty(Default("GenericParameterType")));
             Assert.Equal(
                 "[System.Enum]::ToObject([DefaultLiteralFixture.CaseMode], ([System.Int32]1))",
                 Default("CaseMode"));

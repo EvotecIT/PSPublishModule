@@ -50,6 +50,83 @@ function GetConstructibleDictionaryTypeName([System.Collections.IDictionary]$val
   return GetCanonicalTypeNameFromType $dictionaryType
 }
 
+function GetDictionaryComparer([System.Collections.IDictionary]$value, [ref]$comparerType) {
+  $comparerType.Value = $null
+  $dictionaryType = $value.GetType()
+  $flags = [System.Reflection.BindingFlags]'Instance,Public,NonPublic'
+  foreach ($propertyName in @('Comparer', 'EqualityComparer', 'comparer')) {
+    $property = $dictionaryType.GetProperty($propertyName, $flags)
+    if ($null -eq $property -or $property.GetIndexParameters().Count -ne 0) { continue }
+    try {
+      $comparerType.Value = $property.PropertyType
+      return $property.GetValue($value, $null)
+    } catch {
+      # Try the runtime's backing field when a protected comparer getter is unavailable.
+    }
+  }
+  foreach ($fieldName in @('_keycomparer', '_comparer', 'comparer')) {
+    $field = $dictionaryType.GetField($fieldName, $flags)
+    if ($null -eq $field) { continue }
+    try {
+      $comparerType.Value = $field.FieldType
+      return $field.GetValue($value)
+    } catch {
+      # Keep probing known runtime layouts.
+    }
+  }
+  return $null
+}
+
+function GetKnownDictionaryComparerExpression([object]$comparer, [type]$comparerType) {
+  if ($null -eq $comparer) { return '' }
+  if ($comparerType -and $comparerType.IsGenericType) {
+    $definition = $comparerType.GetGenericTypeDefinition()
+    $argument = $comparerType.GetGenericArguments()[0]
+    $defaultComparerType = $null
+    if ($definition -eq [System.Collections.Generic.IEqualityComparer``1]) {
+      $defaultComparerType = [System.Collections.Generic.EqualityComparer``1].MakeGenericType($argument)
+    } elseif ($definition -eq [System.Collections.Generic.IComparer``1]) {
+      $defaultComparerType = [System.Collections.Generic.Comparer``1].MakeGenericType($argument)
+    }
+    if ($defaultComparerType) {
+      $defaultComparer = $defaultComparerType.GetProperty('Default').GetValue($null, $null)
+      if ([object]::ReferenceEquals($comparer, $defaultComparer)) { return '' }
+    }
+  }
+  foreach ($name in @('Ordinal', 'OrdinalIgnoreCase', 'InvariantCulture', 'InvariantCultureIgnoreCase')) {
+    $knownComparer = [System.StringComparer].GetProperty($name).GetValue($null, $null)
+    if ([object]::ReferenceEquals($comparer, $knownComparer)) {
+      return ('[System.StringComparer]::' + $name)
+    }
+  }
+  throw ('Unsupported dictionary comparer: ' + $comparer.GetType().FullName)
+}
+
+function GetDictionaryConstructorExpression([System.Collections.IDictionary]$value) {
+  $dictionaryTypeName = GetConstructibleDictionaryTypeName $value
+  if ([string]::IsNullOrWhiteSpace($dictionaryTypeName)) {
+    return '[System.Collections.Specialized.OrderedDictionary]::new()'
+  }
+  $comparerType = $null
+  $comparer = GetDictionaryComparer $value ([ref]$comparerType)
+  $comparerExpression = GetKnownDictionaryComparerExpression $comparer $comparerType
+  if ([string]::IsNullOrWhiteSpace($comparerExpression)) {
+    return ('[' + $dictionaryTypeName + ']::new()')
+  }
+  $constructor = $null
+  foreach ($candidate in $value.GetType().GetConstructors()) {
+    $parameters = $candidate.GetParameters()
+    if ($parameters.Count -eq 1 -and $parameters[0].ParameterType.IsInstanceOfType($comparer)) {
+      $constructor = $candidate
+      break
+    }
+  }
+  if ($null -eq $constructor) {
+    throw ('Dictionary type cannot reconstruct comparer: ' + $value.GetType().FullName)
+  }
+  return ('[' + $dictionaryTypeName + ']::new(' + $comparerExpression + ')')
+}
+
 function ResolveExactType([string]$candidate) {
   if ([string]::IsNullOrWhiteSpace($candidate)) { return $null }
   $resolvedType = $null
