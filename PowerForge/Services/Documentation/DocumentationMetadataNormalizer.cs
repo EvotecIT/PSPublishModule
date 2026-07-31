@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Xml;
 
 namespace PowerForge;
 
@@ -306,13 +307,29 @@ internal static class DocumentationMetadataNormalizer
         IEnumerable<string>? metadataValues,
         IEnumerable<string>? enumValues)
     {
-        var result = DistinctNonBlank(metadataValues, StringComparer.OrdinalIgnoreCase);
+        var result = DistinctNonBlank(metadataValues, StringComparer.OrdinalIgnoreCase)
+            .Where(IsXmlSafePossibleValue)
+            .ToList();
         var seen = new HashSet<string>(result, StringComparer.Ordinal);
-        foreach (var value in DistinctNonBlank(enumValues, StringComparer.Ordinal))
+        foreach (var value in DistinctNonBlank(enumValues, StringComparer.Ordinal)
+                     .Where(IsXmlSafePossibleValue))
         {
             if (seen.Add(value)) result.Add(value);
         }
         return result;
+    }
+
+    private static bool IsXmlSafePossibleValue(string value)
+    {
+        try
+        {
+            XmlConvert.VerifyXmlChars(value);
+            return true;
+        }
+        catch (XmlException)
+        {
+            return false;
+        }
     }
 
     private static List<string> DistinctNonBlank(

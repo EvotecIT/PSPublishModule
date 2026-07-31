@@ -107,13 +107,14 @@ function AddRuntimeDefaultValueTokens(
     return
   }
   if (TestExactRuntimeValueType $value ([uri])) {
-    if ($value.UserEscaped) {
-      throw 'User-escaped Uri defaults are not supported.'
+    if (-not (TestRecreatableUri $value)) {
+      throw 'Uri defaults with noncanonical reconstruction state are not supported.'
     }
+    $uriKind = if ($value.IsAbsoluteUri) { 'Absolute' } else { 'Relative' }
     $tokens.Add([ordered]@{
       kind = 'UriCodeUnits'
       text = ConvertToUtf16CodeUnits $value.OriginalString
-      name = if ($value.IsAbsoluteUri) { 'Absolute' } else { 'Relative' }
+      name = $uriKind
     }) | Out-Null
     return
   }

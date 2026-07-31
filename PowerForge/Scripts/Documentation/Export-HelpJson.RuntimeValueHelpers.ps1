@@ -27,6 +27,22 @@ function TestExactRuntimeValueType([object]$value, [object]$expectedType) {
     [object]::ReferenceEquals($value.GetType(), $expectedType)
 }
 
+function TestRecreatableUri([uri]$value) {
+  if ($value.UserEscaped) { return $false }
+  $uriKind = if ($value.IsAbsoluteUri) { 'Absolute' } else { 'Relative' }
+  $reconstructed = [uri]::new($value.OriginalString, [System.UriKind]$uriKind)
+  $matches =
+    $reconstructed.OriginalString -ceq $value.OriginalString -and
+    $reconstructed.ToString() -ceq $value.ToString() -and
+    $reconstructed.UserEscaped -eq $value.UserEscaped
+  if ($value.IsAbsoluteUri) {
+    $matches = $matches -and
+      $reconstructed.AbsoluteUri -ceq $value.AbsoluteUri -and
+      $reconstructed.PathAndQuery -ceq $value.PathAndQuery
+  }
+  return $matches
+}
+
 function TestRecreatableScriptBlock([scriptblock]$value) {
   if ($null -ne $value.Module) {
     return $false
@@ -41,6 +57,14 @@ function TestRecreatableScriptBlock([scriptblock]$value) {
   }
 
   try {
+    $isFilterProperty = [scriptblock].GetProperty(
+      'IsFilter',
+      [System.Reflection.BindingFlags]'Instance,Public,NonPublic')
+    if ($null -eq $isFilterProperty -or -not $isFilterProperty.CanRead -or
+        [bool]$isFilterProperty.GetValue($value, $null)) {
+      return $false
+    }
+
     $languageModeProperty = [scriptblock].GetProperty(
       'LanguageMode',
       [System.Reflection.BindingFlags]'Instance,Public,NonPublic')

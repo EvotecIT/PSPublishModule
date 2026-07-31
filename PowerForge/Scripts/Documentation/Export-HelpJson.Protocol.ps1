@@ -47,6 +47,7 @@ function GetCollectorHelperFunctionNames {
     'TestPowerShellSimpleTypeName',
     'TestPowerShellTypeLiteral',
     'TestPowerShellTypeLiteralName',
+    'TestRecreatableUri',
     'TestRecreatableScriptBlock'
   )
 }
