@@ -291,9 +291,12 @@ function AddRuntimeDefaultValueTokens(
         throw 'UIntPtr defaults outside the 32-bit range are not portable.'
       }
     }
+    $scalarText = if ($runtimeType -eq [intptr] -or $runtimeType -eq [uintptr]) { $pointerValue.ToString([System.Globalization.CultureInfo]::InvariantCulture) } else {
+      ([System.IFormattable]$value).ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
+    }
     $tokens.Add([ordered]@{
       kind = 'Formattable'
-      text = ([System.IFormattable]$value).ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
+      text = $scalarText
       canonicalTypeName = GetCanonicalTypeNameFromType ($value.GetType())
     }) | Out-Null
     return

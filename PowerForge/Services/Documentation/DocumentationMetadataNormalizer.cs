@@ -316,12 +316,17 @@ internal static class DocumentationMetadataNormalizer
         var metadataComparer = validateSetCaseSensitive
             ? StringComparer.Ordinal
             : StringComparer.OrdinalIgnoreCase;
-        var result = (hasValidateSet
-                ? DistinctPreserved(metadataValues, metadataComparer)
-                : DistinctNonBlank(metadataValues, metadataComparer))
+        if (hasValidateSet)
+        {
+            return DistinctPreserved(
+                DistinctPreserved(metadataValues, metadataComparer)
+                    .Select(PowerShellDefaultValueFormatter.FormatDisplayText),
+                metadataComparer);
+        }
+
+        var result = DistinctNonBlank(metadataValues, metadataComparer)
             .Where(IsXmlSafePossibleValue)
             .ToList();
-        if (hasValidateSet) return result;
 
         var seen = new HashSet<string>(result, StringComparer.Ordinal);
         foreach (var value in DistinctNonBlank(enumValues, StringComparer.Ordinal)
