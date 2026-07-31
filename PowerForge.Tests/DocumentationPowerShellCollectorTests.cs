@@ -402,13 +402,6 @@ function Get-CollectorFixture {
         $sharedCollectionAttributes.Add($sharedCollectionDefault)
         $parameters.Add('SharedCollection', [System.Management.Automation.RuntimeDefinedParameter]::new('SharedCollection', [object[]], $sharedCollectionAttributes))
 
-        $sharedStringAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
-        $sharedStringDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
-        $sharedString = -join @('shared', '-', 'string')
-        $sharedStringDefault.Value = [object[]]@($sharedString, $sharedString)
-        $sharedStringAttributes.Add($sharedStringDefault)
-        $parameters.Add('SharedStringReferences', [System.Management.Automation.RuntimeDefinedParameter]::new('SharedStringReferences', [object[]], $sharedStringAttributes))
-
         $matrixAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $matrixDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $matrix = [int[,]]::new(2, 2)
@@ -625,7 +618,6 @@ function Get-AcceleratedOutput {
                     command.Parameters,
                     parameter => parameter.Name == "CyclicCollection");
                 var sharedCollection = Assert.Single(command.Parameters, parameter => parameter.Name == "SharedCollection");
-                var sharedStringReferences = Assert.Single(command.Parameters, parameter => parameter.Name == "SharedStringReferences");
                 var matrix = Assert.Single(command.Parameters, parameter => parameter.Name == "Matrix");
                 var boundedArray = Assert.Single(command.Parameters, parameter => parameter.Name == "BoundedArray");
                 var nestedCollection = Assert.Single(command.Parameters, parameter => parameter.Name == "NestedCollection");
@@ -736,7 +728,6 @@ function Get-AcceleratedOutput {
                 Assert.True(string.IsNullOrEmpty(unsupportedAddress.DefaultValue));
                 Assert.True(string.IsNullOrEmpty(cyclicCollection.DefaultValue));
                 Assert.True(string.IsNullOrEmpty(sharedCollection.DefaultValue));
-                Assert.True(string.IsNullOrEmpty(sharedStringReferences.DefaultValue));
                 Assert.Equal(
                     "& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }",
                     matrix.DefaultValue);

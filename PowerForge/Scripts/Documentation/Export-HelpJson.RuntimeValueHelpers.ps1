@@ -48,8 +48,7 @@ function AddRuntimeDefaultValueReference(
   [object]$value,
   [System.Collections.IList]$references
 ) {
-  if ($null -eq $value -or $value.GetType().IsValueType -or
-      $value -is [type]) {
+  if ($null -eq $value -or $value -is [type]) {
     return
   }
   foreach ($seenReference in $references) {
@@ -114,8 +113,17 @@ function TestRecreatableScriptBlock([scriptblock]$value) {
     if ($null -eq $languageModeProperty -or -not $languageModeProperty.CanRead) {
       return $false
     }
-    return $languageModeProperty.GetValue($value, $null) -eq
-      [System.Management.Automation.PSLanguageMode]::FullLanguage
+    if ($languageModeProperty.GetValue($value, $null) -ne
+        [System.Management.Automation.PSLanguageMode]::FullLanguage) {
+      return $false
+    }
+
+    $sessionStateProperty = [scriptblock].GetProperty(
+      'SessionStateInternal',
+      [System.Reflection.BindingFlags]'Instance,Public,NonPublic')
+    return $null -ne $sessionStateProperty -and
+      $sessionStateProperty.CanRead -and
+      $null -eq $sessionStateProperty.GetValue($value, $null)
   } catch {
     return $false
   }
