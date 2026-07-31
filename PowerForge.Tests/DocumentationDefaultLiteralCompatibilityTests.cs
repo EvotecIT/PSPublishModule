@@ -39,9 +39,15 @@ function Get-DefaultLiteralFixture {
         $decimalAttributes.Add($decimalDefault)
         $parameters.Add('PreciseDecimal', [System.Management.Automation.RuntimeDefinedParameter]::new('PreciseDecimal', [decimal], $decimalAttributes))
 
+        $guidAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $guidDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $guidDefault.Value = [guid]::ParseExact('01234567-89ab-cdef-0123-456789abcdef', 'D')
+        $guidAttributes.Add($guidDefault)
+        $parameters.Add('Guid', [System.Management.Automation.RuntimeDefinedParameter]::new('Guid', [guid], $guidAttributes))
+
         $dateTimeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $dateTimeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
-        $dateTimeDefault.Value = [datetime]::ParseExact('2026-07-30T12:34:56.1234567Z', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)
+        $dateTimeDefault.Value = [datetime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)
         $dateTimeAttributes.Add($dateTimeDefault)
         $parameters.Add('DateTime', [System.Management.Automation.RuntimeDefinedParameter]::new('DateTime', [datetime], $dateTimeAttributes))
 
@@ -89,7 +95,10 @@ function Get-DefaultLiteralFixture {
                 "[System.Decimal]::Parse('0.1234567890123456789012345678', [System.Globalization.CultureInfo]::InvariantCulture)",
                 Default("PreciseDecimal"));
             Assert.Equal(
-                "[System.DateTime]::ParseExact('2026-07-30T12:34:56.1234567Z', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",
+                "[System.Guid]::ParseExact('01234567-89ab-cdef-0123-456789abcdef', 'D')",
+                Default("Guid"));
+            Assert.Equal(
+                "[System.DateTime]::new(([long]639210116961234567), [System.DateTimeKind]::Local)",
                 Default("DateTime"));
             Assert.Equal(
                 "[System.DateTimeOffset]::ParseExact('2026-07-30T12:34:56.1234567+05:30', 'O', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)",

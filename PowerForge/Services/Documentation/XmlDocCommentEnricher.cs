@@ -183,7 +183,7 @@ internal sealed class XmlDocCommentEnricher
     private static IEnumerable<string> GetTypeLookupKeys(DocumentationTypeHelp entry)
     {
         var ordered = new List<string>(2);
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
 
         void AddCandidate(string? value)
         {
@@ -294,7 +294,7 @@ internal sealed class XmlDocCommentEnricher
 
             using var stream = File.OpenRead(full);
             var doc = XDocument.Load(stream, LoadOptions.None);
-            var members = new Dictionary<string, XmlDocMember>(StringComparer.OrdinalIgnoreCase);
+            var members = new Dictionary<string, XmlDocMember>(StringComparer.Ordinal);
 
             foreach (var member in doc.Descendants("member"))
             {
@@ -324,24 +324,42 @@ internal sealed class XmlDocCommentEnricher
             if (string.IsNullOrWhiteSpace(typeName))
                 return null;
 
-            if (_members.TryGetValue("T:" + typeName.Trim(), out var exact))
+            var requested = typeName.Trim();
+            if (_members.TryGetValue("T:" + requested, out var exact))
                 return exact;
 
-            var simpleName = typeName.Trim();
+            if (requested.IndexOf('.') >= 0 || requested.IndexOf('+') >= 0)
+            {
+                XmlDocMember? qualifiedMatch = null;
+                foreach (var pair in _members.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+                {
+                    if (!pair.Key.StartsWith("T:", StringComparison.Ordinal))
+                        continue;
+
+                    var current = pair.Key.Substring(2);
+                    if (!current.Equals(requested, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (qualifiedMatch is not null)
+                        return null;
+                    qualifiedMatch = pair.Value;
+                }
+
+                return qualifiedMatch;
+            }
+
+            var simpleName = requested;
             var lastDot = simpleName.LastIndexOf('.');
             if (lastDot >= 0 && lastDot < simpleName.Length - 1)
                 simpleName = simpleName.Substring(lastDot + 1);
 
             XmlDocMember? singleMatch = null;
-            foreach (var pair in _members.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+            foreach (var pair in _members.OrderBy(pair => pair.Key, StringComparer.Ordinal))
             {
-                if (!pair.Key.StartsWith("T:", StringComparison.OrdinalIgnoreCase))
+                if (!pair.Key.StartsWith("T:", StringComparison.Ordinal))
                     continue;
 
                 var current = pair.Key.Substring(2);
-                if (current.Equals(typeName.Trim(), StringComparison.OrdinalIgnoreCase))
-                    return pair.Value;
-
                 var currentLastDot = current.LastIndexOf('.');
                 var currentSimple = currentLastDot >= 0 && currentLastDot < current.Length - 1
                     ? current.Substring(currentLastDot + 1)

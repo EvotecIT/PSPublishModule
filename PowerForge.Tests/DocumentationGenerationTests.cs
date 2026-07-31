@@ -1107,6 +1107,72 @@ Invoke-Demo -Settings {
     }
 
     [Fact]
+    public void XmlDocCommentEnricher_PreservesCaseDistinctQualifiedTypeDescriptions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-xmldoc-type-case-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var assemblyPath = Path.Combine(root, "DemoModule.dll");
+            var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+            File.WriteAllText(assemblyPath, string.Empty);
+            File.WriteAllText(xmlPath, """
+<doc>
+  <members>
+    <member name="T:Demo.Namespace.MyCommand">
+      <summary>Cmdlet summary.</summary>
+    </member>
+    <member name="T:Demo.Namespace.Result">
+      <summary>Mixed-case result.</summary>
+    </member>
+    <member name="T:Demo.Namespace.RESULT">
+      <summary>Upper-case result.</summary>
+    </member>
+  </members>
+</doc>
+""");
+
+            var command = new DocumentationCommandHelp
+            {
+                Name = "Invoke-Demo",
+                CommandType = "Cmdlet",
+                ImplementingType = "Demo.Namespace.MyCommand",
+                AssemblyPath = assemblyPath,
+                Outputs =
+                [
+                    new DocumentationTypeHelp
+                    {
+                        Name = "Result",
+                        ClrTypeName = "Demo.Namespace.Result"
+                    },
+                    new DocumentationTypeHelp
+                    {
+                        Name = "RESULT",
+                        ClrTypeName = "Demo.Namespace.RESULT"
+                    }
+                ]
+            };
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands = [command]
+            };
+
+            new XmlDocCommentEnricher(new NullLogger()).Enrich(payload);
+
+            Assert.Collection(
+                command.Outputs,
+                output => Assert.Equal("Mixed-case result.", output.Description),
+                output => Assert.Equal("Upper-case result.", output.Description));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void XmlDocCommentEnricher_DoesNotUseAmbiguousSimpleTypeFallback()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-xmldoc-type-ambiguous-" + Guid.NewGuid().ToString("N"));
