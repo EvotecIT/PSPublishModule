@@ -338,7 +338,9 @@ internal sealed class MarkdownHelpWriter
     {
         var values = (p.PossibleValues ?? Enumerable.Empty<string>())
             .Where(value => value is not null)
-            .Select(value => value.Length == value.Trim().Length ? value : "'" + value.Replace("'", "''") + "'")
+            .Select(value => value.Length > 0 && value.Length == value.Trim().Length
+                ? value
+                : "'" + value.Replace("'", "''") + "'")
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 

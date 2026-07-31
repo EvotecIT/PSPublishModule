@@ -196,6 +196,17 @@ namespace RuntimeIdentityFixture {
         public TaggedTypeDelegator(System.Type type, string tag) : base(type) { Tag = tag; }
         public string Tag { get; private set; }
     }
+    public sealed class ShapeSpoofingComparer : System.StringComparer {
+        private readonly System.Globalization.CompareInfo _compareInfo =
+            System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
+        private readonly bool _ignoreCase = true;
+        public override int Compare(string x, string y) {
+            return (x ?? string.Empty).Length.CompareTo((y ?? string.Empty).Length);
+        }
+        public override bool Equals(string x, string y) { return Compare(x, y) == 0; }
+        public override int GetHashCode(string value) { return (value ?? string.Empty).Length; }
+        public string State { get { return _compareInfo.Name + _ignoreCase.ToString(); } }
+    }
 }
 '@ -PassThru
 
@@ -271,6 +282,13 @@ $script:reservedArrayList = [System.Collections.ArrayList]::new(100)
 $script:invariantDictionary = [System.Collections.Generic.Dictionary[string,int]]::new(
     [System.StringComparer]::Create([System.Globalization.CultureInfo]::InvariantCulture, $true))
 $script:invariantDictionary.Add('alpha', 1)
+$shapeSpoofingComparerType = $spoofTypes |
+    Where-Object { $_.FullName -ceq 'RuntimeIdentityFixture.ShapeSpoofingComparer' } |
+    Select-Object -First 1
+$shapeSpoofingComparer = [System.Activator]::CreateInstance($shapeSpoofingComparerType)
+$script:shapeSpoofingDictionary = [System.Collections.Generic.Dictionary[string,int]]::new(
+    [System.Collections.Generic.IEqualityComparer[string]]$shapeSpoofingComparer)
+$script:shapeSpoofingDictionary.Add('a', 1)
 $script:reservedSortedList = [System.Collections.Generic.SortedList[string,int]]::new(
     100, [System.StringComparer]::InvariantCultureIgnoreCase)
 $script:reservedSortedList.Add('alpha', 1)
@@ -308,6 +326,7 @@ function Get-RuntimeIdentityFixture {
             @('ReservedList', $script:reservedList),
             @('ReservedArrayList', $script:reservedArrayList),
             @('InvariantDictionary', $script:invariantDictionary),
+            @('ShapeSpoofingDictionary', $script:shapeSpoofingDictionary),
             @('ReservedSortedList', $script:reservedSortedList),
             @('DelegatedArrayType', $script:delegatedArrayType),
             @('DelegatedPointerType', $script:delegatedPointerType),
@@ -386,6 +405,7 @@ if ($sortedList.GetType() -ne [System.Collections.Generic.SortedList[string,int]
                 Assert.True(string.IsNullOrEmpty(Default("DelegatedPointerType")));
                 Assert.True(string.IsNullOrEmpty(Default("DelegatedByRefType")));
                 Assert.True(string.IsNullOrEmpty(Default("DelegatedGenericType")));
+                Assert.True(string.IsNullOrEmpty(Default("ShapeSpoofingDictionary")));
                 var itemOnly = Default("ItemOnlyCollection");
                 Assert.StartsWith("& { $collection = [System.Collections.ObjectModel.Collection[System.Int32]]::new()", itemOnly, StringComparison.Ordinal);
                 var reservedList = Default("ReservedList");

@@ -190,6 +190,11 @@ function GetKnownDictionaryComparerName([object]$comparer, [type]$comparerType) 
       return $name
     }
   }
+  $cultureComparerType = [System.StringComparer]::Create(
+    [System.Globalization.CultureInfo]::InvariantCulture, $false).GetType()
+  if (-not [object]::ReferenceEquals($comparer.GetType(), $cultureComparerType)) {
+    throw ('Unsupported dictionary comparer: ' + $comparer.GetType().FullName)
+  }
   $flags = [System.Reflection.BindingFlags]'Instance,Public,NonPublic'
   $compareInfoField = $comparer.GetType().GetField('_compareInfo', $flags)
   $ignoreCaseField = $comparer.GetType().GetField('_ignoreCase', $flags)
