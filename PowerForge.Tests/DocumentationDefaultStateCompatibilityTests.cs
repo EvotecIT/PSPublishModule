@@ -25,6 +25,7 @@ public sealed class DocumentationDefaultStateCompatibilityTests
     ModuleVersion = '1.0.0'
     GUID = '55555555-5555-5555-5555-555555555555'
     FunctionsToExport = @('Get-DefaultStateFixture', 'ConvertToPowerShellDefaultValue')
+    AliasesToExport = @('GetCanonicalTypeNameFromType')
 }
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             File.WriteAllText(Path.Combine(root, "DefaultStateFixture.psm1"), """
@@ -34,12 +35,30 @@ using System.Reflection;
 using System.Management.Automation;
 
 public static class PowerForgeAutomationNullFixture {
-    public static PSDefaultValueAttribute Create() {
-        var attribute = new PSDefaultValueAttribute();
+    private static object Value() {
         var type = typeof(PSObject).Assembly.GetType(
             "System.Management.Automation.Internal.AutomationNull", true);
-        var property = type.GetProperty("Value", BindingFlags.Public | BindingFlags.Static);
-        attribute.Value = property.GetValue(null, null);
+        return type.GetProperty("Value", BindingFlags.Public | BindingFlags.Static)
+            .GetValue(null, null);
+    }
+
+    public static PSDefaultValueAttribute Create() {
+        var attribute = new PSDefaultValueAttribute();
+        attribute.Value = Value();
+        return attribute;
+    }
+
+    public static PSDefaultValueAttribute CreateArray() {
+        var attribute = new PSDefaultValueAttribute();
+        attribute.Value = new object[] { Value() };
+        return attribute;
+    }
+
+    public static PSDefaultValueAttribute CreateDictionary(bool key) {
+        var attribute = new PSDefaultValueAttribute();
+        var dictionary = new System.Collections.Specialized.OrderedDictionary();
+        dictionary.Add(key ? Value() : "key", key ? "value" : Value());
+        attribute.Value = dictionary;
         return attribute;
     }
 }
@@ -103,6 +122,16 @@ function Get-DefaultStateFixture {
         $automationNullAttributes.Add([PowerForgeAutomationNullFixture]::Create())
         $parameters.Add('AutomationNull', [System.Management.Automation.RuntimeDefinedParameter]::new(
             'AutomationNull', [object], $automationNullAttributes))
+        foreach ($entry in @(
+            @('AutomationNullArray', [PowerForgeAutomationNullFixture]::CreateArray()),
+            @('AutomationNullDictionaryKey', [PowerForgeAutomationNullFixture]::CreateDictionary($true)),
+            @('AutomationNullDictionaryValue', [PowerForgeAutomationNullFixture]::CreateDictionary($false))
+        )) {
+            $attributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+            $attributes.Add($entry[1])
+            $parameters.Add($entry[0], [System.Management.Automation.RuntimeDefinedParameter]::new(
+                $entry[0], [object], $attributes))
+        }
 
         $collidingValidateSetAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $collidingValidateSetAttributes.Add([System.Management.Automation.ValidateSetAttribute]::new(
@@ -117,7 +146,9 @@ function ConvertToPowerShellDefaultValue {
     throw 'The documented module clobbered a collector helper.'
 }
 
-Export-ModuleMember -Function Get-DefaultStateFixture, ConvertToPowerShellDefaultValue
+Set-Alias -Name GetCanonicalTypeNameFromType -Value Write-Error
+
+Export-ModuleMember -Function Get-DefaultStateFixture, ConvertToPowerShellDefaultValue -Alias GetCanonicalTypeNameFromType
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             var hosts = OperatingSystem.IsWindows()
@@ -133,7 +164,8 @@ Export-ModuleMember -Function Get-DefaultStateFixture, ConvertToPowerShellDefaul
                 foreach (var name in new[]
                          {
                              "SharedStringReferences", "SharedBoxReferences", "SharedCollectionBacking",
-                             "SharedCultureComparer", "SessionBoundScript", "AutomationNull"
+                             "SharedCultureComparer", "SessionBoundScript", "AutomationNull",
+                             "AutomationNullArray", "AutomationNullDictionaryKey", "AutomationNullDictionaryValue"
                          })
                 {
                     var parameter = Assert.Single(command.Parameters, item => item.Name == name);

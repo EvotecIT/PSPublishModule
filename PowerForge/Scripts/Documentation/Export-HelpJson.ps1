@@ -240,7 +240,8 @@ try {
   $collectorHelperFunctions = GetCollectorHelperFunctionSnapshot
   $restoreCollectorHelpers = Get-Command RestoreCollectorHelperFunctions -CommandType Function
   $targetVariableImportFilter = '__PowerForgeDocumentationCollector_' + [guid]::NewGuid().ToString('N')
-  $mod = Import-Module -Name $ManifestPath -Force -PassThru -Function '*' -Cmdlet '*' -Alias '*' -Variable $targetVariableImportFilter -ErrorAction Stop
+  $targetAliasImportFilter = '__PowerForgeDocumentationCollector_' + [guid]::NewGuid().ToString('N')
+  $mod = Import-Module -Name $ManifestPath -Force -PassThru -Function '*' -Cmdlet '*' -Alias $targetAliasImportFilter -Variable $targetVariableImportFilter -ErrorAction Stop
   & $restoreCollectorHelpers $collectorHelperFunctions
   $moduleNameResolved = $mod.Name
 

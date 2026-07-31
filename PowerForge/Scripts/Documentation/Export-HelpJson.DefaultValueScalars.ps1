@@ -12,7 +12,7 @@ function ConvertPSDefaultValueAttribute(
     return ConvertToXmlSafeDefaultHelpText $help
   }
 
-  if (TestPSDefaultValueAutomationNull $attribute) {
+  if (TestPSDefaultValueContainsAutomationNull $attribute) {
     throw 'AutomationNull defaults cannot be represented as PowerShell expressions.'
   }
   return ConvertToPowerShellDefaultValue $attribute.Value
@@ -43,6 +43,147 @@ function TestPSDefaultValueAutomationNull(
   $lambda = [System.Linq.Expressions.Expression]::Lambda(
     $delegateType, $body, [System.Linq.Expressions.ParameterExpression[]]@($attributeParameter))
   return $lambda.Compile().Invoke($attribute)
+}
+
+function GetAutomationNullValueProperty {
+  $automationNullType = [System.Management.Automation.PSObject].Assembly.GetType(
+    'System.Management.Automation.Internal.AutomationNull', $false)
+  if ($null -eq $automationNullType) { return $null }
+  return $automationNullType.GetProperty(
+    'Value', [System.Reflection.BindingFlags]'Static,Public')
+}
+
+function GetAutomationNullListPredicate {
+  if ($null -eq $script:PowerForgeAutomationNullListPredicate) {
+    $sentinelProperty = GetAutomationNullValueProperty
+    if ($null -eq $sentinelProperty) { return $false }
+    $listParameter = [System.Linq.Expressions.Expression]::Parameter(
+      [System.Collections.IList], 'list')
+    $indexParameter = [System.Linq.Expressions.Expression]::Parameter([int], 'index')
+    $itemExpression = [System.Linq.Expressions.Expression]::MakeIndex(
+      $listParameter, [System.Collections.IList].GetProperty('Item'),
+      [System.Linq.Expressions.Expression[]]@($indexParameter))
+    $body = [System.Linq.Expressions.Expression]::ReferenceEqual(
+      $itemExpression, [System.Linq.Expressions.Expression]::Property($null, $sentinelProperty))
+    $delegateType = [System.Func``3].MakeGenericType(
+      [System.Collections.IList], [int], [bool])
+    $script:PowerForgeAutomationNullListPredicate = [System.Linq.Expressions.Expression]::Lambda(
+      $delegateType, $body,
+      [System.Linq.Expressions.ParameterExpression[]]@($listParameter, $indexParameter)).Compile()
+  }
+  return $script:PowerForgeAutomationNullListPredicate
+}
+
+function GetAutomationNullArrayPredicate {
+  if ($null -eq $script:PowerForgeAutomationNullArrayPredicate) {
+    $sentinelProperty = GetAutomationNullValueProperty
+    if ($null -eq $sentinelProperty) { return $false }
+    $arrayParameter = [System.Linq.Expressions.Expression]::Parameter([System.Array], 'array')
+    $indicesParameter = [System.Linq.Expressions.Expression]::Parameter([int[]], 'indices')
+    $itemExpression = [System.Linq.Expressions.Expression]::Call(
+      $arrayParameter, [System.Array].GetMethod('GetValue', [type[]]@([int[]])),
+      [System.Linq.Expressions.Expression[]]@($indicesParameter))
+    $body = [System.Linq.Expressions.Expression]::ReferenceEqual(
+      $itemExpression, [System.Linq.Expressions.Expression]::Property($null, $sentinelProperty))
+    $delegateType = [System.Func``3].MakeGenericType([System.Array], [int[]], [bool])
+    $script:PowerForgeAutomationNullArrayPredicate = [System.Linq.Expressions.Expression]::Lambda(
+      $delegateType, $body,
+      [System.Linq.Expressions.ParameterExpression[]]@($arrayParameter, $indicesParameter)).Compile()
+  }
+  return $script:PowerForgeAutomationNullArrayPredicate
+}
+
+function GetAutomationNullDictionaryEntryPredicate([bool]$key) {
+  $predicateName = if ($key) { 'PowerForgeAutomationNullDictionaryKeyPredicate' } else {
+    'PowerForgeAutomationNullDictionaryValuePredicate'
+  }
+  $predicate = Get-Variable -Scope Script -Name $predicateName -ValueOnly -ErrorAction SilentlyContinue
+  if ($null -eq $predicate) {
+    $sentinelProperty = GetAutomationNullValueProperty
+    if ($null -eq $sentinelProperty) { return $false }
+    $entryParameter = [System.Linq.Expressions.Expression]::Parameter(
+      [System.Collections.DictionaryEntry], 'entry')
+    $itemExpression = [System.Linq.Expressions.Expression]::Property(
+      $entryParameter, $(if ($key) { 'Key' } else { 'Value' }))
+    $body = [System.Linq.Expressions.Expression]::ReferenceEqual(
+      $itemExpression, [System.Linq.Expressions.Expression]::Property($null, $sentinelProperty))
+    $delegateType = [System.Func[System.Collections.DictionaryEntry,bool]]
+    $predicate = [System.Linq.Expressions.Expression]::Lambda(
+      $delegateType, $body,
+      [System.Linq.Expressions.ParameterExpression[]]@($entryParameter)).Compile()
+    Set-Variable -Scope Script -Name $predicateName -Value $predicate
+  }
+  return $predicate
+}
+
+function TestPSDefaultValueContainsAutomationNull(
+  [System.Management.Automation.PSDefaultValueAttribute]$attribute
+) {
+  if (TestPSDefaultValueAutomationNull $attribute) { return $true }
+  $flags = [System.Reflection.BindingFlags]'Instance,Public,NonPublic'
+  $valueField = $attribute.GetType().GetField('<Value>k__BackingField', $flags)
+  if ($null -eq $valueField) { return $false }
+  $root = $valueField.GetValue($attribute)
+  if ($null -eq $root) { return $false }
+
+  $listPredicate = GetAutomationNullListPredicate
+  $arrayPredicate = GetAutomationNullArrayPredicate
+  $dictionaryKeyPredicate = GetAutomationNullDictionaryEntryPredicate $true
+  $dictionaryValuePredicate = GetAutomationNullDictionaryEntryPredicate $false
+  $pending = [System.Collections.ArrayList]::new()
+  $seen = [System.Collections.ArrayList]::new()
+  [void]$pending.Add($root)
+  while ($pending.Count -gt 0) {
+    $current = $pending[$pending.Count - 1]
+    $pending.RemoveAt($pending.Count - 1)
+    $alreadySeen = $false
+    foreach ($seenValue in $seen) {
+      if ([object]::ReferenceEquals($seenValue, $current)) { $alreadySeen = $true; break }
+    }
+    if ($alreadySeen) { continue }
+    [void]$seen.Add($current)
+
+    $children = [System.Collections.ArrayList]::new()
+    if ($current -is [System.Array]) {
+      $indices = [int[]]::new($current.Rank)
+      for ($dimension = 0; $dimension -lt $current.Rank; $dimension++) {
+        $indices[$dimension] = $current.GetLowerBound($dimension)
+      }
+      for ($position = 0; $position -lt $current.Length; $position++) {
+        if ($arrayPredicate.Invoke($current, $indices)) { return $true }
+        [void]$children.Add($current.GetValue($indices))
+        for ($dimension = $current.Rank - 1; $dimension -ge 0; $dimension--) {
+          $indices[$dimension]++
+          if ($indices[$dimension] -lt
+              ($current.GetLowerBound($dimension) + $current.GetLength($dimension))) { break }
+          $indices[$dimension] = $current.GetLowerBound($dimension)
+        }
+      }
+    } elseif ($current -is [System.Collections.IDictionary]) {
+      $enumerator = ([System.Collections.IDictionary]$current).GetEnumerator()
+      while ($enumerator.MoveNext()) {
+        $entry = $enumerator.Entry
+        if ($dictionaryKeyPredicate.Invoke($entry) -or
+            $dictionaryValuePredicate.Invoke($entry)) { return $true }
+        [void]$children.Add($entry.Key)
+        [void]$children.Add($entry.Value)
+      }
+    } elseif ($current -is [System.Collections.IList]) {
+      for ($index = 0; $index -lt $current.Count; $index++) {
+        if ($listPredicate.Invoke($current, $index)) { return $true }
+        [void]$children.Add($current[$index])
+      }
+    }
+    foreach ($child in $children) {
+      if ($null -ne $child -and
+          ($child -is [System.Array] -or
+           $child -is [System.Collections.IDictionary] -or
+           $child -is [System.Collections.IList])) {
+        [void]$pending.Add($child)
+      }
+    }
+  }
+  return $false
 }
 
 function GetCollectorHelperFunctionSnapshot {
