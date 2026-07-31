@@ -134,7 +134,7 @@ public sealed class DocumentationBinaryFixtureTests
     Author = 'PowerForge.Tests'
     Description = 'Binary fixture module for empty-default extraction tests.'
     FunctionsToExport = @()
-    CmdletsToExport = @('Get-BinaryDocEmptyDefault', 'Get-BinaryDocAuthoredOutput', 'Get-BinaryDocConflictingOutput', 'Get-BinaryDocAmbiguousOutputs')
+    CmdletsToExport = @('Get-BinaryDocEmptyDefault', 'Get-BinaryDocAuthoredOutput', 'Get-BinaryDocConflictingOutput', 'Get-BinaryDocAmbiguousOutputs', 'Get-BinaryDocCaseInsensitiveOutput', 'Get-BinaryDocNestedOutput')
     AliasesToExport = @()
     VariablesToExport = @()
 }
@@ -281,6 +281,66 @@ public sealed class DocumentationBinaryFixtureTests
       </command:returnValue>
     </command:returnValues>
   </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Get-BinaryDocCaseInsensitiveOutput</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>BinaryDocCaseInsensitiveOutput</command:noun>
+      <maml:description>
+        <maml:para>Matches an authored qualified output whose casing differs.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Matches an authored qualified output whose casing differs.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Get-BinaryDocCaseInsensitiveOutput</maml:name>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters />
+    <command:inputTypes />
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>binarydocfixture.canonicaloutput.result</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>The canonical qualified result description survives authored casing.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Get-BinaryDocNestedOutput</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>BinaryDocNestedOutput</command:noun>
+      <maml:description>
+        <maml:para>Matches a nested output authored with normal C# type spelling.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Matches a nested output authored with normal C# type spelling.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Get-BinaryDocNestedOutput</maml:name>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters />
+    <command:inputTypes />
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>BinaryDocFixture.NestedOutputs.Outer.Result</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>The nested result keeps its authored description.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+  </command:command>
 </helpItems>
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
@@ -391,6 +451,20 @@ public sealed class DocumentationBinaryFixtureTests
             Assert.True(string.IsNullOrEmpty(outputA.Description));
             Assert.Contains("case-variant RESULT", outputCaseVariant.Description, StringComparison.Ordinal);
             Assert.Contains("Only the OutputB result", outputB.Description, StringComparison.Ordinal);
+
+            var caseInsensitiveOutputCommand = Assert.Single(
+                payload.Commands,
+                item => string.Equals(item.Name, "Get-BinaryDocCaseInsensitiveOutput", StringComparison.Ordinal));
+            var caseInsensitiveOutput = Assert.Single(caseInsensitiveOutputCommand.Outputs);
+            Assert.Equal("BinaryDocFixture.CanonicalOutput.Result", caseInsensitiveOutput.ClrTypeName);
+            Assert.Contains("survives authored casing", caseInsensitiveOutput.Description, StringComparison.Ordinal);
+
+            var nestedOutputCommand = Assert.Single(
+                payload.Commands,
+                item => string.Equals(item.Name, "Get-BinaryDocNestedOutput", StringComparison.Ordinal));
+            var nestedOutput = Assert.Single(nestedOutputCommand.Outputs);
+            Assert.Equal("BinaryDocFixture.NestedOutputs.Outer+Result", nestedOutput.ClrTypeName);
+            Assert.Contains("nested result keeps", nestedOutput.Description, StringComparison.OrdinalIgnoreCase);
 
             var markdownDirectory = Path.Combine(tempRoot, "GeneratedDocs");
             var mamlDirectory = Path.Combine(tempRoot, "GeneratedHelp");

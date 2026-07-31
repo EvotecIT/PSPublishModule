@@ -21,6 +21,26 @@ namespace BinaryDocFixture.OutputB
     }
 }
 
+namespace BinaryDocFixture.CanonicalOutput
+{
+    /// <summary>Represents a qualified output used to verify canonical casing.</summary>
+    public sealed class Result
+    {
+    }
+}
+
+namespace BinaryDocFixture.NestedOutputs
+{
+    /// <summary>Contains a nested result type whose C# and CLR names differ.</summary>
+    public sealed class Outer
+    {
+        /// <summary>Represents a nested result shape.</summary>
+        public sealed class Result
+        {
+        }
+    }
+}
+
 namespace BinaryDocFixture
 {
     /// <summary>Uses authored external help as its output contract.</summary>
@@ -40,6 +60,20 @@ namespace BinaryDocFixture
     [Cmdlet(VerbsCommon.Get, "BinaryDocAmbiguousOutputs")]
     [OutputType(typeof(OutputA.Result), typeof(OutputA.RESULT), typeof(OutputB.Result))]
     public sealed class GetBinaryDocAmbiguousOutputsCommand : PSCmdlet
+    {
+    }
+
+    /// <summary>Matches an authored qualified output whose casing differs.</summary>
+    [Cmdlet(VerbsCommon.Get, "BinaryDocCaseInsensitiveOutput")]
+    [OutputType(typeof(CanonicalOutput.Result))]
+    public sealed class GetBinaryDocCaseInsensitiveOutputCommand : PSCmdlet
+    {
+    }
+
+    /// <summary>Matches a nested output authored with normal C# type spelling.</summary>
+    [Cmdlet(VerbsCommon.Get, "BinaryDocNestedOutput")]
+    [OutputType(typeof(NestedOutputs.Outer.Result))]
+    public sealed class GetBinaryDocNestedOutputCommand : PSCmdlet
     {
     }
 }

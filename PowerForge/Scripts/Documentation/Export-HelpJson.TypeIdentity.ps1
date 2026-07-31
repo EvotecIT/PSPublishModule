@@ -74,12 +74,57 @@ function ResolveUniqueTypeCaseInsensitive([string]$candidate, [ref]$isAmbiguous)
   return $null
 }
 
+function ResolveUniqueNestedType([string]$candidate, [ref]$isAmbiguous) {
+  $isAmbiguous.Value = $false
+  if ([string]::IsNullOrWhiteSpace($candidate) -or -not $candidate.Contains('.')) { return $null }
+
+  $nestedCandidates = [System.Collections.Generic.List[string]]::new()
+  $seenCandidates = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+  for ($index = $candidate.Length - 1; $index -ge 0; $index--) {
+    if ($candidate[$index] -ne '.') { continue }
+    $nestedCandidate = $candidate.Substring(0, $index) + '+' + $candidate.Substring($index + 1).Replace('.', '+')
+    if ($seenCandidates.Add($nestedCandidate)) {
+      $nestedCandidates.Add($nestedCandidate)
+    }
+  }
+
+  $matches = [System.Collections.Generic.Dictionary[string,System.Type]]::new([System.StringComparer]::Ordinal)
+  foreach ($nestedCandidate in $nestedCandidates) {
+    $resolvedType = ResolveExactType $nestedCandidate
+    if ($resolvedType) {
+      $matches[(GetCanonicalTypeNameFromType $resolvedType)] = $resolvedType
+    }
+  }
+  if ($matches.Count -eq 1) {
+    foreach ($match in $matches.Values) { return $match }
+  }
+  if ($matches.Count -gt 1) {
+    $isAmbiguous.Value = $true
+    return $null
+  }
+
+  $ambiguous = $false
+  foreach ($nestedCandidate in $nestedCandidates) {
+    $candidateAmbiguous = $false
+    $resolvedType = ResolveUniqueTypeCaseInsensitive $nestedCandidate ([ref]$candidateAmbiguous)
+    if ($candidateAmbiguous) { $ambiguous = $true }
+    if ($resolvedType) {
+      $matches[(GetCanonicalTypeNameFromType $resolvedType)] = $resolvedType
+    }
+  }
+  $isAmbiguous.Value = $ambiguous -or $matches.Count -gt 1
+  if ($isAmbiguous.Value -or $matches.Count -ne 1) { return $null }
+  foreach ($match in $matches.Values) { return $match }
+  return $null
+}
+
 function ResolveCanonicalTypeName([string]$candidate) {
   if ([string]::IsNullOrWhiteSpace($candidate)) { return '' }
   $trimmed = $candidate.Trim()
   $resolvedType = ResolveExactType $trimmed
   $ambiguous = $false
-  if (-not $resolvedType) { $resolvedType = ResolveUniqueTypeCaseInsensitive $trimmed ([ref]$ambiguous) }
+  if (-not $resolvedType) { $resolvedType = ResolveUniqueNestedType $trimmed ([ref]$ambiguous) }
+  if (-not $resolvedType -and -not $ambiguous) { $resolvedType = ResolveUniqueTypeCaseInsensitive $trimmed ([ref]$ambiguous) }
   if (-not $resolvedType -and -not $ambiguous) {
     try { $resolvedType = $trimmed -as [type] } catch { $resolvedType = $null }
   }
@@ -110,7 +155,14 @@ function GetTypeKeys([string]$name, [string]$clrName) {
       }
     }
   }
-  return @($keys | Sort-Object -Unique)
+  $uniqueKeys = [System.Collections.Generic.List[string]]::new()
+  $seenKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+  foreach ($key in $keys) {
+    if ($seenKeys.Add([string]$key)) {
+      $uniqueKeys.Add([string]$key)
+    }
+  }
+  return @($uniqueKeys.ToArray())
 }
 
 function GetTypeIdentity([string]$name, [string]$clrName) {
@@ -119,7 +171,8 @@ function GetTypeIdentity([string]$name, [string]$clrName) {
     $trimmed = $candidate.Trim()
     $resolvedType = ResolveExactType $trimmed
     $ambiguous = $false
-    if (-not $resolvedType) { $resolvedType = ResolveUniqueTypeCaseInsensitive $trimmed ([ref]$ambiguous) }
+    if (-not $resolvedType) { $resolvedType = ResolveUniqueNestedType $trimmed ([ref]$ambiguous) }
+    if (-not $resolvedType -and -not $ambiguous) { $resolvedType = ResolveUniqueTypeCaseInsensitive $trimmed ([ref]$ambiguous) }
     if ($resolvedType) { return GetCanonicalTypeNameFromType $resolvedType }
     $identity = GetCanonicalTypeName $trimmed
     if ($identity) { return $identity }

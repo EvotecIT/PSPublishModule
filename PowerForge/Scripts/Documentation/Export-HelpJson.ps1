@@ -114,6 +114,10 @@ function ConvertToPowerShellDefaultValue([object]$value) {
   if ($value -is [guid]) {
     return ("[System.Guid]::ParseExact('" + $value.ToString('D') + "', 'D')")
   }
+  if ($value -is [version]) {
+    $versionText = $value.ToString().Replace("'", "''")
+    return ("[System.Version]::Parse('" + $versionText + "')")
+  }
   if ($value -is [datetime]) {
     $ticks = $value.Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
     return ('[System.DateTime]::new(([long]' + $ticks + '), [System.DateTimeKind]::' + $value.Kind + ')')
@@ -138,7 +142,7 @@ function ConvertToPowerShellDefaultValue([object]$value) {
     return ('@(' + ($items -join ', ') + ')')
   }
   if ($value -is [System.IFormattable]) {
-    return $value.ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
+    return ([System.IFormattable]$value).ToString($null, [System.Globalization.CultureInfo]::InvariantCulture)
   }
   return [string]$value
 }
