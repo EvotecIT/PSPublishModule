@@ -153,6 +153,9 @@ function GetKnownDictionaryComparerExpression([object]$comparer, [type]$comparer
 }
 
 function GetDictionaryConstructorExpression([System.Collections.IDictionary]$value) {
+  if ($value.IsReadOnly -or $value.IsFixedSize) {
+    throw ('Read-only or fixed-size dictionary defaults are not supported: ' + $value.GetType().FullName)
+  }
   $dictionaryTypeName = GetConstructibleDictionaryTypeName $value
   if ([string]::IsNullOrWhiteSpace($dictionaryTypeName)) {
     throw ('Dictionary type has no supported constructor: ' + $value.GetType().FullName)
@@ -175,6 +178,32 @@ function GetDictionaryConstructorExpression([System.Collections.IDictionary]$val
     throw ('Dictionary type cannot reconstruct comparer: ' + $value.GetType().FullName)
   }
   return ('[' + $dictionaryTypeName + ']::new(' + $comparerExpression + ')')
+}
+
+function GetPowerShellTypeDefaultExpression([type]$type) {
+  if ($type.IsGenericParameter) {
+    throw 'Generic-parameter Type defaults are not supported.'
+  }
+  if ($type.IsPointer) {
+    return ((GetPowerShellTypeDefaultExpression ($type.GetElementType())) + '.MakePointerType()')
+  }
+  if ($type.IsByRef) {
+    return ((GetPowerShellTypeDefaultExpression ($type.GetElementType())) + '.MakeByRefType()')
+  }
+  if ($type.IsArray -and
+      $type.GetArrayRank() -eq 1 -and
+      $type -ne $type.GetElementType().MakeArrayType()) {
+    return ((GetPowerShellTypeDefaultExpression ($type.GetElementType())) + '.MakeArrayType(1)')
+  }
+  $canonicalTypeName = GetCanonicalTypeNameFromType $type
+  if ($canonicalTypeName -match '^[A-Za-z_][A-Za-z0-9_.+`]*(?:\[[A-Za-z0-9_.+`,\[\]]+\])?$') {
+    return ('[' + $canonicalTypeName + ']')
+  }
+  if ([string]::IsNullOrWhiteSpace($type.AssemblyQualifiedName)) {
+    throw ('Type has no safely resolvable assembly-qualified name: ' + $canonicalTypeName)
+  }
+  $assemblyQualifiedName = $type.AssemblyQualifiedName.Replace("'", "''")
+  return ("[System.Type]::GetType('" + $assemblyQualifiedName + "', `$true, `$false)")
 }
 
 function ResolveExactType([string]$candidate) {

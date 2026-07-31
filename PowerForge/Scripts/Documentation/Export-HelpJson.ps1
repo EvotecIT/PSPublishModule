@@ -97,21 +97,7 @@ function ConvertToPowerShellDefaultValue(
     return ('[System.Enum]::ToObject([' + $enumType.FullName + '], ([' + $underlyingTypeName + ']' + [string]$underlyingValue + '))')
   }
   if ($value -is [type]) {
-    if ($value.IsGenericParameter) {
-      throw 'Generic-parameter Type defaults are not supported.'
-    }
-    if ($value.IsPointer) {
-      return ((ConvertToPowerShellDefaultValue ($value.GetElementType())) + '.MakePointerType()')
-    }
-    if ($value.IsByRef) {
-      return ((ConvertToPowerShellDefaultValue ($value.GetElementType())) + '.MakeByRefType()')
-    }
-    if ($value.IsArray -and
-        $value.GetArrayRank() -eq 1 -and
-        $value -ne $value.GetElementType().MakeArrayType()) {
-      return ((ConvertToPowerShellDefaultValue ($value.GetElementType())) + '.MakeArrayType(1)')
-    }
-    return ('[' + (GetCanonicalTypeNameFromType $value) + ']')
+    return GetPowerShellTypeDefaultExpression $value
   }
   if ($value -is [double]) {
     if ([double]::IsNaN($value)) { return '[double]::NaN' }
@@ -365,11 +351,7 @@ try {
               try {
                 $defaultHelp = [string]$attr.Help
                 if (-not [string]::IsNullOrWhiteSpace($defaultHelp)) {
-                  if (TestDefaultTextNeedsEncoding $defaultHelp) {
-                    $defaultValue = ConvertToPowerShellDefaultValue $defaultHelp
-                  } else {
-                    $defaultValue = $defaultHelp
-                  }
+                  $defaultValue = ConvertToXmlSafeDefaultHelpText $defaultHelp
                 } else {
                   $defaultValue = ConvertToPowerShellDefaultValue $attr.Value
                 }

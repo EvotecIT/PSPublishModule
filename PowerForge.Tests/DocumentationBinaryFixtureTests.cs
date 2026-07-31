@@ -400,8 +400,11 @@ public sealed class DocumentationBinaryFixtureTests
                 "& { $collection = [System.Type[]]::new(2); $collection.SetValue(([System.String]), 0); $collection.SetValue(([System.Int32]), 1); return ,$collection }",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "ValueTypes", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
-                "(-join @(([char]0)))",
+                "([char]0)",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "ControlHelp", StringComparison.Ordinal)).DefaultValue);
+            Assert.Equal(
+                "first\nsecond 😀",
+                Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "MultilineHelp", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
                 "(-join @('first', ([char]10), '```', ([char]10), 'last'))",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "FenceText", StringComparison.Ordinal)).DefaultValue);

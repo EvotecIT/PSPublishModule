@@ -29,6 +29,15 @@ if (-not ('DefaultLiteralFixture.WeirdMode' -as [type])) {
         [int])
     [void]$enumBuilder.DefineLiteral('A-B', 1)
     [void]$enumBuilder.CreateTypeInfo()
+    $script:unsafeDefaultType = $moduleBuilder.DefineType(
+        'DefaultLiteralFixture.A-B',
+        [System.Reflection.TypeAttributes]::Public).CreateTypeInfo().AsType()
+}
+if ($null -eq $script:unsafeDefaultType) {
+    $script:unsafeDefaultType = [System.AppDomain]::CurrentDomain.GetAssemblies() |
+        ForEach-Object { $_.GetType('DefaultLiteralFixture.A-B', $false, $false) } |
+        Where-Object { $null -ne $_ } |
+        Select-Object -First 1
 }
 
 function Get-DefaultLiteralFixture {
@@ -126,6 +135,14 @@ function Get-DefaultLiteralFixture {
         $readOnlyDictionaryAttributes.Add($readOnlyDictionaryDefault)
         $parameters.Add('ReadOnlyDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('ReadOnlyDictionary', [System.Collections.ObjectModel.ReadOnlyDictionary[string, int]], $readOnlyDictionaryAttributes))
 
+        $readOnlyOrderedDictionaryAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $readOnlyOrderedDictionaryDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $readOnlyOrderedDictionary = [System.Collections.Specialized.OrderedDictionary]::new()
+        $readOnlyOrderedDictionary.Add('alpha', 1)
+        $readOnlyOrderedDictionaryDefault.Value = $readOnlyOrderedDictionary.AsReadOnly()
+        $readOnlyOrderedDictionaryAttributes.Add($readOnlyOrderedDictionaryDefault)
+        $parameters.Add('ReadOnlyOrderedDictionary', [System.Management.Automation.RuntimeDefinedParameter]::new('ReadOnlyOrderedDictionary', [System.Collections.Specialized.OrderedDictionary], $readOnlyOrderedDictionaryAttributes))
+
         $unsupportedCultureAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $unsupportedCultureDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $unsupportedCultureDefault.Value = [System.Globalization.CultureInfo]::new('en-US')
@@ -191,6 +208,12 @@ function Get-DefaultLiteralFixture {
         $stackDefault.Value = $stack
         $stackAttributes.Add($stackDefault)
         $parameters.Add('Stack', [System.Management.Automation.RuntimeDefinedParameter]::new('Stack', [System.Collections.Generic.Stack[int]], $stackAttributes))
+
+        $unsafeTypeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $unsafeTypeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $unsafeTypeDefault.Value = $script:unsafeDefaultType
+        $unsafeTypeAttributes.Add($unsafeTypeDefault)
+        $parameters.Add('UnsafeType', [System.Management.Automation.RuntimeDefinedParameter]::new('UnsafeType', [type], $unsafeTypeAttributes))
 
         $dateOnlyAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $dateOnlyDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
@@ -343,6 +366,7 @@ function Get-DefaultLiteralFixture {
                 "& { $dictionary = [System.Collections.Concurrent.ConcurrentDictionary[System.String,System.Int32]]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('Alpha'), (1)); return ,$dictionary }",
                 Default("ConcurrentDictionary"));
             Assert.True(string.IsNullOrEmpty(Default("ReadOnlyDictionary")));
+            Assert.True(string.IsNullOrEmpty(Default("ReadOnlyOrderedDictionary")));
             Assert.True(string.IsNullOrEmpty(Default("UnsupportedCulture")));
             Assert.Equal(
                 new[] { "One", "Two" },
@@ -362,6 +386,10 @@ function Get-DefaultLiteralFixture {
                 "& { $collection = [System.Object[]]::new(1); $collection.SetValue((& { $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2, 2), [int[]]@(0, 0)); $array.SetValue((1), [int[]]@(0, 0)); $array.SetValue((2), [int[]]@(0, 1)); $array.SetValue((3), [int[]]@(1, 0)); $array.SetValue((4), [int[]]@(1, 1)); return ,$array }), 0); return ,$collection }",
                 Default("NestedMatrix"));
             Assert.True(string.IsNullOrEmpty(Default("Stack")));
+            Assert.StartsWith(
+                "[System.Type]::GetType('DefaultLiteralFixture.A-B, DefaultLiteralFixtureDynamic",
+                Default("UnsafeType"),
+                StringComparison.Ordinal);
             Assert.Equal(
                 "[System.DateOnly]::FromDayNumber(([int]739827))",
                 Default("DateOnly"));

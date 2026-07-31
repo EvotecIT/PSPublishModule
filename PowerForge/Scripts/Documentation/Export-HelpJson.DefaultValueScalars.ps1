@@ -18,3 +18,21 @@ function ConvertScalarToPowerShellDefaultValue([object]$value) {
   }
   throw ('Unsupported PSDefaultValue runtime type: ' + $value.GetType().FullName)
 }
+
+function ConvertToXmlSafeDefaultHelpText([string]$text) {
+  $builder = [System.Text.StringBuilder]::new()
+  for ($index = 0; $index -lt $text.Length; $index++) {
+    $character = $text[$index]
+    if ([char]::IsHighSurrogate($character) -and
+        $index + 1 -lt $text.Length -and
+        [char]::IsLowSurrogate($text[$index + 1])) {
+      [void]$builder.Append($character)
+      [void]$builder.Append($text[++$index])
+    } elseif ([System.Xml.XmlConvert]::IsXmlChar($character)) {
+      [void]$builder.Append($character)
+    } else {
+      [void]$builder.Append('([char]' + [int]$character + ')')
+    }
+  }
+  return $builder.ToString()
+}

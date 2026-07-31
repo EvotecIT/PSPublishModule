@@ -141,6 +141,11 @@ public sealed class GetBinaryDocEmptyDefaultCommand : PSCmdlet
     [PSDefaultValue(Value = "unused", Help = "\0")]
     public string ControlHelp { get; set; } = "unused";
 
+    /// <summary>An optional value whose authored default help contains valid multiline Unicode text.</summary>
+    [Parameter]
+    [PSDefaultValue(Value = "unused", Help = "first\nsecond 😀")]
+    public string MultilineHelp { get; set; } = "unused";
+
     /// <summary>An optional multiline value containing a Markdown fence line.</summary>
     [Parameter]
     [PSDefaultValue(Value = "first\n```\nlast")]
