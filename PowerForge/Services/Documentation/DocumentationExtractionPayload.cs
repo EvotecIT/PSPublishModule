@@ -231,6 +231,10 @@ internal sealed class DocumentationParameterHelp
     [DataMember(Name = "enumPossibleValues")]
     public List<string> EnumPossibleValues { get; set; } = new();
 
+    /// <summary>True when possible values came from an explicit ValidateSet attribute.</summary>
+    [DataMember(Name = "hasValidateSet")]
+    public bool HasValidateSet { get; set; }
+
     /// <summary>Tracks whether provenance-sensitive possible-value normalization already ran.</summary>
     internal bool PossibleValuesNormalized { get; set; }
 

@@ -40,8 +40,10 @@ internal static class DocumentationMetadataNormalizer
             {
                 parameter.PossibleValues = MergePossibleValues(
                     parameter.PossibleValues,
-                    parameter.EnumPossibleValues);
+                    parameter.EnumPossibleValues,
+                    parameter.HasValidateSet);
                 parameter.EnumPossibleValues = new List<string>();
+                parameter.HasValidateSet = false;
                 parameter.PossibleValuesNormalized = true;
             }
 
@@ -305,11 +307,14 @@ internal static class DocumentationMetadataNormalizer
 
     private static List<string> MergePossibleValues(
         IEnumerable<string>? metadataValues,
-        IEnumerable<string>? enumValues)
+        IEnumerable<string>? enumValues,
+        bool hasValidateSet)
     {
         var result = DistinctNonBlank(metadataValues, StringComparer.OrdinalIgnoreCase)
             .Where(IsXmlSafePossibleValue)
             .ToList();
+        if (hasValidateSet) return result;
+
         var seen = new HashSet<string>(result, StringComparer.Ordinal);
         foreach (var value in DistinctNonBlank(enumValues, StringComparer.Ordinal)
                      .Where(IsXmlSafePossibleValue))

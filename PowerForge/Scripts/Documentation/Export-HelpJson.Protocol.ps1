@@ -9,6 +9,7 @@ function EmitError([string]$msg) {
 
 function GetCollectorHelperFunctionNames {
   return [string[]]@(
+    'AddRuntimeDefaultValueReference',
     'AddRuntimeDefaultValueTokens',
     'AddRuntimeNumericDefaultValueToken',
     'AddRuntimeTypeShapeTokens',

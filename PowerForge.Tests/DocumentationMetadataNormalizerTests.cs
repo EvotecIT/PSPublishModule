@@ -519,6 +519,29 @@ public sealed partial class DocumentationMetadataNormalizerTests
     }
 
     [Fact]
+    public void Normalize_TreatsValidateSetAsAuthoritativeOverEnumMembers()
+    {
+        var parameter = new DocumentationParameterHelp
+        {
+            PossibleValues = ["Basic"],
+            EnumPossibleValues = ["Basic", "Advanced"],
+            HasValidateSet = true
+        };
+        var payload = PayloadWith(new DocumentationCommandHelp
+        {
+            Name = "Get-Sample",
+            Parameters = [parameter]
+        });
+
+        DocumentationMetadataNormalizer.Normalize(payload);
+        DocumentationMetadataNormalizer.Normalize(payload);
+
+        Assert.Equal(["Basic"], parameter.PossibleValues);
+        Assert.Empty(parameter.EnumPossibleValues);
+        Assert.False(parameter.HasValidateSet);
+    }
+
+    [Fact]
     public void Normalize_MatchesOutputDescriptionsOnlyThroughUnambiguousTypeIdentity()
     {
         var command = new DocumentationCommandHelp

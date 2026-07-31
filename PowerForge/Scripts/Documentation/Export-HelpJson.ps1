@@ -23,6 +23,7 @@ function AddRuntimeDefaultValueTokens(
     $tokens.Add([ordered]@{ kind = 'Null' }) | Out-Null
     return
   }
+  AddRuntimeDefaultValueReference $value $referenceStack
   if ($value -is [string]) {
     $tokens.Add([ordered]@{
       kind = 'StringCodeUnits'
@@ -170,12 +171,6 @@ function AddRuntimeDefaultValueTokens(
   }
   if ($value -is [System.Collections.IDictionary] -or
       $value -is [System.Collections.IEnumerable]) {
-    foreach ($seenReference in $referenceStack) {
-      if ([object]::ReferenceEquals($seenReference, $value)) {
-        throw 'Repeated or circular default-value collection references are not supported.'
-      }
-    }
-    [void]$referenceStack.Add($value)
       if ($value -is [System.Collections.IDictionary]) {
         $comparerType = $null
         $comparer = GetDictionaryComparer $value ([ref]$comparerType)
@@ -420,6 +415,7 @@ try {
       }
       $possibleValues = @()
       $enumPossibleValues = @()
+      $hasValidateSet = $false
 
       $required = $false
       $parameterSetRequired = @{}
@@ -460,6 +456,7 @@ try {
           foreach ($attr in @($pmeta.Attributes)) {
             if ($null -eq $attr) { continue }
             if ($attr -is [System.Management.Automation.ValidateSetAttribute]) {
+              $hasValidateSet = $true
               foreach ($value in @($attr.ValidValues)) {
                 if ($null -ne $value) { $possibleValues += [string]$value }
               }
@@ -566,6 +563,7 @@ try {
         aliases = @($aliases)
         possibleValues = @($possibleValues)
         enumPossibleValues = @($enumPossibleValues)
+        hasValidateSet = [bool]$hasValidateSet
         required = [bool]$required
         parameterSetRequired = $parameterSetRequired
         position = $positionText
