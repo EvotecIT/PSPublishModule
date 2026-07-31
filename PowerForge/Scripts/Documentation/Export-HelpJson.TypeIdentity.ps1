@@ -59,20 +59,45 @@ function GetDictionaryComparer([System.Collections.IDictionary]$value, [ref]$com
     $property = $dictionaryType.GetProperty($propertyName, $flags)
     if ($null -eq $property -or $property.GetIndexParameters().Count -ne 0) { continue }
     try {
-      $comparerType.Value = $property.PropertyType
-      return $property.GetValue($value, $null)
+      $propertyComparer = $property.GetValue($value, $null)
+      if ($null -ne $propertyComparer) {
+        $comparerType.Value = $property.PropertyType
+        return $propertyComparer
+      }
     } catch {
       # Try the runtime's backing field when a protected comparer getter is unavailable.
     }
   }
-  foreach ($fieldName in @('_keycomparer', '_comparer', 'comparer')) {
+  foreach ($fieldName in @('_keycomparer', '_comparer', 'm_keycomparer', 'm_comparer', 'comparer')) {
     $field = $dictionaryType.GetField($fieldName, $flags)
     if ($null -eq $field) { continue }
     try {
-      $comparerType.Value = $field.FieldType
-      return $field.GetValue($value)
+      $fieldComparer = $field.GetValue($value)
+      if ($null -ne $fieldComparer) {
+        $comparerType.Value = $field.FieldType
+        return $fieldComparer
+      }
     } catch {
       # Keep probing known runtime layouts.
+    }
+  }
+  foreach ($containerField in $dictionaryType.GetFields($flags)) {
+    if ($containerField.Name -notmatch 'tables?$') { continue }
+    $container = $null
+    try { $container = $containerField.GetValue($value) } catch { $container = $null }
+    if ($null -eq $container) { continue }
+    foreach ($fieldName in @('_keycomparer', '_comparer', 'm_keycomparer', 'm_comparer', 'comparer')) {
+      $field = $container.GetType().GetField($fieldName, $flags)
+      if ($null -eq $field) { continue }
+      try {
+        $fieldComparer = $field.GetValue($container)
+        if ($null -ne $fieldComparer) {
+          $comparerType.Value = $field.FieldType
+          return $fieldComparer
+        }
+      } catch {
+        # Keep probing known nested runtime layouts.
+      }
     }
   }
   return $null
