@@ -303,7 +303,7 @@ function AddRuntimeDefaultValueTokens(
 Export-ModuleMember -Function @(
   'ConvertToRuntimeDefaultValue', 'ConvertToUtf16CodeUnits',
   'GetCanonicalTypeNameFromType', 'GetOutputTypeSnapshot',
-  'GetText', 'ResolveCanonicalTypeName')
+  'GetText', 'ResolveCanonicalTypeName', 'TestValidateSetCaseSensitive')
 }
 $collectorProtocol = NewCollectorProtocol $collectorHelperModule
 try {
@@ -416,6 +416,7 @@ try {
       $possibleValues = @()
       $enumPossibleValues = @()
       $hasValidateSet = $false
+      $validateSetCaseSensitive = $false
 
       $required = $false
       $parameterSetRequired = @{}
@@ -457,6 +458,9 @@ try {
             if ($null -eq $attr) { continue }
             if ($attr -is [System.Management.Automation.ValidateSetAttribute]) {
               $hasValidateSet = $true
+              if (& $collectorProtocol.TestValidateSetCaseSensitive $attr) {
+                $validateSetCaseSensitive = $true
+              }
               foreach ($value in @($attr.ValidValues)) {
                 if ($null -ne $value) { $possibleValues += [string]$value }
               }
@@ -564,6 +568,7 @@ try {
         possibleValues = @($possibleValues)
         enumPossibleValues = @($enumPossibleValues)
         hasValidateSet = [bool]$hasValidateSet
+        validateSetCaseSensitive = [bool]$validateSetCaseSensitive
         required = [bool]$required
         parameterSetRequired = $parameterSetRequired
         position = $positionText

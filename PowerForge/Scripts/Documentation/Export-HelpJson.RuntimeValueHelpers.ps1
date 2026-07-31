@@ -43,6 +43,16 @@ function AddRuntimeDefaultValueReference(
   [void]$references.Add($value)
 }
 
+function TestValidateSetCaseSensitive(
+  [System.Management.Automation.ValidateSetAttribute]$attribute
+) {
+  try {
+    return $attribute.PSObject.Properties['IgnoreCase'] -and -not [bool]$attribute.IgnoreCase
+  } catch {
+    return $false
+  }
+}
+
 function TestRecreatableUri([uri]$value) {
   if ($value.UserEscaped) { return $false }
   $uriKind = if ($value.IsAbsoluteUri) { 'Absolute' } else { 'Relative' }

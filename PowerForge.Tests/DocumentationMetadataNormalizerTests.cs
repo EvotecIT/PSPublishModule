@@ -523,9 +523,10 @@ public sealed partial class DocumentationMetadataNormalizerTests
     {
         var parameter = new DocumentationParameterHelp
         {
-            PossibleValues = ["Basic"],
-            EnumPossibleValues = ["Basic", "Advanced"],
-            HasValidateSet = true
+            PossibleValues = ["A", "a"],
+            EnumPossibleValues = ["A", "a", "Advanced"],
+            HasValidateSet = true,
+            ValidateSetCaseSensitive = true
         };
         var payload = PayloadWith(new DocumentationCommandHelp
         {
@@ -536,9 +537,10 @@ public sealed partial class DocumentationMetadataNormalizerTests
         DocumentationMetadataNormalizer.Normalize(payload);
         DocumentationMetadataNormalizer.Normalize(payload);
 
-        Assert.Equal(["Basic"], parameter.PossibleValues);
+        Assert.Equal(["A", "a"], parameter.PossibleValues);
         Assert.Empty(parameter.EnumPossibleValues);
         Assert.False(parameter.HasValidateSet);
+        Assert.False(parameter.ValidateSetCaseSensitive);
     }
 
     [Fact]

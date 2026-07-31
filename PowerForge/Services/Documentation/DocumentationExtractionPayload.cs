@@ -235,6 +235,10 @@ internal sealed class DocumentationParameterHelp
     [DataMember(Name = "hasValidateSet")]
     public bool HasValidateSet { get; set; }
 
+    /// <summary>True when explicit ValidateSet alternatives use ordinal case-sensitive binding.</summary>
+    [DataMember(Name = "validateSetCaseSensitive")]
+    public bool ValidateSetCaseSensitive { get; set; }
+
     /// <summary>Tracks whether provenance-sensitive possible-value normalization already ran.</summary>
     internal bool PossibleValuesNormalized { get; set; }
 

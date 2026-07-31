@@ -41,9 +41,11 @@ internal static class DocumentationMetadataNormalizer
                 parameter.PossibleValues = MergePossibleValues(
                     parameter.PossibleValues,
                     parameter.EnumPossibleValues,
-                    parameter.HasValidateSet);
+                    parameter.HasValidateSet,
+                    parameter.ValidateSetCaseSensitive);
                 parameter.EnumPossibleValues = new List<string>();
                 parameter.HasValidateSet = false;
+                parameter.ValidateSetCaseSensitive = false;
                 parameter.PossibleValuesNormalized = true;
             }
 
@@ -308,9 +310,13 @@ internal static class DocumentationMetadataNormalizer
     private static List<string> MergePossibleValues(
         IEnumerable<string>? metadataValues,
         IEnumerable<string>? enumValues,
-        bool hasValidateSet)
+        bool hasValidateSet,
+        bool validateSetCaseSensitive)
     {
-        var result = DistinctNonBlank(metadataValues, StringComparer.OrdinalIgnoreCase)
+        var metadataComparer = validateSetCaseSensitive
+            ? StringComparer.Ordinal
+            : StringComparer.OrdinalIgnoreCase;
+        var result = DistinctNonBlank(metadataValues, metadataComparer)
             .Where(IsXmlSafePossibleValue)
             .ToList();
         if (hasValidateSet) return result;
@@ -358,11 +364,11 @@ internal static class DocumentationMetadataNormalizer
         string? name = null)
         => new()
         {
-            Name = name ?? source.Name ?? string.Empty,
-            ClrTypeName = source.ClrTypeName ?? string.Empty,
-            CanonicalTypeName = source.CanonicalTypeName ?? string.Empty,
+            Name = PowerShellDefaultValueFormatter.FormatDisplayText(name ?? source.Name ?? string.Empty),
+            ClrTypeName = PowerShellDefaultValueFormatter.FormatDisplayText(source.ClrTypeName ?? string.Empty),
+            CanonicalTypeName = PowerShellDefaultValueFormatter.FormatDisplayText(source.CanonicalTypeName ?? string.Empty),
             RuntimeIdentity = string.Empty,
-            Description = description
+            Description = PowerShellDefaultValueFormatter.FormatDisplayText(description)
         };
 
     private sealed class TypeIndex
