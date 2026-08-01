@@ -148,7 +148,8 @@ internal static class PowerShellDefaultValueFormatter
     private static string FormatRuntimeString(string text, bool isInterned)
     {
         var expression = FormatString(text, preserveCharacterType: false);
-        return isInterned ? "[string]::Intern(" + expression + ")" : expression;
+        if (isInterned) return "[string]::Intern(" + expression + ")";
+        return text.Length == 0 ? "[string]::Copy(" + expression + ")" : expression;
     }
 
     private static string FormatEnum(DocumentationRuntimeValue value)
@@ -642,8 +643,12 @@ internal static class PowerShellDefaultValueFormatter
                 var parts = comparerName.Split('|');
                 if (parts.Length != 3 || !bool.TryParse(parts[2], out var ignoreCase))
                     throw new FormatException("The runtime default token stream contains invalid culture comparer metadata.");
-                return "[System.StringComparer]::Create([System.Globalization.CultureInfo]::GetCultureInfo('" +
-                       parts[1].Replace("'", "''") + "'), " + (ignoreCase ? "$true" : "$false") + ")";
+                var cultureExpression = parts[1].Length == 0
+                    ? "[System.Globalization.CultureInfo]::InvariantCulture"
+                    : "[System.Globalization.CultureInfo]::GetCultureInfo('" +
+                      parts[1].Replace("'", "''") + "')";
+                return "[System.StringComparer]::Create(" + cultureExpression + ", " +
+                       (ignoreCase ? "$true" : "$false") + ")";
             }
             switch (comparerName!.Trim())
             {

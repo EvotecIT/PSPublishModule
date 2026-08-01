@@ -528,7 +528,7 @@ public sealed partial class DocumentationMetadataNormalizerTests
         DocumentationMetadataNormalizer.Normalize(payload);
         DocumentationMetadataNormalizer.Normalize(payload);
 
-        Assert.Equal("''", parameter.DefaultValue);
+        Assert.Equal("[string]::Copy('')", parameter.DefaultValue);
         Assert.Equal([" short ", "SHORT", "s", " "], parameter.Aliases);
         Assert.Equal(["Basic", "Advanced"], parameter.PossibleValues);
         Assert.False(parameter.HasMetadataDefault);

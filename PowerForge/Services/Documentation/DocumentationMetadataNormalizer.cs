@@ -24,6 +24,7 @@ internal static class DocumentationMetadataNormalizer
         foreach (var command in payload.Commands ?? new List<DocumentationCommandHelp>())
         {
             if (command is null) continue;
+            NormalizeBindableIdentities(command);
             RestoreTypeIdentityText(command.Inputs);
             RestoreTypeIdentityText(command.Outputs);
             RestoreTypeIdentityText(command.AuthoredOutputs);
@@ -47,7 +48,7 @@ internal static class DocumentationMetadataNormalizer
         foreach (var command in payload.Commands ?? new List<DocumentationCommandHelp>())
         {
             if (command is null) continue;
-            command.Name = DocumentationIdentityTextFormatter.Format(command.Name);
+            command.Name = DocumentationIdentityTextFormatter.PreserveBindable(command.Name, "Command name");
             command.CommandType = Display(command.CommandType);
             command.DefaultParameterSet = DisplayNullable(command.DefaultParameterSet);
             command.Synopsis = Display(command.Synopsis);
@@ -63,11 +64,9 @@ internal static class DocumentationMetadataNormalizer
             foreach (var parameter in command.Parameters ?? new List<DocumentationParameterHelp>())
             {
                 if (parameter is null) continue;
-                parameter.Name = Display(parameter.Name);
                 parameter.Type = Display(parameter.Type);
                 parameter.Description = Display(parameter.Description);
                 parameter.ParameterSets = DisplayList(parameter.ParameterSets);
-                parameter.Aliases = DisplayList(parameter.Aliases);
                 parameter.PossibleValues = DisplayList(parameter.PossibleValues);
                 parameter.Position = Display(parameter.Position);
                 parameter.DefaultValue = Display(parameter.DefaultValue);
@@ -148,6 +147,86 @@ internal static class DocumentationMetadataNormalizer
     private static List<string> DisplayList(IEnumerable<string>? values)
         => (values ?? Array.Empty<string>()).Select(Display).ToList();
 
+    private static void NormalizeBindableIdentities(DocumentationCommandHelp command)
+    {
+        command.Name = DocumentationIdentityTextFormatter.PreserveBindable(command.Name, "Command name");
+        var parameters = command.Parameters ?? new List<DocumentationParameterHelp>();
+        var reservedNames = new HashSet<string>(
+            parameters.Where(parameter => parameter is not null &&
+                                          DocumentationIdentityTextFormatter.IsXmlSafe(parameter.Name))
+                .Select(parameter => parameter.Name ?? string.Empty),
+            StringComparer.OrdinalIgnoreCase);
+        var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var parameter in parameters)
+        {
+            if (parameter is null) continue;
+            var rawName = parameter.Name ?? string.Empty;
+            if (DocumentationIdentityTextFormatter.IsXmlSafe(rawName))
+            {
+                parameter.Name = rawName;
+                usedNames.Add(rawName);
+            }
+            else
+            {
+                parameter.Name = GetUniqueIdentityDisplay(
+                    DocumentationIdentityTextFormatter.Format(rawName),
+                    reservedNames,
+                    usedNames);
+            }
+
+            parameter.Aliases = NormalizeAliases(parameter.Aliases);
+        }
+    }
+
+    private static List<string> NormalizeAliases(IEnumerable<string>? values)
+    {
+        var rawAliases = (values ?? Array.Empty<string>())
+            .Where(alias => !string.IsNullOrEmpty(alias))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var reserved = new HashSet<string>(
+            rawAliases.Where(DocumentationIdentityTextFormatter.IsXmlSafe),
+            StringComparer.OrdinalIgnoreCase);
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<string>(rawAliases.Count);
+        foreach (var alias in rawAliases)
+        {
+            var display = alias;
+            if (!DocumentationIdentityTextFormatter.IsXmlSafe(alias))
+            {
+                display = PowerShellDefaultValueFormatter.FormatDisplayText(alias);
+                if (reserved.Contains(display) || used.Contains(display))
+                {
+                    display = GetUniqueIdentityDisplay(
+                        PowerShellDefaultValueFormatter.FormatString(alias, preserveCharacterType: false),
+                        reserved,
+                        used);
+                    result.Add(display);
+                    continue;
+                }
+            }
+
+            if (used.Add(display)) result.Add(display);
+        }
+        return result;
+    }
+
+    private static string GetUniqueIdentityDisplay(
+        string baseDisplay,
+        HashSet<string> reserved,
+        HashSet<string> used)
+    {
+        var display = baseDisplay;
+        var suffix = 1;
+        while (reserved.Contains(display) || !used.Add(display))
+        {
+            display = baseDisplay + " [encoded " +
+                      suffix.ToString(System.Globalization.CultureInfo.InvariantCulture) + "]";
+            suffix++;
+        }
+        return display;
+    }
+
     private static string Display(string? value)
         => PowerShellDefaultValueFormatter.FormatDisplayText(value ?? string.Empty);
 
@@ -163,7 +242,6 @@ internal static class DocumentationMetadataNormalizer
             parameter.Aliases = (parameter.Aliases ?? new List<string>())
                 .Where(alias => !string.IsNullOrEmpty(alias))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Select(alias => PowerShellDefaultValueFormatter.FormatDisplayText(alias))
                 .ToList();
             if (!parameter.PossibleValuesNormalized)
             {
@@ -454,12 +532,40 @@ internal static class DocumentationMetadataNormalizer
             var displayCounts = new Dictionary<string, int>(metadataComparer);
             foreach (var display in displays)
                 displayCounts[display] = displayCounts.TryGetValue(display, out var count) ? count + 1 : 1;
-
-            return authoredValues.Select((value, index) =>
-                    displayCounts[displays[index]] > 1
-                        ? PowerShellDefaultValueFormatter.FormatString(value, preserveCharacterType: false)
-                        : displays[index])
-                .ToList();
+            var candidates = authoredValues.Select((value, index) =>
+            {
+                var needsFallback = displayCounts[displays[index]] > 1;
+                var display = needsFallback
+                    ? PowerShellDefaultValueFormatter.FormatString(value, preserveCharacterType: false)
+                    : displays[index];
+                return new KeyValuePair<string, bool>(display, needsFallback);
+            }).ToList();
+            var reservedDisplays = new HashSet<string>(
+                candidates.Where(candidate => !candidate.Value).Select(candidate => candidate.Key),
+                metadataComparer);
+            var usedDisplays = new HashSet<string>(metadataComparer);
+            var authoredResult = new List<string>(candidates.Count);
+            foreach (var candidate in candidates)
+            {
+                var display = candidate.Key;
+                if (candidate.Value)
+                {
+                    var baseDisplay = display;
+                    var suffix = 1;
+                    while (reservedDisplays.Contains(display) || !usedDisplays.Add(display))
+                    {
+                        display = baseDisplay + " [encoded " +
+                                  suffix.ToString(System.Globalization.CultureInfo.InvariantCulture) + "]";
+                        suffix++;
+                    }
+                }
+                else
+                {
+                    usedDisplays.Add(display);
+                }
+                authoredResult.Add(display);
+            }
+            return authoredResult;
         }
 
         var result = DistinctNonBlank(metadataValues, metadataComparer)

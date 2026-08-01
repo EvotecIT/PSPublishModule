@@ -1,3 +1,4 @@
+using System;
 using System.Globalization;
 using System.Text;
 using System.Xml;
@@ -9,6 +10,30 @@ namespace PowerForge;
 /// </summary>
 internal static class DocumentationIdentityTextFormatter
 {
+    /// <summary>
+    /// Preserves a binding identity exactly when XML can represent it and rejects
+    /// identities that external help cannot associate with the runtime command.
+    /// </summary>
+    internal static string PreserveBindable(string? text, string identityKind)
+    {
+        var value = text ?? string.Empty;
+        if (IsXmlSafe(value)) return value;
+        throw new InvalidOperationException(identityKind + " contains XML-invalid characters: " + value);
+    }
+
+    internal static bool IsXmlSafe(string? text)
+    {
+        try
+        {
+            XmlConvert.VerifyXmlChars(text ?? string.Empty);
+            return true;
+        }
+        catch (XmlException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// Escapes percent markers and invalid UTF-16 code units so distinct raw
     /// identities cannot collapse to the same rendered value.

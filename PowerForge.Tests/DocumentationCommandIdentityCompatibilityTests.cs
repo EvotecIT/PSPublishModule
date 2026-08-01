@@ -33,20 +33,22 @@ public sealed class DocumentationCommandIdentityCompatibilityTests
     }
 
     [Fact]
-    public void DocumentationNormalizer_UsesCollisionFreeCommandIdentifiersInGeneratedArtifacts()
+    public void DocumentationNormalizer_PreservesXmlValidBindableIdentitiesInGeneratedArtifacts()
     {
-        var invalidName = "Get-A" + '\uD800';
-        var literalName = "Get-A%uD800";
-        Assert.Equal("Get-A%uD800", DocumentationIdentityTextFormatter.Format(invalidName));
-        Assert.Equal("Get-A%25uD800", DocumentationIdentityTextFormatter.Format(literalName));
+        Assert.Equal(
+            "Get-A%uD800",
+            DocumentationIdentityTextFormatter.PreserveBindable("Get-A%uD800", "Command name"));
+        Assert.Equal(
+            "Get-A%25uD800",
+            DocumentationIdentityTextFormatter.Format("Get-A%uD800"));
 
         var payload = new DocumentationExtractionPayload
         {
             ModuleName = "CommandIdentityFixture",
             Commands =
             [
-                new DocumentationCommandHelp { Name = invalidName, CommandType = "Function" },
-                new DocumentationCommandHelp { Name = literalName, CommandType = "Function" }
+                new DocumentationCommandHelp { Name = "Get-A%uD800", CommandType = "Function" },
+                new DocumentationCommandHelp { Name = "Get-A%25uD800", CommandType = "Function" }
             ]
         };
         DocumentationMetadataNormalizer.Normalize(payload);
@@ -80,6 +82,54 @@ public sealed class DocumentationCommandIdentityCompatibilityTests
         finally
         {
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DocumentationNormalizer_RejectsInvalidCommandAndRendersOtherIdentitiesInjectively()
+    {
+        var invalid = new string('\uD800', 1);
+        AssertInvalid(
+            new DocumentationCommandHelp { Name = "Get-A" + invalid, CommandType = "Function" },
+            "Command name contains XML-invalid characters");
+
+        var payload = new DocumentationExtractionPayload
+        {
+            ModuleName = "InvalidIdentityFixture",
+            Commands =
+            [
+                new DocumentationCommandHelp
+                {
+                    Name = "Get-Valid",
+                    CommandType = "Function",
+                    Parameters =
+                    [
+                        new DocumentationParameterHelp
+                        {
+                            Name = "P" + invalid,
+                            Aliases = ["Alias" + invalid, "Alias([char]55296)"]
+                        },
+                        new DocumentationParameterHelp { Name = "P%uD800" }
+                    ]
+                }
+            ]
+        };
+        DocumentationMetadataNormalizer.Normalize(payload);
+        Assert.Equal("P%uD800 [encoded 1]", payload.Commands[0].Parameters[0].Name);
+        Assert.Equal("P%uD800", payload.Commands[0].Parameters[1].Name);
+        Assert.Equal("(-join @('Alias', ([char]55296)))", payload.Commands[0].Parameters[0].Aliases[0]);
+        Assert.Equal("Alias([char]55296)", payload.Commands[0].Parameters[0].Aliases[1]);
+
+        static void AssertInvalid(DocumentationCommandHelp command, string expected)
+        {
+            var invalidPayload = new DocumentationExtractionPayload
+            {
+                ModuleName = "InvalidIdentityFixture",
+                Commands = [command]
+            };
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                DocumentationMetadataNormalizer.Normalize(invalidPayload));
+            Assert.Contains(expected, exception.Message, StringComparison.Ordinal);
         }
     }
 }
