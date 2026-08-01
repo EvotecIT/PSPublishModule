@@ -355,7 +355,7 @@ public sealed class DocumentationBinaryFixtureTests
                 "Empty string",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Label", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
-                "''",
+                "[string]::Intern('')",
                 Assert.Single(command.Parameters, parameter => string.Equals(parameter.Name, "Separator", StringComparison.Ordinal)).DefaultValue);
             Assert.Equal(
                 "five seconds",
