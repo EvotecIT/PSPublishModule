@@ -96,6 +96,8 @@ function Get-DefaultStateFixture {
         $sharedComparer = [System.StringComparer]::Create(
             [System.Globalization.CultureInfo]::GetCultureInfo('tr-TR'), $true)
         $internedString = [string]::Intern((-join @('interned', '-', 'value')))
+        $emptyMethod = [System.Array].GetMethod('Empty').MakeGenericMethod([int])
+        $emptyArray = $emptyMethod.Invoke($null, [object[]]@())
         $nonInternedEmptyString = [string]::Copy('')
         $uriText = -join @('relative', '/', 'path')
         $uri = [uri]::new($uriText, [System.UriKind]::Relative)
@@ -117,6 +119,8 @@ function Get-DefaultStateFixture {
             @('SharedCollectionBacking', $sharedCollections),
             @('SharedCultureComparer', [object[]]@($firstDictionary, $secondDictionary)),
             @('InternedString', $internedString),
+            @('SharedInternedStringReferences', [object[]]@($internedString, $internedString)),
+            @('SharedEmptyArrayReferences', [object[]]@($emptyArray, $emptyArray)),
             @('NonInternedEmptyString', $nonInternedEmptyString),
             @('CreatedInvariantComparer', $createdInvariantDictionary),
             @('SharedUriBacking', [object[]]@($uri, $uri.OriginalString)),
@@ -191,18 +195,45 @@ Export-ModuleMember -Function Get-DefaultStateFixture, ConvertToPowerShellDefaul
 
                 var interned = Assert.Single(command.Parameters, item => item.Name == "InternedString");
                 Assert.Equal("[string]::Intern('interned-value')", interned.DefaultValue);
+                var sharedInterned = Assert.Single(
+                    command.Parameters,
+                    item => item.Name == "SharedInternedStringReferences");
+                Assert.Contains("[string]::Intern('interned-value')", sharedInterned.DefaultValue, StringComparison.Ordinal);
+                var sharedEmptyArray = Assert.Single(
+                    command.Parameters,
+                    item => item.Name == "SharedEmptyArrayReferences");
+                Assert.Contains("[System.Array].GetMethod('Empty')", sharedEmptyArray.DefaultValue, StringComparison.Ordinal);
                 var verificationPath = Path.Combine(root, "VerifyInterned.ps1");
                 File.WriteAllText(verificationPath, """
-param([string]$Expression)
-$value = & ([scriptblock]::Create($Expression))
+param([string]$InternedExpression, [string]$SharedInternedExpression, [string]$SharedEmptyArrayExpression)
+$value = & ([scriptblock]::Create($InternedExpression))
 if (-not [object]::ReferenceEquals($value, [string]::IsInterned($value))) {
     throw 'The reconstructed value is not the intern-pool singleton.'
+}
+$sharedInterned = & ([scriptblock]::Create($SharedInternedExpression))
+if (-not [object]::ReferenceEquals($sharedInterned[0], $sharedInterned[1]) -or
+    -not [object]::ReferenceEquals($sharedInterned[0], [string]::IsInterned($sharedInterned[0]))) {
+    throw 'Repeated interned strings did not preserve singleton identity.'
+}
+$sharedEmptyArray = & ([scriptblock]::Create($SharedEmptyArrayExpression))
+if (-not [object]::ReferenceEquals($sharedEmptyArray[0], $sharedEmptyArray[1])) {
+    throw 'Repeated Array.Empty values did not preserve singleton identity.'
+}
+$emptyMethod = [System.Array].GetMethod('Empty').MakeGenericMethod([int])
+if (-not [object]::ReferenceEquals(
+        $sharedEmptyArray[0], $emptyMethod.Invoke($null, [object[]]@()))) {
+    throw 'The reconstructed array is not the Array.Empty singleton.'
 }
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 var verification = new ExecutablePowerShellRunner(host, root).Run(
                     new PowerShellRunRequest(
                         verificationPath,
-                        new[] { interned.DefaultValue },
+                        new[]
+                        {
+                            interned.DefaultValue,
+                            sharedInterned.DefaultValue,
+                            sharedEmptyArray.DefaultValue
+                        },
                         TimeSpan.FromMinutes(1)));
                 Assert.Equal(0, verification.ExitCode);
 

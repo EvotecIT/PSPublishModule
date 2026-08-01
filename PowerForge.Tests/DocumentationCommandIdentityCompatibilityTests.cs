@@ -246,7 +246,8 @@ $values = @($normalized.DefaultSet) + @($normalized.Syntax.name) +
                         Syntax =
                         [
                             new DocumentationSyntaxHelp { Name = " A ", Text = "Get-Test -Value <string>" },
-                            new DocumentationSyntaxHelp { Name = "A", Text = "Get-Test -Value <string>" }
+                            new DocumentationSyntaxHelp { Name = "A", Text = "Get-Test -Value <string>" },
+                            new DocumentationSyntaxHelp { Name = "' A '", Text = "Get-Test -Value <string>" }
                         ],
                         Parameters =
                         [
@@ -254,11 +255,12 @@ $values = @($normalized.DefaultSet) + @($normalized.Syntax.name) +
                             {
                                 Name = "Value",
                                 Type = "String",
-                                ParameterSets = [" A ", "A"],
+                                ParameterSets = [" A ", "A", "' A '"],
                                 ParameterSetRequired = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
                                 {
                                     [" A "] = true,
-                                    ["A"] = false
+                                    ["A"] = false,
+                                    ["' A '"] = false
                                 }
                             }
                         ]
@@ -267,7 +269,10 @@ $values = @($normalized.DefaultSet) + @($normalized.Syntax.name) +
             };
             var docsPath = Path.Combine(root, "Docs");
             new MarkdownHelpWriter().WriteCommandHelpFiles(payload, payload.ModuleName, docsPath);
-            Assert.Contains("Parameter Sets: ' A ', A", File.ReadAllText(Path.Combine(docsPath, "Get-Test.md")));
+            Assert.Contains(
+                "Parameter Sets: ' A ' [encoded 1], A, ' A '",
+                File.ReadAllText(Path.Combine(docsPath, "Get-Test.md")),
+                StringComparison.Ordinal);
             var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, payload.ModuleName, root);
             var setNames = XDocument.Load(mamlPath)
                 .Descendants()
@@ -276,7 +281,7 @@ $values = @($normalized.DefaultSet) + @($normalized.Syntax.name) +
                 .Where(attribute => attribute is not null)
                 .Select(attribute => attribute!.Value)
                 .ToArray();
-            Assert.Equal([" A ", "A"], setNames);
+            Assert.Equal([" A ", "A", "' A '"], setNames);
         }
         finally
         {

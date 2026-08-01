@@ -316,12 +316,26 @@ internal sealed class MarkdownHelpWriter
 
     private static string FormatParameterSets(DocumentationParameterHelp p)
     {
-        var sets = (p.ParameterSets ?? Enumerable.Empty<string>())
+        var rawSets = (p.ParameterSets ?? Enumerable.Empty<string>())
             .Where(s => !string.IsNullOrEmpty(s))
-            .Select(s => s.Length == s.Trim().Length
-                ? s
-                : "'" + s.Replace("'", "''") + "'")
+            .Distinct(StringComparer.Ordinal)
             .ToArray();
+
+        var used = new HashSet<string>(
+            rawSets.Where(s => s.Length == s.Trim().Length),
+            StringComparer.Ordinal);
+        var sets = rawSets.Select(s =>
+        {
+            if (s.Length == s.Trim().Length) return s;
+            var display = "'" + s.Replace("'", "''") + "'";
+            if (used.Add(display)) return display;
+
+            var suffix = 1;
+            var encoded = display + " [encoded " + suffix++ + "]";
+            while (!used.Add(encoded))
+                encoded = display + " [encoded " + suffix++ + "]";
+            return encoded;
+        }).ToArray();
 
         if (sets.Length == 0) return "(All)";
         if (sets.Length == 1 && sets[0].Equals("(All)", StringComparison.OrdinalIgnoreCase)) return "(All)";

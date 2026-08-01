@@ -146,6 +146,11 @@ function ConvertCollectionItemsToPowerShellDefaultValue(
   }
   $statements = [System.Collections.Generic.List[string]]::new()
   if ($value -is [System.Array]) {
+    if (TestPublicEmptyArraySingleton $value) {
+      $elementTypeExpression = GetPowerShellTypeDefaultExpression ($collectionType.GetElementType())
+      return ("[System.Array].GetMethod('Empty').MakeGenericMethod((" + $elementTypeExpression +
+        ')).Invoke($null, [object[]]@())')
+    }
     $elementTypeName = GetCanonicalTypeNameFromType ($collectionType.GetElementType())
     if (TestPowerShellTypeLiteral ($collectionType.GetElementType())) {
       $statements.Add('$collection = [' + $collectionTypeName + ']::new(' + $items.Count + ')')
@@ -180,4 +185,24 @@ function ConvertCollectionItemsToPowerShellDefaultValue(
   }
   $statements.Add('return ,$collection')
   return ('& { ' + ($statements -join '; ') + ' }')
+}
+
+function TestPublicEmptyArraySingleton([System.Array]$value) {
+  if ($null -eq $value -or $value.Rank -ne 1 -or $value.GetLowerBound(0) -ne 0 -or $value.Length -ne 0) {
+    return $false
+  }
+
+  $emptyMethod = $null
+  foreach ($candidate in [System.Array].GetMethods(
+      [System.Reflection.BindingFlags]'Public,Static')) {
+    if ($candidate.Name -ceq 'Empty' -and $candidate.IsGenericMethodDefinition -and
+        $candidate.GetGenericArguments().Length -eq 1 -and $candidate.GetParameters().Length -eq 0) {
+      $emptyMethod = $candidate
+      break
+    }
+  }
+  if ($null -eq $emptyMethod) { return $false }
+  $singleton = $emptyMethod.MakeGenericMethod($value.GetType().GetElementType()).Invoke(
+    $null, [object[]]@())
+  return [object]::ReferenceEquals($value, $singleton)
 }

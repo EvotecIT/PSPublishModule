@@ -253,6 +253,13 @@ function AddDefaultValueReference(
   if ($null -eq $value -or $value -is [type]) {
     return
   }
+  if ($value -is [string] -and
+      [object]::ReferenceEquals($value, [string]::IsInterned([string]$value))) {
+    return
+  }
+  if ($value -is [System.Array] -and (TestPublicEmptyArraySingleton $value)) {
+    return
+  }
   foreach ($seenReference in $references) {
     if ([object]::ReferenceEquals($seenReference, $value)) {
       throw 'Repeated or circular default-value object references are not supported.'
