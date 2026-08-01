@@ -250,12 +250,14 @@ internal sealed class MarkdownHelpWriter
         var outputs = (cmd.Outputs ?? Enumerable.Empty<DocumentationTypeHelp>())
             .Where(t => t is not null && (!string.IsNullOrWhiteSpace(t.Name) || !string.IsNullOrWhiteSpace(t.Description)))
             .ToArray();
+        var outputNames = FormatBoundaryWhitespaceIdentities(
+            outputs.Select(output => string.IsNullOrWhiteSpace(output.Name) ? "None" : output.Name),
+            StringComparer.Ordinal);
         if (outputs.Length == 0) doc.RawLine($"- {MarkdownDocumentBuilder.InlineCode("None")}");
-        foreach (var o in outputs)
+        for (var index = 0; index < outputs.Length; index++)
         {
-            var name = string.IsNullOrWhiteSpace(o.Name) ? "None" : o.Name;
-            if (name.Length > 0 && (name[0] == ' ' || name[0] == '\t' || name[name.Length - 1] == ' ' || name[name.Length - 1] == '\t'))
-                name = "'" + name.Replace("'", "''") + "'";
+            var o = outputs[index];
+            var name = outputNames[index];
             var desc = (o.Description ?? string.Empty).Replace("\r\n", "\n").Replace("\n", " ").Trim();
             var inlineName = MarkdownDocumentBuilder.InlineIdentityCode(name);
             doc.RawLine(string.IsNullOrWhiteSpace(desc) ? $"- {inlineName}" : $"- {inlineName} — {desc}");
@@ -320,22 +322,7 @@ internal sealed class MarkdownHelpWriter
             .Where(s => !string.IsNullOrEmpty(s))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-
-        var used = new HashSet<string>(
-            rawSets.Where(s => s.Length == s.Trim().Length),
-            StringComparer.Ordinal);
-        var sets = rawSets.Select(s =>
-        {
-            if (s.Length == s.Trim().Length) return s;
-            var display = "'" + s.Replace("'", "''") + "'";
-            if (used.Add(display)) return display;
-
-            var suffix = 1;
-            var encoded = display + " [encoded " + suffix++ + "]";
-            while (!used.Add(encoded))
-                encoded = display + " [encoded " + suffix++ + "]";
-            return encoded;
-        }).ToArray();
+        var sets = FormatBoundaryWhitespaceIdentities(rawSets, StringComparer.Ordinal);
 
         if (sets.Length == 0) return "(All)";
         if (sets.Length == 1 && sets[0].Equals("(All)", StringComparison.OrdinalIgnoreCase)) return "(All)";
@@ -344,15 +331,49 @@ internal sealed class MarkdownHelpWriter
 
     private static string FormatAliases(DocumentationParameterHelp p)
     {
-        var aliases = (p.Aliases ?? Enumerable.Empty<string>())
-            .Where(a => !string.IsNullOrEmpty(a))
+        var aliases = FormatBoundaryWhitespaceIdentities(
+                (p.Aliases ?? Enumerable.Empty<string>()).Where(a => !string.IsNullOrEmpty(a)),
+                StringComparer.OrdinalIgnoreCase)
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(a => a.Length == a.Trim().Length
-                ? a
-                : "'" + a.Replace("'", "''") + "'")
             .ToArray();
 
         return aliases.Length == 0 ? "None" : string.Join(", ", aliases);
+    }
+
+    private static string[] FormatBoundaryWhitespaceIdentities(
+        IEnumerable<string> identities,
+        IEqualityComparer<string> identityComparer)
+    {
+        var rawValues = identities.Select(value => value ?? string.Empty).ToArray();
+        var used = new HashSet<string>(
+            rawValues.Where(value => value.Length == value.Trim().Length),
+            StringComparer.Ordinal);
+        var assigned = new Dictionary<string, string>(identityComparer);
+        var result = new string[rawValues.Length];
+        for (var index = 0; index < rawValues.Length; index++)
+        {
+            var raw = rawValues[index];
+            if (assigned.TryGetValue(raw, out var existing))
+            {
+                result[index] = existing;
+                continue;
+            }
+
+            var display = raw.Length == raw.Trim().Length
+                ? raw
+                : "'" + raw.Replace("'", "''") + "'";
+            if (raw.Length != raw.Trim().Length && !used.Add(display))
+            {
+                var suffix = 1;
+                var encoded = display + " [encoded " + suffix++ + "]";
+                while (!used.Add(encoded))
+                    encoded = display + " [encoded " + suffix++ + "]";
+                display = encoded;
+            }
+            assigned[raw] = display;
+            result[index] = display;
+        }
+        return result;
     }
 
     private static string FormatPossibleValues(DocumentationParameterHelp p)

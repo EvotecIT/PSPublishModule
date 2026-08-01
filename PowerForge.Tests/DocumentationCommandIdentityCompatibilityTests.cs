@@ -155,7 +155,8 @@ $values = foreach ($name in @(' A ', 'A')) {
                         Outputs =
                         [
                             new DocumentationTypeHelp { Name = " A ", ClrTypeName = " A " },
-                            new DocumentationTypeHelp { Name = "A", ClrTypeName = "A" }
+                            new DocumentationTypeHelp { Name = "A", ClrTypeName = "A" },
+                            new DocumentationTypeHelp { Name = "' A '", ClrTypeName = "' A '" }
                         ]
                     }
                 ]
@@ -163,8 +164,9 @@ $values = foreach ($name in @(' A ', 'A')) {
             var docsPath = Path.Combine(root, "Docs");
             new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "OutputWhitespaceFixture", docsPath);
             var markdown = File.ReadAllText(Path.Combine(docsPath, "Get-WhitespaceOutput.md"));
-            Assert.Contains("`' A '`", markdown, StringComparison.Ordinal);
+            Assert.Contains("`' A ' [encoded 1]`", markdown, StringComparison.Ordinal);
             Assert.Contains("`A`", markdown, StringComparison.Ordinal);
+            Assert.Contains("`' A '`", markdown, StringComparison.Ordinal);
 
             var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, "OutputWhitespaceFixture", root);
             var outputNames = XDocument.Load(mamlPath)
@@ -176,6 +178,7 @@ $values = foreach ($name in @(' A ', 'A')) {
                 .ToArray();
             Assert.Contains(" A ", outputNames);
             Assert.Contains("A", outputNames);
+            Assert.Contains("' A '", outputNames);
         }
         finally
         {

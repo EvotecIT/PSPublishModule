@@ -207,13 +207,14 @@ try {
   try { $m = Import-PowerShellDataFile -Path $ManifestPath -ErrorAction Stop } catch { $m = $null }
 
   $collectorHelperFunctions = GetCollectorHelperFunctionSnapshot
-  $restoreCollectorHelpers = Get-Command RestoreCollectorHelperFunctions -CommandType Function
-  $testXmlSafeIdentityText = Get-Command TestXmlSafeIdentityText -CommandType Function
-  $getDocumentedModuleCommandSnapshot = Get-Command GetDocumentedModuleCommandSnapshot -CommandType Function
+  $restoreCollectorHelpers = (Get-Command RestoreCollectorHelperFunctions -CommandType Function).ScriptBlock
+  $testXmlSafeIdentityText = (Get-Command TestXmlSafeIdentityText -CommandType Function).ScriptBlock
+  $getDocumentedModuleCommands = (Get-Command GetDocumentedModuleCommands -CommandType Function).ScriptBlock
+  $getDocumentedModuleCommandSnapshot = (Get-Command GetDocumentedModuleCommandSnapshot -CommandType Function).ScriptBlock
   $targetVariableImportFilter = '__PowerForgeDocumentationCollector_' + [guid]::NewGuid().ToString('N')
   $targetAliasImportFilter = '__PowerForgeDocumentationCollector_' + [guid]::NewGuid().ToString('N')
   $mod = Import-Module -Name $ManifestPath -Force -PassThru -Function '*' -Cmdlet '*' -Alias $targetAliasImportFilter -Variable $targetVariableImportFilter -ErrorAction Stop
-  $commandSnapshot = & $getDocumentedModuleCommandSnapshot $mod $testXmlSafeIdentityText
+  $commandSnapshot = & $getDocumentedModuleCommandSnapshot $mod $testXmlSafeIdentityText $getDocumentedModuleCommands
   $commands = @($commandSnapshot.Commands)
   $helpByCommandName = $commandSnapshot.HelpByCommandName
   & $restoreCollectorHelpers $collectorHelperFunctions

@@ -108,9 +108,10 @@ function GetDocumentedModuleCommands([System.Management.Automation.PSModuleInfo]
 
 function GetDocumentedModuleCommandSnapshot(
   [System.Management.Automation.PSModuleInfo]$module,
-  [System.Management.Automation.CommandInfo]$testXmlSafeIdentityText
+  [scriptblock]$testXmlSafeIdentityText,
+  [scriptblock]$getDocumentedModuleCommands
 ) {
-  $commands = @(GetDocumentedModuleCommands $module)
+  $commands = @(& $getDocumentedModuleCommands $module)
   $helpByCommandName = [System.Collections.Generic.Dictionary[string,object]]::new(
     [System.StringComparer]::OrdinalIgnoreCase)
   foreach ($command in $commands) {

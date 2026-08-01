@@ -787,7 +787,7 @@ Markdown only topic body.
                                 Name = "Name",
                                 Type = "String",
                                 ParameterSets = ["__AllParameterSets"],
-                                Aliases = [" x ", "X", "x", " ", ""]
+                                Aliases = [" x ", "X", "x", " ", "", "' x '"]
                             }
                         ]
                     }
@@ -797,7 +797,7 @@ Markdown only topic body.
             var markdownRoot = Path.Combine(root, "Docs");
             new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "DemoModule", markdownRoot);
             var markdown = File.ReadAllText(Path.Combine(markdownRoot, "Get-Demo.md"));
-            Assert.Contains("Aliases: ' x ', X, ' '\r\n", markdown, StringComparison.Ordinal);
+            Assert.Contains("Aliases: ' x ' [encoded 1], X, ' ', ' x '\r\n", markdown, StringComparison.Ordinal);
 
             var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, "DemoModule", root);
             var document = System.Xml.Linq.XDocument.Load(mamlPath, System.Xml.Linq.LoadOptions.PreserveWhitespace);
@@ -807,7 +807,7 @@ Markdown only topic body.
                 .Where(value => value is not null)
                 .ToArray();
             Assert.NotEmpty(aliasAttributes);
-            Assert.All(aliasAttributes, value => Assert.Equal(" x ,X, ", value));
+            Assert.All(aliasAttributes, value => Assert.Equal(" x ,X, ,' x '", value));
         }
         finally
         {

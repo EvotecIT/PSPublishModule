@@ -9,7 +9,7 @@ public sealed class DocumentationCollectorBuiltinIsolationTests
     {
         var hosts = OperatingSystem.IsWindows() ? new[] { "pwsh.exe", "powershell.exe" } : new[] { "pwsh" };
         foreach (var host in hosts)
-        foreach (var exportedName in new[] { "Get-Command", "Where-Object", "Sort-Object" })
+        foreach (var exportedName in new[] { "Get-Command", "Where-Object", "Sort-Object", "GetDocumentedModuleCommands" })
             yield return new object[] { host, exportedName };
     }
 
@@ -49,8 +49,12 @@ public sealed class DocumentationCollectorBuiltinIsolationTests
                 "param([string]$ManifestPath, [string]$OutputPath)" + Environment.NewLine +
                 EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.OutputMatching.ps1") +
                 Environment.NewLine + "try {" + Environment.NewLine +
+                "$getCommands = (Get-Command GetDocumentedModuleCommands -CommandType Function).ScriptBlock" + Environment.NewLine +
+                "$getSnapshot = (Get-Command GetDocumentedModuleCommandSnapshot -CommandType Function).ScriptBlock" + Environment.NewLine +
+                "$testXml = (Get-Command TestXmlSafeIdentityText -CommandType Function).ScriptBlock" + Environment.NewLine +
                 "$module = Microsoft.PowerShell.Core\\Import-Module -Name $ManifestPath -Force -PassThru -Function '*' -Cmdlet '*' -Alias '__none__' -Variable '__none__'" + Environment.NewLine +
-                "$names = @(GetDocumentedModuleCommands $module | Microsoft.PowerShell.Core\\ForEach-Object { [string]$_.Name })" + Environment.NewLine +
+                "$snapshot = & $getSnapshot $module $testXml $getCommands" + Environment.NewLine +
+                "$names = @($snapshot.Commands | Microsoft.PowerShell.Core\\ForEach-Object { [string]$_.Name })" + Environment.NewLine +
                 "[System.IO.File]::WriteAllLines($OutputPath, $names, [System.Text.UTF8Encoding]::new($false))" + Environment.NewLine +
                 "} finally { if ($module) { Microsoft.PowerShell.Core\\Remove-Module $module -Force -ErrorAction SilentlyContinue } }",
                 new UTF8Encoding(false));
