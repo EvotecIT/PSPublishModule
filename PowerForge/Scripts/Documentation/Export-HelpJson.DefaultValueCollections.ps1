@@ -102,6 +102,15 @@ function GetCollectionCapacity([object]$value) {
   }
   if ($collectionType.IsGenericType -and
       $collectionType.GetGenericTypeDefinition() -eq [System.Collections.Generic.List``1]) {
+    $flags = [System.Reflection.BindingFlags]'Instance,NonPublic'
+    $versionField = $collectionType.GetField('_version', $flags)
+    if ($null -eq $versionField) { $versionField = $collectionType.GetField('version', $flags) }
+    if ($null -eq $versionField) {
+      throw 'List serialization version is unavailable.'
+    }
+    if ([int]$versionField.GetValue($value) -ne $value.Count) {
+      throw 'List defaults with non-reconstructible serialization versions are not supported.'
+    }
     return [int]$value.Capacity
   }
   return $null

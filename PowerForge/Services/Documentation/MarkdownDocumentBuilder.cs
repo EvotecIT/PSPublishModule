@@ -106,6 +106,14 @@ internal sealed class MarkdownDocumentBuilder
         return delimiter + padding + normalized + padding + delimiter;
     }
 
+    public static string InlineIdentityCode(string text)
+    {
+        var encoded = (text ?? string.Empty)
+            .Replace("\r", "%u000D")
+            .Replace("\n", "%u000A");
+        return InlineCode(encoded);
+    }
+
     public void RawLine(string text)
     {
         _body.AppendLine(text ?? string.Empty);

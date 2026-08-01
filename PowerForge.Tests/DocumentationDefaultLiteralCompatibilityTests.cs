@@ -706,11 +706,11 @@ $invalidOutputFunction = "function Get-InvalidOutputFixture { [OutputType('Bad" 
             Assert.True(string.IsNullOrEmpty(Default("Stack")));
             Assert.True(string.IsNullOrEmpty(Default("StatefulList")));
             Assert.StartsWith(
-                "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
+                "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Microsoft.PowerShell.Core\\Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
                 Default("UnsafeType"),
                 StringComparison.Ordinal);
             Assert.Contains(
-                "Where-Object { $_.FullName -ceq ' DefaultLiteralFixture.Edge ' }",
+                "Microsoft.PowerShell.Core\\Where-Object { $_.FullName -ceq ' DefaultLiteralFixture.Edge ' } | Microsoft.PowerShell.Utility\\Select-Object -First 1",
                 Default("WhitespaceType"),
                 StringComparison.Ordinal);
             Assert.DoesNotContain('\u0001', Default("XmlInvalidType"));
@@ -736,16 +736,16 @@ $invalidOutputFunction = "function Get-InvalidOutputFixture { [OutputType('Bad" 
                 Default("UnsafeDictionary"),
                 StringComparison.Ordinal);
             Assert.StartsWith(
-                "(& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
+                "(& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Microsoft.PowerShell.Core\\Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
                 Default("UnsafePointerType"),
                 StringComparison.Ordinal);
             Assert.Contains(").MakePointerType()", Default("UnsafePointerType"), StringComparison.Ordinal);
             Assert.StartsWith(
-                "& { $collection = [System.Array]::CreateInstance((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
+                "& { $collection = [System.Array]::CreateInstance((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Microsoft.PowerShell.Core\\Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
                 Default("UnsafeArray"),
                 StringComparison.Ordinal);
             Assert.StartsWith(
-                "[System.Enum]::ToObject((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
+                "[System.Enum]::ToObject((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Microsoft.PowerShell.Core\\Where-Object { $_.FullName -eq 'DefaultLiteralFixtureDynamic",
                 Default("UnsafeEnum"),
                 StringComparison.Ordinal);
             Assert.Equal(

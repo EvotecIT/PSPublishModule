@@ -278,6 +278,12 @@ $script:itemOnlyCollection.Add(1)
 $script:itemOnlyCollection.Add(2)
 $script:reservedList = [System.Collections.Generic.List[int]]::new(100)
 $script:reservedList.Add(1)
+$script:enumerableList = [System.Collections.Generic.List[int]]::new(
+    [System.Collections.Generic.IEnumerable[int]]([int[]](1, 2)))
+$script:mutatedList = [System.Collections.Generic.List[int]]::new(100)
+$script:mutatedList.Add(1)
+$script:mutatedList.RemoveAt(0)
+$script:mutatedList.Add(1)
 $script:reservedArrayList = [System.Collections.ArrayList]::new(100)
 [void]$script:reservedArrayList.Add(1)
 $script:mutatedArrayList = [System.Collections.ArrayList]::new(100)
@@ -329,6 +335,8 @@ function Get-RuntimeIdentityFixture {
             @('ReservedBackingCollection', $script:reservedBackingCollection),
             @('ItemOnlyCollection', $script:itemOnlyCollection),
             @('ReservedList', $script:reservedList),
+            @('EnumerableList', $script:enumerableList),
+            @('MutatedList', $script:mutatedList),
             @('ReservedArrayList', $script:reservedArrayList),
             @('MutatedArrayList', $script:mutatedArrayList),
             @('InvariantDictionary', $script:invariantDictionary),
@@ -407,6 +415,8 @@ if ($sortedList.GetType() -ne [System.Collections.Generic.SortedList[string,int]
                 Assert.True(string.IsNullOrEmpty(Default("UnorderedHashtable")));
                 Assert.True(string.IsNullOrEmpty(Default("StatefulCollection")));
                 Assert.True(string.IsNullOrEmpty(Default("ReservedBackingCollection")));
+                Assert.True(string.IsNullOrEmpty(Default("EnumerableList")));
+                Assert.True(string.IsNullOrEmpty(Default("MutatedList")));
                 Assert.True(string.IsNullOrEmpty(Default("MutatedArrayList")));
                 Assert.True(string.IsNullOrEmpty(Default("DelegatedArrayType")));
                 Assert.True(string.IsNullOrEmpty(Default("DelegatedPointerType")));

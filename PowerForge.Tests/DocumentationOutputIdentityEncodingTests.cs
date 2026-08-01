@@ -15,7 +15,7 @@ public sealed class DocumentationOutputIdentityEncodingTests
         {
             var manifestPath = Path.Combine(root, "OutputIdentityFixture.psd1");
             File.WriteAllText(Path.Combine(root, "OutputIdentityFixture.psm1"), """
-$functionText = "function Get-OutputIdentityFixture { [OutputType('A" + [char]1 + "', 'A([char]1)', 'A%u0001')] param() }"
+$functionText = "function Get-OutputIdentityFixture { [OutputType('A" + [char]1 + "', 'A([char]1)', 'A%u0001', 'A" + [char]10 + "B', 'A B', 'A%u000AB')] param() }"
 . ([scriptblock]::Create($functionText))
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             File.WriteAllText(manifestPath, """
@@ -49,6 +49,9 @@ $functionText = "function Get-OutputIdentityFixture { [OutputType('A" + [char]1 
             Assert.Contains("A%u0001", markdown, StringComparison.Ordinal);
             Assert.Contains("A([char]1)", markdown, StringComparison.Ordinal);
             Assert.Contains("A%25u0001", markdown, StringComparison.Ordinal);
+            Assert.Contains("`A%u000AB`", markdown, StringComparison.Ordinal);
+            Assert.Contains("`A B`", markdown, StringComparison.Ordinal);
+            Assert.Contains("`A%25u000AB`", markdown, StringComparison.Ordinal);
         }
         finally
         {

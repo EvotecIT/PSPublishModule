@@ -535,12 +535,12 @@ function GetPowerShellTypeDefaultExpression([type]$type) {
   $typeNameExpression = ConvertToPowerShellTypeIdentityText ([string]$type.FullName)
   $assemblyNameExpression = ConvertToPowerShellTypeIdentityText ([string]$type.Assembly.FullName)
   return ("& { `$assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | " +
-    "Where-Object { `$_.FullName -eq " + $assemblyNameExpression + " }; " +
+    "Microsoft.PowerShell.Core\Where-Object { `$_.FullName -eq " + $assemblyNameExpression + " }; " +
     "`$matches = [System.Collections.Generic.List[type]]::new(); " +
     "foreach (`$candidateAssembly in @(`$assembly)) { " +
     "`$type = `$candidateAssembly.GetType(" + $typeNameExpression + ", `$false, `$false); " +
     "if (`$null -eq `$type) { try { `$type = `$candidateAssembly.GetTypes() | " +
-    "Where-Object { `$_.FullName -ceq " + $typeNameExpression + " } | Select-Object -First 1 } catch { `$type = `$null } }; " +
+    "Microsoft.PowerShell.Core\Where-Object { `$_.FullName -ceq " + $typeNameExpression + " } | Microsoft.PowerShell.Utility\Select-Object -First 1 } catch { `$type = `$null } }; " +
     "if (`$null -ne `$type) { `$matches.Add(`$type) } }; " +
     "if (`$matches.Count -ne 1) { throw 'Type identity is unavailable or ambiguous across loaded assemblies.' }; " +
     "return `$matches[0] }")
