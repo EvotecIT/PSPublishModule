@@ -323,9 +323,7 @@ try {
   $moduleNameResolved = $mod.Name
   & $collectorProtocol.RemoveHelperAliases $moduleNameResolved $collectorProtocol.HelperFunctionNames
 
-  $commands = @(@($mod.ExportedCmdlets.Values) + @($mod.ExportedFunctions.Values)) | Microsoft.PowerShell.Core\Where-Object {
-    $_.CommandType -eq 'Cmdlet' -or $_.CommandType -eq 'Function'
-  } | Microsoft.PowerShell.Utility\Sort-Object -Property Name
+  $commands = @(& $collectorProtocol.GetDocumentedModuleCommands $mod)
 
   $result = [ordered]@{
     moduleName = [string]$moduleNameResolved

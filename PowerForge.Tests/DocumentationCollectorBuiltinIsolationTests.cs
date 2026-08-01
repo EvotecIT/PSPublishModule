@@ -47,14 +47,11 @@ public sealed class DocumentationCollectorBuiltinIsolationTests
             File.WriteAllText(
                 scriptPath,
                 "param([string]$ManifestPath, [string]$OutputPath)" + Environment.NewLine +
-                EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.OutputMatching.ps1") +
+                EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.Protocol.ps1") +
                 Environment.NewLine + "try {" + Environment.NewLine +
-                "$getCommands = (Get-Command GetDocumentedModuleCommands -CommandType Function).ScriptBlock" + Environment.NewLine +
-                "$getSnapshot = (Get-Command GetDocumentedModuleCommandSnapshot -CommandType Function).ScriptBlock" + Environment.NewLine +
-                "$testXml = (Get-Command TestXmlSafeIdentityText -CommandType Function).ScriptBlock" + Environment.NewLine +
+                "$getDocumentedModuleCommands = (Microsoft.PowerShell.Core\\Get-Command GetDocumentedModuleCommands -CommandType Function).ScriptBlock" + Environment.NewLine +
                 "$module = Microsoft.PowerShell.Core\\Import-Module -Name $ManifestPath -Force -PassThru -Function '*' -Cmdlet '*' -Alias '__none__' -Variable '__none__'" + Environment.NewLine +
-                "$snapshot = & $getSnapshot $module $testXml $getCommands" + Environment.NewLine +
-                "$names = @($snapshot.Commands | Microsoft.PowerShell.Core\\ForEach-Object { [string]$_.Name })" + Environment.NewLine +
+                "$names = @(& $getDocumentedModuleCommands $module | Microsoft.PowerShell.Core\\ForEach-Object { [string]$_.Name })" + Environment.NewLine +
                 "[System.IO.File]::WriteAllLines($OutputPath, $names, [System.Text.UTF8Encoding]::new($false))" + Environment.NewLine +
                 "} finally { if ($module) { Microsoft.PowerShell.Core\\Remove-Module $module -Force -ErrorAction SilentlyContinue } }",
                 new UTF8Encoding(false));

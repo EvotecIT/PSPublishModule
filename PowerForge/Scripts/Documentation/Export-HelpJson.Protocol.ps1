@@ -32,6 +32,7 @@ function GetCollectorHelperFunctionNames {
     'GetDictionaryCapacity',
     'GetDictionaryComparer',
     'GetDictionaryConstructorExpression',
+    'GetDocumentedModuleCommands',
     'GetExactLoadedTypeMatches',
     'GetKnownDictionaryComparerExpression',
     'GetKnownDictionaryComparerName',
@@ -72,18 +73,26 @@ function ImportDocumentedModule([string]$manifestPath) {
     -ErrorAction Stop
 }
 
+function GetDocumentedModuleCommands([System.Management.Automation.PSModuleInfo]$module) {
+  return @(@($module.ExportedCmdlets.Values) + @($module.ExportedFunctions.Values)) |
+    Microsoft.PowerShell.Core\Where-Object {
+      $_.CommandType -eq 'Cmdlet' -or $_.CommandType -eq 'Function'
+    } | Microsoft.PowerShell.Utility\Sort-Object -Property Name
+}
+
 function NewCollectorProtocol([System.Management.Automation.PSModuleInfo]$helperModule) {
   return [pscustomobject]@{
     ConvertToRuntimeDefaultValue = $helperModule.ExportedFunctions['ConvertToRuntimeDefaultValue']
     ConvertToUtf16CodeUnits = $helperModule.ExportedFunctions['ConvertToUtf16CodeUnits']
     ConvertToUtf8SafeJsonText = $helperModule.ExportedFunctions['ConvertToUtf8SafeJsonText']
-    EmitError = Get-Command EmitError -CommandType Function
+    EmitError = (Get-Command EmitError -CommandType Function).ScriptBlock
     GetCanonicalTypeNameFromType = $helperModule.ExportedFunctions['GetCanonicalTypeNameFromType']
+    GetDocumentedModuleCommands = (Get-Command GetDocumentedModuleCommands -CommandType Function).ScriptBlock
     GetOutputTypeSnapshot = $helperModule.ExportedFunctions['GetOutputTypeSnapshot']
     GetText = $helperModule.ExportedFunctions['GetText']
     HelperFunctionNames = GetCollectorHelperFunctionNames
-    ImportDocumentedModule = Get-Command ImportDocumentedModule -CommandType Function
-    RemoveHelperAliases = Get-Command RemoveCollectorHelperAliases -CommandType Function
+    ImportDocumentedModule = (Get-Command ImportDocumentedModule -CommandType Function).ScriptBlock
+    RemoveHelperAliases = (Get-Command RemoveCollectorHelperAliases -CommandType Function).ScriptBlock
     ResolveCanonicalTypeName = $helperModule.ExportedFunctions['ResolveCanonicalTypeName']
     TestValidateSetCaseSensitive = $helperModule.ExportedFunctions['TestValidateSetCaseSensitive']
     TestPSDefaultValueContainsAutomationNull = $helperModule.ExportedFunctions['TestPSDefaultValueContainsAutomationNull']
