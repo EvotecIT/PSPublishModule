@@ -128,6 +128,8 @@ internal static class DocumentationMetadataNormalizer
                 value.ClrTypeName = PowerShellDefaultValueFormatter.DecodeUtf16CodeUnits(value.ClrTypeNameCodeUnits);
             if (!string.IsNullOrEmpty(value.CanonicalTypeNameCodeUnits))
                 value.CanonicalTypeName = PowerShellDefaultValueFormatter.DecodeUtf16CodeUnits(value.CanonicalTypeNameCodeUnits);
+            value.LookupName = value.Name ?? string.Empty;
+            value.LookupClrTypeName = value.ClrTypeName ?? string.Empty;
             value.NameCodeUnits = null;
             value.ClrTypeNameCodeUnits = null;
             value.CanonicalTypeNameCodeUnits = null;
@@ -701,7 +703,9 @@ internal static class DocumentationMetadataNormalizer
         => new()
         {
             Name = name ?? source.Name ?? string.Empty,
+            LookupName = source.LookupName ?? string.Empty,
             ClrTypeName = source.ClrTypeName ?? string.Empty,
+            LookupClrTypeName = source.LookupClrTypeName ?? string.Empty,
             CanonicalTypeName = source.CanonicalTypeName ?? string.Empty,
             RuntimeIdentity = string.Empty,
             Description = description

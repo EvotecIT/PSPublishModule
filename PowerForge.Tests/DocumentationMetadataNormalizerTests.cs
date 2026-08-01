@@ -239,11 +239,12 @@ public sealed partial class DocumentationMetadataNormalizerTests
                 Text = "1.02:03:04.5678900"
             }));
         Assert.Equal(
-            "[scriptblock]::Create((-join @('param($Value)', ([char]10), '$Value')))",
+            "[scriptblock]::Create([string]::Intern((-join @('param($Value)', ([char]10), '$Value'))))",
             PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
             {
                 Kind = "ScriptBlockCodeUnits",
-                Text = string.Join(",", "param($Value)\n$Value".Select(character => (int)character))
+                Text = string.Join(",", "param($Value)\n$Value".Select(character => (int)character)),
+                IsInterned = true
             }));
         Assert.Equal("@('one', $false)", PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
         {

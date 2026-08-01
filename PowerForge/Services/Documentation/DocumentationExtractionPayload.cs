@@ -124,6 +124,12 @@ internal sealed class DocumentationTypeHelp
     /// <summary>Tracks one-time lossless rendering of XML-bound identity text.</summary>
     public bool IdentityTextNormalized { get; set; }
 
+    /// <summary>Raw type name retained for XML documentation lookup before display encoding.</summary>
+    public string LookupName { get; set; } = string.Empty;
+
+    /// <summary>Raw CLR type name retained for XML documentation lookup before display encoding.</summary>
+    public string LookupClrTypeName { get; set; } = string.Empty;
+
     /// <summary>Type name.</summary>
     [DataMember(Name = "name")]
     public string Name { get; set; } = string.Empty;
@@ -214,10 +220,6 @@ internal sealed class DocumentationSyntaxHelp
 [DataContract]
 internal sealed class DocumentationParameterHelp
 {
-    /// <summary>Raw runtime parameter name used to reconcile syntax text before display encoding.</summary>
-    [DataMember(Name = "originalName")]
-    public string OriginalName { get; set; } = string.Empty;
-
     /// <summary>Parameter name.</summary>
     [DataMember(Name = "name")]
     public string Name { get; set; } = string.Empty;

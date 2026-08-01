@@ -86,7 +86,8 @@ internal static class PowerShellDefaultValueFormatter
             case "timespan":
                 return FormatTemporalParseExact("System.TimeSpan", value.Text, "c", includeStyles: false);
             case "scriptblockcodeunits":
-                return "[scriptblock]::Create(" + FormatString(DecodeUtf16CodeUnits(value.Text), preserveCharacterType: false) + ")";
+                return "[scriptblock]::Create(" +
+                       FormatRuntimeString(DecodeUtf16CodeUnits(value.Text), value.IsInterned) + ")";
             case "collection":
                 return "@(" + string.Join(", ", (value.Items ?? new List<DocumentationRuntimeValue>()).Select(Format)) + ")";
             case "formattable":

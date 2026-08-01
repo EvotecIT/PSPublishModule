@@ -154,6 +154,12 @@ function TestCollectionHasItemOnlyBackingStore(
   $expectedType = [System.Collections.Generic.List``1].MakeGenericType(
     $collectionType.GetGenericArguments()[0])
   if ($backingStore.GetType() -ne $expectedType) { return $false }
+  $flags = [System.Reflection.BindingFlags]'Instance,NonPublic'
+  $versionField = $expectedType.GetField('_version', $flags)
+  if ($null -eq $versionField) { $versionField = $expectedType.GetField('version', $flags) }
+  if ($null -eq $versionField -or [int]$versionField.GetValue($backingStore) -ne $value.Count) {
+    return $false
+  }
   if ($null -ne $referenceStack) {
     AddRuntimeDefaultValueReference $backingStore $referenceStack
   }

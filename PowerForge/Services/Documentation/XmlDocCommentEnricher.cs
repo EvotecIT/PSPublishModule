@@ -195,6 +195,8 @@ internal sealed class XmlDocCommentEnricher
                 ordered.Add(candidate);
         }
 
+        AddCandidate(entry.LookupClrTypeName);
+        AddCandidate(entry.LookupName);
         AddCandidate(entry.ClrTypeName);
         AddCandidate(entry.Name);
 

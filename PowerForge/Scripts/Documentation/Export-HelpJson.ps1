@@ -166,9 +166,12 @@ function AddRuntimeDefaultValueTokens(
     if (-not (TestRecreatableScriptBlock $value)) {
       throw 'Stateful, module-bound, or constrained ScriptBlock defaults are not supported.'
     }
+    $scriptText = [string]$value.ToString()
+    $internedScriptText = [string]::IsInterned($scriptText)
     $tokens.Add([ordered]@{
       kind = 'ScriptBlockCodeUnits'
-      text = ConvertToUtf16CodeUnits ([string]$value.ToString())
+      text = ConvertToUtf16CodeUnits $scriptText
+      isInterned = [object]::ReferenceEquals($scriptText, $internedScriptText)
     }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
@@ -555,7 +558,6 @@ try {
       elseif ($pipeByProp) { $pipelineInput = 'True (ByPropertyName)' }
 
       $parameters += [ordered]@{
-        originalName = $pn
         name = $pn
         type = $typeName
         description = $desc

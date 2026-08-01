@@ -5,7 +5,7 @@ namespace PowerForge.Tests;
 public sealed class DocumentationCommandIdentityCompatibilityTests
 {
     [Fact]
-    public void SyntaxIdentityNormalizer_RewritesEncodedParameterNames()
+    public void DocumentationNormalizer_RewritesEncodedParameterNamesWithoutPrefixCollisions()
     {
         var invalid = "P\u0001";
         var payload = new DocumentationExtractionPayload
@@ -18,17 +18,17 @@ public sealed class DocumentationCommandIdentityCompatibilityTests
                     Syntax = { new DocumentationSyntaxHelp { Text = $"Get-Test [-{invalid} <string>] [-P%u0001 <string>] [-{invalid}Suffix <string>]" } },
                     Parameters =
                     {
-                        new DocumentationParameterHelp { OriginalName = invalid, Name = "P%u0001 [encoded 1]" },
-                        new DocumentationParameterHelp { OriginalName = "P%u0001", Name = "P%u0001" }
+                        new DocumentationParameterHelp { Name = invalid },
+                        new DocumentationParameterHelp { Name = "P%u0001" }
                     }
                 }
             }
         };
 
-        DocumentationSyntaxIdentityNormalizer.Normalize(payload);
+        DocumentationMetadataNormalizer.Normalize(payload);
 
         Assert.Equal(
-            $"Get-Test [-P%u0001 [encoded 1] <string>] [-P%u0001 <string>] [-{invalid}Suffix <string>]",
+            "Get-Test [-P%u0001 [encoded 1] <string>] [-P%u0001 <string>] [-P([char]1)Suffix <string>]",
             Assert.Single(payload.Commands[0].Syntax).Text);
     }
 
