@@ -87,6 +87,8 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.DoesNotContain("$json | Write-Host", script, StringComparison.Ordinal);
         Assert.Contains("safeDiagnostics", script, StringComparison.Ordinal);
         Assert.DoesNotContain("$envelope.error", script, StringComparison.Ordinal);
+        Assert.Contains("APPLE_APP_STORE_CONNECT_CREDENTIALS_MISSING", script, StringComparison.Ordinal);
+        Assert.Contains("Write-AtomicJsonFile", script, StringComparison.Ordinal);
         var failureStart = script.IndexOf("if ($exitCode -ne 0)", StringComparison.Ordinal);
         var failureEnd = script.IndexOf("if (-not $envelope.success)", failureStart, StringComparison.Ordinal);
         Assert.True(failureStart >= 0 && failureEnd > failureStart);

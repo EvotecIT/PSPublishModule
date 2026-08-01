@@ -24,6 +24,38 @@ function Write-ReleaseOutput {
     }
 }
 
+function Get-FirstNonEmptyString {
+    param([AllowNull()] [object[]] $Values)
+
+    foreach ($value in $Values) {
+        $text = [string] $value
+        if (-not [string]::IsNullOrWhiteSpace($text)) { return $text.Trim() }
+    }
+    return $null
+}
+
+function Write-AtomicJsonFile {
+    param(
+        [Parameter(Mandatory)] [string] $Path,
+        [Parameter(Mandatory)] [object] $Value
+    )
+
+    $directory = Split-Path -Parent $Path
+    if (-not [string]::IsNullOrWhiteSpace($directory)) {
+        [System.IO.Directory]::CreateDirectory($directory) | Out-Null
+    }
+    $temporaryPath = Join-Path $directory ".$(Split-Path -Leaf $Path).$([Guid]::NewGuid().ToString('N')).tmp"
+    try {
+        $json = $Value | ConvertTo-Json -Depth 32
+        [System.IO.File]::WriteAllText($temporaryPath, $json, [System.Text.UTF8Encoding]::new($false))
+        [System.IO.File]::Move($temporaryPath, $Path, $true)
+    } finally {
+        if (Test-Path -LiteralPath $temporaryPath -PathType Leaf) {
+            Remove-Item -LiteralPath $temporaryPath -Force
+        }
+    }
+}
+
 $allowedActions = @(
     'Status', 'Doctor', 'Version', 'Archive', 'Upload', 'UploadExisting', 'Prepare',
     'Screenshots', 'TestFlight', 'Advance', 'SubmitTestFlightReview',
@@ -126,7 +158,70 @@ if ($exitCode -ne 0) {
     # Never echo the complete CLI envelope here. The receipt can contain compact
     # tester feedback and diagnostic evidence that belongs in the retained artifact,
     # not the public Actions log.
-    $safeDiagnostics = @($result.diagnostics | ForEach-Object {
+    $receiptDiagnostics = @($result.diagnostics | Where-Object {
+        -not [string]::IsNullOrWhiteSpace([string] $_.code) -or
+        -not [string]::IsNullOrWhiteSpace([string] $_.summary) -or
+        -not [string]::IsNullOrWhiteSpace([string] $_.action)
+    } | ForEach-Object {
+        [ordered]@{
+            severity = (Get-FirstNonEmptyString @($_.severity, 'error'))
+            category = (Get-FirstNonEmptyString @($_.category, 'automation'))
+            code = (Get-FirstNonEmptyString @($_.code, 'APPLE_ACTION_FAILED'))
+            summary = (Get-FirstNonEmptyString @($_.summary, "PowerForge Apple action '$action' failed."))
+            evidence = [string] $_.evidence
+            action = (Get-FirstNonEmptyString @($_.action, 'Inspect the retained failure receipt and run logs, correct the reported condition, then retry.'))
+            retryable = [bool] $_.retryable
+        }
+    })
+    $engineReportedDiagnostics = $receiptDiagnostics.Count -gt 0
+    $failureMessage = Get-FirstNonEmptyString @(
+        $result.errorMessage,
+        $envelope.PSObject.Properties['Error'].Value,
+        "PowerForge Apple action '$action' failed with exit code $exitCode."
+    )
+    if ($receiptDiagnostics.Count -eq 0) {
+        $missingAppStoreCredentials =
+            $failureMessage -match 'App Store Connect.*requires.*AppStoreConnectApiKeyPath' -or
+            $failureMessage -match 'AppStoreConnectApiKeyPath.*AppStoreConnectApiKeyId.*AppStoreConnectApiIssuerId'
+        $failureCategory = if ($missingAppStoreCredentials) { 'credential' } else { 'automation' }
+        $failureCode = if ($missingAppStoreCredentials) { 'APPLE_APP_STORE_CONNECT_CREDENTIALS_MISSING' } else { 'APPLE_ACTION_FAILED' }
+        $failureAction = if ($missingAppStoreCredentials) {
+            'Configure app_store_connect_issuer_id, app_store_connect_key_id, and app_store_connect_private_key in the protected Apple environment.'
+        } else {
+            'Inspect the retained failure receipt and run logs, correct the reported preflight condition, then retry.'
+        }
+        $receiptDiagnostics = @([ordered]@{
+            severity = 'error'
+            category = $failureCategory
+            code = $failureCode
+            summary = $failureMessage
+            evidence = $null
+            action = $failureAction
+            retryable = $false
+        })
+    }
+    # An early CLI/preflight failure has no engine receipt. Replace any stale file
+    # left by a previous invocation so monitoring can never upload old success state.
+    if (-not $engineReportedDiagnostics -or -not (Test-Path -LiteralPath $receiptPath -PathType Leaf)) {
+        $relativeReceiptPath = [System.IO.Path]::GetRelativePath($projectRoot, $receiptPath).Replace('\', '/')
+        Write-AtomicJsonFile -Path $receiptPath -Value ([ordered]@{
+            schemaVersion = 3
+            action = $action
+            sourceCommit = [string] $env:INPUT_SOURCE_COMMIT
+            planOnly = $planOnly
+            checkedAt = [DateTimeOffset]::UtcNow
+            planSha256 = $null
+            success = $false
+            errorMessage = $failureMessage
+            receiptPath = $relativeReceiptPath
+            versioning = $null
+            targets = @()
+            cleanup = [ordered]@{}
+            diagnostics = $receiptDiagnostics
+            nextActions = @($receiptDiagnostics | ForEach-Object { [string] $_.action } | Select-Object -Unique)
+        })
+    }
+    $safeDiagnostics = @($receiptDiagnostics | ForEach-Object {
         [ordered]@{
             severity = [string] $_.severity
             category = [string] $_.category
