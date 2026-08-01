@@ -148,8 +148,8 @@ function ConvertCollectionItemsToPowerShellDefaultValue(
   if ($value -is [System.Array]) {
     if (TestPublicEmptyArraySingleton $value) {
       $elementTypeExpression = GetPowerShellTypeDefaultExpression ($collectionType.GetElementType())
-      return ("[System.Array].GetMethod('Empty').MakeGenericMethod((" + $elementTypeExpression +
-        ')).Invoke($null, [object[]]@())')
+      return ("& { return ,([System.Array].GetMethod('Empty').MakeGenericMethod((" + $elementTypeExpression +
+        ')).Invoke($null, [object[]]@())) }')
     }
     $elementTypeName = GetCanonicalTypeNameFromType ($collectionType.GetElementType())
     if (TestPowerShellTypeLiteral ($collectionType.GetElementType())) {

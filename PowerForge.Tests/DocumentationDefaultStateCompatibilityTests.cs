@@ -138,6 +138,13 @@ function Get-DefaultStateFixture {
                 $entry[0], [object], $attributes))
         }
 
+        $emptyArrayAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $emptyArrayDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $emptyArrayDefault.Value = [object]$emptyArray
+        $emptyArrayAttributes.Add($emptyArrayDefault)
+        $parameters.Add('EmptyArray', [System.Management.Automation.RuntimeDefinedParameter]::new(
+            'EmptyArray', [object], $emptyArrayAttributes))
+
         $automationNullAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $automationNullAttributes.Add([PowerForgeAutomationNullFixture]::Create())
         $parameters.Add('AutomationNull', [System.Management.Automation.RuntimeDefinedParameter]::new(
@@ -203,9 +210,15 @@ Export-ModuleMember -Function Get-DefaultStateFixture, ConvertToPowerShellDefaul
                     command.Parameters,
                     item => item.Name == "SharedEmptyArrayReferences");
                 Assert.Contains("[System.Array].GetMethod('Empty')", sharedEmptyArray.DefaultValue, StringComparison.Ordinal);
+                var emptyArray = Assert.Single(command.Parameters, item => item.Name == "EmptyArray");
+                Assert.Contains("[System.Array].GetMethod('Empty')", emptyArray.DefaultValue, StringComparison.Ordinal);
                 var verificationPath = Path.Combine(root, "VerifyInterned.ps1");
                 File.WriteAllText(verificationPath, """
-param([string]$InternedExpression, [string]$SharedInternedExpression, [string]$SharedEmptyArrayExpression)
+param(
+    [string]$InternedExpression,
+    [string]$SharedInternedExpression,
+    [string]$SharedEmptyArrayExpression,
+    [string]$EmptyArrayExpression)
 $value = & ([scriptblock]::Create($InternedExpression))
 if (-not [object]::ReferenceEquals($value, [string]::IsInterned($value))) {
     throw 'The reconstructed value is not the intern-pool singleton.'
@@ -224,6 +237,11 @@ if (-not [object]::ReferenceEquals(
         $sharedEmptyArray[0], $emptyMethod.Invoke($null, [object[]]@()))) {
     throw 'The reconstructed array is not the Array.Empty singleton.'
 }
+$emptyArray = & ([scriptblock]::Create($EmptyArrayExpression))
+if (-not [object]::ReferenceEquals(
+        $emptyArray, $emptyMethod.Invoke($null, [object[]]@()))) {
+    throw 'The top-level reconstructed array is not the Array.Empty singleton.'
+}
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 var verification = new ExecutablePowerShellRunner(host, root).Run(
                     new PowerShellRunRequest(
@@ -232,7 +250,8 @@ if (-not [object]::ReferenceEquals(
                         {
                             interned.DefaultValue,
                             sharedInterned.DefaultValue,
-                            sharedEmptyArray.DefaultValue
+                            sharedEmptyArray.DefaultValue,
+                            emptyArray.DefaultValue
                         },
                         TimeSpan.FromMinutes(1)));
                 Assert.Equal(0, verification.ExitCode);
