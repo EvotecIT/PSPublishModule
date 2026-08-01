@@ -240,8 +240,7 @@ function GetKnownDictionaryComparerName([object]$comparer, [type]$comparerType) 
     if ($compareInfo) {
       if ([string]::IsNullOrWhiteSpace($compareInfo.Name)) {
         if ($compareInfo.LCID -eq [System.Globalization.CultureInfo]::InvariantCulture.LCID) {
-          if ($ignoreCase) { return 'InvariantCultureIgnoreCase' }
-          return 'InvariantCulture'
+          return ('Culture||' + [string]$ignoreCase)
         }
       } else {
         return ('Culture|' + $compareInfo.Name + '|' + [string]$ignoreCase)
@@ -289,8 +288,12 @@ function GetKnownDictionaryComparerExpression(
     if ($parts.Count -ne 3) { throw ('Invalid culture comparer metadata: ' + $name) }
     $cultureName = $parts[1].Replace("'", "''")
     $ignoreCase = if ([bool]::Parse($parts[2])) { '$true' } else { '$false' }
-    return ("[System.StringComparer]::Create([System.Globalization.CultureInfo]::GetCultureInfo('" +
-      $cultureName + "'), " + $ignoreCase + ')')
+    $cultureExpression = if ([string]::IsNullOrEmpty($cultureName)) {
+      '[System.Globalization.CultureInfo]::InvariantCulture'
+    } else {
+      "[System.Globalization.CultureInfo]::GetCultureInfo('" + $cultureName + "')"
+    }
+    return ('[System.StringComparer]::Create(' + $cultureExpression + ', ' + $ignoreCase + ')')
   }
   return ('[System.StringComparer]::' + $name)
 }

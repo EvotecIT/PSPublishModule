@@ -7,15 +7,15 @@ namespace PowerForge.Tests;
 public sealed class DocumentationCommandIdentityCompatibilityTests
 {
     [Fact]
-    public void DocumentationEngine_UsesCollisionFreeCommandIdentifiersAcrossBothPowerShellHosts()
+    public void DocumentationEngine_PreservesXmlValidPercentCommandNamesAcrossBothPowerShellHosts()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-doc-command-identity-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
 
         try
         {
-            var scriptPath = Path.Combine(root, "EncodeCommandNames.ps1");
-            var outputPath = Path.Combine(root, "encoded.txt");
+            var scriptPath = Path.Combine(root, "ValidateCommandNames.ps1");
+            var outputPath = Path.Combine(root, "validated.txt");
             File.WriteAllText(
                 scriptPath,
                 "param([string]$OutputPath)" + Environment.NewLine +
@@ -23,10 +23,10 @@ public sealed class DocumentationCommandIdentityCompatibilityTests
                 Environment.NewLine + """
 $invalidName = 'Get-A' + [char]1
 $literalName = 'Get-A%u0001'
-$encoded = @(
-    ConvertToXmlSafeIdentityText $invalidName
-    ConvertToXmlSafeIdentityText $literalName)
-[System.IO.File]::WriteAllLines($OutputPath, $encoded, [System.Text.UTF8Encoding]::new($false))
+$valid = @(
+    TestXmlSafeIdentityText $invalidName
+    TestXmlSafeIdentityText $literalName)
+[System.IO.File]::WriteAllLines($OutputPath, $valid, [System.Text.UTF8Encoding]::new($false))
 """,
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
@@ -38,7 +38,7 @@ $encoded = @(
                 var run = new ExecutablePowerShellRunner(host, root).Run(
                     new PowerShellRunRequest(scriptPath, new[] { outputPath }, TimeSpan.FromMinutes(1)));
                 Assert.Equal(0, run.ExitCode);
-                Assert.Equal(["Get-A%u0001", "Get-A%25u0001"], File.ReadAllLines(outputPath));
+                Assert.Equal(["False", "True"], File.ReadAllLines(outputPath));
             }
 
             var payload = new DocumentationExtractionPayload

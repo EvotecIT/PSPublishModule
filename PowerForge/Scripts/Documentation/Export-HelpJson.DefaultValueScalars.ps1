@@ -4,6 +4,47 @@ function TestExactRuntimeValueType([object]$value, [object]$expectedType) {
     [object]::ReferenceEquals($value.GetType(), $expectedType)
 }
 
+function TestDefaultTextNeedsEncoding([string]$text) {
+  foreach ($character in $text.ToCharArray()) {
+    if ($character -eq "`r" -or
+        $character -eq "`n" -or
+        -not [System.Xml.XmlConvert]::IsXmlChar($character)) {
+      return $true
+    }
+  }
+  return $false
+}
+
+function ConvertStringToPowerShellDefaultValue([string]$text, [bool]$isInterned) {
+  if (-not (TestDefaultTextNeedsEncoding $text)) {
+    $expression = ("'" + $text.Replace("'", "''") + "'")
+    if ($isInterned) { return ('[string]::Intern(' + $expression + ')') }
+    if ($text.Length -eq 0) { return ('[string]::Copy(' + $expression + ')') }
+    return $expression
+  }
+  $parts = @()
+  $segment = ''
+  foreach ($character in $text.ToCharArray()) {
+    if ($character -ne "`r" -and
+        $character -ne "`n" -and
+        [System.Xml.XmlConvert]::IsXmlChar($character)) {
+      $segment += $character
+      continue
+    }
+    if ($segment.Length -gt 0) {
+      $parts += ("'" + $segment.Replace("'", "''") + "'")
+      $segment = ''
+    }
+    $parts += ('([char]' + [int]$character + ')')
+  }
+  if ($segment.Length -gt 0) {
+    $parts += ("'" + $segment.Replace("'", "''") + "'")
+  }
+  $expression = ('(-join @(' + ($parts -join ', ') + '))')
+  if ($isInterned) { return ('[string]::Intern(' + $expression + ')') }
+  return $expression
+}
+
 function ConvertPSDefaultValueAttribute(
   [System.Management.Automation.PSDefaultValueAttribute]$attribute
 ) {

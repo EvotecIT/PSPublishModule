@@ -30,11 +30,36 @@ function MergeParameterPossibleValues(
       $displayCounts.Add($entry.Display, 1)
     }
   }
+  $displayCandidates = [System.Collections.Generic.List[object]]::new()
   foreach ($entry in $metadataEntries) {
-    $display = if ($displayCounts[$entry.Display] -gt 1) {
-      ConvertToPowerShellDefaultValue ([string]$entry.Original)
+    $needsFallback = $displayCounts[$entry.Display] -gt 1
+    $displayCandidates.Add([pscustomobject]@{
+      Display = if ($needsFallback) {
+        ConvertToPowerShellDefaultValue ([string]$entry.Original)
+      } else {
+        [string]$entry.Display
+      }
+      NeedsFallback = $needsFallback
+    })
+  }
+
+  $reservedDisplays = [System.Collections.Generic.HashSet[string]]::new($metadataComparer)
+  foreach ($candidate in $displayCandidates) {
+    if (-not $candidate.NeedsFallback) { [void]$reservedDisplays.Add([string]$candidate.Display) }
+  }
+  $usedDisplays = [System.Collections.Generic.HashSet[string]]::new($metadataComparer)
+  foreach ($candidate in $displayCandidates) {
+    $display = [string]$candidate.Display
+    if ($candidate.NeedsFallback) {
+      $baseDisplay = $display
+      $suffix = 1
+      while ($reservedDisplays.Contains($display) -or -not $usedDisplays.Add($display)) {
+        $display = $baseDisplay + ' [encoded ' +
+          $suffix.ToString([System.Globalization.CultureInfo]::InvariantCulture) + ']'
+        $suffix++
+      }
     } else {
-      [string]$entry.Display
+      [void]$usedDisplays.Add($display)
     }
     $result.Add($display)
   }

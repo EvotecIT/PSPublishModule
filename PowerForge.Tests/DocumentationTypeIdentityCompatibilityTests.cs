@@ -415,7 +415,10 @@ if ($sortedList.GetType() -ne [System.Collections.Generic.SortedList[string,int]
                 var reservedSortedList = Default("ReservedSortedList");
                 Assert.Contains("::new(([int]100))", reservedList, StringComparison.Ordinal);
                 Assert.Contains("::new(([int]100))", reservedArrayList, StringComparison.Ordinal);
-                Assert.Contains("[System.StringComparer]::InvariantCultureIgnoreCase", invariantDictionary, StringComparison.Ordinal);
+                Assert.Contains(
+                    "[System.StringComparer]::Create([System.Globalization.CultureInfo]::InvariantCulture, $true)",
+                    invariantDictionary,
+                    StringComparison.Ordinal);
                 Assert.Contains("::new(([int]100), [System.StringComparer]::InvariantCultureIgnoreCase)", reservedSortedList, StringComparison.Ordinal);
                 Assert.Contains(command.Outputs, output => output.Name == "A B");
                 Assert.Contains(command.Outputs, output => output.Name == "AB");

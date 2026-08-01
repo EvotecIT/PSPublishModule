@@ -81,6 +81,49 @@ function ConvertToXmlSafeIdentityText([string]$text) {
   return $builder.ToString()
 }
 
+function TestXmlSafeIdentityText([string]$text) {
+  try {
+    [void][System.Xml.XmlConvert]::VerifyXmlChars($text)
+    return $true
+  } catch {
+    return $false
+  }
+}
+
+function GetDocumentedModuleCommandSnapshot(
+  [System.Management.Automation.PSModuleInfo]$module,
+  [System.Management.Automation.CommandInfo]$testXmlSafeIdentityText
+) {
+  $commands = @(@($module.ExportedCmdlets.Values) + @($module.ExportedFunctions.Values)) | Where-Object {
+    $_.CommandType -eq 'Cmdlet' -or $_.CommandType -eq 'Function'
+  } | Sort-Object -Property Name
+  $helpByCommandName = [System.Collections.Generic.Dictionary[string,object]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase)
+  foreach ($command in $commands) {
+    if (-not (& $testXmlSafeIdentityText ([string]$command.Name))) {
+      throw ('Command name contains XML-invalid characters: ' + [string]$command.Name)
+    }
+    foreach ($parameter in @($command.Parameters.Values)) {
+      if (-not (& $testXmlSafeIdentityText ([string]$parameter.Name))) {
+        throw ('Parameter name contains XML-invalid characters: ' + [string]$parameter.Name)
+      }
+      foreach ($alias in @($parameter.Aliases)) {
+        if (-not (& $testXmlSafeIdentityText ([string]$alias))) {
+          throw ('Parameter alias contains XML-invalid characters: ' + [string]$alias)
+        }
+      }
+    }
+    $help = $null
+    try {
+      $help = Microsoft.PowerShell.Core\Get-Help -Name $command.Name -Full -ErrorAction SilentlyContinue
+    } catch {
+      $help = $null
+    }
+    $helpByCommandName[[string]$command.Name] = $help
+  }
+  return [pscustomobject]@{ Commands = @($commands); HelpByCommandName = $helpByCommandName }
+}
+
 function ConvertOutputsToXmlSafeDocumentationText([object[]]$outputs) {
   foreach ($output in @($outputs)) {
     $output.name = ConvertToXmlSafeIdentityText ([string]$output.name)

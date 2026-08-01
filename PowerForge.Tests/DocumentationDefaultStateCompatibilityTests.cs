@@ -96,6 +96,7 @@ function Get-DefaultStateFixture {
         $sharedComparer = [System.StringComparer]::Create(
             [System.Globalization.CultureInfo]::GetCultureInfo('tr-TR'), $true)
         $internedString = [string]::Intern((-join @('interned', '-', 'value')))
+        $nonInternedEmptyString = [string]::Copy('')
         $uriText = -join @('relative', '/', 'path')
         $uri = [uri]::new($uriText, [System.UriKind]::Relative)
         if (-not [object]::ReferenceEquals($uriText, $uri.OriginalString)) {
@@ -105,12 +106,19 @@ function Get-DefaultStateFixture {
         $secondDictionary = [System.Collections.Generic.Dictionary[string,int]]::new($sharedComparer)
         $firstDictionary.Add('one', 1)
         $secondDictionary.Add('two', 2)
+        $createdInvariantComparer = [System.StringComparer]::Create(
+            [System.Globalization.CultureInfo]::InvariantCulture, $false)
+        $createdInvariantDictionary = [System.Collections.Generic.Dictionary[string,int]]::new(
+            $createdInvariantComparer)
+        $createdInvariantDictionary.Add('invariant', 1)
         foreach ($entry in @(
             @('SharedStringReferences', [object[]]@($sharedString, $sharedString)),
             @('SharedBoxReferences', [object[]]@($sharedBox, $sharedBox)),
             @('SharedCollectionBacking', $sharedCollections),
             @('SharedCultureComparer', [object[]]@($firstDictionary, $secondDictionary)),
             @('InternedString', $internedString),
+            @('NonInternedEmptyString', $nonInternedEmptyString),
+            @('CreatedInvariantComparer', $createdInvariantDictionary),
             @('SharedUriBacking', [object[]]@($uri, $uri.OriginalString)),
             @('SessionBoundScript', $script:sessionBoundDefault)
         )) {
@@ -143,7 +151,7 @@ function Get-DefaultStateFixture {
 
         $collidingValidateSetAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $collidingValidateSetAttributes.Add([System.Management.Automation.ValidateSetAttribute]::new(
-            [string[]]@("A$([char]1)", 'A([char]1)')))
+            [string[]]@("A$([char]1)", 'A([char]1)', "(-join @('A', ([char]1)))")))
         $parameters.Add('CollidingValidateSet', [System.Management.Automation.RuntimeDefinedParameter]::new(
             'CollidingValidateSet', [string], $collidingValidateSetAttributes))
         $parameters
@@ -169,6 +177,7 @@ Export-ModuleMember -Function Get-DefaultStateFixture, ConvertToPowerShellDefaul
                         new NullLogger())
                     .ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(2));
                 var command = Assert.Single(payload.Commands, item => item.Name == "Get-DefaultStateFixture");
+                Assert.Contains(payload.Commands, item => item.Name == "ConvertToPowerShellDefaultValue");
                 foreach (var name in new[]
                          {
                              "SharedStringReferences", "SharedBoxReferences", "SharedCollectionBacking",
@@ -197,9 +206,59 @@ if (-not [object]::ReferenceEquals($value, [string]::IsInterned($value))) {
                         TimeSpan.FromMinutes(1)));
                 Assert.Equal(0, verification.ExitCode);
 
+                var nonInternedEmpty = Assert.Single(
+                    command.Parameters,
+                    item => item.Name == "NonInternedEmptyString");
+                Assert.Equal("[string]::Copy('')", nonInternedEmpty.DefaultValue);
+                var nonInternedVerificationPath = Path.Combine(root, "VerifyNonInternedEmpty.ps1");
+                File.WriteAllText(nonInternedVerificationPath, """
+param([string]$Expression)
+$value = & ([scriptblock]::Create($Expression))
+if ([object]::ReferenceEquals($value, [string]::Empty) -or
+    [object]::ReferenceEquals($value, [string]::IsInterned($value))) {
+    throw 'The reconstructed empty string unexpectedly uses the intern-pool singleton.'
+}
+""", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                var nonInternedVerification = new ExecutablePowerShellRunner(host, root).Run(
+                    new PowerShellRunRequest(
+                        nonInternedVerificationPath,
+                        new[] { nonInternedEmpty.DefaultValue },
+                        TimeSpan.FromMinutes(1)));
+                Assert.Equal(0, nonInternedVerification.ExitCode);
+
+                var invariantComparer = Assert.Single(
+                    command.Parameters,
+                    item => item.Name == "CreatedInvariantComparer");
+                Assert.Contains(
+                    "[System.StringComparer]::Create([System.Globalization.CultureInfo]::InvariantCulture, $false)",
+                    invariantComparer.DefaultValue,
+                    StringComparison.Ordinal);
+                var comparerVerificationPath = Path.Combine(root, "VerifyInvariantComparer.ps1");
+                File.WriteAllText(comparerVerificationPath, """
+param([string]$Expression)
+$dictionary = & ([scriptblock]::Create($Expression))
+if ([object]::ReferenceEquals($dictionary.Comparer, [System.StringComparer]::InvariantCulture)) {
+    throw 'The reconstructed comparer unexpectedly aliases the invariant singleton.'
+}
+if ($dictionary.Comparer.Compare('a', 'A') -eq 0) {
+    throw 'The reconstructed comparer unexpectedly ignores case.'
+}
+""", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                var comparerVerification = new ExecutablePowerShellRunner(host, root).Run(
+                    new PowerShellRunRequest(
+                        comparerVerificationPath,
+                        new[] { invariantComparer.DefaultValue },
+                        TimeSpan.FromMinutes(1)));
+                Assert.Equal(0, comparerVerification.ExitCode);
+
                 var colliding = Assert.Single(command.Parameters, item => item.Name == "CollidingValidateSet");
                 Assert.Equal(
-                    new[] { "(-join @('A', ([char]1)))", "'A([char]1)'" },
+                    new[]
+                    {
+                        "(-join @('A', ([char]1))) [encoded 1]",
+                        "'A([char]1)'",
+                        "(-join @('A', ([char]1)))"
+                    },
                     colliding.PossibleValues);
 
                 var hostOutput = Path.Combine(root, host.Replace('.', '-'));
@@ -208,7 +267,7 @@ if (-not [object]::ReferenceEquals($value, [string]::IsInterned($value))) {
                     "DefaultStateFixture",
                     hostOutput);
                 var maml = File.ReadAllText(mamlPath);
-                Assert.Contains("(-join @('A', ([char]1)))", maml, StringComparison.Ordinal);
+                Assert.Contains("(-join @('A', ([char]1))) [encoded 1]", maml, StringComparison.Ordinal);
                 Assert.Contains("'A([char]1)'", maml, StringComparison.Ordinal);
                 Assert.DoesNotContain('\u0001', maml);
             }

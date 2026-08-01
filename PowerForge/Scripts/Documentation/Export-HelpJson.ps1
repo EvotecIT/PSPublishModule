@@ -29,17 +29,6 @@ function GetText([object]$obj) {
   try { return [string]$obj } catch { return '' }
 }
 
-function TestDefaultTextNeedsEncoding([string]$text) {
-  foreach ($character in $text.ToCharArray()) {
-    if ($character -eq "`r" -or
-        $character -eq "`n" -or
-        -not [System.Xml.XmlConvert]::IsXmlChar($character)) {
-      return $true
-    }
-  }
-  return $false
-}
-
 function ConvertToPowerShellDefaultValue(
   [object]$value,
   [System.Collections.IList]$referenceStack = $null
@@ -55,32 +44,7 @@ function ConvertToPowerShellDefaultValue(
   if ($value -is [string]) {
     $text = [string]$value
     $isInterned = [object]::ReferenceEquals($value, [string]::IsInterned($text))
-    if (-not (TestDefaultTextNeedsEncoding $text)) {
-      $expression = ("'" + $text.Replace("'", "''") + "'")
-      if ($isInterned) { return ('[string]::Intern(' + $expression + ')') }
-      return $expression
-    }
-    $parts = @()
-    $segment = ''
-    foreach ($character in $text.ToCharArray()) {
-      if ($character -ne "`r" -and
-          $character -ne "`n" -and
-          [System.Xml.XmlConvert]::IsXmlChar($character)) {
-        $segment += $character
-        continue
-      }
-      if ($segment.Length -gt 0) {
-        $parts += ("'" + $segment.Replace("'", "''") + "'")
-        $segment = ''
-      }
-      $parts += ('([char]' + [int]$character + ')')
-    }
-    if ($segment.Length -gt 0) {
-      $parts += ("'" + $segment.Replace("'", "''") + "'")
-    }
-    $expression = ('(-join @(' + ($parts -join ', ') + '))')
-    if ($isInterned) { return ('[string]::Intern(' + $expression + ')') }
-    return $expression
+    return ConvertStringToPowerShellDefaultValue $text $isInterned
   }
   if ($value -is [bool]) {
     if ($value) { return '$true' }
@@ -244,15 +208,16 @@ try {
 
   $collectorHelperFunctions = GetCollectorHelperFunctionSnapshot
   $restoreCollectorHelpers = Get-Command RestoreCollectorHelperFunctions -CommandType Function
+  $testXmlSafeIdentityText = Get-Command TestXmlSafeIdentityText -CommandType Function
+  $getDocumentedModuleCommandSnapshot = Get-Command GetDocumentedModuleCommandSnapshot -CommandType Function
   $targetVariableImportFilter = '__PowerForgeDocumentationCollector_' + [guid]::NewGuid().ToString('N')
   $targetAliasImportFilter = '__PowerForgeDocumentationCollector_' + [guid]::NewGuid().ToString('N')
   $mod = Import-Module -Name $ManifestPath -Force -PassThru -Function '*' -Cmdlet '*' -Alias $targetAliasImportFilter -Variable $targetVariableImportFilter -ErrorAction Stop
+  $commandSnapshot = & $getDocumentedModuleCommandSnapshot $mod $testXmlSafeIdentityText
+  $commands = @($commandSnapshot.Commands)
+  $helpByCommandName = $commandSnapshot.HelpByCommandName
   & $restoreCollectorHelpers $collectorHelperFunctions
   $moduleNameResolved = $mod.Name
-
-  $commands = Get-Command -Module $moduleNameResolved -ErrorAction SilentlyContinue | Where-Object {
-    $_.CommandType -eq 'Cmdlet' -or $_.CommandType -eq 'Function'
-  } | Sort-Object -Property Name
 
   $result = [ordered]@{
     moduleName = [string]$moduleNameResolved
@@ -265,8 +230,7 @@ try {
   }
 
   foreach ($c in $commands) {
-    $help = $null
-    try { $help = Get-Help -Name $c.Name -Full -ErrorAction SilentlyContinue } catch { $help = $null }
+    $help = $helpByCommandName[[string]$c.Name]
 
     $implType = $null
     $dllPath = $null
@@ -774,7 +738,7 @@ try {
     }
 
     $result.commands += [ordered]@{
-      name = ConvertToXmlSafeIdentityText ([string]$c.Name)
+      name = [string]$c.Name
       commandType = [string]$c.CommandType
       implementingType = $implType
       assemblyPath = $dllPath
