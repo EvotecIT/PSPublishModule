@@ -74,11 +74,11 @@ on:
         default: ""
         type: string
     secrets:
-      app_store_connect_issuer_id:
+      caller_app_store_connect_issuer_id:
         required: false
-      app_store_connect_key_id:
+      caller_app_store_connect_key_id:
         required: false
-      app_store_connect_private_key:
+      caller_app_store_connect_private_key:
         required: false
 
 jobs:
@@ -425,9 +425,9 @@ jobs:
           target: ${{ inputs.target }}
           plan-only: "false"
           confirm: "true"
-          issuer-id: ${{ secrets.app_store_connect_issuer_id }}
-          key-id: ${{ secrets.app_store_connect_key_id }}
-          private-key: ${{ secrets.app_store_connect_private_key }}
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || secrets.caller_app_store_connect_issuer_id }}
+          key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID || secrets.caller_app_store_connect_key_id }}
+          private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY || secrets.caller_app_store_connect_private_key }}
 
       - name: Retain approved captures and manifests
         if: always()

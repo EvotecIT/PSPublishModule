@@ -51,11 +51,11 @@ on:
         default: '[]'
         type: string
     secrets:
-      app_store_connect_issuer_id:
+      caller_app_store_connect_issuer_id:
         required: false
-      app_store_connect_key_id:
+      caller_app_store_connect_key_id:
         required: false
-      app_store_connect_private_key:
+      caller_app_store_connect_private_key:
         required: false
 
 concurrency:
@@ -139,9 +139,9 @@ jobs:
           tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
           tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           plan-only: "true"
-          issuer-id: ${{ secrets.app_store_connect_issuer_id }}
-          key-id: ${{ secrets.app_store_connect_key_id }}
-          private-key: ${{ secrets.app_store_connect_private_key }}
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || secrets.caller_app_store_connect_issuer_id }}
+          key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID || secrets.caller_app_store_connect_key_id }}
+          private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY || secrets.caller_app_store_connect_private_key }}
 
       - name: Upload compact approval plan receipt
         if: always()
@@ -227,9 +227,9 @@ jobs:
           tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
           tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           plan-only: "true"
-          issuer-id: ${{ secrets.app_store_connect_issuer_id }}
-          key-id: ${{ secrets.app_store_connect_key_id }}
-          private-key: ${{ secrets.app_store_connect_private_key }}
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || secrets.caller_app_store_connect_issuer_id }}
+          key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID || secrets.caller_app_store_connect_key_id }}
+          private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY || secrets.caller_app_store_connect_private_key }}
 
       - name: Bind execution to the reviewed plan
         shell: pwsh
@@ -256,9 +256,9 @@ jobs:
           plan-only: "false"
           confirm: "true"
           expected-plan-sha256: ${{ needs.plan.outputs.plan_sha256 }}
-          issuer-id: ${{ secrets.app_store_connect_issuer_id }}
-          key-id: ${{ secrets.app_store_connect_key_id }}
-          private-key: ${{ secrets.app_store_connect_private_key }}
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || secrets.caller_app_store_connect_issuer_id }}
+          key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID || secrets.caller_app_store_connect_key_id }}
+          private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY || secrets.caller_app_store_connect_private_key }}
 
       - name: Upload compact approved replan receipt
         if: always()

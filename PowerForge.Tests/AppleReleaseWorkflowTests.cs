@@ -312,6 +312,58 @@ public sealed partial class AppleReleaseWorkflowTests
     }
 
     [Fact]
+    public void AppleReusableWorkflowsPreferProtectedEnvironmentCredentialsWithCallerFallback()
+    {
+        var root = FindRepoRoot();
+        var workflows = new[]
+        {
+            "powerforge-apple-monitor.yml",
+            "powerforge-apple-version-pr.yml",
+            "powerforge-apple-advance.yml",
+            "powerforge-apple-approval.yml",
+            "powerforge-apple-governance.yml",
+            "powerforge-apple-screenshots.yml",
+            "powerforge-apple-screenshot-approve.yml"
+        };
+
+        foreach (var name in workflows)
+        {
+            var workflow = Read(root, ".github", "workflows", name);
+            Assert.Contains("environment:", workflow, StringComparison.Ordinal);
+            Assert.Contains("caller_app_store_connect_issuer_id:", workflow, StringComparison.Ordinal);
+            Assert.Contains("caller_app_store_connect_key_id:", workflow, StringComparison.Ordinal);
+            Assert.Contains("caller_app_store_connect_private_key:", workflow, StringComparison.Ordinal);
+            Assert.Contains(
+                "issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || secrets.caller_app_store_connect_issuer_id }}",
+                workflow,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID || secrets.caller_app_store_connect_key_id }}",
+                workflow,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY || secrets.caller_app_store_connect_private_key }}",
+                workflow,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("\n      app_store_connect_issuer_id:", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("\n      app_store_connect_key_id:", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("\n      app_store_connect_private_key:", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                "issuer-id: ${{ secrets.app_store_connect_issuer_id }}",
+                workflow,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                "key-id: ${{ secrets.app_store_connect_key_id }}",
+                workflow,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                "private-key: ${{ secrets.app_store_connect_private_key }}",
+                workflow,
+                StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void GovernanceWorkflowPlansBeforeProtectedConfirmedApplyWithCompactReceipts()
     {
         var root = FindRepoRoot();
@@ -520,7 +572,7 @@ public sealed partial class AppleReleaseWorkflowTests
     }
 
     [Fact]
-    public void AppleEnvironmentCredentialsRemainOptionalAtTheWorkflowCallBoundary()
+    public void AppleCallerCredentialFallbacksRemainOptionalAtTheWorkflowCallBoundary()
     {
         var root = FindRepoRoot();
         foreach (var workflowName in new[]
@@ -538,9 +590,9 @@ public sealed partial class AppleReleaseWorkflowTests
                 .Replace("\r\n", "\n", StringComparison.Ordinal);
             foreach (var secretName in new[]
                      {
-                         "app_store_connect_issuer_id",
-                         "app_store_connect_key_id",
-                         "app_store_connect_private_key"
+                         "caller_app_store_connect_issuer_id",
+                         "caller_app_store_connect_key_id",
+                         "caller_app_store_connect_private_key"
                      })
             {
                 Assert.Contains(
