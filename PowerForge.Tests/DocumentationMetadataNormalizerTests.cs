@@ -509,14 +509,14 @@ public sealed partial class DocumentationMetadataNormalizerTests
     }
 
     [Fact]
-    public void Normalize_UsesMetadataDefaultAndNormalizesAliasesAndPossibleValues()
+    public void Normalize_UsesMetadataDefaultAndPreservesExactAliasesAndPossibleValues()
     {
         var parameter = new DocumentationParameterHelp
         {
             DefaultValue = "stale",
             HasMetadataDefault = true,
             MetadataDefaultValue = new DocumentationRuntimeValue { Kind = "String", Text = string.Empty },
-            Aliases = ["", " short ", "SHORT", "s"],
+            Aliases = ["", " short ", "SHORT", "short", "s", " "],
             PossibleValues = ["", " Basic ", "BASIC", "Advanced"]
         };
         var payload = PayloadWith(new DocumentationCommandHelp
@@ -529,7 +529,7 @@ public sealed partial class DocumentationMetadataNormalizerTests
         DocumentationMetadataNormalizer.Normalize(payload);
 
         Assert.Equal("''", parameter.DefaultValue);
-        Assert.Equal(["short", "s"], parameter.Aliases);
+        Assert.Equal([" short ", "SHORT", "s", " "], parameter.Aliases);
         Assert.Equal(["Basic", "Advanced"], parameter.PossibleValues);
         Assert.False(parameter.HasMetadataDefault);
         Assert.Null(parameter.MetadataDefaultHelp);

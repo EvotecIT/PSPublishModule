@@ -48,7 +48,7 @@ function Get-HelperIsolationFixture {
         $valueDefault.Value = 'runtime value'
         $valueAttributes.Add($valueDefault)
         $valueAlias = [System.Management.Automation.AliasAttribute]::new(
-            [string[]]@([string][char]0xD800))
+            [string[]]@([string][char]0xD800, ' x '))
         $valueAttributes.Add($valueAlias)
         $parameters.Add('Value', [System.Management.Automation.RuntimeDefinedParameter]::new(
             'Value', [string], $valueAttributes))
@@ -81,7 +81,7 @@ Export-ModuleMember -Function Get-HelperIsolationFixture, ConvertToUtf16CodeUnit
                     candidate.Name == "Get-HelperIsolationFixture");
                 var valueParameter = Assert.Single(command.Parameters, parameter => parameter.Name == "Value");
                 Assert.Equal("'runtime value'", Default("Value"));
-                Assert.Equal("([char]55296)", Assert.Single(valueParameter.Aliases));
+                Assert.Equal(["([char]55296)", " x "], valueParameter.Aliases);
                 Assert.Equal("authored\nvalue", Default("HelpValue"));
                 Assert.Contains(command.Outputs, output =>
                     output.CanonicalTypeName == "System.Collections.Generic.List[System.String]");
@@ -94,6 +94,22 @@ Export-ModuleMember -Function Get-HelperIsolationFixture, ConvertToUtf16CodeUnit
                 var maml = File.ReadAllText(mamlPath);
                 Assert.Contains("([char]55296)", maml, StringComparison.Ordinal);
                 Assert.DoesNotContain('\uD800', maml);
+
+                var aliasAttributes = System.Xml.Linq.XDocument.Load(
+                        mamlPath,
+                        System.Xml.Linq.LoadOptions.PreserveWhitespace)
+                    .Descendants()
+                    .Where(element => element.Name.LocalName == "parameter")
+                    .Select(element => element.Attribute("aliases")?.Value)
+                    .Where(value => value is not null && value != "none")
+                    .ToArray();
+                Assert.Equal(2, aliasAttributes.Length);
+                Assert.All(aliasAttributes, value => Assert.Equal("([char]55296), x ", value));
+
+                var docsPath = Path.Combine(hostOutput, "Docs");
+                new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "HelperIsolationFixture", docsPath);
+                var markdown = File.ReadAllText(Path.Combine(docsPath, "Get-HelperIsolationFixture.md"));
+                Assert.Contains("Aliases: ([char]55296), ' x '", markdown, StringComparison.Ordinal);
 
                 string Default(string name)
                     => Assert.Single(command.Parameters, parameter => parameter.Name == name).DefaultValue;
