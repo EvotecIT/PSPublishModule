@@ -764,6 +764,58 @@ Markdown only topic body.
     }
 
     [Fact]
+    public void DocumentationWriters_PreserveExactParameterAliases()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-doc-aliases-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var payload = new DocumentationExtractionPayload
+            {
+                ModuleName = "DemoModule",
+                Commands =
+                [
+                    new DocumentationCommandHelp
+                    {
+                        Name = "Get-Demo",
+                        Synopsis = "Gets demo data.",
+                        Parameters =
+                        [
+                            new DocumentationParameterHelp
+                            {
+                                Name = "Name",
+                                Type = "String",
+                                ParameterSets = ["__AllParameterSets"],
+                                Aliases = [" x ", "X", "x", " ", ""]
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            var markdownRoot = Path.Combine(root, "Docs");
+            new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "DemoModule", markdownRoot);
+            var markdown = File.ReadAllText(Path.Combine(markdownRoot, "Get-Demo.md"));
+            Assert.Contains("Aliases: ' x ', X, ' '\r\n", markdown, StringComparison.Ordinal);
+
+            var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, "DemoModule", root);
+            var document = System.Xml.Linq.XDocument.Load(mamlPath, System.Xml.Linq.LoadOptions.PreserveWhitespace);
+            var aliasAttributes = document.Descendants()
+                .Where(element => element.Name.LocalName == "parameter")
+                .Select(element => element.Attribute("aliases")?.Value)
+                .Where(value => value is not null)
+                .ToArray();
+            Assert.NotEmpty(aliasAttributes);
+            Assert.All(aliasAttributes, value => Assert.Equal(" x ,X, ", value));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void MarkdownHelpWriter_RendersExamplesUsingRequestedLayout()
     {
         var command = new DocumentationCommandHelp

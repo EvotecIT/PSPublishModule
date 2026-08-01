@@ -327,8 +327,11 @@ internal sealed class MarkdownHelpWriter
     private static string FormatAliases(DocumentationParameterHelp p)
     {
         var aliases = (p.Aliases ?? Enumerable.Empty<string>())
-            .Where(a => !string.IsNullOrWhiteSpace(a))
-            .Select(a => a.Trim())
+            .Where(a => !string.IsNullOrEmpty(a))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(a => a.Length == a.Trim().Length
+                ? a
+                : "'" + a.Replace("'", "''") + "'")
             .ToArray();
 
         return aliases.Length == 0 ? "None" : string.Join(", ", aliases);

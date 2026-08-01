@@ -296,8 +296,8 @@ internal sealed class MamlHelpWriter
     private static void WriteParameter(XmlWriter writer, DocumentationParameterHelp p, bool includeParameterValue, string? setName = null, string? syntaxText = null)
     {
         var aliases = (p.Aliases ?? Enumerable.Empty<string>())
-            .Where(a => !string.IsNullOrWhiteSpace(a))
-            .Select(a => a.Trim())
+            .Where(a => !string.IsNullOrEmpty(a))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         var aliasValue = aliases.Length == 0 ? "none" : string.Join(",", aliases);
