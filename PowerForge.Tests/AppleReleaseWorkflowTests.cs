@@ -298,7 +298,10 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("([string] $_.body).Contains($monitorMarker)", workflow, StringComparison.Ordinal);
         Assert.Contains("if ($receiptDiagnostics.Count -eq 0)", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("Select-Object -First 10", workflow, StringComparison.Ordinal);
-        Assert.Contains("$diagnostics -join \"`n\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("$maxDiagnosticEntryLength = 4000", workflow, StringComparison.Ordinal);
+        Assert.Contains("$maxRenderedDiagnosticCharacters = 48000", workflow, StringComparison.Ordinal);
+        Assert.Contains("$omittedDiagnosticCount additional diagnostics omitted", workflow, StringComparison.Ordinal);
+        Assert.Contains("Diagnostic state: ``$stateHash``", workflow, StringComparison.Ordinal);
         Assert.Contains("$previousState.Groups[1].Value -ne $stateHash", workflow, StringComparison.Ordinal);
         Assert.Contains("Unable to enumerate all open repository issues", workflow, StringComparison.Ordinal);
         Assert.Contains("Unable to close recovered Apple incident", workflow, StringComparison.Ordinal);

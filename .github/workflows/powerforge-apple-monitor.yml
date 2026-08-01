@@ -168,14 +168,6 @@ jobs:
           if ($receiptDiagnostics.Count -eq 0) {
             $receiptDiagnostics = @($structured)
           }
-          $diagnostics = @($receiptDiagnostics | ForEach-Object {
-            "- **$($_.code)** [$($_.severity)]: $($_.summary)`n  - Action: $($_.action)"
-          })
-          $diagnosticLines = if ($diagnostics.Count -gt 0) {
-            $diagnostics -join "`n"
-          } else {
-            '- The action failed before a structured receipt was available; inspect the linked run.'
-          }
           $stateDiagnostics = @($receiptDiagnostics | ForEach-Object {
             [ordered]@{
               code = [string] $_.code
@@ -198,6 +190,31 @@ jobs:
             $sha256.Dispose()
           }
           $stateMarker = "<!-- powerforge-apple-monitor-state:$stateHash -->"
+          $maxDiagnosticEntryLength = 4000
+          $maxRenderedDiagnosticCharacters = 48000
+          $renderedDiagnostics = [Collections.Generic.List[string]]::new()
+          $renderedCharacters = 0
+          foreach ($diagnostic in $receiptDiagnostics) {
+            $line = "- **$($diagnostic.code)** [$($diagnostic.severity)]: $($diagnostic.summary)`n  - Action: $($diagnostic.action)"
+            if ($line.Length -gt $maxDiagnosticEntryLength) {
+              $line = $line.Substring(0, $maxDiagnosticEntryLength - 1) + '…'
+            }
+            if ($renderedCharacters + $line.Length + 1 -gt $maxRenderedDiagnosticCharacters) {
+              break
+            }
+            $renderedDiagnostics.Add($line)
+            $renderedCharacters += $line.Length + 1
+          }
+          $omittedDiagnosticCount = $receiptDiagnostics.Count - $renderedDiagnostics.Count
+          $diagnosticLines = if ($renderedDiagnostics.Count -gt 0) {
+            $renderedDiagnostics -join "`n"
+          } else {
+            '- The action failed before a structured receipt was available; inspect the linked run.'
+          }
+          if ($omittedDiagnosticCount -gt 0) {
+            $diagnosticLines += "`n- $omittedDiagnosticCount additional diagnostics omitted to stay within GitHub's issue-body limit. Inspect the compact receipt for the full set."
+          }
+          $diagnosticLines += "`n`nDiagnostic state: ``$stateHash``"
           $body = @(
             $monitorMarker,
             $stateMarker,
