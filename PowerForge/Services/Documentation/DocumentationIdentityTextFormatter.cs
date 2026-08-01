@@ -39,6 +39,16 @@ internal static class DocumentationIdentityTextFormatter
     /// identities cannot collapse to the same rendered value.
     /// </summary>
     internal static string Format(string text)
+        => Format(text, encodeLineBreaks: false);
+
+    /// <summary>
+    /// Escapes identity-significant CR/LF code units in addition to XML-invalid
+    /// characters so output types that differ only by line breaks remain distinct.
+    /// </summary>
+    internal static string FormatOutputType(string text)
+        => Format(text, encodeLineBreaks: true);
+
+    private static string Format(string text, bool encodeLineBreaks)
     {
         if (string.IsNullOrEmpty(text)) return string.Empty;
         var builder = new StringBuilder(text.Length);
@@ -48,6 +58,10 @@ internal static class DocumentationIdentityTextFormatter
             if (character == '%')
             {
                 builder.Append("%25");
+            }
+            else if (encodeLineBreaks && (character == '\r' || character == '\n'))
+            {
+                builder.Append("%u").Append(((int)character).ToString("X4", CultureInfo.InvariantCulture));
             }
             else if (char.IsHighSurrogate(character) &&
                      index + 1 < text.Length &&

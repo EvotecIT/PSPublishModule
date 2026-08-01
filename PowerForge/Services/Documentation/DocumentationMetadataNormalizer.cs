@@ -81,8 +81,8 @@ internal static class DocumentationMetadataNormalizer
                 example.Remarks = Display(example.Remarks);
             }
 
-            NormalizeTypeText(command.Inputs);
-            NormalizeTypeText(command.Outputs);
+            NormalizeTypeText(command.Inputs, encodeLineBreaks: false);
+            NormalizeTypeText(command.Outputs, encodeLineBreaks: true);
 
             foreach (var link in command.RelatedLinks ?? new List<DocumentationLinkHelp>())
             {
@@ -100,16 +100,22 @@ internal static class DocumentationMetadataNormalizer
         }
     }
 
-    private static void NormalizeTypeText(IEnumerable<DocumentationTypeHelp>? values)
+    private static void NormalizeTypeText(IEnumerable<DocumentationTypeHelp>? values, bool encodeLineBreaks)
     {
         foreach (var value in values ?? Array.Empty<DocumentationTypeHelp>())
         {
             if (value is null) continue;
             if (!value.IdentityTextNormalized)
             {
-                value.Name = DocumentationIdentityTextFormatter.Format(value.Name);
-                value.ClrTypeName = DocumentationIdentityTextFormatter.Format(value.ClrTypeName);
-                value.CanonicalTypeName = DocumentationIdentityTextFormatter.Format(value.CanonicalTypeName);
+                value.Name = encodeLineBreaks
+                    ? DocumentationIdentityTextFormatter.FormatOutputType(value.Name)
+                    : DocumentationIdentityTextFormatter.Format(value.Name);
+                value.ClrTypeName = encodeLineBreaks
+                    ? DocumentationIdentityTextFormatter.FormatOutputType(value.ClrTypeName)
+                    : DocumentationIdentityTextFormatter.Format(value.ClrTypeName);
+                value.CanonicalTypeName = encodeLineBreaks
+                    ? DocumentationIdentityTextFormatter.FormatOutputType(value.CanonicalTypeName)
+                    : DocumentationIdentityTextFormatter.Format(value.CanonicalTypeName);
                 value.IdentityTextNormalized = true;
             }
             value.RuntimeIdentity = string.Empty;
@@ -128,11 +134,14 @@ internal static class DocumentationMetadataNormalizer
                 value.ClrTypeName = PowerShellDefaultValueFormatter.DecodeUtf16CodeUnits(value.ClrTypeNameCodeUnits);
             if (!string.IsNullOrEmpty(value.CanonicalTypeNameCodeUnits))
                 value.CanonicalTypeName = PowerShellDefaultValueFormatter.DecodeUtf16CodeUnits(value.CanonicalTypeNameCodeUnits);
+            if (!string.IsNullOrEmpty(value.AssemblyQualifiedNameCodeUnits))
+                value.AssemblyQualifiedName = PowerShellDefaultValueFormatter.DecodeUtf16CodeUnits(value.AssemblyQualifiedNameCodeUnits);
             value.LookupName = value.Name ?? string.Empty;
             value.LookupClrTypeName = value.ClrTypeName ?? string.Empty;
             value.NameCodeUnits = null;
             value.ClrTypeNameCodeUnits = null;
             value.CanonicalTypeNameCodeUnits = null;
+            value.AssemblyQualifiedNameCodeUnits = null;
         }
     }
 
@@ -359,6 +368,11 @@ internal static class DocumentationMetadataNormalizer
         var authoredIndex = BuildIndex(authoredOutputs);
         var runtimeIndex = BuildIndex(runtimeOutputs);
         var outputs = new List<DocumentationTypeHelp>();
+        var runtimeIdentityCounts = runtimeOutputs
+            .Select(GetIdentity)
+            .Where(identity => identity.Length > 0)
+            .GroupBy(identity => identity, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
         var seenIdentities = new HashSet<string>(StringComparer.Ordinal);
         var seenRuntimeIdentities = new HashSet<string>(StringComparer.Ordinal);
 
@@ -372,6 +386,7 @@ internal static class DocumentationMetadataNormalizer
 
             var description = string.Empty;
             var displayName = runtimeOutput.Name ?? string.Empty;
+            var displayClrTypeName = runtimeOutput.ClrTypeName ?? string.Empty;
             var matched = false;
             foreach (var key in GetKeys(runtimeOutput))
             {
@@ -399,7 +414,15 @@ internal static class DocumentationMetadataNormalizer
                     displayName = foldedAuthoredOutput.Name;
             }
 
-            outputs.Add(Copy(runtimeOutput, description, displayName));
+            if (runtimeIdentityCounts.TryGetValue(identity, out var identityCount) &&
+                identityCount > 1 &&
+                !string.IsNullOrWhiteSpace(runtimeOutput.AssemblyQualifiedName))
+            {
+                displayName = runtimeOutput.AssemblyQualifiedName!;
+                displayClrTypeName = runtimeOutput.AssemblyQualifiedName!;
+            }
+
+            outputs.Add(Copy(runtimeOutput, description, displayName, displayClrTypeName));
         }
 
         var allowHelpOnlyOutputs =
@@ -699,12 +722,13 @@ internal static class DocumentationMetadataNormalizer
     private static DocumentationTypeHelp Copy(
         DocumentationTypeHelp source,
         string description,
-        string? name = null)
+        string? name = null,
+        string? clrTypeName = null)
         => new()
         {
             Name = name ?? source.Name ?? string.Empty,
             LookupName = source.LookupName ?? string.Empty,
-            ClrTypeName = source.ClrTypeName ?? string.Empty,
+            ClrTypeName = clrTypeName ?? source.ClrTypeName ?? string.Empty,
             LookupClrTypeName = source.LookupClrTypeName ?? string.Empty,
             CanonicalTypeName = source.CanonicalTypeName ?? string.Empty,
             RuntimeIdentity = string.Empty,

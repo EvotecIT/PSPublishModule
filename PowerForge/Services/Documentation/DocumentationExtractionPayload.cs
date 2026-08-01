@@ -156,6 +156,14 @@ internal sealed class DocumentationTypeHelp
     [DataMember(Name = "canonicalTypeNameCodeUnits")]
     public string? CanonicalTypeNameCodeUnits { get; set; }
 
+    /// <summary>Assembly-qualified runtime type identity used to disambiguate colliding display names.</summary>
+    [DataMember(Name = "assemblyQualifiedName", EmitDefaultValue = false)]
+    public string? AssemblyQualifiedName { get; set; }
+
+    /// <summary>Lossless UTF-16 transport for the assembly-qualified runtime type identity.</summary>
+    [DataMember(Name = "assemblyQualifiedNameCodeUnits", EmitDefaultValue = false)]
+    public string? AssemblyQualifiedNameCodeUnits { get; set; }
+
     /// <summary>Process-local structural identity used to retain distinct runtime Type instances.</summary>
     [DataMember(Name = "runtimeIdentity")]
     public string RuntimeIdentity { get; set; } = string.Empty;

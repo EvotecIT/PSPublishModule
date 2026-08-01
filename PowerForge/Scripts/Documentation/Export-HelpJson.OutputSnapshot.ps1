@@ -2,6 +2,7 @@ function GetOutputTypeSnapshot([object]$outputType) {
   $outputTypeName = ''
   $outputTypeClrName = ''
   $canonicalTypeName = ''
+  $assemblyQualifiedName = ''
   $runtimeIdentity = ''
   $runtimeType = $null
   try { $outputTypeName = [string]$outputType.Name } catch { $outputTypeName = '' }
@@ -9,6 +10,7 @@ function GetOutputTypeSnapshot([object]$outputType) {
   if ($runtimeType -is [type]) {
     $outputTypeClrName = [string]$runtimeType.FullName
     $canonicalTypeName = GetCanonicalTypeNameFromType $runtimeType
+    $assemblyQualifiedName = [string]$runtimeType.AssemblyQualifiedName
     $runtimeIdentity = GetRuntimeTypeInstanceIdentity $runtimeType
     if ($runtimeType.IsGenericType) { $outputTypeName = $canonicalTypeName }
   }
@@ -33,6 +35,8 @@ function GetOutputTypeSnapshot([object]$outputType) {
     clrTypeNameCodeUnits = ConvertToUtf16CodeUnits $outputTypeClrName
     canonicalTypeName = $canonicalTypeName
     canonicalTypeNameCodeUnits = ConvertToUtf16CodeUnits $canonicalTypeName
+    assemblyQualifiedName = $assemblyQualifiedName
+    assemblyQualifiedNameCodeUnits = ConvertToUtf16CodeUnits $assemblyQualifiedName
     runtimeIdentity = $runtimeIdentity
     description = ''
   }
