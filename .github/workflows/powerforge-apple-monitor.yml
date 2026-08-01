@@ -164,25 +164,80 @@ jobs:
           $receipt = if (Test-Path -LiteralPath $env:RECEIPT_PATH) {
             Get-Content -LiteralPath $env:RECEIPT_PATH -Raw | ConvertFrom-Json -Depth 100
           } else { $null }
-          $diagnostics = @($receipt.diagnostics | Select-Object -First 10 | ForEach-Object {
-            "- **$($_.code)** [$($_.severity)]: $($_.summary)`n  - Action: $($_.action)"
+          $receiptDiagnostics = if ($null -ne $receipt) { @($receipt.diagnostics) } else { @() }
+          if ($receiptDiagnostics.Count -eq 0) {
+            $receiptDiagnostics = @($structured)
+          }
+          $stateDiagnostics = @($receiptDiagnostics | ForEach-Object {
+            [ordered]@{
+              code = [string] $_.code
+              severity = [string] $_.severity
+              summary = [string] $_.summary
+              action = [string] $_.action
+              retryable = [bool] $_.retryable
+            }
           })
+          $stateJson = ([ordered]@{
+            outcome = $env:DOCTOR_OUTCOME
+            diagnostics = $stateDiagnostics
+          } | ConvertTo-Json -Depth 20 -Compress)
+          $sha256 = [System.Security.Cryptography.SHA256]::Create()
+          try {
+            $stateHash = ([BitConverter]::ToString(
+              $sha256.ComputeHash([Text.Encoding]::UTF8.GetBytes($stateJson))
+            )).Replace('-', '').ToLowerInvariant()
+          } finally {
+            $sha256.Dispose()
+          }
+          $stateMarker = "<!-- powerforge-apple-monitor-state:$stateHash -->"
+          $maxDiagnosticEntryLength = 4000
+          $maxRenderedDiagnosticCharacters = 48000
+          $renderedDiagnostics = [Collections.Generic.List[string]]::new()
+          $renderedCharacters = 0
+          foreach ($diagnostic in $receiptDiagnostics) {
+            $line = "- **$($diagnostic.code)** [$($diagnostic.severity)]: $($diagnostic.summary)`n  - Action: $($diagnostic.action)"
+            if ($line.Length -gt $maxDiagnosticEntryLength) {
+              $line = $line.Substring(0, $maxDiagnosticEntryLength - 1) + '…'
+            }
+            if ($renderedCharacters + $line.Length + 1 -gt $maxRenderedDiagnosticCharacters) {
+              break
+            }
+            $renderedDiagnostics.Add($line)
+            $renderedCharacters += $line.Length + 1
+          }
+          $omittedDiagnosticCount = $receiptDiagnostics.Count - $renderedDiagnostics.Count
+          $diagnosticLines = if ($renderedDiagnostics.Count -gt 0) {
+            $renderedDiagnostics -join "`n"
+          } else {
+            '- The action failed before a structured receipt was available; inspect the linked run.'
+          }
+          if ($omittedDiagnosticCount -gt 0) {
+            $diagnosticLines += "`n- $omittedDiagnosticCount additional diagnostics omitted to stay within GitHub's issue-body limit. Inspect the compact receipt for the full set."
+          }
+          $diagnosticLines += "`n`nDiagnostic state: ``$stateHash``"
           $body = @(
             $monitorMarker,
+            $stateMarker,
             'PowerForge Apple Doctor detected a release, upload, signing, metadata, screenshot, review, or observability problem before relying on Apple email.',
             '',
             "Run: $env:RUN_URL",
             "Source: $env:SOURCE_REF",
             '',
             '## Diagnostics',
-            ($diagnostics.Count -gt 0 ? $diagnostics : '- The action failed before a structured receipt was available; inspect the linked run.')
+            $diagnosticLines
           ) -join "`n"
           if (-not $issue) {
             gh issue create --title $env:ISSUE_TITLE --body $body
             if ($LASTEXITCODE -ne 0) { throw 'Unable to create the proactive Apple incident.' }
           } else {
-            gh issue comment $issue.number --body $body
-            if ($LASTEXITCODE -ne 0) { throw "Unable to update proactive Apple incident #$($issue.number)." }
+            $previousState = [regex]::Match(
+              [string] $issue.body,
+              '<!-- powerforge-apple-monitor-state:([0-9a-f]{64}) -->'
+            )
+            if (-not $previousState.Success -or $previousState.Groups[1].Value -ne $stateHash) {
+              gh issue edit $issue.number --body $body
+              if ($LASTEXITCODE -ne 0) { throw "Unable to update proactive Apple incident #$($issue.number)." }
+            }
             foreach ($duplicate in @($issues | Select-Object -Skip 1)) {
               gh issue close $duplicate.number --comment "Consolidated into #$($issue.number) by the Apple release monitor."
               if ($LASTEXITCODE -ne 0) { throw "Unable to close duplicate Apple incident #$($duplicate.number)." }
