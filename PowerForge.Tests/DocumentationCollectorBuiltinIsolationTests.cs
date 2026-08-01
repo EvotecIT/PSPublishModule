@@ -70,6 +70,47 @@ public sealed class DocumentationCollectorBuiltinIsolationTests
         }
     }
 
+    public static IEnumerable<object[]> PowerShellHosts()
+    {
+        var hosts = OperatingSystem.IsWindows() ? new[] { "pwsh.exe", "powershell.exe" } : new[] { "pwsh" };
+        foreach (var host in hosts)
+            yield return new object[] { host };
+    }
+
+    [Theory]
+    [MemberData(nameof(PowerShellHosts))]
+    public void RuntimeValueHelpers_IsolateBuiltinCmdletsFromTargetExports(string host)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-doc-helper-isolation-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var scriptPath = Path.Combine(root, "ValidateRuntimeHelperIsolation.ps1");
+            var outputPath = Path.Combine(root, "tokens.txt");
+            File.WriteAllText(
+                scriptPath,
+                "param([string]$OutputPath)" + Environment.NewLine +
+                EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.RuntimeValueHelpers.ps1") +
+                Environment.NewLine + "function global:Out-Null { throw 'Target Out-Null must not be invoked.' }" + Environment.NewLine +
+                "$tokens = [System.Collections.Generic.List[object]]::new()" + Environment.NewLine +
+                "if (-not (AddRuntimeNumericDefaultValueToken ([double]1.5) $tokens)) { throw 'Numeric token was not handled.' }" + Environment.NewLine +
+                "[System.IO.File]::WriteAllText($OutputPath, [string]$tokens[0].kind + ':' + [string]$tokens[0].text, [System.Text.UTF8Encoding]::new($false))",
+                new UTF8Encoding(false));
+
+            var run = new ExecutablePowerShellRunner(host, root).Run(
+                new PowerShellRunRequest(
+                    scriptPath,
+                    new[] { outputPath },
+                    TimeSpan.FromSeconds(20)));
+            Assert.Equal(0, run.ExitCode);
+            Assert.Equal("Double:1.5", File.ReadAllText(outputPath));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
     private sealed class ExecutablePowerShellRunner : IPowerShellRunner
     {
         private readonly string _executable;

@@ -1,9 +1,9 @@
 function EmitError([string]$msg) {
   try {
     $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$msg))
-    Write-Output ('PFDOCS::ERROR::' + $b64)
+    Microsoft.PowerShell.Utility\Write-Output ('PFDOCS::ERROR::' + $b64)
   } catch {
-    Write-Output 'PFDOCS::ERROR::'
+    Microsoft.PowerShell.Utility\Write-Output 'PFDOCS::ERROR::'
   }
 }
 
@@ -69,7 +69,7 @@ function ImportDocumentedModule([string]$manifestPath) {
     [guid]::NewGuid().ToString('N')
   $aliasImportFilter = '__PowerForgeDocumentationCollector_' +
     [guid]::NewGuid().ToString('N')
-  return Import-Module -Name $manifestPath -Force -PassThru -Scope Global `
+  return Microsoft.PowerShell.Core\Import-Module -Name $manifestPath -Force -PassThru -Scope Global `
     -Function '*' -Cmdlet '*' -Alias $aliasImportFilter -Variable $variableImportFilter `
     -ErrorAction Stop
 }
@@ -102,15 +102,15 @@ function NewCollectorProtocol([System.Management.Automation.PSModuleInfo]$helper
     ConvertToRuntimeDefaultValue = $helperModule.ExportedFunctions['ConvertToRuntimeDefaultValue']
     ConvertToUtf16CodeUnits = $helperModule.ExportedFunctions['ConvertToUtf16CodeUnits']
     ConvertToUtf8SafeJsonText = $helperModule.ExportedFunctions['ConvertToUtf8SafeJsonText']
-    EmitError = (Get-Command EmitError -CommandType Function).ScriptBlock
+    EmitError = (Microsoft.PowerShell.Core\Get-Command EmitError -CommandType Function).ScriptBlock
     GetCanonicalTypeNameFromType = $helperModule.ExportedFunctions['GetCanonicalTypeNameFromType']
-    GetDocumentedModuleCommands = (Get-Command GetDocumentedModuleCommands -CommandType Function).ScriptBlock
+    GetDocumentedModuleCommands = (Microsoft.PowerShell.Core\Get-Command GetDocumentedModuleCommands -CommandType Function).ScriptBlock
     GetOutputTypeSnapshot = $helperModule.ExportedFunctions['GetOutputTypeSnapshot']
     GetText = $helperModule.ExportedFunctions['GetText']
     HelperFunctionNames = GetCollectorHelperFunctionNames
-    ImportDocumentedModule = (Get-Command ImportDocumentedModule -CommandType Function).ScriptBlock
-    NewModuleSnapshot = (Get-Command NewDocumentationModuleSnapshot -CommandType Function).ScriptBlock
-    RemoveHelperAliases = (Get-Command RemoveCollectorHelperAliases -CommandType Function).ScriptBlock
+    ImportDocumentedModule = (Microsoft.PowerShell.Core\Get-Command ImportDocumentedModule -CommandType Function).ScriptBlock
+    NewModuleSnapshot = (Microsoft.PowerShell.Core\Get-Command NewDocumentationModuleSnapshot -CommandType Function).ScriptBlock
+    RemoveHelperAliases = (Microsoft.PowerShell.Core\Get-Command RemoveCollectorHelperAliases -CommandType Function).ScriptBlock
     ResolveCanonicalTypeName = $helperModule.ExportedFunctions['ResolveCanonicalTypeName']
     TestValidateSetCaseSensitive = $helperModule.ExportedFunctions['TestValidateSetCaseSensitive']
     TestPSDefaultValueContainsAutomationNull = $helperModule.ExportedFunctions['TestPSDefaultValueContainsAutomationNull']
@@ -122,10 +122,10 @@ function RemoveCollectorHelperAliases(
   [string[]]$helperNames
 ) {
   foreach ($helperName in $helperNames) {
-    $alias = Get-Command -Name $helperName -CommandType Alias -ErrorAction SilentlyContinue
+    $alias = Microsoft.PowerShell.Core\Get-Command -Name $helperName -CommandType Alias -ErrorAction SilentlyContinue
     if ($null -ne $alias -and
         ($alias.ModuleName -eq $targetModuleName -or $alias.Source -eq $targetModuleName)) {
-      Remove-Item -LiteralPath ('Alias:' + $helperName) -Force
+      Microsoft.PowerShell.Management\Remove-Item -LiteralPath ('Alias:' + $helperName) -Force
     }
   }
 }

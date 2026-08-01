@@ -20,7 +20,7 @@ function AddRuntimeDefaultValueTokens(
     $referenceStack = [System.Collections.ArrayList]::new()
   }
   if ($null -eq $value) {
-    $tokens.Add([ordered]@{ kind = 'Null' }) | Out-Null
+    $tokens.Add([ordered]@{ kind = 'Null' }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   AddRuntimeDefaultValueReference $value $referenceStack
@@ -30,25 +30,25 @@ function AddRuntimeDefaultValueTokens(
       text = ConvertToUtf16CodeUnits ([string]$value)
       isInterned = [object]::ReferenceEquals(
         $value, [string]::IsInterned([string]$value))
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if ($value -is [char]) {
     $tokens.Add([ordered]@{
       kind = 'CharCodeUnit'
       text = ([int][char]$value).ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if ($value -is [bool]) {
-    $tokens.Add([ordered]@{ kind = 'Boolean'; text = [string]$value }) | Out-Null
+    $tokens.Add([ordered]@{ kind = 'Boolean'; text = [string]$value }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if (TestExactRuntimeValueType $value ([System.Management.Automation.SwitchParameter])) {
     $tokens.Add([ordered]@{
       kind = 'SwitchParameter'
       text = if ($value.IsPresent) { 'True' } else { 'False' }
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if ($value -is [enum]) {
@@ -67,7 +67,7 @@ function AddRuntimeDefaultValueTokens(
       runtimeTypeNameCodeUnits = ConvertToUtf16CodeUnits ([string]$enumType.FullName)
       assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$enumType.Assembly.FullName)
       runtimeTypeShape = GetRuntimeTypeShape $enumType
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if ($value -is [type]) {
@@ -84,7 +84,7 @@ function AddRuntimeDefaultValueTokens(
       text = ConvertToUtf16CodeUnits ([string]$runtimeIdentityType.FullName)
       assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$runtimeIdentityType.Assembly.FullName)
       runtimeTypeShape = GetRuntimeTypeShape $value
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if (AddRuntimeNumericDefaultValueToken $value $tokens) { return }
@@ -92,21 +92,21 @@ function AddRuntimeDefaultValueTokens(
     $tokens.Add([ordered]@{
       kind = 'BigInteger'
       text = $value.ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if ($value -is [guid]) {
     $tokens.Add([ordered]@{
       kind = 'Guid'
       text = $value.ToString('D')
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if ($value -is [version]) {
     $tokens.Add([ordered]@{
       kind = 'Version'
       text = $value.ToString()
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if (TestExactRuntimeValueType $value ([uri])) {
@@ -119,21 +119,21 @@ function AddRuntimeDefaultValueTokens(
       kind = 'UriCodeUnits'
       text = ConvertToUtf16CodeUnits $value.OriginalString
       name = $uriKind
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if (TestExactRuntimeValueType $value (GetCoreRuntimeType 'System.DateOnly')) {
     $tokens.Add([ordered]@{
       kind = 'DateOnly'
       text = $value.DayNumber.ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if (TestExactRuntimeValueType $value (GetCoreRuntimeType 'System.TimeOnly')) {
     $tokens.Add([ordered]@{
       kind = 'TimeOnly'
       text = $value.Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if ($value -is [datetime]) {
@@ -145,21 +145,21 @@ function AddRuntimeDefaultValueTokens(
       kind = 'DateTime'
       text = $value.Ticks.ToString([System.Globalization.CultureInfo]::InvariantCulture)
       name = [string]$value.Kind
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if ($value -is [datetimeoffset]) {
     $tokens.Add([ordered]@{
       kind = 'DateTimeOffset'
       text = $value.ToString('O', [System.Globalization.CultureInfo]::InvariantCulture)
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if ($value -is [timespan]) {
     $tokens.Add([ordered]@{
       kind = 'TimeSpan'
       text = $value.ToString('c', [System.Globalization.CultureInfo]::InvariantCulture)
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if ($value -is [scriptblock]) {
@@ -169,7 +169,7 @@ function AddRuntimeDefaultValueTokens(
     $tokens.Add([ordered]@{
       kind = 'ScriptBlockCodeUnits'
       text = ConvertToUtf16CodeUnits ([string]$value.ToString())
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   if ($value -is [System.Collections.IDictionary] -or
@@ -191,14 +191,14 @@ function AddRuntimeDefaultValueTokens(
           runtimeTypeNameCodeUnits = ConvertToUtf16CodeUnits ([string]$value.GetType().FullName)
           assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$value.GetType().Assembly.FullName)
           runtimeTypeShape = GetRuntimeTypeShape ($value.GetType())
-        }) | Out-Null
+        }) | Microsoft.PowerShell.Core\Out-Null
         foreach ($entry in $value.GetEnumerator()) {
-          $tokens.Add([ordered]@{ kind = 'DictionaryEntryStart' }) | Out-Null
+          $tokens.Add([ordered]@{ kind = 'DictionaryEntryStart' }) | Microsoft.PowerShell.Core\Out-Null
           AddRuntimeDefaultValueTokens $entry.Key $tokens $referenceStack
           AddRuntimeDefaultValueTokens $entry.Value $tokens $referenceStack
-          $tokens.Add([ordered]@{ kind = 'DictionaryEntryEnd' }) | Out-Null
+          $tokens.Add([ordered]@{ kind = 'DictionaryEntryEnd' }) | Microsoft.PowerShell.Core\Out-Null
         }
-        $tokens.Add([ordered]@{ kind = 'DictionaryEnd' }) | Out-Null
+        $tokens.Add([ordered]@{ kind = 'DictionaryEnd' }) | Microsoft.PowerShell.Core\Out-Null
         return
       }
       if ($value -isnot [System.Collections.IList] -and $value -isnot [System.Array]) {
@@ -222,11 +222,11 @@ function AddRuntimeDefaultValueTokens(
           runtimeTypeNameCodeUnits = ConvertToUtf16CodeUnits ([string]$runtimeElementType.FullName)
           assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$runtimeElementType.Assembly.FullName)
           runtimeTypeShape = GetRuntimeTypeShape $elementType
-        }) | Out-Null
+        }) | Microsoft.PowerShell.Core\Out-Null
         foreach ($item in $value) {
           AddRuntimeDefaultValueTokens $item $tokens $referenceStack
         }
-        $tokens.Add([ordered]@{ kind = 'ArrayEnd' }) | Out-Null
+        $tokens.Add([ordered]@{ kind = 'ArrayEnd' }) | Microsoft.PowerShell.Core\Out-Null
         return
       }
       $collectionType = $value.GetType()
@@ -264,11 +264,11 @@ function AddRuntimeDefaultValueTokens(
         assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$runtimeConstructionType.Assembly.FullName)
         runtimeTypeShape = GetRuntimeTypeShape $(if ($null -ne $elementType) { $elementType } else { $collectionType })
         name = if ($value -is [System.Array]) { 'Array' } else { 'List' }
-      }) | Out-Null
+      }) | Microsoft.PowerShell.Core\Out-Null
       foreach ($item in $value) {
         AddRuntimeDefaultValueTokens $item $tokens $referenceStack
       }
-      $tokens.Add([ordered]@{ kind = 'CollectionEnd' }) | Out-Null
+      $tokens.Add([ordered]@{ kind = 'CollectionEnd' }) | Microsoft.PowerShell.Core\Out-Null
       return
   }
   $runtimeType = $value.GetType()
@@ -301,12 +301,12 @@ function AddRuntimeDefaultValueTokens(
       kind = 'Formattable'
       text = $scalarText
       canonicalTypeName = GetCanonicalTypeNameFromType ($value.GetType())
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return
   }
   throw ('Unsupported PSDefaultValue runtime type: ' + $runtimeType.FullName)
 }
-Export-ModuleMember -Function @(
+Microsoft.PowerShell.Core\Export-ModuleMember -Function @(
   'ConvertToRuntimeDefaultValue', 'ConvertToUtf16CodeUnits', 'ConvertToUtf8SafeJsonText',
   'GetCanonicalTypeNameFromType', 'GetOutputTypeSnapshot', 'GetText', 'ResolveCanonicalTypeName', 'TestPSDefaultValueContainsAutomationNull', 'TestValidateSetCaseSensitive')
 }
@@ -317,7 +317,7 @@ try {
   }
 
   $m = $null
-  try { $m = Import-PowerShellDataFile -Path $ManifestPath -ErrorAction Stop } catch { $m = $null }
+  try { $m = Microsoft.PowerShell.Utility\Import-PowerShellDataFile -Path $ManifestPath -ErrorAction Stop } catch { $m = $null }
 
   $mod = & $collectorProtocol.ImportDocumentedModule $ManifestPath
   $moduleNameResolved = $mod.Name

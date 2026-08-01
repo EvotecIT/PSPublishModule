@@ -243,7 +243,7 @@ function GetAutomationNullDictionaryEntryPredicate([bool]$key) {
   $predicateName = if ($key) { 'PowerForgeAutomationNullDictionaryKeyPredicate' } else {
     'PowerForgeAutomationNullDictionaryValuePredicate'
   }
-  $predicate = Get-Variable -Scope Script -Name $predicateName -ValueOnly -ErrorAction SilentlyContinue
+  $predicate = Microsoft.PowerShell.Utility\Get-Variable -Scope Script -Name $predicateName -ValueOnly -ErrorAction SilentlyContinue
   if ($null -eq $predicate) {
     $sentinelProperty = GetAutomationNullValueProperty
     if ($null -eq $sentinelProperty) { return $null }
@@ -257,7 +257,7 @@ function GetAutomationNullDictionaryEntryPredicate([bool]$key) {
     $predicate = [System.Linq.Expressions.Expression]::Lambda(
       $delegateType, $body,
       [System.Linq.Expressions.ParameterExpression[]]@($entryParameter)).Compile()
-    Set-Variable -Scope Script -Name $predicateName -Value $predicate
+    Microsoft.PowerShell.Utility\Set-Variable -Scope Script -Name $predicateName -Value $predicate
   }
   return $predicate
 }
@@ -336,6 +336,15 @@ function TestPSDefaultValueContainsAutomationNull(
 function GetCollectionCapacity([object]$value) {
   $collectionType = $value.GetType()
   if ([object]::ReferenceEquals($collectionType, [System.Collections.ArrayList])) {
+    $flags = [System.Reflection.BindingFlags]'Instance,NonPublic'
+    $versionField = $collectionType.GetField('_version', $flags)
+    if ($null -eq $versionField) { $versionField = $collectionType.GetField('version', $flags) }
+    if ($null -eq $versionField) {
+      throw 'ArrayList serialization version is unavailable.'
+    }
+    if ([int]$versionField.GetValue($value) -ne $value.Count) {
+      throw 'ArrayList defaults with non-reconstructible serialization versions are not supported.'
+    }
     return [int]$value.Capacity
   }
   if ($collectionType.IsGenericType -and
@@ -404,12 +413,12 @@ function AddRuntimeNumericDefaultValueToken(
       $tokens.Add([ordered]@{
         kind = 'DoubleBits'
         text = [System.BitConverter]::DoubleToInt64Bits($value).ToString([System.Globalization.CultureInfo]::InvariantCulture)
-      }) | Out-Null
+      }) | Microsoft.PowerShell.Core\Out-Null
       return $true
     }
     $text = $value.ToString('G17', [System.Globalization.CultureInfo]::InvariantCulture)
     if ($value -eq 0 -and [System.BitConverter]::DoubleToInt64Bits($value) -lt 0) { $text = '-0' }
-    $tokens.Add([ordered]@{ kind = 'Double'; text = $text }) | Out-Null
+    $tokens.Add([ordered]@{ kind = 'Double'; text = $text }) | Microsoft.PowerShell.Core\Out-Null
     return $true
   }
   if ($value -is [single]) {
@@ -419,7 +428,7 @@ function AddRuntimeNumericDefaultValueToken(
         text = [System.BitConverter]::ToInt32(
           [System.BitConverter]::GetBytes([single]$value), 0).ToString(
             [System.Globalization.CultureInfo]::InvariantCulture)
-      }) | Out-Null
+      }) | Microsoft.PowerShell.Core\Out-Null
       return $true
     }
     $text = $value.ToString('G9', [System.Globalization.CultureInfo]::InvariantCulture)
@@ -427,17 +436,17 @@ function AddRuntimeNumericDefaultValueToken(
       $bits = [System.BitConverter]::ToInt32([System.BitConverter]::GetBytes([single]$value), 0)
       if ($bits -lt 0) { $text = '-0' }
     }
-    $tokens.Add([ordered]@{ kind = 'Single'; text = $text }) | Out-Null
+    $tokens.Add([ordered]@{ kind = 'Single'; text = $text }) | Microsoft.PowerShell.Core\Out-Null
     return $true
   }
   if ($value -is [decimal]) {
     $bits = [System.Decimal]::GetBits($value)
     $tokens.Add([ordered]@{
       kind = 'DecimalBits'
-      text = ($bits | ForEach-Object {
+      text = ($bits | Microsoft.PowerShell.Core\ForEach-Object {
         $_.ToString([System.Globalization.CultureInfo]::InvariantCulture)
       }) -join ','
-    }) | Out-Null
+    }) | Microsoft.PowerShell.Core\Out-Null
     return $true
   }
   return $false
