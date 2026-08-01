@@ -440,6 +440,7 @@ internal static class PowerShellDefaultValueFormatter
         private readonly string _assemblyName;
         private readonly string? _runtimeTypeShape;
         private readonly bool _isArray;
+        private readonly bool _isArrayEmpty;
         private readonly List<string> _items = new();
 
         public CollectionTokenFrame(
@@ -454,7 +455,8 @@ internal static class PowerShellDefaultValueFormatter
             if (string.IsNullOrWhiteSpace(collectionTypeName))
                 throw new FormatException("The runtime default token stream is missing a constructible collection type.");
             _collectionTypeName = collectionTypeName!.Trim();
-            _isArray = string.Equals(collectionKind, "Array", StringComparison.Ordinal);
+            _isArrayEmpty = string.Equals(collectionKind, "ArrayEmpty", StringComparison.Ordinal);
+            _isArray = _isArrayEmpty || string.Equals(collectionKind, "Array", StringComparison.Ordinal);
             _elementTypeName = elementTypeName ??
                                (_isArray && _collectionTypeName.EndsWith("[]", StringComparison.Ordinal)
                                    ? _collectionTypeName.Substring(0, _collectionTypeName.Length - 2)
@@ -494,6 +496,15 @@ internal static class PowerShellDefaultValueFormatter
                     _runtimeTypeName,
                     _assemblyName,
                     _runtimeTypeShape);
+                if (_isArrayEmpty)
+                {
+                    if (_items.Count != 0)
+                        throw new FormatException("The Array.Empty token contains unexpected elements.");
+                    if (elementExpression.Length == 0)
+                        throw new FormatException("The runtime default token stream contains an unresolved Array.Empty element type.");
+                    return "& { return ,([System.Array].GetMethod('Empty').MakeGenericMethod((" +
+                           elementExpression + ")).Invoke($null, [object[]]@())) }";
+                }
                 if (IsTypeLiteralExpression(elementExpression))
                 {
                     statements.Add("$collection = [" + _collectionTypeName + "]::new(" +

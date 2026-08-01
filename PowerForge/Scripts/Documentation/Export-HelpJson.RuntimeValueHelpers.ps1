@@ -51,12 +51,39 @@ function AddRuntimeDefaultValueReference(
   if ($null -eq $value -or $value -is [type]) {
     return
   }
+  if ($value -is [string] -and
+      [object]::ReferenceEquals($value, [string]::IsInterned([string]$value))) {
+    return
+  }
+  if ($value -is [System.Array] -and (TestPublicEmptyArraySingleton $value)) {
+    return
+  }
   foreach ($seenReference in $references) {
     if ([object]::ReferenceEquals($seenReference, $value)) {
       throw 'Repeated or circular default-value object references are not supported.'
     }
   }
   [void]$references.Add($value)
+}
+
+function TestPublicEmptyArraySingleton([System.Array]$value) {
+  if ($null -eq $value -or $value.Rank -ne 1 -or $value.GetLowerBound(0) -ne 0 -or $value.Length -ne 0) {
+    return $false
+  }
+
+  $emptyMethod = $null
+  foreach ($candidate in [System.Array].GetMethods(
+      [System.Reflection.BindingFlags]'Public,Static')) {
+    if ($candidate.Name -ceq 'Empty' -and $candidate.IsGenericMethodDefinition -and
+        $candidate.GetGenericArguments().Length -eq 1 -and $candidate.GetParameters().Length -eq 0) {
+      $emptyMethod = $candidate
+      break
+    }
+  }
+  if ($null -eq $emptyMethod) { return $false }
+  $singleton = $emptyMethod.MakeGenericMethod($value.GetType().GetElementType()).Invoke(
+    $null, [object[]]@())
+  return [object]::ReferenceEquals($value, $singleton)
 }
 
 function TestValidateSetCaseSensitive(

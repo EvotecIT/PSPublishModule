@@ -266,7 +266,7 @@ function AddRuntimeDefaultValueTokens(
         runtimeTypeNameCodeUnits = ConvertToUtf16CodeUnits ([string]$runtimeConstructionType.FullName)
         assemblyNameCodeUnits = ConvertToUtf16CodeUnits ([string]$runtimeConstructionType.Assembly.FullName)
         runtimeTypeShape = GetRuntimeTypeShape $(if ($null -ne $elementType) { $elementType } else { $collectionType })
-        name = if ($value -is [System.Array]) { 'Array' } else { 'List' }
+        name = if ($value -isnot [System.Array]) { 'List' } elseif (TestPublicEmptyArraySingleton $value) { 'ArrayEmpty' } else { 'Array' }
       }) | Microsoft.PowerShell.Core\Out-Null
       foreach ($item in $value) {
         AddRuntimeDefaultValueTokens $item $tokens $referenceStack

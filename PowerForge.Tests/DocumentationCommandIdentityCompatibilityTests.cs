@@ -182,7 +182,8 @@ public sealed class DocumentationCommandIdentityCompatibilityTests
                         new DocumentationSyntaxHelp { Name = invalid, Text = "Get-Test -Value <string>" },
                         new DocumentationSyntaxHelp { Name = literal, Text = "Get-Test -Value <string>" },
                         new DocumentationSyntaxHelp { Name = " A ", Text = "Get-Test -Value <string>" },
-                        new DocumentationSyntaxHelp { Name = "A", Text = "Get-Test -Value <string>" }
+                        new DocumentationSyntaxHelp { Name = "A", Text = "Get-Test -Value <string>" },
+                        new DocumentationSyntaxHelp { Name = "' A '", Text = "Get-Test -Value <string>" }
                     ],
                     Parameters =
                     [
@@ -190,13 +191,14 @@ public sealed class DocumentationCommandIdentityCompatibilityTests
                         {
                             Name = "Value",
                             Type = "String",
-                            ParameterSets = [invalid, literal, " A ", "A"],
+                            ParameterSets = [invalid, literal, " A ", "A", "' A '"],
                             ParameterSetRequired = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
                             {
                                 [invalid] = true,
                                 [literal] = false,
                                 [" A "] = true,
-                                ["A"] = false
+                                ["A"] = false,
+                                ["' A '"] = false
                             }
                         }
                     ]
@@ -208,17 +210,22 @@ public sealed class DocumentationCommandIdentityCompatibilityTests
         var command = payload.Commands[0];
         Assert.Equal("S%uD800 [encoded 1]", command.DefaultParameterSet);
         Assert.Equal(
-            ["S%uD800 [encoded 1]", "S%uD800", " A ", "A"],
+            ["S%uD800 [encoded 1]", "S%uD800", " A ", "A", "' A '"],
             command.Syntax.Select(item => item.Name).ToArray());
         Assert.Equal(
-            ["S%uD800 [encoded 1]", "S%uD800", " A ", "A"],
+            ["S%uD800 [encoded 1]", "S%uD800", " A ", "A", "' A '"],
             command.Parameters[0].ParameterSets);
-        Assert.Equal(4, command.Parameters[0].ParameterSetRequired.Count);
+        Assert.Equal(5, command.Parameters[0].ParameterSetRequired.Count);
 
         var root = Path.Combine(Path.GetTempPath(), "pf-doc-parameter-set-identity-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
+            new MarkdownHelpWriter().WriteCommandHelpFiles(payload, payload.ModuleName, root);
+            Assert.Contains(
+                "Parameter Sets: S%uD800 [encoded 1], S%uD800, ' A ' [encoded 1], A, ' A '",
+                File.ReadAllText(Path.Combine(root, "Get-Test.md")),
+                StringComparison.Ordinal);
             var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, payload.ModuleName, root);
             var setNames = XDocument.Load(mamlPath)
                 .Descendants()
@@ -228,7 +235,7 @@ public sealed class DocumentationCommandIdentityCompatibilityTests
                 .Select(attribute => attribute!.Value)
                 .ToArray();
             Assert.Equal(
-                ["S%uD800 [encoded 1]", "S%uD800", " A ", "A"],
+                ["S%uD800 [encoded 1]", "S%uD800", " A ", "A", "' A '"],
                 setNames);
         }
         finally
