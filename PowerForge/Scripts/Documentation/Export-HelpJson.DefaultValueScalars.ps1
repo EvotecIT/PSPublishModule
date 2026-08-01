@@ -153,9 +153,10 @@ function TestPSDefaultValueContainsAutomationNull(
         if ($arrayPredicate.Invoke($current, $indices)) { return $true }
         [void]$children.Add($current.GetValue($indices))
         for ($dimension = $current.Rank - 1; $dimension -ge 0; $dimension--) {
-          $indices[$dimension]++
-          if ($indices[$dimension] -lt
-              ($current.GetLowerBound($dimension) + $current.GetLength($dimension))) { break }
+          if ($indices[$dimension] -lt $current.GetUpperBound($dimension)) {
+            $indices[$dimension]++
+            break
+          }
           $indices[$dimension] = $current.GetLowerBound($dimension)
         }
       }

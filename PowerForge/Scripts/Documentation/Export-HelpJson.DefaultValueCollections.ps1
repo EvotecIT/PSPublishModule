@@ -29,9 +29,10 @@ function ConvertMultidimensionalArrayToPowerShellDefaultValue(
     $itemExpression = ConvertToPowerShellDefaultValue ($value.GetValue($indices)) $referenceStack
     $statements.Add('$array.SetValue((' + $itemExpression + '), [int[]]@(' + $indexText + '))')
     for ($dimension = $rank - 1; $dimension -ge 0; $dimension--) {
-      $indices[$dimension]++
-      if ($indices[$dimension] -lt
-          ($value.GetLowerBound($dimension) + $value.GetLength($dimension))) { break }
+      if ($indices[$dimension] -lt $value.GetUpperBound($dimension)) {
+        $indices[$dimension]++
+        break
+      }
       $indices[$dimension] = $value.GetLowerBound($dimension)
     }
   }
