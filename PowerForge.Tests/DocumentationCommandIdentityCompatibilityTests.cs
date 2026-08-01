@@ -102,6 +102,14 @@ public sealed class DocumentationCommandIdentityCompatibilityTests
                 {
                     Name = "Get-Valid",
                     CommandType = "Function",
+                    Syntax =
+                    [
+                        new DocumentationSyntaxHelp
+                        {
+                            Name = "Default",
+                            Text = "Get-Valid [-P" + invalid + " <string>] [-P%uD800 <string>] [-P([char]55296) <string>]"
+                        }
+                    ],
                     Parameters =
                     [
                         new DocumentationParameterHelp
@@ -109,7 +117,8 @@ public sealed class DocumentationCommandIdentityCompatibilityTests
                             Name = "P" + invalid,
                             Aliases = ["Alias" + invalid, "Alias([char]55296)"]
                         },
-                        new DocumentationParameterHelp { Name = "P%uD800" }
+                        new DocumentationParameterHelp { Name = "P%uD800" },
+                        new DocumentationParameterHelp { Name = "P([char]55296)" }
                     ]
                 }
             ]
@@ -117,8 +126,28 @@ public sealed class DocumentationCommandIdentityCompatibilityTests
         DocumentationMetadataNormalizer.Normalize(payload);
         Assert.Equal("P%uD800 [encoded 1]", payload.Commands[0].Parameters[0].Name);
         Assert.Equal("P%uD800", payload.Commands[0].Parameters[1].Name);
+        Assert.Equal("P([char]55296)", payload.Commands[0].Parameters[2].Name);
         Assert.Equal("(-join @('Alias', ([char]55296)))", payload.Commands[0].Parameters[0].Aliases[0]);
         Assert.Equal("Alias([char]55296)", payload.Commands[0].Parameters[0].Aliases[1]);
+        Assert.Equal(
+            "Get-Valid [-P%uD800 [encoded 1] <string>] [-P%uD800 <string>] [-P([char]55296) <string>]",
+            payload.Commands[0].Syntax[0].Text);
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-doc-syntax-identity-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            new MarkdownHelpWriter().WriteCommandHelpFiles(payload, payload.ModuleName, root);
+            var markdown = File.ReadAllText(Path.Combine(root, "Get-Valid.md"));
+            Assert.Contains(
+                "Get-Valid [-P%uD800 [encoded 1] <string>] [-P%uD800 <string>] [-P([char]55296) <string>]",
+                markdown,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
 
         static void AssertInvalid(DocumentationCommandHelp command, string expected)
         {

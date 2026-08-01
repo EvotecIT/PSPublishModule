@@ -147,6 +147,7 @@ internal static class DocumentationMetadataNormalizer
                 .Select(parameter => parameter.Name ?? string.Empty),
             StringComparer.OrdinalIgnoreCase);
         var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parameterIdentityMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var parameter in parameters)
         {
             if (parameter is null) continue;
@@ -164,7 +165,33 @@ internal static class DocumentationMetadataNormalizer
                     usedNames);
             }
 
+            parameterIdentityMap[rawName] = parameter.Name;
+
             parameter.Aliases = NormalizeAliases(parameter.Aliases);
+        }
+
+        NormalizeSyntaxParameterIdentities(command.Syntax, parameterIdentityMap);
+    }
+
+    private static void NormalizeSyntaxParameterIdentities(
+        IEnumerable<DocumentationSyntaxHelp>? syntaxItems,
+        IReadOnlyDictionary<string, string> parameterIdentityMap)
+    {
+        var rawNames = parameterIdentityMap.Keys
+            .Where(name => name.Length > 0)
+            .OrderByDescending(name => name.Length)
+            .Select(Regex.Escape)
+            .ToArray();
+        if (rawNames.Length == 0) return;
+
+        var matcher = new Regex(
+            @"(?<prefix>^|[\s\[])-(?<name>" + string.Join("|", rawNames) + @")(?=$|[\s\]\[<>{}(),|:=])",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        foreach (var syntax in syntaxItems ?? Array.Empty<DocumentationSyntaxHelp>())
+        {
+            if (syntax is null || string.IsNullOrEmpty(syntax.Text)) continue;
+            syntax.Text = matcher.Replace(syntax.Text, match =>
+                match.Groups["prefix"].Value + "-" + parameterIdentityMap[match.Groups["name"].Value]);
         }
     }
 

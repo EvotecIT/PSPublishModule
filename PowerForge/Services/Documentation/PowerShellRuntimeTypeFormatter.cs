@@ -113,11 +113,11 @@ internal static class PowerShellRuntimeTypeFormatter
             return string.Empty;
         var formattedRuntimeTypeName = PowerShellDefaultValueFormatter.FormatString(runtimeTypeName, preserveCharacterType: false);
         return "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | " +
-               "Where-Object { $_.FullName -eq " + PowerShellDefaultValueFormatter.FormatString(assemblyName, preserveCharacterType: false) +
+               "Microsoft.PowerShell.Core\\Where-Object { $_.FullName -eq " + PowerShellDefaultValueFormatter.FormatString(assemblyName, preserveCharacterType: false) +
                " }; $matches = [System.Collections.Generic.List[type]]::new(); foreach ($candidateAssembly in @($assembly)) { " +
                "$type = $candidateAssembly.GetType(" + formattedRuntimeTypeName + ", $false, $false); " +
-               "if ($null -eq $type) { try { $type = $candidateAssembly.GetTypes() | Where-Object { $_.FullName -ceq " +
-               formattedRuntimeTypeName + " } | Select-Object -First 1 } catch { $type = $null } }; " +
+               "if ($null -eq $type) { try { $type = $candidateAssembly.GetTypes() | Microsoft.PowerShell.Core\\Where-Object { $_.FullName -ceq " +
+               formattedRuntimeTypeName + " } | Microsoft.PowerShell.Utility\\Select-Object -First 1 } catch { $type = $null } }; " +
                "if ($null -ne $type) { $matches.Add($type) } }; if ($matches.Count -ne 1) { " +
                "throw 'Type identity is unavailable or ambiguous across loaded assemblies.' }; return $matches[0] }";
     }
