@@ -588,8 +588,6 @@ try {
       }
     }
 
-    $parameters = @(ConvertParametersToXmlSafeDocumentationText @($parameters))
-
     $helpExamples = @()
     try {
       if ($help -and $help.Examples -and $help.Examples.Example) { $helpExamples = @($help.Examples.Example) }
