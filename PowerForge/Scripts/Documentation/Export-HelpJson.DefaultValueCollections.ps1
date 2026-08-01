@@ -89,6 +89,15 @@ function TestCollectionHasItemOnlyBackingStore(
 function GetCollectionCapacity([object]$value) {
   $collectionType = $value.GetType()
   if ($collectionType -eq [System.Collections.ArrayList]) {
+    $flags = [System.Reflection.BindingFlags]'Instance,NonPublic'
+    $versionField = $collectionType.GetField('_version', $flags)
+    if ($null -eq $versionField) { $versionField = $collectionType.GetField('version', $flags) }
+    if ($null -eq $versionField) {
+      throw 'ArrayList serialization version is unavailable.'
+    }
+    if ([int]$versionField.GetValue($value) -ne $value.Count) {
+      throw 'ArrayList defaults with non-reconstructible serialization versions are not supported.'
+    }
     return [int]$value.Capacity
   }
   if ($collectionType.IsGenericType -and

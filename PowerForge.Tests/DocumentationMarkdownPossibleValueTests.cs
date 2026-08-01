@@ -24,7 +24,7 @@ public sealed class DocumentationMarkdownPossibleValueTests
                             {
                                 Name = "Value",
                                 Type = "String",
-                                PossibleValues = new List<string> { string.Empty }
+                                PossibleValues = new List<string> { string.Empty, "''" }
                             }
                         }
                     }
@@ -33,7 +33,7 @@ public sealed class DocumentationMarkdownPossibleValueTests
 
             new MarkdownHelpWriter().WriteCommandHelpFiles(payload, payload.ModuleName, root);
             var markdown = File.ReadAllText(Path.Combine(root, "Get-EmptyValidateSetFixture.md"));
-            Assert.Contains("Possible values: ''", markdown, StringComparison.Ordinal);
+            Assert.Contains("Possible values: '', ''''''", markdown, StringComparison.Ordinal);
         }
         finally
         {

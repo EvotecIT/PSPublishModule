@@ -343,12 +343,23 @@ internal sealed class MarkdownHelpWriter
 
     private static string FormatPossibleValues(DocumentationParameterHelp p)
     {
+        var used = new HashSet<string>(StringComparer.Ordinal);
         var values = (p.PossibleValues ?? Enumerable.Empty<string>())
             .Where(value => value is not null)
-            .Select(value => value.Length > 0 && value.Length == value.Trim().Length
-                ? value
-                : "'" + value.Replace("'", "''") + "'")
             .Distinct(StringComparer.Ordinal)
+            .Select(value =>
+            {
+                var display = value.Length > 0 && value.Length == value.Trim().Length
+                    ? value
+                    : "'" + value.Replace("'", "''") + "'";
+                if (used.Add(display)) return display;
+
+                var encoded = "'" + value.Replace("'", "''") + "'";
+                var suffix = 1;
+                while (!used.Add(encoded))
+                    encoded = "'" + value.Replace("'", "''") + "' [encoded " + suffix++ + "]";
+                return encoded;
+            })
             .ToArray();
 
         return values.Length == 0 ? string.Empty : string.Join(", ", values);

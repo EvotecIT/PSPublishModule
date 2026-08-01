@@ -280,6 +280,10 @@ $script:reservedList = [System.Collections.Generic.List[int]]::new(100)
 $script:reservedList.Add(1)
 $script:reservedArrayList = [System.Collections.ArrayList]::new(100)
 [void]$script:reservedArrayList.Add(1)
+$script:mutatedArrayList = [System.Collections.ArrayList]::new(100)
+[void]$script:mutatedArrayList.Add(1)
+$script:mutatedArrayList.RemoveAt(0)
+[void]$script:mutatedArrayList.Add(1)
 $script:invariantDictionary = [System.Collections.Generic.Dictionary[string,int]]::new(
     [System.StringComparer]::Create([System.Globalization.CultureInfo]::InvariantCulture, $true))
 $script:invariantDictionary.Add('alpha', 1)
@@ -326,6 +330,7 @@ function Get-RuntimeIdentityFixture {
             @('ItemOnlyCollection', $script:itemOnlyCollection),
             @('ReservedList', $script:reservedList),
             @('ReservedArrayList', $script:reservedArrayList),
+            @('MutatedArrayList', $script:mutatedArrayList),
             @('InvariantDictionary', $script:invariantDictionary),
             @('ShapeSpoofingDictionary', $script:shapeSpoofingDictionary),
             @('ReservedSortedList', $script:reservedSortedList),
@@ -402,6 +407,7 @@ if ($sortedList.GetType() -ne [System.Collections.Generic.SortedList[string,int]
                 Assert.True(string.IsNullOrEmpty(Default("UnorderedHashtable")));
                 Assert.True(string.IsNullOrEmpty(Default("StatefulCollection")));
                 Assert.True(string.IsNullOrEmpty(Default("ReservedBackingCollection")));
+                Assert.True(string.IsNullOrEmpty(Default("MutatedArrayList")));
                 Assert.True(string.IsNullOrEmpty(Default("DelegatedArrayType")));
                 Assert.True(string.IsNullOrEmpty(Default("DelegatedPointerType")));
                 Assert.True(string.IsNullOrEmpty(Default("DelegatedByRefType")));
