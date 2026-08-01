@@ -22,17 +22,26 @@ $surrogate = [string][char]0xD800
 $result = [ordered]@{
     moduleName = 'TransportFixture'
     moduleVersion = '1.0.0'
+    moduleDescription = $surrogate
     commands = @([ordered]@{
         name = 'Get-TransportFixture'
         commandType = 'Function'
+        synopsis = $surrogate
+        description = $surrogate
+        syntax = @([ordered]@{ name = $surrogate; isDefault = $true; text = $surrogate })
         parameters = @([ordered]@{
             name = 'Mode'
             type = 'String'
+            description = $surrogate
+            parameterSets = @($surrogate)
+            parameterSetRequired = @{ $surrogate = $true }
             aliases = @($surrogate)
             possibleValues = @($surrogate)
             enumPossibleValues = @()
             hasValidateSet = $true
         })
+        examples = @([ordered]@{ title = $surrogate; introduction = $surrogate; code = $surrogate; remarks = $surrogate })
+        inputs = @([ordered]@{ name = 'System.String'; description = $surrogate })
         outputs = @()
         authoredOutputs = @([ordered]@{
             name = 'System.String'
@@ -41,6 +50,8 @@ $result = [ordered]@{
             description = $surrogate
         })
         runtimeOutputs = @()
+        relatedLinks = @([ordered]@{ text = $surrogate; uri = $surrogate })
+        notes = @([ordered]@{ title = $surrogate; text = $surrogate })
     })
 }
 $json = ConvertToUtf8SafeJsonText ($result | ConvertTo-Json -Depth 20)
@@ -78,6 +89,14 @@ $json = ConvertToUtf8SafeJsonText ($result | ConvertTo-Json -Depth 20)
                 Assert.Equal("([char]55296)", Assert.Single(parameter.Aliases));
                 Assert.Equal("([char]55296)", Assert.Single(parameter.PossibleValues));
                 Assert.Equal("([char]55296)", Assert.Single(command.Outputs).Description);
+                Assert.Equal("([char]55296)", payload.ModuleDescription);
+                Assert.Equal("([char]55296)", command.Synopsis);
+                Assert.Equal("([char]55296)", command.Description);
+                Assert.Equal("([char]55296)", parameter.Description);
+                Assert.Equal("([char]55296)", Assert.Single(command.Examples).Code);
+                Assert.Equal("([char]55296)", Assert.Single(command.Inputs).Description);
+                Assert.Equal("([char]55296)", Assert.Single(command.RelatedLinks).Text);
+                Assert.Equal("([char]55296)", Assert.Single(command.Notes).Text);
 
                 var hostOutput = Path.Combine(root, host.Replace('.', '-'));
                 var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, "TransportFixture", hostOutput);

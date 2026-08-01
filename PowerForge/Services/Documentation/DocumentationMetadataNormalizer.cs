@@ -27,7 +27,107 @@ internal static class DocumentationMetadataNormalizer
             NormalizeParameters(command);
             NormalizeOutputs(command);
         }
+
+        NormalizeXmlBoundText(payload);
     }
+
+    private static void NormalizeXmlBoundText(DocumentationExtractionPayload payload)
+    {
+        payload.ModuleName = Display(payload.ModuleName);
+        payload.ModuleVersion = DisplayNullable(payload.ModuleVersion);
+        payload.ModuleGuid = DisplayNullable(payload.ModuleGuid);
+        payload.ModuleDescription = DisplayNullable(payload.ModuleDescription);
+        payload.HelpInfoUri = DisplayNullable(payload.HelpInfoUri);
+        payload.ProjectUri = DisplayNullable(payload.ProjectUri);
+
+        foreach (var command in payload.Commands ?? new List<DocumentationCommandHelp>())
+        {
+            if (command is null) continue;
+            command.Name = Display(command.Name);
+            command.CommandType = Display(command.CommandType);
+            command.DefaultParameterSet = DisplayNullable(command.DefaultParameterSet);
+            command.Synopsis = Display(command.Synopsis);
+            command.Description = Display(command.Description);
+
+            foreach (var syntax in command.Syntax ?? new List<DocumentationSyntaxHelp>())
+            {
+                if (syntax is null) continue;
+                syntax.Name = Display(syntax.Name);
+                syntax.Text = Display(syntax.Text);
+            }
+
+            foreach (var parameter in command.Parameters ?? new List<DocumentationParameterHelp>())
+            {
+                if (parameter is null) continue;
+                parameter.Name = Display(parameter.Name);
+                parameter.Type = Display(parameter.Type);
+                parameter.Description = Display(parameter.Description);
+                parameter.ParameterSets = DisplayList(parameter.ParameterSets);
+                parameter.Aliases = DisplayList(parameter.Aliases);
+                parameter.PossibleValues = DisplayList(parameter.PossibleValues);
+                parameter.Position = Display(parameter.Position);
+                parameter.DefaultValue = Display(parameter.DefaultValue);
+                parameter.PipelineInput = Display(parameter.PipelineInput);
+
+                var requiredBySet = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                foreach (var entry in parameter.ParameterSetRequired ?? new Dictionary<string, bool>())
+                {
+                    var name = Display(entry.Key);
+                    requiredBySet[name] = entry.Value ||
+                        (requiredBySet.TryGetValue(name, out var required) && required);
+                }
+                parameter.ParameterSetRequired = requiredBySet;
+            }
+
+            foreach (var example in command.Examples ?? new List<DocumentationExampleHelp>())
+            {
+                if (example is null) continue;
+                example.Title = Display(example.Title);
+                example.Introduction = Display(example.Introduction);
+                example.Code = Display(example.Code);
+                example.Remarks = Display(example.Remarks);
+            }
+
+            NormalizeTypeText(command.Inputs);
+            NormalizeTypeText(command.Outputs);
+
+            foreach (var link in command.RelatedLinks ?? new List<DocumentationLinkHelp>())
+            {
+                if (link is null) continue;
+                link.Text = Display(link.Text);
+                link.Uri = Display(link.Uri);
+            }
+
+            foreach (var note in command.Notes ?? new List<DocumentationNoteHelp>())
+            {
+                if (note is null) continue;
+                note.Title = Display(note.Title);
+                note.Text = Display(note.Text);
+            }
+        }
+    }
+
+    private static void NormalizeTypeText(IEnumerable<DocumentationTypeHelp>? values)
+    {
+        foreach (var value in values ?? Array.Empty<DocumentationTypeHelp>())
+        {
+            if (value is null) continue;
+            value.Name = Display(value.Name);
+            value.ClrTypeName = Display(value.ClrTypeName);
+            value.CanonicalTypeName = Display(value.CanonicalTypeName);
+            value.RuntimeIdentity = string.Empty;
+            value.Description = Display(value.Description);
+        }
+    }
+
+    private static List<string> DisplayList(IEnumerable<string>? values)
+        => (values ?? Array.Empty<string>()).Select(Display).ToList();
+
+    private static string Display(string? value)
+        => PowerShellDefaultValueFormatter.FormatDisplayText(value ?? string.Empty);
+
+    private static string? DisplayNullable(string? value)
+        => value is null ? null : Display(value);
 
     private static void NormalizeParameters(DocumentationCommandHelp command)
     {
