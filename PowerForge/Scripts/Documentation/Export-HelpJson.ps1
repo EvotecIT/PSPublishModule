@@ -325,15 +325,7 @@ try {
 
   $commands = @(& $collectorProtocol.GetDocumentedModuleCommands $mod)
 
-  $result = [ordered]@{
-    moduleName = [string]$moduleNameResolved
-    moduleVersion = if ($m -and $m.ModuleVersion) { [string]$m.ModuleVersion } else { $null }
-    moduleGuid = if ($m -and $m.GUID) { [string]$m.GUID } else { $null }        
-    moduleDescription = if ($m -and $m.Description) { [string]$m.Description } else { $null }
-    helpInfoUri = if ($m -and $m.HelpInfoURI) { [string]$m.HelpInfoURI } else { $null }
-    projectUri = $(try { if ($m -and $m.PrivateData -and $m.PrivateData.PSData -and $m.PrivateData.PSData.ProjectUri) { [string]$m.PrivateData.PSData.ProjectUri } else { $null } } catch { $null })
-    commands = @()
-  }
+  $result = & $collectorProtocol.NewModuleSnapshot $m ([string]$moduleNameResolved)
 
   foreach ($c in $commands) {
     $help = $null

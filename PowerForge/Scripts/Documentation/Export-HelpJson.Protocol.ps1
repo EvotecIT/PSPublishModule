@@ -44,6 +44,7 @@ function GetCollectorHelperFunctionNames {
     'GetRuntimeTypeShape',
     'GetText',
     'ImportDocumentedModule',
+    'NewDocumentationModuleSnapshot',
     'RemoveCollectorHelperAliases',
     'ResolveCanonicalTypeName',
     'ResolveExactType',
@@ -80,6 +81,22 @@ function GetDocumentedModuleCommands([System.Management.Automation.PSModuleInfo]
     } | Microsoft.PowerShell.Utility\Sort-Object -Property Name
 }
 
+function NewDocumentationModuleSnapshot([object]$manifest, [string]$moduleName) {
+  return [ordered]@{
+    moduleName = $moduleName
+    moduleVersion = if ($manifest -and $manifest.ModuleVersion) { [string]$manifest.ModuleVersion } else { $null }
+    moduleGuid = if ($manifest -and $manifest.GUID) { [string]$manifest.GUID } else { $null }
+    moduleDescription = if ($manifest -and $manifest.Description) { [string]$manifest.Description } else { $null }
+    helpInfoUri = if ($manifest -and $manifest.HelpInfoURI) { [string]$manifest.HelpInfoURI } else { $null }
+    projectUri = $(try {
+      if ($manifest -and $manifest.PrivateData -and $manifest.PrivateData.PSData -and $manifest.PrivateData.PSData.ProjectUri) {
+        [string]$manifest.PrivateData.PSData.ProjectUri
+      } else { $null }
+    } catch { $null })
+    commands = @()
+  }
+}
+
 function NewCollectorProtocol([System.Management.Automation.PSModuleInfo]$helperModule) {
   return [pscustomobject]@{
     ConvertToRuntimeDefaultValue = $helperModule.ExportedFunctions['ConvertToRuntimeDefaultValue']
@@ -92,6 +109,7 @@ function NewCollectorProtocol([System.Management.Automation.PSModuleInfo]$helper
     GetText = $helperModule.ExportedFunctions['GetText']
     HelperFunctionNames = GetCollectorHelperFunctionNames
     ImportDocumentedModule = (Get-Command ImportDocumentedModule -CommandType Function).ScriptBlock
+    NewModuleSnapshot = (Get-Command NewDocumentationModuleSnapshot -CommandType Function).ScriptBlock
     RemoveHelperAliases = (Get-Command RemoveCollectorHelperAliases -CommandType Function).ScriptBlock
     ResolveCanonicalTypeName = $helperModule.ExportedFunctions['ResolveCanonicalTypeName']
     TestValidateSetCaseSensitive = $helperModule.ExportedFunctions['TestValidateSetCaseSensitive']
