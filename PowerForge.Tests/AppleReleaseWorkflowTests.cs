@@ -518,6 +518,38 @@ public sealed partial class AppleReleaseWorkflowTests
     }
 
     [Fact]
+    public void AppleEnvironmentCredentialsRemainOptionalAtTheWorkflowCallBoundary()
+    {
+        var root = FindRepoRoot();
+        foreach (var workflowName in new[]
+                 {
+                     "powerforge-apple-screenshots.yml",
+                     "powerforge-apple-screenshot-approve.yml",
+                     "powerforge-apple-monitor.yml",
+                     "powerforge-apple-version-pr.yml",
+                     "powerforge-apple-advance.yml",
+                     "powerforge-apple-governance.yml",
+                     "powerforge-apple-approval.yml"
+                 })
+        {
+            var workflow = Read(root, ".github", "workflows", workflowName)
+                .Replace("\r\n", "\n", StringComparison.Ordinal);
+            foreach (var secretName in new[]
+                     {
+                         "app_store_connect_issuer_id",
+                         "app_store_connect_key_id",
+                         "app_store_connect_private_key"
+                     })
+            {
+                Assert.Contains(
+                    $"      {secretName}:\n        required: false",
+                    workflow,
+                    StringComparison.Ordinal);
+            }
+        }
+    }
+
+    [Fact]
     public void AppleWorkflowRunScriptsDoNotInlineCallerControlledInputs()
     {
         var root = FindRepoRoot();
@@ -527,7 +559,9 @@ public sealed partial class AppleReleaseWorkflowTests
                      "powerforge-apple-screenshot-capture.yml",
                      "powerforge-apple-screenshot-approve.yml",
                      "powerforge-apple-monitor.yml",
+                     "powerforge-apple-version-pr.yml",
                      "powerforge-apple-advance.yml",
+                     "powerforge-apple-governance.yml",
                      "powerforge-apple-approval.yml",
                      "pspublishmodule-public-release.yml"
                  })
@@ -550,7 +584,9 @@ public sealed partial class AppleReleaseWorkflowTests
                      "powerforge-apple-screenshot-capture.yml",
                      "powerforge-apple-screenshot-approve.yml",
                      "powerforge-apple-monitor.yml",
+                     "powerforge-apple-version-pr.yml",
                      "powerforge-apple-advance.yml",
+                     "powerforge-apple-governance.yml",
                      "powerforge-apple-approval.yml",
                      "pspublishmodule-public-release.yml"
                  })
