@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System.Xml;
 
 namespace PowerForge;
 
@@ -622,72 +621,62 @@ internal static class DocumentationMetadataNormalizer
         if (hasValidateSet)
         {
             var authoredValues = DistinctPreserved(metadataValues, metadataComparer);
-            var displays = authoredValues
-                .Select(PowerShellDefaultValueFormatter.FormatDisplayText)
-                .ToList();
-            var displayCounts = new Dictionary<string, int>(metadataComparer);
-            foreach (var display in displays)
-                displayCounts[display] = displayCounts.TryGetValue(display, out var count) ? count + 1 : 1;
-            var candidates = authoredValues.Select((value, index) =>
-            {
-                var needsFallback = displayCounts[displays[index]] > 1;
-                var display = needsFallback
-                    ? PowerShellDefaultValueFormatter.FormatString(value, preserveCharacterType: false)
-                    : displays[index];
-                return new KeyValuePair<string, bool>(display, needsFallback);
-            }).ToList();
-            var reservedDisplays = new HashSet<string>(
-                candidates.Where(candidate => !candidate.Value).Select(candidate => candidate.Key),
-                metadataComparer);
-            var usedDisplays = new HashSet<string>(metadataComparer);
-            var authoredResult = new List<string>(candidates.Count);
-            foreach (var candidate in candidates)
-            {
-                var display = candidate.Key;
-                if (candidate.Value)
-                {
-                    var baseDisplay = display;
-                    var suffix = 1;
-                    while (reservedDisplays.Contains(display) || !usedDisplays.Add(display))
-                    {
-                        display = baseDisplay + " [encoded " +
-                                  suffix.ToString(System.Globalization.CultureInfo.InvariantCulture) + "]";
-                        suffix++;
-                    }
-                }
-                else
-                {
-                    usedDisplays.Add(display);
-                }
-                authoredResult.Add(display);
-            }
-            return authoredResult;
+            return FormatPossibleValueDisplays(authoredValues, metadataComparer);
         }
 
-        var result = DistinctNonBlank(metadataValues, metadataComparer)
-            .Where(IsXmlSafePossibleValue)
-            .ToList();
-
-        var seen = new HashSet<string>(result, StringComparer.Ordinal);
-        foreach (var value in DistinctNonBlank(enumValues, StringComparer.Ordinal)
-                     .Where(IsXmlSafePossibleValue))
+        var combinedValues = DistinctNonBlank(metadataValues, metadataComparer);
+        var seenValues = new HashSet<string>(combinedValues, StringComparer.Ordinal);
+        foreach (var value in DistinctNonBlank(enumValues, StringComparer.Ordinal))
         {
-            if (seen.Add(value)) result.Add(value);
+            if (seenValues.Add(value)) combinedValues.Add(value);
         }
-        return result;
+        return FormatPossibleValueDisplays(combinedValues, StringComparer.Ordinal);
     }
 
-    private static bool IsXmlSafePossibleValue(string value)
+    private static List<string> FormatPossibleValueDisplays(
+        IReadOnlyList<string> values,
+        IEqualityComparer<string> displayComparer)
     {
-        try
+        var displays = values
+            .Select(PowerShellDefaultValueFormatter.FormatDisplayText)
+            .ToList();
+        var displayCounts = new Dictionary<string, int>(displayComparer);
+        foreach (var display in displays)
+            displayCounts[display] = displayCounts.TryGetValue(display, out var count) ? count + 1 : 1;
+        var candidates = values.Select((value, index) =>
         {
-            XmlConvert.VerifyXmlChars(value);
-            return true;
-        }
-        catch (XmlException)
+            var needsFallback = displayCounts[displays[index]] > 1;
+            var display = needsFallback
+                ? PowerShellDefaultValueFormatter.FormatString(value, preserveCharacterType: false)
+                : displays[index];
+            return new KeyValuePair<string, bool>(display, needsFallback);
+        }).ToList();
+        var reservedDisplays = new HashSet<string>(
+            candidates.Where(candidate => !candidate.Value).Select(candidate => candidate.Key),
+            displayComparer);
+        var usedDisplays = new HashSet<string>(displayComparer);
+        var result = new List<string>(candidates.Count);
+        foreach (var candidate in candidates)
         {
-            return false;
+            var display = candidate.Key;
+            if (candidate.Value)
+            {
+                var baseDisplay = display;
+                var suffix = 1;
+                while (reservedDisplays.Contains(display) || !usedDisplays.Add(display))
+                {
+                    display = baseDisplay + " [encoded " +
+                              suffix.ToString(System.Globalization.CultureInfo.InvariantCulture) + "]";
+                    suffix++;
+                }
+            }
+            else
+            {
+                usedDisplays.Add(display);
+            }
+            result.Add(display);
         }
+        return result;
     }
 
     private static List<string> DistinctNonBlank(

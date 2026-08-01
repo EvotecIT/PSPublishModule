@@ -58,9 +58,14 @@ function AddRuntimeDefaultValueTokens(
       $value,
       $underlyingType,
       [System.Globalization.CultureInfo]::InvariantCulture)
+    $underlyingText = if ([object]::ReferenceEquals($underlyingType, [char])) {
+      ([int][char]$underlyingValue).ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    } else {
+      [System.Convert]::ToString($underlyingValue, [System.Globalization.CultureInfo]::InvariantCulture)
+    }
     $tokens.Add([ordered]@{
       kind = 'Enum'
-      text = [System.Convert]::ToString($underlyingValue, [System.Globalization.CultureInfo]::InvariantCulture)
+      text = $underlyingText
       name = GetPowerShellSafeEnumName $enumType $value
       canonicalTypeName = GetCanonicalTypeNameFromType $enumType
       underlyingTypeName = GetCanonicalTypeNameFromType $underlyingType
@@ -119,6 +124,9 @@ function AddRuntimeDefaultValueTokens(
       kind = 'UriCodeUnits'
       text = ConvertToUtf16CodeUnits $value.OriginalString
       name = $uriKind
+      isInterned = [object]::ReferenceEquals(
+        $value.OriginalString,
+        [string]::IsInterned([string]$value.OriginalString))
     }) | Microsoft.PowerShell.Core\Out-Null
     return
   }

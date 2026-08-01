@@ -813,9 +813,9 @@ $invalidOutputFunction = "function Get-InvalidOutputFixture { [OutputType('Bad" 
                 ", ([System.Char]39))",
                 Default("CharMode"),
                 StringComparison.Ordinal);
-            Assert.Empty(Assert.Single(
-                command.Parameters,
-                parameter => parameter.Name == "XmlInvalidMode").PossibleValues);
+            Assert.Equal(
+                ["A([char]1)"],
+                Assert.Single(command.Parameters, parameter => parameter.Name == "XmlInvalidMode").PossibleValues);
 
             string Default(string name)
                 => Assert.Single(command.Parameters, parameter => parameter.Name == name).DefaultValue;

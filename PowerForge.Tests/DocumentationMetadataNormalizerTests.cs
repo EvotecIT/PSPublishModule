@@ -203,6 +203,24 @@ public sealed partial class DocumentationMetadataNormalizerTests
                 Text = string.Join(",", "https://example.com/a'b?x=1".Select(character => (int)character))
             }));
         Assert.Equal(
+            "[System.Uri]::new([string]::Intern('https://example.com/interned'), [System.UriKind]::Absolute)",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "UriCodeUnits",
+                Name = "Absolute",
+                IsInterned = true,
+                Text = string.Join(",", "https://example.com/interned".Select(character => (int)character))
+            }));
+        Assert.Equal(
+            "[System.Enum]::ToObject([Demo.CharMode], ([System.Char]39))",
+            PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
+            {
+                Kind = "Enum",
+                CanonicalTypeName = "Demo.CharMode",
+                UnderlyingTypeName = "System.Char",
+                Text = "39"
+            }));
+        Assert.Equal(
             "[System.DateOnly]::FromDayNumber(([int]739827))",
             PowerShellDefaultValueFormatter.Format(new DocumentationRuntimeValue
             {
@@ -561,6 +579,26 @@ public sealed partial class DocumentationMetadataNormalizerTests
         Assert.Empty(parameter.EnumPossibleValues);
         Assert.False(parameter.HasValidateSet);
         Assert.False(parameter.ValidateSetCaseSensitive);
+    }
+
+    [Fact]
+    public void Normalize_XmlEncodesAuthoredPossibleValuesWithoutCollisions()
+    {
+        var parameter = new DocumentationParameterHelp
+        {
+            PossibleValues = ["bad\uD800value", "bad([char]55296)value"]
+        };
+        var payload = PayloadWith(new DocumentationCommandHelp
+        {
+            Name = "Get-Sample",
+            Parameters = [parameter]
+        });
+
+        DocumentationMetadataNormalizer.Normalize(payload);
+
+        Assert.Equal(
+            ["(-join @('bad', ([char]55296), 'value'))", "'bad([char]55296)value'"],
+            parameter.PossibleValues);
     }
 
     [Fact]

@@ -73,7 +73,7 @@ internal static class PowerShellDefaultValueFormatter
             case "version":
                 return "[System.Version]::Parse('" + (value.Text ?? string.Empty).Replace("'", "''") + "')";
             case "uricodeunits":
-                return FormatUri(DecodeUtf16CodeUnits(value.Text), value.Name);
+                return FormatUri(DecodeUtf16CodeUnits(value.Text), value.Name, value.IsInterned);
             case "dateonly":
                 return "[System.DateOnly]::FromDayNumber(([int]" + (value.Text ?? string.Empty) + "))";
             case "timeonly":
@@ -236,12 +236,12 @@ internal static class PowerShellDefaultValueFormatter
         return expression + ")";
     }
 
-    private static string FormatUri(string text, string? kind)
+    private static string FormatUri(string text, string? kind, bool isInterned)
     {
         var uriKind = string.Equals(kind, "Absolute", StringComparison.OrdinalIgnoreCase)
             ? "Absolute"
             : "Relative";
-        return "[System.Uri]::new(" + FormatString(text, preserveCharacterType: false) +
+        return "[System.Uri]::new(" + FormatRuntimeString(text, isInterned) +
                ", [System.UriKind]::" + uriKind + ")";
     }
 

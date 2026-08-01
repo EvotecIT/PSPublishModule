@@ -56,6 +56,7 @@ function GetCollectorHelperFunctionNames {
     'TestPowerShellSimpleTypeName',
     'TestPowerShellTypeLiteral',
     'TestPowerShellTypeLiteralName',
+    'TestPublicEmptyArraySingleton',
     'TestPSDefaultValueAutomationNull',
     'TestPSDefaultValueContainsAutomationNull',
     'TestRecreatableUri',

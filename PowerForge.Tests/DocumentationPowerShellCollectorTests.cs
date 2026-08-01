@@ -294,7 +294,7 @@ function Get-CollectorFixture {
 
         $uriAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $uriDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
-        $uriDefault.Value = [uri]::new("https://example.com/a'b?x=1")
+        $uriDefault.Value = [uri]::new([string]::Intern("https://example.com/a'b?x=1"))
         $uriAttributes.Add($uriDefault)
         $parameters.Add('Uri', [System.Management.Automation.RuntimeDefinedParameter]::new('Uri', [uri], $uriAttributes))
 
@@ -695,7 +695,7 @@ function Get-AcceleratedOutput {
                     "[System.Enum]::ToObject([CollectorFixture.WeirdMode], ([System.Int32]1))",
                     weirdMode.DefaultValue);
                 Assert.Equal(
-                    "[System.Uri]::new('https://example.com/a''b?x=1', [System.UriKind]::Absolute)",
+                    "[System.Uri]::new([string]::Intern('https://example.com/a''b?x=1'), [System.UriKind]::Absolute)",
                     uri.DefaultValue);
                 Assert.True(string.IsNullOrEmpty(userEscapedUri.DefaultValue));
                 Assert.StartsWith(

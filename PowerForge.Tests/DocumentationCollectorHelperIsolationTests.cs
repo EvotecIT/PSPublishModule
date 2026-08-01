@@ -19,7 +19,7 @@ public sealed partial class DocumentationPowerShellCollectorTests
     ModuleVersion = '1.0.0'
     GUID = '12121212-1212-1212-1212-121212121212'
     FunctionsToExport = @('Get-HelperIsolationFixture', 'ConvertToUtf16CodeUnits')
-    AliasesToExport = @('GetText')
+    AliasesToExport = @('GetText', 'TestPublicEmptyArraySingleton')
     VariablesToExport = @('collectorProtocol')
 }
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
@@ -34,6 +34,7 @@ function ConvertToUtf16CodeUnits {
 }
 
 Set-Alias -Name GetText -Value ConvertToUtf16CodeUnits
+Set-Alias -Name TestPublicEmptyArraySingleton -Value ConvertToUtf16CodeUnits
 
 function Get-HelperIsolationFixture {
     [CmdletBinding()]
@@ -61,11 +62,20 @@ function Get-HelperIsolationFixture {
         $parameters.Add('HelpValue', [System.Management.Automation.RuntimeDefinedParameter]::new(
             'HelpValue', [string], $helpAttributes))
 
+        $emptyArrayAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $emptyArrayDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $emptyArrayDefault.Value = [System.Array].GetMethod('Empty').MakeGenericMethod([int]).Invoke(
+            $null, [object[]]@())
+        $emptyArrayAttributes.Add($emptyArrayDefault)
+        $parameters.Add('EmptyArray', [System.Management.Automation.RuntimeDefinedParameter]::new(
+            'EmptyArray', [int[]], $emptyArrayAttributes))
+
         $parameters
     }
 }
 
-Export-ModuleMember -Function Get-HelperIsolationFixture, ConvertToUtf16CodeUnits -Alias GetText -Variable collectorProtocol
+Export-ModuleMember -Function Get-HelperIsolationFixture, ConvertToUtf16CodeUnits `
+    -Alias GetText, TestPublicEmptyArraySingleton -Variable collectorProtocol
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             var hosts = OperatingSystem.IsWindows()
@@ -83,6 +93,10 @@ Export-ModuleMember -Function Get-HelperIsolationFixture, ConvertToUtf16CodeUnit
                 Assert.Equal("'runtime value'", Default("Value"));
                 Assert.Equal(["([char]55296)", " x "], valueParameter.Aliases);
                 Assert.Equal("authored\nvalue", Default("HelpValue"));
+                Assert.StartsWith(
+                    "& { return ,([System.Array].GetMethod('Empty'",
+                    Default("EmptyArray"),
+                    StringComparison.Ordinal);
                 Assert.Contains(command.Outputs, output =>
                     output.CanonicalTypeName == "System.Collections.Generic.List[System.String]");
 
