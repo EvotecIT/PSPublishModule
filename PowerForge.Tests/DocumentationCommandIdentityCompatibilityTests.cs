@@ -205,6 +205,50 @@ $values = @($normalized.DefaultSet) + @($normalized.Syntax.name) +
                     ],
                     File.ReadAllLines(outputPath));
             }
+
+            var payload = new DocumentationExtractionPayload
+            {
+                ModuleName = "ParameterSetIdentityFixture",
+                Commands =
+                [
+                    new DocumentationCommandHelp
+                    {
+                        Name = "Get-Test",
+                        CommandType = "Function",
+                        Syntax =
+                        [
+                            new DocumentationSyntaxHelp { Name = " A ", Text = "Get-Test -Value <string>" },
+                            new DocumentationSyntaxHelp { Name = "A", Text = "Get-Test -Value <string>" }
+                        ],
+                        Parameters =
+                        [
+                            new DocumentationParameterHelp
+                            {
+                                Name = "Value",
+                                Type = "String",
+                                ParameterSets = [" A ", "A"],
+                                ParameterSetRequired = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
+                                {
+                                    [" A "] = true,
+                                    ["A"] = false
+                                }
+                            }
+                        ]
+                    }
+                ]
+            };
+            var docsPath = Path.Combine(root, "Docs");
+            new MarkdownHelpWriter().WriteCommandHelpFiles(payload, payload.ModuleName, docsPath);
+            Assert.Contains("Parameter Sets: ' A ', A", File.ReadAllText(Path.Combine(docsPath, "Get-Test.md")));
+            var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, payload.ModuleName, root);
+            var setNames = XDocument.Load(mamlPath)
+                .Descendants()
+                .Where(element => element.Name.LocalName == "syntaxItem")
+                .Select(element => element.Attribute("parameterSetName"))
+                .Where(attribute => attribute is not null)
+                .Select(attribute => attribute!.Value)
+                .ToArray();
+            Assert.Equal([" A ", "A"], setNames);
         }
         finally
         {

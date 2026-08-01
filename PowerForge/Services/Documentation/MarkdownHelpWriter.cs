@@ -317,8 +317,10 @@ internal sealed class MarkdownHelpWriter
     private static string FormatParameterSets(DocumentationParameterHelp p)
     {
         var sets = (p.ParameterSets ?? Enumerable.Empty<string>())
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Select(s => s.Trim())
+            .Where(s => !string.IsNullOrEmpty(s))
+            .Select(s => s.Length == s.Trim().Length
+                ? s
+                : "'" + s.Replace("'", "''") + "'")
             .ToArray();
 
         if (sets.Length == 0) return "(All)";

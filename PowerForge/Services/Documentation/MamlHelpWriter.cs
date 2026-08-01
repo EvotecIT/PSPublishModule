@@ -119,7 +119,7 @@ internal sealed class MamlHelpWriter
 
         foreach (var set in syntaxSets)
         {
-            var setName = set.Name.Trim();
+            var setName = set.Name;
             var parameters = (cmd.Parameters ?? Enumerable.Empty<DocumentationParameterHelp>())
                 .Where(p => ParameterInSet(p, setName))
                 .ToArray();
@@ -139,9 +139,8 @@ internal sealed class MamlHelpWriter
         writer.WriteStartElement("command", "syntaxItem", CommandNs);
         if (setName is not null)
         {
-            var normalizedSetName = setName.Trim();
-            if (normalizedSetName.Length > 0)
-                writer.WriteAttributeString("parameterSetName", normalizedSetName);
+            if (setName.Length > 0)
+                writer.WriteAttributeString("parameterSetName", setName);
         }
         writer.WriteElementString("maml", "name", MamlNs, commandName);
 
@@ -458,8 +457,8 @@ internal sealed class MamlHelpWriter
         var sets = p.ParameterSets ?? Enumerable.Empty<string>();
         foreach (var s in sets)
         {
-            if (string.IsNullOrWhiteSpace(s)) continue;
-            var sn = s.Trim();
+            if (string.IsNullOrEmpty(s)) continue;
+            var sn = s;
             if (sn.Equals("(All)", StringComparison.OrdinalIgnoreCase)) return true;
             if (sn.Equals("__AllParameterSets", StringComparison.OrdinalIgnoreCase)) return true;
             if (sn.Equals(setName, StringComparison.OrdinalIgnoreCase)) return true;
@@ -470,24 +469,24 @@ internal sealed class MamlHelpWriter
     private static bool ParameterRequiredInSet(DocumentationParameterHelp p, string? setName, string? syntaxText)
     {
         if (p is null) return false;
-        if (string.IsNullOrWhiteSpace(setName)) return p.Required;
+        if (string.IsNullOrEmpty(setName)) return p.Required;
 
         var setRequired = p.ParameterSetRequired;
         if (setRequired is null || setRequired.Count == 0)
             return TryResolveRequiredFromSyntax(syntaxText, p.Name) ?? p.Required;
 
-        var normalizedSetName = setName!.Trim();
+        var normalizedSetName = setName!;
         foreach (var entry in setRequired)
         {
-            if (string.IsNullOrWhiteSpace(entry.Key)) continue;
-            if (entry.Key.Trim().Equals(normalizedSetName, StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrEmpty(entry.Key)) continue;
+            if (entry.Key.Equals(normalizedSetName, StringComparison.OrdinalIgnoreCase))
                 return entry.Value;
         }
 
         foreach (var entry in setRequired)
         {
-            if (string.IsNullOrWhiteSpace(entry.Key)) continue;
-            var key = entry.Key.Trim();
+            if (string.IsNullOrEmpty(entry.Key)) continue;
+            var key = entry.Key;
             if (key.Equals("(All)", StringComparison.OrdinalIgnoreCase) ||
                 key.Equals("__AllParameterSets", StringComparison.OrdinalIgnoreCase))
                 return entry.Value;
