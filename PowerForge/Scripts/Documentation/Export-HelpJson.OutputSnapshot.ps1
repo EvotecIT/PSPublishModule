@@ -15,18 +15,16 @@ function GetOutputTypeSnapshot([object]$outputType) {
   if (-not $outputTypeClrName) {
     try { $outputTypeClrName = [string]$outputType.TypeName.FullName } catch { $outputTypeClrName = '' }
   }
-  $outputTypeName = $outputTypeName.Trim()
-  $outputTypeClrName = $outputTypeClrName.Trim()
   if (-not $outputTypeClrName) { $outputTypeClrName = $outputTypeName }
   if (-not $outputTypeName) { $outputTypeName = $outputTypeClrName }
   if (-not $outputTypeName) { return $null }
   if (-not $canonicalTypeName) {
-    foreach ($candidate in @($outputTypeClrName, $outputTypeName)) {
-      $canonicalTypeName = ResolveCanonicalTypeName $candidate
-      if ($canonicalTypeName) { break }
+    $canonicalTypeName = if (-not [string]::IsNullOrWhiteSpace($outputTypeClrName)) {
+      $outputTypeClrName
+    } else {
+      $outputTypeName
     }
   }
-  $canonicalTypeName = $canonicalTypeName.Trim()
 
   return [pscustomobject][ordered]@{
     name = $outputTypeName
