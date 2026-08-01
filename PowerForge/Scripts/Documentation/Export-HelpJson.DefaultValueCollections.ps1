@@ -75,6 +75,12 @@ function TestCollectionHasItemOnlyBackingStore(
   $expectedType = [System.Collections.Generic.List``1].MakeGenericType(
     $collectionType.GetGenericArguments()[0])
   if ($backingStore.GetType() -ne $expectedType) { return $false }
+  $flags = [System.Reflection.BindingFlags]'Instance,NonPublic'
+  $versionField = $expectedType.GetField('_version', $flags)
+  if ($null -eq $versionField) { $versionField = $expectedType.GetField('version', $flags) }
+  if ($null -eq $versionField -or [int]$versionField.GetValue($backingStore) -ne $value.Count) {
+    return $false
+  }
   if ($null -ne $referenceStack) {
     AddDefaultValueReference $backingStore $referenceStack
   }
@@ -92,9 +98,7 @@ function GetCollectionCapacity([object]$value) {
     $flags = [System.Reflection.BindingFlags]'Instance,NonPublic'
     $versionField = $collectionType.GetField('_version', $flags)
     if ($null -eq $versionField) { $versionField = $collectionType.GetField('version', $flags) }
-    if ($null -eq $versionField) {
-      throw 'ArrayList serialization version is unavailable.'
-    }
+    if ($null -eq $versionField) { throw 'ArrayList serialization version is unavailable.' }
     if ([int]$versionField.GetValue($value) -ne $value.Count) {
       throw 'ArrayList defaults with non-reconstructible serialization versions are not supported.'
     }
@@ -105,9 +109,7 @@ function GetCollectionCapacity([object]$value) {
     $flags = [System.Reflection.BindingFlags]'Instance,NonPublic'
     $versionField = $collectionType.GetField('_version', $flags)
     if ($null -eq $versionField) { $versionField = $collectionType.GetField('version', $flags) }
-    if ($null -eq $versionField) {
-      throw 'List serialization version is unavailable.'
-    }
+    if ($null -eq $versionField) { throw 'List serialization version is unavailable.' }
     if ([int]$versionField.GetValue($value) -ne $value.Count) {
       throw 'List defaults with non-reconstructible serialization versions are not supported.'
     }

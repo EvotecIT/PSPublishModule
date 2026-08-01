@@ -149,6 +149,7 @@ function ConvertParametersToXmlSafeDocumentationText([object[]]$parameters) {
     }
     $parameter.aliases = @($aliases.ToArray())
   }
+
   return @($parameters)
 }
 

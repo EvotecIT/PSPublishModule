@@ -307,8 +307,10 @@ public sealed class DocumentationEngine
                 {
                     UseSimpleDictionaryFormat = true
                 });
-            var payload = serializer.ReadObject(stream) as DocumentationExtractionPayload;
-            return payload ?? new DocumentationExtractionPayload();
+            var payload = serializer.ReadObject(stream) as DocumentationExtractionPayload
+                ?? new DocumentationExtractionPayload();
+            DocumentationSyntaxIdentityNormalizer.Normalize(payload);
+            return payload;
         }
         finally
         {

@@ -276,6 +276,10 @@ $script:reservedBackingCollection = [System.Collections.ObjectModel.Collection[i
 $script:itemOnlyCollection = [System.Collections.ObjectModel.Collection[int]]::new()
 $script:itemOnlyCollection.Add(1)
 $script:itemOnlyCollection.Add(2)
+$script:mutatedCollection = [System.Collections.ObjectModel.Collection[int]]::new()
+$script:mutatedCollection.Add(1)
+$script:mutatedCollection.RemoveAt(0)
+$script:mutatedCollection.Add(1)
 $script:reservedList = [System.Collections.Generic.List[int]]::new(100)
 $script:reservedList.Add(1)
 $script:enumerableList = [System.Collections.Generic.List[int]]::new(
@@ -303,6 +307,11 @@ $script:shapeSpoofingDictionary.Add('a', 1)
 $script:reservedSortedList = [System.Collections.Generic.SortedList[string,int]]::new(
     100, [System.StringComparer]::InvariantCultureIgnoreCase)
 $script:reservedSortedList.Add('alpha', 1)
+$script:mutatedSortedList = [System.Collections.Generic.SortedList[string,int]]::new(
+    100, [System.StringComparer]::InvariantCultureIgnoreCase)
+$script:mutatedSortedList.Add('alpha', 1)
+$script:mutatedSortedList.Remove('alpha')
+$script:mutatedSortedList.Add('alpha', 1)
 $typeDelegator = $spoofTypes |
     Where-Object { $_.FullName -ceq 'RuntimeIdentityFixture.TaggedTypeDelegator' } |
     Select-Object -First 1
@@ -334,6 +343,7 @@ function Get-RuntimeIdentityFixture {
             @('StatefulCollection', $script:statefulCollection),
             @('ReservedBackingCollection', $script:reservedBackingCollection),
             @('ItemOnlyCollection', $script:itemOnlyCollection),
+            @('MutatedCollection', $script:mutatedCollection),
             @('ReservedList', $script:reservedList),
             @('EnumerableList', $script:enumerableList),
             @('MutatedList', $script:mutatedList),
@@ -342,6 +352,7 @@ function Get-RuntimeIdentityFixture {
             @('InvariantDictionary', $script:invariantDictionary),
             @('ShapeSpoofingDictionary', $script:shapeSpoofingDictionary),
             @('ReservedSortedList', $script:reservedSortedList),
+            @('MutatedSortedList', $script:mutatedSortedList),
             @('DelegatedArrayType', $script:delegatedArrayType),
             @('DelegatedPointerType', $script:delegatedPointerType),
             @('DelegatedByRefType', $script:delegatedByRefType),
@@ -423,6 +434,8 @@ if ($sortedList.GetType() -ne [System.Collections.Generic.SortedList[string,int]
                 Assert.True(string.IsNullOrEmpty(Default("DelegatedByRefType")));
                 Assert.True(string.IsNullOrEmpty(Default("DelegatedGenericType")));
                 Assert.True(string.IsNullOrEmpty(Default("ShapeSpoofingDictionary")));
+                Assert.True(string.IsNullOrEmpty(Default("MutatedCollection")));
+                Assert.True(string.IsNullOrEmpty(Default("MutatedSortedList")));
                 var itemOnly = Default("ItemOnlyCollection");
                 Assert.StartsWith("& { $collection = [System.Collections.ObjectModel.Collection[System.Int32]]::new()", itemOnly, StringComparison.Ordinal);
                 var reservedList = Default("ReservedList");

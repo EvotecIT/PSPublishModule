@@ -7,6 +7,34 @@ namespace PowerForge.Tests;
 public sealed class DocumentationCommandIdentityCompatibilityTests
 {
     [Fact]
+    public void SyntaxIdentityNormalizer_RewritesEncodedParameterNames()
+    {
+        var invalid = "P\u0001";
+        var payload = new DocumentationExtractionPayload
+        {
+            Commands =
+            {
+                new DocumentationCommandHelp
+                {
+                    Name = "Get-Test",
+                    Syntax = { new DocumentationSyntaxHelp { Text = $"Get-Test [-{invalid} <string>] [-P%u0001 <string>] [-{invalid}Suffix <string>]" } },
+                    Parameters =
+                    {
+                        new DocumentationParameterHelp { OriginalName = invalid, Name = "P%u0001 [encoded 1]" },
+                        new DocumentationParameterHelp { OriginalName = "P%u0001", Name = "P%u0001" }
+                    }
+                }
+            }
+        };
+
+        DocumentationSyntaxIdentityNormalizer.Normalize(payload);
+
+        Assert.Equal(
+            $"Get-Test [-P%u0001 [encoded 1] <string>] [-P%u0001 <string>] [-{invalid}Suffix <string>]",
+            Assert.Single(payload.Commands[0].Syntax).Text);
+    }
+
+    [Fact]
     public void DocumentationEngine_PreservesXmlValidPercentCommandNamesAcrossBothPowerShellHosts()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-doc-command-identity-" + Guid.NewGuid().ToString("N"));

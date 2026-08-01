@@ -448,6 +448,7 @@ try {
       elseif ($pipeByProp) { $pipelineInput = 'True (ByPropertyName)' }
 
       $parameters += [ordered]@{
+        originalName = $pn
         name = $pn
         type = $typeName
         description = $desc

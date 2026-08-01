@@ -89,5 +89,8 @@ public class MarkdownDocumentBuilderTests
     public void InlineIdentityCode_EncodesDistinctLineBreakCodeUnits()
     {
         Assert.Equal("`A%u000DB%u000AC`", MarkdownDocumentBuilder.InlineIdentityCode("A\rB\nC"));
+        Assert.NotEqual(
+            MarkdownDocumentBuilder.InlineIdentityCode("A%u000AB"),
+            MarkdownDocumentBuilder.InlineIdentityCode("A\nB"));
     }
 }

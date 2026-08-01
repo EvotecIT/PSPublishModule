@@ -109,6 +109,7 @@ internal sealed class MarkdownDocumentBuilder
     public static string InlineIdentityCode(string text)
     {
         var encoded = (text ?? string.Empty)
+            .Replace("%", "%25")
             .Replace("\r", "%u000D")
             .Replace("\n", "%u000A");
         return InlineCode(encoded);

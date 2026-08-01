@@ -46,12 +46,14 @@ $functionText = "function Get-OutputIdentityFixture { [OutputType('A" + [char]1 
             Assert.Contains("A%u0001", maml, StringComparison.Ordinal);
             Assert.Contains("A([char]1)", maml, StringComparison.Ordinal);
             Assert.Contains("A%25u0001", maml, StringComparison.Ordinal);
-            Assert.Contains("A%u0001", markdown, StringComparison.Ordinal);
-            Assert.Contains("A([char]1)", markdown, StringComparison.Ordinal);
-            Assert.Contains("A%25u0001", markdown, StringComparison.Ordinal);
-            Assert.Contains("`A%u000AB`", markdown, StringComparison.Ordinal);
-            Assert.Contains("`A B`", markdown, StringComparison.Ordinal);
-            Assert.Contains("`A%25u000AB`", markdown, StringComparison.Ordinal);
+            var renderedNames = outputNames
+                .Select(MarkdownDocumentBuilder.InlineIdentityCode)
+                .ToList();
+            Assert.Equal(renderedNames.Count, renderedNames.Distinct(StringComparer.Ordinal).Count());
+            foreach (var renderedName in renderedNames)
+            {
+                Assert.Contains(renderedName, markdown, StringComparison.Ordinal);
+            }
         }
         finally
         {

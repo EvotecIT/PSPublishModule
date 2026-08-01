@@ -68,9 +68,12 @@ function GetConstructibleDictionaryTypeName([System.Collections.IDictionary]$val
 
 function GetDictionaryCapacity([System.Collections.IDictionary]$value) {
   $dictionaryType = $value.GetType()
+  $genericDefinition = if ($dictionaryType.IsGenericType) {
+    $dictionaryType.GetGenericTypeDefinition()
+  } else { $null }
   $isExactGenericDictionary = $dictionaryType.IsGenericType -and
     [object]::ReferenceEquals(
-      $dictionaryType.GetGenericTypeDefinition(),
+      $genericDefinition,
       [System.Collections.Generic.Dictionary``2])
   if ($isExactGenericDictionary) {
     $flags = [System.Reflection.BindingFlags]'Instance,NonPublic'
@@ -110,6 +113,19 @@ function GetDictionaryCapacity([System.Collections.IDictionary]$value) {
       throw ('OrderedDictionary initial capacity is unavailable: ' + $dictionaryType.FullName)
     }
     return [int]$initialCapacityField.GetValue($value)
+  }
+
+  if ([object]::ReferenceEquals($genericDefinition, [System.Collections.Generic.SortedList``2])) {
+    $flags = [System.Reflection.BindingFlags]'Instance,NonPublic'
+    $versionField = $dictionaryType.GetField('_version', $flags)
+    if ($null -eq $versionField) { $versionField = $dictionaryType.GetField('version', $flags) }
+    if ($null -eq $versionField) {
+      throw ('SortedList serialization version is unavailable: ' + $dictionaryType.FullName)
+    }
+    if ([int]$versionField.GetValue($value) -ne $value.Count) {
+      throw ('SortedList defaults with non-reconstructible serialization versions are not supported: ' +
+        $dictionaryType.FullName)
+    }
   }
 
   $capacityProperty = $dictionaryType.GetProperty(
