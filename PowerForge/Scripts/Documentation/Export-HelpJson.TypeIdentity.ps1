@@ -128,6 +128,33 @@ function GetDictionaryCapacity([System.Collections.IDictionary]$value) {
     }
   }
 
+  if ([object]::ReferenceEquals($genericDefinition, [System.Collections.Generic.SortedDictionary``2])) {
+    $flags = [System.Reflection.BindingFlags]'Instance,NonPublic'
+    $setField = $dictionaryType.GetField('_set', $flags)
+    if ($null -eq $setField) { $setField = $dictionaryType.GetField('set', $flags) }
+    if ($null -eq $setField) {
+      throw ('SortedDictionary backing set is unavailable: ' + $dictionaryType.FullName)
+    }
+    $backingSet = $setField.GetValue($value)
+    if ($null -eq $backingSet) {
+      throw ('SortedDictionary backing set is unavailable: ' + $dictionaryType.FullName)
+    }
+    $versionField = $null
+    $setType = $backingSet.GetType()
+    while ($null -ne $setType -and $null -eq $versionField) {
+      $versionField = $setType.GetField('_version', $flags)
+      if ($null -eq $versionField) { $versionField = $setType.GetField('version', $flags) }
+      $setType = $setType.BaseType
+    }
+    if ($null -eq $versionField) {
+      throw ('SortedDictionary serialization version is unavailable: ' + $dictionaryType.FullName)
+    }
+    if ([int]$versionField.GetValue($backingSet) -ne $value.Count) {
+      throw ('SortedDictionary defaults with non-reconstructible serialization versions are not supported: ' +
+        $dictionaryType.FullName)
+    }
+  }
+
   $capacityProperty = $dictionaryType.GetProperty(
     'Capacity',
     [System.Reflection.BindingFlags]'Instance,Public')

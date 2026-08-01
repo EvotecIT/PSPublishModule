@@ -15,7 +15,7 @@ public sealed class DocumentationOutputIdentityEncodingTests
         {
             var manifestPath = Path.Combine(root, "OutputIdentityFixture.psd1");
             File.WriteAllText(Path.Combine(root, "OutputIdentityFixture.psm1"), """
-$functionText = "function Get-OutputIdentityFixture { [OutputType('A" + [char]1 + "', 'A([char]1)', 'A%u0001', 'A" + [char]10 + "B', 'A B', 'A%u000AB')] param() }"
+$functionText = "function Get-OutputIdentityFixture { [OutputType('A" + [char]1 + "', 'A([char]1)', 'A%u0001', 'A" + [char]10 + "B', 'A B', 'A%u000AB', '" + [char]10 + "Boundary', '%u000ABoundary')] param() }"
 . ([scriptblock]::Create($functionText))
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             File.WriteAllText(manifestPath, """
@@ -34,6 +34,8 @@ $functionText = "function Get-OutputIdentityFixture { [OutputType('A" + [char]1 
             Assert.Contains("A%u0001", outputNames);
             Assert.Contains("A([char]1)", outputNames);
             Assert.Contains("A%25u0001", outputNames);
+            Assert.Contains("%u000ABoundary", outputNames);
+            Assert.Contains("%25u000ABoundary", outputNames);
             Assert.Equal(outputNames.Count, outputNames.Distinct(StringComparer.Ordinal).Count());
 
             var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(

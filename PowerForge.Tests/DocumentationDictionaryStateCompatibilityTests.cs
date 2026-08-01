@@ -48,6 +48,15 @@ $rejected = $false
 try { [void](GetDictionaryCapacity $dictionary) } catch { $rejected = $true }
 if (-not $rejected) { throw 'A non-reconstructible Dictionary serialization version was accepted.' }
 
+$sorted = [System.Collections.Generic.SortedDictionary[string, int]]::new()
+$sorted.Add('alpha', 1)
+[void](GetDictionaryCapacity $sorted)
+$sorted.Remove('alpha')
+$sorted.Add('alpha', 1)
+$rejected = $false
+try { [void](GetDictionaryCapacity $sorted) } catch { $rejected = $true }
+if (-not $rejected) { throw 'A non-reconstructible SortedDictionary serialization version was accepted.' }
+
 [System.IO.File]::WriteAllText(
     $OutputPath,
     $orderedExpression,

@@ -41,6 +41,10 @@ function GetOutputTypeMetadata([object]$outputType) {
   if (-not $outputTypeClrName) { $outputTypeClrName = $outputTypeName }
   if (-not $outputTypeName) { $outputTypeName = $outputTypeClrName }
   if (-not $outputTypeName) { return $null }
+  if ($outputRuntimeType -is [type]) {
+    $runtimeDisplayName = $outputTypeName.Trim("`r", "`n")
+    if ($runtimeDisplayName -ceq $outputTypeClrName) { $outputTypeName = $runtimeDisplayName }
+  }
   $outputIdentity = if ($outputRuntimeType -is [type]) {
     GetCanonicalTypeNameFromType $outputRuntimeType
   } else {
@@ -56,6 +60,7 @@ function GetOutputTypeMetadata([object]$outputType) {
   return [pscustomobject][ordered]@{
     name = $outputTypeName
     clrTypeName = $outputTypeClrName
+    assemblyQualifiedName = if ($outputRuntimeType -is [type]) { [string]$outputRuntimeType.AssemblyQualifiedName } else { '' }
     identity = $outputIdentity
     runtimeIdentity = if ($outputRuntimeType -is [type]) { GetRuntimeTypeInstanceIdentity $outputRuntimeType } else { '' }
     keys = @(GetTypeKeys $outputTypeName $outputTypeClrName)
@@ -68,6 +73,10 @@ function ConvertToXmlSafeIdentityText([string]$text) {
     $character = $text[$index]
     if ($character -eq '%') {
       [void]$builder.Append('%25')
+    } elseif ($character -eq "`r") {
+      [void]$builder.Append('%u000D')
+    } elseif ($character -eq "`n") {
+      [void]$builder.Append('%u000A')
     } elseif ([char]::IsHighSurrogate($character) -and
         $index + 1 -lt $text.Length -and
         [char]::IsLowSurrogate($text[$index + 1])) {

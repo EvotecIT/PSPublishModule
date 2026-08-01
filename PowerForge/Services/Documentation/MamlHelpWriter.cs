@@ -183,7 +183,7 @@ internal sealed class MamlHelpWriter
         foreach (var t in inputs)
         {
             writer.WriteStartElement("command", "inputType", CommandNs);
-            WriteTypeWithDescription(writer, t);
+            WriteTypeWithDescription(writer, t, preserveBoundaryLineBreaks: false);
             writer.WriteEndElement(); // inputType
         }
         writer.WriteEndElement(); // inputTypes
@@ -206,7 +206,7 @@ internal sealed class MamlHelpWriter
         foreach (var t in outputs)
         {
             writer.WriteStartElement("command", "returnValue", CommandNs);
-            WriteTypeWithDescription(writer, t);
+            WriteTypeWithDescription(writer, t, preserveBoundaryLineBreaks: true);
             writer.WriteEndElement(); // returnValue
         }
         writer.WriteEndElement(); // returnValues
@@ -358,9 +358,14 @@ internal sealed class MamlHelpWriter
         writer.WriteEndElement(); // command:parameter
     }
 
-    private static void WriteTypeWithDescription(XmlWriter writer, DocumentationTypeHelp type)
+    private static void WriteTypeWithDescription(
+        XmlWriter writer,
+        DocumentationTypeHelp type,
+        bool preserveBoundaryLineBreaks)
     {
-        var name = string.IsNullOrWhiteSpace(type.Name) ? "None" : type.Name.Trim('\r', '\n');
+        var name = string.IsNullOrWhiteSpace(type.Name)
+            ? "None"
+            : preserveBoundaryLineBreaks ? type.Name : type.Name.Trim('\r', '\n');
         writer.WriteStartElement("dev", "type", DevNs);
         writer.WriteElementString("maml", "name", MamlNs, name);
         writer.WriteEndElement(); // dev:type

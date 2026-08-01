@@ -472,12 +472,13 @@ public sealed class DocumentationBinaryFixtureTests
             var assemblyDistinctOutputCommand = Assert.Single(
                 payload.Commands,
                 item => string.Equals(item.Name, "Get-BinaryDocAssemblyDistinctOutputs", StringComparison.Ordinal));
-            Assert.Equal(
-                2,
-                assemblyDistinctOutputCommand.Outputs.Count(output => string.Equals(
-                    output.ClrTypeName,
-                    "BinaryDocFixture.AssemblyDistinct.SameResult",
-                    StringComparison.Ordinal)));
+            var assemblyDistinctOutputs = assemblyDistinctOutputCommand.Outputs.ToArray();
+            Assert.Equal(2, assemblyDistinctOutputs.Length);
+            Assert.Equal(2, assemblyDistinctOutputs.Select(output => output.Name).Distinct(StringComparer.Ordinal).Count());
+            Assert.All(assemblyDistinctOutputs, output => Assert.StartsWith(
+                "BinaryDocFixture.AssemblyDistinct.SameResult, BinaryDocOutputAssembly",
+                output.ClrTypeName,
+                StringComparison.Ordinal));
 
             var openGenericOutputCommand = Assert.Single(
                 payload.Commands,
@@ -492,6 +493,14 @@ public sealed class DocumentationBinaryFixtureTests
             var generatedMamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, moduleName, mamlDirectory);
             var generatedMaml = File.ReadAllText(generatedMamlPath);
             Assert.DoesNotContain('\0', generatedMaml);
+            var assemblyDistinctMarkdown = File.ReadAllText(Path.Combine(
+                markdownDirectory,
+                "Get-BinaryDocAssemblyDistinctOutputs.md"));
+            foreach (var assemblyName in new[] { "BinaryDocOutputAssemblyA", "BinaryDocOutputAssemblyB" })
+            {
+                Assert.Contains(assemblyName, assemblyDistinctMarkdown, StringComparison.Ordinal);
+                Assert.Contains(assemblyName, generatedMaml, StringComparison.Ordinal);
+            }
             Assert.Contains(
                 "Default value: & { $collection = [System.String[]]::new(2); $collection.SetValue(('a'), 0); $collection.SetValue(('b c'), 1); return ,$collection }",
                 File.ReadAllText(Path.Combine(markdownDirectory, "Get-BinaryDocEmptyDefault.md")),

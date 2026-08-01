@@ -625,6 +625,7 @@ try {
     $runtimeOutputByFoldedKey = [System.Collections.Generic.Dictionary[string,object]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $runtimeOutputFoldedKeyCounts = [System.Collections.Generic.Dictionary[string,int]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $runtimeOutputMetadata = @()
+    $runtimeOutputIdentityCounts = [System.Collections.Generic.Dictionary[string,int]]::new([System.StringComparer]::Ordinal)
     try {
       foreach ($outputType in @($c.OutputType)) {
         $metadata = GetOutputTypeMetadata $outputType
@@ -633,6 +634,10 @@ try {
         if (-not $seenRuntimeOutputIdentities.Add($runtimeIdentity)) { continue }
         [void]$seenOutputIdentities.Add([string]$metadata.identity)
         $runtimeOutputMetadata += $metadata
+        $runtimeOutputIdentityCounts[[string]$metadata.identity] =
+          if ($runtimeOutputIdentityCounts.ContainsKey([string]$metadata.identity)) {
+            [int]$runtimeOutputIdentityCounts[[string]$metadata.identity] + 1
+          } else { 1 }
         foreach ($key in @($metadata.keys)) { $runtimeOutputKeys[$key] = $true }
         AddTypeKeysToIndexes $metadata @($metadata.keys) `
           $runtimeOutputByKey $runtimeOutputKeyCounts $runtimeOutputByFoldedKey $runtimeOutputFoldedKeyCounts
@@ -641,6 +646,7 @@ try {
       foreach ($metadata in $runtimeOutputMetadata) {
         $typeDesc = ''
         $displayName = [string]$metadata.name
+        $displayClrTypeName = [string]$metadata.clrTypeName
         $exactHelpMatch = $null
         foreach ($key in @($metadata.keys)) {
           if ($helpOutputByKey.ContainsKey($key) -and
@@ -673,9 +679,15 @@ try {
           }
         }
 
+        if ([int]$runtimeOutputIdentityCounts[[string]$metadata.identity] -gt 1 -and
+            -not [string]::IsNullOrWhiteSpace([string]$metadata.assemblyQualifiedName)) {
+          $displayName = [string]$metadata.assemblyQualifiedName
+          $displayClrTypeName = [string]$metadata.assemblyQualifiedName
+        }
+
         $outputs += [ordered]@{
           name = $displayName
-          clrTypeName = [string]$metadata.clrTypeName
+          clrTypeName = $displayClrTypeName
           description = $typeDesc
         }
       }
