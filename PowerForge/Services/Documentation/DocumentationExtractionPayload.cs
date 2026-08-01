@@ -183,6 +183,10 @@ internal sealed class DocumentationSyntaxHelp
 [DataContract]
 internal sealed class DocumentationParameterHelp
 {
+    /// <summary>Raw runtime parameter name used to reconcile syntax text before display encoding.</summary>
+    [DataMember(Name = "originalName")]
+    public string OriginalName { get; set; } = string.Empty;
+
     /// <summary>Parameter name.</summary>
     [DataMember(Name = "name")]
     public string Name { get; set; } = string.Empty;

@@ -62,4 +62,35 @@ public class MarkdownDocumentBuilderTests
             .ReplaceLineEndings(Environment.NewLine) + Environment.NewLine,
             markdown);
     }
+
+    [Fact]
+    public void CodeFence_UsesDelimiterLongerThanEmbeddedBackticks()
+    {
+        var document = new MarkdownDocumentBuilder();
+        document.CodeFence("yaml", "Default value: first\n```\nlast");
+
+        var markdown = document.ToString();
+
+        Assert.Equal(
+            "````yaml\nDefault value: first\n```\nlast\n````\n".ReplaceLineEndings(Environment.NewLine),
+            markdown);
+    }
+
+    [Theory]
+    [InlineData("System.Collections.Generic.List`1", "``System.Collections.Generic.List`1``")]
+    [InlineData("`boundary`", "`` `boundary` ``")]
+    [InlineData("a``b", "```a``b```")]
+    public void InlineCode_UsesDelimiterLongerThanEmbeddedBackticks(string value, string expected)
+    {
+        Assert.Equal(expected, MarkdownDocumentBuilder.InlineCode(value));
+    }
+
+    [Fact]
+    public void InlineIdentityCode_EncodesDistinctLineBreakCodeUnits()
+    {
+        Assert.Equal("`A%u000DB%u000AC`", MarkdownDocumentBuilder.InlineIdentityCode("A\rB\nC"));
+        Assert.NotEqual(
+            MarkdownDocumentBuilder.InlineIdentityCode("A%u000AB"),
+            MarkdownDocumentBuilder.InlineIdentityCode("A\nB"));
+    }
 }

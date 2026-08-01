@@ -119,7 +119,7 @@ internal sealed class MamlHelpWriter
 
         foreach (var set in syntaxSets)
         {
-            var setName = set.Name.Trim();
+            var setName = set.Name;
             var parameters = (cmd.Parameters ?? Enumerable.Empty<DocumentationParameterHelp>())
                 .Where(p => ParameterInSet(p, setName))
                 .ToArray();
@@ -139,9 +139,8 @@ internal sealed class MamlHelpWriter
         writer.WriteStartElement("command", "syntaxItem", CommandNs);
         if (setName is not null)
         {
-            var normalizedSetName = setName.Trim();
-            if (normalizedSetName.Length > 0)
-                writer.WriteAttributeString("parameterSetName", normalizedSetName);
+            if (setName.Length > 0)
+                writer.WriteAttributeString("parameterSetName", setName);
         }
         writer.WriteElementString("maml", "name", MamlNs, commandName);
 
@@ -184,7 +183,7 @@ internal sealed class MamlHelpWriter
         foreach (var t in inputs)
         {
             writer.WriteStartElement("command", "inputType", CommandNs);
-            WriteTypeWithDescription(writer, t);
+            WriteTypeWithDescription(writer, t, preserveBoundaryLineBreaks: false);
             writer.WriteEndElement(); // inputType
         }
         writer.WriteEndElement(); // inputTypes
@@ -207,7 +206,7 @@ internal sealed class MamlHelpWriter
         foreach (var t in outputs)
         {
             writer.WriteStartElement("command", "returnValue", CommandNs);
-            WriteTypeWithDescription(writer, t);
+            WriteTypeWithDescription(writer, t, preserveBoundaryLineBreaks: true);
             writer.WriteEndElement(); // returnValue
         }
         writer.WriteEndElement(); // returnValues
@@ -296,8 +295,8 @@ internal sealed class MamlHelpWriter
     private static void WriteParameter(XmlWriter writer, DocumentationParameterHelp p, bool includeParameterValue, string? setName = null, string? syntaxText = null)
     {
         var aliases = (p.Aliases ?? Enumerable.Empty<string>())
-            .Where(a => !string.IsNullOrWhiteSpace(a))
-            .Select(a => a.Trim())
+            .Where(a => !string.IsNullOrEmpty(a))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         var aliasValue = aliases.Length == 0 ? "none" : string.Join(",", aliases);
@@ -330,9 +329,8 @@ internal sealed class MamlHelpWriter
         }
 
         var possibleValues = (p.PossibleValues ?? Enumerable.Empty<string>())
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => value.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(value => value is not null)
+            .Distinct(StringComparer.Ordinal)
             .ToArray();
         if (possibleValues.Length > 0)
         {
@@ -360,9 +358,14 @@ internal sealed class MamlHelpWriter
         writer.WriteEndElement(); // command:parameter
     }
 
-    private static void WriteTypeWithDescription(XmlWriter writer, DocumentationTypeHelp type)
+    private static void WriteTypeWithDescription(
+        XmlWriter writer,
+        DocumentationTypeHelp type,
+        bool preserveBoundaryLineBreaks)
     {
-        var name = string.IsNullOrWhiteSpace(type.Name) ? "None" : type.Name.Trim();
+        var name = string.IsNullOrWhiteSpace(type.Name)
+            ? "None"
+            : preserveBoundaryLineBreaks ? type.Name : type.Name.Trim('\r', '\n');
         writer.WriteStartElement("dev", "type", DevNs);
         writer.WriteElementString("maml", "name", MamlNs, name);
         writer.WriteEndElement(); // dev:type
@@ -459,8 +462,8 @@ internal sealed class MamlHelpWriter
         var sets = p.ParameterSets ?? Enumerable.Empty<string>();
         foreach (var s in sets)
         {
-            if (string.IsNullOrWhiteSpace(s)) continue;
-            var sn = s.Trim();
+            if (string.IsNullOrEmpty(s)) continue;
+            var sn = s;
             if (sn.Equals("(All)", StringComparison.OrdinalIgnoreCase)) return true;
             if (sn.Equals("__AllParameterSets", StringComparison.OrdinalIgnoreCase)) return true;
             if (sn.Equals(setName, StringComparison.OrdinalIgnoreCase)) return true;
@@ -471,24 +474,24 @@ internal sealed class MamlHelpWriter
     private static bool ParameterRequiredInSet(DocumentationParameterHelp p, string? setName, string? syntaxText)
     {
         if (p is null) return false;
-        if (string.IsNullOrWhiteSpace(setName)) return p.Required;
+        if (string.IsNullOrEmpty(setName)) return p.Required;
 
         var setRequired = p.ParameterSetRequired;
         if (setRequired is null || setRequired.Count == 0)
             return TryResolveRequiredFromSyntax(syntaxText, p.Name) ?? p.Required;
 
-        var normalizedSetName = setName!.Trim();
+        var normalizedSetName = setName!;
         foreach (var entry in setRequired)
         {
-            if (string.IsNullOrWhiteSpace(entry.Key)) continue;
-            if (entry.Key.Trim().Equals(normalizedSetName, StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrEmpty(entry.Key)) continue;
+            if (entry.Key.Equals(normalizedSetName, StringComparison.OrdinalIgnoreCase))
                 return entry.Value;
         }
 
         foreach (var entry in setRequired)
         {
-            if (string.IsNullOrWhiteSpace(entry.Key)) continue;
-            var key = entry.Key.Trim();
+            if (string.IsNullOrEmpty(entry.Key)) continue;
+            var key = entry.Key;
             if (key.Equals("(All)", StringComparison.OrdinalIgnoreCase) ||
                 key.Equals("__AllParameterSets", StringComparison.OrdinalIgnoreCase))
                 return entry.Value;

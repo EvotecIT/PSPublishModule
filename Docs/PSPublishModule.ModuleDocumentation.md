@@ -54,6 +54,7 @@ Useful XML authoring shapes that PowerForge now preserves for binary modules:
 - cmdlet `<summary>` for synopsis
 - cmdlet top-level `<para>` blocks or `<remarks>` for descriptions
 - parameter/property `<summary>` for parameter descriptions
+- `[PSDefaultValue(Value = ...)]` on optional binary-cmdlet parameters for generated default values; nonblank `Help` takes precedence as the display label, and string values are rendered as PowerShell literals
 - `<list type="alertSet">` for notes
 - `<example>` with `<summary>`, `<prefix>`, `<code>`, and `<para>`
 - `<seealso>` links

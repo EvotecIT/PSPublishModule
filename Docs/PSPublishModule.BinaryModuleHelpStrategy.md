@@ -29,6 +29,7 @@ For C# cmdlets, the source of truth should be:
   - `<list type="alertSet">`: notes / warnings / caveats
 - parameter property / field XML docs
   - `<summary>` / `<remarks>`: parameter description
+  - `[PSDefaultValue(Value = ...)]`: documented runtime default for optional parameters; nonblank `Help` is the preferred display label, while string values are rendered as PowerShell literals to preserve whitespace
 - referenced input/output CLR type XML docs
   - `<summary>` / `<remarks>`: input/output type descriptions
 - curated module content
@@ -91,6 +92,7 @@ Recommended direction:
    - aliases
    - pipeline behavior
    - validate-set / enum values
+   - declared `PSDefaultValue` metadata
    - common PowerShell help semantics
 3. Layer binary XML-doc enrichment on top for:
    - synopsis

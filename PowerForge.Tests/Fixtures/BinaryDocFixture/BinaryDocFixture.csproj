@@ -15,4 +15,13 @@
     <PackageReference Include="PowerShellStandard.Library" Version="5.1.1" PrivateAssets="all" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="AssemblyDistinctA\BinaryDocOutputAssemblyA.csproj" Aliases="DistinctA" />
+    <ProjectReference Include="AssemblyDistinctB\BinaryDocOutputAssemblyB.csproj" Aliases="DistinctB" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="AssemblyDistinctA\**;AssemblyDistinctB\**" />
+  </ItemGroup>
+
 </Project>

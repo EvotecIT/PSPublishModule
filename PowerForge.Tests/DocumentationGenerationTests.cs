@@ -186,7 +186,7 @@ EXAMPLES
                                 Name = "Mode",
                                 Type = "String",
                                 ParameterSets = new List<string> { "ByMode" },
-                                PossibleValues = new List<string> { "Basic", "Advanced" }
+                                PossibleValues = new List<string> { "Basic", "basic", "Advanced" }
                             }
                         }
                     }
@@ -216,8 +216,14 @@ EXAMPLES
                 .Select(v => v.Value)
                 .ToArray();
             Assert.NotNull(possibleValues);
-            Assert.Contains("Basic", possibleValues!);
-            Assert.Contains("Advanced", possibleValues!);
+            Assert.Equal(new[] { "Basic", "basic", "Advanced" }, possibleValues);
+
+            var markdownRoot = Path.Combine(root, "markdown");
+            new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "TestModule", markdownRoot);
+            Assert.Contains(
+                "Possible values: Basic, basic, Advanced",
+                File.ReadAllText(Path.Combine(markdownRoot, "Invoke-Thing.md")),
+                StringComparison.Ordinal);
         }
         finally
         {
@@ -746,6 +752,7 @@ Markdown only topic body.
 
             var text = File.ReadAllText(Path.Combine(root, "Get-Demo.md"));
             Assert.False(HasIsolatedLf(text), "Markdown help should be normalized to CRLF line endings.");
+            Assert.Contains("Aliases: None\r\n", text, StringComparison.Ordinal);
             Assert.Contains("Possible values:\r\n\r\nRequired:", text, StringComparison.Ordinal);
             Assert.DoesNotContain("Possible values: \r\n", text, StringComparison.Ordinal);
         }
@@ -753,6 +760,94 @@ Markdown only topic body.
         {
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void DocumentationWriters_PreserveExactParameterAliases()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-doc-aliases-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var payload = new DocumentationExtractionPayload
+            {
+                ModuleName = "DemoModule",
+                Commands =
+                [
+                    new DocumentationCommandHelp
+                    {
+                        Name = "Get-Demo",
+                        Synopsis = "Gets demo data.",
+                        Parameters =
+                        [
+                            new DocumentationParameterHelp
+                            {
+                                Name = "Name",
+                                Type = "String",
+                                ParameterSets = ["__AllParameterSets"],
+                                Aliases = [" x ", "X", "x", " ", "", "' x '"]
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            var markdownRoot = Path.Combine(root, "Docs");
+            new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "DemoModule", markdownRoot);
+            var markdown = File.ReadAllText(Path.Combine(markdownRoot, "Get-Demo.md"));
+            Assert.Contains("Aliases: ' x ' [encoded 1], X, ' ', ' x '\r\n", markdown, StringComparison.Ordinal);
+
+            var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, "DemoModule", root);
+            var document = System.Xml.Linq.XDocument.Load(mamlPath, System.Xml.Linq.LoadOptions.PreserveWhitespace);
+            var aliasAttributes = document.Descendants()
+                .Where(element => element.Name.LocalName == "parameter")
+                .Select(element => element.Attribute("aliases")?.Value)
+                .Where(value => value is not null)
+                .ToArray();
+            Assert.NotEmpty(aliasAttributes);
+            Assert.All(aliasAttributes, value => Assert.Equal(" x ,X, ,' x '", value));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void MarkdownHelpWriter_PreservesWhitespaceOnlyOutputIdentities()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-doc-output-whitespace-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands =
+                [
+                    new DocumentationCommandHelp
+                    {
+                        Name = "Get-Demo",
+                        Outputs =
+                        [
+                            new DocumentationTypeHelp { Name = " " },
+                            new DocumentationTypeHelp { Name = "None" }
+                        ]
+                    }
+                ]
+            };
+
+            new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "DemoModule", root);
+            var markdown = File.ReadAllText(Path.Combine(root, "Get-Demo.md"));
+
+            Assert.Contains("- `' '`\r\n", markdown, StringComparison.Ordinal);
+            Assert.Contains("- `None`\r\n", markdown, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
         }
     }
 
@@ -1097,6 +1192,78 @@ Invoke-Demo -Settings {
 
             var output = Assert.Single(Assert.Single(payload.Commands).Outputs);
             Assert.Equal("Real result description.", output.Description);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void XmlDocCommentEnricher_PreservesCaseDistinctQualifiedTypeDescriptions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-xmldoc-type-case-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var assemblyPath = Path.Combine(root, "DemoModule.dll");
+            var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+            File.WriteAllText(assemblyPath, string.Empty);
+            File.WriteAllText(xmlPath, """
+<doc>
+  <members>
+    <member name="T:Demo.Namespace.MyCommand">
+      <summary>Cmdlet summary.</summary>
+    </member>
+    <member name="T:Demo.Namespace.Result">
+      <summary>Mixed-case result.</summary>
+    </member>
+    <member name="T:Demo.Namespace.RESULT">
+      <summary>Upper-case result.</summary>
+    </member>
+  </members>
+</doc>
+""");
+
+            var command = new DocumentationCommandHelp
+            {
+                Name = "Invoke-Demo",
+                CommandType = "Cmdlet",
+                ImplementingType = "Demo.Namespace.MyCommand",
+                AssemblyPath = assemblyPath,
+                Outputs =
+                [
+                    new DocumentationTypeHelp
+                    {
+                        Name = "Result",
+                        ClrTypeName = "Demo.Namespace.Result"
+                    },
+                    new DocumentationTypeHelp
+                    {
+                        Name = "RESULT",
+                        ClrTypeName = "Demo.Namespace.RESULT"
+                    },
+                    new DocumentationTypeHelp
+                    {
+                        Name = "result",
+                        ClrTypeName = "Demo.Namespace.result"
+                    }
+                ]
+            };
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands = [command]
+            };
+
+            new XmlDocCommentEnricher(new NullLogger()).Enrich(payload);
+
+            Assert.Collection(
+                command.Outputs,
+                output => Assert.Equal("Mixed-case result.", output.Description),
+                output => Assert.Equal("Upper-case result.", output.Description),
+                output => Assert.True(string.IsNullOrEmpty(output.Description)));
         }
         finally
         {
