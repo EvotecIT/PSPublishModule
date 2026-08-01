@@ -30,8 +30,11 @@ function GetOutputTypeSnapshot([object]$outputType) {
 
   return [pscustomobject][ordered]@{
     name = $outputTypeName
+    nameCodeUnits = ConvertToUtf16CodeUnits $outputTypeName
     clrTypeName = $outputTypeClrName
+    clrTypeNameCodeUnits = ConvertToUtf16CodeUnits $outputTypeClrName
     canonicalTypeName = $canonicalTypeName
+    canonicalTypeNameCodeUnits = ConvertToUtf16CodeUnits $canonicalTypeName
     runtimeIdentity = $runtimeIdentity
     description = ''
   }

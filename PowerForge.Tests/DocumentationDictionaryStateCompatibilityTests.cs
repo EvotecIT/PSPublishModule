@@ -14,13 +14,10 @@ public sealed class DocumentationDictionaryStateCompatibilityTests
         try
         {
             var scriptPath = Path.Combine(root, "Test-DictionaryState.ps1");
-            var scalarHelpers = EmbeddedScripts.Load(
-                "Scripts/Documentation/Export-HelpJson.DefaultValueScalars.ps1");
             var typeHelpers = EmbeddedScripts.Load(
                 "Scripts/Documentation/Export-HelpJson.TypeIdentity.ps1");
             File.WriteAllText(scriptPath, "param([string]$OutputPath)" + Environment.NewLine +
                 "$ErrorActionPreference = 'Stop'" + Environment.NewLine +
-                scalarHelpers + Environment.NewLine +
                 typeHelpers + Environment.NewLine + """
 function GetCanonicalTypeNameFromType([type]$type) { return $type.FullName }
 function GetPowerShellTypeDefaultExpression([type]$type) { return ('[' + $type.FullName + ']') }

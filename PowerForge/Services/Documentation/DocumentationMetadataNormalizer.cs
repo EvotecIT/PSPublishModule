@@ -24,6 +24,10 @@ internal static class DocumentationMetadataNormalizer
         foreach (var command in payload.Commands ?? new List<DocumentationCommandHelp>())
         {
             if (command is null) continue;
+            RestoreTypeIdentityText(command.Inputs);
+            RestoreTypeIdentityText(command.Outputs);
+            RestoreTypeIdentityText(command.AuthoredOutputs);
+            RestoreTypeIdentityText(command.RuntimeOutputs);
             NormalizeParameters(command);
             NormalizeOutputs(command);
         }
@@ -112,11 +116,32 @@ internal static class DocumentationMetadataNormalizer
         foreach (var value in values ?? Array.Empty<DocumentationTypeHelp>())
         {
             if (value is null) continue;
-            value.Name = Display(value.Name);
-            value.ClrTypeName = Display(value.ClrTypeName);
-            value.CanonicalTypeName = Display(value.CanonicalTypeName);
+            if (!value.IdentityTextNormalized)
+            {
+                value.Name = DocumentationIdentityTextFormatter.Format(value.Name);
+                value.ClrTypeName = DocumentationIdentityTextFormatter.Format(value.ClrTypeName);
+                value.CanonicalTypeName = DocumentationIdentityTextFormatter.Format(value.CanonicalTypeName);
+                value.IdentityTextNormalized = true;
+            }
             value.RuntimeIdentity = string.Empty;
             value.Description = Display(value.Description);
+        }
+    }
+
+    private static void RestoreTypeIdentityText(IEnumerable<DocumentationTypeHelp>? values)
+    {
+        foreach (var value in values ?? Array.Empty<DocumentationTypeHelp>())
+        {
+            if (value is null) continue;
+            if (!string.IsNullOrEmpty(value.NameCodeUnits))
+                value.Name = PowerShellDefaultValueFormatter.DecodeUtf16CodeUnits(value.NameCodeUnits);
+            if (!string.IsNullOrEmpty(value.ClrTypeNameCodeUnits))
+                value.ClrTypeName = PowerShellDefaultValueFormatter.DecodeUtf16CodeUnits(value.ClrTypeNameCodeUnits);
+            if (!string.IsNullOrEmpty(value.CanonicalTypeNameCodeUnits))
+                value.CanonicalTypeName = PowerShellDefaultValueFormatter.DecodeUtf16CodeUnits(value.CanonicalTypeNameCodeUnits);
+            value.NameCodeUnits = null;
+            value.ClrTypeNameCodeUnits = null;
+            value.CanonicalTypeNameCodeUnits = null;
         }
     }
 
@@ -497,11 +522,11 @@ internal static class DocumentationMetadataNormalizer
         string? name = null)
         => new()
         {
-            Name = PowerShellDefaultValueFormatter.FormatDisplayText(name ?? source.Name ?? string.Empty),
-            ClrTypeName = PowerShellDefaultValueFormatter.FormatDisplayText(source.ClrTypeName ?? string.Empty),
-            CanonicalTypeName = PowerShellDefaultValueFormatter.FormatDisplayText(source.CanonicalTypeName ?? string.Empty),
+            Name = name ?? source.Name ?? string.Empty,
+            ClrTypeName = source.ClrTypeName ?? string.Empty,
+            CanonicalTypeName = source.CanonicalTypeName ?? string.Empty,
             RuntimeIdentity = string.Empty,
-            Description = PowerShellDefaultValueFormatter.FormatDisplayText(description)
+            Description = description
         };
 
     private sealed class TypeIndex

@@ -734,8 +734,11 @@ try {
 
         $helpOutputs += [ordered]@{
           name = $typeName
+          nameCodeUnits = & $collectorProtocol.ConvertToUtf16CodeUnits $typeName
           clrTypeName = $typeClrName
+          clrTypeNameCodeUnits = & $collectorProtocol.ConvertToUtf16CodeUnits $typeClrName
           canonicalTypeName = $canonicalTypeName
+          canonicalTypeNameCodeUnits = & $collectorProtocol.ConvertToUtf16CodeUnits $canonicalTypeName
           description = $typeDesc
         }
       }

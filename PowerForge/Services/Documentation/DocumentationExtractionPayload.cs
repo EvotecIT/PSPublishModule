@@ -121,9 +121,16 @@ internal sealed class DocumentationCommandHelp
 [DataContract]
 internal sealed class DocumentationTypeHelp
 {
+    /// <summary>Tracks one-time lossless rendering of XML-bound identity text.</summary>
+    public bool IdentityTextNormalized { get; set; }
+
     /// <summary>Type name.</summary>
     [DataMember(Name = "name")]
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>Lossless UTF-16 transport for the type name.</summary>
+    [DataMember(Name = "nameCodeUnits")]
+    public string? NameCodeUnits { get; set; }
 
     /// <summary>
     /// CLR full type name when known. This is used for binary-module XML doc enrichment.
@@ -131,9 +138,17 @@ internal sealed class DocumentationTypeHelp
     [DataMember(Name = "clrTypeName")]
     public string ClrTypeName { get; set; } = string.Empty;
 
+    /// <summary>Lossless UTF-16 transport for the CLR type name.</summary>
+    [DataMember(Name = "clrTypeNameCodeUnits")]
+    public string? ClrTypeNameCodeUnits { get; set; }
+
     /// <summary>Canonical CLR type identity observed inside the target PowerShell host.</summary>
     [DataMember(Name = "canonicalTypeName")]
     public string CanonicalTypeName { get; set; } = string.Empty;
+
+    /// <summary>Lossless UTF-16 transport for the canonical CLR identity.</summary>
+    [DataMember(Name = "canonicalTypeNameCodeUnits")]
+    public string? CanonicalTypeNameCodeUnits { get; set; }
 
     /// <summary>Process-local structural identity used to retain distinct runtime Type instances.</summary>
     [DataMember(Name = "runtimeIdentity")]
