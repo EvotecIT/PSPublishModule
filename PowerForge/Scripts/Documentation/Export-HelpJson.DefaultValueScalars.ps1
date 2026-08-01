@@ -138,7 +138,7 @@ function GetAutomationNullDictionaryEntryPredicate([bool]$key) {
   $predicateName = if ($key) { 'PowerForgeAutomationNullDictionaryKeyPredicate' } else {
     'PowerForgeAutomationNullDictionaryValuePredicate'
   }
-  $predicate = Get-Variable -Scope Script -Name $predicateName -ValueOnly -ErrorAction SilentlyContinue
+  $predicate = Microsoft.PowerShell.Utility\Get-Variable -Scope Script -Name $predicateName -ValueOnly -ErrorAction SilentlyContinue
   if ($null -eq $predicate) {
     $sentinelProperty = GetAutomationNullValueProperty
     if ($null -eq $sentinelProperty) { return $false }
@@ -152,7 +152,7 @@ function GetAutomationNullDictionaryEntryPredicate([bool]$key) {
     $predicate = [System.Linq.Expressions.Expression]::Lambda(
       $delegateType, $body,
       [System.Linq.Expressions.ParameterExpression[]]@($entryParameter)).Compile()
-    Set-Variable -Scope Script -Name $predicateName -Value $predicate
+    Microsoft.PowerShell.Utility\Set-Variable -Scope Script -Name $predicateName -Value $predicate
   }
   return $predicate
 }
@@ -230,7 +230,7 @@ function TestPSDefaultValueContainsAutomationNull(
 
 function GetCollectorHelperFunctionSnapshot {
   $snapshot = @{}
-  foreach ($command in Get-Command -CommandType Function) {
+  foreach ($command in Microsoft.PowerShell.Core\Get-Command -CommandType Function) {
     if ($null -ne $command.ScriptBlock -and
         $command.ScriptBlock.File -eq $PSCommandPath) {
       $snapshot[$command.Name] = $command.ScriptBlock

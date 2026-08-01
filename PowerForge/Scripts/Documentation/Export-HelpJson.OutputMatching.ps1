@@ -91,13 +91,17 @@ function TestXmlSafeIdentityText([string]$text) {
   }
 }
 
+function GetDocumentedModuleCommands([System.Management.Automation.PSModuleInfo]$module) {
+  return @(@($module.ExportedCmdlets.Values) + @($module.ExportedFunctions.Values)) | Microsoft.PowerShell.Core\Where-Object {
+    $_.CommandType -eq 'Cmdlet' -or $_.CommandType -eq 'Function'
+  } | Microsoft.PowerShell.Utility\Sort-Object -Property Name
+}
+
 function GetDocumentedModuleCommandSnapshot(
   [System.Management.Automation.PSModuleInfo]$module,
   [System.Management.Automation.CommandInfo]$testXmlSafeIdentityText
 ) {
-  $commands = @(@($module.ExportedCmdlets.Values) + @($module.ExportedFunctions.Values)) | Where-Object {
-    $_.CommandType -eq 'Cmdlet' -or $_.CommandType -eq 'Function'
-  } | Sort-Object -Property Name
+  $commands = @(GetDocumentedModuleCommands $module)
   $helpByCommandName = [System.Collections.Generic.Dictionary[string,object]]::new(
     [System.StringComparer]::OrdinalIgnoreCase)
   foreach ($command in $commands) {

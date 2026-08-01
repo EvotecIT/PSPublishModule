@@ -151,3 +151,69 @@ function ConvertParametersToXmlSafeDocumentationText([object[]]$parameters) {
   }
   return @($parameters)
 }
+
+function ConvertParameterSetIdentitiesToXmlSafeDocumentationText(
+  [string]$defaultSet,
+  [object[]]$syntax,
+  [object[]]$parameters
+) {
+  $rawNames = [System.Collections.Generic.List[string]]::new()
+  if ($defaultSet) { $rawNames.Add($defaultSet) }
+  foreach ($entry in @($syntax)) { $rawNames.Add([string]$entry.name) }
+  foreach ($parameter in @($parameters)) {
+    foreach ($name in @($parameter.parameterSets)) { $rawNames.Add([string]$name) }
+    foreach ($name in @($parameter.parameterSetRequired.Keys)) { $rawNames.Add([string]$name) }
+  }
+
+  $reserved = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase)
+  foreach ($name in $rawNames) {
+    if (TestXmlSafeIdentityText $name) { [void]$reserved.Add($name) }
+  }
+  $used = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase)
+  $map = [System.Collections.Generic.Dictionary[string,string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase)
+  foreach ($rawName in $rawNames) {
+    if ($map.ContainsKey($rawName)) { continue }
+    $name = $rawName
+    if (-not (TestXmlSafeIdentityText $rawName)) {
+      $baseName = ConvertToXmlSafeIdentityText $rawName
+      $name = $baseName
+      $suffix = 1
+      while ($reserved.Contains($name) -or -not $used.Add($name)) {
+        $name = $baseName + ' [encoded ' +
+          $suffix.ToString([System.Globalization.CultureInfo]::InvariantCulture) + ']'
+        $suffix++
+      }
+    } else {
+      [void]$used.Add($name)
+    }
+    $map.Add($rawName, $name)
+  }
+
+  if ($defaultSet -and $map.ContainsKey($defaultSet)) { $defaultSet = $map[$defaultSet] }
+  foreach ($entry in @($syntax)) {
+    $rawName = [string]$entry.name
+    if ($map.ContainsKey($rawName)) { $entry.name = $map[$rawName] }
+  }
+  foreach ($parameter in @($parameters)) {
+    $parameter.parameterSets = @($parameter.parameterSets | Microsoft.PowerShell.Core\ForEach-Object {
+      $rawName = [string]$_
+      if ($map.ContainsKey($rawName)) { $map[$rawName] } else { $rawName }
+    })
+    $required = [System.Collections.Generic.Dictionary[string,bool]]::new(
+      [System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($entry in $parameter.parameterSetRequired.GetEnumerator()) {
+      $rawName = [string]$entry.Key
+      $name = if ($map.ContainsKey($rawName)) { $map[$rawName] } else { $rawName }
+      $required[$name] = [bool]$entry.Value
+    }
+    $parameter.parameterSetRequired = $required
+  }
+  return [pscustomobject]@{
+    DefaultSet = $defaultSet
+    Syntax = @($syntax)
+    Parameters = @($parameters)
+  }
+}

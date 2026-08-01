@@ -434,8 +434,8 @@ function GetExactLoadedTypeMatches([string]$assemblyName, [string]$typeName) {
     if ($null -eq $candidate) {
       try {
         $candidate = $assembly.GetTypes() |
-          Where-Object { $_.FullName -ceq $typeName } |
-          Select-Object -First 1
+          Microsoft.PowerShell.Core\Where-Object { $_.FullName -ceq $typeName } |
+          Microsoft.PowerShell.Utility\Select-Object -First 1
       } catch {
         $candidate = $null
       }

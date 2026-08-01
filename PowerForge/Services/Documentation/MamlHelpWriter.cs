@@ -361,7 +361,7 @@ internal sealed class MamlHelpWriter
 
     private static void WriteTypeWithDescription(XmlWriter writer, DocumentationTypeHelp type)
     {
-        var name = string.IsNullOrWhiteSpace(type.Name) ? "None" : type.Name.Trim();
+        var name = string.IsNullOrWhiteSpace(type.Name) ? "None" : type.Name;
         writer.WriteStartElement("dev", "type", DevNs);
         writer.WriteElementString("maml", "name", MamlNs, name);
         writer.WriteEndElement(); // dev:type

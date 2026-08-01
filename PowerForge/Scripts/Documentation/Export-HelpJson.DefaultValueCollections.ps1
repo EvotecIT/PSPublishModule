@@ -23,7 +23,7 @@ function ConvertMultidimensionalArrayToPowerShellDefaultValue(
     '$array = [System.Array]::CreateInstance(' + $elementTypeExpression +
     ', [int[]]@(' + ($lengths -join ', ') + '), [int[]]@(' + ($lowerBounds -join ', ') + '))')
   for ($position = 0; $position -lt $value.Length; $position++) {
-    $indexText = ($indices | ForEach-Object {
+    $indexText = ($indices | Microsoft.PowerShell.Core\ForEach-Object {
       $_.ToString([System.Globalization.CultureInfo]::InvariantCulture)
     }) -join ', '
     $itemExpression = ConvertToPowerShellDefaultValue ($value.GetValue($indices)) $referenceStack

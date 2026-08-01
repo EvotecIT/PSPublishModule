@@ -14,9 +14,9 @@ $ProgressPreference = 'SilentlyContinue'
 function EmitError([string]$msg) {
   try {
     $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$msg))
-    Write-Output ('PFDOCS::ERROR::' + $b64)
+    Microsoft.PowerShell.Utility\Write-Output ('PFDOCS::ERROR::' + $b64)
   } catch {
-    Write-Output 'PFDOCS::ERROR::'
+    Microsoft.PowerShell.Utility\Write-Output 'PFDOCS::ERROR::'
   }
 }
 
@@ -258,7 +258,7 @@ try {
       if ($null -ne $ps -and $null -ne $ps.Parameters) { $psParameters = @($ps.Parameters) }
       foreach ($pp in $psParameters) {
         $pn = [string]$pp.Name
-        if (-not $paramSets.ContainsKey($pn)) { $paramSets[$pn] = New-Object System.Collections.Generic.List[string] }
+        if (-not $paramSets.ContainsKey($pn)) { $paramSets[$pn] = Microsoft.PowerShell.Utility\New-Object System.Collections.Generic.List[string] }
         $null = $paramSets[$pn].Add([string]$ps.Name)
       }
     }
@@ -282,13 +282,13 @@ try {
     $paramNames = @()
     try {
       if ($c -and $c.Parameters) {
-        $paramNames = @($c.Parameters.GetEnumerator() | ForEach-Object { [string]$_.Key })
+        $paramNames = @($c.Parameters.GetEnumerator() | Microsoft.PowerShell.Core\ForEach-Object { [string]$_.Key })
       }
     } catch { $paramNames = @() }
     foreach ($hp in $helpParameters) { try { $paramNames += [string]$hp.Name } catch {
       # best effort: keep extracting other parameters even when one help node is incomplete
     } }
-    $paramNames = @($paramNames | Where-Object { $_ -and ($commonParamNames -notcontains $_) } | Sort-Object -Unique)
+    $paramNames = @($paramNames | Microsoft.PowerShell.Core\Where-Object { $_ -and ($commonParamNames -notcontains $_) } | Microsoft.PowerShell.Utility\Sort-Object -Unique)
 
     $parameters = @()
     foreach ($pn in $paramNames) {
@@ -464,6 +464,10 @@ try {
     }
 
     $parameters = @(ConvertParametersToXmlSafeDocumentationText @($parameters))
+    $parameterSetIdentities = ConvertParameterSetIdentitiesToXmlSafeDocumentationText $defaultSet @($syntax) @($parameters)
+    $defaultSet = $parameterSetIdentities.DefaultSet
+    $syntax = @($parameterSetIdentities.Syntax)
+    $parameters = @($parameterSetIdentities.Parameters)
 
     $helpExamples = @()
     try {
@@ -758,11 +762,11 @@ try {
   }
 
   $outDir = Split-Path -Path $OutputJsonPath -Parent
-  if ($outDir) { [System.IO.Directory]::CreateDirectory($outDir) | Out-Null }
-  $json = $result | ConvertTo-Json -Depth 8
+  if ($outDir) { [System.IO.Directory]::CreateDirectory($outDir) | Microsoft.PowerShell.Core\Out-Null }
+  $json = $result | Microsoft.PowerShell.Utility\ConvertTo-Json -Depth 8
   [System.IO.File]::WriteAllText($OutputJsonPath, $json, [System.Text.UTF8Encoding]::new($false))
 
-  Write-Output 'PFDOCS::OK'
+  Microsoft.PowerShell.Utility\Write-Output 'PFDOCS::OK'
   exit 0
 } catch {
   EmitError $_.Exception.Message

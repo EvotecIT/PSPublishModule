@@ -253,7 +253,9 @@ internal sealed class MarkdownHelpWriter
         if (outputs.Length == 0) doc.RawLine($"- {MarkdownDocumentBuilder.InlineCode("None")}");
         foreach (var o in outputs)
         {
-            var name = string.IsNullOrWhiteSpace(o.Name) ? "None" : o.Name.Trim();
+            var name = string.IsNullOrWhiteSpace(o.Name) ? "None" : o.Name;
+            if (name.Length != name.Trim().Length)
+                name = "'" + name.Replace("'", "''") + "'";
             var desc = (o.Description ?? string.Empty).Replace("\r\n", "\n").Replace("\n", " ").Trim();
             var inlineName = MarkdownDocumentBuilder.InlineCode(name);
             doc.RawLine(string.IsNullOrWhiteSpace(desc) ? $"- {inlineName}" : $"- {inlineName} — {desc}");
