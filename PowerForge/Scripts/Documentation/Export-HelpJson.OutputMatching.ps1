@@ -38,17 +38,18 @@ function GetOutputTypeMetadata([object]$outputType) {
       # best effort: OutputType wrappers differ between hosts and command kinds
     }
   }
-  $outputTypeName = $outputTypeName.Trim()
-  $outputTypeClrName = $outputTypeClrName.Trim()
   if (-not $outputTypeClrName) { $outputTypeClrName = $outputTypeName }
   if (-not $outputTypeName) { $outputTypeName = $outputTypeClrName }
   if (-not $outputTypeName) { return $null }
   $outputIdentity = if ($outputRuntimeType -is [type]) {
     GetCanonicalTypeNameFromType $outputRuntimeType
   } else {
-    GetTypeIdentity $outputTypeName $outputTypeClrName
+    if (-not [string]::IsNullOrWhiteSpace($outputTypeClrName)) {
+      $outputTypeClrName
+    } else {
+      $outputTypeName
+    }
   }
-  $outputIdentity = ([string]$outputIdentity).Trim()
   if ($outputRuntimeType -is [type] -and $outputRuntimeType.IsGenericType) {
     $outputTypeName = $outputIdentity
   }

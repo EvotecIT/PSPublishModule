@@ -19,6 +19,8 @@ public sealed class DocumentationCommandIdentityCompatibilityTests
             File.WriteAllText(
                 scriptPath,
                 "param([string]$OutputPath)" + Environment.NewLine +
+                EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.TypeIdentity.ps1") +
+                Environment.NewLine +
                 EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.OutputMatching.ps1") +
                 Environment.NewLine + """
 $invalidName = 'Get-A' + [char]1
@@ -68,6 +70,50 @@ $valid = @(
                 .ToArray();
             Assert.Contains("Get-A%u0001", names);
             Assert.Contains("Get-A%25u0001", names);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DocumentationEngine_PreservesBoundaryWhitespaceInExtendedOutputTypesAcrossBothPowerShellHosts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-doc-output-whitespace-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var scriptPath = Path.Combine(root, "ValidateOutputNames.ps1");
+            var outputPath = Path.Combine(root, "validated.txt");
+            File.WriteAllText(
+                scriptPath,
+                "param([string]$OutputPath)" + Environment.NewLine +
+                EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.TypeIdentity.ps1") +
+                Environment.NewLine +
+                EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.OutputMatching.ps1") +
+                Environment.NewLine + """
+$values = foreach ($name in @(' A ', 'A')) {
+    $metadata = GetOutputTypeMetadata ([pscustomobject]@{
+        Name = $name
+        TypeName = [pscustomobject]@{ FullName = $name }
+    })
+    $metadata.name + '|' + $metadata.clrTypeName + '|' + $metadata.identity
+}
+[System.IO.File]::WriteAllLines($OutputPath, $values, [System.Text.UTF8Encoding]::new($false))
+""",
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            var hosts = OperatingSystem.IsWindows()
+                ? new[] { "pwsh.exe", "powershell.exe" }
+                : new[] { "pwsh" };
+            foreach (var host in hosts)
+            {
+                var run = new ExecutablePowerShellRunner(host, root).Run(
+                    new PowerShellRunRequest(scriptPath, new[] { outputPath }, TimeSpan.FromMinutes(1)));
+                Assert.Equal(0, run.ExitCode);
+                Assert.Equal([" A | A | A ", "A|A|A"], File.ReadAllLines(outputPath));
+            }
         }
         finally
         {
