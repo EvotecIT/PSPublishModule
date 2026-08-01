@@ -13,6 +13,48 @@ function Resolve-ReleasePath {
     return [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot $Path))
 }
 
+function Resolve-SafeReleaseOutputPath {
+    param(
+        [Parameter(Mandatory)] [string] $ProjectRoot,
+        [Parameter(Mandatory)] [string] $Path,
+        [Parameter(Mandatory)] [string] $Name
+    )
+
+    $root = [System.IO.Path]::GetFullPath($ProjectRoot).TrimEnd(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar)
+    $candidate = Resolve-ReleasePath -ProjectRoot $root -Path $Path
+    $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $prefix = $root + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $candidate.StartsWith($prefix, $comparison)) {
+        throw "$Name must resolve inside AppleApps.ProjectRoot: $candidate"
+    }
+
+    $current = $candidate
+    while ($true) {
+        $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+        if ($null -ne $item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "$Name must not traverse a symbolic link or reparse point: $current"
+        }
+        if ($current.Equals($root, $comparison)) { break }
+        $parent = Split-Path -Parent $current
+        if ([string]::IsNullOrWhiteSpace($parent) -or $parent.Equals($current, $comparison)) {
+            throw "$Name could not be bounded to AppleApps.ProjectRoot: $candidate"
+        }
+        $current = $parent
+    }
+    return $candidate
+}
+
+function Get-ReleaseFileFingerprint {
+    param([Parameter(Mandatory)] [string] $Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+    $item = Get-Item -LiteralPath $Path -Force
+    $hash = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+    return "$hash`:$($item.Length)`:$($item.LastWriteTimeUtc.Ticks)"
+}
+
 function Write-ReleaseOutput {
     param(
         [Parameter(Mandatory)] [string] $Name,
@@ -99,11 +141,29 @@ if ([string]::IsNullOrWhiteSpace($configuredReceiptPath)) {
         'build/powerforge/apple/release-receipt.json'
     }
 }
-$receiptPath = Resolve-ReleasePath -ProjectRoot $projectRoot -Path $configuredReceiptPath
+$defaultReceiptPath = if ($planOnly) {
+    'build/powerforge/apple/release-plan.json'
+} else {
+    'build/powerforge/apple/release-receipt.json'
+}
+try {
+    $receiptPath = Resolve-SafeReleaseOutputPath `
+        -ProjectRoot $projectRoot `
+        -Path $configuredReceiptPath `
+        -Name ($planOnly ? 'AppleApps.Automation.PlanReceiptPath' : 'AppleApps.Automation.ReceiptPath')
+} catch {
+    # The engine will report the invalid configured path. Keep the wrapper's
+    # fallback receipt inside the project so that failure remains actionable.
+    $receiptPath = Resolve-SafeReleaseOutputPath `
+        -ProjectRoot $projectRoot `
+        -Path $defaultReceiptPath `
+        -Name 'Apple failure fallback receipt path'
+}
 
 # Expose the expected artifact before invoking PowerForge. GitHub Actions then retains
 # the path even when the transition fails after PowerForge writes a failure receipt.
 Write-ReleaseOutput -Name 'receipt-path' -Value $receiptPath
+$receiptFingerprintBefore = Get-ReleaseFileFingerprint -Path $receiptPath
 
 $arguments = @('apple-release', $action, '--config', $env:INPUT_CONFIG_PATH, '--summary', '--output', 'json')
 if ($planOnly) { $arguments += '--plan' }
@@ -144,13 +204,16 @@ if (-not [string]::IsNullOrWhiteSpace($json)) {
 
 $result = $envelope.result
 $planSha256 = [string] $result.planSha256
-if ($planOnly -and $planSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
+if ($exitCode -eq 0 -and $planOnly -and $planSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
     throw "PowerForge action '$action' did not return a valid exact plan SHA-256."
 }
 Write-ReleaseOutput -Name 'plan-sha256' -Value $planSha256
 $reportedReceiptPath = [string] $result.receiptPath
-if (-not [string]::IsNullOrWhiteSpace($reportedReceiptPath)) {
-    $receiptPath = Resolve-ReleasePath -ProjectRoot $projectRoot -Path $reportedReceiptPath
+if ($exitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($reportedReceiptPath)) {
+    $receiptPath = Resolve-SafeReleaseOutputPath `
+        -ProjectRoot $projectRoot `
+        -Path $reportedReceiptPath `
+        -Name 'PowerForge reported receipt path'
     Write-ReleaseOutput -Name 'receipt-path' -Value $receiptPath
 }
 
@@ -173,7 +236,6 @@ if ($exitCode -ne 0) {
             retryable = [bool] $_.retryable
         }
     })
-    $engineReportedDiagnostics = $receiptDiagnostics.Count -gt 0
     $failureMessage = Get-FirstNonEmptyString @(
         $result.errorMessage,
         $envelope.PSObject.Properties['Error'].Value,
@@ -200,9 +262,12 @@ if ($exitCode -ne 0) {
             retryable = $false
         })
     }
-    # An early CLI/preflight failure has no engine receipt. Replace any stale file
-    # left by a previous invocation so monitoring can never upload old success state.
-    if (-not $engineReportedDiagnostics -or -not (Test-Path -LiteralPath $receiptPath -PathType Leaf)) {
+    $receiptFingerprintAfter = Get-ReleaseFileFingerprint -Path $receiptPath
+    $engineWroteCurrentReceipt = $null -ne $receiptFingerprintAfter -and
+        $receiptFingerprintAfter -ne $receiptFingerprintBefore
+    # Replace missing or byte-for-byte stale state. Preserve a file changed by this
+    # invocation even when stdout was malformed or did not carry diagnostics.
+    if (-not $engineWroteCurrentReceipt) {
         $relativeReceiptPath = [System.IO.Path]::GetRelativePath($projectRoot, $receiptPath).Replace('\', '/')
         Write-AtomicJsonFile -Path $receiptPath -Value ([ordered]@{
             schemaVersion = 3
