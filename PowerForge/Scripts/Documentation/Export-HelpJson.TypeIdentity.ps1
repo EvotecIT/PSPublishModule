@@ -85,6 +85,31 @@ function GetDictionaryCapacity([System.Collections.IDictionary]$value) {
     if ([int]$freeCountField.GetValue($value) -ne 0) {
       throw ('Dictionary defaults with removed slots are not supported: ' + $dictionaryType.FullName)
     }
+
+    $versionField = $null
+    foreach ($fieldName in @('_version', 'version')) {
+      $versionField = $dictionaryType.GetField($fieldName, $flags)
+      if ($null -ne $versionField) { break }
+    }
+    if ($null -eq $versionField) {
+      throw ('Dictionary serialization version is unavailable: ' + $dictionaryType.FullName)
+    }
+    if ([int]$versionField.GetValue($value) -ne $value.Count) {
+      throw ('Dictionary defaults with non-reconstructible serialization versions are not supported: ' +
+        $dictionaryType.FullName)
+    }
+  }
+
+  if ([object]::ReferenceEquals(
+      $dictionaryType,
+      [System.Collections.Specialized.OrderedDictionary])) {
+    $initialCapacityField = $dictionaryType.GetField(
+      '_initialCapacity',
+      [System.Reflection.BindingFlags]'Instance,NonPublic')
+    if ($null -eq $initialCapacityField) {
+      throw ('OrderedDictionary initial capacity is unavailable: ' + $dictionaryType.FullName)
+    }
+    return [int]$initialCapacityField.GetValue($value)
   }
 
   $capacityProperty = $dictionaryType.GetProperty(

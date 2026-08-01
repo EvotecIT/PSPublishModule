@@ -632,8 +632,8 @@ $invalidOutputFunction = "function Get-InvalidOutputFixture { [OutputType('Bad" 
             var generatedMarkdown = File.ReadAllText(Path.Combine(markdownDirectory, "Get-DefaultLiteralFixture.md"));
             Assert.Contains("Possible values: ' A ', ' a ', bad([char]1)value", generatedMarkdown, StringComparison.Ordinal);
             var invalidOutput = Assert.Single(invalidOutputCommand.Outputs);
-            Assert.Equal("Bad([char]1)Name", invalidOutput.Name);
-            Assert.Equal("Bad([char]1)Name", invalidOutput.ClrTypeName);
+            Assert.Equal("Bad%u0001Name", invalidOutput.Name);
+            Assert.Equal("Bad%u0001Name", invalidOutput.ClrTypeName);
 
             Assert.Equal("([double]-0.0)", Default("NegativeDouble"));
             Assert.Equal(
@@ -668,7 +668,7 @@ $invalidOutputFunction = "function Get-InvalidOutputFixture { [OutputType('Bad" 
             Assert.True(string.IsNullOrEmpty(Default("UserEscapedUri")));
             Assert.True(string.IsNullOrEmpty(Default("NoncanonicalUri")));
             Assert.Equal(
-                "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('alpha'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
+                "& { $dictionary = [System.Collections.Specialized.OrderedDictionary]::new(([int]2), [System.StringComparer]::OrdinalIgnoreCase); ([System.Collections.IDictionary]$dictionary).Add(('alpha'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('endpoint'), ([System.Uri]::new('relative/path', [System.UriKind]::Relative))); return ,$dictionary }",
                 Default("Dictionary"));
             Assert.Equal(
                 "& { $dictionary = [System.Collections.Generic.Dictionary[System.String,System.Int32]]::new(([int]3), [System.StringComparer]::Ordinal); ([System.Collections.IDictionary]$dictionary).Add(('A'), (1)); ([System.Collections.IDictionary]$dictionary).Add(('a'), (2)); return ,$dictionary }",

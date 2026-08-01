@@ -61,10 +61,30 @@ function GetOutputTypeMetadata([object]$outputType) {
   }
 }
 
+function ConvertToXmlSafeIdentityText([string]$text) {
+  $builder = [System.Text.StringBuilder]::new()
+  for ($index = 0; $index -lt $text.Length; $index++) {
+    $character = $text[$index]
+    if ($character -eq '%') {
+      [void]$builder.Append('%25')
+    } elseif ([char]::IsHighSurrogate($character) -and
+        $index + 1 -lt $text.Length -and
+        [char]::IsLowSurrogate($text[$index + 1])) {
+      [void]$builder.Append($character)
+      [void]$builder.Append($text[++$index])
+    } elseif ([System.Xml.XmlConvert]::IsXmlChar($character)) {
+      [void]$builder.Append($character)
+    } else {
+      [void]$builder.Append('%u' + ([int]$character).ToString('X4', [System.Globalization.CultureInfo]::InvariantCulture))
+    }
+  }
+  return $builder.ToString()
+}
+
 function ConvertOutputsToXmlSafeDocumentationText([object[]]$outputs) {
   foreach ($output in @($outputs)) {
-    $output.name = ConvertToXmlSafeDefaultHelpText ([string]$output.name)
-    $output.clrTypeName = ConvertToXmlSafeDefaultHelpText ([string]$output.clrTypeName)
+    $output.name = ConvertToXmlSafeIdentityText ([string]$output.name)
+    $output.clrTypeName = ConvertToXmlSafeIdentityText ([string]$output.clrTypeName)
     $output.description = ConvertToXmlSafeDefaultHelpText ([string]$output.description)
   }
   return @($outputs)
