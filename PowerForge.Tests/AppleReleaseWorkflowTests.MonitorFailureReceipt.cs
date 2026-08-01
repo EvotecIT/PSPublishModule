@@ -283,6 +283,49 @@ public sealed partial class AppleReleaseWorkflowTests
         }
     }
 
+    [Fact]
+    public void AppleActionPreservesFilesystemRootWhenResolvingReceiptPath()
+    {
+        if (!CommandExists("pwsh")) return;
+
+        var root = FindRepoRoot();
+        var sandbox = Path.Combine(root, ".test-temp", $"apple-root-receipt-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(sandbox);
+            var filesystemRoot = Path.GetPathRoot(sandbox)!;
+            var receiptPath = Path.Combine(sandbox, "root-configured-receipt.json");
+            var configuredPath = Path.GetRelativePath(filesystemRoot, receiptPath);
+            File.WriteAllText(
+                Path.Combine(sandbox, "powerforge.release.json"),
+                JsonSerializer.Serialize(new
+                {
+                    AppleApps = new
+                    {
+                        ProjectRoot = filesystemRoot,
+                        Automation = new { ReceiptPath = configuredPath }
+                    }
+                }));
+            var envelope = JsonSerializer.Serialize(new
+            {
+                success = false,
+                exitCode = 1,
+                result = new { success = false, errorMessage = "Root receipt test." }
+            });
+
+            var result = RunAppleWrapper(root, sandbox, CreateFailingTool(sandbox, envelope), writeConfig: false);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.True(File.Exists(receiptPath), result.StandardOutput + result.StandardError);
+            using var receipt = JsonDocument.Parse(File.ReadAllText(receiptPath));
+            Assert.Equal("Root receipt test.", receipt.RootElement.GetProperty("errorMessage").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+        }
+    }
+
     private static ProcessResult RunAppleWrapper(
         string root,
         string sandbox,

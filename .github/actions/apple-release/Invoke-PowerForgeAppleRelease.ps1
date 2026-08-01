@@ -20,12 +20,23 @@ function Resolve-SafeReleaseOutputPath {
         [Parameter(Mandatory)] [string] $Name
     )
 
-    $root = [System.IO.Path]::GetFullPath($ProjectRoot).TrimEnd(
-        [System.IO.Path]::DirectorySeparatorChar,
-        [System.IO.Path]::AltDirectorySeparatorChar)
-    $candidate = Resolve-ReleasePath -ProjectRoot $root -Path $Path
     $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
-    $prefix = $root + [System.IO.Path]::DirectorySeparatorChar
+    $fullRoot = [System.IO.Path]::GetFullPath($ProjectRoot)
+    $filesystemRoot = [System.IO.Path]::GetPathRoot($fullRoot)
+    $root = if ($fullRoot.Equals($filesystemRoot, $comparison)) {
+        $fullRoot
+    } else {
+        $fullRoot.TrimEnd(
+            [System.IO.Path]::DirectorySeparatorChar,
+            [System.IO.Path]::AltDirectorySeparatorChar)
+    }
+    $candidate = Resolve-ReleasePath -ProjectRoot $root -Path $Path
+    $prefix = if ($root.EndsWith([System.IO.Path]::DirectorySeparatorChar) -or
+        $root.EndsWith([System.IO.Path]::AltDirectorySeparatorChar)) {
+        $root
+    } else {
+        $root + [System.IO.Path]::DirectorySeparatorChar
+    }
     if (-not $candidate.StartsWith($prefix, $comparison)) {
         throw "$Name must resolve inside AppleApps.ProjectRoot: $candidate"
     }
@@ -46,7 +57,7 @@ function Resolve-SafeReleaseOutputPath {
             }
         }
         if ($current.Equals($root, $comparison)) { break }
-        $parent = Split-Path -Parent $current
+        $parent = [System.IO.Directory]::GetParent($current)?.FullName
         if ([string]::IsNullOrWhiteSpace($parent) -or $parent.Equals($current, $comparison)) {
             throw "$Name could not be bounded to AppleApps.ProjectRoot: $candidate"
         }
