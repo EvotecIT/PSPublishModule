@@ -323,7 +323,7 @@ function GetKnownDictionaryComparerExpression(
   $name = GetKnownDictionaryComparerName $comparer $comparerType
   if ($null -ne $referenceStack -and
       -not (TestDictionaryComparerIsSingleton $comparer $comparerType)) {
-    AddDefaultValueReference $comparer $referenceStack
+    AddRuntimeDefaultValueReference $comparer $referenceStack
   }
   if ([string]::IsNullOrWhiteSpace($name)) { return '' }
   if ($name.StartsWith('Culture|', [System.StringComparison]::Ordinal)) {
@@ -520,6 +520,13 @@ function ConvertToPowerShellTypeIdentityText([string]$text) {
   return ('(-join @(' + ($parts -join ', ') + '))')
 }
 
+function GetRuntimeIdentityType([type]$type) {
+  while ($type.IsPointer -or $type.IsByRef -or $type.IsArray) {
+    $type = $type.GetElementType()
+  }
+  return $type
+}
+
 function GetPowerShellTypeDefaultExpression([type]$type) {
   if ($type.IsGenericParameter) {
     throw 'Generic-parameter Type defaults are not supported.'
@@ -692,66 +699,4 @@ function ResolveCanonicalTypeName([string]$candidate) {
   }
   if ($resolvedType) { return GetCanonicalTypeNameFromType $resolvedType }
   return $trimmed
-}
-
-function GetCanonicalTypeName([string]$candidate) {
-  return ResolveCanonicalTypeName $candidate
-}
-
-function GetTypeKeys([string]$name, [string]$clrName) {
-  $keys = @()
-  foreach ($candidate in @($name, $clrName)) {
-    if (-not [string]::IsNullOrWhiteSpace($candidate)) {
-      $trimmed = $candidate.Trim()
-      $keys += $trimmed
-      $canonical = GetCanonicalTypeName $trimmed
-      if ($canonical) {
-        $keys += $canonical
-        $genericIndex = $canonical.IndexOf('[')
-        $baseName = if ($genericIndex -ge 0) { $canonical.Substring(0, $genericIndex) } else { $canonical }
-        $genericSuffix = if ($genericIndex -ge 0) { $canonical.Substring($genericIndex) } else { '' }
-        $separatorIndex = [System.Math]::Max($baseName.LastIndexOf('.'), $baseName.LastIndexOf('+'))
-        if ($separatorIndex -ge 0 -and $separatorIndex -lt ($baseName.Length - 1)) {
-          $keys += ($baseName.Substring($separatorIndex + 1) + $genericSuffix)
-        }
-      }
-    }
-  }
-  $uniqueKeys = [System.Collections.Generic.List[string]]::new()
-  $seenKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
-  foreach ($key in $keys) {
-    if ($seenKeys.Add([string]$key)) {
-      $uniqueKeys.Add([string]$key)
-    }
-  }
-  return @($uniqueKeys.ToArray())
-}
-
-function GetTypeIdentity([string]$name, [string]$clrName) {
-  foreach ($candidate in @($clrName, $name)) {
-    if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
-    $trimmed = $candidate.Trim()
-    $resolvedType = ResolveExactType $trimmed
-    $ambiguous = $false
-    if (-not $resolvedType) { $resolvedType = ResolveUniqueNestedType $trimmed ([ref]$ambiguous) }
-    if (-not $resolvedType -and -not $ambiguous) { $resolvedType = ResolveUniqueTypeCaseInsensitive $trimmed ([ref]$ambiguous) }
-    if ($resolvedType) { return GetCanonicalTypeNameFromType $resolvedType }
-    $identity = GetCanonicalTypeName $trimmed
-    if ($identity) { return $identity }
-  }
-  return ''
-}
-
-function TestQualifiedTypeIdentity([string]$identity) {
-  if ([string]::IsNullOrWhiteSpace($identity)) { return $false }
-  $baseName = $identity
-  $genericIndex = $baseName.IndexOf('[')
-  if ($genericIndex -ge 0) { $baseName = $baseName.Substring(0, $genericIndex) }
-  return $baseName.Contains('.') -or $baseName.Contains('+')
-}
-
-function TestConflictingQualifiedTypeIdentity([string]$left, [string]$right) {
-  return $left -cne $right -and
-    (TestQualifiedTypeIdentity $left) -and
-    (TestQualifiedTypeIdentity $right)
 }

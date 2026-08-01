@@ -98,6 +98,12 @@ function Get-DefaultStateFixture {
         $internedString = [string]::Intern((-join @('interned', '-', 'value')))
         $emptyMethod = [System.Array].GetMethod('Empty').MakeGenericMethod([int])
         $emptyArray = $emptyMethod.Invoke($null, [object[]]@())
+        $internedScriptText = [string]::Intern((-join @('param($Value)', "`n", '$Value')))
+        $internedScript = [scriptblock]::Create($internedScriptText)
+        if (-not [object]::ReferenceEquals(
+            $internedScript.ToString(), [string]::IsInterned($internedScript.ToString()))) {
+            throw 'The ScriptBlock fixture must retain its interned source string.'
+        }
         $nonInternedEmptyString = [string]::Copy('')
         $uriText = -join @('relative', '/', 'path')
         $uri = [uri]::new($uriText, [System.UriKind]::Relative)
@@ -121,6 +127,7 @@ function Get-DefaultStateFixture {
             @('InternedString', $internedString),
             @('SharedInternedStringReferences', [object[]]@($internedString, $internedString)),
             @('SharedEmptyArrayReferences', [object[]]@($emptyArray, $emptyArray)),
+            @('InternedScript', $internedScript),
             @('NonInternedEmptyString', $nonInternedEmptyString),
             @('CreatedInvariantComparer', $createdInvariantDictionary),
             @('SharedUriBacking', [object[]]@($uri, $uri.OriginalString)),
@@ -255,6 +262,26 @@ if (-not [object]::ReferenceEquals(
                         },
                         TimeSpan.FromMinutes(1)));
                 Assert.Equal(0, verification.ExitCode);
+
+                var internedScript = Assert.Single(command.Parameters, item => item.Name == "InternedScript");
+                Assert.Equal(
+                    "[scriptblock]::Create([string]::Intern((-join @('param($Value)', ([char]10), '$Value'))))",
+                    internedScript.DefaultValue);
+                var scriptVerificationPath = Path.Combine(root, "VerifyInternedScript.ps1");
+                File.WriteAllText(scriptVerificationPath, """
+param([string]$Expression)
+$scriptBlock = & ([scriptblock]::Create($Expression))
+$source = $scriptBlock.ToString()
+if (-not [object]::ReferenceEquals($source, [string]::IsInterned($source))) {
+    throw 'The reconstructed ScriptBlock source is not the intern-pool singleton.'
+}
+""", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                var scriptVerification = new ExecutablePowerShellRunner(host, root).Run(
+                    new PowerShellRunRequest(
+                        scriptVerificationPath,
+                        new[] { internedScript.DefaultValue },
+                        TimeSpan.FromMinutes(1)));
+                Assert.Equal(0, scriptVerification.ExitCode);
 
                 var nonInternedEmpty = Assert.Single(
                     command.Parameters,

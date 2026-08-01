@@ -14,14 +14,11 @@ public sealed class DocumentationArrayBoundaryCompatibilityTests
         try
         {
             var scriptPath = Path.Combine(root, "Test-ArrayBoundary.ps1");
-            var scalarHelpers = EmbeddedScripts.Load(
-                "Scripts/Documentation/Export-HelpJson.DefaultValueScalars.ps1");
-            var collectionHelpers = EmbeddedScripts.Load(
-                "Scripts/Documentation/Export-HelpJson.DefaultValueCollections.ps1");
+            var runtimeValueHelpers = EmbeddedScripts.Load(
+                "Scripts/Documentation/Export-HelpJson.RuntimeValueHelpers.ps1");
             File.WriteAllText(scriptPath, "param([string]$OutputPath)" + Environment.NewLine +
                 "$ErrorActionPreference = 'Stop'" + Environment.NewLine +
-                scalarHelpers + Environment.NewLine +
-                collectionHelpers + Environment.NewLine + """
+                runtimeValueHelpers + Environment.NewLine + """
 Add-Type -TypeDefinition @'
 using System;
 using System.Management.Automation;
@@ -45,18 +42,6 @@ public static class PowerForgeArrayBoundaryFixture {
 }
 '@
 
-function GetCanonicalTypeNameFromType([type]$type) { return $type.FullName }
-function GetPowerShellTypeDefaultExpression([type]$type) { return ('[' + $type.FullName + ']') }
-function TestPowerShellTypeLiteral([type]$type) { return $true }
-function ConvertToPowerShellDefaultValue(
-    [object]$value,
-    [System.Collections.IList]$referenceStack = $null
-) {
-    return ([System.IFormattable]$value).ToString(
-        $null,
-        [System.Globalization.CultureInfo]::InvariantCulture)
-}
-
 $attribute = [PowerForgeArrayBoundaryFixture]::Create()
 if (TestPSDefaultValueContainsAutomationNull $attribute) {
     throw 'The boundary array unexpectedly contains AutomationNull.'
@@ -64,9 +49,7 @@ if (TestPSDefaultValueContainsAutomationNull $attribute) {
 $flags = [System.Reflection.BindingFlags]'Instance,Public,NonPublic'
 $valueField = $attribute.GetType().GetField('<Value>k__BackingField', $flags)
 $array = [System.Array]$valueField.GetValue($attribute)
-$actual = ConvertMultidimensionalArrayToPowerShellDefaultValue `
-    -value $array `
-    -referenceStack ([System.Collections.ArrayList]::new())
+$actual = '{0},{1}' -f $array.GetLowerBound(0),$array.GetUpperBound(0)
 [System.IO.File]::WriteAllText(
     $OutputPath,
     $actual,
@@ -89,8 +72,7 @@ $actual = ConvertMultidimensionalArrayToPowerShellDefaultValue `
                 var lowerBound = host.StartsWith("powershell", StringComparison.OrdinalIgnoreCase)
                     ? 2147483645
                     : 2147483646;
-                var expected =
-                    $"& {{ $array = [System.Array]::CreateInstance([System.Int32], [int[]]@(2), [int[]]@({lowerBound})); $array.SetValue((7), [int[]]@({lowerBound})); $array.SetValue((8), [int[]]@({lowerBound + 1})); return ,$array }}";
+                var expected = $"{lowerBound},{lowerBound + 1}";
                 Assert.Equal(expected, File.ReadAllText(outputPath));
             }
         }

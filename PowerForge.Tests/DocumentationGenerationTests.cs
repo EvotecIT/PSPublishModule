@@ -1201,6 +1201,66 @@ Invoke-Demo -Settings {
     }
 
     [Fact]
+    public void XmlDocCommentEnricher_UsesRawTypeIdentityBeforeDisplayEncoding()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-xmldoc-raw-type-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var assemblyPath = Path.Combine(root, "DemoModule.dll");
+            var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+            File.WriteAllText(assemblyPath, string.Empty);
+            File.WriteAllText(xmlPath, """
+<doc>
+  <members>
+    <member name="T:Demo.Namespace.Result%Type">
+      <summary>Percent result description.</summary>
+    </member>
+    <member name="T:Demo.Namespace.MyCommand">
+      <summary>Cmdlet summary.</summary>
+    </member>
+  </members>
+</doc>
+""");
+
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands =
+                [
+                    new DocumentationCommandHelp
+                    {
+                        Name = "Invoke-Demo",
+                        CommandType = "Cmdlet",
+                        ImplementingType = "Demo.Namespace.MyCommand",
+                        AssemblyPath = assemblyPath,
+                        Inputs =
+                        [
+                            new DocumentationTypeHelp
+                            {
+                                Name = "Result%Type",
+                                ClrTypeName = "Demo.Namespace.Result%Type"
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            DocumentationMetadataNormalizer.Normalize(payload);
+            var input = Assert.Single(Assert.Single(payload.Commands).Inputs);
+            Assert.Equal("Demo.Namespace.Result%25Type", input.ClrTypeName);
+
+            new XmlDocCommentEnricher(new NullLogger()).Enrich(payload);
+
+            Assert.Equal("Percent result description.", input.Description);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void XmlDocCommentEnricher_PreservesCaseDistinctQualifiedTypeDescriptions()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-xmldoc-type-case-" + Guid.NewGuid().ToString("N"));

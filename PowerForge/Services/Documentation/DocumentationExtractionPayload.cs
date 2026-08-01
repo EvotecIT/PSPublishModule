@@ -98,6 +98,14 @@ internal sealed class DocumentationCommandHelp
     [DataMember(Name = "outputs")]
     public List<DocumentationTypeHelp> Outputs { get; set; } = new();
 
+    /// <summary>Authored output metadata captured from Get-Help before reconciliation.</summary>
+    [DataMember(Name = "authoredOutputs")]
+    public List<DocumentationTypeHelp> AuthoredOutputs { get; set; } = new();
+
+    /// <summary>Runtime output metadata captured from CommandInfo before reconciliation.</summary>
+    [DataMember(Name = "runtimeOutputs")]
+    public List<DocumentationTypeHelp> RuntimeOutputs { get; set; } = new();
+
     /// <summary>Related links (from Get-Help).</summary>
     [DataMember(Name = "relatedLinks")]
     public List<DocumentationLinkHelp> RelatedLinks { get; set; } = new();
@@ -113,15 +121,52 @@ internal sealed class DocumentationCommandHelp
 [DataContract]
 internal sealed class DocumentationTypeHelp
 {
+    /// <summary>Tracks one-time lossless rendering of XML-bound identity text.</summary>
+    public bool IdentityTextNormalized { get; set; }
+
+    /// <summary>Raw type name retained for XML documentation lookup before display encoding.</summary>
+    public string LookupName { get; set; } = string.Empty;
+
+    /// <summary>Raw CLR type name retained for XML documentation lookup before display encoding.</summary>
+    public string LookupClrTypeName { get; set; } = string.Empty;
+
     /// <summary>Type name.</summary>
     [DataMember(Name = "name")]
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>Lossless UTF-16 transport for the type name.</summary>
+    [DataMember(Name = "nameCodeUnits")]
+    public string? NameCodeUnits { get; set; }
 
     /// <summary>
     /// CLR full type name when known. This is used for binary-module XML doc enrichment.
     /// </summary>
     [DataMember(Name = "clrTypeName")]
     public string ClrTypeName { get; set; } = string.Empty;
+
+    /// <summary>Lossless UTF-16 transport for the CLR type name.</summary>
+    [DataMember(Name = "clrTypeNameCodeUnits")]
+    public string? ClrTypeNameCodeUnits { get; set; }
+
+    /// <summary>Canonical CLR type identity observed inside the target PowerShell host.</summary>
+    [DataMember(Name = "canonicalTypeName")]
+    public string CanonicalTypeName { get; set; } = string.Empty;
+
+    /// <summary>Lossless UTF-16 transport for the canonical CLR identity.</summary>
+    [DataMember(Name = "canonicalTypeNameCodeUnits")]
+    public string? CanonicalTypeNameCodeUnits { get; set; }
+
+    /// <summary>Assembly-qualified runtime type identity used to disambiguate colliding display names.</summary>
+    [DataMember(Name = "assemblyQualifiedName", EmitDefaultValue = false)]
+    public string? AssemblyQualifiedName { get; set; }
+
+    /// <summary>Lossless UTF-16 transport for the assembly-qualified runtime type identity.</summary>
+    [DataMember(Name = "assemblyQualifiedNameCodeUnits", EmitDefaultValue = false)]
+    public string? AssemblyQualifiedNameCodeUnits { get; set; }
+
+    /// <summary>Process-local structural identity used to retain distinct runtime Type instances.</summary>
+    [DataMember(Name = "runtimeIdentity")]
+    public string RuntimeIdentity { get; set; } = string.Empty;
 
     /// <summary>Type description.</summary>
     [DataMember(Name = "description")]
@@ -183,10 +228,6 @@ internal sealed class DocumentationSyntaxHelp
 [DataContract]
 internal sealed class DocumentationParameterHelp
 {
-    /// <summary>Raw runtime parameter name used to reconcile syntax text before display encoding.</summary>
-    [DataMember(Name = "originalName")]
-    public string OriginalName { get; set; } = string.Empty;
-
     /// <summary>Parameter name.</summary>
     [DataMember(Name = "name")]
     public string Name { get; set; } = string.Empty;
@@ -211,6 +252,21 @@ internal sealed class DocumentationParameterHelp
     [DataMember(Name = "possibleValues")]
     public List<string> PossibleValues { get; set; } = new();
 
+    /// <summary>Case-sensitive enum member names captured from the target PowerShell host.</summary>
+    [DataMember(Name = "enumPossibleValues")]
+    public List<string> EnumPossibleValues { get; set; } = new();
+
+    /// <summary>True when possible values came from an explicit ValidateSet attribute.</summary>
+    [DataMember(Name = "hasValidateSet")]
+    public bool HasValidateSet { get; set; }
+
+    /// <summary>True when explicit ValidateSet alternatives use ordinal case-sensitive binding.</summary>
+    [DataMember(Name = "validateSetCaseSensitive")]
+    public bool ValidateSetCaseSensitive { get; set; }
+
+    /// <summary>Tracks whether provenance-sensitive possible-value normalization already ran.</summary>
+    internal bool PossibleValuesNormalized { get; set; }
+
     /// <summary>True when the parameter is required.</summary>
     [DataMember(Name = "required")]
     public bool Required { get; set; }
@@ -226,6 +282,22 @@ internal sealed class DocumentationParameterHelp
     /// <summary>Default value (stringified).</summary>
     [DataMember(Name = "defaultValue")]
     public string DefaultValue { get; set; } = string.Empty;
+
+    /// <summary>True when PSDefaultValueAttribute explicitly supplied metadata.</summary>
+    [DataMember(Name = "hasMetadataDefault")]
+    public bool HasMetadataDefault { get; set; }
+
+    /// <summary>Optional authored display text from PSDefaultValueAttribute.Help.</summary>
+    [DataMember(Name = "metadataDefaultHelp")]
+    public string? MetadataDefaultHelp { get; set; }
+
+    /// <summary>Authored display text transported as UTF-16 code units to preserve invalid surrogate values.</summary>
+    [DataMember(Name = "metadataDefaultHelpCodeUnits")]
+    public string? MetadataDefaultHelpCodeUnits { get; set; }
+
+    /// <summary>Tagged PSDefaultValueAttribute.Value captured in the target PowerShell host.</summary>
+    [DataMember(Name = "metadataDefaultValue")]
+    public DocumentationRuntimeValue? MetadataDefaultValue { get; set; }
 
     /// <summary>Pipeline input text (True/False/ByValue/ByPropertyName).</summary>
     [DataMember(Name = "pipelineInput")]

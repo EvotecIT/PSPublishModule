@@ -47,14 +47,11 @@ public sealed class DocumentationCollectorBuiltinIsolationTests
             File.WriteAllText(
                 scriptPath,
                 "param([string]$ManifestPath, [string]$OutputPath)" + Environment.NewLine +
-                EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.OutputMatching.ps1") +
+                EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.Protocol.ps1") +
                 Environment.NewLine + "try {" + Environment.NewLine +
-                "$getCommands = (Get-Command GetDocumentedModuleCommands -CommandType Function).ScriptBlock" + Environment.NewLine +
-                "$getSnapshot = (Get-Command GetDocumentedModuleCommandSnapshot -CommandType Function).ScriptBlock" + Environment.NewLine +
-                "$testXml = (Get-Command TestXmlSafeIdentityText -CommandType Function).ScriptBlock" + Environment.NewLine +
+                "$getDocumentedModuleCommands = (Microsoft.PowerShell.Core\\Get-Command GetDocumentedModuleCommands -CommandType Function).ScriptBlock" + Environment.NewLine +
                 "$module = Microsoft.PowerShell.Core\\Import-Module -Name $ManifestPath -Force -PassThru -Function '*' -Cmdlet '*' -Alias '__none__' -Variable '__none__'" + Environment.NewLine +
-                "$snapshot = & $getSnapshot $module $testXml $getCommands" + Environment.NewLine +
-                "$names = @($snapshot.Commands | Microsoft.PowerShell.Core\\ForEach-Object { [string]$_.Name })" + Environment.NewLine +
+                "$names = @(& $getDocumentedModuleCommands $module | Microsoft.PowerShell.Core\\ForEach-Object { [string]$_.Name })" + Environment.NewLine +
                 "[System.IO.File]::WriteAllLines($OutputPath, $names, [System.Text.UTF8Encoding]::new($false))" + Environment.NewLine +
                 "} finally { if ($module) { Microsoft.PowerShell.Core\\Remove-Module $module -Force -ErrorAction SilentlyContinue } }",
                 new UTF8Encoding(false));
@@ -66,6 +63,47 @@ public sealed class DocumentationCollectorBuiltinIsolationTests
                     TimeSpan.FromSeconds(20)));
             Assert.Equal(0, run.ExitCode);
             Assert.Equal(exportedNames, File.ReadAllLines(outputPath));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    public static IEnumerable<object[]> PowerShellHosts()
+    {
+        var hosts = OperatingSystem.IsWindows() ? new[] { "pwsh.exe", "powershell.exe" } : new[] { "pwsh" };
+        foreach (var host in hosts)
+            yield return new object[] { host };
+    }
+
+    [Theory]
+    [MemberData(nameof(PowerShellHosts))]
+    public void RuntimeValueHelpers_IsolateBuiltinCmdletsFromTargetExports(string host)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-doc-helper-isolation-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var scriptPath = Path.Combine(root, "ValidateRuntimeHelperIsolation.ps1");
+            var outputPath = Path.Combine(root, "tokens.txt");
+            File.WriteAllText(
+                scriptPath,
+                "param([string]$OutputPath)" + Environment.NewLine +
+                EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.RuntimeValueHelpers.ps1") +
+                Environment.NewLine + "function global:Out-Null { throw 'Target Out-Null must not be invoked.' }" + Environment.NewLine +
+                "$tokens = [System.Collections.Generic.List[object]]::new()" + Environment.NewLine +
+                "if (-not (AddRuntimeNumericDefaultValueToken ([double]1.5) $tokens)) { throw 'Numeric token was not handled.' }" + Environment.NewLine +
+                "[System.IO.File]::WriteAllText($OutputPath, [string]$tokens[0].kind + ':' + [string]$tokens[0].text, [System.Text.UTF8Encoding]::new($false))",
+                new UTF8Encoding(false));
+
+            var run = new ExecutablePowerShellRunner(host, root).Run(
+                new PowerShellRunRequest(
+                    scriptPath,
+                    new[] { outputPath },
+                    TimeSpan.FromSeconds(20)));
+            Assert.Equal(0, run.ExitCode);
+            Assert.Equal("Double:1.5", File.ReadAllText(outputPath));
         }
         finally
         {
