@@ -22,6 +22,10 @@ internal sealed class DocumentationRuntimeValue
     [DataMember(Name = "name")]
     public string? Name { get; set; }
 
+    /// <summary>Whether a captured string is the process-wide intern-pool singleton.</summary>
+    [DataMember(Name = "isInterned")]
+    public bool IsInterned { get; set; }
+
     /// <summary>Canonical CLR type identity observed inside the PowerShell host.</summary>
     [DataMember(Name = "canonicalTypeName")]
     public string? CanonicalTypeName { get; set; }

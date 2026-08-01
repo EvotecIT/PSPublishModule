@@ -28,6 +28,8 @@ function AddRuntimeDefaultValueTokens(
     $tokens.Add([ordered]@{
       kind = 'StringCodeUnits'
       text = ConvertToUtf16CodeUnits ([string]$value)
+      isInterned = [object]::ReferenceEquals(
+        $value, [string]::IsInterned([string]$value))
     }) | Out-Null
     return
   }
@@ -111,6 +113,7 @@ function AddRuntimeDefaultValueTokens(
     if (-not (TestRecreatableUri $value)) {
       throw 'Uri defaults with noncanonical reconstruction state are not supported.'
     }
+    AddRuntimeDefaultValueReference $value.OriginalString $referenceStack
     $uriKind = if ($value.IsAbsoluteUri) { 'Absolute' } else { 'Relative' }
     $tokens.Add([ordered]@{
       kind = 'UriCodeUnits'

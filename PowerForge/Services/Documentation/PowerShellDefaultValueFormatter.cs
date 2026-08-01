@@ -28,9 +28,9 @@ internal static class PowerShellDefaultValueFormatter
             case "null":
                 return "$null";
             case "string":
-                return FormatString(value.Text ?? string.Empty, preserveCharacterType: false);
+                return FormatRuntimeString(value.Text ?? string.Empty, value.IsInterned);
             case "stringcodeunits":
-                return FormatString(DecodeUtf16CodeUnits(value.Text), preserveCharacterType: false);
+                return FormatRuntimeString(DecodeUtf16CodeUnits(value.Text), value.IsInterned);
             case "char":
                 return FormatString(value.Text ?? string.Empty, preserveCharacterType: true);
             case "charcodeunit":
@@ -143,6 +143,12 @@ internal static class PowerShellDefaultValueFormatter
             }
         }
         return builder.ToString();
+    }
+
+    private static string FormatRuntimeString(string text, bool isInterned)
+    {
+        var expression = FormatString(text, preserveCharacterType: false);
+        return isInterned ? "[string]::Intern(" + expression + ")" : expression;
     }
 
     private static string FormatEnum(DocumentationRuntimeValue value)

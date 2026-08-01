@@ -47,7 +47,7 @@ internal static class DocumentationMetadataNormalizer
         foreach (var command in payload.Commands ?? new List<DocumentationCommandHelp>())
         {
             if (command is null) continue;
-            command.Name = Display(command.Name);
+            command.Name = DocumentationIdentityTextFormatter.Format(command.Name);
             command.CommandType = Display(command.CommandType);
             command.DefaultParameterSet = DisplayNullable(command.DefaultParameterSet);
             command.Synopsis = Display(command.Synopsis);
