@@ -13,6 +13,69 @@ function Resolve-ReleasePath {
     return [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot $Path))
 }
 
+function Resolve-SafeReleaseOutputPath {
+    param(
+        [Parameter(Mandatory)] [string] $ProjectRoot,
+        [Parameter(Mandatory)] [string] $Path,
+        [Parameter(Mandatory)] [string] $Name
+    )
+
+    $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $fullRoot = [System.IO.Path]::GetFullPath($ProjectRoot)
+    $filesystemRoot = [System.IO.Path]::GetPathRoot($fullRoot)
+    $root = if ($fullRoot.Equals($filesystemRoot, $comparison)) {
+        $fullRoot
+    } else {
+        $fullRoot.TrimEnd(
+            [System.IO.Path]::DirectorySeparatorChar,
+            [System.IO.Path]::AltDirectorySeparatorChar)
+    }
+    $candidate = Resolve-ReleasePath -ProjectRoot $root -Path $Path
+    $prefix = if ($root.EndsWith([System.IO.Path]::DirectorySeparatorChar) -or
+        $root.EndsWith([System.IO.Path]::AltDirectorySeparatorChar)) {
+        $root
+    } else {
+        $root + [System.IO.Path]::DirectorySeparatorChar
+    }
+    if (-not $candidate.StartsWith($prefix, $comparison)) {
+        throw "$Name must resolve inside AppleApps.ProjectRoot: $candidate"
+    }
+
+    $current = $candidate
+    $isCandidate = $true
+    while ($true) {
+        $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+        if ($null -ne $item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "$Name must not traverse a symbolic link or reparse point: $current"
+        }
+        if ($null -ne $item) {
+            if ($isCandidate -and $item.PSIsContainer) {
+                throw "$Name must resolve to a file, not a directory: $candidate"
+            }
+            if (-not $isCandidate -and -not $item.PSIsContainer) {
+                throw "$Name must not traverse a file used as a parent path: $current"
+            }
+        }
+        if ($current.Equals($root, $comparison)) { break }
+        $parent = [System.IO.Directory]::GetParent($current)?.FullName
+        if ([string]::IsNullOrWhiteSpace($parent) -or $parent.Equals($current, $comparison)) {
+            throw "$Name could not be bounded to AppleApps.ProjectRoot: $candidate"
+        }
+        $current = $parent
+        $isCandidate = $false
+    }
+    return $candidate
+}
+
+function Get-ReleaseFileFingerprint {
+    param([Parameter(Mandatory)] [string] $Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+    $item = Get-Item -LiteralPath $Path -Force
+    $hash = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+    return "$hash`:$($item.Length)`:$($item.LastWriteTimeUtc.Ticks)"
+}
+
 function Write-ReleaseOutput {
     param(
         [Parameter(Mandatory)] [string] $Name,
@@ -21,6 +84,38 @@ function Write-ReleaseOutput {
 
     if ($env:GITHUB_OUTPUT) {
         "$Name=$Value" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+    }
+}
+
+function Get-FirstNonEmptyString {
+    param([AllowNull()] [object[]] $Values)
+
+    foreach ($value in $Values) {
+        $text = [string] $value
+        if (-not [string]::IsNullOrWhiteSpace($text)) { return $text.Trim() }
+    }
+    return $null
+}
+
+function Write-AtomicJsonFile {
+    param(
+        [Parameter(Mandatory)] [string] $Path,
+        [Parameter(Mandatory)] [object] $Value
+    )
+
+    $directory = Split-Path -Parent $Path
+    if (-not [string]::IsNullOrWhiteSpace($directory)) {
+        [System.IO.Directory]::CreateDirectory($directory) | Out-Null
+    }
+    $temporaryPath = Join-Path $directory ".$(Split-Path -Leaf $Path).$([Guid]::NewGuid().ToString('N')).tmp"
+    try {
+        $json = $Value | ConvertTo-Json -Depth 32
+        [System.IO.File]::WriteAllText($temporaryPath, $json, [System.Text.UTF8Encoding]::new($false))
+        [System.IO.File]::Move($temporaryPath, $Path, $true)
+    } finally {
+        if (Test-Path -LiteralPath $temporaryPath -PathType Leaf) {
+            Remove-Item -LiteralPath $temporaryPath -Force
+        }
     }
 }
 
@@ -67,11 +162,29 @@ if ([string]::IsNullOrWhiteSpace($configuredReceiptPath)) {
         'build/powerforge/apple/release-receipt.json'
     }
 }
-$receiptPath = Resolve-ReleasePath -ProjectRoot $projectRoot -Path $configuredReceiptPath
+$defaultReceiptPath = if ($planOnly) {
+    'build/powerforge/apple/release-plan.json'
+} else {
+    'build/powerforge/apple/release-receipt.json'
+}
+try {
+    $receiptPath = Resolve-SafeReleaseOutputPath `
+        -ProjectRoot $projectRoot `
+        -Path $configuredReceiptPath `
+        -Name ($planOnly ? 'AppleApps.Automation.PlanReceiptPath' : 'AppleApps.Automation.ReceiptPath')
+} catch {
+    # The engine will report the invalid configured path. Keep the wrapper's
+    # fallback receipt inside the project so that failure remains actionable.
+    $receiptPath = Resolve-SafeReleaseOutputPath `
+        -ProjectRoot $projectRoot `
+        -Path $defaultReceiptPath `
+        -Name 'Apple failure fallback receipt path'
+}
 
 # Expose the expected artifact before invoking PowerForge. GitHub Actions then retains
 # the path even when the transition fails after PowerForge writes a failure receipt.
 Write-ReleaseOutput -Name 'receipt-path' -Value $receiptPath
+$receiptFingerprintBefore = Get-ReleaseFileFingerprint -Path $receiptPath
 
 $arguments = @('apple-release', $action, '--config', $env:INPUT_CONFIG_PATH, '--summary', '--output', 'json')
 if ($planOnly) { $arguments += '--plan' }
@@ -112,13 +225,16 @@ if (-not [string]::IsNullOrWhiteSpace($json)) {
 
 $result = $envelope.result
 $planSha256 = [string] $result.planSha256
-if ($planOnly -and $planSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
+if ($exitCode -eq 0 -and $planOnly -and $planSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
     throw "PowerForge action '$action' did not return a valid exact plan SHA-256."
 }
 Write-ReleaseOutput -Name 'plan-sha256' -Value $planSha256
 $reportedReceiptPath = [string] $result.receiptPath
-if (-not [string]::IsNullOrWhiteSpace($reportedReceiptPath)) {
-    $receiptPath = Resolve-ReleasePath -ProjectRoot $projectRoot -Path $reportedReceiptPath
+if ($exitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($reportedReceiptPath)) {
+    $receiptPath = Resolve-SafeReleaseOutputPath `
+        -ProjectRoot $projectRoot `
+        -Path $reportedReceiptPath `
+        -Name 'PowerForge reported receipt path'
     Write-ReleaseOutput -Name 'receipt-path' -Value $receiptPath
 }
 
@@ -126,7 +242,72 @@ if ($exitCode -ne 0) {
     # Never echo the complete CLI envelope here. The receipt can contain compact
     # tester feedback and diagnostic evidence that belongs in the retained artifact,
     # not the public Actions log.
-    $safeDiagnostics = @($result.diagnostics | ForEach-Object {
+    $receiptDiagnostics = @($result.diagnostics | Where-Object {
+        -not [string]::IsNullOrWhiteSpace([string] $_.code) -or
+        -not [string]::IsNullOrWhiteSpace([string] $_.summary) -or
+        -not [string]::IsNullOrWhiteSpace([string] $_.action)
+    } | ForEach-Object {
+        [ordered]@{
+            severity = (Get-FirstNonEmptyString @($_.severity, 'error'))
+            category = (Get-FirstNonEmptyString @($_.category, 'automation'))
+            code = (Get-FirstNonEmptyString @($_.code, 'APPLE_ACTION_FAILED'))
+            summary = (Get-FirstNonEmptyString @($_.summary, "PowerForge Apple action '$action' failed."))
+            evidence = [string] $_.evidence
+            action = (Get-FirstNonEmptyString @($_.action, 'Inspect the retained failure receipt and run logs, correct the reported condition, then retry.'))
+            retryable = [bool] $_.retryable
+        }
+    })
+    $failureMessage = Get-FirstNonEmptyString @(
+        $result.errorMessage,
+        $envelope.PSObject.Properties['Error'].Value,
+        "PowerForge Apple action '$action' failed with exit code $exitCode."
+    )
+    if ($receiptDiagnostics.Count -eq 0) {
+        $missingAppStoreCredentials =
+            $failureMessage -match 'App Store Connect.*requires.*AppStoreConnectApiKeyPath' -or
+            $failureMessage -match 'AppStoreConnectApiKeyPath.*AppStoreConnectApiKeyId.*AppStoreConnectApiIssuerId'
+        $failureCategory = if ($missingAppStoreCredentials) { 'credential' } else { 'automation' }
+        $failureCode = if ($missingAppStoreCredentials) { 'APPLE_APP_STORE_CONNECT_CREDENTIALS_MISSING' } else { 'APPLE_ACTION_FAILED' }
+        $failureAction = if ($missingAppStoreCredentials) {
+            'Configure app_store_connect_issuer_id, app_store_connect_key_id, and app_store_connect_private_key in the protected Apple environment.'
+        } else {
+            'Inspect the retained failure receipt and run logs, correct the reported preflight condition, then retry.'
+        }
+        $receiptDiagnostics = @([ordered]@{
+            severity = 'error'
+            category = $failureCategory
+            code = $failureCode
+            summary = $failureMessage
+            evidence = $null
+            action = $failureAction
+            retryable = $false
+        })
+    }
+    $receiptFingerprintAfter = Get-ReleaseFileFingerprint -Path $receiptPath
+    $engineWroteCurrentReceipt = $null -ne $receiptFingerprintAfter -and
+        $receiptFingerprintAfter -ne $receiptFingerprintBefore
+    # Replace missing or byte-for-byte stale state. Preserve a file changed by this
+    # invocation even when stdout was malformed or did not carry diagnostics.
+    if (-not $engineWroteCurrentReceipt) {
+        $relativeReceiptPath = [System.IO.Path]::GetRelativePath($projectRoot, $receiptPath).Replace('\', '/')
+        Write-AtomicJsonFile -Path $receiptPath -Value ([ordered]@{
+            schemaVersion = 3
+            action = $action
+            sourceCommit = [string] $env:INPUT_SOURCE_COMMIT
+            planOnly = $planOnly
+            checkedAt = [DateTimeOffset]::UtcNow
+            planSha256 = $null
+            success = $false
+            errorMessage = $failureMessage
+            receiptPath = $relativeReceiptPath
+            versioning = $null
+            targets = @()
+            cleanup = [ordered]@{}
+            diagnostics = $receiptDiagnostics
+            nextActions = @($receiptDiagnostics | ForEach-Object { [string] $_.action } | Select-Object -Unique)
+        })
+    }
+    $safeDiagnostics = @($receiptDiagnostics | ForEach-Object {
         [ordered]@{
             severity = [string] $_.severity
             category = [string] $_.category
