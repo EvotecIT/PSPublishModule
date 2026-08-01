@@ -132,4 +132,79 @@ public sealed class DocumentationCommandIdentityCompatibilityTests
             Assert.Contains(expected, exception.Message, StringComparison.Ordinal);
         }
     }
+
+    [Fact]
+    public void DocumentationNormalizer_RendersParameterSetIdentitiesInjectivelyAndPreservesBoundaries()
+    {
+        var invalid = "S" + new string('\uD800', 1);
+        var literal = "S%uD800";
+        var payload = new DocumentationExtractionPayload
+        {
+            ModuleName = "ParameterSetIdentityFixture",
+            Commands =
+            [
+                new DocumentationCommandHelp
+                {
+                    Name = "Get-Test",
+                    CommandType = "Function",
+                    DefaultParameterSet = invalid,
+                    Syntax =
+                    [
+                        new DocumentationSyntaxHelp { Name = invalid, Text = "Get-Test -Value <string>" },
+                        new DocumentationSyntaxHelp { Name = literal, Text = "Get-Test -Value <string>" },
+                        new DocumentationSyntaxHelp { Name = " A ", Text = "Get-Test -Value <string>" },
+                        new DocumentationSyntaxHelp { Name = "A", Text = "Get-Test -Value <string>" }
+                    ],
+                    Parameters =
+                    [
+                        new DocumentationParameterHelp
+                        {
+                            Name = "Value",
+                            Type = "String",
+                            ParameterSets = [invalid, literal, " A ", "A"],
+                            ParameterSetRequired = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
+                            {
+                                [invalid] = true,
+                                [literal] = false,
+                                [" A "] = true,
+                                ["A"] = false
+                            }
+                        }
+                    ]
+                }
+            ]
+        };
+
+        DocumentationMetadataNormalizer.Normalize(payload);
+        var command = payload.Commands[0];
+        Assert.Equal("S%uD800 [encoded 1]", command.DefaultParameterSet);
+        Assert.Equal(
+            ["S%uD800 [encoded 1]", "S%uD800", " A ", "A"],
+            command.Syntax.Select(item => item.Name).ToArray());
+        Assert.Equal(
+            ["S%uD800 [encoded 1]", "S%uD800", " A ", "A"],
+            command.Parameters[0].ParameterSets);
+        Assert.Equal(4, command.Parameters[0].ParameterSetRequired.Count);
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-doc-parameter-set-identity-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, payload.ModuleName, root);
+            var setNames = XDocument.Load(mamlPath)
+                .Descendants()
+                .Where(element => element.Name.LocalName == "syntaxItem")
+                .Select(element => element.Attribute("parameterSetName"))
+                .Where(attribute => attribute is not null)
+                .Select(attribute => attribute!.Value)
+                .ToArray();
+            Assert.Equal(
+                ["S%uD800 [encoded 1]", "S%uD800", " A ", "A"],
+                setNames);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
 }

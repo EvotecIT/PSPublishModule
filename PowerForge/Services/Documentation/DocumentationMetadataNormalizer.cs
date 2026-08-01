@@ -25,6 +25,7 @@ internal static class DocumentationMetadataNormalizer
         {
             if (command is null) continue;
             NormalizeBindableIdentities(command);
+            NormalizeParameterSetIdentities(command);
             RestoreTypeIdentityText(command.Inputs);
             RestoreTypeIdentityText(command.Outputs);
             RestoreTypeIdentityText(command.AuthoredOutputs);
@@ -50,14 +51,12 @@ internal static class DocumentationMetadataNormalizer
             if (command is null) continue;
             command.Name = DocumentationIdentityTextFormatter.PreserveBindable(command.Name, "Command name");
             command.CommandType = Display(command.CommandType);
-            command.DefaultParameterSet = DisplayNullable(command.DefaultParameterSet);
             command.Synopsis = Display(command.Synopsis);
             command.Description = Display(command.Description);
 
             foreach (var syntax in command.Syntax ?? new List<DocumentationSyntaxHelp>())
             {
                 if (syntax is null) continue;
-                syntax.Name = Display(syntax.Name);
                 syntax.Text = Display(syntax.Text);
             }
 
@@ -66,20 +65,11 @@ internal static class DocumentationMetadataNormalizer
                 if (parameter is null) continue;
                 parameter.Type = Display(parameter.Type);
                 parameter.Description = Display(parameter.Description);
-                parameter.ParameterSets = DisplayList(parameter.ParameterSets);
                 parameter.PossibleValues = DisplayList(parameter.PossibleValues);
                 parameter.Position = Display(parameter.Position);
                 parameter.DefaultValue = Display(parameter.DefaultValue);
                 parameter.PipelineInput = Display(parameter.PipelineInput);
 
-                var requiredBySet = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-                foreach (var entry in parameter.ParameterSetRequired ?? new Dictionary<string, bool>())
-                {
-                    var name = Display(entry.Key);
-                    requiredBySet[name] = entry.Value ||
-                        (requiredBySet.TryGetValue(name, out var required) && required);
-                }
-                parameter.ParameterSetRequired = requiredBySet;
             }
 
             foreach (var example in command.Examples ?? new List<DocumentationExampleHelp>())
@@ -175,6 +165,60 @@ internal static class DocumentationMetadataNormalizer
             }
 
             parameter.Aliases = NormalizeAliases(parameter.Aliases);
+        }
+    }
+
+    private static void NormalizeParameterSetIdentities(DocumentationCommandHelp command)
+    {
+        var rawNames = new List<string>();
+        if (command.DefaultParameterSet is not null) rawNames.Add(command.DefaultParameterSet);
+        foreach (var syntax in command.Syntax ?? new List<DocumentationSyntaxHelp>())
+            if (syntax is not null) rawNames.Add(syntax.Name ?? string.Empty);
+        foreach (var parameter in command.Parameters ?? new List<DocumentationParameterHelp>())
+        {
+            if (parameter is null) continue;
+            rawNames.AddRange(parameter.ParameterSets ?? new List<string>());
+            rawNames.AddRange((parameter.ParameterSetRequired ?? new Dictionary<string, bool>()).Keys);
+        }
+
+        var reserved = new HashSet<string>(
+            rawNames.Where(DocumentationIdentityTextFormatter.IsXmlSafe),
+            StringComparer.OrdinalIgnoreCase);
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var rawName in rawNames)
+        {
+            if (map.ContainsKey(rawName)) continue;
+            var display = DocumentationIdentityTextFormatter.IsXmlSafe(rawName)
+                ? rawName
+                : GetUniqueIdentityDisplay(
+                    DocumentationIdentityTextFormatter.Format(rawName), reserved, used);
+            if (DocumentationIdentityTextFormatter.IsXmlSafe(rawName)) used.Add(display);
+            map.Add(rawName, display);
+        }
+
+        string Map(string? value)
+        {
+            var raw = value ?? string.Empty;
+            return map.TryGetValue(raw, out var display) ? display : raw;
+        }
+
+        if (command.DefaultParameterSet is not null)
+            command.DefaultParameterSet = Map(command.DefaultParameterSet);
+        foreach (var syntax in command.Syntax ?? new List<DocumentationSyntaxHelp>())
+            if (syntax is not null) syntax.Name = Map(syntax.Name);
+        foreach (var parameter in command.Parameters ?? new List<DocumentationParameterHelp>())
+        {
+            if (parameter is null) continue;
+            parameter.ParameterSets = (parameter.ParameterSets ?? new List<string>()).Select(Map).ToList();
+            var requiredBySet = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in parameter.ParameterSetRequired ?? new Dictionary<string, bool>())
+            {
+                var name = Map(entry.Key);
+                requiredBySet[name] = entry.Value ||
+                    (requiredBySet.TryGetValue(name, out var required) && required);
+            }
+            parameter.ParameterSetRequired = requiredBySet;
         }
     }
 

@@ -323,9 +323,9 @@ try {
   $moduleNameResolved = $mod.Name
   & $collectorProtocol.RemoveHelperAliases $moduleNameResolved $collectorProtocol.HelperFunctionNames
 
-  $commands = Get-Command -Module $moduleNameResolved -ErrorAction SilentlyContinue | Where-Object {
+  $commands = @(@($mod.ExportedCmdlets.Values) + @($mod.ExportedFunctions.Values)) | Microsoft.PowerShell.Core\Where-Object {
     $_.CommandType -eq 'Cmdlet' -or $_.CommandType -eq 'Function'
-  } | Sort-Object -Property Name
+  } | Microsoft.PowerShell.Utility\Sort-Object -Property Name
 
   $result = [ordered]@{
     moduleName = [string]$moduleNameResolved
@@ -339,7 +339,7 @@ try {
 
   foreach ($c in $commands) {
     $help = $null
-    try { $help = Get-Help -Name $c.Name -Full -ErrorAction SilentlyContinue } catch { $help = $null }
+    try { $help = Microsoft.PowerShell.Core\Get-Help -Name $c.Name -Full -ErrorAction SilentlyContinue } catch { $help = $null }
 
     $implType = $null
     $dllPath = $null
@@ -367,7 +367,7 @@ try {
       if ($null -ne $ps -and $null -ne $ps.Parameters) { $psParameters = @($ps.Parameters) }
       foreach ($pp in $psParameters) {
         $pn = [string]$pp.Name
-        if (-not $paramSets.ContainsKey($pn)) { $paramSets[$pn] = New-Object System.Collections.Generic.List[string] }
+        if (-not $paramSets.ContainsKey($pn)) { $paramSets[$pn] = Microsoft.PowerShell.Utility\New-Object System.Collections.Generic.List[string] }
         $null = $paramSets[$pn].Add([string]$ps.Name)
       }
     }
@@ -391,13 +391,13 @@ try {
     $paramNames = @()
     try {
       if ($c -and $c.Parameters) {
-        $paramNames = @($c.Parameters.GetEnumerator() | ForEach-Object { [string]$_.Key })
+        $paramNames = @($c.Parameters.GetEnumerator() | Microsoft.PowerShell.Core\ForEach-Object { [string]$_.Key })
       }
     } catch { $paramNames = @() }
     foreach ($hp in $helpParameters) { try { $paramNames += [string]$hp.Name } catch {
       # best effort: keep extracting other parameters even when one help node is incomplete
     } }
-    $paramNames = @($paramNames | Where-Object { $_ -and ($commonParamNames -notcontains $_) } | Sort-Object -Unique)
+    $paramNames = @($paramNames | Microsoft.PowerShell.Core\Where-Object { $_ -and ($commonParamNames -notcontains $_) } | Microsoft.PowerShell.Utility\Sort-Object -Unique)
 
     $parameters = @()
     foreach ($pn in $paramNames) {
@@ -795,11 +795,11 @@ try {
   }
 
   $outDir = Split-Path -Path $OutputJsonPath -Parent
-  if ($outDir) { [System.IO.Directory]::CreateDirectory($outDir) | Out-Null }
-  $json = & $collectorProtocol.ConvertToUtf8SafeJsonText ($result | ConvertTo-Json -Depth 100)
+  if ($outDir) { [System.IO.Directory]::CreateDirectory($outDir) | Microsoft.PowerShell.Core\Out-Null }
+  $json = & $collectorProtocol.ConvertToUtf8SafeJsonText ($result | Microsoft.PowerShell.Utility\ConvertTo-Json -Depth 100)
   [System.IO.File]::WriteAllText($OutputJsonPath, $json, [System.Text.UTF8Encoding]::new($false))
 
-  Write-Output 'PFDOCS::OK'
+  Microsoft.PowerShell.Utility\Write-Output 'PFDOCS::OK'
   exit 0
 } catch {
   & $collectorProtocol.EmitError $_.Exception.Message
