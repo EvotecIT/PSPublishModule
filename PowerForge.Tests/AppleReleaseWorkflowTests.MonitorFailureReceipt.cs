@@ -229,6 +229,60 @@ public sealed partial class AppleReleaseWorkflowTests
         }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AppleActionRedirectsUnusableConfiguredReceiptShapesToSafeFallback(bool targetIsDirectory)
+    {
+        if (!CommandExists("pwsh")) return;
+
+        var root = FindRepoRoot();
+        var sandbox = Path.Combine(root, ".test-temp", $"apple-unusable-receipt-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(sandbox);
+            var configuredPath = targetIsDirectory
+                ? "configured-receipt"
+                : Path.Combine("blocked-parent", "receipt.json");
+            if (targetIsDirectory)
+            {
+                Directory.CreateDirectory(Path.Combine(sandbox, configuredPath));
+            }
+            else
+            {
+                File.WriteAllText(Path.Combine(sandbox, "blocked-parent"), "not-a-directory");
+            }
+            File.WriteAllText(
+                Path.Combine(sandbox, "powerforge.release.json"),
+                JsonSerializer.Serialize(new
+                {
+                    AppleApps = new
+                    {
+                        ProjectRoot = ".",
+                        Automation = new { ReceiptPath = configuredPath }
+                    }
+                }));
+            var envelope = JsonSerializer.Serialize(new
+            {
+                success = false,
+                exitCode = 1,
+                result = new { success = false, errorMessage = "Receipt path is unusable." }
+            });
+
+            var result = RunAppleWrapper(root, sandbox, CreateFailingTool(sandbox, envelope), writeConfig: false);
+
+            Assert.NotEqual(0, result.ExitCode);
+            var safeReceipt = Path.Combine(sandbox, "build", "powerforge", "apple", "release-receipt.json");
+            Assert.True(File.Exists(safeReceipt), result.StandardOutput + result.StandardError);
+            using var receipt = JsonDocument.Parse(File.ReadAllText(safeReceipt));
+            Assert.Equal("Receipt path is unusable.", receipt.RootElement.GetProperty("errorMessage").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+        }
+    }
+
     private static ProcessResult RunAppleWrapper(
         string root,
         string sandbox,

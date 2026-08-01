@@ -31,10 +31,19 @@ function Resolve-SafeReleaseOutputPath {
     }
 
     $current = $candidate
+    $isCandidate = $true
     while ($true) {
         $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
         if ($null -ne $item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
             throw "$Name must not traverse a symbolic link or reparse point: $current"
+        }
+        if ($null -ne $item) {
+            if ($isCandidate -and $item.PSIsContainer) {
+                throw "$Name must resolve to a file, not a directory: $candidate"
+            }
+            if (-not $isCandidate -and -not $item.PSIsContainer) {
+                throw "$Name must not traverse a file used as a parent path: $current"
+            }
         }
         if ($current.Equals($root, $comparison)) { break }
         $parent = Split-Path -Parent $current
@@ -42,6 +51,7 @@ function Resolve-SafeReleaseOutputPath {
             throw "$Name could not be bounded to AppleApps.ProjectRoot: $candidate"
         }
         $current = $parent
+        $isCandidate = $false
     }
     return $candidate
 }
