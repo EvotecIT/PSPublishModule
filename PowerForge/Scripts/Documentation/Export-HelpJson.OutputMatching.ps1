@@ -103,16 +103,6 @@ function GetDocumentedModuleCommandSnapshot(
     if (-not (& $testXmlSafeIdentityText ([string]$command.Name))) {
       throw ('Command name contains XML-invalid characters: ' + [string]$command.Name)
     }
-    foreach ($parameter in @($command.Parameters.Values)) {
-      if (-not (& $testXmlSafeIdentityText ([string]$parameter.Name))) {
-        throw ('Parameter name contains XML-invalid characters: ' + [string]$parameter.Name)
-      }
-      foreach ($alias in @($parameter.Aliases)) {
-        if (-not (& $testXmlSafeIdentityText ([string]$alias))) {
-          throw ('Parameter alias contains XML-invalid characters: ' + [string]$alias)
-        }
-      }
-    }
     $help = $null
     try {
       $help = Microsoft.PowerShell.Core\Get-Help -Name $command.Name -Full -ErrorAction SilentlyContinue

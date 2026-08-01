@@ -86,3 +86,68 @@ function TestValidateSetCaseSensitive(
     return $false
   }
 }
+
+function ConvertParametersToXmlSafeDocumentationText([object[]]$parameters) {
+  $reservedNames = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase)
+  foreach ($parameter in @($parameters)) {
+    $name = [string]$parameter.name
+    if (TestXmlSafeIdentityText $name) { [void]$reservedNames.Add($name) }
+  }
+
+  $usedNames = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase)
+  foreach ($parameter in @($parameters)) {
+    $rawName = [string]$parameter.name
+    $name = $rawName
+    if (-not (TestXmlSafeIdentityText $rawName)) {
+      $baseName = ConvertToXmlSafeIdentityText $rawName
+      $name = $baseName
+      $suffix = 1
+      while ($reservedNames.Contains($name) -or -not $usedNames.Add($name)) {
+        $name = $baseName + ' [encoded ' +
+          $suffix.ToString([System.Globalization.CultureInfo]::InvariantCulture) + ']'
+        $suffix++
+      }
+    } else {
+      [void]$usedNames.Add($name)
+    }
+    $parameter.name = $name
+
+    $rawAliases = [System.Collections.Generic.List[string]]::new()
+    $seenRawAliases = [System.Collections.Generic.HashSet[string]]::new(
+      [System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($aliasValue in @($parameter.aliases)) {
+      $alias = [string]$aliasValue
+      if ($alias -and $seenRawAliases.Add($alias)) { $rawAliases.Add($alias) }
+    }
+
+    $reservedAliases = [System.Collections.Generic.HashSet[string]]::new(
+      [System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($alias in $rawAliases) {
+      if (TestXmlSafeIdentityText $alias) { [void]$reservedAliases.Add($alias) }
+    }
+    $usedAliases = [System.Collections.Generic.HashSet[string]]::new(
+      [System.StringComparer]::OrdinalIgnoreCase)
+    $aliases = [System.Collections.Generic.List[string]]::new()
+    foreach ($alias in $rawAliases) {
+      $display = $alias
+      if (-not (TestXmlSafeIdentityText $alias)) {
+        $display = ConvertToXmlSafeDefaultHelpText $alias
+        if ($reservedAliases.Contains($display) -or $usedAliases.Contains($display)) {
+          $baseDisplay = ConvertToPowerShellDefaultValue $alias
+          $display = $baseDisplay
+          $suffix = 1
+          while ($reservedAliases.Contains($display) -or $usedAliases.Contains($display)) {
+            $display = $baseDisplay + ' [encoded ' +
+              $suffix.ToString([System.Globalization.CultureInfo]::InvariantCulture) + ']'
+            $suffix++
+          }
+        }
+      }
+      if ($usedAliases.Add($display)) { $aliases.Add($display) }
+    }
+    $parameter.aliases = @($aliases.ToArray())
+  }
+  return @($parameters)
+}
