@@ -54,10 +54,10 @@ public sealed partial class DocumentationMetadataNormalizerTests
         const string unsafeTypeName = "Example.A-B";
         const string unsafeAssemblyName = "Example.Assembly, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null";
         string ExactTypeExpression(string typeName)
-            => "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq '" +
+            => "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Microsoft.PowerShell.Core\\Where-Object { $_.FullName -eq '" +
                unsafeAssemblyName + "' }; $matches = [System.Collections.Generic.List[type]]::new(); foreach ($candidateAssembly in @($assembly)) { " +
                "$type = $candidateAssembly.GetType('" + typeName + "', $false, $false); if ($null -eq $type) { try { $type = $candidateAssembly.GetTypes() | " +
-               "Where-Object { $_.FullName -ceq '" + typeName + "' } | Select-Object -First 1 } catch { $type = $null } }; " +
+               "Microsoft.PowerShell.Core\\Where-Object { $_.FullName -ceq '" + typeName + "' } | Microsoft.PowerShell.Utility\\Select-Object -First 1 } catch { $type = $null } }; " +
                "if ($null -ne $type) { $matches.Add($type) } }; if ($matches.Count -ne 1) { " +
                "throw 'Type identity is unavailable or ambiguous across loaded assemblies.' }; return $matches[0] }";
         Assert.Equal(

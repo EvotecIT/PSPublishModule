@@ -664,7 +664,7 @@ function Get-AcceleratedOutput {
                 Assert.Equal("[System.Int32].MakeArrayType(1)", nonSzArrayType.DefaultValue);
                 Assert.True(string.IsNullOrEmpty(genericParameterType.DefaultValue));
                 Assert.StartsWith(
-                    "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'CollectorFixtureDynamic",
+                    "& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Microsoft.PowerShell.Core\\Where-Object { $_.FullName -eq 'CollectorFixtureDynamic",
                     unsafeType.DefaultValue,
                     StringComparison.Ordinal);
                 Assert.StartsWith(
@@ -676,16 +676,16 @@ function Get-AcceleratedOutput {
                     unsafeDictionary.DefaultValue,
                     StringComparison.Ordinal);
                 Assert.StartsWith(
-                    "(& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'CollectorFixtureDynamic",
+                    "(& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Microsoft.PowerShell.Core\\Where-Object { $_.FullName -eq 'CollectorFixtureDynamic",
                     unsafePointerType.DefaultValue,
                     StringComparison.Ordinal);
                 Assert.Contains(").MakePointerType()", unsafePointerType.DefaultValue, StringComparison.Ordinal);
                 Assert.StartsWith(
-                    "& { $collection = [System.Array]::CreateInstance((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'CollectorFixtureDynamic",
+                    "& { $collection = [System.Array]::CreateInstance((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Microsoft.PowerShell.Core\\Where-Object { $_.FullName -eq 'CollectorFixtureDynamic",
                     unsafeArray.DefaultValue,
                     StringComparison.Ordinal);
                 Assert.StartsWith(
-                    "[System.Enum]::ToObject((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -eq 'CollectorFixtureDynamic",
+                    "[System.Enum]::ToObject((& { $assembly = [System.AppDomain]::CurrentDomain.GetAssemblies() | Microsoft.PowerShell.Core\\Where-Object { $_.FullName -eq 'CollectorFixtureDynamic",
                     unsafeEnum.DefaultValue,
                     StringComparison.Ordinal);
                 Assert.Equal(
