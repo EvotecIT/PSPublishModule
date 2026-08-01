@@ -57,11 +57,11 @@ on:
         type: number
     secrets:
       app_store_connect_issuer_id:
-        required: true
+        required: false
       app_store_connect_key_id:
-        required: true
+        required: false
       app_store_connect_private_key:
-        required: true
+        required: false
 
 concurrency:
   group: powerforge-apple-${{ github.repository }}
