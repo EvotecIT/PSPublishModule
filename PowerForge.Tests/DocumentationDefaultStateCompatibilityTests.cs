@@ -95,6 +95,12 @@ function Get-DefaultStateFixture {
             [System.Collections.ObjectModel.Collection[int]]::new($sharedBacking))
         $sharedComparer = [System.StringComparer]::Create(
             [System.Globalization.CultureInfo]::GetCultureInfo('tr-TR'), $true)
+        $internedString = [string]::Intern((-join @('interned', '-', 'value')))
+        $uriText = -join @('relative', '/', 'path')
+        $uri = [uri]::new($uriText, [System.UriKind]::Relative)
+        if (-not [object]::ReferenceEquals($uriText, $uri.OriginalString)) {
+            throw 'The URI fixture must retain its original backing string.'
+        }
         $firstDictionary = [System.Collections.Generic.Dictionary[string,int]]::new($sharedComparer)
         $secondDictionary = [System.Collections.Generic.Dictionary[string,int]]::new($sharedComparer)
         $firstDictionary.Add('one', 1)
@@ -104,6 +110,8 @@ function Get-DefaultStateFixture {
             @('SharedBoxReferences', [object[]]@($sharedBox, $sharedBox)),
             @('SharedCollectionBacking', $sharedCollections),
             @('SharedCultureComparer', [object[]]@($firstDictionary, $secondDictionary)),
+            @('InternedString', $internedString),
+            @('SharedUriBacking', [object[]]@($uri, $uri.OriginalString)),
             @('SessionBoundScript', $script:sessionBoundDefault)
         )) {
             if ($entry[0] -eq 'SharedBoxReferences' -and
@@ -164,13 +172,30 @@ Export-ModuleMember -Function Get-DefaultStateFixture, ConvertToPowerShellDefaul
                 foreach (var name in new[]
                          {
                              "SharedStringReferences", "SharedBoxReferences", "SharedCollectionBacking",
-                             "SharedCultureComparer", "SessionBoundScript", "AutomationNull",
+                             "SharedCultureComparer", "SharedUriBacking", "SessionBoundScript", "AutomationNull",
                              "AutomationNullArray", "AutomationNullDictionaryKey", "AutomationNullDictionaryValue"
                          })
                 {
                     var parameter = Assert.Single(command.Parameters, item => item.Name == name);
                     Assert.True(string.IsNullOrEmpty(parameter.DefaultValue), name);
                 }
+
+                var interned = Assert.Single(command.Parameters, item => item.Name == "InternedString");
+                Assert.Equal("[string]::Intern('interned-value')", interned.DefaultValue);
+                var verificationPath = Path.Combine(root, "VerifyInterned.ps1");
+                File.WriteAllText(verificationPath, """
+param([string]$Expression)
+$value = & ([scriptblock]::Create($Expression))
+if (-not [object]::ReferenceEquals($value, [string]::IsInterned($value))) {
+    throw 'The reconstructed value is not the intern-pool singleton.'
+}
+""", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                var verification = new ExecutablePowerShellRunner(host, root).Run(
+                    new PowerShellRunRequest(
+                        verificationPath,
+                        new[] { interned.DefaultValue },
+                        TimeSpan.FromMinutes(1)));
+                Assert.Equal(0, verification.ExitCode);
 
                 var colliding = Assert.Single(command.Parameters, item => item.Name == "CollidingValidateSet");
                 Assert.Equal(

@@ -54,8 +54,11 @@ function ConvertToPowerShellDefaultValue(
   }
   if ($value -is [string]) {
     $text = [string]$value
+    $isInterned = [object]::ReferenceEquals($value, [string]::IsInterned($text))
     if (-not (TestDefaultTextNeedsEncoding $text)) {
-      return ("'" + $text.Replace("'", "''") + "'")
+      $expression = ("'" + $text.Replace("'", "''") + "'")
+      if ($isInterned) { return ('[string]::Intern(' + $expression + ')') }
+      return $expression
     }
     $parts = @()
     $segment = ''
@@ -75,7 +78,9 @@ function ConvertToPowerShellDefaultValue(
     if ($segment.Length -gt 0) {
       $parts += ("'" + $segment.Replace("'", "''") + "'")
     }
-    return ('(-join @(' + ($parts -join ', ') + '))')
+    $expression = ('(-join @(' + ($parts -join ', ') + '))')
+    if ($isInterned) { return ('[string]::Intern(' + $expression + ')') }
+    return $expression
   }
   if ($value -is [bool]) {
     if ($value) { return '$true' }
@@ -769,7 +774,7 @@ try {
     }
 
     $result.commands += [ordered]@{
-      name = [string]$c.Name
+      name = ConvertToXmlSafeIdentityText ([string]$c.Name)
       commandType = [string]$c.CommandType
       implementingType = $implType
       assemblyPath = $dllPath
