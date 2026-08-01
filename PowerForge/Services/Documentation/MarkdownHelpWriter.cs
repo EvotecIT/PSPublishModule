@@ -248,10 +248,10 @@ internal sealed class MarkdownHelpWriter
         doc.RawLine("## OUTPUTS");
         doc.BlankLine();
         var outputs = (cmd.Outputs ?? Enumerable.Empty<DocumentationTypeHelp>())
-            .Where(t => t is not null && (!string.IsNullOrWhiteSpace(t.Name) || !string.IsNullOrWhiteSpace(t.Description)))
+            .Where(t => t is not null && (!string.IsNullOrEmpty(t.Name) || !string.IsNullOrWhiteSpace(t.Description)))
             .ToArray();
         var outputNames = FormatBoundaryWhitespaceIdentities(
-            outputs.Select(output => string.IsNullOrWhiteSpace(output.Name) ? "None" : output.Name),
+            outputs.Select(output => string.IsNullOrEmpty(output.Name) ? "None" : output.Name),
             StringComparer.Ordinal);
         if (outputs.Length == 0) doc.RawLine($"- {MarkdownDocumentBuilder.InlineCode("None")}");
         for (var index = 0; index < outputs.Length; index++)

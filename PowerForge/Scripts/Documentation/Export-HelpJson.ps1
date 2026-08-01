@@ -66,9 +66,15 @@ function ConvertToPowerShellDefaultValue(
       $value,
       [System.Enum]::GetUnderlyingType($enumType),
       [System.Globalization.CultureInfo]::InvariantCulture)
-    $underlyingTypeName = GetCanonicalTypeNameFromType ([System.Enum]::GetUnderlyingType($enumType))
+    $underlyingType = [System.Enum]::GetUnderlyingType($enumType)
+    $underlyingText = if ([object]::ReferenceEquals($underlyingType, [char])) {
+      ([int][char]$underlyingValue).ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    } else {
+      [System.Convert]::ToString($underlyingValue, [System.Globalization.CultureInfo]::InvariantCulture)
+    }
+    $underlyingTypeName = GetCanonicalTypeNameFromType $underlyingType
     $enumTypeArgument = if ($enumTypeIsLiteral) { $enumTypeExpression } else { '(' + $enumTypeExpression + ')' }
-    return ('[System.Enum]::ToObject(' + $enumTypeArgument + ', ([' + $underlyingTypeName + ']' + [string]$underlyingValue + '))')
+    return ('[System.Enum]::ToObject(' + $enumTypeArgument + ', ([' + $underlyingTypeName + ']' + $underlyingText + '))')
   }
   if ($value -is [type]) {
     if (-not (TestGenuineRuntimeTypeValue $value)) {

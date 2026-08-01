@@ -54,6 +54,12 @@ if (-not ('DefaultLiteralFixture.WeirdMode' -as [type])) {
         [int])
     [void]$xmlInvalidEnumBuilder.DefineLiteral(('A' + [char]1), 1)
     $script:xmlInvalidEnumType = $xmlInvalidEnumBuilder.CreateTypeInfo().AsType()
+    $charEnumBuilder = $moduleBuilder.DefineEnum(
+        'DefaultLiteralFixture.CharMode',
+        [System.Reflection.TypeAttributes]::Public,
+        [char])
+    [void]$charEnumBuilder.DefineLiteral('A-B', [char]39)
+    $script:charEnumType = $charEnumBuilder.CreateTypeInfo().AsType()
     $unsafeTypeBuilder = $moduleBuilder.DefineEnum(
         'DefaultLiteralFixture.A-B',
         [System.Reflection.TypeAttributes]::Public,
@@ -91,6 +97,12 @@ if ($null -eq $script:xmlInvalidDefaultType) {
 if ($null -eq $script:xmlInvalidEnumType) {
     $script:xmlInvalidEnumType = [System.AppDomain]::CurrentDomain.GetAssemblies() |
         ForEach-Object { $_.GetType('DefaultLiteralFixture.XmlInvalidMode', $false, $false) } |
+        Where-Object { $null -ne $_ } |
+        Select-Object -First 1
+}
+if ($null -eq $script:charEnumType) {
+    $script:charEnumType = [System.AppDomain]::CurrentDomain.GetAssemblies() |
+        ForEach-Object { $_.GetType('DefaultLiteralFixture.CharMode', $false, $false) } |
         Where-Object { $null -ne $_ } |
         Select-Object -First 1
 }
@@ -564,6 +576,13 @@ function Get-DefaultLiteralFixture {
         $weirdModeAttributes.Add($weirdModeDefault)
         $parameters.Add('WeirdMode', [System.Management.Automation.RuntimeDefinedParameter]::new('WeirdMode', $weirdModeType, $weirdModeAttributes))
 
+        $charModeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $charModeDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
+        $charModeDefault.Value = [System.Enum]::ToObject($script:charEnumType, [char]39)
+        $charModeAttributes.Add($charModeDefault)
+        $parameters.Add('CharMode', [System.Management.Automation.RuntimeDefinedParameter]::new(
+            'CharMode', $script:charEnumType, $charModeAttributes))
+
         $xmlInvalidModeAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
         $parameters.Add('XmlInvalidMode', [System.Management.Automation.RuntimeDefinedParameter]::new(
             'XmlInvalidMode', $script:xmlInvalidEnumType, $xmlInvalidModeAttributes))
@@ -790,6 +809,10 @@ $invalidOutputFunction = "function Get-InvalidOutputFixture { [OutputType('Bad" 
             Assert.Equal(
                 "[System.Enum]::ToObject([DefaultLiteralFixture.WeirdMode], ([System.Int32]1))",
                 Default("WeirdMode"));
+            Assert.EndsWith(
+                ", ([System.Char]39))",
+                Default("CharMode"),
+                StringComparison.Ordinal);
             Assert.Empty(Assert.Single(
                 command.Parameters,
                 parameter => parameter.Name == "XmlInvalidMode").PossibleValues);

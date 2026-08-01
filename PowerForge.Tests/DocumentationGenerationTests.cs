@@ -816,6 +816,42 @@ Markdown only topic body.
     }
 
     [Fact]
+    public void MarkdownHelpWriter_PreservesWhitespaceOnlyOutputIdentities()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-doc-output-whitespace-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands =
+                [
+                    new DocumentationCommandHelp
+                    {
+                        Name = "Get-Demo",
+                        Outputs =
+                        [
+                            new DocumentationTypeHelp { Name = " " },
+                            new DocumentationTypeHelp { Name = "None" }
+                        ]
+                    }
+                ]
+            };
+
+            new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "DemoModule", root);
+            var markdown = File.ReadAllText(Path.Combine(root, "Get-Demo.md"));
+
+            Assert.Contains("- `' '`\r\n", markdown, StringComparison.Ordinal);
+            Assert.Contains("- `None`\r\n", markdown, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void MarkdownHelpWriter_RendersExamplesUsingRequestedLayout()
     {
         var command = new DocumentationCommandHelp
