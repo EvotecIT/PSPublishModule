@@ -136,7 +136,7 @@ public sealed class DocumentationBinaryMetadataContractTests
             var sameNameModuleRoot = Path.Combine(root, "BundledOwner");
             var sameNameAlias = Path.Combine(sameNameModuleRoot, "Lib", "en-US", "Bundled.DLL-Help.xml");
             Directory.CreateDirectory(Path.GetDirectoryName(sameNameAlias)!);
-            File.WriteAllText(Path.Combine(sameNameModuleRoot, "OwnerModule.psd1"), "@{ RootModule = '' }");
+            File.WriteAllText(Path.Combine(sameNameModuleRoot, "OwnerModule.PSD1"), "@{ RootModule = '' }");
             File.WriteAllText(
                 sameNameAlias,
                 DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "<helpItems />");
@@ -202,6 +202,39 @@ public sealed class DocumentationBinaryMetadataContractTests
                 "New-Custom-Name-help.xml");
 
             Assert.True(File.Exists(oldPrimary));
+            Assert.False(File.Exists(staleAlias));
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ExternalHelpAliases_UseExplicitDllNamedPrimaryForLegacyOwnership()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-binary-alias-dll-primary-" + Guid.NewGuid().ToString("N"));
+        var primaryDirectory = Path.Combine(root, "en-US");
+        var aliasDirectory = Path.Combine(root, "Lib", "Removed", "en-US");
+        Directory.CreateDirectory(primaryDirectory);
+        Directory.CreateDirectory(aliasDirectory);
+
+        try
+        {
+            const string content = "<legacyHelpItems />";
+            var primary = Path.Combine(primaryDirectory, "Foo.dll-Help.xml");
+            var staleAlias = Path.Combine(aliasDirectory, "Removed.dll-Help.xml");
+            File.WriteAllText(primary, content);
+            File.WriteAllText(
+                staleAlias,
+                DocumentationExternalHelpAliasWriter.GetLegacyGeneratedAliasMarker() + content);
+
+            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(
+                root,
+                "OwnerModule",
+                "Foo.dll-Help.xml");
+
+            Assert.True(File.Exists(primary));
             Assert.False(File.Exists(staleAlias));
         }
         finally

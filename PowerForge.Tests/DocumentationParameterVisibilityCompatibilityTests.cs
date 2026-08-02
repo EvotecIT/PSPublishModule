@@ -23,9 +23,16 @@ function Get-VisibilityFixture {
         [Parameter(Mandatory = $true, DontShow = $true, Position = 0, ValueFromPipelineByPropertyName = $true)] [string] $HiddenTransport
     )
 }
+function Get-GenericVisibilityFixture {
+    [CmdletBinding()]
+    param(
+        [Parameter(ValueFromPipeline = $true)]
+        [Nullable[System.Collections.Generic.KeyValuePair[string,int]]] $Pair
+    )
+}
 function GetDocumentationParameterDeclaringMetadata { throw 'Target helper shadow was invoked.' }
 function TestDocumentationParameterDontShow { throw 'Target helper shadow was invoked.' }
-Export-ModuleMember -Function Get-VisibilityFixture,GetDocumentationParameterDeclaringMetadata,TestDocumentationParameterDontShow
+Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture,GetDocumentationParameterDeclaringMetadata,TestDocumentationParameterDontShow
 """, new UTF8Encoding(false));
             File.WriteAllText(manifestPath, """
 @{
@@ -34,7 +41,7 @@ Export-ModuleMember -Function Get-VisibilityFixture,GetDocumentationParameterDec
     GUID = '34343434-3434-3434-3434-343434343434'
     Author = 'PowerForge.Tests'
     Description = 'Parameter visibility fixture.'
-    FunctionsToExport = @('Get-VisibilityFixture','GetDocumentationParameterDeclaringMetadata','TestDocumentationParameterDontShow')
+    FunctionsToExport = @('Get-VisibilityFixture','Get-GenericVisibilityFixture','GetDocumentationParameterDeclaringMetadata','TestDocumentationParameterDontShow')
     CmdletsToExport = @()
     AliasesToExport = @()
     VariablesToExport = @()
@@ -72,6 +79,13 @@ Export-ModuleMember -Function Get-VisibilityFixture,GetDocumentationParameterDec
                 var maml = File.ReadAllText(mamlPath);
                 Assert.DoesNotContain("HiddenTransport", maml, StringComparison.Ordinal);
                 Assert.DoesNotContain("Nullable", maml, StringComparison.OrdinalIgnoreCase);
+
+                var genericCommand = Assert.Single(payload.Commands, item => item.Name == "Get-GenericVisibilityFixture");
+                const string genericType = "System.Collections.Generic.KeyValuePair[System.String,System.Int32]";
+                Assert.Equal(genericType, Assert.Single(genericCommand.Parameters).Type);
+                Assert.Equal(genericType, Assert.Single(genericCommand.Inputs).Name);
+                Assert.All(genericCommand.Syntax, syntax =>
+                    Assert.DoesNotContain("KeyValuePair`2", syntax.Text, StringComparison.Ordinal));
             }
         }
         finally

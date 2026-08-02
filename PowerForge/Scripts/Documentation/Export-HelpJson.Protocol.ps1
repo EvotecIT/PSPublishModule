@@ -133,7 +133,8 @@ function GetDocumentationParameterRuntimeMetadata(
   [System.Management.Automation.CommandInfo]$command,
   [string]$parameterName,
   [scriptblock]$getDeclaringMetadata,
-  [scriptblock]$testDontShow
+  [scriptblock]$testDontShow,
+  [scriptblock]$getCanonicalTypeName
 ) {
   $metadata = $null
   try { $metadata = $command.Parameters[$parameterName] } catch { $metadata = $null }
@@ -155,7 +156,13 @@ function GetDocumentationParameterRuntimeMetadata(
     ParameterType = $parameterType
     EnumType = $enumType
     DisplayName = $(if ($null -ne $parameterType) { [string]$parameterType.Name } else { '' })
-    NullableUnderlyingTypeName = $(if ($null -ne $nullableUnderlyingType) { [string]$nullableUnderlyingType.Name } else { $null })
+    NullableUnderlyingTypeName = $(if ($null -ne $nullableUnderlyingType) {
+      if ($nullableUnderlyingType.IsGenericType) {
+        & $getCanonicalTypeName $nullableUnderlyingType
+      } else {
+        [string]$nullableUnderlyingType.Name
+      }
+    } else { $null })
     NullableArrayRanks = @($nullableArrayRanks)
     DeclaringType = $(if ($null -ne $declaringMetadata) { $declaringMetadata.TypeName } else { $null })
     DeclaringAssemblyPath = $(if ($null -ne $declaringMetadata) { $declaringMetadata.AssemblyPath } else { $null })
@@ -187,7 +194,7 @@ function NewCollectorProtocol([System.Management.Automation.PSModuleInfo]$helper
     ConvertToUtf16CodeUnits = $helperModule.ExportedFunctions['ConvertToUtf16CodeUnits']
     ConvertToUtf8SafeJsonText = $helperModule.ExportedFunctions['ConvertToUtf8SafeJsonText']
     EmitError = (Microsoft.PowerShell.Core\Get-Command EmitError -CommandType Function).ScriptBlock
-    GetCanonicalTypeNameFromType = $helperModule.ExportedFunctions['GetCanonicalTypeNameFromType']
+    GetCanonicalTypeNameFromType = $helperModule.ExportedFunctions['GetCanonicalTypeNameFromType'].ScriptBlock
     GetParameterDeclaringMetadata = (Microsoft.PowerShell.Core\Get-Command GetDocumentationParameterDeclaringMetadata -CommandType Function).ScriptBlock
     GetParameterRuntimeMetadata = (Microsoft.PowerShell.Core\Get-Command GetDocumentationParameterRuntimeMetadata -CommandType Function).ScriptBlock
     GetParameterNames = (Microsoft.PowerShell.Core\Get-Command GetDocumentationParameterNames -CommandType Function).ScriptBlock

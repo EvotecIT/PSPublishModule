@@ -161,7 +161,8 @@ internal static class DocumentationExternalHelpAliasWriter
                  {
                      var fileName = Path.GetFileName(path);
                      return fileName.EndsWith("-Help.xml", StringComparison.OrdinalIgnoreCase) &&
-                            !fileName.EndsWith(".dll-Help.xml", StringComparison.OrdinalIgnoreCase);
+                            (!fileName.EndsWith(".dll-Help.xml", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(fileName, preferredFileName, StringComparison.OrdinalIgnoreCase));
                  })
                  .OrderByDescending(path => string.Equals(
                      Path.GetFileName(path), preferredFileName, StringComparison.OrdinalIgnoreCase)))
@@ -195,7 +196,8 @@ internal static class DocumentationExternalHelpAliasWriter
         var pathComparer = pathComparison == StringComparison.Ordinal
             ? StringComparer.Ordinal
             : StringComparer.OrdinalIgnoreCase;
-        return Directory.EnumerateFiles(rootDirectory, "*.psd1", SearchOption.AllDirectories)
+        return Directory.EnumerateFiles(rootDirectory, "*", SearchOption.AllDirectories)
+            .Where(path => Path.GetFileName(path).EndsWith(".psd1", StringComparison.OrdinalIgnoreCase))
             .Select(Path.GetDirectoryName)
             .Where(path => !string.IsNullOrWhiteSpace(path) &&
                            !string.Equals(
