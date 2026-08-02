@@ -75,7 +75,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `BinaryDocFixture.BinaryDocOutput` — Represents the output returned by the binary documentation fixture command.
+- `BinaryDocFixture.BinaryDocOutput`: Represents the output returned by the binary documentation fixture command.
 
 ## RELATED LINKS
 

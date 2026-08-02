@@ -109,6 +109,6 @@ public sealed class DocumentationInputTypeNormalizationTests
         Assert.Empty(command.RuntimeInputs);
 
         var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
-        Assert.Contains("- `System.String` — This is string input.", markdown, StringComparison.Ordinal);
+        Assert.Contains("- `System.String`: This is string input.", markdown, StringComparison.Ordinal);
     }
 }

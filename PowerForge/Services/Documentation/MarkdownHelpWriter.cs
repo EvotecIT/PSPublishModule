@@ -241,7 +241,7 @@ internal sealed class MarkdownHelpWriter
             var name = string.IsNullOrWhiteSpace(i.Name) ? "None" : i.Name.Trim();
             var desc = (i.Description ?? string.Empty).Replace("\r\n", "\n").Replace("\n", " ").Trim();
             var inlineName = MarkdownDocumentBuilder.InlineIdentityCode(name);
-            doc.RawLine(string.IsNullOrWhiteSpace(desc) ? $"- {inlineName}" : $"- {inlineName} — {desc}");
+            doc.RawLine(string.IsNullOrWhiteSpace(desc) ? $"- {inlineName}" : $"- {inlineName}: {desc}");
         }
         doc.BlankLine();
 
@@ -260,7 +260,7 @@ internal sealed class MarkdownHelpWriter
             var name = outputNames[index];
             var desc = (o.Description ?? string.Empty).Replace("\r\n", "\n").Replace("\n", " ").Trim();
             var inlineName = MarkdownDocumentBuilder.InlineIdentityCode(name);
-            doc.RawLine(string.IsNullOrWhiteSpace(desc) ? $"- {inlineName}" : $"- {inlineName} — {desc}");
+            doc.RawLine(string.IsNullOrWhiteSpace(desc) ? $"- {inlineName}" : $"- {inlineName}: {desc}");
         }
         doc.BlankLine();
 
