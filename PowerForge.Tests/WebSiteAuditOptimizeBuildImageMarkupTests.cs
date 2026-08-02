@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ImageMagick;
 using PowerForge.Web;
 
@@ -17,14 +18,33 @@ public partial class WebSiteAuditOptimizeBuildTests
             var sourceRoot = Path.Combine(bundleRoot, "source");
             var storyRoot = Path.Combine(siteRoot, "story");
             Directory.CreateDirectory(storyRoot);
-            foreach (var fileName in new[] { "demo.svg", "demo.png", "demo.txt" })
-                File.Copy(Path.Combine(sourceRoot, fileName), Path.Combine(storyRoot, fileName));
+            File.WriteAllText(Path.Combine(sourceRoot, "demo.html"), "<p>protected story source</p>");
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                PropertyNameCaseInsensitive = true,
+                WriteIndented = true
+            };
+            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(
+                File.ReadAllText(Path.Combine(sourceRoot, "story.json")),
+                jsonOptions)!;
+            bundle.Artifacts = bundle.Artifacts
+                .Append(new WebVisualStoryArtifact { Role = "html", Format = "html", Path = "demo.html" })
+                .ToArray();
+            File.WriteAllText(
+                Path.Combine(sourceRoot, "story.json"),
+                JsonSerializer.Serialize(bundle, jsonOptions));
 
-            _ = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            foreach (var fileName in new[] { "demo.svg", "demo.png", "demo.txt", "demo.html" })
+                File.Copy(Path.Combine(sourceRoot, fileName), Path.Combine(storyRoot, fileName));
+            File.WriteAllText(Path.Combine(siteRoot, "index.html"), "<script src=\"/app.js\"></script>");
+            File.WriteAllText(Path.Combine(siteRoot, "app.js"), "console.log('ready');");
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
             {
                 SiteRoot = siteRoot,
                 HashAssets = true,
-                HashExtensions = new[] { ".png" },
+                HashExtensions = new[] { ".png", ".js" },
                 AssetPolicy = new AssetPolicySpec
                 {
                     Rewrites =
@@ -42,7 +62,11 @@ public partial class WebSiteAuditOptimizeBuildTests
 
             Assert.True(File.Exists(Path.Combine(storyRoot, "visual-story.json")));
             Assert.True(File.Exists(Path.Combine(storyRoot, "demo.png")));
+            Assert.Equal("<p>protected story source</p>", File.ReadAllText(Path.Combine(storyRoot, "demo.html")));
             Assert.Empty(Directory.EnumerateFiles(storyRoot, "demo.*.png"));
+            Assert.Equal(1, result.HashedAssetCount);
+            Assert.Single(Directory.EnumerateFiles(siteRoot, "app.*.js"));
+            Assert.DoesNotContain("/app.js", File.ReadAllText(Path.Combine(siteRoot, "index.html")), StringComparison.Ordinal);
         }
         finally
         {

@@ -137,9 +137,13 @@ public static partial class WebAssetOptimizer
                 siteRoot,
                 protectedStoryArtifacts);
             protectedStoryArtifacts.UnionWith(FindVisualStoryArtifactPaths(siteRoot));
+            mutableHtmlFiles = mutableHtmlFiles
+                .Where(path => !protectedStoryArtifacts.Contains(Path.GetFullPath(path)))
+                .ToArray();
             htmlFiles = htmlFiles
                 .Where(path => !protectedStoryArtifacts.Contains(Path.GetFullPath(path)))
                 .ToArray();
+            result.HtmlSelectedFileCount = htmlFiles.Length;
             foreach (var htmlFile in htmlFiles)
             {
                 var content = File.ReadAllText(htmlFile);
