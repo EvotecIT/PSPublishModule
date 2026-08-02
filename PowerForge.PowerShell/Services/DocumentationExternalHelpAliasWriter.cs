@@ -26,7 +26,7 @@ internal static class DocumentationExternalHelpAliasWriter
 
         var marker = GetGeneratedAliasMarker(moduleName);
         var legacyPrimaryContent = GetLegacyPrimaryContent(rootDirectory, primaryFileName);
-        var nestedModuleRoots = GetNestedModuleRoots(rootDirectory);
+        var nestedModuleRoots = GetNestedModuleRoots(rootDirectory, moduleName);
 
         foreach (var aliasPath in EnumerateFilesWithoutDirectoryLinks(rootDirectory)
                  .Where(path => Path.GetFileName(path)
@@ -96,6 +96,8 @@ internal static class DocumentationExternalHelpAliasWriter
 
             var aliasName = Path.GetFileName(assemblyPath) + "-Help.xml";
             var assemblyDirectory = Path.GetDirectoryName(assemblyPath) ?? stagingRoot;
+            if (ContainsDirectoryReparsePoint(stagingRoot, assemblyDirectory))
+                continue;
             var aliasDirectory = Path.Combine(assemblyDirectory, culture);
             var aliasPath = Path.Combine(aliasDirectory, aliasName);
             if (string.Equals(aliasPath, externalHelpFilePath, pathComparison))
@@ -185,7 +187,7 @@ internal static class DocumentationExternalHelpAliasWriter
         return content;
     }
 
-    private static string[] GetNestedModuleRoots(string rootDirectory)
+    private static string[] GetNestedModuleRoots(string rootDirectory, string moduleName)
     {
         var pathComparison = FrameworkCompatibility.GetPathStringComparison(rootDirectory);
         var pathComparer = pathComparison == StringComparison.Ordinal
@@ -193,6 +195,10 @@ internal static class DocumentationExternalHelpAliasWriter
             : StringComparer.OrdinalIgnoreCase;
         return EnumerateFilesWithoutDirectoryLinks(rootDirectory)
             .Where(path => Path.GetFileName(path).EndsWith(".psd1", StringComparison.OrdinalIgnoreCase))
+            .Where(path => string.Equals(
+                Path.GetFileNameWithoutExtension(path),
+                moduleName,
+                StringComparison.OrdinalIgnoreCase))
             .Where(IsModuleManifest)
             .Select(Path.GetDirectoryName)
             .Where(path => !string.IsNullOrWhiteSpace(path) &&
@@ -203,6 +209,37 @@ internal static class DocumentationExternalHelpAliasWriter
             .Select(path => Path.GetFullPath(path!))
             .Distinct(pathComparer)
             .ToArray();
+    }
+
+    private static bool ContainsDirectoryReparsePoint(string rootDirectory, string candidateDirectory)
+    {
+        var fullRoot = Path.GetFullPath(rootDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var current = Path.GetFullPath(candidateDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (!IsPathWithinRoot(fullRoot, current)) return true;
+
+        var pathComparison = FrameworkCompatibility.GetPathStringComparison(fullRoot);
+        while (!string.Equals(current, fullRoot, pathComparison))
+        {
+            try
+            {
+                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                    return true;
+            }
+            catch
+            {
+                // Fail closed when a directory disappears or cannot be inspected.
+                return true;
+            }
+
+            var parent = Directory.GetParent(current);
+            if (parent is null) return true;
+            current = parent.FullName
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
+        return false;
     }
 
     private static IEnumerable<string> EnumerateFilesWithoutDirectoryLinks(string rootDirectory)

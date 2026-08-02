@@ -140,6 +140,13 @@ public sealed class DocumentationBinaryMetadataContractTests
             File.WriteAllText(
                 sameNameAlias,
                 DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "<helpItems />");
+            var otherNameModuleRoot = Path.Combine(root, "BundledOther");
+            var outerAliasUnderOtherModule = Path.Combine(otherNameModuleRoot, "Lib", "en-US", "Outer.DLL-Help.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(outerAliasUnderOtherModule)!);
+            File.WriteAllText(Path.Combine(otherNameModuleRoot, "OtherModule.psd1"), "@{ RootModule = ''; ModuleVersion = '1.0.0' }");
+            File.WriteAllText(
+                outerAliasUnderOtherModule,
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "<helpItems />");
             var staleMixedCaseAlias = Path.Combine(root, "Lib", "Removed", "en-US", "Removed.DLL-Help.xml");
             Directory.CreateDirectory(Path.GetDirectoryName(staleMixedCaseAlias)!);
             File.WriteAllText(
@@ -178,6 +185,7 @@ public sealed class DocumentationBinaryMetadataContractTests
             Assert.True(File.Exists(authoredAlias));
             Assert.True(File.Exists(otherAlias));
             Assert.True(File.Exists(sameNameAlias));
+            Assert.False(File.Exists(outerAliasUnderOtherModule));
             Assert.False(File.Exists(staleMixedCaseAlias));
             Assert.False(File.Exists(dataAlias));
         }
@@ -244,6 +252,45 @@ public sealed class DocumentationBinaryMetadataContractTests
             DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(root, "OwnerModule");
 
             Assert.True(File.Exists(outsideAlias));
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+            try { Directory.Delete(outside, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ExternalHelpAliases_DoNotWriteThroughDirectoryLinks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-binary-alias-write-link-root-" + Guid.NewGuid().ToString("N"));
+        var outside = Path.Combine(Path.GetTempPath(), "pf-binary-alias-write-link-target-" + Guid.NewGuid().ToString("N"));
+        var cultureDirectory = Path.Combine(root, "en-US");
+        Directory.CreateDirectory(cultureDirectory);
+        Directory.CreateDirectory(outside);
+
+        try
+        {
+            var primary = Path.Combine(cultureDirectory, "Owner-help.xml");
+            File.WriteAllText(primary, "<helpItems />");
+            var assemblyPath = Path.Combine(outside, "Foo.dll");
+            File.WriteAllText(assemblyPath, string.Empty);
+            var link = Path.Combine(root, "Linked");
+            try { Directory.CreateSymbolicLink(link, outside); }
+            catch (Exception exception) when (exception is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+            {
+                return;
+            }
+
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands = [new DocumentationCommandHelp { AssemblyPath = Path.Combine(link, "Foo.dll") }]
+            };
+
+            var paths = DocumentationExternalHelpAliasWriter.WriteAliases(payload, primary, "OwnerModule");
+
+            Assert.Single(paths);
+            Assert.False(File.Exists(Path.Combine(outside, "en-US", "Foo.dll-Help.xml")));
         }
         finally
         {
