@@ -3,7 +3,8 @@ param(
     [string] $ToolManifestPath,
     [string] $SourceCommit,
     [string] $GitPath = 'git',
-    [switch] $SkipToolManifest
+    [switch] $SkipToolManifest,
+    [switch] $RejectCredentialOverrides
 )
 
 $ErrorActionPreference = 'Stop'
@@ -65,6 +66,17 @@ if (-not $SkipToolManifest) {
 }
 
 $config = Get-Content -LiteralPath $configFullPath -Raw | ConvertFrom-Json -Depth 100
+if ($RejectCredentialOverrides) {
+    foreach ($credentialProperty in @(
+        'AppStoreConnectApiKeyPath',
+        'AppStoreConnectApiKeyId',
+        'AppStoreConnectApiIssuerId'
+    )) {
+        if (-not [string]::IsNullOrWhiteSpace([string] $config.AppleApps.$credentialProperty)) {
+            throw "AppleApps.$credentialProperty is forbidden in tracked release configuration; use the fixed private runner profile."
+        }
+    }
+}
 $projectRootSetting = [string] $config.AppleApps.ProjectRoot
 if ([string]::IsNullOrWhiteSpace($projectRootSetting)) { $projectRootSetting = '.' }
 $projectRoot = if ([IO.Path]::IsPathRooted($projectRootSetting)) {
@@ -118,6 +130,7 @@ foreach ($propertyName in $trackedInputProperties) {
 }
 
 foreach ($app in @($config.AppleApps.Apps)) {
+    if ($null -ne $app.PSObject.Properties['Enabled'] -and -not [bool] $app.Enabled) { continue }
     $configuredProjectPath = [string] $app.ProjectPath
     if ([string]::IsNullOrWhiteSpace($configuredProjectPath)) { continue }
     $projectPath = if ([IO.Path]::IsPathRooted($configuredProjectPath)) {
@@ -128,20 +141,32 @@ foreach ($app in @($config.AppleApps.Apps)) {
     if (-not $projectPath.StartsWith($sourcePrefix, $comparison)) {
         throw "AppleApps.Apps.ProjectPath must resolve inside the exact checked-out source: $projectPath"
     }
+    $projectExists = Test-Path -LiteralPath $projectPath
     if (Test-Path -LiteralPath $projectPath -PathType Leaf) {
         Assert-TrackedSourceFile -SourceRoot $sourceRoot -Path $projectPath -Name 'AppleApps.Apps.ProjectPath'
     } elseif (Test-Path -LiteralPath $projectPath -PathType Container) {
+        $projectMetadataName = if ($projectPath.EndsWith('.xcworkspace', [StringComparison]::OrdinalIgnoreCase)) {
+            'contents.xcworkspacedata'
+        } else {
+            'project.pbxproj'
+        }
         Assert-TrackedSourceFile `
             -SourceRoot $sourceRoot `
-            -Path (Join-Path $projectPath 'project.pbxproj') `
-            -Name 'AppleApps.Apps.ProjectPath/project.pbxproj'
+            -Path (Join-Path $projectPath $projectMetadataName) `
+            -Name "AppleApps.Apps.ProjectPath/$projectMetadataName"
     } elseif ([bool] $app.GenerateProjectIfMissing) {
         Assert-TrackedSourceFile `
             -SourceRoot $sourceRoot `
-            -Path (Join-Path $projectRoot 'project.yml') `
+            -Path (Join-Path (Split-Path -Parent $projectPath) 'project.yml') `
             -Name 'AppleApps.Apps.ProjectPath generation source'
     } else {
         throw "AppleApps.Apps.ProjectPath was not found inside the exact checked-out source: $projectPath"
+    }
+    if ($projectExists -and [bool] $app.RegenerateProject) {
+        Assert-TrackedSourceFile `
+            -SourceRoot $sourceRoot `
+            -Path (Join-Path (Split-Path -Parent $projectPath) 'project.yml') `
+            -Name 'AppleApps.Apps.ProjectPath regeneration source'
     }
 }
 

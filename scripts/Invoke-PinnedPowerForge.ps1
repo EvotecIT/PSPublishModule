@@ -193,8 +193,51 @@ function Invoke-TrackedInputValidator {
     Invoke-GitText -Root $toolRoot -Arguments @('ls-files', '--error-unmatch', '--', $relative) | Out-Null
     Invoke-GitText -Root $toolRoot -Arguments @('diff', '--quiet', 'HEAD', '--', $relative) | Out-Null
     foreach ($configPath in @($script:validatedConfigPaths | Select-Object -Unique)) {
-        & $validator -ConfigPath $configPath -SourceCommit $SourceCommit -GitPath $script:gitPath -SkipToolManifest
+        & $validator `
+            -ConfigPath $configPath `
+            -SourceCommit $SourceCommit `
+            -GitPath $script:gitPath `
+            -SkipToolManifest `
+            -RejectCredentialOverrides
     }
+}
+
+function Get-FirstEnvironmentValue {
+    param([Parameter(Mandatory)][string[]] $Names)
+    foreach ($name in $Names) {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if (-not [string]::IsNullOrWhiteSpace($value)) { return $value.Trim() }
+    }
+    return $null
+}
+
+function Assert-FixedLocalCredentialProfile {
+    $keyPath = Get-FirstEnvironmentValue -Names @('APP_STORE_CONNECT_PRIVATE_KEY_PATH', 'ASC_PRIVATE_KEY_PATH')
+    $keyId = Get-FirstEnvironmentValue -Names @('APP_STORE_CONNECT_KEY_ID', 'ASC_KEY_ID')
+    $issuerId = Get-FirstEnvironmentValue -Names @('APP_STORE_CONNECT_ISSUER_ID', 'ASC_ISSUER_ID')
+    $configuredCount = @($keyPath, $keyId, $issuerId).Where({ -not [string]::IsNullOrWhiteSpace($_) }).Count
+    if ($configuredCount -eq 0) {
+        $script:validatedCredentialKeyPath = $null
+        return
+    }
+    if ($configuredCount -ne 3) {
+        throw 'The fixed local App Store Connect profile must provide a complete key path, key id, and issuer id tuple.'
+    }
+    if (-not [IO.Path]::IsPathRooted($keyPath)) {
+        throw 'The fixed local App Store Connect private-key path must be absolute.'
+    }
+    $fullKeyPath = [IO.Path]::GetFullPath($keyPath)
+    $profileRoot = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('UserProfile')) '.appstoreconnect'))
+    $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $profilePrefix = $profileRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    if (-not $fullKeyPath.StartsWith($profilePrefix, $comparison)) {
+        throw 'Local Apple credentials must remain inside the fixed private ~/.appstoreconnect profile.'
+    }
+    if (-not (Test-Path -LiteralPath $fullKeyPath -PathType Leaf)) {
+        throw "The fixed local App Store Connect private key was not found: $fullKeyPath"
+    }
+    Assert-UnlinkedPath -Path $fullKeyPath -Name 'App Store Connect private key'
+    $script:validatedCredentialKeyPath = $fullKeyPath
 }
 
 function Assert-AuthoritativeCaptureProvenance {
@@ -206,14 +249,19 @@ function Assert-AuthoritativeCaptureProvenance {
     $repository = [string]$provenance.repository
     $runId = [string]$provenance.captureRunId
     $sourceCommit = ([string]$provenance.sourceCommit).ToLowerInvariant()
+    $workflowRef = [string]$provenance.workflowRef
+    $workflowPattern = '^' + [regex]::Escape($ExpectedConsumerRepository) + '/(?<path>\.github/workflows/[A-Za-z0-9._/-]+\.ya?ml)@refs/heads/' + [regex]::Escape($requiredBranch) + '$'
+    $workflowMatch = [regex]::Match($workflowRef, $workflowPattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
     if (-not $repository.Equals($ExpectedConsumerRepository, [StringComparison]::OrdinalIgnoreCase) -or
-        $runId -notmatch '^\d+$' -or $sourceCommit -notmatch '^[0-9a-f]{40}$') {
-        throw 'Capture provenance repository, run id, or source commit is invalid.'
+        $runId -notmatch '^\d+$' -or $sourceCommit -notmatch '^[0-9a-f]{40}$' -or -not $workflowMatch.Success) {
+        throw 'Capture provenance repository, run id, source commit, or workflow identity is invalid.'
     }
     $run = & $GhPath api "repos/$repository/actions/runs/$runId" 2>$null | ConvertFrom-Json
-    if ($LASTEXITCODE -ne 0 -or $run.conclusion -ne 'success' -or $run.head_branch -ne $requiredBranch -or
+    if ($LASTEXITCODE -ne 0 -or $run.status -ne 'completed' -or $run.conclusion -ne 'success' -or
+        $run.event -ne 'workflow_dispatch' -or $run.path -ne $workflowMatch.Groups['path'].Value -or
+        $run.head_repository.full_name -ne $repository -or $run.head_branch -ne $requiredBranch -or
         ([string]$run.head_sha).ToLowerInvariant() -ne $sourceCommit) {
-        throw 'Capture provenance does not identify a successful GitHub Actions run at the exact source commit.'
+        throw 'Capture provenance does not identify the dedicated successful default-branch capture workflow at the exact source commit.'
     }
     $artifactName = "powerforge-apple-screenshot-provenance-$sourceCommit"
     $downloadRoot = Join-Path $temporaryRoot 'authoritative-provenance'
@@ -236,8 +284,7 @@ function Get-RedactedToolText {
         $value = [Environment]::GetEnvironmentVariable($name)
         if (-not [string]::IsNullOrWhiteSpace($value)) { $sensitiveValues.Add($value) }
     }
-    $keyPath = [Environment]::GetEnvironmentVariable('APP_STORE_CONNECT_PRIVATE_KEY_PATH')
-    if ([string]::IsNullOrWhiteSpace($keyPath)) { $keyPath = [Environment]::GetEnvironmentVariable('ASC_PRIVATE_KEY_PATH') }
+    $keyPath = $script:validatedCredentialKeyPath
     if (-not [string]::IsNullOrWhiteSpace($keyPath) -and (Test-Path -LiteralPath $keyPath -PathType Leaf)) {
         $keyPath = [IO.Path]::GetFullPath($keyPath)
         $profileRoot = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('UserProfile')) '.appstoreconnect'))
@@ -322,6 +369,7 @@ try {
     Invoke-GitText -Root $toolRoot -Arguments @('diff', '--quiet', 'HEAD', '--', $scriptRelative) | Out-Null
     Assert-SafeArguments
     Invoke-TrackedInputValidator -SourceCommit $consumerHead
+    Assert-FixedLocalCredentialProfile
 
     $dotnet = Resolve-FixedTool -Name dotnet
     $gh = Resolve-FixedTool -Name gh
