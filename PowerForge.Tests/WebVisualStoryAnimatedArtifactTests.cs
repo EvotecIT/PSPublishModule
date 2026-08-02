@@ -161,6 +161,77 @@ public class WebVisualStoryAnimatedArtifactTests
         }
     }
 
+    [Fact]
+    public void Stage_AcceptsStaticSvgForNonAnimatedRole()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            File.WriteAllText(
+                Path.Combine(source, "source.svg"),
+                "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1\" height=\"1\"/></svg>");
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = ReadBundle(manifest);
+            bundle.Artifacts = bundle.Artifacts
+                .Append(new WebVisualStoryArtifact
+                {
+                    Role = "source",
+                    Format = "svg",
+                    Path = "source.svg"
+                })
+                .ToArray();
+            WriteBundle(manifest, bundle);
+
+            var result = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = manifest,
+                OutputPath = Path.Combine(root, "published")
+            });
+
+            Assert.Contains(result.Bundle.Artifacts, artifact => artifact.Path == "source.svg");
+            Assert.Contains(
+                WebVisualStoryStager.Load(result.ManifestPath).Artifacts,
+                artifact => artifact.Path == "source.svg");
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Stage_AcceptsMpathBasedSvgMotion()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            File.WriteAllText(
+                Path.Combine(source, "motion.svg"),
+                "<svg xmlns=\"http://www.w3.org/2000/svg\"><path id=\"route\" d=\"M0 0L1 1\"/><circle r=\"1\"><animateMotion dur=\"1s\"><mpath href=\"#route\"/></animateMotion></circle></svg>");
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = ReadBundle(manifest);
+            var animated = Assert.Single(bundle.Artifacts, artifact => artifact.Role == "animated");
+            animated.Path = "motion.svg";
+            WriteBundle(manifest, bundle);
+
+            var result = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = manifest,
+                OutputPath = Path.Combine(root, "published")
+            });
+
+            Assert.Equal("motion.svg", Assert.Single(
+                result.Bundle.Artifacts,
+                artifact => artifact.Role == "animated").Path);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     [Theory]
     [InlineData("gif", "animated.gif", MagickFormat.Gif)]
     [InlineData("apng", "animated.png", MagickFormat.APng)]

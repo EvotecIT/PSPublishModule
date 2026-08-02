@@ -25,7 +25,7 @@ internal static class WebVisualStoryAnimatedArtifactValidator
     {
         if (string.Equals(format, "svg", StringComparison.OrdinalIgnoreCase))
         {
-            ValidateSvg(path, displayPath);
+            ValidateSvg(path, displayPath, requireAnimation: true);
             return;
         }
         if (string.Equals(format, "apng", StringComparison.OrdinalIgnoreCase))
@@ -102,7 +102,7 @@ internal static class WebVisualStoryAnimatedArtifactValidator
         }
     }
 
-    private static void ValidateSvg(string path, string displayPath)
+    internal static void ValidateSvg(string path, string displayPath, bool requireAnimation)
     {
         try
         {
@@ -125,6 +125,7 @@ internal static class WebVisualStoryAnimatedArtifactValidator
             var sawCssKeyframes = false;
             var sawCssAnimationDeclaration = false;
             var insideStyle = false;
+            var pendingAnimateMotionDepth = -1;
             while (reader.Read())
             {
                 if (reader.NodeType is XmlNodeType.Text or XmlNodeType.CDATA && insideStyle)
@@ -142,11 +143,28 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                     insideStyle = false;
                     continue;
                 }
+                if (reader.NodeType == XmlNodeType.EndElement &&
+                    pendingAnimateMotionDepth == reader.Depth &&
+                    string.Equals(reader.LocalName, "animateMotion", StringComparison.Ordinal) &&
+                    string.Equals(reader.NamespaceURI, SvgNamespace, StringComparison.Ordinal))
+                {
+                    pendingAnimateMotionDepth = -1;
+                    continue;
+                }
                 if (reader.NodeType != XmlNodeType.Element ||
                     !string.Equals(reader.NamespaceURI, SvgNamespace, StringComparison.Ordinal))
                     continue;
 
                 if (IsDeclarativeAnimationElement(reader))
+                    sawDeclarativeAnimation = true;
+                else if (string.Equals(reader.LocalName, "animateMotion", StringComparison.Ordinal) &&
+                         reader.GetAttribute("dur") is { Length: > 0 } &&
+                         !reader.IsEmptyElement)
+                    pendingAnimateMotionDepth = reader.Depth;
+                else if (pendingAnimateMotionDepth >= 0 &&
+                         reader.Depth == pendingAnimateMotionDepth + 1 &&
+                         string.Equals(reader.LocalName, "mpath", StringComparison.Ordinal) &&
+                         HasLocalMotionPathReference(reader))
                     sawDeclarativeAnimation = true;
 
                 var inlineStyle = reader.GetAttribute("style");
@@ -155,7 +173,9 @@ internal static class WebVisualStoryAnimatedArtifactValidator
 
                 insideStyle = string.Equals(reader.LocalName, "style", StringComparison.Ordinal) && !reader.IsEmptyElement;
             }
-            if (!sawDeclarativeAnimation && !(sawCssKeyframes && sawCssAnimationDeclaration))
+            if (requireAnimation &&
+                !sawDeclarativeAnimation &&
+                !(sawCssKeyframes && sawCssAnimationDeclaration))
             {
                 throw new InvalidOperationException(
                     $"Visual-story animated SVG artifact does not contain a supported animation: {displayPath}");
@@ -193,6 +213,13 @@ internal static class WebVisualStoryAnimatedArtifactValidator
         => reader.GetAttribute("values") is { Length: > 0 } ||
            reader.GetAttribute("to") is { Length: > 0 } ||
            reader.GetAttribute("by") is { Length: > 0 };
+
+    private static bool HasLocalMotionPathReference(XmlReader reader)
+    {
+        var reference = reader.GetAttribute("href") ??
+                        reader.GetAttribute("href", "http://www.w3.org/1999/xlink");
+        return reference is { Length: > 1 } && reference[0] == '#';
+    }
 
     private static bool ContainsCssAnimationDeclaration(string css)
     {

@@ -367,18 +367,31 @@ public static partial class WebSiteBuilder
 
     private static void CopyDirectory(string source, string destination)
     {
+        var sourceDirectory = new DirectoryInfo(source);
+        RejectLinkedAsset(sourceDirectory);
         Directory.CreateDirectory(destination);
 
-        foreach (var file in Directory.GetFiles(source))
+        foreach (var file in sourceDirectory.EnumerateFiles())
         {
-            var destFile = Path.Combine(destination, Path.GetFileName(file));
-            CopyFileIfChanged(file, destFile);
+            RejectLinkedAsset(file);
+            var destFile = Path.Combine(destination, file.Name);
+            CopyFileIfChanged(file.FullName, destFile);
         }
 
-        foreach (var dir in Directory.GetDirectories(source))
+        foreach (var directory in sourceDirectory.EnumerateDirectories())
         {
-            var destDir = Path.Combine(destination, Path.GetFileName(dir));
-            CopyDirectory(dir, destDir);
+            RejectLinkedAsset(directory);
+            var destDir = Path.Combine(destination, directory.Name);
+            CopyDirectory(directory.FullName, destDir);
+        }
+    }
+
+    private static void RejectLinkedAsset(FileSystemInfo entry)
+    {
+        if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"Website asset source cannot contain a symbolic link or reparse point: {entry.FullName}");
         }
     }
 
@@ -406,6 +419,7 @@ public static partial class WebSiteBuilder
             var destination = (asset.Destination ?? string.Empty).TrimStart('/', '\\');
             if (File.Exists(sourcePath))
             {
+                RejectLinkedAsset(new FileInfo(sourcePath));
                 var destPath = string.IsNullOrWhiteSpace(destination)
                     ? Path.Combine(outputRoot, Path.GetFileName(sourcePath))
                     : (Path.HasExtension(destination)

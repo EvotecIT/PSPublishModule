@@ -458,6 +458,11 @@ public static class WebVisualStoryStager
         switch (normalizedFormat)
         {
             case "svg":
+                WebVisualStoryAnimatedArtifactValidator.ValidateSvg(
+                    path,
+                    displayPath,
+                    requireAnimation: false);
+                break;
             case "apng":
                 WebVisualStoryAnimatedArtifactValidator.Validate(path, displayPath, normalizedFormat);
                 break;

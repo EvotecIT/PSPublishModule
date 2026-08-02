@@ -159,7 +159,7 @@ public class WebShortcodeMediaTests
             {
                 var bundleRoot = Path.Combine(root, "static", "stories", "chart");
                 Directory.CreateDirectory(bundleRoot);
-                File.WriteAllText(Path.Combine(bundleRoot, "demo.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+                WriteAnimatedSvg(Path.Combine(bundleRoot, "demo.svg"));
                 using (var image = new MagickImage(MagickColors.Transparent, 2, 2))
                 {
                     image.Write(Path.Combine(bundleRoot, "demo.png"), MagickFormat.Png);
@@ -240,9 +240,7 @@ public class WebShortcodeMediaTests
             {
                 var bundleRoot = Path.Combine(root, "static");
                 Directory.CreateDirectory(bundleRoot);
-                File.WriteAllText(
-                    Path.Combine(bundleRoot, "demo.svg"),
-                    "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+                WriteAnimatedSvg(Path.Combine(bundleRoot, "demo.svg"));
                 using (var completed = new MagickImage(MagickColors.Transparent, 2, 2))
                 {
                     completed.Write(Path.Combine(bundleRoot, "demo.png"), MagickFormat.Png);
@@ -284,9 +282,7 @@ public class WebShortcodeMediaTests
                 var bundleRoot = Path.Combine(root, "static");
                 Directory.CreateDirectory(bundleRoot);
                 File.WriteAllText(Path.Combine(root, "favicon.ico"), "icon");
-                File.WriteAllText(
-                    Path.Combine(bundleRoot, "demo.svg"),
-                    "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+                WriteAnimatedSvg(Path.Combine(bundleRoot, "demo.svg"));
                 using (var completed = new MagickImage(MagickColors.Transparent, 2, 2))
                 {
                     completed.Write(Path.Combine(bundleRoot, "demo.png"), MagickFormat.Png);
@@ -333,9 +329,7 @@ public class WebShortcodeMediaTests
             {
                 var bundleRoot = Path.Combine(root, "generated", "story");
                 Directory.CreateDirectory(bundleRoot);
-                File.WriteAllText(
-                    Path.Combine(bundleRoot, "demo.svg"),
-                    "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+                WriteAnimatedSvg(Path.Combine(bundleRoot, "demo.svg"));
                 using (var completed = new MagickImage(MagickColors.Transparent, 2, 2))
                 {
                     completed.Write(Path.Combine(bundleRoot, "demo.png"), MagickFormat.Png);
@@ -389,9 +383,7 @@ public class WebShortcodeMediaTests
             {
                 var bundleRoot = Path.Combine(root, "content", "pages", "demo", "story");
                 Directory.CreateDirectory(bundleRoot);
-                File.WriteAllText(
-                    Path.Combine(bundleRoot, "demo.svg"),
-                    "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+                WriteAnimatedSvg(Path.Combine(bundleRoot, "demo.svg"));
                 using (var completed = new MagickImage(MagickColors.Transparent, 2, 2))
                 {
                     completed.Write(Path.Combine(bundleRoot, "demo.png"), MagickFormat.Png);
@@ -509,6 +501,13 @@ public class WebShortcodeMediaTests
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
         }
+    }
+
+    private static void WriteAnimatedSvg(string path)
+    {
+        File.WriteAllText(
+            path,
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1\" height=\"1\"><animate attributeName=\"opacity\" dur=\"1s\" values=\"0;1\"/></rect></svg>");
     }
 
     private static int CountOccurrences(string text, string token)

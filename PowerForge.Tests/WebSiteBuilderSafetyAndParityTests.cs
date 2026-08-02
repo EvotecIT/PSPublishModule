@@ -146,6 +146,95 @@ public class WebSiteBuilderSafetyAndParityTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Build_RejectsLinkedEntriesInConventionalStaticAssets(bool directoryLink)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-static-link-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(
+                Path.Combine(pagesPath, "index.md"),
+                "---\ntitle: Home\nslug: index\n---\n\nHome");
+
+            var staticPath = Path.Combine(root, "static");
+            Directory.CreateDirectory(staticPath);
+            if (directoryLink)
+            {
+                var outsideDirectory = Path.Combine(root, "outside");
+                Directory.CreateDirectory(outsideDirectory);
+                File.WriteAllText(Path.Combine(outsideDirectory, "secret.txt"), "SECRET");
+                Directory.CreateSymbolicLink(Path.Combine(staticPath, "linked"), outsideDirectory);
+            }
+            else
+            {
+                var outsideFile = Path.Combine(root, "secret.txt");
+                File.WriteAllText(outsideFile, "SECRET");
+                File.CreateSymbolicLink(Path.Combine(staticPath, "linked.txt"), outsideFile);
+            }
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebSiteBuilder.Build(spec, WebSitePlanner.Plan(spec, configPath), outPath));
+
+            Assert.Contains("symbolic link", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(Path.Combine(outPath, "linked.txt")));
+            Assert.False(File.Exists(Path.Combine(outPath, "linked", "secret.txt")));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_RejectsExplicitLinkedStaticAssetFile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-static-file-link-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(
+                Path.Combine(pagesPath, "index.md"),
+                "---\ntitle: Home\nslug: index\n---\n\nHome");
+            var outsideFile = Path.Combine(root, "secret.txt");
+            File.WriteAllText(outsideFile, "SECRET");
+            var linkedFile = Path.Combine(root, "linked.txt");
+            File.CreateSymbolicLink(linkedFile, outsideFile);
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            spec.StaticAssets =
+            [
+                new StaticAssetSpec { Source = "linked.txt", Destination = "assets/linked.txt" }
+            ];
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebSiteBuilder.Build(spec, WebSitePlanner.Plan(spec, configPath), outPath));
+
+            Assert.Contains("symbolic link", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(Path.Combine(outPath, "assets", "linked.txt")));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     [Fact]
     public void Build_ExplicitStaticRootMappingSuppressesConventionalRootCopy()
     {
