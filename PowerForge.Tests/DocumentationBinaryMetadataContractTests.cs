@@ -53,6 +53,13 @@ public sealed class DocumentationBinaryMetadataContractTests
             Assert.DoesNotContain(command.Parameters, parameter => parameter.Name == "HiddenTransport");
             Assert.All(command.Syntax, syntax => Assert.DoesNotContain("HiddenTransport", syntax.Text, StringComparison.Ordinal));
 
+            var staleAliasDirectory = Path.Combine(root, "Lib", "Removed", "en-US");
+            Directory.CreateDirectory(staleAliasDirectory);
+            var staleAlias = Path.Combine(staleAliasDirectory, "Removed.dll-Help.xml");
+            File.WriteAllText(
+                staleAlias,
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("MetadataFixture") + "<helpItems />");
+
             var result = engine.Build(
                 "MetadataFixture",
                 root,
@@ -62,15 +69,17 @@ public sealed class DocumentationBinaryMetadataContractTests
                 {
                     Enable = true,
                     GenerateExternalHelp = true,
+                    ExternalHelpCulture = "fr-FR",
                     IncludeAboutTopics = false,
                     GenerateFallbackExamples = false
                 });
 
             Assert.True(result.Succeeded, result.ErrorMessage);
-            var primary = Path.Combine(root, "en-US", "MetadataFixture-help.xml");
-            var binaryAlias = Path.Combine(root, "Lib", "Core", "en-US", "BinaryDocFixture.dll-Help.xml");
+            var primary = Path.Combine(root, "fr-FR", "MetadataFixture-help.xml");
+            var binaryAlias = Path.Combine(root, "Lib", "Core", "fr-FR", "BinaryDocFixture.dll-Help.xml");
             Assert.True(File.Exists(primary));
             Assert.True(File.Exists(binaryAlias));
+            Assert.False(File.Exists(staleAlias));
             var primaryDocument = System.Xml.Linq.XDocument.Load(primary);
             var aliasDocument = System.Xml.Linq.XDocument.Load(binaryAlias);
             Assert.Equal(primaryDocument.Root!.ToString(), aliasDocument.Root!.ToString());
@@ -81,6 +90,62 @@ public sealed class DocumentationBinaryMetadataContractTests
         {
             try { Directory.Delete(root, true); } catch { }
             try { Directory.Delete(outputDirectory, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ExternalHelpAliases_PreserveAuthoredAndOtherModuleFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-binary-alias-ownership-" + Guid.NewGuid().ToString("N"));
+        var cultureDirectory = Path.Combine(root, "en-US");
+        var coreDirectory = Path.Combine(root, "Lib", "Core");
+        var authoredDirectory = Path.Combine(root, "Lib", "Authored", "en-US");
+        Directory.CreateDirectory(cultureDirectory);
+        Directory.CreateDirectory(coreDirectory);
+        Directory.CreateDirectory(authoredDirectory);
+
+        try
+        {
+            var primary = Path.Combine(cultureDirectory, "Foo.dll-Help.xml");
+            File.WriteAllText(primary, "<helpItems />");
+            var assemblyPath = Path.Combine(coreDirectory, "Foo.dll");
+            File.WriteAllText(assemblyPath, string.Empty);
+            var authoredAssemblyPath = Path.Combine(root, "Lib", "Authored", "Authored.dll");
+            File.WriteAllText(authoredAssemblyPath, string.Empty);
+            var authoredAlias = Path.Combine(authoredDirectory, "Authored.dll-Help.xml");
+            File.WriteAllText(authoredAlias, "<authoredHelpItems />");
+            var otherAlias = Path.Combine(root, "Lib", "Other", "en-US", "Other.dll-Help.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(otherAlias)!);
+            File.WriteAllText(
+                otherAlias,
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OtherModule") + "<helpItems />");
+
+            var payload = new DocumentationExtractionPayload
+            {
+                ModuleName = "OwnerModule",
+                Commands =
+                [
+                    new DocumentationCommandHelp { AssemblyPath = assemblyPath },
+                    new DocumentationCommandHelp { AssemblyPath = authoredAssemblyPath }
+                ]
+            };
+            var paths = DocumentationExternalHelpAliasWriter.WriteAliases(payload, primary, "OwnerModule");
+            var nestedAlias = Path.Combine(coreDirectory, "en-US", "Foo.dll-Help.xml");
+
+            Assert.Contains(nestedAlias, paths, StringComparer.OrdinalIgnoreCase);
+            Assert.True(File.Exists(nestedAlias));
+            Assert.Equal("<authoredHelpItems />", File.ReadAllText(authoredAlias));
+            Assert.DoesNotContain(authoredAlias, paths, StringComparer.OrdinalIgnoreCase);
+
+            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(root, "OwnerModule");
+
+            Assert.False(File.Exists(nestedAlias));
+            Assert.True(File.Exists(authoredAlias));
+            Assert.True(File.Exists(otherAlias));
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
         }
     }
 

@@ -19,7 +19,8 @@ function Get-VisibilityFixture {
     [CmdletBinding()]
     param(
         [Nullable[VisibilityMode]] $Mode,
-        [Parameter(DontShow = $true, Position = 0)] [string] $HiddenTransport
+        [Nullable[VisibilityMode][]] $Modes,
+        [Parameter(Mandatory = $true, DontShow = $true, Position = 0)] [string] $HiddenTransport
     )
 }
 function GetDocumentationParameterDeclaringMetadata { throw 'Target helper shadow was invoked.' }
@@ -48,18 +49,28 @@ Export-ModuleMember -Function Get-VisibilityFixture,GetDocumentationParameterDec
                 var engine = new DocumentationEngine(new ExecutablePowerShellRunner(host, root), new NullLogger());
                 var payload = engine.ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
                 var command = Assert.Single(payload.Commands, item => item.Name == "Get-VisibilityFixture");
-                var mode = Assert.Single(command.Parameters);
+                Assert.Equal(2, command.Parameters.Count);
+                var mode = Assert.Single(command.Parameters, parameter => parameter.Name == "Mode");
+                var modes = Assert.Single(command.Parameters, parameter => parameter.Name == "Modes");
 
                 Assert.Equal("Mode", mode.Name);
                 Assert.Equal("VisibilityMode", mode.Type);
+                Assert.Equal("VisibilityMode[]", modes.Type);
                 Assert.Equal(new[] { "Advanced", "Basic" }, mode.PossibleValues.OrderBy(value => value));
                 Assert.All(command.Syntax, syntax => Assert.DoesNotContain("HiddenTransport", syntax.Text, StringComparison.Ordinal));
+                Assert.All(command.Syntax, syntax => Assert.DoesNotContain("Nullable", syntax.Text, StringComparison.OrdinalIgnoreCase));
+
+                var docsRoot = Path.Combine(root, host.Replace('.', '-') + "-docs");
+                new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "VisibilityFixture", docsRoot);
+                var markdown = File.ReadAllText(Path.Combine(docsRoot, "Get-VisibilityFixture.md"));
+                Assert.DoesNotContain("HiddenTransport", markdown, StringComparison.Ordinal);
+                Assert.DoesNotContain("Nullable", markdown, StringComparison.OrdinalIgnoreCase);
 
                 var mamlRoot = Path.Combine(root, host.Replace('.', '-'));
                 var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, "VisibilityFixture", mamlRoot);
                 var maml = File.ReadAllText(mamlPath);
                 Assert.DoesNotContain("HiddenTransport", maml, StringComparison.Ordinal);
-                Assert.DoesNotContain("Nullable`1", maml, StringComparison.Ordinal);
+                Assert.DoesNotContain("Nullable", maml, StringComparison.OrdinalIgnoreCase);
             }
         }
         finally

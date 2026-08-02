@@ -217,7 +217,7 @@ public sealed class DocumentationEngine
                 try
                 {
                     externalHelpFile = mamlWriter.WriteExternalHelpFile(extracted, moduleName, externalHelpDir, fileName);
-                    externalHelpFiles = DocumentationExternalHelpAliasWriter.WriteAliases(extracted, externalHelpFile);
+                    externalHelpFiles = DocumentationExternalHelpAliasWriter.WriteAliases(extracted, externalHelpFile, moduleName);
                     if (buildDocumentation.IncludeAboutTopics)
                         new AboutTopicWriter().WriteExternalHelpFiles(stagingPath, externalHelpDir, buildDocumentation.AboutTopicsSourcePath);
                     SafeDone(externalHelpStep);
@@ -484,6 +484,7 @@ public sealed class DocumentationEngine
 
             var culture = NormalizeExternalHelpCulture(buildDocumentation.ExternalHelpCulture);
             var externalHelpDir = Path.Combine(stagingPath, culture);
+            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(stagingPath, moduleName);
             if (!Directory.Exists(externalHelpDir)) return;
 
             var fileName = string.IsNullOrWhiteSpace(buildDocumentation.ExternalHelpFileName)
@@ -492,7 +493,6 @@ public sealed class DocumentationEngine
             if (string.IsNullOrWhiteSpace(fileName)) fileName = $"{moduleName}-help.xml";
 
             var externalHelpFile = Path.Combine(externalHelpDir, fileName);
-            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(stagingPath);
             if (File.Exists(externalHelpFile))
             {
                 try { File.Delete(externalHelpFile); } catch { /* best effort */ }

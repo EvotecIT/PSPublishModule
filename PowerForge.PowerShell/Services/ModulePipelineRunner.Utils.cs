@@ -120,7 +120,7 @@ public sealed partial class ModulePipelineRunner
             var stagingRoot = string.IsNullOrWhiteSpace(externalHelpDir)
                 ? string.Empty
                 : Directory.GetParent(externalHelpDir)?.FullName ?? string.Empty;
-            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(projectRoot);
+            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(projectRoot, plan.ModuleName);
 
             foreach (var sourceHelpFile in existingHelpFiles)
             {
@@ -131,6 +131,9 @@ public sealed partial class ModulePipelineRunner
                 var targetHelpDirectory = Path.GetDirectoryName(targetHelpFile);
                 if (!string.IsNullOrWhiteSpace(targetHelpDirectory))
                     Directory.CreateDirectory(targetHelpDirectory);
+                if (DocumentationExternalHelpAliasWriter.IsGeneratedAlias(sourceHelpFile) &&
+                    !DocumentationExternalHelpAliasWriter.CanWriteGeneratedAlias(targetHelpFile, plan.ModuleName))
+                    continue;
                 if (!SamePath(sourceHelpFile, targetHelpFile))
                     File.Copy(sourceHelpFile, targetHelpFile, overwrite: true);
             }

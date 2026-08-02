@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 
 namespace PowerForge;
 
@@ -10,11 +11,16 @@ namespace PowerForge;
 /// </summary>
 internal static class DocumentationExternalHelpAliasWriter
 {
-    private const string GeneratedAliasMarker = "<!-- PowerForgeGeneratedExternalHelpAlias -->";
+    private const string LegacyGeneratedAliasMarker = "<!-- PowerForgeGeneratedExternalHelpAlias -->";
+    private const string GeneratedAliasMarkerPrefix = "<!-- PowerForgeGeneratedExternalHelpAlias:";
 
-    public static void PruneGeneratedAliases(string rootDirectory)
+    public static void PruneGeneratedAliases(string rootDirectory, string moduleName)
     {
-        if (string.IsNullOrWhiteSpace(rootDirectory) || !Directory.Exists(rootDirectory)) return;
+        if (string.IsNullOrWhiteSpace(rootDirectory) ||
+            string.IsNullOrWhiteSpace(moduleName) ||
+            !Directory.Exists(rootDirectory)) return;
+
+        var marker = GetGeneratedAliasMarker(moduleName);
 
         foreach (var aliasPath in Directory.EnumerateFiles(
                      rootDirectory,
@@ -23,15 +29,7 @@ internal static class DocumentationExternalHelpAliasWriter
         {
             try
             {
-                bool generated;
-                using (var reader = new StreamReader(aliasPath))
-                {
-                    var prefix = new char[512];
-                    var read = reader.Read(prefix, 0, prefix.Length);
-                    generated = new string(prefix, 0, read)
-                        .Contains(GeneratedAliasMarker, StringComparison.Ordinal);
-                }
-                if (generated)
+                if (ReadPrefix(aliasPath).Contains(marker, StringComparison.Ordinal))
                     File.Delete(aliasPath);
             }
             catch
@@ -43,9 +41,11 @@ internal static class DocumentationExternalHelpAliasWriter
 
     public static IReadOnlyList<string> WriteAliases(
         DocumentationExtractionPayload payload,
-        string externalHelpFilePath)
+        string externalHelpFilePath,
+        string moduleName)
     {
         if (payload is null) throw new ArgumentNullException(nameof(payload));
+        if (string.IsNullOrWhiteSpace(moduleName)) throw new ArgumentException("Module name is required.", nameof(moduleName));
         if (string.IsNullOrWhiteSpace(externalHelpFilePath) || !File.Exists(externalHelpFilePath))
             return Array.Empty<string>();
 
@@ -53,7 +53,6 @@ internal static class DocumentationExternalHelpAliasWriter
         var directory = Path.GetDirectoryName(Path.GetFullPath(externalHelpFilePath))!;
         var culture = new DirectoryInfo(directory).Name;
         var stagingRoot = Directory.GetParent(directory)?.FullName ?? directory;
-        var primaryFileName = Path.GetFileName(externalHelpFilePath);
         var assemblyPaths = (payload.Commands ?? new List<DocumentationCommandHelp>())
             .Where(command => command is not null && !string.IsNullOrWhiteSpace(command.AssemblyPath))
             .Select(command => command.AssemblyPath!.Trim().Trim('"'))
@@ -64,11 +63,12 @@ internal static class DocumentationExternalHelpAliasWriter
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
 
+        var marker = GetGeneratedAliasMarker(moduleName);
         var content = File.ReadAllText(externalHelpFilePath);
         var declarationEnd = content.IndexOf("?>", StringComparison.Ordinal);
         content = declarationEnd >= 0
-            ? content.Insert(declarationEnd + 2, Environment.NewLine + GeneratedAliasMarker)
-            : GeneratedAliasMarker + Environment.NewLine + content;
+            ? content.Insert(declarationEnd + 2, Environment.NewLine + marker)
+            : marker + Environment.NewLine + content;
 
         foreach (var assemblyPath in assemblyPaths)
         {
@@ -79,16 +79,46 @@ internal static class DocumentationExternalHelpAliasWriter
             var assemblyDirectory = Path.GetDirectoryName(assemblyPath) ?? stagingRoot;
             var aliasDirectory = Path.Combine(assemblyDirectory, culture);
             var aliasPath = Path.Combine(aliasDirectory, aliasName);
-            if (string.Equals(aliasPath, externalHelpFilePath, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(aliasName, primaryFileName, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(aliasPath, externalHelpFilePath, StringComparison.OrdinalIgnoreCase))
                 continue;
 
             Directory.CreateDirectory(aliasDirectory);
+            if (!CanWriteGeneratedAlias(aliasPath, moduleName))
+                continue;
             File.WriteAllText(aliasPath, content, new System.Text.UTF8Encoding(false));
             output.Add(aliasPath);
         }
 
         return output;
+    }
+
+    internal static string GetGeneratedAliasMarker(string moduleName)
+        => GeneratedAliasMarkerPrefix +
+           Convert.ToBase64String(Encoding.UTF8.GetBytes((moduleName ?? string.Empty).ToUpperInvariant())) +
+           " -->";
+
+    internal static bool IsGeneratedAlias(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return false;
+        var prefix = ReadPrefix(path);
+        return prefix.Contains(GeneratedAliasMarkerPrefix, StringComparison.Ordinal) ||
+               prefix.Contains(LegacyGeneratedAliasMarker, StringComparison.Ordinal);
+    }
+
+    internal static bool CanWriteGeneratedAlias(string path, string moduleName)
+    {
+        if (!File.Exists(path)) return true;
+        var prefix = ReadPrefix(path);
+        return prefix.Contains(GetGeneratedAliasMarker(moduleName), StringComparison.Ordinal) ||
+               prefix.Contains(LegacyGeneratedAliasMarker, StringComparison.Ordinal);
+    }
+
+    private static string ReadPrefix(string path)
+    {
+        using var reader = new StreamReader(path);
+        var prefix = new char[512];
+        var read = reader.Read(prefix, 0, prefix.Length);
+        return new string(prefix, 0, read);
     }
 
     private static bool IsPathWithinRoot(string root, string path)

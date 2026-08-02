@@ -118,22 +118,30 @@ public sealed class ModulePipelineDocumentationSyncTests
             File.WriteAllText(stagedHelp, "<helpItems />");
             var stagedBinaryHelp = Path.Combine(stagedHelpDir, "TestModule.Binary.dll-Help.xml");
             File.WriteAllText(stagedBinaryHelp, "<helpItems />");
+            var generatedMarker = DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker(moduleName);
+            var stagedAuthoredCollision = Path.Combine(stagedHelpDir, "Authored.Binary.dll-Help.xml");
+            File.WriteAllText(stagedAuthoredCollision, generatedMarker + "<replacementHelpItems />");
             var stagedNestedHelpDir = Path.Combine(root.FullName, "Staging", "Lib", "Core", "en-US");
             Directory.CreateDirectory(stagedNestedHelpDir);
             var stagedNestedBinaryHelp = Path.Combine(stagedNestedHelpDir, "Nested.Binary.dll-Help.xml");
-            File.WriteAllText(stagedNestedBinaryHelp, "<!-- PowerForgeGeneratedExternalHelpAlias --><helpItems />");
+            File.WriteAllText(stagedNestedBinaryHelp, generatedMarker + "<helpItems />");
             var targetHelpDir = Path.Combine(projectRoot, "en-US");
             Directory.CreateDirectory(targetHelpDir);
             File.WriteAllText(Path.Combine(targetHelpDir, "TestModule-help.xml"), "<oldHelpItems />");
             File.WriteAllText(
                 Path.Combine(targetHelpDir, "Removed.Binary.dll-Help.xml"),
-                "<!-- PowerForgeGeneratedExternalHelpAlias --><oldHelpItems />");
+                generatedMarker + "<oldHelpItems />");
             File.WriteAllText(Path.Combine(targetHelpDir, "Authored.Binary.dll-Help.xml"), "<oldHelpItems />");
             var staleNestedHelpDir = Path.Combine(projectRoot, "Lib", "Removed", "en-US");
             Directory.CreateDirectory(staleNestedHelpDir);
             File.WriteAllText(
                 Path.Combine(staleNestedHelpDir, "Removed.Nested.dll-Help.xml"),
-                "<!-- PowerForgeGeneratedExternalHelpAlias --><oldHelpItems />");
+                generatedMarker + "<oldHelpItems />");
+            var otherModuleHelp = Path.Combine(projectRoot, "Bundled", "en-US", "Bundled.dll-Help.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(otherModuleHelp)!);
+            File.WriteAllText(
+                otherModuleHelp,
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("BundledModule") + "<oldHelpItems />");
 
             var runner = new ModulePipelineRunner(new NullLogger());
             var plan = runner.Plan(new ModulePipelineSpec
@@ -183,7 +191,7 @@ public sealed class ModulePipelineDocumentationSyncTests
                 markdownFiles: 1,
                 externalHelpFilePath: stagedHelp,
                 errorMessage: null,
-                externalHelpFilePaths: new[] { stagedHelp, stagedBinaryHelp, stagedNestedBinaryHelp });
+                externalHelpFilePaths: new[] { stagedHelp, stagedBinaryHelp, stagedAuthoredCollision, stagedNestedBinaryHelp });
 
             InvokeSync(runner, plan, result);
 
@@ -192,7 +200,10 @@ public sealed class ModulePipelineDocumentationSyncTests
             Assert.True(File.Exists(Path.Combine(projectRoot, "Lib", "Core", "en-US", "Nested.Binary.dll-Help.xml")));
             Assert.False(File.Exists(Path.Combine(projectRoot, "en-US", "Removed.Binary.dll-Help.xml")));
             Assert.False(File.Exists(Path.Combine(staleNestedHelpDir, "Removed.Nested.dll-Help.xml")));
-            Assert.True(File.Exists(Path.Combine(projectRoot, "en-US", "Authored.Binary.dll-Help.xml")));
+            Assert.Equal(
+                "<oldHelpItems />",
+                File.ReadAllText(Path.Combine(projectRoot, "en-US", "Authored.Binary.dll-Help.xml")));
+            Assert.True(File.Exists(otherModuleHelp));
         }
         finally
         {
