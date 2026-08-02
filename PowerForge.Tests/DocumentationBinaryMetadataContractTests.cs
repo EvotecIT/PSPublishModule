@@ -53,12 +53,25 @@ public sealed class DocumentationBinaryMetadataContractTests
             Assert.DoesNotContain(command.Parameters, parameter => parameter.Name == "HiddenTransport");
             Assert.All(command.Syntax, syntax => Assert.DoesNotContain("HiddenTransport", syntax.Text, StringComparison.Ordinal));
 
+            var legacyPrimaryDirectory = Path.Combine(root, "en-US");
+            Directory.CreateDirectory(legacyPrimaryDirectory);
+            File.WriteAllText(
+                Path.Combine(legacyPrimaryDirectory, "MetadataFixture-help.xml"),
+                "<legacyHelpItems />");
             var staleAliasDirectory = Path.Combine(root, "Lib", "Removed", "en-US");
             Directory.CreateDirectory(staleAliasDirectory);
             var staleAlias = Path.Combine(staleAliasDirectory, "Removed.dll-Help.xml");
             File.WriteAllText(
                 staleAlias,
-                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("MetadataFixture") + "<helpItems />");
+                DocumentationExternalHelpAliasWriter.GetLegacyGeneratedAliasMarker() + "<legacyHelpItems />");
+            var bundledRoot = Path.Combine(root, "Bundled");
+            var bundledAliasDirectory = Path.Combine(bundledRoot, "Lib", "en-US");
+            Directory.CreateDirectory(bundledAliasDirectory);
+            File.WriteAllText(Path.Combine(bundledRoot, "Bundled.psd1"), "@{ RootModule = '' }");
+            var bundledAlias = Path.Combine(bundledAliasDirectory, "Bundled.dll-Help.xml");
+            File.WriteAllText(
+                bundledAlias,
+                DocumentationExternalHelpAliasWriter.GetLegacyGeneratedAliasMarker() + "<legacyHelpItems />");
 
             var result = engine.Build(
                 "MetadataFixture",
@@ -80,6 +93,7 @@ public sealed class DocumentationBinaryMetadataContractTests
             Assert.True(File.Exists(primary));
             Assert.True(File.Exists(binaryAlias));
             Assert.False(File.Exists(staleAlias));
+            Assert.True(File.Exists(bundledAlias));
             var primaryDocument = System.Xml.Linq.XDocument.Load(primary);
             var aliasDocument = System.Xml.Linq.XDocument.Load(binaryAlias);
             Assert.Equal(primaryDocument.Root!.ToString(), aliasDocument.Root!.ToString());

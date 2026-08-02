@@ -130,7 +130,7 @@ public sealed class ModulePipelineDocumentationSyncTests
             File.WriteAllText(Path.Combine(targetHelpDir, "TestModule-help.xml"), "<oldHelpItems />");
             File.WriteAllText(
                 Path.Combine(targetHelpDir, "Removed.Binary.dll-Help.xml"),
-                generatedMarker + "<oldHelpItems />");
+                DocumentationExternalHelpAliasWriter.GetLegacyGeneratedAliasMarker() + "<oldHelpItems />");
             File.WriteAllText(Path.Combine(targetHelpDir, "Authored.Binary.dll-Help.xml"), "<oldHelpItems />");
             var staleNestedHelpDir = Path.Combine(projectRoot, "Lib", "Removed", "en-US");
             Directory.CreateDirectory(staleNestedHelpDir);
@@ -139,9 +139,10 @@ public sealed class ModulePipelineDocumentationSyncTests
                 generatedMarker + "<oldHelpItems />");
             var otherModuleHelp = Path.Combine(projectRoot, "Bundled", "en-US", "Bundled.dll-Help.xml");
             Directory.CreateDirectory(Path.GetDirectoryName(otherModuleHelp)!);
+            File.WriteAllText(Path.Combine(projectRoot, "Bundled", "Bundled.psd1"), "@{ RootModule = '' }");
             File.WriteAllText(
                 otherModuleHelp,
-                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("BundledModule") + "<oldHelpItems />");
+                DocumentationExternalHelpAliasWriter.GetLegacyGeneratedAliasMarker() + "<oldHelpItems />");
 
             var runner = new ModulePipelineRunner(new NullLogger());
             var plan = runner.Plan(new ModulePipelineSpec

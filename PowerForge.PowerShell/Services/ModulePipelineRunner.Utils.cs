@@ -120,7 +120,10 @@ public sealed partial class ModulePipelineRunner
             var stagingRoot = string.IsNullOrWhiteSpace(externalHelpDir)
                 ? string.Empty
                 : Directory.GetParent(externalHelpDir)?.FullName ?? string.Empty;
-            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(projectRoot, plan.ModuleName);
+            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(
+                projectRoot,
+                plan.ModuleName,
+                Path.GetFileName(documentationResult.ExternalHelpFilePath));
 
             foreach (var sourceHelpFile in existingHelpFiles)
             {

@@ -482,15 +482,15 @@ public sealed class DocumentationEngine
             if (string.IsNullOrWhiteSpace(stagingPath)) return;
             if (string.IsNullOrWhiteSpace(moduleName)) return;
 
-            var culture = NormalizeExternalHelpCulture(buildDocumentation.ExternalHelpCulture);
-            var externalHelpDir = Path.Combine(stagingPath, culture);
-            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(stagingPath, moduleName);
-            if (!Directory.Exists(externalHelpDir)) return;
-
             var fileName = string.IsNullOrWhiteSpace(buildDocumentation.ExternalHelpFileName)
                 ? $"{moduleName}-help.xml"
                 : Path.GetFileName(buildDocumentation.ExternalHelpFileName.Trim());
             if (string.IsNullOrWhiteSpace(fileName)) fileName = $"{moduleName}-help.xml";
+
+            var culture = NormalizeExternalHelpCulture(buildDocumentation.ExternalHelpCulture);
+            var externalHelpDir = Path.Combine(stagingPath, culture);
+            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(stagingPath, moduleName, fileName);
+            if (!Directory.Exists(externalHelpDir)) return;
 
             var externalHelpFile = Path.Combine(externalHelpDir, fileName);
             if (File.Exists(externalHelpFile))

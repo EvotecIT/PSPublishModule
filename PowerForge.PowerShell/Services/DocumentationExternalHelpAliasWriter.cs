@@ -14,13 +14,18 @@ internal static class DocumentationExternalHelpAliasWriter
     private const string LegacyGeneratedAliasMarker = "<!-- PowerForgeGeneratedExternalHelpAlias -->";
     private const string GeneratedAliasMarkerPrefix = "<!-- PowerForgeGeneratedExternalHelpAlias:";
 
-    public static void PruneGeneratedAliases(string rootDirectory, string moduleName)
+    public static void PruneGeneratedAliases(
+        string rootDirectory,
+        string moduleName,
+        string? primaryFileName = null)
     {
         if (string.IsNullOrWhiteSpace(rootDirectory) ||
             string.IsNullOrWhiteSpace(moduleName) ||
             !Directory.Exists(rootDirectory)) return;
 
         var marker = GetGeneratedAliasMarker(moduleName);
+        var legacyPrimaryContent = GetLegacyPrimaryContent(rootDirectory, primaryFileName);
+        var nestedModuleRoots = GetNestedModuleRoots(rootDirectory);
 
         foreach (var aliasPath in Directory.EnumerateFiles(
                      rootDirectory,
@@ -29,7 +34,14 @@ internal static class DocumentationExternalHelpAliasWriter
         {
             try
             {
-                if (ReadPrefix(aliasPath).Contains(marker, StringComparison.Ordinal))
+                var prefix = ReadPrefix(aliasPath);
+                var ownedByCurrentModule = prefix.Contains(marker, StringComparison.Ordinal);
+                var legacyOwnedByCurrentModule =
+                    legacyPrimaryContent.Count > 0 &&
+                    prefix.Contains(LegacyGeneratedAliasMarker, StringComparison.Ordinal) &&
+                    !nestedModuleRoots.Any(root => IsPathWithinRoot(root, aliasPath)) &&
+                    legacyPrimaryContent.Contains(NormalizeLegacyContent(File.ReadAllText(aliasPath)));
+                if (ownedByCurrentModule || legacyOwnedByCurrentModule)
                     File.Delete(aliasPath);
             }
             catch
@@ -97,6 +109,9 @@ internal static class DocumentationExternalHelpAliasWriter
            Convert.ToBase64String(Encoding.UTF8.GetBytes((moduleName ?? string.Empty).ToUpperInvariant())) +
            " -->";
 
+    internal static string GetLegacyGeneratedAliasMarker()
+        => LegacyGeneratedAliasMarker;
+
     internal static bool IsGeneratedAlias(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return false;
@@ -119,6 +134,57 @@ internal static class DocumentationExternalHelpAliasWriter
         var prefix = new char[512];
         var read = reader.Read(prefix, 0, prefix.Length);
         return new string(prefix, 0, read);
+    }
+
+    private static HashSet<string> GetLegacyPrimaryContent(string rootDirectory, string? primaryFileName)
+    {
+        var content = new HashSet<string>(StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(primaryFileName)) return content;
+
+        foreach (var path in Directory.EnumerateFiles(
+                     rootDirectory,
+                     Path.GetFileName(primaryFileName),
+                     SearchOption.AllDirectories))
+        {
+            var parent = Path.GetDirectoryName(path);
+            var candidateRoot = string.IsNullOrWhiteSpace(parent)
+                ? null
+                : Directory.GetParent(parent)?.FullName;
+            if (!string.Equals(
+                    Path.GetFullPath(rootDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                    candidateRoot?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                    StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            try { content.Add(NormalizeLegacyContent(File.ReadAllText(path))); }
+            catch { /* best effort */ }
+        }
+
+        return content;
+    }
+
+    private static string[] GetNestedModuleRoots(string rootDirectory)
+        => Directory.EnumerateFiles(rootDirectory, "*.psd1", SearchOption.AllDirectories)
+            .Select(Path.GetDirectoryName)
+            .Where(path => !string.IsNullOrWhiteSpace(path) &&
+                           !string.Equals(
+                               Path.GetFullPath(path!),
+                               Path.GetFullPath(rootDirectory),
+                               StringComparison.OrdinalIgnoreCase))
+            .Select(path => Path.GetFullPath(path!))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static string NormalizeLegacyContent(string content)
+    {
+        var normalized = (content ?? string.Empty)
+            .Replace("\r\n", "\n")
+            .Replace("\r", "\n");
+        normalized = normalized
+            .Replace("\n" + LegacyGeneratedAliasMarker, string.Empty)
+            .Replace(LegacyGeneratedAliasMarker + "\n", string.Empty)
+            .Replace(LegacyGeneratedAliasMarker, string.Empty);
+        return normalized.Trim();
     }
 
     private static bool IsPathWithinRoot(string root, string path)
