@@ -4,11 +4,6 @@ namespace PowerForge.Web;
 
 internal static partial class ShortcodeDefaults
 {
-    private static readonly StringComparison VisualStoryFileSystemPathComparison =
-        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-
     internal static string RenderVisualStory(ShortcodeRenderContext context, Dictionary<string, string> attrs)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -237,7 +232,7 @@ internal static partial class ShortcodeDefaults
     {
         var fullRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
         var fullPath = Path.GetFullPath(path);
-        var pathComparison = comparison ?? VisualStoryFileSystemPathComparison;
+        var pathComparison = comparison ?? WebVisualStoryStager.GetFileSystemPathComparison(fullRoot);
         if (string.Equals(fullRoot, fullPath, pathComparison))
         {
             relativePath = string.Empty;

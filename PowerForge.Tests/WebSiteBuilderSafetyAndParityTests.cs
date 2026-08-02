@@ -146,6 +146,41 @@ public class WebSiteBuilderSafetyAndParityTests
         }
     }
 
+    [Fact]
+    public void Build_GeneratedRoutesOverrideConventionalStaticCollisions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-static-route-collision-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(
+                Path.Combine(pagesPath, "index.md"),
+                "---\ntitle: Home\nslug: index\n---\n\nGenerated home");
+            var staticPath = Path.Combine(root, "static");
+            Directory.CreateDirectory(staticPath);
+            File.WriteAllText(Path.Combine(staticPath, "index.html"), "STATIC HOME");
+            File.WriteAllText(Path.Combine(staticPath, "asset.txt"), "STATIC ASSET");
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, WebSitePlanner.Plan(spec, configPath), outPath);
+
+            Assert.Contains("Generated home", File.ReadAllText(Path.Combine(outPath, "index.html")), StringComparison.Ordinal);
+            Assert.DoesNotContain("STATIC HOME", File.ReadAllText(Path.Combine(outPath, "index.html")), StringComparison.Ordinal);
+            Assert.Equal("STATIC ASSET", File.ReadAllText(Path.Combine(outPath, "asset.txt")));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

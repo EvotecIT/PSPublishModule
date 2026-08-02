@@ -77,6 +77,36 @@ public partial class WebVisualStoryStagerTests
     }
 
     [Fact]
+    public void Stage_OverwriteRemovesUndeclaredFilesFromAValidPriorBundle()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var sourceManifest = Path.Combine(root, "source", "story.json");
+            var output = Path.Combine(root, "published");
+            _ = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = sourceManifest,
+                OutputPath = output
+            });
+            File.WriteAllText(Path.Combine(output, "stale.html"), "<script>alert('stale')</script>");
+
+            _ = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = sourceManifest,
+                OutputPath = output,
+                Overwrite = true
+            });
+
+            Assert.False(File.Exists(Path.Combine(output, "stale.html")));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Stage_OverwriteRecoversFromMalformedPriorArtifactPath()
     {
         var root = CreateBundle();

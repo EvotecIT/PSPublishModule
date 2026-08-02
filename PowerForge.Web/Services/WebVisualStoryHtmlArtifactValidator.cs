@@ -36,6 +36,7 @@ internal static class WebVisualStoryHtmlArtifactValidator
             ValidatePassiveContent(element, displayPath);
             ValidateSvgPresentationAttributes(element, displayPath);
             ValidateAttribute(element, "src", displayPath, bundleRoot, declaredArtifactPaths);
+            ValidateAttribute(element, "background", displayPath, bundleRoot, declaredArtifactPaths);
             if (string.Equals(element.LocalName, "video", StringComparison.OrdinalIgnoreCase))
                 ValidateAttribute(element, "poster", displayPath, bundleRoot, declaredArtifactPaths);
             if (string.Equals(element.LocalName, "object", StringComparison.OrdinalIgnoreCase))

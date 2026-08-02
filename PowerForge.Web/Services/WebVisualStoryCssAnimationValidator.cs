@@ -284,10 +284,32 @@ internal static partial class WebVisualStoryCssAnimationValidator
 
     private static string TrimImportant(string value)
     {
-        const string important = "!important";
-        return value.EndsWith(important, StringComparison.OrdinalIgnoreCase)
-            ? value.Substring(0, value.Length - important.Length).TrimEnd()
-            : value;
+        return TryTrimImportant(value, out var trimmed) ? trimmed : value;
+    }
+
+    private static bool TryTrimImportant(string value, out string trimmed)
+    {
+        var normalized = RemoveComments(value).TrimEnd();
+        const string keyword = "important";
+        var keywordStart = normalized.Length - keyword.Length;
+        if (keywordStart < 0 ||
+            !string.Equals(normalized.Substring(keywordStart), keyword, StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = value;
+            return false;
+        }
+
+        var marker = keywordStart - 1;
+        while (marker >= 0 && char.IsWhiteSpace(normalized[marker]))
+            marker--;
+        if (marker < 0 || normalized[marker] != '!')
+        {
+            trimmed = value;
+            return false;
+        }
+
+        trimmed = normalized.Substring(0, marker).TrimEnd();
+        return true;
     }
 
     private static string RemoveComments(string css)

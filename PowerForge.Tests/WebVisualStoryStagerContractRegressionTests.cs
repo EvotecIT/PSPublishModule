@@ -19,7 +19,35 @@ public class WebVisualStoryStagerContractRegressionTests
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal;
 
-            Assert.Equal(expected, WebVisualStoryStager.GetFileSystemPathComparisonForTesting(root));
+            Assert.Equal(expected, WebVisualStoryStager.GetFileSystemPathComparison(root));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ShortcodeContainment_UsesTheActualTargetVolumeIdentity()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-shortcode-path-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var storyRoot = Path.Combine(root, "Story");
+            Directory.CreateDirectory(storyRoot);
+            File.WriteAllText(Path.Combine(storyRoot, "marker"), "probe");
+            var differentlyCasedPath = Path.Combine(root, "story", "nested", "visual-story.json");
+            var caseInsensitive = File.Exists(Path.Combine(storyRoot, "MARKER"));
+
+            var contained = ShortcodeDefaults.TryGetContainedRelativePath(
+                storyRoot,
+                differentlyCasedPath,
+                out var relative);
+
+            Assert.Equal(caseInsensitive, contained);
+            if (contained)
+                Assert.Equal("nested/visual-story.json", relative);
         }
         finally
         {

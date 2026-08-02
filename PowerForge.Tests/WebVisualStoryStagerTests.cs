@@ -247,7 +247,7 @@ public partial class WebVisualStoryStagerTests
     }
 
     [Fact]
-    public void Stage_AppliesCaseOnlyArtifactRenamesExactly()
+    public void Stage_AppliesCaseOnlyArtifactRenamesExactlyAndDropsUndeclaredFiles()
     {
         var root = CreateBundle();
         try
@@ -291,7 +291,7 @@ public partial class WebVisualStoryStagerTests
             Assert.Contains(
                 Directory.EnumerateFiles(Path.Combine(output, "Media")),
                 path => string.Equals(Path.GetFileName(path), "Demo.svg", StringComparison.Ordinal));
-            Assert.True(File.Exists(Path.Combine(output, "Media", "retained.txt")));
+            Assert.False(File.Exists(Path.Combine(output, "Media", "retained.txt")));
             var staged = WebVisualStoryStager.Load(Path.Combine(output, "visual-story.json"));
             Assert.Contains(staged.Artifacts, artifact => string.Equals(artifact.Path, "Media/Demo.svg", StringComparison.Ordinal));
         }

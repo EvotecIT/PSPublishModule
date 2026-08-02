@@ -2,7 +2,7 @@ namespace PowerForge.Web;
 
 public static partial class WebVisualStoryStager
 {
-    private static StringComparison GetFileSystemPathComparison(string path)
+    internal static StringComparison GetFileSystemPathComparison(string path)
     {
         var directory = Directory.Exists(path) ? path : Path.GetDirectoryName(path);
         while (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
@@ -38,6 +38,4 @@ public static partial class WebVisualStoryStager
     private static bool SamePath(string left, string right, StringComparison comparison)
         => string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), comparison);
 
-    internal static StringComparison GetFileSystemPathComparisonForTesting(string path)
-        => GetFileSystemPathComparison(path);
 }

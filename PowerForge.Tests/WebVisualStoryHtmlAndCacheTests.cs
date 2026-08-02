@@ -35,6 +35,7 @@ public sealed class WebVisualStoryHtmlAndCacheTests
     [InlineData("<link rel=\"prerender\" href=\"https://example.test/next.html\">")]
     [InlineData("<link rel=\"mask-icon\" href=\"https://example.test/mask.svg\">")]
     [InlineData("<link rel=\"apple-touch-icon\" href=\"https://example.test/icon.png\">")]
+    [InlineData("<body background=\"https://example.test/wallpaper.png\"></body>")]
     public void Stage_RejectsHtmlDependenciesOutsideDeclaredBundleArtifacts(string html)
     {
         var root = CreateBundle(html);

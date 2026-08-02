@@ -113,15 +113,16 @@ public static partial class WebVisualStoryStager
 
         if (!options.Overwrite)
         {
-            var outputPathComparison = GetFileSystemPathComparison(outputRoot);
+            var collisionPathComparison = GetFileSystemPathComparison(outputRoot);
             var collision = resolved.FirstOrDefault(item =>
-                !SamePath(item.SourcePath, item.DestinationPath, outputPathComparison) &&
+                !SamePath(item.SourcePath, item.DestinationPath, collisionPathComparison) &&
                 File.Exists(item.DestinationPath));
             if (collision.Artifact is not null)
                 throw new IOException($"Visual-story artifact already exists: {collision.DestinationPath}");
         }
 
-        var preserveExistingOutput = true;
+        var outputPathComparison = GetFileSystemPathComparison(outputRoot);
+        var preserveExistingOutput = SamePath(sourceRoot, outputRoot, outputPathComparison);
         var previousPaths = Array.Empty<string>();
         if (options.Overwrite && File.Exists(stagedManifestPath))
         {

@@ -260,11 +260,6 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
         }
     }
 
-    private static bool HasAnimationValue(XmlReader reader)
-        => reader.GetAttribute("values") is { Length: > 0 } ||
-           reader.GetAttribute("to") is { Length: > 0 } ||
-           reader.GetAttribute("by") is { Length: > 0 };
-
     private static bool HasLocalMotionPathReference(XmlReader reader)
     {
         var reference = reader.GetAttribute("href") ??

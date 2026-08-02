@@ -26,6 +26,18 @@ public class WebVisualStorySvgCssAnimationTests
     }
 
     [Theory]
+    [InlineData("! important")]
+    [InlineData("!/* priority */important")]
+    public void Stage_HonorsImportantPriorityWithLegalWhitespaceAndComments(string priority)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                $"<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{{from{{opacity:0}}to{{opacity:1}}}}rect{{animation:none{priority}}}</style><rect style=\"animation:fade 1s\" width=\"1\" height=\"1\"/></svg>"));
+
+        Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
     [InlineData("animation:none")]
     [InlineData("animation:fade 0s")]
     [InlineData("animation:fade 1s paused")]
@@ -144,6 +156,21 @@ public class WebVisualStorySvgCssAnimationTests
     {
         StageSvg(
             $"<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1\" height=\"1\"><animate attributeName=\"opacity\" dur=\"{duration}\" values=\"0;1\"/></rect></svg>");
+    }
+
+    [Theory]
+    [InlineData("values=\"1\"")]
+    [InlineData("values=\"1;1\"")]
+    [InlineData("from=\"1\" to=\"1\"")]
+    [InlineData("by=\"0\"")]
+    [InlineData("by=\"0 0\"")]
+    public void Stage_RejectsSmilAnimationWithoutAValueChange(string valueAttributes)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                $"<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1\" height=\"1\"><animate attributeName=\"opacity\" dur=\"1s\" {valueAttributes}/></rect></svg>"));
+
+        Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]

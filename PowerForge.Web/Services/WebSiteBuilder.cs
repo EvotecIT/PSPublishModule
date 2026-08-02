@@ -166,6 +166,10 @@ public static partial class WebSiteBuilder
             };
             var rendered = 0;
             var lastProgressReportAt = buildStopwatch.Elapsed;
+            ReportProgress("copying theme assets");
+            CopyThemeAssets(spec, plan.RootPath, outDir);
+            ReportProgress("copying static assets");
+            CopyStaticAssets(spec, plan.RootPath, outDir);
             ReportProgress("rendering content");
             foreach (var item in renderItems)
             {
@@ -203,10 +207,6 @@ public static partial class WebSiteBuilder
                 }
             }
 
-            ReportProgress("copying theme assets");
-            CopyThemeAssets(spec, plan.RootPath, outDir);
-            ReportProgress("copying static assets");
-            CopyStaticAssets(spec, plan.RootPath, outDir);
             ReportProgress("writing navigation/search/diagnostic outputs");
             WriteSiteNavData(spec, outDir, menuSpecs);
             WriteSearchIndex(spec, outDir, renderItems);

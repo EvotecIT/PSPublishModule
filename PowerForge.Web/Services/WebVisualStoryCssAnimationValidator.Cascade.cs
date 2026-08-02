@@ -66,11 +66,7 @@ internal static partial class WebVisualStoryCssAnimationValidator
             if (!property.StartsWith("animation", StringComparison.OrdinalIgnoreCase))
                 continue;
             var rawValue = declaration.Substring(separator + 1).Trim();
-            const string important = "!important";
-            var isImportant = rawValue.EndsWith(important, StringComparison.OrdinalIgnoreCase);
-            var value = isImportant
-                ? rawValue.Substring(0, rawValue.Length - important.Length).TrimEnd()
-                : rawValue;
+            var isImportant = TryTrimImportant(rawValue, out var value);
             if (value.Length > 0)
                 destination.Add(new CascadedDeclaration(property, value, isImportant, specificity, sourceOrder));
         }
