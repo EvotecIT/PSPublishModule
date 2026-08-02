@@ -12,7 +12,6 @@ internal static partial class WebVisualStoryCssAnimationValidator
         bool Paused,
         double IterationCount);
     private readonly record struct StyleRule(string Selector, string Declarations);
-
     private static readonly HashSet<string> AnimationKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
         "none", "infinite", "normal", "reverse", "alternate", "alternate-reverse",
@@ -28,23 +27,6 @@ internal static partial class WebVisualStoryCssAnimationValidator
         foreach (var declarationBlock in GetDeclarationBlocks(normalizedCss))
         {
             foreach (var name in GetEffectiveAnimationNamesFromDeclaration(declarationBlock))
-                names.Add(name);
-        }
-        return names;
-    }
-
-    internal static IReadOnlySet<string> GetEffectiveAnimationNamesForMatchingSelectors(
-        string css,
-        Func<string, bool> selectorMatches)
-    {
-        ArgumentNullException.ThrowIfNull(selectorMatches);
-        var normalizedCss = RemoveUnsupportedConditionalRuleBlocks(RemoveComments(css));
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var rule in GetStyleRules(normalizedCss))
-        {
-            if (!SplitTopLevel(rule.Selector, ',').Any(selectorMatches))
-                continue;
-            foreach (var name in GetEffectiveAnimationNamesFromDeclaration(rule.Declarations))
                 names.Add(name);
         }
         return names;
@@ -127,87 +109,6 @@ internal static partial class WebVisualStoryCssAnimationValidator
                 names.Add(name);
         }
         return names;
-    }
-
-    internal static bool ContainsExternalResourceReference(string css)
-    {
-        var normalizedCss = DecodeCssEscapes(RemoveComments(css));
-        var quote = '\0';
-        var escaped = false;
-        for (var index = 0; index < normalizedCss.Length; index++)
-        {
-            var character = normalizedCss[index];
-            if (quote != '\0')
-            {
-                if (escaped)
-                    escaped = false;
-                else if (character == '\\')
-                    escaped = true;
-                else if (character == quote)
-                    quote = '\0';
-                continue;
-            }
-            if (character is '\'' or '"')
-            {
-                quote = character;
-                continue;
-            }
-            if (character == '@' &&
-                IsAtRuleBoundary(normalizedCss, index) &&
-                StartsWithCssKeyword(normalizedCss, index, "@import"))
-            {
-                var importCursor = index + 7;
-                while (importCursor < normalizedCss.Length && char.IsWhiteSpace(normalizedCss[importCursor]))
-                    importCursor++;
-                if (importCursor < normalizedCss.Length && normalizedCss[importCursor] is '\'' or '"')
-                    return true;
-            }
-            if (!StartsWithCssKeyword(normalizedCss, index, "url"))
-                continue;
-            var cursor = index + 3;
-            while (cursor < normalizedCss.Length && char.IsWhiteSpace(normalizedCss[cursor]))
-                cursor++;
-            if (cursor >= normalizedCss.Length || normalizedCss[cursor] != '(')
-                continue;
-            cursor++;
-            while (cursor < normalizedCss.Length && char.IsWhiteSpace(normalizedCss[cursor]))
-                cursor++;
-            var valueQuote = cursor < normalizedCss.Length && normalizedCss[cursor] is '\'' or '"'
-                ? normalizedCss[cursor++]
-                : '\0';
-            var value = new StringBuilder();
-            var valueEscaped = false;
-            while (cursor < normalizedCss.Length)
-            {
-                character = normalizedCss[cursor++];
-                if (valueEscaped)
-                {
-                    value.Append(character);
-                    valueEscaped = false;
-                    continue;
-                }
-                if (character == '\\')
-                {
-                    valueEscaped = true;
-                    value.Append(character);
-                    continue;
-                }
-                if (valueQuote != '\0')
-                {
-                    if (character == valueQuote)
-                        break;
-                    value.Append(character);
-                    continue;
-                }
-                if (character == ')')
-                    break;
-                value.Append(character);
-            }
-            var reference = DecodeCssEscapes(value.ToString()).Trim();
-            if (reference.Length > 0 && reference[0] != '#')
-                return true;
-        }
-        return false;
     }
 
     private static IReadOnlyList<string> GetEffectiveAnimationNamesFromDeclaration(string declarations)

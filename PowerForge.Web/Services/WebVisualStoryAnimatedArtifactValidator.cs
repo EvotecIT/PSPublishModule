@@ -10,7 +10,7 @@ namespace PowerForge.Web;
 /// </summary>
 internal static partial class WebVisualStoryAnimatedArtifactValidator
 {
-    private readonly record struct SvgElementIdentity(string LocalName, string? Id, string[] Classes);
+    private readonly record struct SvgElementIdentity(string LocalName, string? Id, string[] Classes, string? InlineStyle);
 
     private const int MaximumGifFrames = 240;
     private const ulong MaximumGifDecodedPixels = 128_000_000UL;
@@ -117,7 +117,14 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
             };
             using var stream = File.OpenRead(path);
             using var reader = XmlReader.Create(stream, settings);
-            reader.MoveToContent();
+            while (reader.Read() && reader.NodeType != XmlNodeType.Element)
+            {
+                if (reader.NodeType == XmlNodeType.ProcessingInstruction)
+                {
+                    throw new InvalidOperationException(
+                        $"Visual-story SVG artifacts cannot contain processing instructions: {displayPath}");
+                }
+            }
             if (!string.Equals(reader.LocalName, "svg", StringComparison.Ordinal) ||
                 !string.Equals(reader.NamespaceURI, SvgNamespace, StringComparison.Ordinal))
             {
@@ -130,10 +137,9 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
             var cssStyleBlocks = new List<string>();
             var svgElements = new List<SvgElementIdentity> { ReadSvgElementIdentity(reader) };
             var smilFragmentReferences = new List<SvgFragmentReference>();
-            var rootInlineStyle = reader.GetAttribute("style");
             ValidatePassiveSvgContent(reader, displayPath);
             ValidateSelfContainedReferences(reader, displayPath);
-            AddCssAnimationNames(rootInlineStyle, cssAnimationNames, displayPath);
+            ValidateInlineStyle(reader.GetAttribute("style"), displayPath);
             var insideStyle = false;
             StringBuilder? currentStyle = null;
             var pendingAnimateMotionDepth = -1;
@@ -196,21 +202,26 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
                     AddSmilTargetReference(reader, smilFragmentReferences, mustBePath: true);
                 }
 
-                var inlineStyle = reader.GetAttribute("style");
-                AddCssAnimationNames(inlineStyle, cssAnimationNames, displayPath);
+                ValidateInlineStyle(reader.GetAttribute("style"), displayPath);
 
                 insideStyle = string.Equals(reader.LocalName, "style", StringComparison.Ordinal) && !reader.IsEmptyElement;
                 if (insideStyle)
                     currentStyle = new StringBuilder();
             }
             ValidateSmilFragmentReferences(svgElements, smilFragmentReferences, displayPath);
-            foreach (var css in cssStyleBlocks)
+            if (cssStyleBlocks.Count > 0)
             {
                 AddNames(
                     cssAnimationNames,
                     WebVisualStoryCssAnimationValidator.GetEffectiveAnimationNamesForMatchingSelectors(
-                        css,
-                        selector => svgElements.Any(element => MatchesSimpleSelector(selector, element))));
+                        string.Join(Environment.NewLine, cssStyleBlocks),
+                        svgElements.Select(static element => element.InlineStyle).ToArray(),
+                        (selector, elementIndex) => MatchesSimpleSelector(selector, svgElements[elementIndex])));
+            }
+            else
+            {
+                foreach (var element in svgElements)
+                    AddNames(cssAnimationNames, WebVisualStoryCssAnimationValidator.GetEffectiveAnimationNames(element.InlineStyle ?? string.Empty));
             }
             if (requireAnimation &&
                 !sawDeclarativeAnimation &&
@@ -265,7 +276,7 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
     {
         var classes = (reader.GetAttribute("class") ?? string.Empty)
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        return new SvgElementIdentity(reader.LocalName, reader.GetAttribute("id"), classes);
+        return new SvgElementIdentity(reader.LocalName, reader.GetAttribute("id"), classes, reader.GetAttribute("style"));
     }
 
     private static bool MatchesSimpleSelector(string selector, SvgElementIdentity element)
@@ -312,10 +323,7 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
     private static bool IsSimpleCssIdentifierCharacter(char value)
         => char.IsLetterOrDigit(value) || value is '-' or '_';
 
-    private static void AddCssAnimationNames(
-        string? css,
-        HashSet<string> animationNames,
-        string displayPath)
+    private static void ValidateInlineStyle(string? css, string displayPath)
     {
         if (string.IsNullOrWhiteSpace(css))
             return;
@@ -324,7 +332,6 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
             throw new InvalidOperationException(
                 $"Visual-story SVG artifacts must be self-contained and cannot reference external resources: {displayPath}");
         }
-        AddNames(animationNames, WebVisualStoryCssAnimationValidator.GetEffectiveAnimationNames(css));
     }
 
     private static void AddNames(HashSet<string> destination, IReadOnlySet<string> source)

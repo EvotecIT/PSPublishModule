@@ -17,7 +17,8 @@ internal static class WebVisualStoryHtmlArtifactValidator
     };
     private static readonly HashSet<string> ResourceLinkRelations = new(StringComparer.OrdinalIgnoreCase)
     {
-        "icon", "manifest", "modulepreload", "preload", "stylesheet"
+        "apple-touch-icon", "dns-prefetch", "icon", "manifest", "mask-icon", "modulepreload",
+        "preconnect", "prefetch", "preload", "prerender", "stylesheet"
     };
 
     internal static void Validate(
@@ -33,6 +34,7 @@ internal static class WebVisualStoryHtmlArtifactValidator
         foreach (var element in document.All)
         {
             ValidatePassiveContent(element, displayPath);
+            ValidateSvgPresentationAttributes(element, displayPath);
             ValidateAttribute(element, "src", displayPath, bundleRoot, declaredArtifactPaths);
             if (string.Equals(element.LocalName, "video", StringComparison.OrdinalIgnoreCase))
                 ValidateAttribute(element, "poster", displayPath, bundleRoot, declaredArtifactPaths);
@@ -113,12 +115,30 @@ internal static class WebVisualStoryHtmlArtifactValidator
     private static void ValidatePassiveNavigation(IElement element, string attributeName, string displayPath)
     {
         var value = System.Net.WebUtility.HtmlDecode(element.GetAttribute(attributeName) ?? string.Empty).Trim();
+        if (value.Any(static character => character <= '\u001f' || character == '\u007f'))
+        {
+            throw Invalid(displayPath, $"active navigation is not allowed: {attributeName}");
+        }
         if (value.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) ||
             value.StartsWith("vbscript:", StringComparison.OrdinalIgnoreCase) ||
             value.StartsWith("data:text/html", StringComparison.OrdinalIgnoreCase) ||
             value.StartsWith("data:application/xhtml+xml", StringComparison.OrdinalIgnoreCase))
         {
             throw Invalid(displayPath, $"active navigation is not allowed: {attributeName}");
+        }
+    }
+
+    private static void ValidateSvgPresentationAttributes(IElement element, string displayPath)
+    {
+        if (!string.Equals(element.NamespaceUri, "http://www.w3.org/2000/svg", StringComparison.Ordinal))
+            return;
+
+        foreach (var attribute in element.Attributes)
+        {
+            if (WebVisualStoryCssAnimationValidator.ContainsExternalResourceReference(attribute.Value))
+            {
+                throw Invalid(displayPath, "embedded SVG presentation attributes cannot reference external or sibling resources");
+            }
         }
     }
 

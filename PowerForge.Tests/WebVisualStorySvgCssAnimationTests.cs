@@ -45,6 +45,26 @@ public class WebVisualStorySvgCssAnimationTests
     }
 
     [Fact]
+    public void Stage_RejectsAnimationDisabledByLaterMatchingRule()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{from{opacity:0}to{opacity:1}}rect{animation:fade 1s}rect{animation:none}</style><rect width=\"1\" height=\"1\"/></svg>"));
+
+        Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Stage_RejectsInlineAnimationDisabledByImportantStylesheetRule()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{from{opacity:0}to{opacity:1}}rect{animation:none!important}</style><rect style=\"animation:fade 1s\" width=\"1\" height=\"1\"/></svg>"));
+
+        Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Stage_RejectsCommentedOutKeyframes()
     {
         var error = Assert.Throws<InvalidOperationException>(() =>
@@ -180,6 +200,16 @@ public class WebVisualStorySvgCssAnimationTests
                 $"<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{{from{{opacity:0}}to{{opacity:1}}}}rect{{animation:fade 1s}}</style>{content}<rect width=\"1\" height=\"1\"/></svg>"));
 
         Assert.Contains("self-contained", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Stage_RejectsStylesheetProcessingInstructionsBeforeSvgRoot()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                "<?xml-stylesheet href=\"https://example.test/story.css\"?><svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1\" height=\"1\"><animate attributeName=\"opacity\" dur=\"1s\" values=\"0;1\"/></rect></svg>"));
+
+        Assert.Contains("processing instructions", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -406,33 +406,7 @@ public static partial class WebSiteBuilder
         string sourceRoute,
         string targetRoute,
         IReadOnlyList<PageResource>? resources)
-    {
-        if (string.IsNullOrEmpty(html) || resources is null || resources.Count == 0)
-            return html;
-
-        var sourceBase = "/" + sourceRoute.Trim('/');
-        var targetBase = "/" + targetRoute.Trim('/');
-        if (string.Equals(sourceBase, targetBase, StringComparison.Ordinal))
-            return html;
-
-        var rebased = html;
-        foreach (var resource in resources)
-        {
-            if (string.IsNullOrWhiteSpace(resource.RelativePath))
-                continue;
-            var encodedPath = string.Join(
-                "/",
-                resource.RelativePath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(Uri.EscapeDataString));
-            if (encodedPath.Length == 0)
-                continue;
-            rebased = rebased.Replace(
-                sourceBase.TrimEnd('/') + "/" + encodedPath,
-                targetBase.TrimEnd('/') + "/" + encodedPath,
-                StringComparison.Ordinal);
-        }
-        return rebased;
-    }
+        => WebFallbackResourceUrlRewriter.Rewrite(html, sourceRoute, targetRoute, resources);
 
     private static Dictionary<string, object?> CloneFallbackMeta(
         IReadOnlyDictionary<string, object?>? source,

@@ -28,6 +28,13 @@ public sealed class WebVisualStoryHtmlAndCacheTests
     [InlineData("<img srcset=\"data:image/png;base64,AAAA 1x, https://example.test/frame.png 2x\">")]
     [InlineData("<img srcset=\"data:image/png;base64,AAAA, https://example.test/frame.png 2x\">")]
     [InlineData("<div style=\"background-image: \\75rl('https://example.test/frame.png')\"></div>")]
+    [InlineData("<div style=\"background-image:image-set('https://example.test/frame.png' 1x)\"></div>")]
+    [InlineData("<svg><rect fill=\"url(https://example.test/fill.svg#paint)\"></rect></svg>")]
+    [InlineData("<a href=\"java&#x0A;script:alert(1)\">Open</a>")]
+    [InlineData("<link rel=\"prefetch\" href=\"https://example.test/next.html\">")]
+    [InlineData("<link rel=\"prerender\" href=\"https://example.test/next.html\">")]
+    [InlineData("<link rel=\"mask-icon\" href=\"https://example.test/mask.svg\">")]
+    [InlineData("<link rel=\"apple-touch-icon\" href=\"https://example.test/icon.png\">")]
     public void Stage_RejectsHtmlDependenciesOutsideDeclaredBundleArtifacts(string html)
     {
         var root = CreateBundle(html);
