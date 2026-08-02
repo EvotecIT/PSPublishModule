@@ -55,6 +55,16 @@ public class WebVisualStorySvgCssAnimationTests
         Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Stage_UsesTheLastDefinitionOfAKeyframeNameAcrossStyleBlocks()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{from{opacity:0}to{opacity:1}}</style><style>@keyframes fade{from{opacity:1}to{opacity:1}}rect{animation:fade 1s}</style><rect width=\"1\" height=\"1\"/></svg>"));
+
+        Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("! important")]
     [InlineData("!/* priority */important")]
@@ -155,6 +165,16 @@ public class WebVisualStorySvgCssAnimationTests
     {
         StageSvg(
             $"<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{{from{{opacity:0}}to{{opacity:1}}}}{selector}{{animation:fade 1s}}</style><rect id=\"target\" class=\"present\" width=\"1\" height=\"1\"/></svg>");
+    }
+
+    [Theory]
+    [InlineData("svg rect")]
+    [InlineData("svg > g > rect")]
+    [InlineData("svg .present")]
+    public void Stage_AcceptsAnimationAppliedThroughCompoundSelectors(string selector)
+    {
+        StageSvg(
+            $"<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{{from{{opacity:0}}to{{opacity:1}}}}{selector}{{animation:fade 1s}}</style><g><rect class=\"present\" width=\"1\" height=\"1\"/></g></svg>");
     }
 
     [Fact]

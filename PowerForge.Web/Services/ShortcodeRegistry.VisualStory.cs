@@ -133,10 +133,16 @@ internal static partial class ShortcodeDefaults
     {
         var root = Path.GetFullPath(string.IsNullOrWhiteSpace(context.RootPath) ? "." : context.RootPath);
         var publishedPath = ResolvePublishedVisualStoryManifestPath(context.Site, root, manifestPath);
-        if (publishedPath is null &&
-            TryResolvePageBundleVisualStoryBaseUrl(context, manifestPath, out var pageBundleBaseUrl))
+        if (publishedPath is null && TryResolvePageBundleVisualStoryBaseUrl(context, manifestPath, out var pageBundleBaseUrl))
             return pageBundleBaseUrl;
         var normalized = publishedPath ?? Path.GetRelativePath(root, manifestPath).Replace('\\', '/');
+        if (publishedPath is null &&
+            !normalized.Equals("static", StringComparison.OrdinalIgnoreCase) &&
+            !normalized.StartsWith("static/", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "story shortcode requires an explicit base URL unless its manifest is published by a static mapping, the conventional static directory, or a page bundle.");
+        }
         var directory = normalized.Contains('/')
             ? normalized[..normalized.LastIndexOf('/')]
             : string.Empty;

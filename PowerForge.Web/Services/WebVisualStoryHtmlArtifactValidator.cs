@@ -111,6 +111,7 @@ internal static class WebVisualStoryHtmlArtifactValidator
         }
 
         ValidatePassiveNavigation(element, "href", displayPath);
+        ValidatePassiveNavigation(element, "xlink:href", displayPath);
         ValidatePassiveNavigation(element, "action", displayPath);
         ValidatePassiveNavigation(element, "formaction", displayPath);
     }

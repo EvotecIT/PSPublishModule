@@ -605,6 +605,37 @@ public class WebVisualStoryAnimatedArtifactTests
         Assert.Contains("aggregate decoded-byte safety limit", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Stage_RejectsApngWithoutAVisibleFrameChange()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var animationPath = Path.Combine(source, "same-frames.png");
+            WriteTinyApng(animationPath, repeatFirstFrame: true);
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = ReadBundle(manifest);
+            var animated = Assert.Single(bundle.Artifacts, artifact => artifact.Role == "animated");
+            animated.Format = "apng";
+            animated.Path = "same-frames.png";
+            WriteBundle(manifest, bundle);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("visible frame change", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     private static WebVisualStoryBundle ReadBundle(string manifest)
         => JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(manifest), JsonOptions)!;
 
@@ -616,7 +647,8 @@ public class WebVisualStoryAnimatedArtifactTests
         bool completeSecondFrame = true,
         byte secondFrameDisposal = 0,
         bool useIdatForSecondFrame = false,
-        byte secondFrameFilter = 0)
+        byte secondFrameFilter = 0,
+        bool repeatFirstFrame = false)
     {
         using var output = new MemoryStream();
         output.Write(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 });
@@ -634,7 +666,9 @@ public class WebVisualStoryAnimatedArtifactTests
         WritePngChunk(output, "IDAT", CompressPngPixel(0, 191, 255, 255));
         WritePngChunk(output, "fcTL", FrameControl(sequence: 1, disposal: secondFrameDisposal));
         var compressedFrame = completeSecondFrame
-            ? CompressPngBytes(secondFrameFilter, 60, 179, 113, 255)
+            ? repeatFirstFrame
+                ? CompressPngBytes(secondFrameFilter, 0, 191, 255, 255)
+                : CompressPngBytes(secondFrameFilter, 60, 179, 113, 255)
             : CompressPngBytes(0);
         if (useIdatForSecondFrame)
         {

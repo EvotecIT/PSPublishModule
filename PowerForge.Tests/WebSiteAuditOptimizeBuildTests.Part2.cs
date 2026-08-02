@@ -916,7 +916,7 @@ public partial class WebSiteAuditOptimizeBuildTests
             File.WriteAllBytes(Path.Combine(siteRoot, protectedName), sourcePng);
             File.WriteAllBytes(Path.Combine(siteRoot, "demo.png"), ordinaryPng);
             Assert.Single(manifest.Artifacts, artifact => artifact.Role == "completed").Path = protectedName;
-            var visualManifest = Path.Combine(siteRoot, "visual-story.json");
+            var visualManifest = Path.Combine(siteRoot, "renamed-story.json");
             File.WriteAllText(visualManifest, JsonSerializer.Serialize(manifest));
             File.Delete(manifestPath);
 

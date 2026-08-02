@@ -397,6 +397,39 @@ public class WebShortcodeMediaTests
     }
 
     [Fact]
+    public void Build_RejectsImplicitStoryUrlsForUnpublishedDirectories()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            BuildSinglePageSite(
+                "{{< story manifest=\"generated/story/visual-story.json\" transcript=\"hidden\" >}}",
+                root =>
+                {
+                    var bundleRoot = Path.Combine(root, "generated", "story");
+                    Directory.CreateDirectory(bundleRoot);
+                    WriteAnimatedSvg(Path.Combine(bundleRoot, "demo.svg"));
+                    using var completed = new MagickImage(MagickColors.Transparent, 2, 2);
+                    completed.Write(Path.Combine(bundleRoot, "demo.png"), MagickFormat.Png);
+                    File.WriteAllText(
+                        Path.Combine(bundleRoot, "visual-story.json"),
+                        """
+                        {
+                          "schemaVersion": 1,
+                          "id": "unpublished-story",
+                          "title": "Unpublished story",
+                          "alt": "The result appears.",
+                          "outcome": "The result is visible.",
+                          "artifacts": [
+                            { "role": "animated", "format": "svg", "path": "demo.svg" },
+                            { "role": "completed", "format": "png", "path": "demo.png" }
+                          ]
+                        }
+                        """);
+                }));
+
+        Assert.Contains("explicit base URL", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Build_DerivesStoryUrlsFromPublishedPageBundleResources()
     {
         var html = BuildSinglePageSite(

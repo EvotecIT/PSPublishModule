@@ -85,7 +85,9 @@ internal static partial class WebVisualStoryCssAnimationValidator
                 value.Append(character);
             }
             var reference = DecodeCssEscapes(value.ToString()).Trim();
-            if (reference.Length > 0 && reference[0] != '#')
+            if (reference.Length > 0 &&
+                reference[0] != '#' &&
+                !reference.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
                 return true;
         }
         return false;

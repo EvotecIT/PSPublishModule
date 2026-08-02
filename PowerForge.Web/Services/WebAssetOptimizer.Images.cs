@@ -324,7 +324,7 @@ public static partial class WebAssetOptimizer
         var paths = new HashSet<string>(FileSystemPathComparer);
         foreach (var manifestPath in Directory.EnumerateFiles(
                      siteRoot,
-                     "visual-story.json",
+                     "*.json",
                      SearchOption.AllDirectories))
         {
             if (!WebVisualStoryManifestDiscovery.IsRecognizable(manifestPath))

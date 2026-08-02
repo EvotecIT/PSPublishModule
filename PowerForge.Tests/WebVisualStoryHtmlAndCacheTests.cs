@@ -25,6 +25,7 @@ public sealed class WebVisualStoryHtmlAndCacheTests
     [InlineData("<img src=\"demo.png\" onload=\"document.body.textContent = 'owned'\">")]
     [InlineData("<iframe src=\"demo.html\"></iframe>")]
     [InlineData("<a href=\"javascript:alert(1)\">Open</a>")]
+    [InlineData("<svg xmlns:xlink=\"http://www.w3.org/1999/xlink\"><a xlink:href=\"javascript:alert(1)\">Open</a></svg>")]
     [InlineData("<img srcset=\"data:image/png;base64,AAAA 1x, https://example.test/frame.png 2x\">")]
     [InlineData("<img srcset=\"data:image/png;base64,AAAA, https://example.test/frame.png 2x\">")]
     [InlineData("<link rel=\"preload\" as=\"image\" imagesrcset=\"demo.png 1x, https://example.test/frame.png 2x\">")]
@@ -64,6 +65,28 @@ public sealed class WebVisualStoryHtmlAndCacheTests
         var root = CreateBundle(
             "<link rel=\"preload\" as=\"image\" imagesrcset=\"data:image/png;base64,AAAA 1x, demo.png 2x\">" +
             "<img srcset=\"data:image/png;base64,AAAA 1x, demo.png 2x\" alt=\"Completed result\">");
+        try
+        {
+            var result = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = Path.Combine(root, "source", "story.json"),
+                OutputPath = Path.Combine(root, "published")
+            });
+
+            Assert.Contains(result.Bundle.Artifacts, artifact => artifact.Format == "html");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Stage_AllowsSelfContainedDataUrlsInCssUrlFunctions()
+    {
+        var root = CreateBundle(
+            "<div style=\"background-image:url(data:image/png;base64,AAAA)\"></div>" +
+            "<style>body{background-image:url('data:image/png;base64,AAAA')}</style>");
         try
         {
             var result = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
