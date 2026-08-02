@@ -105,7 +105,25 @@ internal static class DocumentationHiddenParameterNormalizer
                                     string.Equals(set, syntax.Name, StringComparison.OrdinalIgnoreCase)) &&
                                 !BelongsToEveryNamedSet(parameter, namedParameterSets))
             .ToArray();
-        return setSpecificParameters.Length > 0 && setSpecificParameters.All(parameter => parameter.DontShow);
+        if (setSpecificParameters.Length == 0 || setSpecificParameters.Any(parameter => !parameter.DontShow))
+            return false;
+
+        if (!syntax.IsDefault)
+            return true;
+
+        return setSpecificParameters.Any(parameter => IsRequiredInSet(parameter, syntax.Name));
+    }
+
+    private static bool IsRequiredInSet(DocumentationParameterHelp parameter, string setName)
+    {
+        var requiredBySet = parameter.ParameterSetRequired ?? new Dictionary<string, bool>();
+        foreach (var pair in requiredBySet)
+        {
+            if (string.Equals(pair.Key, setName, StringComparison.OrdinalIgnoreCase))
+                return pair.Value;
+        }
+
+        return requiredBySet.Count == 0 && parameter.Required;
     }
 
     private static bool BelongsToEveryNamedSet(

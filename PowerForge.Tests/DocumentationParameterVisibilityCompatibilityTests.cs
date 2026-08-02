@@ -59,10 +59,19 @@ function Get-HiddenOnlySetFixture {
         [switch] $Secret
     )
 }
+function Get-HiddenOptionalDefaultSetFixture {
+    [CmdletBinding(DefaultParameterSetName = 'HiddenDefault')]
+    param(
+        [Parameter(ParameterSetName = 'HiddenDefault', DontShow = $true)]
+        [switch] $Secret,
+        [Parameter(ParameterSetName = 'Visible')]
+        [switch] $Visible
+    )
+}
 function GetDocumentationParameterDeclaringMetadata { throw 'Target helper shadow was invoked.' }
 function TestDocumentationParameterDontShow { throw 'Target helper shadow was invoked.' }
 function GetDocumentationRuntimeInputs { throw 'Target helper shadow was invoked.' }
-Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture,Get-GenericVisibilityCollisionFixture,Get-MixedVisibilityFixture,Get-HiddenOnlySetFixture,GetDocumentationParameterDeclaringMetadata,TestDocumentationParameterDontShow,GetDocumentationRuntimeInputs
+Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture,Get-GenericVisibilityCollisionFixture,Get-MixedVisibilityFixture,Get-HiddenOnlySetFixture,Get-HiddenOptionalDefaultSetFixture,GetDocumentationParameterDeclaringMetadata,TestDocumentationParameterDontShow,GetDocumentationRuntimeInputs
 """, new UTF8Encoding(false));
             File.WriteAllText(manifestPath, """
 @{
@@ -71,7 +80,7 @@ Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture
     GUID = '34343434-3434-3434-3434-343434343434'
     Author = 'PowerForge.Tests'
     Description = 'Parameter visibility fixture.'
-    FunctionsToExport = @('Get-VisibilityFixture','Get-GenericVisibilityFixture','Get-GenericVisibilityCollisionFixture','Get-MixedVisibilityFixture','Get-HiddenOnlySetFixture','GetDocumentationParameterDeclaringMetadata','TestDocumentationParameterDontShow','GetDocumentationRuntimeInputs')
+    FunctionsToExport = @('Get-VisibilityFixture','Get-GenericVisibilityFixture','Get-GenericVisibilityCollisionFixture','Get-MixedVisibilityFixture','Get-HiddenOnlySetFixture','Get-HiddenOptionalDefaultSetFixture','GetDocumentationParameterDeclaringMetadata','TestDocumentationParameterDontShow','GetDocumentationRuntimeInputs')
     CmdletsToExport = @()
     AliasesToExport = @()
     VariablesToExport = @()
@@ -149,6 +158,32 @@ Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture
                 Assert.DoesNotContain(
                     hiddenOnlyCommandElement.Descendants().SelectMany(element => element.Attributes("parameterSetName")),
                     attribute => string.Equals(attribute.Value, "Hidden", StringComparison.OrdinalIgnoreCase));
+
+                var hiddenDefaultCommand = Assert.Single(payload.Commands, item => item.Name == "Get-HiddenOptionalDefaultSetFixture");
+                Assert.Single(hiddenDefaultCommand.Parameters, parameter => parameter.Name == "Visible");
+                var hiddenDefaultSyntax = Assert.Single(hiddenDefaultCommand.Syntax, syntax =>
+                    string.Equals(syntax.Name, "HiddenDefault", StringComparison.OrdinalIgnoreCase));
+                Assert.True(hiddenDefaultSyntax.IsDefault);
+                Assert.DoesNotContain("Secret", hiddenDefaultSyntax.Text, StringComparison.Ordinal);
+                Assert.Contains(hiddenDefaultCommand.Syntax, syntax =>
+                    string.Equals(syntax.Name, "Visible", StringComparison.OrdinalIgnoreCase));
+
+                var hiddenDefaultMarkdown = File.ReadAllText(Path.Combine(docsRoot, "Get-HiddenOptionalDefaultSetFixture.md"));
+                Assert.Contains("### HiddenDefault (Default)", hiddenDefaultMarkdown, StringComparison.Ordinal);
+                Assert.DoesNotContain("Secret", hiddenDefaultMarkdown, StringComparison.Ordinal);
+                var hiddenDefaultCommandElement = Assert.Single(
+                    hiddenOnlyMaml.Descendants(),
+                    element => element.Name.LocalName == "command" &&
+                               element.Descendants().Any(child =>
+                                   child.Name.LocalName == "name" &&
+                                   child.Value == "Get-HiddenOptionalDefaultSetFixture"));
+                Assert.Contains(
+                    hiddenDefaultCommandElement.Descendants().Where(element => element.Name.LocalName == "syntaxItem"),
+                    element => string.Equals(
+                        element.Attribute("parameterSetName")?.Value,
+                        "HiddenDefault",
+                        StringComparison.OrdinalIgnoreCase));
+                Assert.DoesNotContain("Secret", hiddenDefaultCommandElement.Value, StringComparison.Ordinal);
             }
         }
         finally

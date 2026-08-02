@@ -137,9 +137,11 @@ public sealed class DocumentationBinaryMetadataContractTests
             var sameNameAlias = Path.Combine(sameNameModuleRoot, "Lib", "en-US", "Bundled.DLL-Help.xml");
             Directory.CreateDirectory(Path.GetDirectoryName(sameNameAlias)!);
             File.WriteAllText(Path.Combine(sameNameModuleRoot, "OwnerModule.PSD1"), "@{ RootModule = ''; ModuleVersion = '1.0.0' }");
+            var sameNameAssemblyPath = Path.Combine(sameNameModuleRoot, "Lib", "Bundled.DLL");
+            File.WriteAllText(sameNameAssemblyPath, string.Empty);
             File.WriteAllText(
                 sameNameAlias,
-                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "<helpItems />");
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "\n<nestedSameName />");
             var otherNameModuleRoot = Path.Combine(root, "BundledOther");
             var outerAliasUnderOtherModule = Path.Combine(otherNameModuleRoot, "Lib", "en-US", "Outer.DLL-Help.xml");
             Directory.CreateDirectory(Path.GetDirectoryName(outerAliasUnderOtherModule)!);
@@ -148,9 +150,12 @@ public sealed class DocumentationBinaryMetadataContractTests
                 outerAliasUnderOtherModule,
                 DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "<helpItems />");
             var legacyAliasUnderOtherModule = Path.Combine(otherNameModuleRoot, "Lib", "en-US", "Legacy.DLL-Help.xml");
+            var legacyAssemblyPath = Path.Combine(otherNameModuleRoot, "Lib", "Legacy.DLL");
+            File.WriteAllText(legacyAssemblyPath, string.Empty);
+            var legacyAliasContent = DocumentationExternalHelpAliasWriter.GetLegacyGeneratedAliasMarker() + "<nestedLegacy />";
             File.WriteAllText(
                 legacyAliasUnderOtherModule,
-                DocumentationExternalHelpAliasWriter.GetLegacyGeneratedAliasMarker() + "<helpItems />");
+                legacyAliasContent);
             var staleMixedCaseAlias = Path.Combine(root, "Lib", "Removed", "en-US", "Removed.DLL-Help.xml");
             Directory.CreateDirectory(Path.GetDirectoryName(staleMixedCaseAlias)!);
             File.WriteAllText(
@@ -172,7 +177,9 @@ public sealed class DocumentationBinaryMetadataContractTests
                 Commands =
                 [
                     new DocumentationCommandHelp { AssemblyPath = assemblyPath },
-                    new DocumentationCommandHelp { AssemblyPath = authoredAssemblyPath }
+                    new DocumentationCommandHelp { AssemblyPath = authoredAssemblyPath },
+                    new DocumentationCommandHelp { AssemblyPath = sameNameAssemblyPath },
+                    new DocumentationCommandHelp { AssemblyPath = legacyAssemblyPath }
                 ]
             };
             var paths = DocumentationExternalHelpAliasWriter.WriteAliases(payload, primary, "OwnerModule");
@@ -182,6 +189,12 @@ public sealed class DocumentationBinaryMetadataContractTests
             Assert.True(File.Exists(nestedAlias));
             Assert.Equal("<authoredHelpItems />", File.ReadAllText(authoredAlias));
             Assert.DoesNotContain(authoredAlias, paths, StringComparer.OrdinalIgnoreCase);
+            Assert.Equal(
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "\n<nestedSameName />",
+                File.ReadAllText(sameNameAlias));
+            Assert.Equal(legacyAliasContent, File.ReadAllText(legacyAliasUnderOtherModule));
+            Assert.DoesNotContain(sameNameAlias, paths, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(legacyAliasUnderOtherModule, paths, StringComparer.OrdinalIgnoreCase);
 
             DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(root, "OwnerModule");
 
@@ -189,8 +202,12 @@ public sealed class DocumentationBinaryMetadataContractTests
             Assert.True(File.Exists(authoredAlias));
             Assert.True(File.Exists(otherAlias));
             Assert.True(File.Exists(sameNameAlias));
+            Assert.Equal(
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "\n<nestedSameName />",
+                File.ReadAllText(sameNameAlias));
             Assert.False(File.Exists(outerAliasUnderOtherModule));
             Assert.True(File.Exists(legacyAliasUnderOtherModule));
+            Assert.Equal(legacyAliasContent, File.ReadAllText(legacyAliasUnderOtherModule));
             Assert.False(File.Exists(staleMixedCaseAlias));
             Assert.False(File.Exists(dataAlias));
         }

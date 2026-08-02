@@ -74,6 +74,7 @@ internal static class DocumentationExternalHelpAliasWriter
         var pathComparer = pathComparison == StringComparison.Ordinal
             ? StringComparer.Ordinal
             : StringComparer.OrdinalIgnoreCase;
+        var nestedModuleRoots = GetNestedModuleRoots(stagingRoot);
         var assemblyPaths = (payload.Commands ?? new List<DocumentationCommandHelp>())
             .Where(command => command is not null && !string.IsNullOrWhiteSpace(command.AssemblyPath))
             .Select(command => command.AssemblyPath!.Trim().Trim('"'))
@@ -103,6 +104,8 @@ internal static class DocumentationExternalHelpAliasWriter
             var aliasDirectory = Path.Combine(assemblyDirectory, culture);
             var aliasPath = Path.Combine(aliasDirectory, aliasName);
             if (string.Equals(aliasPath, externalHelpFilePath, pathComparison))
+                continue;
+            if (nestedModuleRoots.Any(root => IsPathWithinRoot(root, aliasPath)))
                 continue;
 
             Directory.CreateDirectory(aliasDirectory);
