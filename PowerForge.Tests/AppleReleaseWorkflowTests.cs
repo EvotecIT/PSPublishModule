@@ -109,6 +109,17 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.True(
             script.IndexOf("Write-ReleaseOutput -Name 'receipt-path'", StringComparison.Ordinal) <
             script.IndexOf("Invoke-SecretSafeNativeProcess -FilePath $env:POWERFORGE_TOOL_PATH", StringComparison.Ordinal));
+        Assert.Contains("$extension -in @('.cmd', '.bat', '.ps1')", script, StringComparison.Ordinal);
+        Assert.Contains("Invoke-CapturedPowerShellTool.ps1", script, StringComparison.Ordinal);
+        var capturedTool = Read(
+            root,
+            ".github",
+            "actions",
+            "apple-release",
+            "Invoke-CapturedPowerShellTool.ps1");
+        Assert.Contains("& $ToolPath @toolArguments", capturedTool, StringComparison.Ordinal);
+        Assert.Contains("[Console]::Error.WriteLine", capturedTool, StringComparison.Ordinal);
+        Assert.DoesNotContain("Write-Host", capturedTool, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -150,11 +150,30 @@ function Invoke-SecretSafeNativeProcess {
     )
 
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $FilePath
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
-    foreach ($argument in $ArgumentList) {
+    $processArguments = $ArgumentList
+    $extension = [System.IO.Path]::GetExtension($FilePath)
+    if ($IsWindows -and $extension -in @('.cmd', '.bat', '.ps1')) {
+        $startInfo.FileName = Join-Path $PSHOME 'pwsh.exe'
+        $argumentJson = $ArgumentList | ConvertTo-Json -Compress -AsArray
+        $argumentBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($argumentJson))
+        $processArguments = @(
+            '-NoLogo',
+            '-NoProfile',
+            '-NonInteractive',
+            '-File',
+            (Join-Path $PSScriptRoot 'Invoke-CapturedPowerShellTool.ps1'),
+            '-ToolPath',
+            $FilePath,
+            '-ArgumentListBase64',
+            $argumentBase64
+        )
+    } else {
+        $startInfo.FileName = $FilePath
+    }
+    foreach ($argument in $processArguments) {
         $startInfo.ArgumentList.Add($argument)
     }
 
