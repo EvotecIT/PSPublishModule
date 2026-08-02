@@ -160,6 +160,31 @@ public class WebVisualStoryStagerContractRegressionTests
     }
 
     [Fact]
+    public void Load_RejectsCaseFoldedArtifactPathCollisions()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var manifest = Path.Combine(source, "story.json");
+            var document = JsonNode.Parse(File.ReadAllText(manifest))!;
+            document["artifacts"]![1]!["path"] = "Poster.png";
+            document["artifacts"]![2]!["path"] = "poster.png";
+            File.Move(Path.Combine(source, "demo.png"), Path.Combine(source, "Poster.png"));
+            File.WriteAllText(manifest, document.ToJsonString());
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Load(manifest));
+
+            Assert.Contains("consistent casing", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Stage_PersistsConfiguredLimitsForSubsequentLoads()
     {
         var root = WebVisualStoryStagerTests.CreateBundle();

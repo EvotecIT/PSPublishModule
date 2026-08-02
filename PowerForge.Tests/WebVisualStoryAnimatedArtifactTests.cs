@@ -313,6 +313,42 @@ public class WebVisualStoryAnimatedArtifactTests
     }
 
     [Fact]
+    public void Stage_RejectsAnimatedGifWithoutAVisibleFrameChange()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var animationPath = Path.Combine(source, "static.gif");
+            using (var frames = new MagickImageCollection())
+            {
+                frames.Add(new MagickImage(MagickColors.DeepSkyBlue, 2, 2) { AnimationDelay = 10 });
+                frames.Add(new MagickImage(MagickColors.DeepSkyBlue, 2, 2) { AnimationDelay = 10 });
+                frames.Write(animationPath, MagickFormat.Gif);
+            }
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = ReadBundle(manifest);
+            var animated = Assert.Single(bundle.Artifacts, artifact => artifact.Role == "animated");
+            animated.Format = "gif";
+            animated.Path = "static.gif";
+            WriteBundle(manifest, bundle);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("visible frame change", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Stage_RejectsApngFramesWithIncompletePixelData()
     {
         var root = WebVisualStoryStagerTests.CreateBundle();

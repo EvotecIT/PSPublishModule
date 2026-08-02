@@ -40,71 +40,6 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
         ValidateGif(path, displayPath, requireMultipleFrames: true);
     }
 
-    internal static void ValidateGif(string path, string displayPath, bool requireMultipleFrames)
-    {
-        try
-        {
-            using (var metadata = new MagickImageCollection())
-            {
-                metadata.Ping(path);
-                if (metadata.Count < (requireMultipleFrames ? 2 : 1))
-                {
-                    throw new InvalidOperationException(
-                        requireMultipleFrames
-                            ? $"Visual-story animated artifact must contain multiple decodable frames: {displayPath}"
-                            : $"Visual-story GIF artifact must contain a decodable frame: {displayPath}");
-                }
-                if (metadata.Count > MaximumGifFrames)
-                {
-                    throw new InvalidOperationException(
-                        $"Visual-story animated artifact exceeds the {MaximumGifFrames}-frame safety limit: {displayPath}");
-                }
-
-                var decodedPixels = 0UL;
-                foreach (var frame in metadata)
-                {
-                    if (frame.Format is not (MagickFormat.Gif or MagickFormat.Gif87) ||
-                        frame.Width == 0 ||
-                        frame.Height == 0)
-                    {
-                        throw new InvalidOperationException(
-                            $"Visual-story animated artifact does not match its declared format: {displayPath}");
-                    }
-                    decodedPixels = checked(decodedPixels + (ulong)frame.Width * frame.Height);
-                    if (decodedPixels > MaximumGifDecodedPixels)
-                    {
-                        throw new InvalidOperationException(
-                            $"Visual-story animated artifact exceeds the aggregate decoded-pixel safety limit: {displayPath}");
-                    }
-                }
-            }
-
-            using var frames = new MagickImageCollection();
-            frames.Read(path);
-            foreach (var frame in frames)
-            {
-                if (frame.Format is not (MagickFormat.Gif or MagickFormat.Gif87) ||
-                    frame.Width == 0 ||
-                    frame.Height == 0)
-                {
-                    throw new InvalidOperationException(
-                        $"Visual-story animated artifact does not match its declared format: {displayPath}");
-                }
-                if ((ulong)frame.Width * frame.Height > 100_000_000UL)
-                {
-                    throw new InvalidOperationException(
-                        $"Visual-story animated artifact exceeds the 100-megapixel frame safety limit: {displayPath}");
-                }
-            }
-        }
-        catch (MagickException ex)
-        {
-            throw new InvalidOperationException(
-                $"Visual-story animated artifact is not decodable: {displayPath}",
-                ex);
-        }
-    }
-
     internal static void ValidateSvg(string path, string displayPath, bool requireAnimation)
     {
         try
@@ -174,12 +109,13 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
                     pendingAnimateMotionDepth = -1;
                     continue;
                 }
-                if (reader.NodeType != XmlNodeType.Element ||
-                    !string.Equals(reader.NamespaceURI, SvgNamespace, StringComparison.Ordinal))
+                if (reader.NodeType != XmlNodeType.Element)
                     continue;
 
                 ValidatePassiveSvgContent(reader, displayPath);
                 ValidateSelfContainedReferences(reader, displayPath);
+                if (!string.Equals(reader.NamespaceURI, SvgNamespace, StringComparison.Ordinal))
+                    continue;
                 svgElements.Add(ReadSvgElementIdentity(reader));
                 if (IsDeclarativeAnimationElement(reader))
                 {
@@ -344,6 +280,13 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
         do
         {
             var reference = reader.Value.Trim();
+            if (string.Equals(reader.LocalName, "base", StringComparison.Ordinal) &&
+                string.Equals(reader.NamespaceURI, "http://www.w3.org/XML/1998/namespace", StringComparison.Ordinal) &&
+                reference.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Visual-story SVG artifacts must be self-contained and cannot declare xml:base: {displayPath}");
+            }
             var isDirectReference = string.Equals(reader.LocalName, "href", StringComparison.OrdinalIgnoreCase) ||
                                     string.Equals(reader.LocalName, "src", StringComparison.OrdinalIgnoreCase);
             if (isDirectReference && reference.Length > 0 && reference[0] != '#' ||

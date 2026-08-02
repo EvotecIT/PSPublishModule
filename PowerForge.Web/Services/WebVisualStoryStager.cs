@@ -309,6 +309,8 @@ public static partial class WebVisualStoryStager
         var declaredArtifactPaths = bundle.Artifacts
             .Select(static artifact => artifact.Path.Replace('\\', '/'))
             .ToHashSet(StringComparer.Ordinal);
+        var portablePaths = new Dictionary<string, (string DeclaredPath, bool IsDirectory)>(
+            StringComparer.OrdinalIgnoreCase);
         foreach (var artifact in bundle.Artifacts)
         {
             ValidateArtifact(artifact);
@@ -318,6 +320,8 @@ public static partial class WebVisualStoryStager
                 "artifact");
             var portableRelativePath = Path.GetRelativePath(manifestRoot, artifactPath).Replace('\\', '/');
             VisualStoryPortablePathValidator.Validate(portableRelativePath);
+            ValidateReservedStagedPath(portableRelativePath);
+            ValidatePortablePathTopology(portableRelativePath, portablePaths);
             if (!File.Exists(artifactPath))
                 throw new FileNotFoundException($"Visual-story artifact was not found: {artifact.Path}", artifactPath);
             var info = new FileInfo(artifactPath);

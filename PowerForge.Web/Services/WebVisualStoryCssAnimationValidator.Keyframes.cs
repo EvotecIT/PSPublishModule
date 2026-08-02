@@ -5,7 +5,7 @@ internal static partial class WebVisualStoryCssAnimationValidator
     internal static IReadOnlySet<string> GetKeyframeNames(string css)
     {
         var normalizedCss = RemoveUnsupportedConditionalRuleBlocks(RemoveComments(css));
-        var names = new HashSet<string>(StringComparer.Ordinal);
+        var definitions = new Dictionary<string, bool>(StringComparer.Ordinal);
         var quote = '\0';
         var escaped = false;
         var parentheses = 0;
@@ -62,12 +62,14 @@ internal static partial class WebVisualStoryCssAnimationValidator
             if (blockEnd < 0)
                 continue;
             var body = normalizedCss.Substring(cursor + 1, blockEnd - cursor - 1);
-            if (KeyframesCanProduceMotion(body))
-                names.Add(name);
+            definitions[name] = KeyframesCanProduceMotion(body);
             index = blockEnd;
         }
 
-        return names;
+        return definitions
+            .Where(static definition => definition.Value)
+            .Select(static definition => definition.Key)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     private static bool TryReadKeyframeName(string css, ref int cursor, out string name)

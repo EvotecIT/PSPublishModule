@@ -179,6 +179,27 @@ public partial class WebVisualStoryStagerTests
     }
 
     [Fact]
+    public void GetFileSystemPathComparison_DistinguishesCoexistingCaseVariants()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-case-variants-" + Guid.NewGuid().ToString("N"));
+        var upper = Path.Combine(root, "Story");
+        var lower = Path.Combine(root, "story");
+        Directory.CreateDirectory(upper);
+        try
+        {
+            Directory.CreateDirectory(lower);
+            if (Directory.EnumerateDirectories(root).Count() < 2)
+                return;
+
+            Assert.Equal(StringComparison.Ordinal, WebVisualStoryStager.GetFileSystemPathComparison(upper));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Stage_RejectsDeclaredIntegrityThatDoesNotMatchSource()
     {
         var root = CreateBundle();

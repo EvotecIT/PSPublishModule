@@ -45,6 +45,16 @@ public class WebVisualStorySvgCssAnimationTests
         Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Stage_UsesTheLastDefinitionOfAKeyframeName()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{from{opacity:0}to{opacity:1}}@keyframes fade{from{opacity:1}to{opacity:1}}rect{animation:fade 1s}</style><rect width=\"1\" height=\"1\"/></svg>"));
+
+        Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("! important")]
     [InlineData("!/* priority */important")]
@@ -240,6 +250,7 @@ public class WebVisualStorySvgCssAnimationTests
     [InlineData("<rect fill=\"url(../paint.svg#gradient)\"/>")]
     [InlineData("<style>@import 'https://example.test/story.css';</style>")]
     [InlineData("<style>@import \"../story.css\";</style>")]
+    [InlineData("<g xml:base=\"https://example.test/\"><image href=\"#frame\"/></g>")]
     public void Stage_RejectsExternalSvgResources(string content)
     {
         var error = Assert.Throws<InvalidOperationException>(() =>
@@ -269,6 +280,8 @@ public class WebVisualStorySvgCssAnimationTests
     [Theory]
     [InlineData("<script>alert(1)</script>")]
     [InlineData("<foreignObject><div xmlns=\"http://www.w3.org/1999/xhtml\">active</div></foreignObject>")]
+    [InlineData("<script xmlns=\"http://www.w3.org/1999/xhtml\">alert(1)</script>")]
+    [InlineData("<iframe xmlns=\"http://www.w3.org/1999/xhtml\" src=\"https://example.test/\"/>")]
     [InlineData("<rect onload=\"alert(1)\" width=\"1\" height=\"1\"/>")]
     [InlineData("<a href=\"#target\"><set attributeName=\"href\" to=\"javascript:alert(1)\" dur=\"1s\"/></a>")]
     public void Stage_RejectsActiveSvgContent(string content)

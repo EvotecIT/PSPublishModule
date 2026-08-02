@@ -17,6 +17,14 @@ public static partial class WebVisualStoryStager
                 var alternateName = ToggleCase(name);
                 if (!string.Equals(name, alternateName, StringComparison.Ordinal))
                 {
+                    var matchingEntries = Directory.EnumerateFileSystemEntries(parent)
+                        .Select(Path.GetFileName)
+                        .Where(candidate => string.Equals(candidate, name, StringComparison.OrdinalIgnoreCase))
+                        .Take(2)
+                        .Count();
+                    if (matchingEntries > 1)
+                        return StringComparison.Ordinal;
+
                     return Directory.Exists(Path.Combine(parent, alternateName))
                         ? StringComparison.OrdinalIgnoreCase
                         : StringComparison.Ordinal;

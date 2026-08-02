@@ -6,6 +6,12 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
 {
     private static void ValidatePassiveSvgContent(XmlReader reader, string displayPath)
     {
+        if (!string.Equals(reader.NamespaceURI, SvgNamespace, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Visual-story SVG artifacts cannot contain foreign-namespace elements: {displayPath}");
+        }
+
         if (string.Equals(reader.LocalName, "script", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(reader.LocalName, "foreignObject", StringComparison.OrdinalIgnoreCase))
         {
