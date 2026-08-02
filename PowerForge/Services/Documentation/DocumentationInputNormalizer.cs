@@ -21,6 +21,7 @@ internal static class DocumentationInputNormalizer
         {
             command.Inputs = runtimeInputs;
             command.RuntimeInputs = new List<DocumentationTypeHelp>();
+            NormalizeNullablePipelineInputs(command, runtimeInputs);
             return;
         }
 
@@ -38,6 +39,76 @@ internal static class DocumentationInputNormalizer
 
         command.Inputs = normalized;
         command.RuntimeInputs = new List<DocumentationTypeHelp>();
+        NormalizeNullablePipelineInputs(command, runtimeInputs);
+    }
+
+    private static void NormalizeNullablePipelineInputs(
+        DocumentationCommandHelp command,
+        IReadOnlyList<DocumentationTypeHelp> runtimeInputs)
+    {
+        var usedRuntimeInputs = new HashSet<int>();
+        foreach (var parameter in command.Parameters ?? new List<DocumentationParameterHelp>())
+        {
+            var displayType = DocumentationMetadataNormalizer.GetNullableParameterTypeName(parameter);
+            if (string.IsNullOrWhiteSpace(displayType) ||
+                string.IsNullOrWhiteSpace(parameter.PipelineInput) ||
+                parameter.PipelineInput.StartsWith("False", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var runtimeIndex = FindRuntimeInput(parameter.Type, runtimeInputs, usedRuntimeInputs);
+            if (runtimeIndex < 0) continue;
+            usedRuntimeInputs.Add(runtimeIndex);
+
+            var runtimeInput = runtimeInputs[runtimeIndex];
+            var rawNames = new HashSet<string>(StringComparer.Ordinal);
+            AddRawName(rawNames, runtimeInput.Name);
+            AddRawName(rawNames, runtimeInput.ClrTypeName);
+            AddRawName(rawNames, runtimeInput.CanonicalTypeName);
+
+            foreach (var input in command.Inputs ?? new List<DocumentationTypeHelp>())
+            {
+                if (input is null || !MatchesAnyIdentity(input, rawNames)) continue;
+                input.Name = displayType!;
+                input.ClrTypeName = displayType!;
+                input.CanonicalTypeName = displayType!;
+                input.LookupName = displayType!;
+                input.LookupClrTypeName = displayType!;
+            }
+        }
+    }
+
+    private static int FindRuntimeInput(
+        string parameterType,
+        IReadOnlyList<DocumentationTypeHelp> runtimeInputs,
+        ISet<int> usedRuntimeInputs)
+    {
+        for (var index = 0; index < runtimeInputs.Count; index++)
+        {
+            if (usedRuntimeInputs.Contains(index)) continue;
+            var runtimeInput = runtimeInputs[index];
+            if (string.Equals(parameterType, runtimeInput.Name, StringComparison.Ordinal) ||
+                string.Equals(parameterType, runtimeInput.ClrTypeName, StringComparison.Ordinal))
+                return index;
+        }
+        return -1;
+    }
+
+    private static bool MatchesAnyIdentity(DocumentationTypeHelp input, ISet<string> rawNames)
+        => MatchesRawIdentity(input.Name, rawNames) ||
+           MatchesRawIdentity(input.ClrTypeName, rawNames) ||
+           MatchesRawIdentity(input.CanonicalTypeName, rawNames);
+
+    private static bool MatchesRawIdentity(string? value, ISet<string> rawNames)
+    {
+        if (string.IsNullOrEmpty(value)) return false;
+        if (rawNames.Contains(value!)) return true;
+        var withoutHelpLineBreaks = value!.TrimEnd('\r', '\n');
+        return withoutHelpLineBreaks.Length != value.Length && rawNames.Contains(withoutHelpLineBreaks);
+    }
+
+    private static void AddRawName(ISet<string> rawNames, string? value)
+    {
+        if (!string.IsNullOrEmpty(value)) rawNames.Add(value!);
     }
 
     private static bool TryParsePowerShellInputAggregate(

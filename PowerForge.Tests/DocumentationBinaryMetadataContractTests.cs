@@ -163,6 +163,79 @@ public sealed class DocumentationBinaryMetadataContractTests
         }
     }
 
+    [Fact]
+    public void ExternalHelpAliases_PruneLegacyAliasesAfterPrimaryFileNameChanges()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-binary-alias-rename-" + Guid.NewGuid().ToString("N"));
+        var oldPrimaryDirectory = Path.Combine(root, "en-US");
+        var aliasDirectory = Path.Combine(root, "Lib", "Removed", "en-US");
+        Directory.CreateDirectory(oldPrimaryDirectory);
+        Directory.CreateDirectory(aliasDirectory);
+
+        try
+        {
+            const string oldContent = "<legacyHelpItems />";
+            var oldPrimary = Path.Combine(oldPrimaryDirectory, "Old-Custom-Name-help.xml");
+            var staleAlias = Path.Combine(aliasDirectory, "Removed.dll-Help.xml");
+            File.WriteAllText(oldPrimary, oldContent);
+            File.WriteAllText(
+                staleAlias,
+                DocumentationExternalHelpAliasWriter.GetLegacyGeneratedAliasMarker() + oldContent);
+
+            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(
+                root,
+                "OwnerModule",
+                "New-Custom-Name-help.xml");
+
+            Assert.True(File.Exists(oldPrimary));
+            Assert.False(File.Exists(staleAlias));
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ExternalHelpAliases_DoNotWriteOutsideCaseSensitiveStagingRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-binary-alias-case-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        if (FrameworkCompatibility.GetPathStringComparison(root) != StringComparison.Ordinal)
+        {
+            try { Directory.Delete(root, true); } catch { }
+            return;
+        }
+
+        var stagingRoot = Path.Combine(root, "Module");
+        var siblingRoot = Path.Combine(root, "module");
+        var primaryDirectory = Path.Combine(stagingRoot, "en-US");
+        var siblingBinaryDirectory = Path.Combine(siblingRoot, "Lib");
+        Directory.CreateDirectory(primaryDirectory);
+        Directory.CreateDirectory(siblingBinaryDirectory);
+
+        try
+        {
+            var primary = Path.Combine(primaryDirectory, "Owner-help.xml");
+            var assemblyPath = Path.Combine(siblingBinaryDirectory, "Outside.dll");
+            File.WriteAllText(primary, "<helpItems />");
+            File.WriteAllText(assemblyPath, string.Empty);
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands = [new DocumentationCommandHelp { AssemblyPath = assemblyPath }]
+            };
+
+            var paths = DocumentationExternalHelpAliasWriter.WriteAliases(payload, primary, "Owner");
+
+            Assert.Single(paths);
+            Assert.False(File.Exists(Path.Combine(siblingBinaryDirectory, "en-US", "Outside.dll-Help.xml")));
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+        }
+    }
+
     private static string BuildFixture(string fixtureRoot)
     {
         var outputDirectory = Path.Combine(Path.GetTempPath(), "pf-binary-metadata-build-" + Guid.NewGuid().ToString("N"));

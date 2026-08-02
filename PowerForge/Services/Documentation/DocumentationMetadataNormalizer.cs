@@ -323,13 +323,10 @@ internal static class DocumentationMetadataNormalizer
         {
             if (parameter is null) continue;
 
-            if (!string.IsNullOrWhiteSpace(parameter.NullableUnderlyingTypeName))
+            var nullableTypeName = GetNullableParameterTypeName(parameter);
+            if (!string.IsNullOrWhiteSpace(nullableTypeName))
             {
-                var suffix = string.Concat((parameter.NullableArrayRanks ?? new List<int>())
-                    .AsEnumerable()
-                    .Reverse()
-                    .Select(rank => rank <= 1 ? "[]" : "[" + new string(',', rank - 1) + "]"));
-                parameter.Type = parameter.NullableUnderlyingTypeName! + suffix;
+                parameter.Type = nullableTypeName!;
                 NormalizeSyntaxParameterType(command, parameter.Name, parameter.Type);
             }
             parameter.NullableUnderlyingTypeName = null;
@@ -367,6 +364,18 @@ internal static class DocumentationMetadataNormalizer
             parameter.MetadataDefaultValue = null;
             parameter.HasMetadataDefault = false;
         }
+    }
+
+    internal static string? GetNullableParameterTypeName(DocumentationParameterHelp parameter)
+    {
+        if (parameter is null || string.IsNullOrWhiteSpace(parameter.NullableUnderlyingTypeName))
+            return null;
+
+        var suffix = string.Concat((parameter.NullableArrayRanks ?? new List<int>())
+            .AsEnumerable()
+            .Reverse()
+            .Select(rank => rank <= 1 ? "[]" : "[" + new string(',', rank - 1) + "]"));
+        return parameter.NullableUnderlyingTypeName + suffix;
     }
 
     private static void NormalizeSyntaxParameterType(

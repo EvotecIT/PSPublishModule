@@ -19,7 +19,7 @@ function Get-VisibilityFixture {
     [CmdletBinding()]
     param(
         [Nullable[VisibilityMode]] $Mode,
-        [Nullable[VisibilityMode][]] $Modes,
+        [Parameter(ValueFromPipeline = $true)] [Nullable[VisibilityMode][]] $Modes,
         [Parameter(Mandatory = $true, DontShow = $true, Position = 0)] [string] $HiddenTransport
     )
 }
@@ -56,6 +56,7 @@ Export-ModuleMember -Function Get-VisibilityFixture,GetDocumentationParameterDec
                 Assert.Equal("Mode", mode.Name);
                 Assert.Equal("VisibilityMode", mode.Type);
                 Assert.Equal("VisibilityMode[]", modes.Type);
+                Assert.Equal("VisibilityMode[]", Assert.Single(command.Inputs).Name);
                 Assert.Equal(new[] { "Advanced", "Basic" }, mode.PossibleValues.OrderBy(value => value));
                 Assert.All(command.Syntax, syntax => Assert.DoesNotContain("HiddenTransport", syntax.Text, StringComparison.Ordinal));
                 Assert.All(command.Syntax, syntax => Assert.DoesNotContain("Nullable", syntax.Text, StringComparison.OrdinalIgnoreCase));

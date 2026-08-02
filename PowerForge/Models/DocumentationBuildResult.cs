@@ -51,8 +51,33 @@ public sealed class DocumentationBuildResult
         int exitCode,
         int markdownFiles,
         string externalHelpFilePath,
+        string? errorMessage)
+        : this(
+            enabled,
+            docsPath,
+            readmePath,
+            succeeded,
+            exitCode,
+            markdownFiles,
+            externalHelpFilePath,
+            errorMessage,
+            externalHelpFilePaths: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new result instance with every generated external-help path.
+    /// </summary>
+    public DocumentationBuildResult(
+        bool enabled,
+        string docsPath,
+        string readmePath,
+        bool succeeded,
+        int exitCode,
+        int markdownFiles,
+        string externalHelpFilePath,
         string? errorMessage,
-        IReadOnlyList<string>? externalHelpFilePaths = null)
+        IReadOnlyList<string>? externalHelpFilePaths)
     {
         Enabled = enabled;
         DocsPath = docsPath;

@@ -65,6 +65,10 @@ internal static class DocumentationExternalHelpAliasWriter
         var directory = Path.GetDirectoryName(Path.GetFullPath(externalHelpFilePath))!;
         var culture = new DirectoryInfo(directory).Name;
         var stagingRoot = Directory.GetParent(directory)?.FullName ?? directory;
+        var pathComparison = FrameworkCompatibility.GetPathStringComparison(stagingRoot);
+        var pathComparer = pathComparison == StringComparison.Ordinal
+            ? StringComparer.Ordinal
+            : StringComparer.OrdinalIgnoreCase;
         var assemblyPaths = (payload.Commands ?? new List<DocumentationCommandHelp>())
             .Where(command => command is not null && !string.IsNullOrWhiteSpace(command.AssemblyPath))
             .Select(command => command.AssemblyPath!.Trim().Trim('"'))
@@ -72,8 +76,8 @@ internal static class DocumentationExternalHelpAliasWriter
             .Select(path => Path.IsPathRooted(path)
                 ? Path.GetFullPath(path)
                 : Path.GetFullPath(Path.Combine(stagingRoot, path)))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
+            .Distinct(pathComparer)
+            .OrderBy(path => path, pathComparer);
 
         var marker = GetGeneratedAliasMarker(moduleName);
         var content = File.ReadAllText(externalHelpFilePath);
@@ -91,7 +95,7 @@ internal static class DocumentationExternalHelpAliasWriter
             var assemblyDirectory = Path.GetDirectoryName(assemblyPath) ?? stagingRoot;
             var aliasDirectory = Path.Combine(assemblyDirectory, culture);
             var aliasPath = Path.Combine(aliasDirectory, aliasName);
-            if (string.Equals(aliasPath, externalHelpFilePath, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(aliasPath, externalHelpFilePath, pathComparison))
                 continue;
 
             Directory.CreateDirectory(aliasDirectory);
@@ -139,24 +143,41 @@ internal static class DocumentationExternalHelpAliasWriter
     private static HashSet<string> GetLegacyPrimaryContent(string rootDirectory, string? primaryFileName)
     {
         var content = new HashSet<string>(StringComparer.Ordinal);
-        if (string.IsNullOrWhiteSpace(primaryFileName)) return content;
+        var fullRoot = Path.GetFullPath(rootDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var pathComparison = FrameworkCompatibility.GetPathStringComparison(fullRoot);
+        var preferredFileName = Path.GetFileName(primaryFileName ?? string.Empty);
 
         foreach (var path in Directory.EnumerateFiles(
                      rootDirectory,
-                     Path.GetFileName(primaryFileName),
-                     SearchOption.AllDirectories))
+                     "*",
+                     SearchOption.AllDirectories)
+                 .Where(path =>
+                 {
+                     var fileName = Path.GetFileName(path);
+                     return fileName.EndsWith("-Help.xml", StringComparison.OrdinalIgnoreCase) &&
+                            !fileName.EndsWith(".dll-Help.xml", StringComparison.OrdinalIgnoreCase);
+                 })
+                 .OrderByDescending(path => string.Equals(
+                     Path.GetFileName(path), preferredFileName, StringComparison.OrdinalIgnoreCase)))
         {
             var parent = Path.GetDirectoryName(path);
             var candidateRoot = string.IsNullOrWhiteSpace(parent)
                 ? null
                 : Directory.GetParent(parent)?.FullName;
-            if (!string.Equals(
-                    Path.GetFullPath(rootDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            if (!string.Equals(fullRoot,
                     candidateRoot?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                    StringComparison.OrdinalIgnoreCase))
+                    pathComparison))
                 continue;
 
-            try { content.Add(NormalizeLegacyContent(File.ReadAllText(path))); }
+            try
+            {
+                var text = File.ReadAllText(path);
+                if (text.Contains(GeneratedAliasMarkerPrefix, StringComparison.Ordinal) ||
+                    text.Contains(LegacyGeneratedAliasMarker, StringComparison.Ordinal))
+                    continue;
+                content.Add(NormalizeLegacyContent(text));
+            }
             catch { /* best effort */ }
         }
 
@@ -164,16 +185,22 @@ internal static class DocumentationExternalHelpAliasWriter
     }
 
     private static string[] GetNestedModuleRoots(string rootDirectory)
-        => Directory.EnumerateFiles(rootDirectory, "*.psd1", SearchOption.AllDirectories)
+    {
+        var pathComparison = FrameworkCompatibility.GetPathStringComparison(rootDirectory);
+        var pathComparer = pathComparison == StringComparison.Ordinal
+            ? StringComparer.Ordinal
+            : StringComparer.OrdinalIgnoreCase;
+        return Directory.EnumerateFiles(rootDirectory, "*.psd1", SearchOption.AllDirectories)
             .Select(Path.GetDirectoryName)
             .Where(path => !string.IsNullOrWhiteSpace(path) &&
                            !string.Equals(
                                Path.GetFullPath(path!),
                                Path.GetFullPath(rootDirectory),
-                               StringComparison.OrdinalIgnoreCase))
+                               pathComparison))
             .Select(path => Path.GetFullPath(path!))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(pathComparer)
             .ToArray();
+    }
 
     private static string NormalizeLegacyContent(string content)
     {
@@ -192,7 +219,8 @@ internal static class DocumentationExternalHelpAliasWriter
         var fullRoot = Path.GetFullPath(root)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var fullPath = Path.GetFullPath(path);
-        return string.Equals(fullRoot, fullPath, StringComparison.OrdinalIgnoreCase) ||
-               fullPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        var pathComparison = FrameworkCompatibility.GetPathStringComparison(fullRoot);
+        return string.Equals(fullRoot, fullPath, pathComparison) ||
+               fullPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, pathComparison);
     }
 }
