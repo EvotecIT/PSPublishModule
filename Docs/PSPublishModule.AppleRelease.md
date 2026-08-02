@@ -577,6 +577,15 @@ height inventory exactly. Explicit `--version`, `--source-commit`, or
 capture-metadata options may still be supplied for recovery, but they must match
 the provenance document exactly.
 
+The capture workflow therefore requires the exact three-part marketing version;
+blank or branch-relative capture evidence cannot be approved. The pinned helper
+also requires the retained provenance for every local `Screenshots` action, for
+an `Advance` action configured to synchronize screenshots, and for final review
+submission or release when screenshot configs are present. Before any mutation, it
+re-downloads that artifact and proves that the approval manifests name the same
+run, repository, workflow, source commit, version, and complete path-bound PNG
+byte and dimension inventory.
+
 For local publication, invoke the command through the reviewed
 `scripts/Invoke-PinnedPowerForge.ps1` helper. It requires the exact merged
 PSPublishModule commit, a clean consumer `main` equal to `origin/main`, and the
@@ -589,7 +598,10 @@ platform runtime represented by their images; simulator captures must name the
 simulator runtime rather than the macOS host. The pinned helper intentionally
 rejects `UploadExisting` because an ignored prebuilt archive has no reviewed
 source or byte provenance; use `Upload` to build and upload from the bound source.
-GitHub CLI is required only when a retained capture-provenance artifact is used.
+It restores locked packages into a fresh private NuGet cache, builds from the
+pinned PSPublishModule root so its `global.json` selects the SDK, and only then
+executes the built CLI with the consumer as its working directory. GitHub CLI is
+required only when a retained capture-provenance artifact is used.
 
 In GitHub Actions, `ApprovedBy` names the protected environment boundary—not the
 workflow initiator. `InitiatedBy` records who started the run, while

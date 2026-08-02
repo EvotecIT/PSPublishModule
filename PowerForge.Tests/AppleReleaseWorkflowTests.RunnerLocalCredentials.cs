@@ -20,8 +20,10 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("refs/remotes/origin/$RequiredBranch", script, StringComparison.Ordinal);
         Assert.Contains("status', '--porcelain=v1', '--untracked-files=all", script, StringComparison.Ordinal);
         Assert.Contains("ls-files', '--error-unmatch'", script, StringComparison.Ordinal);
-        Assert.Contains("--artifacts-path", script, StringComparison.Ordinal);
-        Assert.Contains("Push-Location $consumer", script, StringComparison.Ordinal);
+        Assert.Contains("'restore', $cliProject, '--locked-mode', '--packages', $nugetPackages, '--artifacts-path', $artifactsRoot", script, StringComparison.Ordinal);
+        Assert.Contains("-WorkingDirectory $toolRoot", script, StringComparison.Ordinal);
+        Assert.Contains("-WorkingDirectory $consumer", script, StringComparison.Ordinal);
+        Assert.Contains("$start.Environment['NUGET_PACKAGES'] = $NuGetPackagesPath", script, StringComparison.Ordinal);
         Assert.Contains("run download $runId", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("requires an explicit --config", script, StringComparison.Ordinal);
         Assert.Contains("Invoke-TrackedInputValidator -SourceCommit $consumerHead", script, StringComparison.Ordinal);
@@ -35,9 +37,20 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("$run.head_repository.full_name -ne $repository", script, StringComparison.Ordinal);
         Assert.Contains("UploadExisting is forbidden at the pinned local operator boundary", script, StringComparison.Ordinal);
         Assert.Contains("if ($null -ne (Get-OptionValue -Option '--capture-provenance'))", script, StringComparison.Ordinal);
+        Assert.Contains("Capture provenance source commit", script, StringComparison.Ordinal);
+        Assert.Contains("--apple-source-commit must match the exact consumer HEAD", script, StringComparison.Ordinal);
+        Assert.Contains("Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead", script, StringComparison.Ordinal);
+        Assert.Contains("if ($ArgumentList[0] -ne 'apple-release')", script, StringComparison.Ordinal);
+        Assert.Contains("$argument -eq '--capture-provenance'", script, StringComparison.Ordinal);
+        Assert.Contains("Screenshot approval manifests do not match the retained capture byte inventory", script, StringComparison.Ordinal);
         Assert.Contains("[Diagnostics.ProcessStartInfo]::new()", script, StringComparison.Ordinal);
         Assert.Contains("RedirectStandardError = $true", script, StringComparison.Ordinal);
         Assert.DoesNotContain("[string] $DotNet =", script, StringComparison.Ordinal);
+
+        var captureWorkflow = Read(root, ".github", "workflows", "powerforge-apple-screenshot-capture.yml");
+        Assert.Contains("marketing_version:\n        description: Exact x.y.z", captureWorkflow, StringComparison.Ordinal);
+        Assert.Contains("marketing_version must use x.y.z", captureWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("marketing_version must be blank", captureWorkflow, StringComparison.Ordinal);
     }
 
     [Fact]

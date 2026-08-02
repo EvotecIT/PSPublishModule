@@ -8,9 +8,8 @@ on:
         required: true
         type: string
       marketing_version:
-        description: Optional exact x.y.z App Store version represented by the captures; required by the approval workflow.
-        required: false
-        default: ""
+        description: Exact x.y.z App Store version represented by the captures and approval.
+        required: true
         type: string
       capture_script:
         description: Repository-relative deterministic capture script.
@@ -71,7 +70,7 @@ jobs:
           CAPTURE_RUNTIME: ${{ inputs.runtime }}
         run: |
           if ($env:SOURCE_REF -notmatch '^[0-9A-Fa-f]{40}$') { throw 'source_ref must be an exact 40-character commit SHA.' }
-          if (-not [string]::IsNullOrWhiteSpace($env:MARKETING_VERSION) -and $env:MARKETING_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'marketing_version must be blank or use x.y.z.' }
+          if ($env:MARKETING_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'marketing_version must use x.y.z.' }
           if ($env:CAPTURE_SHELL -notin @('bash', 'pwsh')) { throw 'capture_shell must be bash or pwsh.' }
           if ([string]::IsNullOrWhiteSpace($env:CAPTURE_RUNTIME) -or $env:CAPTURE_RUNTIME.Length -gt 200 -or $env:CAPTURE_RUNTIME -match '[\r\n]') {
             throw 'runtime must be a non-empty single-line platform runtime no longer than 200 characters.'

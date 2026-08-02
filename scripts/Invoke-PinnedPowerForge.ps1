@@ -149,6 +149,21 @@ function Get-OptionValue {
     return $null
 }
 
+function Get-ForwardedArgumentList {
+    if ($ArgumentList[0] -ne 'apple-release') { return @($ArgumentList) }
+    $result = [Collections.Generic.List[string]]::new()
+    for ($index = 0; $index -lt $ArgumentList.Count; $index++) {
+        $argument = $ArgumentList[$index]
+        if ($argument -eq '--capture-provenance') {
+            $index++
+            continue
+        }
+        if ($argument.StartsWith('--capture-provenance=', [StringComparison]::OrdinalIgnoreCase)) { continue }
+        $result.Add($argument)
+    }
+    return @($result)
+}
+
 function Assert-SafeArguments {
     if ($ArgumentList.Count -lt 1 -or $ArgumentList[0] -notin @('apple-release', 'apple-screenshots', 'apple-governance')) {
         throw 'Pinned local operator accepts only Apple PowerForge commands.'
@@ -244,7 +259,10 @@ function Assert-FixedLocalCredentialProfile {
 }
 
 function Assert-AuthoritativeCaptureProvenance {
-    param([Parameter(Mandatory)][string] $GhPath)
+    param(
+        [Parameter(Mandatory)][string] $GhPath,
+        [Parameter(Mandatory)][string] $SourceCommit
+    )
     $configured = Get-OptionValue -Option '--capture-provenance'
     if (-not $configured) { return }
     $path = Resolve-OptionPath -Value $configured
@@ -258,6 +276,9 @@ function Assert-AuthoritativeCaptureProvenance {
     if (-not $repository.Equals($ExpectedConsumerRepository, [StringComparison]::OrdinalIgnoreCase) -or
         $runId -notmatch '^\d+$' -or $sourceCommit -notmatch '^[0-9a-f]{40}$' -or -not $workflowMatch.Success) {
         throw 'Capture provenance repository, run id, source commit, or workflow identity is invalid.'
+    }
+    if ($sourceCommit -ne $SourceCommit.ToLowerInvariant()) {
+        throw "Capture provenance source commit '$sourceCommit' does not match the exact consumer HEAD '$SourceCommit'."
     }
     $run = & $GhPath api "repos/$repository/actions/runs/$runId" 2>$null | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0 -or $run.status -ne 'completed' -or $run.conclusion -ne 'success' -or
@@ -276,6 +297,80 @@ function Assert-AuthoritativeCaptureProvenance {
     $expectedHash = (Get-FileHash -LiteralPath $downloaded[0].FullName -Algorithm SHA256).Hash
     $actualHash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
     if ($expectedHash -ne $actualHash) { throw 'Local capture provenance differs from the retained GitHub Actions artifact.' }
+    $script:validatedCaptureProvenance = $provenance
+}
+
+function Assert-ScreenshotPublicationBinding {
+    param([Parameter(Mandatory)][string] $SourceCommit)
+    if ($ArgumentList[0] -ne 'apple-release' -or $ArgumentList.Count -lt 2) { return }
+    $operation = $ArgumentList[1]
+    if ($operation -notin @('Screenshots', 'Advance', 'SubmitAppReview', 'Release')) { return }
+
+    $releaseConfigPath = Resolve-OptionPath -Value (Get-OptionValue -Option '--config')
+    $release = Get-Content -LiteralPath $releaseConfigPath -Raw | ConvertFrom-Json
+    $apple = $release.AppleApps
+    $projectRootValue = if ([string]::IsNullOrWhiteSpace([string]$apple.ProjectRoot)) { '.' } else { [string]$apple.ProjectRoot }
+    $projectRoot = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $releaseConfigPath) $projectRootValue))
+    $configValues = @()
+    if (-not [string]::IsNullOrWhiteSpace([string]$apple.ScreenshotConfigPath)) { $configValues += [string]$apple.ScreenshotConfigPath }
+    $configValues += @($apple.ScreenshotConfigPaths | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    $requiresBinding = $operation -eq 'Screenshots' -or
+        ($operation -eq 'Advance' -and $apple.SyncScreenshots -eq $true) -or
+        ($operation -in @('SubmitAppReview', 'Release') -and $configValues.Count -gt 0)
+    if (-not $requiresBinding) { return }
+    if ($configValues.Count -eq 0) { throw "apple-release $operation requires at least one screenshot configuration." }
+    if ($null -eq $script:validatedCaptureProvenance) {
+        throw "apple-release $operation requires --capture-provenance so screenshot publication remains bound to the retained capture artifact."
+    }
+
+    $provenance = $script:validatedCaptureProvenance
+
+    $inventoryCounts = @{}
+    $provenanceEntries = @($provenance.screenshots)
+    foreach ($entry in $provenanceEntries) {
+        $relativePath = ([string]$entry.path).Replace('\', '/')
+        $key = "$relativePath|$( ([string]$entry.sha256).ToLowerInvariant() )|$([int]$entry.width)|$([int]$entry.height)"
+        $inventoryCounts[$key] = 1 + [int]($inventoryCounts[$key] ?? 0)
+    }
+    $approvedCounts = @{}
+    foreach ($configValue in $configValues) {
+        $screenshotConfigPath = [IO.Path]::GetFullPath((Join-Path $projectRoot $configValue))
+        $screenshotConfig = Get-Content -LiteralPath $screenshotConfigPath -Raw | ConvertFrom-Json
+        $manifestValue = [string]$screenshotConfig.Quality.ApprovalManifestPath
+        if ([string]::IsNullOrWhiteSpace($manifestValue)) {
+            throw "Screenshot configuration '$screenshotConfigPath' must name Quality.ApprovalManifestPath."
+        }
+        $manifestPath = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $screenshotConfigPath) $manifestValue))
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        if ([string]$manifest.CaptureRunId -ne [string]$provenance.captureRunId -or
+            -not ([string]$manifest.CaptureRepository).Equals([string]$provenance.repository, [StringComparison]::OrdinalIgnoreCase) -or
+            [string]$manifest.CaptureWorkflowRef -ne [string]$provenance.workflowRef -or
+            ([string]$manifest.SourceCommit).ToLowerInvariant() -ne $SourceCommit.ToLowerInvariant() -or
+            [string]$manifest.VersionString -ne [string]$provenance.marketingVersion) {
+            throw "Screenshot approval manifest '$manifestPath' is not bound to the authoritative capture run, repository, workflow, source commit, and marketing version."
+        }
+        foreach ($entry in @($manifest.Screenshots)) {
+            $approvedPath = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $screenshotConfigPath) ([string]$entry.File))).Replace('\', '/')
+            $matches = @($provenanceEntries | Where-Object {
+                $candidate = ([string]$_.path).Replace('\', '/')
+                $approvedPath.EndsWith("/$candidate", [StringComparison]::Ordinal)
+            })
+            if ($matches.Count -ne 1) {
+                throw "Screenshot approval entry '$([string]$entry.File)' does not identify exactly one retained capture path."
+            }
+            $relativePath = ([string]$matches[0].path).Replace('\', '/')
+            $key = "$relativePath|$( ([string]$entry.Sha256).ToLowerInvariant() )|$([int]$entry.Width)|$([int]$entry.Height)"
+            $approvedCounts[$key] = 1 + [int]($approvedCounts[$key] ?? 0)
+        }
+    }
+    if ($inventoryCounts.Count -ne $approvedCounts.Count) {
+        throw 'Screenshot approval manifests do not match the retained capture byte inventory.'
+    }
+    foreach ($key in $inventoryCounts.Keys) {
+        if ([int]$approvedCounts[$key] -ne [int]$inventoryCounts[$key]) {
+            throw 'Screenshot approval manifests do not match the retained capture byte inventory.'
+        }
+    }
 }
 
 function Get-RedactedToolText {
@@ -329,20 +424,22 @@ function Get-RedactedToolText {
     return $Text
 }
 
-function Invoke-PowerForgeProcess {
+function Invoke-RedactedProcess {
     param(
-        [Parameter(Mandatory)][string] $DotNetPath,
-        [Parameter(Mandatory)][string] $ProjectPath,
-        [Parameter(Mandatory)][string] $ArtifactsPath
+        [Parameter(Mandatory)][string] $FilePath,
+        [Parameter(Mandatory)][string] $WorkingDirectory,
+        [Parameter(Mandatory)][string[]] $Arguments,
+        [Parameter(Mandatory)][string] $NuGetPackagesPath
     )
     $start = [Diagnostics.ProcessStartInfo]::new()
-    $start.FileName = $DotNetPath
-    $start.WorkingDirectory = $consumer
+    $start.FileName = $FilePath
+    $start.WorkingDirectory = $WorkingDirectory
     $start.UseShellExecute = $false
     $start.CreateNoWindow = $true
     $start.RedirectStandardOutput = $true
     $start.RedirectStandardError = $true
-    foreach ($argument in @('run', '--framework', 'net10.0', '--artifacts-path', $ArtifactsPath, '--project', $ProjectPath, '--') + $ArgumentList) {
+    $start.Environment['NUGET_PACKAGES'] = $NuGetPackagesPath
+    foreach ($argument in $Arguments) {
         $start.ArgumentList.Add($argument)
     }
     $process = [Diagnostics.Process]::new()
@@ -373,25 +470,47 @@ try {
     Assert-SafeArguments
     Invoke-TrackedInputValidator -SourceCommit $consumerHead
     Assert-FixedLocalCredentialProfile
+    $configuredSourceCommit = Get-OptionValue -Option '--apple-source-commit'
+    if ($configuredSourceCommit -and $configuredSourceCommit.ToLowerInvariant() -ne $consumerHead) {
+        throw "--apple-source-commit must match the exact consumer HEAD '$consumerHead'."
+    }
 
     $dotnet = Resolve-FixedTool -Name dotnet
     if ($null -ne (Get-OptionValue -Option '--capture-provenance')) {
         $gh = Resolve-FixedTool -Name gh
-        Assert-AuthoritativeCaptureProvenance -GhPath $gh
+        Assert-AuthoritativeCaptureProvenance -GhPath $gh -SourceCommit $consumerHead
     }
+    Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead
     $cliProject = Join-Path $toolRoot 'PowerForge.Cli/PowerForge.Cli.csproj'
     if (-not (Test-Path -LiteralPath $cliProject -PathType Leaf)) { throw "PowerForge CLI project is missing: $cliProject" }
 
+    $nugetPackages = Join-Path $temporaryRoot 'nuget-packages'
+    $artifactsRoot = Join-Path $temporaryRoot 'artifacts'
+    $cliOutput = Join-Path $temporaryRoot 'cli'
+    New-Item -ItemType Directory -Path $nugetPackages, $artifactsRoot, $cliOutput -Force | Out-Null
+    $restoreExitCode = Invoke-RedactedProcess `
+        -FilePath $dotnet `
+        -WorkingDirectory $toolRoot `
+        -Arguments @('restore', $cliProject, '--locked-mode', '--packages', $nugetPackages, '--artifacts-path', $artifactsRoot, '--verbosity', 'minimal') `
+        -NuGetPackagesPath $nugetPackages
+    if ($restoreExitCode -ne 0) { exit $restoreExitCode }
+    $buildExitCode = Invoke-RedactedProcess `
+        -FilePath $dotnet `
+        -WorkingDirectory $toolRoot `
+        -Arguments @('build', $cliProject, '--configuration', 'Release', '--framework', 'net10.0', '--no-restore', '--artifacts-path', $artifactsRoot, '--output', $cliOutput, "--property:RestorePackagesPath=$nugetPackages", '--verbosity', 'minimal') `
+        -NuGetPackagesPath $nugetPackages
+    if ($buildExitCode -ne 0) { exit $buildExitCode }
+    $cliAssembly = Join-Path $cliOutput 'PowerForge.Cli.dll'
+    if (-not (Test-Path -LiteralPath $cliAssembly -PathType Leaf)) { throw "PowerForge CLI build output is missing: $cliAssembly" }
+
     Write-Host "PowerForge source: $toolHead"
     Write-Host "Consumer source: $consumerHead"
-    Push-Location $consumer
-    try {
-        $toolExitCode = Invoke-PowerForgeProcess `
-            -DotNetPath $dotnet `
-            -ProjectPath $cliProject `
-            -ArtifactsPath (Join-Path $temporaryRoot 'artifacts')
-        if ($toolExitCode -ne 0) { exit $toolExitCode }
-    } finally { Pop-Location }
+    $toolExitCode = Invoke-RedactedProcess `
+        -FilePath $dotnet `
+        -WorkingDirectory $consumer `
+        -Arguments (@($cliAssembly) + (Get-ForwardedArgumentList)) `
+        -NuGetPackagesPath $nugetPackages
+    if ($toolExitCode -ne 0) { exit $toolExitCode }
 } finally {
     if (Test-Path -LiteralPath $temporaryRoot) { Remove-Item -LiteralPath $temporaryRoot -Recurse -Force }
 }
