@@ -122,7 +122,7 @@ internal static class DocumentationInputNormalizer
                string.Equals(withoutHelpLineBreaks, expected, StringComparison.Ordinal);
     }
 
-    private static bool TryParsePowerShellInputAggregate(
+    internal static bool TryParsePowerShellInputAggregate(
         DocumentationTypeHelp input,
         IReadOnlyList<DocumentationTypeHelp> runtimeInputs,
         out IReadOnlyList<DocumentationTypeHelp> parsedInputs)

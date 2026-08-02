@@ -67,7 +67,7 @@ public sealed class DocumentationBinaryMetadataContractTests
             var bundledRoot = Path.Combine(root, "Bundled");
             var bundledAliasDirectory = Path.Combine(bundledRoot, "Lib", "en-US");
             Directory.CreateDirectory(bundledAliasDirectory);
-            File.WriteAllText(Path.Combine(bundledRoot, "Bundled.psd1"), "@{ RootModule = '' }");
+            File.WriteAllText(Path.Combine(bundledRoot, "Bundled.psd1"), "@{ RootModule = ''; ModuleVersion = '1.0.0' }");
             var bundledAlias = Path.Combine(bundledAliasDirectory, "Bundled.dll-Help.xml");
             File.WriteAllText(
                 bundledAlias,
@@ -136,7 +136,7 @@ public sealed class DocumentationBinaryMetadataContractTests
             var sameNameModuleRoot = Path.Combine(root, "BundledOwner");
             var sameNameAlias = Path.Combine(sameNameModuleRoot, "Lib", "en-US", "Bundled.DLL-Help.xml");
             Directory.CreateDirectory(Path.GetDirectoryName(sameNameAlias)!);
-            File.WriteAllText(Path.Combine(sameNameModuleRoot, "OwnerModule.PSD1"), "@{ RootModule = '' }");
+            File.WriteAllText(Path.Combine(sameNameModuleRoot, "OwnerModule.PSD1"), "@{ RootModule = ''; ModuleVersion = '1.0.0' }");
             File.WriteAllText(
                 sameNameAlias,
                 DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "<helpItems />");
@@ -144,6 +144,15 @@ public sealed class DocumentationBinaryMetadataContractTests
             Directory.CreateDirectory(Path.GetDirectoryName(staleMixedCaseAlias)!);
             File.WriteAllText(
                 staleMixedCaseAlias,
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "<helpItems />");
+            var dataRoot = Path.Combine(root, "Data");
+            var dataAlias = Path.Combine(dataRoot, "en-US", "RemovedData.dll-Help.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(dataAlias)!);
+            File.WriteAllText(
+                Path.Combine(dataRoot, "strings.psd1"),
+                "@{ ModuleVersion = '1.0.0'; Greeting = 'Hello' }");
+            File.WriteAllText(
+                dataAlias,
                 DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "<helpItems />");
 
             var payload = new DocumentationExtractionPayload
@@ -170,6 +179,7 @@ public sealed class DocumentationBinaryMetadataContractTests
             Assert.True(File.Exists(otherAlias));
             Assert.True(File.Exists(sameNameAlias));
             Assert.False(File.Exists(staleMixedCaseAlias));
+            Assert.False(File.Exists(dataAlias));
         }
         finally
         {

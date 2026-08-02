@@ -15,12 +15,23 @@ public sealed class DocumentationParameterVisibilityCompatibilityTests
             var manifestPath = Path.Combine(root, "VisibilityFixture.psd1");
             File.WriteAllText(modulePath, """
 enum VisibilityMode { Basic; Advanced }
+class HiddenPayload { [string] $Value }
+class VisiblePayload { [string] $Value }
 function Get-VisibilityFixture {
     [CmdletBinding()]
     param(
         [Nullable[VisibilityMode]] $Mode,
         [Parameter(ValueFromPipeline = $true)] [Nullable[VisibilityMode][]] $Modes,
         [Parameter(Mandatory = $true, DontShow = $true, Position = 0, ValueFromPipelineByPropertyName = $true)] [string] $HiddenTransport
+    )
+}
+function Get-GenericVisibilityCollisionFixture {
+    [CmdletBinding()]
+    param(
+        [Parameter(DontShow = $true, ValueFromPipeline = $true)]
+        [System.Collections.Generic.List[HiddenPayload]] $HiddenItems,
+        [Parameter(ValueFromPipelineByPropertyName = $true)]
+        [System.Collections.Generic.List[VisiblePayload]] $VisibleItems
     )
 }
 function Get-GenericVisibilityFixture {
@@ -32,7 +43,8 @@ function Get-GenericVisibilityFixture {
 }
 function GetDocumentationParameterDeclaringMetadata { throw 'Target helper shadow was invoked.' }
 function TestDocumentationParameterDontShow { throw 'Target helper shadow was invoked.' }
-Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture,GetDocumentationParameterDeclaringMetadata,TestDocumentationParameterDontShow
+function GetDocumentationRuntimeInputs { throw 'Target helper shadow was invoked.' }
+Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture,Get-GenericVisibilityCollisionFixture,GetDocumentationParameterDeclaringMetadata,TestDocumentationParameterDontShow,GetDocumentationRuntimeInputs
 """, new UTF8Encoding(false));
             File.WriteAllText(manifestPath, """
 @{
@@ -41,7 +53,7 @@ Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture
     GUID = '34343434-3434-3434-3434-343434343434'
     Author = 'PowerForge.Tests'
     Description = 'Parameter visibility fixture.'
-    FunctionsToExport = @('Get-VisibilityFixture','Get-GenericVisibilityFixture','GetDocumentationParameterDeclaringMetadata','TestDocumentationParameterDontShow')
+    FunctionsToExport = @('Get-VisibilityFixture','Get-GenericVisibilityFixture','Get-GenericVisibilityCollisionFixture','GetDocumentationParameterDeclaringMetadata','TestDocumentationParameterDontShow','GetDocumentationRuntimeInputs')
     CmdletsToExport = @()
     AliasesToExport = @()
     VariablesToExport = @()
@@ -86,6 +98,12 @@ Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture
                 Assert.Equal(genericType, Assert.Single(genericCommand.Inputs).Name);
                 Assert.All(genericCommand.Syntax, syntax =>
                     Assert.DoesNotContain("KeyValuePair`2", syntax.Text, StringComparison.Ordinal));
+
+                var collisionCommand = Assert.Single(payload.Commands, item => item.Name == "Get-GenericVisibilityCollisionFixture");
+                Assert.Single(collisionCommand.Parameters, parameter => parameter.Name == "VisibleItems");
+                var collisionInput = Assert.Single(collisionCommand.Inputs);
+                Assert.Contains("VisiblePayload", collisionInput.ClrTypeName, StringComparison.Ordinal);
+                Assert.DoesNotContain("HiddenPayload", collisionInput.ClrTypeName, StringComparison.Ordinal);
             }
         }
         finally

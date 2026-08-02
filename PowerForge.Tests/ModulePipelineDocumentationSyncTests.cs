@@ -139,7 +139,7 @@ public sealed class ModulePipelineDocumentationSyncTests
                 generatedMarker + "<oldHelpItems />");
             var otherModuleHelp = Path.Combine(projectRoot, "Bundled", "en-US", "Bundled.dll-Help.xml");
             Directory.CreateDirectory(Path.GetDirectoryName(otherModuleHelp)!);
-            File.WriteAllText(Path.Combine(projectRoot, "Bundled", "Bundled.psd1"), "@{ RootModule = '' }");
+            File.WriteAllText(Path.Combine(projectRoot, "Bundled", "Bundled.psd1"), "@{ RootModule = ''; ModuleVersion = '1.0.0' }");
             File.WriteAllText(
                 otherModuleHelp,
                 DocumentationExternalHelpAliasWriter.GetLegacyGeneratedAliasMarker() + "<oldHelpItems />");

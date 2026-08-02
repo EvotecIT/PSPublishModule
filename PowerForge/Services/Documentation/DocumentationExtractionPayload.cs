@@ -240,6 +240,14 @@ internal sealed class DocumentationParameterHelp
     [DataMember(Name = "type")]
     public string Type { get; set; } = string.Empty;
 
+    /// <summary>Full CLR identity captured from the target runtime before display normalization.</summary>
+    [DataMember(Name = "runtimeTypeName")]
+    public string RuntimeTypeName { get; set; } = string.Empty;
+
+    /// <summary>Runtime <see cref="Type.FullName"/> captured for exact Get-Help identity matching.</summary>
+    [DataMember(Name = "runtimeClrTypeName")]
+    public string RuntimeClrTypeName { get; set; } = string.Empty;
+
     /// <summary>Underlying nullable type name captured from the target runtime.</summary>
     [DataMember(Name = "nullableUnderlyingTypeName")]
     public string? NullableUnderlyingTypeName { get; set; }

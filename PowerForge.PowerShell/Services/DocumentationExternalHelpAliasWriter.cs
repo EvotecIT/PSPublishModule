@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Management.Automation.Language;
 
 namespace PowerForge;
 
@@ -198,6 +199,7 @@ internal static class DocumentationExternalHelpAliasWriter
             : StringComparer.OrdinalIgnoreCase;
         return Directory.EnumerateFiles(rootDirectory, "*", SearchOption.AllDirectories)
             .Where(path => Path.GetFileName(path).EndsWith(".psd1", StringComparison.OrdinalIgnoreCase))
+            .Where(IsModuleManifest)
             .Select(Path.GetDirectoryName)
             .Where(path => !string.IsNullOrWhiteSpace(path) &&
                            !string.Equals(
@@ -208,6 +210,52 @@ internal static class DocumentationExternalHelpAliasWriter
             .Distinct(pathComparer)
             .ToArray();
     }
+
+    private static bool IsModuleManifest(string path)
+    {
+        try
+        {
+            var ast = Parser.ParseFile(path, out _, out var errors);
+            if (errors is { Length: > 0 }) return false;
+            var manifest = ast.Find(
+                node => node is HashtableAst table && !HasHashtableAncestor(table),
+                searchNestedScriptBlocks: false) as HashtableAst;
+            if (manifest is null) return false;
+            var keys = manifest.KeyValuePairs
+                .Select(pair => GetManifestKey(pair.Item1))
+                .Where(key => !string.IsNullOrEmpty(key))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return keys.Contains("ModuleVersion") && keys.Overlaps(ModuleManifestContentKeys);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool HasHashtableAncestor(Ast ast)
+    {
+        for (var parent = ast.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is HashtableAst) return true;
+        }
+        return false;
+    }
+
+    private static string? GetManifestKey(ExpressionAst key)
+        => key switch
+        {
+            StringConstantExpressionAst text => text.Value,
+            ConstantExpressionAst constant when constant.Value is string value => value,
+            _ => null
+        };
+
+    private static readonly string[] ModuleManifestContentKeys =
+    {
+        "RootModule", "ModuleToProcess", "NestedModules", "RequiredModules",
+        "FunctionsToExport", "CmdletsToExport", "AliasesToExport", "VariablesToExport",
+        "FormatsToProcess", "TypesToProcess", "ScriptsToProcess"
+    };
 
     private static string NormalizeLegacyContent(string content)
     {

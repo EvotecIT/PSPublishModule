@@ -552,6 +552,8 @@ try {
       $parameters += [ordered]@{
         name = $pn
         type = $typeName
+        runtimeTypeName = $parameterRuntimeMetadata.RuntimeTypeName
+        runtimeClrTypeName = $parameterRuntimeMetadata.RuntimeClrTypeName
         nullableUnderlyingTypeName = $parameterRuntimeMetadata.NullableUnderlyingTypeName
         nullableArrayRanks = @($parameterRuntimeMetadata.NullableArrayRanks)
         declaringType = $declaringType
@@ -643,45 +645,8 @@ try {
     } catch {
       # best effort: older hosts can omit or reshape InputTypes entirely
     }
-    $runtimeInputs = @()
-    $seenInputs = @{}
-    foreach ($pn in $paramNames) {
-        $pmeta = $null
-        try { $pmeta = $c.Parameters[$pn] } catch { $pmeta = $null }
-        if (-not $pmeta) { continue }
-
-        $supportsPipeline = $false
-        try {
-          foreach ($setEntry in @($pmeta.ParameterSets.GetEnumerator())) {
-            $psm = $setEntry.Value
-            if ($psm -and ($psm.ValueFromPipeline -or $psm.ValueFromPipelineByPropertyName)) {
-              $supportsPipeline = $true
-              break
-            }
-          }
-        } catch {
-          # best effort: pipeline metadata can differ between hosts and proxy commands
-        }
-
-        if (-not $supportsPipeline) { continue }
-
-        $inputTypeName = ''
-        $inputTypeClrName = ''
-        try {
-          if ($pmeta.ParameterType) {
-            $inputTypeName = [string]$pmeta.ParameterType.Name
-            $inputTypeClrName = [string]$pmeta.ParameterType.FullName
-          }
-        } catch {
-          # best effort: pipeline parameter type metadata is not always available on proxy commands
-        }
-
-        if (-not $inputTypeName) { continue }
-        $key = if ($inputTypeClrName) { $inputTypeClrName } else { $inputTypeName }
-        if ($seenInputs.ContainsKey($key)) { continue }
-        $seenInputs[$key] = $true
-        $runtimeInputs += [ordered]@{ name = $inputTypeName; clrTypeName = $inputTypeClrName; description = '' }
-    }
+    $runtimeInputs = @(& $collectorProtocol.GetRuntimeInputs `
+      $c $paramNames $collectorProtocol.GetCanonicalTypeNameFromType)
     if (-not $inputs -or $inputs.Count -eq 0) {
       $inputs = @($runtimeInputs)
     }
