@@ -16,58 +16,112 @@ internal static class DocumentationInputNormalizer
         if (command is null) throw new ArgumentNullException(nameof(command));
 
         var inputs = command.Inputs ?? new List<DocumentationTypeHelp>();
-        if (inputs.Count == 0) return;
+        var runtimeInputs = command.RuntimeInputs ?? new List<DocumentationTypeHelp>();
+        if (inputs.Count == 0)
+        {
+            command.Inputs = runtimeInputs;
+            command.RuntimeInputs = new List<DocumentationTypeHelp>();
+            return;
+        }
 
         var normalized = new List<DocumentationTypeHelp>(inputs.Count);
         foreach (var input in inputs)
         {
-            if (input is null || !TrySplitPowerShellInputAggregate(input, out var splitInputs))
+            if (input is null || !TryParsePowerShellInputAggregate(input, runtimeInputs, out var parsedInputs))
             {
                 if (input is not null) normalized.Add(input);
                 continue;
             }
 
-            normalized.AddRange(splitInputs);
+            normalized.AddRange(parsedInputs);
         }
 
         command.Inputs = normalized;
+        command.RuntimeInputs = new List<DocumentationTypeHelp>();
     }
 
-    private static bool TrySplitPowerShellInputAggregate(
+    private static bool TryParsePowerShellInputAggregate(
         DocumentationTypeHelp input,
-        out IReadOnlyList<DocumentationTypeHelp> splitInputs)
+        IReadOnlyList<DocumentationTypeHelp> runtimeInputs,
+        out IReadOnlyList<DocumentationTypeHelp> parsedInputs)
     {
-        splitInputs = Array.Empty<DocumentationTypeHelp>();
+        parsedInputs = Array.Empty<DocumentationTypeHelp>();
         if (!string.IsNullOrWhiteSpace(input.Description) ||
             !string.IsNullOrEmpty(input.CanonicalTypeName) ||
             !string.IsNullOrEmpty(input.RuntimeIdentity) ||
-            !string.IsNullOrEmpty(input.AssemblyQualifiedName))
+            !string.IsNullOrEmpty(input.AssemblyQualifiedName) ||
+            runtimeInputs.Count == 0)
             return false;
 
-        var names = SplitPowerShellHelpLines(input.Name);
-        if (names.Length < 2 || names.Any(string.IsNullOrEmpty)) return false;
+        var lines = SplitPowerShellHelpLines(input.Name);
+        if (lines.Length < 2 || lines.Any(string.IsNullOrEmpty)) return false;
 
-        string[] clrTypeNames;
-        if (string.IsNullOrEmpty(input.ClrTypeName))
-        {
-            clrTypeNames = Enumerable.Repeat(string.Empty, names.Length).ToArray();
-        }
-        else
-        {
-            clrTypeNames = SplitPowerShellHelpLines(input.ClrTypeName);
-            if (clrTypeNames.Length != names.Length || clrTypeNames.Any(string.IsNullOrEmpty)) return false;
-        }
+        var usedRuntimeInputs = new HashSet<int>();
+        var result = new List<DocumentationTypeHelp>();
+        DocumentationTypeHelp? current = null;
+        List<string>? descriptionLines = null;
 
-        splitInputs = names
-            .Select((name, index) => new DocumentationTypeHelp
+        foreach (var line in lines)
+        {
+            if (TryFindRuntimeInput(line, runtimeInputs, usedRuntimeInputs, out var runtimeIndex))
             {
-                Name = name,
-                ClrTypeName = clrTypeNames[index],
-                LookupName = name,
-                LookupClrTypeName = clrTypeNames[index]
-            })
-            .ToArray();
+                CompleteCurrent(result, current, descriptionLines);
+                var runtimeInput = runtimeInputs[runtimeIndex];
+                var clrTypeName = string.IsNullOrEmpty(runtimeInput.ClrTypeName)
+                    ? line
+                    : runtimeInput.ClrTypeName;
+                current = new DocumentationTypeHelp
+                {
+                    Name = line,
+                    ClrTypeName = clrTypeName,
+                    LookupName = line,
+                    LookupClrTypeName = clrTypeName
+                };
+                descriptionLines = new List<string>();
+                usedRuntimeInputs.Add(runtimeIndex);
+                continue;
+            }
+
+            if (current is null) return false;
+            descriptionLines!.Add(line);
+        }
+
+        CompleteCurrent(result, current, descriptionLines);
+        if (result.Count == 0) return false;
+        parsedInputs = result;
         return true;
+    }
+
+    private static bool TryFindRuntimeInput(
+        string line,
+        IReadOnlyList<DocumentationTypeHelp> runtimeInputs,
+        ISet<int> usedRuntimeInputs,
+        out int runtimeIndex)
+    {
+        for (var index = 0; index < runtimeInputs.Count; index++)
+        {
+            if (usedRuntimeInputs.Contains(index)) continue;
+            var runtimeInput = runtimeInputs[index];
+            if (string.Equals(line, runtimeInput.Name, StringComparison.Ordinal) ||
+                string.Equals(line, runtimeInput.ClrTypeName, StringComparison.Ordinal))
+            {
+                runtimeIndex = index;
+                return true;
+            }
+        }
+
+        runtimeIndex = -1;
+        return false;
+    }
+
+    private static void CompleteCurrent(
+        ICollection<DocumentationTypeHelp> result,
+        DocumentationTypeHelp? current,
+        IReadOnlyCollection<string>? descriptionLines)
+    {
+        if (current is null) return;
+        current.Description = string.Join("\n", descriptionLines ?? Array.Empty<string>());
+        result.Add(current);
     }
 
     private static string[] SplitPowerShellHelpLines(string value)

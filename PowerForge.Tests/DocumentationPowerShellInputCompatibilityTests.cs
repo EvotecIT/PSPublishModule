@@ -19,7 +19,7 @@ public sealed partial class DocumentationPowerShellCollectorTests
     RootModule = 'InputFixture.psm1'
     ModuleVersion = '1.0.0'
     GUID = '88888888-8888-8888-8888-888888888888'
-    FunctionsToExport = @('Install-InputFixture')
+    FunctionsToExport = @('Install-InputFixture', 'Get-AuthoredInputFixture')
     CmdletsToExport = @()
     AliasesToExport = @()
     VariablesToExport = @()
@@ -39,7 +39,25 @@ function Install-InputFixture {
     process { }
 }
 
-Export-ModuleMember -Function Install-InputFixture
+function Get-AuthoredInputFixture {
+    <#
+    .SYNOPSIS
+    Gets an authored input fixture.
+
+    .INPUTS
+    System.String
+    This is string input.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(ValueFromPipeline = $true)]
+        [string] $InputObject
+    )
+
+    process { }
+}
+
+Export-ModuleMember -Function Install-InputFixture, Get-AuthoredInputFixture
 """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             var hosts = OperatingSystem.IsWindows()
@@ -49,7 +67,7 @@ Export-ModuleMember -Function Install-InputFixture
             {
                 var engine = new DocumentationEngine(new ExecutablePowerShellRunner(host, root), new NullLogger());
                 var payload = engine.ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
-                var command = Assert.Single(payload.Commands);
+                var command = Assert.Single(payload.Commands, item => item.Name == "Install-InputFixture");
 
                 Assert.Collection(
                     command.Inputs,
@@ -66,13 +84,24 @@ Export-ModuleMember -Function Install-InputFixture
 
                 var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, "InputFixture", root);
                 var maml = XDocument.Load(mamlPath);
-                var inputNames = maml.Descendants()
+                var installCommand = maml.Descendants()
+                    .Single(element =>
+                        element.Name.LocalName == "command" &&
+                        element.Descendants().Any(child =>
+                            child.Name.LocalName == "name" &&
+                            child.Value == "Install-InputFixture"));
+                var inputNames = installCommand.Descendants()
                     .Where(element => element.Name.LocalName == "inputType")
                     .Select(element => element.Descendants().First(child => child.Name.LocalName == "name").Value)
                     .ToArray();
                 Assert.Equal(
                     new[] { "System.String[]", "System.Management.Automation.PSObject[]" },
                     inputNames);
+
+                var authored = Assert.Single(payload.Commands, item => item.Name == "Get-AuthoredInputFixture");
+                var authoredInput = Assert.Single(authored.Inputs);
+                Assert.Equal("System.String", authoredInput.Name);
+                Assert.Equal("This is string input.", authoredInput.Description);
             }
         }
         finally

@@ -18,6 +18,15 @@ public sealed class DocumentationInputTypeNormalizationTests
                     Name = aggregate,
                     ClrTypeName = aggregate
                 }
+            ],
+            RuntimeInputs =
+            [
+                new DocumentationTypeHelp { Name = "String[]", ClrTypeName = "System.String[]" },
+                new DocumentationTypeHelp
+                {
+                    Name = "ManagedModuleVersionInfo[]",
+                    ClrTypeName = "PowerForge.ManagedModuleVersionInfo[]"
+                }
             ]
         };
         var payload = new DocumentationExtractionPayload
@@ -71,9 +80,9 @@ public sealed class DocumentationInputTypeNormalizationTests
     }
 
     [Fact]
-    public void Normalize_DoesNotSplitAnAuthoredInputDescription()
+    public void Normalize_PreservesAuthoredInputDescriptionEmbeddedByPowerShell()
     {
-        var aggregate = "First\r\nSecond";
+        var aggregate = "System.String\r\nThis is string input.";
         var command = new DocumentationCommandHelp
         {
             Name = "Get-Demo",
@@ -82,19 +91,24 @@ public sealed class DocumentationInputTypeNormalizationTests
                 new DocumentationTypeHelp
                 {
                     Name = aggregate,
-                    ClrTypeName = aggregate,
-                    Description = "An explicitly authored input identity."
+                    ClrTypeName = aggregate
                 }
+            ],
+            RuntimeInputs =
+            [
+                new DocumentationTypeHelp { Name = "String", ClrTypeName = "System.String" }
             ]
         };
 
         DocumentationMetadataNormalizer.Normalize(new DocumentationExtractionPayload { Commands = [command] });
 
         var input = Assert.Single(command.Inputs);
-        Assert.Equal(aggregate, input.Name);
-        Assert.Equal("An explicitly authored input identity.", input.Description);
+        Assert.Equal("System.String", input.Name);
+        Assert.Equal("System.String", input.ClrTypeName);
+        Assert.Equal("This is string input.", input.Description);
+        Assert.Empty(command.RuntimeInputs);
 
         var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
-        Assert.Contains("- `First%u000D%u000ASecond`", markdown, StringComparison.Ordinal);
+        Assert.Contains("- `System.String` — This is string input.", markdown, StringComparison.Ordinal);
     }
 }
