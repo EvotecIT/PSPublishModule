@@ -33,6 +33,8 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("$run.event -ne 'workflow_dispatch'", script, StringComparison.Ordinal);
         Assert.Contains("$run.path -ne $workflowMatch.Groups['path'].Value", script, StringComparison.Ordinal);
         Assert.Contains("$run.head_repository.full_name -ne $repository", script, StringComparison.Ordinal);
+        Assert.Contains("UploadExisting is forbidden at the pinned local operator boundary", script, StringComparison.Ordinal);
+        Assert.Contains("if ($null -ne (Get-OptionValue -Option '--capture-provenance'))", script, StringComparison.Ordinal);
         Assert.Contains("[Diagnostics.ProcessStartInfo]::new()", script, StringComparison.Ordinal);
         Assert.Contains("RedirectStandardError = $true", script, StringComparison.Ordinal);
         Assert.DoesNotContain("[string] $DotNet =", script, StringComparison.Ordinal);
@@ -47,6 +49,9 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("sips -g pixelWidth -g pixelHeight", workflow, StringComparison.Ordinal);
         Assert.Contains("path = [IO.Path]::GetRelativePath($artifactRoot, $_.FullName)", workflow, StringComparison.Ordinal);
         Assert.Contains("screenshots = $screenshots", workflow, StringComparison.Ordinal);
+        Assert.Contains("CAPTURE_RUNTIME: ${{ inputs.runtime }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("$captureRuntime = $env:CAPTURE_RUNTIME.Trim()", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("sw_vers", workflow, StringComparison.Ordinal);
     }
 
     [Fact]

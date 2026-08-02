@@ -158,6 +158,9 @@ function Assert-SafeArguments {
     }
     $command = $ArgumentList[0]
     $operation = if ($ArgumentList.Count -gt 1) { $ArgumentList[1] } else { '' }
+    if ($command -eq 'apple-release' -and $operation -ieq 'UploadExisting') {
+        throw 'UploadExisting is forbidden at the pinned local operator boundary because existing archive bytes lack reviewed provenance.'
+    }
     $config = Get-OptionValue -Option '--config'
     if (($command -eq 'apple-release' -or $command -eq 'apple-screenshots' -or
         ($command -eq 'apple-governance' -and $operation -ne 'snapshot')) -and -not $config) {
@@ -372,8 +375,10 @@ try {
     Assert-FixedLocalCredentialProfile
 
     $dotnet = Resolve-FixedTool -Name dotnet
-    $gh = Resolve-FixedTool -Name gh
-    Assert-AuthoritativeCaptureProvenance -GhPath $gh
+    if ($null -ne (Get-OptionValue -Option '--capture-provenance')) {
+        $gh = Resolve-FixedTool -Name gh
+        Assert-AuthoritativeCaptureProvenance -GhPath $gh
+    }
     $cliProject = Join-Path $toolRoot 'PowerForge.Cli/PowerForge.Cli.csproj'
     if (-not (Test-Path -LiteralPath $cliProject -PathType Leaf)) { throw "PowerForge CLI project is missing: $cliProject" }
 

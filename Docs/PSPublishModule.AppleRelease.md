@@ -584,7 +584,12 @@ expected GitHub repository. It also re-downloads the named provenance artifact
 from the successful source-bound GitHub run and compares its exact bytes before
 building the CLI into an isolated temporary artifacts directory. This prevents
 an editable local provenance copy, a stale ignored binary, or another checkout
-from becoming the publication authority.
+from becoming the publication authority. Capture callers must supply the exact
+platform runtime represented by their images; simulator captures must name the
+simulator runtime rather than the macOS host. The pinned helper intentionally
+rejects `UploadExisting` because an ignored prebuilt archive has no reviewed
+source or byte provenance; use `Upload` to build and upload from the bound source.
+GitHub CLI is required only when a retained capture-provenance artifact is used.
 
 In GitHub Actions, `ApprovedBy` names the protected environment boundary—not the
 workflow initiator. `InitiatedBy` records who started the run, while
