@@ -60,6 +60,7 @@ public static partial class WebSiteBuilder
         var localization = ResolveLocalizationConfig(spec);
         var contentRoots = BuildContentRoots(plan);
         var gitLastModifiedCache = new Dictionary<string, DateTimeOffset?>(StringComparer.OrdinalIgnoreCase);
+        var visualStoryCache = new WebVisualStoryBundleCache();
 
         foreach (var collection in spec.Collections)
         {
@@ -128,7 +129,8 @@ public static partial class WebSiteBuilder
                     ThemeManifest = manifest,
                     ThemeRoot = themeRoot,
                     Engine = shortcodeEngine,
-                    PartialResolver = partialResolver
+                    PartialResolver = partialResolver,
+                    VisualStoryCache = visualStoryCache
                 };
                 var processedBody = ShortcodeProcessor.Apply(effectiveBody, shortcodeContext);
                 var skipMarkdown = false;

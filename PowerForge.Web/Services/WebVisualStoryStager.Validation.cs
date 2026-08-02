@@ -116,7 +116,9 @@ public static partial class WebVisualStoryStager
         WebVisualStoryArtifact artifact,
         string path,
         string displayPath,
-        string normalizedFormat)
+        string normalizedFormat,
+        string bundleRoot,
+        IReadOnlySet<string> declaredArtifactPaths)
     {
         if (IsAnimatedArtifact(artifact))
         {
@@ -137,18 +139,28 @@ public static partial class WebVisualStoryStager
             case "png":
                 ValidatePng(path, displayPath);
                 break;
-            case "html":
             case "text":
                 ValidateUtf8Text(path, displayPath);
+                break;
+            case "html":
+                var html = ReadUtf8Text(path, displayPath);
+                WebVisualStoryHtmlArtifactValidator.Validate(
+                    html,
+                    displayPath,
+                    bundleRoot,
+                    declaredArtifactPaths);
                 break;
         }
     }
 
     private static void ValidateUtf8Text(string path, string displayPath)
+        => _ = ReadUtf8Text(path, displayPath);
+
+    private static string ReadUtf8Text(string path, string displayPath)
     {
         try
         {
-            _ = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
+            return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
                 .GetString(File.ReadAllBytes(path));
         }
         catch (DecoderFallbackException ex)

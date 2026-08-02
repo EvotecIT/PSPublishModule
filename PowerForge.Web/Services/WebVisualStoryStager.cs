@@ -136,6 +136,9 @@ public static partial class WebVisualStoryStager
             static item => item.RelativePath,
             static item => item.RelativePath,
             StringComparer.OrdinalIgnoreCase);
+        var declaredArtifactPaths = resolved
+            .Select(static item => item.RelativePath)
+            .ToHashSet(StringComparer.Ordinal);
 
         var stagingRoot = CreateSiblingPath(outputRoot, "stage");
         try
@@ -177,7 +180,13 @@ public static partial class WebVisualStoryStager
                         $"Visual-story artifact changed while it was being staged: {item.RelativePath}");
                 }
                 var stagedFormat = NormalizeFormat(item.Artifact.Format);
-                ValidateArtifactContent(item.Artifact, temporaryDestination, item.RelativePath, stagedFormat);
+                ValidateArtifactContent(
+                    item.Artifact,
+                    temporaryDestination,
+                    item.RelativePath,
+                    stagedFormat,
+                    stagingRoot,
+                    declaredArtifactPaths);
                 item.Artifact.Role = item.Artifact.Role.Trim().ToLowerInvariant();
                 item.Artifact.Path = item.RelativePath;
                 item.Artifact.Format = stagedFormat;
@@ -291,6 +300,9 @@ public static partial class WebVisualStoryStager
         var maximumTotalArtifactBytes = bundle.ResourceLimits?.MaximumTotalArtifactBytes
                                         ?? DefaultMaximumTotalArtifactBytes;
         var totalArtifactBytes = 0L;
+        var declaredArtifactPaths = bundle.Artifacts
+            .Select(static artifact => artifact.Path.Replace('\\', '/'))
+            .ToHashSet(StringComparer.Ordinal);
         foreach (var artifact in bundle.Artifacts)
         {
             ValidateArtifact(artifact);
@@ -317,7 +329,13 @@ public static partial class WebVisualStoryStager
             if (!string.IsNullOrWhiteSpace(artifact.Sha256) &&
                 !string.Equals(artifact.Sha256, ComputeSha256(artifactPath), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Visual-story artifact digest does not match its manifest: {artifact.Path}");
-            ValidateArtifactContent(artifact, artifactPath, artifact.Path, normalizedFormat);
+            ValidateArtifactContent(
+                artifact,
+                artifactPath,
+                artifact.Path,
+                normalizedFormat,
+                manifestRoot,
+                declaredArtifactPaths);
         }
         return bundle;
     }

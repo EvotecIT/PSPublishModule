@@ -25,6 +25,7 @@ public sealed class ShortcodeRenderContext
     public string? ThemeRoot { get; init; }
     internal ITemplateEngine? Engine { get; init; }
     internal Func<string, string?>? PartialResolver { get; init; }
+    internal WebVisualStoryBundleCache VisualStoryCache { get; init; } = new();
 
     internal static ShortcodeRenderContext FromDataOnly(IReadOnlyDictionary<string, object?> data)
     {

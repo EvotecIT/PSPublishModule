@@ -14,7 +14,7 @@ internal static partial class ShortcodeDefaults
             throw new InvalidOperationException("story shortcode requires a manifest.");
 
         var manifestPath = ResolveVisualStoryManifestPath(context.RootPath, manifestValue);
-        var bundle = WebVisualStoryStager.Load(manifestPath);
+        var bundle = context.VisualStoryCache.Load(manifestPath);
         var baseUrl = ReadAttr(attrs, "base", "baseUrl", "base-url");
         if (string.IsNullOrWhiteSpace(baseUrl))
             baseUrl = DeriveVisualStoryBaseUrl(context, manifestPath);
