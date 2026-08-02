@@ -27,6 +27,7 @@ public sealed class WebVisualStoryHtmlAndCacheTests
     [InlineData("<a href=\"javascript:alert(1)\">Open</a>")]
     [InlineData("<img srcset=\"data:image/png;base64,AAAA 1x, https://example.test/frame.png 2x\">")]
     [InlineData("<img srcset=\"data:image/png;base64,AAAA, https://example.test/frame.png 2x\">")]
+    [InlineData("<link rel=\"preload\" as=\"image\" imagesrcset=\"demo.png 1x, https://example.test/frame.png 2x\">")]
     [InlineData("<div style=\"background-image: \\75rl('https://example.test/frame.png')\"></div>")]
     [InlineData("<div style=\"background-image:image-set('https://example.test/frame.png' 1x)\"></div>")]
     [InlineData("<svg><rect fill=\"url(https://example.test/fill.svg#paint)\"></rect></svg>")]
@@ -61,6 +62,7 @@ public sealed class WebVisualStoryHtmlAndCacheTests
     public void Stage_AllowsDataAndDeclaredCandidatesInSourceSets()
     {
         var root = CreateBundle(
+            "<link rel=\"preload\" as=\"image\" imagesrcset=\"data:image/png;base64,AAAA 1x, demo.png 2x\">" +
             "<img srcset=\"data:image/png;base64,AAAA 1x, demo.png 2x\" alt=\"Completed result\">");
         try
         {

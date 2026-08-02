@@ -57,9 +57,11 @@ internal static class WebVisualStoryHtmlArtifactValidator
                 ValidateAttribute(element, "href", displayPath, bundleRoot, declaredArtifactPaths);
             }
 
-            var sourceSet = element.GetAttribute("srcset");
-            if (!string.IsNullOrWhiteSpace(sourceSet))
+            foreach (var sourceSetAttribute in new[] { "srcset", "imagesrcset" })
             {
+                var sourceSet = element.GetAttribute(sourceSetAttribute);
+                if (string.IsNullOrWhiteSpace(sourceSet))
+                    continue;
                 foreach (var reference in ParseSourceSet(sourceSet))
                     ValidateReference(reference, displayPath, bundleRoot, declaredArtifactPaths);
             }

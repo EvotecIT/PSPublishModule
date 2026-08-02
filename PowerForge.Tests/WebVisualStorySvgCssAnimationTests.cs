@@ -25,6 +25,26 @@ public class WebVisualStorySvgCssAnimationTests
             "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{from{opacity:0}to{opacity:1}}rect{/* keep */animation:fade 1s infinite!important}</style><rect width=\"1\" height=\"1\"/></svg>");
     }
 
+    [Fact]
+    public void Stage_AcceptsSingleEffectiveKeyframeAgainstTheUnderlyingStyle()
+    {
+        StageSvg(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{to{opacity:0}}rect{animation:fade 1s}</style><rect width=\"1\" height=\"1\"/></svg>");
+    }
+
+    [Theory]
+    [InlineData("from{}to{}")]
+    [InlineData("from{opacity:1}to{opacity:1}")]
+    [InlineData("0%{opacity:1}50%{opacity:1}100%{opacity:1}")]
+    public void Stage_RejectsKeyframesThatCannotProduceMotion(string frames)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                $"<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{{{frames}}}rect{{animation:fade 1s}}</style><rect width=\"1\" height=\"1\"/></svg>"));
+
+        Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("! important")]
     [InlineData("!/* priority */important")]

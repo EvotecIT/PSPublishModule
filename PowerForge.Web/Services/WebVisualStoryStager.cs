@@ -72,6 +72,11 @@ public static partial class WebVisualStoryStager
         ValidateBundle(bundle);
         ValidateCompletedArtifact(bundle);
 
+        var outputPathComparison = GetFileSystemPathComparison(outputRoot);
+        var preserveExistingOutput = SamePath(sourceRoot, outputRoot, outputPathComparison);
+        if (!options.Overwrite && Directory.Exists(outputRoot) && !preserveExistingOutput)
+            throw new IOException($"Visual-story output directory already exists: {outputRoot}");
+
         var stagedManifestPath = Path.Combine(outputRoot, StagedManifestFileName);
         if (!options.Overwrite && File.Exists(stagedManifestPath))
             throw new IOException($"Visual-story manifest already exists: {stagedManifestPath}");
@@ -121,8 +126,6 @@ public static partial class WebVisualStoryStager
                 throw new IOException($"Visual-story artifact already exists: {collision.DestinationPath}");
         }
 
-        var outputPathComparison = GetFileSystemPathComparison(outputRoot);
-        var preserveExistingOutput = SamePath(sourceRoot, outputRoot, outputPathComparison);
         var previousPaths = Array.Empty<string>();
         if (options.Overwrite && File.Exists(stagedManifestPath))
         {

@@ -7,32 +7,46 @@ public static partial class WebVisualStoryStager
         var directory = Directory.Exists(path) ? path : Path.GetDirectoryName(path);
         while (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
             directory = Path.GetDirectoryName(directory);
-        if (string.IsNullOrWhiteSpace(directory))
-            directory = Path.GetPathRoot(path);
-        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
-            return StringComparison.Ordinal;
 
-        var probeName = ".powerforge-case-probe-" + Guid.NewGuid().ToString("N");
-        var probePath = Path.Combine(directory, probeName);
-        var alternatePath = Path.Combine(directory, probeName.ToUpperInvariant());
-        try
+        while (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
         {
-            using (new FileStream(
-                       probePath,
-                       FileMode.CreateNew,
-                       FileAccess.Write,
-                       FileShare.ReadWrite | FileShare.Delete))
+            var name = Path.GetFileName(directory);
+            var parent = Path.GetDirectoryName(directory);
+            if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(parent))
             {
+                var alternateName = ToggleCase(name);
+                if (!string.Equals(name, alternateName, StringComparison.Ordinal))
+                {
+                    return Directory.Exists(Path.Combine(parent, alternateName))
+                        ? StringComparison.OrdinalIgnoreCase
+                        : StringComparison.Ordinal;
+                }
             }
-            return File.Exists(alternatePath)
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal;
+
+            directory = parent;
         }
-        finally
+
+        return OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+    }
+
+    private static string ToggleCase(string value)
+    {
+        var characters = value.ToCharArray();
+        for (var index = 0; index < characters.Length; index++)
         {
-            if (File.Exists(probePath))
-                File.Delete(probePath);
+            var alternate = char.IsUpper(characters[index])
+                ? char.ToLowerInvariant(characters[index])
+                : char.ToUpperInvariant(characters[index]);
+            if (alternate == characters[index])
+                continue;
+
+            characters[index] = alternate;
+            return new string(characters);
         }
+
+        return value;
     }
 
     private static bool SamePath(string left, string right, StringComparison comparison)

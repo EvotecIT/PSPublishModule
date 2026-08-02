@@ -124,6 +124,61 @@ public partial class WebVisualStoryStagerTests
     }
 
     [Fact]
+    public void Stage_RejectsExistingOutputDirectoryWithoutOverwrite_BeforeReplacingUndeclaredFiles()
+    {
+        var root = CreateBundle();
+        var output = Path.Combine(root, "published");
+        var marker = Path.Combine(output, "keep.txt");
+        try
+        {
+            Directory.CreateDirectory(output);
+            File.WriteAllText(marker, "keep");
+
+            var error = Assert.Throws<IOException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = Path.Combine(root, "source", "story.json"),
+                    OutputPath = output,
+                    Overwrite = false
+                }));
+
+            Assert.Contains("output directory already exists", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("keep", File.ReadAllText(marker));
+            Assert.False(File.Exists(Path.Combine(output, "visual-story.json")));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void GetFileSystemPathComparison_DoesNotRequireWritingToTheTargetDirectory()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-read-only-case-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var originalMode = File.GetUnixFileMode(root);
+        try
+        {
+            File.SetUnixFileMode(
+                root,
+                UnixFileMode.UserRead | UnixFileMode.UserExecute |
+                UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+
+            Assert.Equal(StringComparison.Ordinal, WebVisualStoryStager.GetFileSystemPathComparison(root));
+        }
+        finally
+        {
+            File.SetUnixFileMode(root, originalMode);
+            Directory.Delete(root);
+        }
+    }
+
+    [Fact]
     public void Stage_RejectsDeclaredIntegrityThatDoesNotMatchSource()
     {
         var root = CreateBundle();
