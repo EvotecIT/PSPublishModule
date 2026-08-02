@@ -60,8 +60,15 @@ internal static class DocumentationHiddenParameterNormalizer
                 visibleDisplayTypes);
         }
 
-        command.Syntax = (command.Syntax ?? new List<DocumentationSyntaxHelp>())
-            .Where(syntax => syntax is not null && !IsHiddenOnlyParameterSet(syntax, parameters))
+        var syntaxItems = command.Syntax ?? new List<DocumentationSyntaxHelp>();
+        var namedParameterSets = syntaxItems
+            .Where(syntax => syntax is not null && !string.IsNullOrWhiteSpace(syntax.Name))
+            .Select(syntax => syntax.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        command.Syntax = syntaxItems
+            .Where(syntax => syntax is not null &&
+                             !IsHiddenOnlyParameterSet(syntax, parameters, namedParameterSets))
             .ToList();
 
         command.Parameters = parameters
@@ -88,15 +95,26 @@ internal static class DocumentationHiddenParameterNormalizer
 
     private static bool IsHiddenOnlyParameterSet(
         DocumentationSyntaxHelp syntax,
-        IEnumerable<DocumentationParameterHelp> parameters)
+        IEnumerable<DocumentationParameterHelp> parameters,
+        IReadOnlyCollection<string> namedParameterSets)
     {
         if (string.IsNullOrWhiteSpace(syntax.Name)) return false;
         var setSpecificParameters = parameters
             .Where(parameter => parameter is not null &&
                                 (parameter.ParameterSets ?? new List<string>()).Any(set =>
-                                    string.Equals(set, syntax.Name, StringComparison.OrdinalIgnoreCase)))
+                                    string.Equals(set, syntax.Name, StringComparison.OrdinalIgnoreCase)) &&
+                                !BelongsToEveryNamedSet(parameter, namedParameterSets))
             .ToArray();
         return setSpecificParameters.Length > 0 && setSpecificParameters.All(parameter => parameter.DontShow);
+    }
+
+    private static bool BelongsToEveryNamedSet(
+        DocumentationParameterHelp parameter,
+        IEnumerable<string> namedParameterSets)
+    {
+        var parameterSets = parameter.ParameterSets ?? new List<string>();
+        return namedParameterSets.All(name => parameterSets.Any(set =>
+            string.Equals(set, name, StringComparison.OrdinalIgnoreCase)));
     }
 
     private static bool MatchesRuntimeType(DocumentationTypeHelp input, ISet<string> parameterTypes)

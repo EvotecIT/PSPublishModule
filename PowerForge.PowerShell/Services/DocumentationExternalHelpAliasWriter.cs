@@ -106,6 +106,8 @@ internal static class DocumentationExternalHelpAliasWriter
                 continue;
 
             Directory.CreateDirectory(aliasDirectory);
+            if (IsReparsePoint(aliasPath))
+                continue;
             if (!CanWriteGeneratedAlias(aliasPath, moduleName))
                 continue;
             File.WriteAllText(aliasPath, content, new System.Text.UTF8Encoding(false));
@@ -137,6 +139,27 @@ internal static class DocumentationExternalHelpAliasWriter
         var prefix = ReadPrefix(path);
         return prefix.Contains(GetGeneratedAliasMarker(moduleName), StringComparison.Ordinal) ||
                prefix.Contains(LegacyGeneratedAliasMarker, StringComparison.Ordinal);
+    }
+
+    internal static bool IsReparsePoint(string path)
+    {
+        try
+        {
+            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+        }
+        catch (FileNotFoundException)
+        {
+            return false;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return false;
+        }
+        catch
+        {
+            // Fail closed when an existing path cannot be inspected safely.
+            return true;
+        }
     }
 
     private static string ReadPrefix(string path)

@@ -305,6 +305,46 @@ public sealed class DocumentationBinaryMetadataContractTests
     }
 
     [Fact]
+    public void ExternalHelpAliases_DoNotWriteThroughFileLinks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-binary-alias-write-file-link-root-" + Guid.NewGuid().ToString("N"));
+        var outside = Path.Combine(Path.GetTempPath(), "pf-binary-alias-write-file-link-target-" + Guid.NewGuid().ToString("N") + ".xml");
+        var cultureDirectory = Path.Combine(root, "en-US");
+        Directory.CreateDirectory(cultureDirectory);
+
+        try
+        {
+            var primary = Path.Combine(cultureDirectory, "Owner-help.xml");
+            File.WriteAllText(primary, "<helpItems />");
+            var assemblyPath = Path.Combine(root, "Foo.dll");
+            File.WriteAllText(assemblyPath, string.Empty);
+            const string outsideContent = "<!-- PowerForgeGeneratedExternalHelpAlias --><outside />";
+            File.WriteAllText(outside, outsideContent);
+            var aliasPath = Path.Combine(cultureDirectory, "Foo.dll-Help.xml");
+            try { File.CreateSymbolicLink(aliasPath, outside); }
+            catch (Exception exception) when (exception is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+            {
+                return;
+            }
+
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands = [new DocumentationCommandHelp { AssemblyPath = assemblyPath }]
+            };
+
+            var paths = DocumentationExternalHelpAliasWriter.WriteAliases(payload, primary, "OwnerModule");
+
+            Assert.Single(paths);
+            Assert.Equal(outsideContent, File.ReadAllText(outside));
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+            try { File.Delete(outside); } catch { }
+        }
+    }
+
+    [Fact]
     public void ExternalHelpAliases_UseExplicitDllNamedPrimaryForLegacyOwnership()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-binary-alias-dll-primary-" + Guid.NewGuid().ToString("N"));

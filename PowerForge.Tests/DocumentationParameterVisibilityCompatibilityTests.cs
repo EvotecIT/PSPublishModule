@@ -52,6 +52,7 @@ function Get-MixedVisibilityFixture {
 function Get-HiddenOnlySetFixture {
     [CmdletBinding(DefaultParameterSetName = 'Visible')]
     param(
+        [string] $Shared,
         [Parameter(ParameterSetName = 'Visible')]
         [switch] $Visible,
         [Parameter(ParameterSetName = 'Hidden', DontShow = $true, Mandatory = $true)]
@@ -128,7 +129,9 @@ Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture
                     syntax.Text.Contains("Shared", StringComparison.Ordinal));
 
                 var hiddenOnlyCommand = Assert.Single(payload.Commands, item => item.Name == "Get-HiddenOnlySetFixture");
-                Assert.Single(hiddenOnlyCommand.Parameters, parameter => parameter.Name == "Visible");
+                Assert.Equal(2, hiddenOnlyCommand.Parameters.Count);
+                Assert.Contains(hiddenOnlyCommand.Parameters, parameter => parameter.Name == "Shared");
+                Assert.Contains(hiddenOnlyCommand.Parameters, parameter => parameter.Name == "Visible");
                 Assert.DoesNotContain(hiddenOnlyCommand.Syntax, syntax =>
                     string.Equals(syntax.Name, "Hidden", StringComparison.OrdinalIgnoreCase));
                 Assert.Contains(hiddenOnlyCommand.Syntax, syntax =>

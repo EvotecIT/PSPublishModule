@@ -147,6 +147,27 @@ public sealed class ModulePipelineDocumentationSyncTests
             {
                 // Link creation is not available on every test host.
             }
+            var outsideFile = Path.Combine(outsideRoot, "linked-file.xml");
+            const string outsideFileContent = "<!-- PowerForgeGeneratedExternalHelpAlias --><outside />";
+            File.WriteAllText(outsideFile, outsideFileContent);
+            var linkedFileCreated = false;
+            var linkedFileTargetDirectory = Path.Combine(projectRoot, "FileLinked", "en-US");
+            Directory.CreateDirectory(linkedFileTargetDirectory);
+            var linkedFileTarget = Path.Combine(linkedFileTargetDirectory, "FileLinked.Binary.dll-Help.xml");
+            try
+            {
+                File.CreateSymbolicLink(linkedFileTarget, outsideFile);
+                linkedFileCreated = true;
+                var stagedFileLinkedHelpDirectory = Path.Combine(root.FullName, "Staging", "FileLinked", "en-US");
+                Directory.CreateDirectory(stagedFileLinkedHelpDirectory);
+                var stagedFileLinkedHelp = Path.Combine(stagedFileLinkedHelpDirectory, "FileLinked.Binary.dll-Help.xml");
+                File.WriteAllText(stagedFileLinkedHelp, generatedMarker + "<helpItems />");
+                externalHelpFilePaths.Add(stagedFileLinkedHelp);
+            }
+            catch (Exception exception) when (exception is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+            {
+                // Link creation is not available on every test host.
+            }
             var targetHelpDir = Path.Combine(projectRoot, "en-US");
             Directory.CreateDirectory(targetHelpDir);
             File.WriteAllText(Path.Combine(targetHelpDir, "TestModule-help.xml"), "<oldHelpItems />");
@@ -229,6 +250,8 @@ public sealed class ModulePipelineDocumentationSyncTests
             Assert.True(File.Exists(otherModuleHelp));
             if (linkedTargetCreated)
                 Assert.False(File.Exists(Path.Combine(outsideRoot, "en-US", "Linked.Binary.dll-Help.xml")));
+            if (linkedFileCreated)
+                Assert.Equal(outsideFileContent, File.ReadAllText(outsideFile));
         }
         finally
         {

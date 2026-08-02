@@ -139,6 +139,8 @@ public sealed partial class ModulePipelineRunner
                     continue;
                 if (!string.IsNullOrWhiteSpace(targetHelpDirectory))
                     Directory.CreateDirectory(targetHelpDirectory);
+                if (DocumentationExternalHelpAliasWriter.IsReparsePoint(targetHelpFile))
+                    continue;
                 if (DocumentationExternalHelpAliasWriter.IsGeneratedAlias(sourceHelpFile) &&
                     !DocumentationExternalHelpAliasWriter.CanWriteGeneratedAlias(targetHelpFile, plan.ModuleName))
                     continue;
