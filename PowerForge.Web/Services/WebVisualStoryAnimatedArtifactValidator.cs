@@ -222,7 +222,7 @@ internal static class WebVisualStoryAnimatedArtifactValidator
             case "set":
                 return reader.GetAttribute("attributeName") is { Length: > 0 } &&
                        reader.GetAttribute("to") is { Length: > 0 } &&
-                       HasAutomaticSmilBegin(reader.GetAttribute("begin"));
+                       HasEffectiveSmilTiming(reader);
             case "animate":
             case "animateTransform":
                 return reader.GetAttribute("attributeName") is { Length: > 0 } &&

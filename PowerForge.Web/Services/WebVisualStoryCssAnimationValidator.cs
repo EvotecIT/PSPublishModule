@@ -148,6 +148,16 @@ internal static class WebVisualStoryCssAnimationValidator
                 quote = character;
                 continue;
             }
+            if (character == '@' &&
+                IsAtRuleBoundary(normalizedCss, index) &&
+                StartsWithCssKeyword(normalizedCss, index, "@import"))
+            {
+                var importCursor = index + 7;
+                while (importCursor < normalizedCss.Length && char.IsWhiteSpace(normalizedCss[importCursor]))
+                    importCursor++;
+                if (importCursor < normalizedCss.Length && normalizedCss[importCursor] is '\'' or '"')
+                    return true;
+            }
             if (!StartsWithCssKeyword(normalizedCss, index, "url"))
                 continue;
             var cursor = index + 3;

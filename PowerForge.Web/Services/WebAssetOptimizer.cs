@@ -136,6 +136,10 @@ public static partial class WebAssetOptimizer
                 policy.Rewrites,
                 siteRoot,
                 protectedStoryArtifacts);
+            protectedStoryArtifacts.UnionWith(FindVisualStoryArtifactPaths(siteRoot));
+            htmlFiles = htmlFiles
+                .Where(path => !protectedStoryArtifacts.Contains(Path.GetFullPath(path)))
+                .ToArray();
             foreach (var htmlFile in htmlFiles)
             {
                 var content = File.ReadAllText(htmlFile);

@@ -145,6 +145,23 @@ public class WebVisualStorySvgCssAnimationTests
             "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1\" height=\"1\"><animate attributeName=\"opacity\" dur=\"1s\" begin=\"250ms\" repeatCount=\"2\" values=\"0;1\"/></rect></svg>");
     }
 
+    [Fact]
+    public void Stage_RejectsUntimedSetAsStaticPresentation()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1\" height=\"1\"><set attributeName=\"opacity\" to=\"1\"/></rect></svg>"));
+
+        Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Stage_AcceptsTimedSetTransition()
+    {
+        StageSvg(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1\" height=\"1\"><set attributeName=\"opacity\" to=\"1\" dur=\"1s\"/></rect></svg>");
+    }
+
     [Theory]
     [InlineData("<image href=\"https://example.test/frame.png\"/>")]
     [InlineData("<image href=\"../frame.png\"/>")]
@@ -152,6 +169,8 @@ public class WebVisualStorySvgCssAnimationTests
     [InlineData("<style>rect{fill:url('../fill.svg')}</style>")]
     [InlineData("<rect filter=\"url(https://example.test/filter.svg#blur)\"/>")]
     [InlineData("<rect fill=\"url(../paint.svg#gradient)\"/>")]
+    [InlineData("<style>@import 'https://example.test/story.css';</style>")]
+    [InlineData("<style>@import \"../story.css\";</style>")]
     public void Stage_RejectsExternalSvgResources(string content)
     {
         var error = Assert.Throws<InvalidOperationException>(() =>
