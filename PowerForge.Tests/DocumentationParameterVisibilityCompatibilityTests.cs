@@ -49,10 +49,19 @@ function Get-MixedVisibilityFixture {
         [string] $Shared
     )
 }
+function Get-HiddenOnlySetFixture {
+    [CmdletBinding(DefaultParameterSetName = 'Visible')]
+    param(
+        [Parameter(ParameterSetName = 'Visible')]
+        [switch] $Visible,
+        [Parameter(ParameterSetName = 'Hidden', DontShow = $true, Mandatory = $true)]
+        [switch] $Secret
+    )
+}
 function GetDocumentationParameterDeclaringMetadata { throw 'Target helper shadow was invoked.' }
 function TestDocumentationParameterDontShow { throw 'Target helper shadow was invoked.' }
 function GetDocumentationRuntimeInputs { throw 'Target helper shadow was invoked.' }
-Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture,Get-GenericVisibilityCollisionFixture,Get-MixedVisibilityFixture,GetDocumentationParameterDeclaringMetadata,TestDocumentationParameterDontShow,GetDocumentationRuntimeInputs
+Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture,Get-GenericVisibilityCollisionFixture,Get-MixedVisibilityFixture,Get-HiddenOnlySetFixture,GetDocumentationParameterDeclaringMetadata,TestDocumentationParameterDontShow,GetDocumentationRuntimeInputs
 """, new UTF8Encoding(false));
             File.WriteAllText(manifestPath, """
 @{
@@ -61,7 +70,7 @@ Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture
     GUID = '34343434-3434-3434-3434-343434343434'
     Author = 'PowerForge.Tests'
     Description = 'Parameter visibility fixture.'
-    FunctionsToExport = @('Get-VisibilityFixture','Get-GenericVisibilityFixture','Get-GenericVisibilityCollisionFixture','Get-MixedVisibilityFixture','GetDocumentationParameterDeclaringMetadata','TestDocumentationParameterDontShow','GetDocumentationRuntimeInputs')
+    FunctionsToExport = @('Get-VisibilityFixture','Get-GenericVisibilityFixture','Get-GenericVisibilityCollisionFixture','Get-MixedVisibilityFixture','Get-HiddenOnlySetFixture','GetDocumentationParameterDeclaringMetadata','TestDocumentationParameterDontShow','GetDocumentationRuntimeInputs')
     CmdletsToExport = @()
     AliasesToExport = @()
     VariablesToExport = @()
@@ -117,6 +126,26 @@ Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture
                 Assert.Single(mixedCommand.Parameters, parameter => parameter.Name == "Shared");
                 Assert.Contains(mixedCommand.Syntax, syntax =>
                     syntax.Text.Contains("Shared", StringComparison.Ordinal));
+
+                var hiddenOnlyCommand = Assert.Single(payload.Commands, item => item.Name == "Get-HiddenOnlySetFixture");
+                Assert.Single(hiddenOnlyCommand.Parameters, parameter => parameter.Name == "Visible");
+                Assert.DoesNotContain(hiddenOnlyCommand.Syntax, syntax =>
+                    string.Equals(syntax.Name, "Hidden", StringComparison.OrdinalIgnoreCase));
+                Assert.Contains(hiddenOnlyCommand.Syntax, syntax =>
+                    string.Equals(syntax.Name, "Visible", StringComparison.OrdinalIgnoreCase));
+
+                var hiddenOnlyMarkdown = File.ReadAllText(Path.Combine(docsRoot, "Get-HiddenOnlySetFixture.md"));
+                Assert.DoesNotContain("### Hidden", hiddenOnlyMarkdown, StringComparison.OrdinalIgnoreCase);
+                var hiddenOnlyMaml = System.Xml.Linq.XDocument.Load(mamlPath);
+                var hiddenOnlyCommandElement = Assert.Single(
+                    hiddenOnlyMaml.Descendants(),
+                    element => element.Name.LocalName == "command" &&
+                               element.Descendants().Any(child =>
+                                   child.Name.LocalName == "name" &&
+                                   child.Value == "Get-HiddenOnlySetFixture"));
+                Assert.DoesNotContain(
+                    hiddenOnlyCommandElement.Descendants().SelectMany(element => element.Attributes("parameterSetName")),
+                    attribute => string.Equals(attribute.Value, "Hidden", StringComparison.OrdinalIgnoreCase));
             }
         }
         finally

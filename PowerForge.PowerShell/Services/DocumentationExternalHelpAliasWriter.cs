@@ -26,7 +26,8 @@ internal static class DocumentationExternalHelpAliasWriter
 
         var marker = GetGeneratedAliasMarker(moduleName);
         var legacyPrimaryContent = GetLegacyPrimaryContent(rootDirectory, primaryFileName);
-        var nestedModuleRoots = GetNestedModuleRoots(rootDirectory, moduleName);
+        var nestedModuleRoots = GetNestedModuleRoots(rootDirectory);
+        var sameNameNestedModuleRoots = GetNestedModuleRoots(rootDirectory, moduleName);
 
         foreach (var aliasPath in EnumerateFilesWithoutDirectoryLinks(rootDirectory)
                  .Where(path => Path.GetFileName(path)
@@ -36,8 +37,9 @@ internal static class DocumentationExternalHelpAliasWriter
             {
                 var prefix = ReadPrefix(aliasPath);
                 var insideNestedModule = nestedModuleRoots.Any(root => IsPathWithinRoot(root, aliasPath));
+                var insideSameNameNestedModule = sameNameNestedModuleRoots.Any(root => IsPathWithinRoot(root, aliasPath));
                 var ownedByCurrentModule =
-                    !insideNestedModule &&
+                    !insideSameNameNestedModule &&
                     prefix.Contains(marker, StringComparison.Ordinal);
                 var legacyOwnedByCurrentModule =
                     legacyPrimaryContent.Count > 0 &&
@@ -187,7 +189,7 @@ internal static class DocumentationExternalHelpAliasWriter
         return content;
     }
 
-    private static string[] GetNestedModuleRoots(string rootDirectory, string moduleName)
+    private static string[] GetNestedModuleRoots(string rootDirectory, string? moduleName = null)
     {
         var pathComparison = FrameworkCompatibility.GetPathStringComparison(rootDirectory);
         var pathComparer = pathComparison == StringComparison.Ordinal
@@ -195,10 +197,10 @@ internal static class DocumentationExternalHelpAliasWriter
             : StringComparer.OrdinalIgnoreCase;
         return EnumerateFilesWithoutDirectoryLinks(rootDirectory)
             .Where(path => Path.GetFileName(path).EndsWith(".psd1", StringComparison.OrdinalIgnoreCase))
-            .Where(path => string.Equals(
-                Path.GetFileNameWithoutExtension(path),
-                moduleName,
-                StringComparison.OrdinalIgnoreCase))
+            .Where(path => moduleName is null || string.Equals(
+                    Path.GetFileNameWithoutExtension(path),
+                    moduleName,
+                    StringComparison.OrdinalIgnoreCase))
             .Where(IsModuleManifest)
             .Select(Path.GetDirectoryName)
             .Where(path => !string.IsNullOrWhiteSpace(path) &&

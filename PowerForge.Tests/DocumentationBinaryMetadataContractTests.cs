@@ -147,6 +147,10 @@ public sealed class DocumentationBinaryMetadataContractTests
             File.WriteAllText(
                 outerAliasUnderOtherModule,
                 DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "<helpItems />");
+            var legacyAliasUnderOtherModule = Path.Combine(otherNameModuleRoot, "Lib", "en-US", "Legacy.DLL-Help.xml");
+            File.WriteAllText(
+                legacyAliasUnderOtherModule,
+                DocumentationExternalHelpAliasWriter.GetLegacyGeneratedAliasMarker() + "<helpItems />");
             var staleMixedCaseAlias = Path.Combine(root, "Lib", "Removed", "en-US", "Removed.DLL-Help.xml");
             Directory.CreateDirectory(Path.GetDirectoryName(staleMixedCaseAlias)!);
             File.WriteAllText(
@@ -186,6 +190,7 @@ public sealed class DocumentationBinaryMetadataContractTests
             Assert.True(File.Exists(otherAlias));
             Assert.True(File.Exists(sameNameAlias));
             Assert.False(File.Exists(outerAliasUnderOtherModule));
+            Assert.True(File.Exists(legacyAliasUnderOtherModule));
             Assert.False(File.Exists(staleMixedCaseAlias));
             Assert.False(File.Exists(dataAlias));
         }

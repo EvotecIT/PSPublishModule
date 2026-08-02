@@ -60,6 +60,10 @@ internal static class DocumentationHiddenParameterNormalizer
                 visibleDisplayTypes);
         }
 
+        command.Syntax = (command.Syntax ?? new List<DocumentationSyntaxHelp>())
+            .Where(syntax => syntax is not null && !IsHiddenOnlyParameterSet(syntax, parameters))
+            .ToList();
+
         command.Parameters = parameters
             .Where(parameter => parameter is not null && !parameter.DontShow)
             .ToList();
@@ -81,6 +85,19 @@ internal static class DocumentationHiddenParameterNormalizer
     private static bool AcceptsPipelineInput(DocumentationParameterHelp parameter)
         => !string.IsNullOrWhiteSpace(parameter.PipelineInput) &&
            !parameter.PipelineInput.StartsWith("False", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsHiddenOnlyParameterSet(
+        DocumentationSyntaxHelp syntax,
+        IEnumerable<DocumentationParameterHelp> parameters)
+    {
+        if (string.IsNullOrWhiteSpace(syntax.Name)) return false;
+        var setSpecificParameters = parameters
+            .Where(parameter => parameter is not null &&
+                                (parameter.ParameterSets ?? new List<string>()).Any(set =>
+                                    string.Equals(set, syntax.Name, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+        return setSpecificParameters.Length > 0 && setSpecificParameters.All(parameter => parameter.DontShow);
+    }
 
     private static bool MatchesRuntimeType(DocumentationTypeHelp input, ISet<string> parameterTypes)
         => parameterTypes.Contains(input.ClrTypeName ?? string.Empty) ||
