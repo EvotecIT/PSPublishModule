@@ -240,6 +240,26 @@ internal sealed class DocumentationParameterHelp
     [DataMember(Name = "type")]
     public string Type { get; set; } = string.Empty;
 
+    /// <summary>Underlying nullable type name captured from the target runtime.</summary>
+    [DataMember(Name = "nullableUnderlyingTypeName")]
+    public string? NullableUnderlyingTypeName { get; set; }
+
+    /// <summary>Outer-to-inner CLR array ranks surrounding the nullable element type.</summary>
+    [DataMember(Name = "nullableArrayRanks")]
+    public List<int> NullableArrayRanks { get; set; } = new();
+
+    /// <summary>Full name of the .NET type that declares the cmdlet property.</summary>
+    [DataMember(Name = "declaringType")]
+    public string? DeclaringType { get; set; }
+
+    /// <summary>Assembly path of the .NET type that declares the cmdlet property.</summary>
+    [DataMember(Name = "declaringAssemblyPath")]
+    public string? DeclaringAssemblyPath { get; set; }
+
+    /// <summary>True when PowerShell marks the parameter as hidden from help.</summary>
+    [DataMember(Name = "dontShow")]
+    public bool DontShow { get; set; }
+
     /// <summary>Parameter description.</summary>
     [DataMember(Name = "description")]
     public string Description { get; set; } = string.Empty;

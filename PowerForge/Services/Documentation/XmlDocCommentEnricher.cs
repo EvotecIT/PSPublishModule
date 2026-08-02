@@ -33,39 +33,44 @@ internal sealed class XmlDocCommentEnricher
         if (cmdlets.Length == 0) return;
 
         var xmlCache = new Dictionary<string, XmlDocFile>(StringComparer.OrdinalIgnoreCase);
-        foreach (var cmd in cmdlets)
+
+        XmlDocFile? LoadXmlForAssembly(string? assemblyPathRaw, string commandName)
         {
-            var implementingType = cmd.ImplementingType!.Trim();
-            var assemblyPathRaw = cmd.AssemblyPath!.Trim().Trim('"');
+            var candidate = (assemblyPathRaw ?? string.Empty).Trim().Trim('"');
+            if (candidate.Length == 0) return null;
 
             string assemblyPath;
-            try { assemblyPath = Path.GetFullPath(assemblyPathRaw); }
-            catch { assemblyPath = assemblyPathRaw; }
-
-            if (string.IsNullOrWhiteSpace(assemblyPath) || !File.Exists(assemblyPath))
-                continue;
+            try { assemblyPath = Path.GetFullPath(candidate); }
+            catch { assemblyPath = candidate; }
+            if (!File.Exists(assemblyPath)) return null;
 
             var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
             if (string.IsNullOrWhiteSpace(xmlPath) || !File.Exists(xmlPath))
             {
                 if (_logger.IsVerbose)
-                    _logger.Verbose($"XML docs not found for '{cmd.Name}' ({assemblyPath}). Expected: {xmlPath}");
-                continue;
+                    _logger.Verbose($"XML docs not found for '{commandName}' ({assemblyPath}). Expected: {xmlPath}");
+                return null;
             }
 
-            if (!xmlCache.TryGetValue(xmlPath, out var xml))
+            if (xmlCache.TryGetValue(xmlPath, out var cached)) return cached;
+            try
             {
-                try
-                {
-                    xml = XmlDocFile.Load(xmlPath);
-                    xmlCache[xmlPath] = xml;
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warn($"Failed to read XML docs '{xmlPath}'. Error: {ex.Message}");
-                    continue;
-                }
+                var loaded = XmlDocFile.Load(xmlPath);
+                xmlCache[xmlPath] = loaded;
+                return loaded;
             }
+            catch (Exception ex)
+            {
+                _logger.Warn($"Failed to read XML docs '{xmlPath}'. Error: {ex.Message}");
+                return null;
+            }
+        }
+
+        foreach (var cmd in cmdlets)
+        {
+            var implementingType = cmd.ImplementingType!.Trim();
+            var xml = LoadXmlForAssembly(cmd.AssemblyPath, cmd.Name);
+            if (xml is null) continue;
 
             var typeMember = xml.TryGetMember("T:" + implementingType);
             if (typeMember is not null)
@@ -135,7 +140,15 @@ internal sealed class XmlDocCommentEnricher
                 if (!NeedsText(p.Description)) continue;
                 if (string.IsNullOrWhiteSpace(p.Name)) continue;
 
+                var declaringType = string.IsNullOrWhiteSpace(p.DeclaringType)
+                    ? implementingType
+                    : p.DeclaringType!.Trim();
+                var parameterXml = string.IsNullOrWhiteSpace(p.DeclaringAssemblyPath)
+                    ? xml
+                    : LoadXmlForAssembly(p.DeclaringAssemblyPath, cmd.Name) ?? xml;
                 var member =
+                    parameterXml.TryGetMember("P:" + declaringType + "." + p.Name.Trim()) ??
+                    parameterXml.TryGetMember("F:" + declaringType + "." + p.Name.Trim()) ??
                     xml.TryGetMember("P:" + implementingType + "." + p.Name.Trim()) ??
                     xml.TryGetMember("F:" + implementingType + "." + p.Name.Trim());
 

@@ -33,6 +33,9 @@ function GetCollectorHelperFunctionNames {
     'GetDictionaryComparer',
     'GetDictionaryConstructorExpression',
     'GetDocumentedModuleCommands',
+    'GetDocumentationParameterDeclaringMetadata',
+    'GetDocumentationParameterNames',
+    'GetDocumentationParameterRuntimeMetadata',
     'GetExactLoadedTypeMatches',
     'GetKnownDictionaryComparerExpression',
     'GetKnownDictionaryComparerName',
@@ -53,6 +56,7 @@ function GetCollectorHelperFunctionNames {
     'TestCollectionHasItemOnlyBackingStore',
     'TestExactRuntimeValueType',
     'TestGenuineRuntimeTypeValue',
+    'TestDocumentationParameterDontShow',
     'TestPowerShellSimpleTypeName',
     'TestPowerShellTypeLiteral',
     'TestPowerShellTypeLiteralName',
@@ -98,6 +102,83 @@ function NewDocumentationModuleSnapshot([object]$manifest, [string]$moduleName) 
   }
 }
 
+function GetDocumentationParameterDeclaringMetadata([type]$implementingType, [string]$parameterName) {
+  if ($null -eq $implementingType -or [string]::IsNullOrWhiteSpace($parameterName)) { return $null }
+  try {
+    $property = $implementingType.GetProperty(
+      $parameterName,
+      [System.Reflection.BindingFlags]'Instance,Public,FlattenHierarchy')
+    if ($null -ne $property -and $null -ne $property.DeclaringType) {
+      return [pscustomobject]@{
+        TypeName = [string]$property.DeclaringType.FullName
+        AssemblyPath = $(try { [string]$property.DeclaringType.Assembly.Location } catch { $null })
+      }
+    }
+  } catch {
+    return $null
+  }
+  return $null
+}
+
+function TestDocumentationParameterDontShow([object[]]$attributes) {
+  foreach ($attribute in @($attributes)) {
+    if ($attribute -is [System.Management.Automation.ParameterAttribute] -and $attribute.DontShow) {
+      return $true
+    }
+  }
+  return $false
+}
+
+function GetDocumentationParameterRuntimeMetadata(
+  [System.Management.Automation.CommandInfo]$command,
+  [string]$parameterName
+) {
+  $metadata = $null
+  try { $metadata = $command.Parameters[$parameterName] } catch { $metadata = $null }
+  $parameterType = if ($null -ne $metadata) { $metadata.ParameterType } else { $null }
+  $nullableArrayRanks = Microsoft.PowerShell.Utility\New-Object System.Collections.Generic.List[int]
+  $elementType = $parameterType
+  while ($null -ne $elementType -and $elementType.IsArray) {
+    $nullableArrayRanks.Add([int]$elementType.GetArrayRank())
+    $elementType = $elementType.GetElementType()
+  }
+  $nullableUnderlyingType = if ($null -ne $elementType) {
+    [System.Nullable]::GetUnderlyingType($elementType)
+  } else { $null }
+  $enumType = if ($null -ne $nullableUnderlyingType) { $nullableUnderlyingType } else { $elementType }
+  $attributes = if ($null -ne $metadata) { @($metadata.Attributes) } else { @() }
+  $declaringMetadata = GetDocumentationParameterDeclaringMetadata $command.ImplementingType $parameterName
+  return [pscustomobject]@{
+    Metadata = $metadata
+    ParameterType = $parameterType
+    EnumType = $enumType
+    DisplayName = $(if ($null -ne $parameterType) { [string]$parameterType.Name } else { '' })
+    NullableUnderlyingTypeName = $(if ($null -ne $nullableUnderlyingType) { [string]$nullableUnderlyingType.Name } else { $null })
+    NullableArrayRanks = @($nullableArrayRanks)
+    DeclaringType = $(if ($null -ne $declaringMetadata) { $declaringMetadata.TypeName } else { $null })
+    DeclaringAssemblyPath = $(if ($null -ne $declaringMetadata) { $declaringMetadata.AssemblyPath } else { $null })
+    DontShow = TestDocumentationParameterDontShow $attributes
+  }
+}
+
+function GetDocumentationParameterNames(
+  [System.Management.Automation.CommandInfo]$command,
+  [object[]]$helpParameters
+) {
+  $commonNames = @(
+    'Verbose','Debug','ErrorAction','ErrorVariable','WarningAction','WarningVariable',
+    'InformationAction','InformationVariable','OutVariable','OutBuffer','PipelineVariable',
+    'WhatIf','Confirm','ProgressAction')
+  $names = @()
+  try { $names = @($command.Parameters.Keys) } catch { $names = @() }
+  foreach ($helpParameter in @($helpParameters)) {
+    try { $names += [string]$helpParameter.Name } catch { }
+  }
+  return @($names | Microsoft.PowerShell.Core\Where-Object {
+    $_ -and ($commonNames -notcontains $_)
+  } | Microsoft.PowerShell.Utility\Sort-Object -Unique)
+}
+
 function NewCollectorProtocol([System.Management.Automation.PSModuleInfo]$helperModule) {
   return [pscustomobject]@{
     ConvertToRuntimeDefaultValue = $helperModule.ExportedFunctions['ConvertToRuntimeDefaultValue']
@@ -105,6 +186,8 @@ function NewCollectorProtocol([System.Management.Automation.PSModuleInfo]$helper
     ConvertToUtf8SafeJsonText = $helperModule.ExportedFunctions['ConvertToUtf8SafeJsonText']
     EmitError = (Microsoft.PowerShell.Core\Get-Command EmitError -CommandType Function).ScriptBlock
     GetCanonicalTypeNameFromType = $helperModule.ExportedFunctions['GetCanonicalTypeNameFromType']
+    GetParameterRuntimeMetadata = (Microsoft.PowerShell.Core\Get-Command GetDocumentationParameterRuntimeMetadata -CommandType Function).ScriptBlock
+    GetParameterNames = (Microsoft.PowerShell.Core\Get-Command GetDocumentationParameterNames -CommandType Function).ScriptBlock
     GetDocumentedModuleCommands = (Microsoft.PowerShell.Core\Get-Command GetDocumentedModuleCommands -CommandType Function).ScriptBlock
     GetOutputTypeSnapshot = $helperModule.ExportedFunctions['GetOutputTypeSnapshot']
     GetText = $helperModule.ExportedFunctions['GetText']
@@ -115,6 +198,7 @@ function NewCollectorProtocol([System.Management.Automation.PSModuleInfo]$helper
     ResolveCanonicalTypeName = $helperModule.ExportedFunctions['ResolveCanonicalTypeName']
     TestValidateSetCaseSensitive = $helperModule.ExportedFunctions['TestValidateSetCaseSensitive']
     TestPSDefaultValueContainsAutomationNull = $helperModule.ExportedFunctions['TestPSDefaultValueContainsAutomationNull']
+    TestParameterDontShow = (Microsoft.PowerShell.Core\Get-Command TestDocumentationParameterDontShow -CommandType Function).ScriptBlock
   }
 }
 

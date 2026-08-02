@@ -23,6 +23,7 @@ internal static class DocumentationMetadataNormalizer
         foreach (var command in payload.Commands ?? new List<DocumentationCommandHelp>())
         {
             if (command is null) continue;
+            DocumentationHiddenParameterNormalizer.Normalize(command);
             NormalizeBindableIdentities(command);
             NormalizeParameterSetIdentities(command);
             RestoreTypeIdentityText(command.Inputs);
@@ -321,6 +322,17 @@ internal static class DocumentationMetadataNormalizer
         foreach (var parameter in command.Parameters ?? new List<DocumentationParameterHelp>())
         {
             if (parameter is null) continue;
+
+            if (!string.IsNullOrWhiteSpace(parameter.NullableUnderlyingTypeName))
+            {
+                var suffix = string.Concat((parameter.NullableArrayRanks ?? new List<int>())
+                    .AsEnumerable()
+                    .Reverse()
+                    .Select(rank => rank <= 1 ? "[]" : "[" + new string(',', rank - 1) + "]"));
+                parameter.Type = parameter.NullableUnderlyingTypeName! + suffix;
+            }
+            parameter.NullableUnderlyingTypeName = null;
+            parameter.NullableArrayRanks = new List<int>();
 
             parameter.Aliases = (parameter.Aliases ?? new List<string>())
                 .Where(alias => !string.IsNullOrEmpty(alias))

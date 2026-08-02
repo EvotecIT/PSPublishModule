@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace PowerForge;
 
 /// <summary>
@@ -29,6 +32,11 @@ public sealed class DocumentationBuildResult
     /// </summary>
     public string ExternalHelpFilePath { get; }
 
+    /// <summary>
+    /// Full paths to every generated external-help file, including assembly-named aliases used by direct binary imports.
+    /// </summary>
+    public IReadOnlyList<string> ExternalHelpFilePaths { get; }
+
     /// <summary>Optional error message when <see cref="Succeeded"/> is false.</summary>
     public string? ErrorMessage { get; }
 
@@ -43,7 +51,8 @@ public sealed class DocumentationBuildResult
         int exitCode,
         int markdownFiles,
         string externalHelpFilePath,
-        string? errorMessage)
+        string? errorMessage,
+        IReadOnlyList<string>? externalHelpFilePaths = null)
     {
         Enabled = enabled;
         DocsPath = docsPath;
@@ -52,6 +61,10 @@ public sealed class DocumentationBuildResult
         ExitCode = exitCode;
         MarkdownFiles = markdownFiles;
         ExternalHelpFilePath = externalHelpFilePath ?? string.Empty;
+        ExternalHelpFilePaths = externalHelpFilePaths ??
+            (string.IsNullOrWhiteSpace(ExternalHelpFilePath)
+                ? Array.Empty<string>()
+                : new[] { ExternalHelpFilePath });
         ErrorMessage = errorMessage;
     }
 }

@@ -203,6 +203,7 @@ public sealed class DocumentationEngine
             }
 
             var externalHelpFile = string.Empty;
+            IReadOnlyList<string> externalHelpFiles = Array.Empty<string>();
             if (buildDocumentation.GenerateExternalHelp)
             {
                 var culture = NormalizeExternalHelpCulture(buildDocumentation.ExternalHelpCulture);
@@ -216,6 +217,7 @@ public sealed class DocumentationEngine
                 try
                 {
                     externalHelpFile = mamlWriter.WriteExternalHelpFile(extracted, moduleName, externalHelpDir, fileName);
+                    externalHelpFiles = DocumentationExternalHelpAliasWriter.WriteAliases(extracted, externalHelpFile);
                     if (buildDocumentation.IncludeAboutTopics)
                         new AboutTopicWriter().WriteExternalHelpFiles(stagingPath, externalHelpDir, buildDocumentation.AboutTopicsSourcePath);
                     SafeDone(externalHelpStep);
@@ -235,7 +237,8 @@ public sealed class DocumentationEngine
                 exitCode: 0,
                 markdownFiles: CountMarkdownFiles(docsPath),
                 externalHelpFilePath: externalHelpFile,
-                errorMessage: null);
+                errorMessage: null,
+                externalHelpFilePaths: externalHelpFiles);
         }
         catch (Exception ex)
         {
@@ -489,6 +492,7 @@ public sealed class DocumentationEngine
             if (string.IsNullOrWhiteSpace(fileName)) fileName = $"{moduleName}-help.xml";
 
             var externalHelpFile = Path.Combine(externalHelpDir, fileName);
+            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(externalHelpDir);
             if (File.Exists(externalHelpFile))
             {
                 try { File.Delete(externalHelpFile); } catch { /* best effort */ }

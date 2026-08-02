@@ -116,6 +116,15 @@ public sealed class ModulePipelineDocumentationSyncTests
             Directory.CreateDirectory(stagedHelpDir);
             var stagedHelp = Path.Combine(stagedHelpDir, "TestModule-help.xml");
             File.WriteAllText(stagedHelp, "<helpItems />");
+            var stagedBinaryHelp = Path.Combine(stagedHelpDir, "TestModule.Binary.dll-Help.xml");
+            File.WriteAllText(stagedBinaryHelp, "<helpItems />");
+            var targetHelpDir = Path.Combine(projectRoot, "en-US");
+            Directory.CreateDirectory(targetHelpDir);
+            File.WriteAllText(Path.Combine(targetHelpDir, "TestModule-help.xml"), "<oldHelpItems />");
+            File.WriteAllText(
+                Path.Combine(targetHelpDir, "Removed.Binary.dll-Help.xml"),
+                "<!-- PowerForgeGeneratedExternalHelpAlias --><oldHelpItems />");
+            File.WriteAllText(Path.Combine(targetHelpDir, "Authored.Binary.dll-Help.xml"), "<oldHelpItems />");
 
             var runner = new ModulePipelineRunner(new NullLogger());
             var plan = runner.Plan(new ModulePipelineSpec
@@ -164,11 +173,15 @@ public sealed class ModulePipelineDocumentationSyncTests
                 exitCode: 0,
                 markdownFiles: 1,
                 externalHelpFilePath: stagedHelp,
-                errorMessage: null);
+                errorMessage: null,
+                externalHelpFilePaths: new[] { stagedHelp, stagedBinaryHelp });
 
             InvokeSync(runner, plan, result);
 
             Assert.True(File.Exists(Path.Combine(projectRoot, "en-US", "TestModule-help.xml")));
+            Assert.True(File.Exists(Path.Combine(projectRoot, "en-US", "TestModule.Binary.dll-Help.xml")));
+            Assert.False(File.Exists(Path.Combine(projectRoot, "en-US", "Removed.Binary.dll-Help.xml")));
+            Assert.True(File.Exists(Path.Combine(projectRoot, "en-US", "Authored.Binary.dll-Help.xml")));
         }
         finally
         {

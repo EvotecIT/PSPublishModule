@@ -108,20 +108,29 @@ public sealed partial class ModulePipelineRunner
         if (plan.DocumentationBuild.GenerateExternalHelp &&
             (plan.DocumentationBuild.SyncExternalHelpToProjectRoot ||
              plan.GateMode == ConfigurationGateMode.Documentation) &&
-            !string.IsNullOrWhiteSpace(documentationResult.ExternalHelpFilePath) &&
-            File.Exists(documentationResult.ExternalHelpFilePath))
+            documentationResult.ExternalHelpFilePaths.Count > 0)
         {
-            var externalHelpDir = Path.GetDirectoryName(Path.GetFullPath(documentationResult.ExternalHelpFilePath));
+            var existingHelpFiles = documentationResult.ExternalHelpFilePaths
+                .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                .Select(Path.GetFullPath)
+                .ToArray();
+            if (existingHelpFiles.Length == 0) return;
+
+            var externalHelpDir = Path.GetDirectoryName(existingHelpFiles[0]);
             var cultureFolder = string.IsNullOrWhiteSpace(externalHelpDir)
                 ? plan.DocumentationBuild.ExternalHelpCulture
                 : new DirectoryInfo(externalHelpDir).Name;
 
             var targetCultureDir = Path.Combine(projectRoot, cultureFolder);
             Directory.CreateDirectory(targetCultureDir);
+            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(targetCultureDir);
 
-            var targetHelpFile = Path.Combine(targetCultureDir, Path.GetFileName(documentationResult.ExternalHelpFilePath));
-            if (!SamePath(documentationResult.ExternalHelpFilePath, targetHelpFile))
-                File.Copy(documentationResult.ExternalHelpFilePath, targetHelpFile, overwrite: true);
+            foreach (var sourceHelpFile in existingHelpFiles)
+            {
+                var targetHelpFile = Path.Combine(targetCultureDir, Path.GetFileName(sourceHelpFile));
+                if (!SamePath(sourceHelpFile, targetHelpFile))
+                    File.Copy(sourceHelpFile, targetHelpFile, overwrite: true);
+            }
         }
 
         _logger.Success($"Updated project documentation at '{targetDocs}'.");
