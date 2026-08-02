@@ -132,6 +132,11 @@ public sealed partial class ModulePipelineRunner
                     : GetRelativePath(stagingRoot, sourceHelpFile);
                 var targetHelpFile = Path.Combine(projectRoot, relativeHelpPath);
                 var targetHelpDirectory = Path.GetDirectoryName(targetHelpFile);
+                if (!string.IsNullOrWhiteSpace(targetHelpDirectory) &&
+                    DocumentationExternalHelpAliasWriter.PathTraversesDirectoryReparsePoint(
+                        projectRoot,
+                        targetHelpDirectory))
+                    continue;
                 if (!string.IsNullOrWhiteSpace(targetHelpDirectory))
                     Directory.CreateDirectory(targetHelpDirectory);
                 if (DocumentationExternalHelpAliasWriter.IsGeneratedAlias(sourceHelpFile) &&

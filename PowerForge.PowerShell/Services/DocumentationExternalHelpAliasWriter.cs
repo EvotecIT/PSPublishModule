@@ -98,7 +98,7 @@ internal static class DocumentationExternalHelpAliasWriter
 
             var aliasName = Path.GetFileName(assemblyPath) + "-Help.xml";
             var assemblyDirectory = Path.GetDirectoryName(assemblyPath) ?? stagingRoot;
-            if (ContainsDirectoryReparsePoint(stagingRoot, assemblyDirectory))
+            if (PathTraversesDirectoryReparsePoint(stagingRoot, assemblyDirectory))
                 continue;
             var aliasDirectory = Path.Combine(assemblyDirectory, culture);
             var aliasPath = Path.Combine(aliasDirectory, aliasName);
@@ -213,7 +213,7 @@ internal static class DocumentationExternalHelpAliasWriter
             .ToArray();
     }
 
-    private static bool ContainsDirectoryReparsePoint(string rootDirectory, string candidateDirectory)
+    internal static bool PathTraversesDirectoryReparsePoint(string rootDirectory, string candidateDirectory)
     {
         var fullRoot = Path.GetFullPath(rootDirectory)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -229,9 +229,17 @@ internal static class DocumentationExternalHelpAliasWriter
                 if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
                     return true;
             }
+            catch (FileNotFoundException)
+            {
+                // A trailing directory may not exist yet. Existing ancestors are still inspected.
+            }
+            catch (DirectoryNotFoundException)
+            {
+                // A trailing directory may not exist yet. Existing ancestors are still inspected.
+            }
             catch
             {
-                // Fail closed when a directory disappears or cannot be inspected.
+                // Fail closed when an existing directory cannot be inspected safely.
                 return true;
             }
 
