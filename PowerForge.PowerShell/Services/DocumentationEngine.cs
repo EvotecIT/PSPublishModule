@@ -350,6 +350,12 @@ public sealed class DocumentationEngine
         var value = (culture ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(value)) value = "en-US";
 
+        if (string.Equals(value, ".", StringComparison.Ordinal) ||
+            string.Equals(value, "..", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("External help culture must be a single folder name and cannot be '.' or '..'.", nameof(culture));
+        }
+
         // Avoid path traversal and invalid characters; culture should be a folder name like "en-US".
         value = value.Replace(Path.DirectorySeparatorChar, '_').Replace(Path.AltDirectorySeparatorChar, '_');
         foreach (var c in Path.GetInvalidFileNameChars())
