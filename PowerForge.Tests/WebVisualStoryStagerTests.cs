@@ -1,12 +1,9 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
-using ImageMagick;
-using Json.Schema;
 using PowerForge.Web;
 
 namespace PowerForge.Tests;
 
-public class WebVisualStoryStagerTests
+public partial class WebVisualStoryStagerTests
 {
     [Fact]
     public void Stage_ProducesSelfContainedManifest_WithCompletedOutcome()
@@ -215,77 +212,6 @@ public class WebVisualStoryStagerTests
         }
     }
 
-    [Fact]
-    public void Stage_HonorsOverwriteForManifestAndRemovesObsoleteDeclaredArtifacts()
-    {
-        var root = CreateBundle();
-        try
-        {
-            var sourceManifest = Path.Combine(root, "source", "story.json");
-            var output = Path.Combine(root, "published");
-            WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
-            {
-                ManifestPath = sourceManifest,
-                OutputPath = output
-            });
-
-            Assert.Throws<IOException>(() =>
-                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
-                {
-                    ManifestPath = sourceManifest,
-                    OutputPath = output,
-                    Overwrite = false
-                }));
-
-            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(sourceManifest), WebJsonForTests.Options)!;
-            bundle.Artifacts = bundle.Artifacts.Where(artifact => artifact.Role != "transcript").ToArray();
-            File.WriteAllText(sourceManifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
-            WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
-            {
-                ManifestPath = sourceManifest,
-                OutputPath = output
-            });
-
-            Assert.False(File.Exists(Path.Combine(output, "demo.txt")));
-        }
-        finally
-        {
-            Directory.Delete(root, true);
-        }
-    }
-
-    [Fact]
-    public void Stage_OverwriteRecoversFromInvalidPriorManifest()
-    {
-        var root = CreateBundle();
-        try
-        {
-            var sourceManifest = Path.Combine(root, "source", "story.json");
-            var output = Path.Combine(root, "published");
-            var first = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
-            {
-                ManifestPath = sourceManifest,
-                OutputPath = output
-            });
-            File.WriteAllText(first.ManifestPath, "{ truncated");
-            File.WriteAllText(Path.Combine(output, "stale.bin"), "stale");
-
-            var replacement = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
-            {
-                ManifestPath = sourceManifest,
-                OutputPath = output,
-                Overwrite = true
-            });
-
-            Assert.Equal(3, WebVisualStoryStager.Load(replacement.ManifestPath).Artifacts.Length);
-            Assert.False(File.Exists(Path.Combine(output, "stale.bin")));
-        }
-        finally
-        {
-            Directory.Delete(root, true);
-        }
-    }
-
     [Theory]
     [InlineData("svg", "invalid.svg")]
     [InlineData("gif", "invalid.gif")]
@@ -407,133 +333,6 @@ public class WebVisualStoryStagerTests
         {
             Directory.Delete(root, true);
         }
-    }
-
-    [Fact]
-    public void Stage_RequiresSchemaVersion()
-    {
-        var root = CreateBundle();
-        try
-        {
-            var manifest = Path.Combine(root, "source", "story.json");
-            var json = File.ReadAllText(manifest).Replace("\"schemaVersion\": 1,", string.Empty, StringComparison.Ordinal);
-            File.WriteAllText(manifest, json);
-
-            var error = Assert.Throws<InvalidOperationException>(() =>
-                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
-                {
-                    ManifestPath = manifest,
-                    OutputPath = Path.Combine(root, "published")
-                }));
-
-            Assert.Contains("schemaVersion is required", error.Message, StringComparison.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            Directory.Delete(root, true);
-        }
-    }
-
-    [Fact]
-    public void Stage_RejectsPropertiesOutsideThePublishedManifestSchema()
-    {
-        var root = CreateBundle();
-        try
-        {
-            var manifest = Path.Combine(root, "source", "story.json");
-            var json = File.ReadAllText(manifest)
-                .Replace("\"role\": \"animated\",", "\"role\": \"animated\", \"sha265\": \"typo\",", StringComparison.Ordinal);
-            File.WriteAllText(manifest, json);
-
-            var error = Assert.Throws<InvalidOperationException>(() =>
-                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
-                {
-                    ManifestPath = manifest,
-                    OutputPath = Path.Combine(root, "published")
-                }));
-
-            Assert.Contains("published schema", error.Message, StringComparison.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            Directory.Delete(root, true);
-        }
-    }
-
-    [Fact]
-    public void Stage_AcceptsAndPreservesThePublishedSchemaDeclaration()
-    {
-        var root = CreateBundle();
-        try
-        {
-            var manifest = Path.Combine(root, "source", "story.json");
-            var bundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(manifest), WebJsonForTests.Options)!;
-            bundle.Schema = "https://example.invalid/powerforge.web.visualstory.schema.json";
-            File.WriteAllText(manifest, JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
-
-            var result = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
-            {
-                ManifestPath = manifest,
-                OutputPath = Path.Combine(root, "published")
-            });
-
-            Assert.Equal(bundle.Schema, result.Bundle.Schema);
-            Assert.Contains("\"$schema\"", File.ReadAllText(result.ManifestPath), StringComparison.Ordinal);
-        }
-        finally
-        {
-            Directory.Delete(root, true);
-        }
-    }
-
-    [Fact]
-    public void PublishedSchemaRequiresExactlyOneCompletedPng()
-    {
-        var schemaPath = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..", "..", "..", "..",
-            "Schemas",
-            "powerforge.web.visualstory.schema.json"));
-        var schemaDocument = JsonNode.Parse(File.ReadAllText(schemaPath))!;
-        var artifacts = schemaDocument["properties"]!["artifacts"]!;
-        Assert.Equal(64, artifacts["maxItems"]!.GetValue<int>());
-        Assert.Equal(1, artifacts["minContains"]!.GetValue<int>());
-        Assert.Equal(1, artifacts["maxContains"]!.GetValue<int>());
-        Assert.Equal(
-            "completed",
-            artifacts["contains"]!["properties"]!["role"]!["const"]!.GetValue<string>());
-        Assert.Equal(
-            "png",
-            artifacts["items"]!["allOf"]![0]!["then"]!["properties"]!["format"]!["const"]!.GetValue<string>());
-        var transcriptFormats = artifacts["items"]!["allOf"]![1]!["then"]!["properties"]!["format"]!["enum"]!;
-        Assert.Equal(new[] { "text", "txt" }, transcriptFormats.AsArray().Select(node => node!.GetValue<string>()));
-        var animatedFormats = artifacts["items"]!["allOf"]![2]!["then"]!["properties"]!["format"]!["enum"]!;
-        Assert.Equal(new[] { "svg", "gif", "apng" }, animatedFormats.AsArray().Select(node => node!.GetValue<string>()));
-    }
-
-    [Theory]
-    [InlineData("demo.png", true)]
-    [InlineData("media/demo.png", true)]
-    [InlineData("media\\demo.png", true)]
-    [InlineData("../demo.png", false)]
-    [InlineData("media/../../demo.png", false)]
-    [InlineData("/demo.png", false)]
-    [InlineData("C:\\demo.png", false)]
-    public void PublishedSchemaRequiresBundleRelativeArtifactPaths(string path, bool expected)
-    {
-        var schemaPath = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..", "..", "..", "..",
-            "Schemas",
-            "powerforge.web.visualstory.schema.json"));
-        var schemaDocument = JsonNode.Parse(File.ReadAllText(schemaPath))!;
-        var pathSchema = schemaDocument["properties"]!["artifacts"]!["items"]!["properties"]!["path"]!;
-        var schema = JsonSchema.FromText(pathSchema.ToJsonString());
-        var result = schema.Evaluate(
-            JsonValue.Create(path),
-            new EvaluationOptions { OutputFormat = OutputFormat.List });
-
-        Assert.Equal(expected, result.IsValid);
     }
 
     [Fact]
@@ -907,46 +706,4 @@ public class WebVisualStoryStagerTests
         }
     }
 
-    internal static string CreateBundle()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "pf-story-" + Guid.NewGuid().ToString("N"));
-        var source = Path.Combine(root, "source");
-        Directory.CreateDirectory(source);
-        File.WriteAllText(
-            Path.Combine(source, "demo.svg"),
-            "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes pulse{from{opacity:.5}to{opacity:1}}rect{animation:pulse 1s infinite}</style><rect width=\"1\" height=\"1\"/></svg>");
-        using (var image = new MagickImage(MagickColors.Transparent, 2, 2))
-        {
-            image.Write(Path.Combine(source, "demo.png"), MagickFormat.Png);
-        }
-        File.WriteAllText(Path.Combine(source, "demo.txt"), "Run demo\nThe chart is visible.");
-        var bundle = new WebVisualStoryBundle
-        {
-            SchemaVersion = 1,
-            Id = "chart-five-lines",
-            Title = "Create a chart in five lines",
-            Alt = "Source code followed by the generated chart.",
-            Outcome = "The chart is visible.",
-            Artifacts =
-            [
-                new WebVisualStoryArtifact { Role = "animated", Format = "svg", Path = "demo.svg" },
-                new WebVisualStoryArtifact { Role = "completed", Format = "png", Path = "demo.png" },
-                new WebVisualStoryArtifact { Role = "transcript", Format = "text", Path = "demo.txt" }
-            ]
-        };
-        File.WriteAllText(
-            Path.Combine(source, "story.json"),
-            JsonSerializer.Serialize(bundle, WebJsonForTests.Options));
-        return root;
-    }
-
-    private static class WebJsonForTests
-    {
-        internal static readonly JsonSerializerOptions Options = new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            PropertyNameCaseInsensitive = true,
-            WriteIndented = true
-        };
-    }
 }

@@ -208,10 +208,28 @@ public static partial class WebVisualStoryStager
         var bundle = DeserializeManifest(manifestPath);
         ValidateBundle(bundle);
         var paths = new List<string>(bundle.Artifacts.Length);
+        var portablePaths = new Dictionary<string, (string DeclaredPath, bool IsDirectory)>(
+            StringComparer.OrdinalIgnoreCase);
         foreach (var artifact in bundle.Artifacts)
         {
             ValidateArtifact(artifact);
-            var fullPath = VisualStoryPathGuard.ResolveRelativePath(outputRoot, artifact.Path, "existing staged artifact");
+            VisualStoryPortablePathValidator.Validate(artifact.Path);
+            ValidateReservedStagedPath(artifact.Path.Replace('\\', '/'));
+            ValidatePortablePathTopology(artifact.Path.Replace('\\', '/'), portablePaths);
+            string fullPath;
+            try
+            {
+                fullPath = VisualStoryPathGuard.ResolveRelativePath(
+                    outputRoot,
+                    artifact.Path,
+                    "existing staged artifact");
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                throw new InvalidOperationException(
+                    $"Existing visual-story manifest contains an invalid artifact path: {artifact.Path}",
+                    ex);
+            }
             paths.Add(Path.GetRelativePath(outputRoot, fullPath).Replace('\\', '/'));
         }
         return paths.ToArray();
