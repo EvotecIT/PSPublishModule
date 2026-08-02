@@ -29,6 +29,7 @@ internal static class DocumentationMetadataNormalizer
             RestoreTypeIdentityText(command.Outputs);
             RestoreTypeIdentityText(command.AuthoredOutputs);
             RestoreTypeIdentityText(command.RuntimeOutputs);
+            DocumentationInputNormalizer.Normalize(command);
             NormalizeParameters(command);
             NormalizeOutputs(command);
         }
