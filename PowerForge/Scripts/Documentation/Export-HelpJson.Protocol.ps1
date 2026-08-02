@@ -122,12 +122,10 @@ function GetDocumentationParameterDeclaringMetadata([type]$implementingType, [st
 }
 
 function TestDocumentationParameterDontShow([object[]]$attributes) {
-  foreach ($attribute in @($attributes)) {
-    if ($attribute -is [System.Management.Automation.ParameterAttribute] -and $attribute.DontShow) {
-      return $true
-    }
-  }
-  return $false
+  $parameterAttributes = @($attributes) |
+    Microsoft.PowerShell.Core\Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] }
+  return $parameterAttributes.Count -gt 0 -and
+    @($parameterAttributes | Microsoft.PowerShell.Core\Where-Object { -not $_.DontShow }).Count -eq 0
 }
 
 function GetDocumentationParameterRuntimeMetadata(

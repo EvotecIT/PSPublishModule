@@ -41,10 +41,18 @@ function Get-GenericVisibilityFixture {
         [Nullable[System.Collections.Generic.KeyValuePair[string,int]]] $Pair
     )
 }
+function Get-MixedVisibilityFixture {
+    [CmdletBinding(DefaultParameterSetName = 'Visible')]
+    param(
+        [Parameter(ParameterSetName = 'Hidden', DontShow = $true)]
+        [Parameter(ParameterSetName = 'Visible')]
+        [string] $Shared
+    )
+}
 function GetDocumentationParameterDeclaringMetadata { throw 'Target helper shadow was invoked.' }
 function TestDocumentationParameterDontShow { throw 'Target helper shadow was invoked.' }
 function GetDocumentationRuntimeInputs { throw 'Target helper shadow was invoked.' }
-Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture,Get-GenericVisibilityCollisionFixture,GetDocumentationParameterDeclaringMetadata,TestDocumentationParameterDontShow,GetDocumentationRuntimeInputs
+Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture,Get-GenericVisibilityCollisionFixture,Get-MixedVisibilityFixture,GetDocumentationParameterDeclaringMetadata,TestDocumentationParameterDontShow,GetDocumentationRuntimeInputs
 """, new UTF8Encoding(false));
             File.WriteAllText(manifestPath, """
 @{
@@ -53,7 +61,7 @@ Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture
     GUID = '34343434-3434-3434-3434-343434343434'
     Author = 'PowerForge.Tests'
     Description = 'Parameter visibility fixture.'
-    FunctionsToExport = @('Get-VisibilityFixture','Get-GenericVisibilityFixture','Get-GenericVisibilityCollisionFixture','GetDocumentationParameterDeclaringMetadata','TestDocumentationParameterDontShow','GetDocumentationRuntimeInputs')
+    FunctionsToExport = @('Get-VisibilityFixture','Get-GenericVisibilityFixture','Get-GenericVisibilityCollisionFixture','Get-MixedVisibilityFixture','GetDocumentationParameterDeclaringMetadata','TestDocumentationParameterDontShow','GetDocumentationRuntimeInputs')
     CmdletsToExport = @()
     AliasesToExport = @()
     VariablesToExport = @()
@@ -104,6 +112,11 @@ Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture
                 var collisionInput = Assert.Single(collisionCommand.Inputs);
                 Assert.Contains("VisiblePayload", collisionInput.ClrTypeName, StringComparison.Ordinal);
                 Assert.DoesNotContain("HiddenPayload", collisionInput.ClrTypeName, StringComparison.Ordinal);
+
+                var mixedCommand = Assert.Single(payload.Commands, item => item.Name == "Get-MixedVisibilityFixture");
+                Assert.Single(mixedCommand.Parameters, parameter => parameter.Name == "Shared");
+                Assert.Contains(mixedCommand.Syntax, syntax =>
+                    syntax.Text.Contains("Shared", StringComparison.Ordinal));
             }
         }
         finally

@@ -28,10 +28,7 @@ internal static class DocumentationExternalHelpAliasWriter
         var legacyPrimaryContent = GetLegacyPrimaryContent(rootDirectory, primaryFileName);
         var nestedModuleRoots = GetNestedModuleRoots(rootDirectory);
 
-        foreach (var aliasPath in Directory.EnumerateFiles(
-                     rootDirectory,
-                     "*",
-                     SearchOption.AllDirectories)
+        foreach (var aliasPath in EnumerateFilesWithoutDirectoryLinks(rootDirectory)
                  .Where(path => Path.GetFileName(path)
                      .EndsWith(".dll-Help.xml", StringComparison.OrdinalIgnoreCase)))
         {
@@ -154,10 +151,7 @@ internal static class DocumentationExternalHelpAliasWriter
         var pathComparison = FrameworkCompatibility.GetPathStringComparison(fullRoot);
         var preferredFileName = Path.GetFileName(primaryFileName ?? string.Empty);
 
-        foreach (var path in Directory.EnumerateFiles(
-                     rootDirectory,
-                     "*",
-                     SearchOption.AllDirectories)
+        foreach (var path in EnumerateFilesWithoutDirectoryLinks(rootDirectory)
                  .Where(path =>
                  {
                      var fileName = Path.GetFileName(path);
@@ -197,7 +191,7 @@ internal static class DocumentationExternalHelpAliasWriter
         var pathComparer = pathComparison == StringComparison.Ordinal
             ? StringComparer.Ordinal
             : StringComparer.OrdinalIgnoreCase;
-        return Directory.EnumerateFiles(rootDirectory, "*", SearchOption.AllDirectories)
+        return EnumerateFilesWithoutDirectoryLinks(rootDirectory)
             .Where(path => Path.GetFileName(path).EndsWith(".psd1", StringComparison.OrdinalIgnoreCase))
             .Where(IsModuleManifest)
             .Select(Path.GetDirectoryName)
@@ -209,6 +203,37 @@ internal static class DocumentationExternalHelpAliasWriter
             .Select(path => Path.GetFullPath(path!))
             .Distinct(pathComparer)
             .ToArray();
+    }
+
+    private static IEnumerable<string> EnumerateFilesWithoutDirectoryLinks(string rootDirectory)
+    {
+        var pending = new Stack<string>();
+        pending.Push(Path.GetFullPath(rootDirectory));
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            IEnumerable<string> files;
+            try { files = Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly).ToArray(); }
+            catch { continue; }
+            foreach (var file in files)
+                yield return file;
+
+            IEnumerable<string> children;
+            try { children = Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly).ToArray(); }
+            catch { continue; }
+            foreach (var child in children)
+            {
+                try
+                {
+                    if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) == 0)
+                        pending.Push(child);
+                }
+                catch
+                {
+                    // Best effort only. Unreadable or changing directories are outside the pruning contract.
+                }
+            }
+        }
     }
 
     private static bool IsModuleManifest(string path)

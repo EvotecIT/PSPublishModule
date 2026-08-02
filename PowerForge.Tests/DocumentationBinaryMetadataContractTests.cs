@@ -221,6 +221,38 @@ public sealed class DocumentationBinaryMetadataContractTests
     }
 
     [Fact]
+    public void ExternalHelpAliases_DoNotTraverseDirectoryLinksWhilePruning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-binary-alias-link-root-" + Guid.NewGuid().ToString("N"));
+        var outside = Path.Combine(Path.GetTempPath(), "pf-binary-alias-link-target-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(outside);
+
+        try
+        {
+            var outsideAlias = Path.Combine(outside, "Outside.dll-Help.xml");
+            File.WriteAllText(
+                outsideAlias,
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "<helpItems />");
+            var link = Path.Combine(root, "Linked");
+            try { Directory.CreateSymbolicLink(link, outside); }
+            catch (Exception exception) when (exception is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+            {
+                return;
+            }
+
+            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(root, "OwnerModule");
+
+            Assert.True(File.Exists(outsideAlias));
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+            try { Directory.Delete(outside, true); } catch { }
+        }
+    }
+
+    [Fact]
     public void ExternalHelpAliases_UseExplicitDllNamedPrimaryForLegacyOwnership()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-binary-alias-dll-primary-" + Guid.NewGuid().ToString("N"));
