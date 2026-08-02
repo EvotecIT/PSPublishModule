@@ -298,15 +298,18 @@ Write-ReleaseOutput -Name 'receipt-path' -Value $receiptPath
 $receiptFingerprintBefore = Get-ReleaseFileFingerprint -Path $receiptPath
 
 if ($runnerLocalCredentials) {
-    Add-RunnerLocalCredentialSecret -Value (Join-Path ([string] $env:HOME) '.appstoreconnect')
-    $suppliedCredentialValues = @(
-        $env:APP_STORE_CONNECT_ISSUER_ID,
-        $env:APP_STORE_CONNECT_KEY_ID,
-        $env:APP_STORE_CONNECT_PRIVATE_KEY_PATH
-    ) | Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
     try {
+        Add-RunnerLocalCredentialSecret -Value (Join-Path ([string] $env:HOME) '.appstoreconnect')
+        $suppliedCredentialValues = @(
+            $env:APP_STORE_CONNECT_ISSUER_ID,
+            $env:APP_STORE_CONNECT_KEY_ID,
+            $env:APP_STORE_CONNECT_PRIVATE_KEY_PATH,
+            $config.AppleApps.AppStoreConnectApiKeyPath,
+            $config.AppleApps.AppStoreConnectApiKeyId,
+            $config.AppleApps.AppStoreConnectApiIssuerId
+        ) | Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) }
         if ($suppliedCredentialValues.Count -gt 0) {
-            throw 'Runner-local App Store Connect credentials must not be combined with action credential inputs.'
+            throw 'Runner-local App Store Connect credentials must not be combined with action inputs or release-config credentials.'
         }
         & (Join-Path $PSScriptRoot 'Resolve-RunnerLocalAppleCredentials.ps1') -Action $action
         $privateKeyContent = [System.IO.File]::ReadAllText($env:APP_STORE_CONNECT_PRIVATE_KEY_PATH)

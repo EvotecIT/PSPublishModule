@@ -11,7 +11,7 @@ public sealed partial class AppleReleaseWorkflowTests
     [Fact]
     public void RunnerLocalDoctorUsesPrivateProfileWithoutSerializingCredentials()
     {
-        if (OperatingSystem.IsWindows() || !CommandExists("pwsh")) return;
+        if (!OperatingSystem.IsMacOS() || !CommandExists("pwsh")) return;
 
         var root = FindRepoRoot();
         var sandbox = CreateRunnerLocalSandbox(root, "$HOME/.appstoreconnect/AuthKey_ABC123DEFG.p8");
@@ -43,7 +43,7 @@ public sealed partial class AppleReleaseWorkflowTests
         string runnerEnvironment,
         string runnerOs)
     {
-        if (OperatingSystem.IsWindows() || !CommandExists("pwsh")) return;
+        if (!OperatingSystem.IsMacOS() || !CommandExists("pwsh")) return;
 
         var root = FindRepoRoot();
         var sandbox = CreateRunnerLocalSandbox(root, "$HOME/.appstoreconnect/AuthKey_ABC123DEFG.p8");
@@ -65,7 +65,7 @@ public sealed partial class AppleReleaseWorkflowTests
     [Fact]
     public void RunnerLocalCredentialsRejectActionCredentialMixing()
     {
-        if (OperatingSystem.IsWindows() || !CommandExists("pwsh")) return;
+        if (!OperatingSystem.IsMacOS() || !CommandExists("pwsh")) return;
 
         var root = FindRepoRoot();
         var sandbox = CreateRunnerLocalSandbox(root, "$HOME/.appstoreconnect/AuthKey_ABC123DEFG.p8");
@@ -92,10 +92,73 @@ public sealed partial class AppleReleaseWorkflowTests
         }
     }
 
+    [Theory]
+    [InlineData("AppStoreConnectApiKeyPath", ".appstoreconnect/AuthKey_CONFIG.p8")]
+    [InlineData("AppStoreConnectApiKeyId", "CONFIGKEY1")]
+    [InlineData("AppStoreConnectApiIssuerId", "00000000-0000-0000-0000-000000000000")]
+    public void RunnerLocalCredentialsRejectEveryReleaseConfigCredentialField(string name, string value)
+    {
+        if (!OperatingSystem.IsMacOS() || !CommandExists("pwsh")) return;
+
+        var root = FindRepoRoot();
+        var sandbox = CreateRunnerLocalSandbox(root, "$HOME/.appstoreconnect/AuthKey_ABC123DEFG.p8");
+        try
+        {
+            var configPath = Path.Combine(sandbox, "powerforge.release.json");
+            File.WriteAllText(
+                configPath,
+                JsonSerializer.Serialize(new
+                {
+                    AppleApps = new Dictionary<string, object?>
+                    {
+                        ["ProjectRoot"] = ".",
+                        ["Automation"] = new { ReceiptPath = "build/powerforge/apple/release-receipt.json" },
+                        [name] = value
+                    }
+                }));
+
+            var result = RunRunnerLocalWrapper(root, sandbox, CreateSuccessfulCredentialProbe(sandbox), "Doctor");
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.False(File.Exists(Path.Combine(sandbox, "credential-proof.txt")));
+            AssertRunnerLocalFailureReceipt(sandbox);
+        }
+        finally
+        {
+            if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RunnerLocalCredentialsRetainStructuredFailureWhenHomeIsMissing()
+    {
+        if (!OperatingSystem.IsMacOS() || !CommandExists("pwsh")) return;
+
+        var root = FindRepoRoot();
+        var sandbox = CreateRunnerLocalSandbox(root, "$HOME/.appstoreconnect/AuthKey_ABC123DEFG.p8");
+        try
+        {
+            var result = RunRunnerLocalWrapper(
+                root,
+                sandbox,
+                CreateSuccessfulCredentialProbe(sandbox),
+                "Doctor",
+                additionalEnvironment: new Dictionary<string, string?> { ["HOME"] = string.Empty });
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.False(File.Exists(Path.Combine(sandbox, "credential-proof.txt")));
+            AssertRunnerLocalFailureReceipt(sandbox);
+        }
+        finally
+        {
+            if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+        }
+    }
+
     [Fact]
     public void RunnerLocalDoctorRedactsCredentialMaterialFromFailureHandoffs()
     {
-        if (OperatingSystem.IsWindows() || !CommandExists("pwsh")) return;
+        if (!OperatingSystem.IsMacOS() || !CommandExists("pwsh")) return;
 
         var root = FindRepoRoot();
         var sandbox = CreateRunnerLocalSandbox(root, "$HOME/.appstoreconnect/AuthKey_ABC123DEFG.p8");
@@ -124,7 +187,7 @@ public sealed partial class AppleReleaseWorkflowTests
     [Fact]
     public void RunnerLocalCredentialsRejectUnsupportedProfileContent()
     {
-        if (OperatingSystem.IsWindows() || !CommandExists("pwsh")) return;
+        if (!OperatingSystem.IsMacOS() || !CommandExists("pwsh")) return;
 
         var root = FindRepoRoot();
         var sandbox = CreateRunnerLocalSandbox(root, "$HOME/.appstoreconnect/AuthKey_ABC123DEFG.p8");
@@ -147,7 +210,7 @@ public sealed partial class AppleReleaseWorkflowTests
     [Fact]
     public void RunnerLocalCredentialsRejectLiteralAliasCopies()
     {
-        if (OperatingSystem.IsWindows() || !CommandExists("pwsh")) return;
+        if (!OperatingSystem.IsMacOS() || !CommandExists("pwsh")) return;
 
         var root = FindRepoRoot();
         var sandbox = CreateRunnerLocalSandbox(root, "$HOME/.appstoreconnect/AuthKey_ABC123DEFG.p8");
@@ -183,7 +246,7 @@ public sealed partial class AppleReleaseWorkflowTests
     [InlineData("sec1-key-pem")]
     public void RunnerLocalCredentialsRejectUnsafeLocalMaterial(string unsafeShape)
     {
-        if (OperatingSystem.IsWindows() || !CommandExists("pwsh")) return;
+        if (!OperatingSystem.IsMacOS() || !CommandExists("pwsh")) return;
 
         var root = FindRepoRoot();
         var keySetting = unsafeShape == "outside"

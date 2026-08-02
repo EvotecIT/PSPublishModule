@@ -169,7 +169,10 @@ try {
     try {
         $bytesRead = 0
         $privateKey.ImportPkcs8PrivateKey($privateKeyBytes, [ref] $bytesRead)
-        if ($bytesRead -ne $privateKeyBytes.Length -or $privateKey.KeySize -ne 256) {
+        $curveOid = [string] $privateKey.ExportParameters($false).Curve.Oid.Value
+        if ($bytesRead -ne $privateKeyBytes.Length -or
+            $privateKey.KeySize -ne 256 -or
+            $curveOid -ne '1.2.840.10045.3.1.7') {
             throw 'The private key must use the Apple P-256 curve.'
         }
     } finally {

@@ -476,6 +476,9 @@ read-only Doctor action uses only the fixed private profile on the self-hosted M
 never copies that credential tuple into GitHub secrets, inputs, outputs, artifacts, or
 receipts. Runner-local credentials cannot be enabled for Version, Advance, governance,
 screenshots, review submission, release, or any other mutating action.
+Runner-local mode also rejects any `AppStoreConnectApiKeyPath`,
+`AppStoreConnectApiKeyId`, or `AppStoreConnectApiIssuerId` in the tracked release
+configuration so repository content cannot override the validated private profile.
 Release configs and tool manifests must be tracked, unchanged files beneath the exact
 checkout and must not traverse symbolic links or reparse points. Do not add
 repository-wide `secrets: inherit`; that would weaken the environment boundary. When
