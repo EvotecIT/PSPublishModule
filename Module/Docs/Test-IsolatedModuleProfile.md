@@ -118,8 +118,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.IsolatedModuleProfileValidationResult
-System.Boolean`
+- `PowerForge.IsolatedModuleProfileValidationResult`
+- `System.Boolean`
 
 ## RELATED LINKS
 

@@ -1506,8 +1506,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.PowerForgeReleaseResult
-PowerForge.PowerForgeAppleReleaseReceipt`
+- `PowerForge.PowerForgeReleaseResult`
+- `PowerForge.PowerForgeAppleReleaseReceipt`
 
 ## RELATED LINKS
 

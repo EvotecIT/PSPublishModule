@@ -247,14 +247,14 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-- `System.String[]
-PSPublishModule.ModuleStateInstalledModuleResult[]
-System.String`
+- `System.String[]`
+- `PSPublishModule.ModuleStateInstalledModuleResult[]`: PowerShell-facing installed module inventory entry.
+- `System.String`
 
 ## OUTPUTS
 
-- `PowerForge.ManagedModuleUninstallResult
-PowerForge.ManagedModuleUninstallPlan`
+- `PowerForge.ManagedModuleUninstallResult`
+- `PowerForge.ManagedModuleUninstallPlan`
 
 ## RELATED LINKS
 

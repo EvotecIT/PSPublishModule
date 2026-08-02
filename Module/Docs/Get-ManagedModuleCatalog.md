@@ -92,8 +92,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.ManagedModuleCatalog
-PowerForge.ManagedModuleCatalogPackage`
+- `PowerForge.ManagedModuleCatalog`
+- `PowerForge.ManagedModuleCatalogPackage`
 
 ## RELATED LINKS
 

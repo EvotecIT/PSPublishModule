@@ -646,12 +646,12 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-- `System.String[]
-PSPublishModule.ModuleStateInventoryResult`
+- `System.String[]`
+- `PSPublishModule.ModuleStateInventoryResult`: PowerShell-facing module-state inventory result.
 
 ## OUTPUTS
 
-- `PSPublishModule.ModuleStateWorkflowResult` — PowerShell-facing result for a complete module-state management workflow.
+- `PSPublishModule.ModuleStateWorkflowResult`: PowerShell-facing result for a complete module-state management workflow.
 
 ## RELATED LINKS
 

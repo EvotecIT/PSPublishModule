@@ -471,12 +471,12 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-- `System.String
-System.Management.Automation.PSModuleInfo`
+- `System.String`
+- `System.Management.Automation.PSModuleInfo`
 
 ## OUTPUTS
 
-- `System.Object`
+- `None`
 
 ## RELATED LINKS
 

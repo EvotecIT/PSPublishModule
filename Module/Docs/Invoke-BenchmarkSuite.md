@@ -361,8 +361,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.BenchmarkRunResult
-PowerForge.PowerShellBenchmarkWorkItem`
+- `PowerForge.BenchmarkRunResult`
+- `PowerForge.PowerShellBenchmarkWorkItem`
 
 ## RELATED LINKS
 

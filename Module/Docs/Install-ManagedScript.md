@@ -468,8 +468,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.ManagedScriptInstallResult
-PowerForge.ManagedScriptInstallPlan`
+- `PowerForge.ManagedScriptInstallResult`
+- `PowerForge.ManagedScriptInstallPlan`
 
 ## RELATED LINKS
 

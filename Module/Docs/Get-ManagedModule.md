@@ -199,9 +199,9 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PSPublishModule.ModuleStateInstalledModuleResult
-PSPublishModule.ModuleStateInventoryResult
-System.String`
+- `PSPublishModule.ModuleStateInstalledModuleResult`: PowerShell-facing installed module inventory entry.
+- `PSPublishModule.ModuleStateInventoryResult`: PowerShell-facing module-state inventory result.
+- `System.String`
 
 ## RELATED LINKS
 

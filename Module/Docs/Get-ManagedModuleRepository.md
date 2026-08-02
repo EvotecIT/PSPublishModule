@@ -155,8 +155,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PSPublishModule.ModuleRepositoryProfileResult
-PSPublishModule.ModuleRepositoryProfileReadinessResult` — Readiness information for a saved private module repository profile.
+- `PSPublishModule.ModuleRepositoryProfileResult`: User-facing private module repository profile saved by PSPublishModule.
+- `PSPublishModule.ModuleRepositoryProfileReadinessResult`: Readiness information for a saved private module repository profile.
 
 ## RELATED LINKS
 

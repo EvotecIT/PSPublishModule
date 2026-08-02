@@ -420,8 +420,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.ManagedScriptSaveResult
-PowerForge.ManagedScriptSavePlan`
+- `PowerForge.ManagedScriptSaveResult`
+- `PowerForge.ManagedScriptSavePlan`
 
 ## RELATED LINKS
 

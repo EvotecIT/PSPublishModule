@@ -118,8 +118,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `System.String
-PowerForge.ModuleVersionStepResult`
+- `System.String`
+- `PowerForge.ModuleVersionStepResult`
 
 ## RELATED LINKS
 

@@ -582,8 +582,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PSPublishModule.ModuleRepositoryOnboardingResult
-PSPublishModule.ModuleRepositoryRegistrationResult` — Result returned when registering or refreshing a private module repository.
+- `PSPublishModule.ModuleRepositoryOnboardingResult`: Result returned by Initialize-ManagedModuleRepository for managed repository onboarding.
+- `PSPublishModule.ModuleRepositoryRegistrationResult`: Result returned when registering or refreshing a private module repository.
 
 ## RELATED LINKS
 

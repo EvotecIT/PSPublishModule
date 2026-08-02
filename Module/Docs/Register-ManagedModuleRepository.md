@@ -218,7 +218,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PSPublishModule.ModuleRepositoryProfileResult` — User-facing private module repository profile saved by PSPublishModule.
+- `PSPublishModule.ModuleRepositoryProfileResult`: User-facing private module repository profile saved by PSPublishModule.
 
 ## RELATED LINKS
 

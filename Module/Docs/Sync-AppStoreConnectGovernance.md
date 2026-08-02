@@ -148,8 +148,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.AppStoreConnectGovernanceApplyResult
-PowerForge.AppStoreConnectGovernancePlan`
+- `PowerForge.AppStoreConnectGovernanceApplyResult`
+- `PowerForge.AppStoreConnectGovernancePlan`
 
 ## RELATED LINKS
 

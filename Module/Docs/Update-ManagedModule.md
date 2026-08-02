@@ -691,8 +691,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.ManagedModuleUpdateResult
-PowerForge.ManagedModuleUpdatePlan`
+- `PowerForge.ManagedModuleUpdateResult`
+- `PowerForge.ManagedModuleUpdatePlan`
 
 ## RELATED LINKS
 

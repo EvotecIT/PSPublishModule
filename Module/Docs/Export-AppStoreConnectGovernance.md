@@ -180,8 +180,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `System.IO.FileInfo
-PowerForge.AppStoreConnectGovernanceSpec`
+- `System.IO.FileInfo`
+- `PowerForge.AppStoreConnectGovernanceSpec`
 
 ## RELATED LINKS
 

@@ -138,9 +138,9 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `System.String
-System.Int32
-System.Boolean`
+- `System.String`
+- `System.Int32`
+- `System.Boolean`
 
 ## RELATED LINKS
 

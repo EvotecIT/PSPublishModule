@@ -356,8 +356,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.DotNetPublishPlan
-PowerForge.DotNetPublishResult`
+- `PowerForge.DotNetPublishPlan`
+- `PowerForge.DotNetPublishResult`
 
 ## RELATED LINKS
 

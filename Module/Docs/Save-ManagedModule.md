@@ -602,13 +602,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-- `System.String[]
-PowerForge.ManagedModuleVersionInfo[]`
+- `System.String[]`
+- `PowerForge.ManagedModuleVersionInfo[]`
 
 ## OUTPUTS
 
-- `PowerForge.ManagedModuleInstallResult
-PowerForge.ManagedModuleInstallPlan`
+- `PowerForge.ManagedModuleInstallResult`
+- `PowerForge.ManagedModuleInstallPlan`
 
 ## RELATED LINKS
 

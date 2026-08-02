@@ -212,8 +212,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `System.Boolean
-PowerForge.AppleAppReleaseDriftReport`
+- `System.Boolean`
+- `PowerForge.AppleAppReleaseDriftReport`
 
 ## RELATED LINKS
 
