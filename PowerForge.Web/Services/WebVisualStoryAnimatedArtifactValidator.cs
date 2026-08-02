@@ -122,19 +122,19 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                     $"Visual-story animated artifact is not a valid SVG: {displayPath}");
             }
             var sawDeclarativeAnimation = false;
-            var sawCssKeyframes = false;
+            var cssKeyframeNames = new HashSet<string>(StringComparer.Ordinal);
+            var cssAnimationNames = new HashSet<string>(StringComparer.Ordinal);
             var rootInlineStyle = reader.GetAttribute("style");
-            var sawCssAnimationDeclaration = !string.IsNullOrWhiteSpace(rootInlineStyle) &&
-                                             WebVisualStoryCssAnimationValidator.ContainsEffectiveAnimation(rootInlineStyle);
+            ValidateSelfContainedReferences(reader, displayPath);
+            AddCssAnimationNames(rootInlineStyle, cssAnimationNames, displayPath);
             var insideStyle = false;
             var pendingAnimateMotionDepth = -1;
             while (reader.Read())
             {
                 if (reader.NodeType is XmlNodeType.Text or XmlNodeType.CDATA && insideStyle)
                 {
-                    sawCssKeyframes |= WebVisualStoryCssAnimationValidator.ContainsKeyframes(reader.Value);
-                    sawCssAnimationDeclaration |=
-                        WebVisualStoryCssAnimationValidator.ContainsEffectiveAnimation(reader.Value);
+                    AddNames(cssKeyframeNames, WebVisualStoryCssAnimationValidator.GetKeyframeNames(reader.Value));
+                    AddCssAnimationNames(reader.Value, cssAnimationNames, displayPath);
                     continue;
                 }
                 if (reader.NodeType == XmlNodeType.EndElement &&
@@ -156,10 +156,11 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                     !string.Equals(reader.NamespaceURI, SvgNamespace, StringComparison.Ordinal))
                     continue;
 
+                ValidateSelfContainedReferences(reader, displayPath);
                 if (IsDeclarativeAnimationElement(reader))
                     sawDeclarativeAnimation = true;
                 else if (string.Equals(reader.LocalName, "animateMotion", StringComparison.Ordinal) &&
-                         reader.GetAttribute("dur") is { Length: > 0 } &&
+                         HasPositiveSmilDuration(reader.GetAttribute("dur")) &&
                          !reader.IsEmptyElement)
                     pendingAnimateMotionDepth = reader.Depth;
                 else if (pendingAnimateMotionDepth >= 0 &&
@@ -169,15 +170,13 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                     sawDeclarativeAnimation = true;
 
                 var inlineStyle = reader.GetAttribute("style");
-                if (!string.IsNullOrWhiteSpace(inlineStyle) &&
-                    WebVisualStoryCssAnimationValidator.ContainsEffectiveAnimation(inlineStyle))
-                    sawCssAnimationDeclaration = true;
+                AddCssAnimationNames(inlineStyle, cssAnimationNames, displayPath);
 
                 insideStyle = string.Equals(reader.LocalName, "style", StringComparison.Ordinal) && !reader.IsEmptyElement;
             }
             if (requireAnimation &&
                 !sawDeclarativeAnimation &&
-                !(sawCssKeyframes && sawCssAnimationDeclaration))
+                !cssAnimationNames.Overlaps(cssKeyframeNames))
             {
                 throw new InvalidOperationException(
                     $"Visual-story animated SVG artifact does not contain a supported animation: {displayPath}");
@@ -201,10 +200,10 @@ internal static class WebVisualStoryAnimatedArtifactValidator
             case "animate":
             case "animateTransform":
                 return reader.GetAttribute("attributeName") is { Length: > 0 } &&
-                       reader.GetAttribute("dur") is { Length: > 0 } &&
+                       HasPositiveSmilDuration(reader.GetAttribute("dur")) &&
                        HasAnimationValue(reader);
             case "animateMotion":
-                return reader.GetAttribute("dur") is { Length: > 0 } &&
+                return HasPositiveSmilDuration(reader.GetAttribute("dur")) &&
                        (reader.GetAttribute("path") is { Length: > 0 } || HasAnimationValue(reader));
             default:
                 return false;
@@ -221,6 +220,70 @@ internal static class WebVisualStoryAnimatedArtifactValidator
         var reference = reader.GetAttribute("href") ??
                         reader.GetAttribute("href", "http://www.w3.org/1999/xlink");
         return reference is { Length: > 1 } && reference[0] == '#';
+    }
+
+    private static void AddCssAnimationNames(
+        string? css,
+        HashSet<string> animationNames,
+        string displayPath)
+    {
+        if (string.IsNullOrWhiteSpace(css))
+            return;
+        if (WebVisualStoryCssAnimationValidator.ContainsExternalResourceReference(css))
+        {
+            throw new InvalidOperationException(
+                $"Visual-story SVG artifacts must be self-contained and cannot reference external resources: {displayPath}");
+        }
+        AddNames(animationNames, WebVisualStoryCssAnimationValidator.GetEffectiveAnimationNames(css));
+    }
+
+    private static void AddNames(HashSet<string> destination, IReadOnlySet<string> source)
+    {
+        foreach (var name in source)
+            destination.Add(name);
+    }
+
+    private static void ValidateSelfContainedReferences(XmlReader reader, string displayPath)
+    {
+        if (!reader.HasAttributes)
+            return;
+        if (!reader.MoveToFirstAttribute())
+            return;
+        do
+        {
+            if (!string.Equals(reader.LocalName, "href", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(reader.LocalName, "src", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var reference = reader.Value.Trim();
+            if (reference.Length > 0 && reference[0] != '#')
+            {
+                throw new InvalidOperationException(
+                    $"Visual-story SVG artifacts must be self-contained and cannot reference external resources: {displayPath}");
+            }
+        } while (reader.MoveToNextAttribute());
+        reader.MoveToElement();
+    }
+
+    private static bool HasPositiveSmilDuration(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+        var token = value.Trim();
+        if (token.EndsWith("ms", StringComparison.OrdinalIgnoreCase) &&
+            double.TryParse(token[..^2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var milliseconds))
+        {
+            return double.IsFinite(milliseconds) && milliseconds > 0;
+        }
+        var units = new[] { (Suffix: "min", Multiplier: 60d), (Suffix: "h", Multiplier: 3600d), (Suffix: "s", Multiplier: 1d) };
+        foreach (var unit in units)
+        {
+            if (!token.EndsWith(unit.Suffix, StringComparison.OrdinalIgnoreCase) ||
+                !double.TryParse(token[..^unit.Suffix.Length], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var number))
+                continue;
+            return double.IsFinite(number) && number * unit.Multiplier > 0;
+        }
+        return TimeSpan.TryParse(token, System.Globalization.CultureInfo.InvariantCulture, out var duration) &&
+               duration > TimeSpan.Zero;
     }
 
     private static void ValidateApng(string path, string displayPath)

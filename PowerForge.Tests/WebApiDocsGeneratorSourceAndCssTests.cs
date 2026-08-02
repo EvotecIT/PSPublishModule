@@ -685,6 +685,46 @@ public class WebApiDocsGeneratorSourceAndCssTests
     }
 
     [Fact]
+    public void GenerateDocsHtml_RejectsAmbiguousPngVisualStorySource()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-story-source-png-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                  <example>
+                    <media kind="story" src="/stories/sample.png" alt="Code runs and the result appears." poster="/stories/sample-poster.png" />
+                  </example>
+                </member>
+              </members>
+            </doc>
+            """);
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = Path.Combine(root, "api"),
+            Format = "both",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+
+        try
+        {
+            var error = Assert.Throws<InvalidOperationException>(() => WebApiDocsGenerator.Generate(options));
+            Assert.Contains("animated SVG, GIF, or APNG", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void GenerateDocsHtml_RejectsVisualStoryWithoutAlternativeText()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-story-alt-" + Guid.NewGuid().ToString("N"));

@@ -6,7 +6,7 @@ namespace PowerForge.Web;
 /// <summary>Recognizes effective CSS animations without executing or rendering SVG content.</summary>
 internal static class WebVisualStoryCssAnimationValidator
 {
-    private readonly record struct AnimationDefinition(bool HasName, double DurationMilliseconds, bool Paused);
+    private readonly record struct AnimationDefinition(string? Name, double DurationMilliseconds, bool Paused);
 
     private static readonly HashSet<string> AnimationKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -16,20 +16,22 @@ internal static class WebVisualStoryCssAnimationValidator
         "inherit", "unset", "revert", "revert-layer"
     };
 
-    internal static bool ContainsEffectiveAnimation(string css)
+    internal static IReadOnlySet<string> GetEffectiveAnimationNames(string css)
     {
         var normalizedCss = RemoveComments(css);
+        var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var declarationBlock in GetDeclarationBlocks(normalizedCss))
         {
-            if (ContainsEffectiveAnimationDeclaration(declarationBlock))
-                return true;
+            foreach (var name in GetEffectiveAnimationNamesFromDeclaration(declarationBlock))
+                names.Add(name);
         }
-        return false;
+        return names;
     }
 
-    internal static bool ContainsKeyframes(string css)
+    internal static IReadOnlySet<string> GetKeyframeNames(string css)
     {
         var normalizedCss = RemoveComments(css);
+        var names = new HashSet<string>(StringComparer.Ordinal);
         var quote = '\0';
         var escaped = false;
         var parentheses = 0;
@@ -76,6 +78,7 @@ internal static class WebVisualStoryCssAnimationValidator
                 cursor++;
             if (cursor >= normalizedCss.Length)
                 continue;
+            string name;
             if (normalizedCss[cursor] is '\'' or '"')
             {
                 var nameQuote = normalizedCss[cursor++];
@@ -84,6 +87,7 @@ internal static class WebVisualStoryCssAnimationValidator
                     cursor++;
                 if (cursor == nameStart || cursor >= normalizedCss.Length)
                     continue;
+                name = normalizedCss.Substring(nameStart, cursor - nameStart);
                 cursor++;
             }
             else
@@ -93,19 +97,91 @@ internal static class WebVisualStoryCssAnimationValidator
                     cursor++;
                 if (cursor == nameStart)
                     continue;
+                name = normalizedCss.Substring(nameStart, cursor - nameStart);
             }
             while (cursor < normalizedCss.Length && char.IsWhiteSpace(normalizedCss[cursor]))
                 cursor++;
             if (cursor < normalizedCss.Length && normalizedCss[cursor] == '{')
+                names.Add(name);
+        }
+        return names;
+    }
+
+    internal static bool ContainsExternalResourceReference(string css)
+    {
+        var normalizedCss = RemoveComments(css);
+        var quote = '\0';
+        var escaped = false;
+        for (var index = 0; index < normalizedCss.Length; index++)
+        {
+            var character = normalizedCss[index];
+            if (quote != '\0')
+            {
+                if (escaped)
+                    escaped = false;
+                else if (character == '\\')
+                    escaped = true;
+                else if (character == quote)
+                    quote = '\0';
+                continue;
+            }
+            if (character is '\'' or '"')
+            {
+                quote = character;
+                continue;
+            }
+            if (!StartsWithCssKeyword(normalizedCss, index, "url"))
+                continue;
+            var cursor = index + 3;
+            while (cursor < normalizedCss.Length && char.IsWhiteSpace(normalizedCss[cursor]))
+                cursor++;
+            if (cursor >= normalizedCss.Length || normalizedCss[cursor] != '(')
+                continue;
+            cursor++;
+            while (cursor < normalizedCss.Length && char.IsWhiteSpace(normalizedCss[cursor]))
+                cursor++;
+            var valueQuote = cursor < normalizedCss.Length && normalizedCss[cursor] is '\'' or '"'
+                ? normalizedCss[cursor++]
+                : '\0';
+            var value = new StringBuilder();
+            var valueEscaped = false;
+            while (cursor < normalizedCss.Length)
+            {
+                character = normalizedCss[cursor++];
+                if (valueEscaped)
+                {
+                    value.Append(character);
+                    valueEscaped = false;
+                    continue;
+                }
+                if (character == '\\')
+                {
+                    valueEscaped = true;
+                    value.Append(character);
+                    continue;
+                }
+                if (valueQuote != '\0')
+                {
+                    if (character == valueQuote)
+                        break;
+                    value.Append(character);
+                    continue;
+                }
+                if (character == ')')
+                    break;
+                value.Append(character);
+            }
+            var reference = value.ToString().Trim();
+            if (reference.Length > 0 && reference[0] != '#')
                 return true;
         }
         return false;
     }
 
-    private static bool ContainsEffectiveAnimationDeclaration(string declarations)
+    private static IReadOnlyList<string> GetEffectiveAnimationNamesFromDeclaration(string declarations)
     {
-        AnimationDefinition[] shorthand = [new(false, 0, false)];
-        bool[]? names = null;
+        AnimationDefinition[] shorthand = [new(null, 0, false)];
+        string?[]? names = null;
         double[]? durations = null;
         bool[]? playStates = null;
         foreach (var declaration in ParseDeclarations(declarations))
@@ -122,7 +198,7 @@ internal static class WebVisualStoryCssAnimationValidator
                     break;
                 case "animation-name":
                     names = SplitTopLevel(declaration.Value, ',')
-                        .Select(IsAnimationName)
+                        .Select(NormalizeAnimationName)
                         .ToArray();
                     break;
                 case "animation-duration":
@@ -143,20 +219,21 @@ internal static class WebVisualStoryCssAnimationValidator
         var count = Math.Max(
             shorthand.Length,
             Math.Max(names?.Length ?? 0, Math.Max(durations?.Length ?? 0, playStates?.Length ?? 0)));
+        var effectiveNames = new List<string>();
         for (var index = 0; index < count; index++)
         {
             var basis = shorthand[index % shorthand.Length];
-            var hasName = names is { Length: > 0 } ? names[index % names.Length] : basis.HasName;
+            var name = names is { Length: > 0 } ? names[index % names.Length] : basis.Name;
             var duration = durations is { Length: > 0 }
                 ? durations[index % durations.Length]
                 : basis.DurationMilliseconds;
             var paused = playStates is { Length: > 0 }
                 ? playStates[index % playStates.Length]
                 : basis.Paused;
-            if (hasName && duration > 0 && !paused)
-                return true;
+            if (name is not null && duration > 0 && !paused)
+                effectiveNames.Add(name);
         }
-        return false;
+        return effectiveNames;
     }
 
     private static AnimationDefinition ParseShorthand(string shorthand)
@@ -164,7 +241,7 @@ internal static class WebVisualStoryCssAnimationValidator
         var tokens = SplitTopLevelWhitespace(shorthand);
         var hasPositiveDuration = false;
         var sawDuration = false;
-        var hasName = false;
+        string? name = null;
         var paused = false;
         foreach (var token in tokens)
         {
@@ -180,22 +257,25 @@ internal static class WebVisualStoryCssAnimationValidator
 
             if (string.Equals(token, "paused", StringComparison.OrdinalIgnoreCase))
                 paused = true;
-            else if (IsAnimationName(token))
-                hasName = true;
+            else if (NormalizeAnimationName(token) is { } animationName)
+                name = animationName;
         }
-        return new AnimationDefinition(hasName, hasPositiveDuration ? 1 : 0, paused);
+        return new AnimationDefinition(name, hasPositiveDuration ? 1 : 0, paused);
     }
 
-    private static bool IsAnimationName(string value)
+    private static string? NormalizeAnimationName(string value)
     {
         var token = value.Trim();
         if (token.Length == 0 || AnimationKeywords.Contains(token))
-            return false;
+            return null;
         if ((token[0] is '\'' or '"') && token.Length > 1 && token[^1] == token[0])
-            return !string.Equals(token.Substring(1, token.Length - 2), "none", StringComparison.OrdinalIgnoreCase);
+        {
+            var quotedName = token.Substring(1, token.Length - 2);
+            return string.Equals(quotedName, "none", StringComparison.OrdinalIgnoreCase) ? null : quotedName;
+        }
         if (token.IndexOf('(') >= 0 || double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out _))
-            return false;
-        return !TryParseCssTime(token, out _);
+            return null;
+        return TryParseCssTime(token, out _) ? null : token;
     }
 
     private static bool TryParseCssTime(string value, out double milliseconds)

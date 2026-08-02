@@ -1071,6 +1071,27 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void AssetRewriteDownloadHelpers_ProtectStoryArtifactsFromCssDependencies()
+    {
+        var siteRoot = Path.Combine(Path.GetTempPath(), "pf-web-opt-story-dependency-" + Guid.NewGuid().ToString("N"));
+        var cssPath = Path.Combine(siteRoot, "stories", "demo", "site.css");
+        var artifactPath = Path.Combine(siteRoot, "stories", "demo", "font.1234.woff2");
+        var protectedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            Path.GetFullPath(artifactPath)
+        };
+
+        Assert.True(WebAssetOptimizer.IsDownloadedDependencyPathProtectedForTesting(
+            cssPath,
+            "font.1234.woff2",
+            protectedPaths));
+        Assert.False(WebAssetOptimizer.IsDownloadedDependencyPathProtectedForTesting(
+            cssPath,
+            "font.other.woff2",
+            protectedPaths));
+    }
+
+    [Fact]
     public void OptimizeDetailed_WritesReportWithUpdatedFilesAndByteSavings()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-report-" + Guid.NewGuid().ToString("N"));

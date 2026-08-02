@@ -692,7 +692,6 @@ public static partial class WebApiDocsGenerator
             path = path[..delimiter];
         return path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase) ||
                path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) ||
-               path.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
                path.EndsWith(".apng", StringComparison.OrdinalIgnoreCase);
     }
 

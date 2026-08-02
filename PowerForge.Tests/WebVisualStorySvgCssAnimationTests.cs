@@ -62,6 +62,61 @@ public class WebVisualStorySvgCssAnimationTests
         Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Stage_RejectsAnimationNameWithoutMatchingKeyframes()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{from{opacity:0}to{opacity:1}}rect{animation:spin 1s}</style><rect width=\"1\" height=\"1\"/></svg>"));
+
+        Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("0s")]
+    [InlineData("0ms")]
+    [InlineData("00:00:00")]
+    [InlineData("indefinite")]
+    public void Stage_RejectsSmilAnimationWithoutPositiveDuration(string duration)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                $"<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1\" height=\"1\"><animate attributeName=\"opacity\" dur=\"{duration}\" values=\"0;1\"/></rect></svg>"));
+
+        Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("250ms")]
+    [InlineData("1s")]
+    [InlineData("00:00:01")]
+    public void Stage_AcceptsSmilAnimationWithPositiveDuration(string duration)
+    {
+        StageSvg(
+            $"<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1\" height=\"1\"><animate attributeName=\"opacity\" dur=\"{duration}\" values=\"0;1\"/></rect></svg>");
+    }
+
+    [Theory]
+    [InlineData("<image href=\"https://example.test/frame.png\"/>")]
+    [InlineData("<image href=\"../frame.png\"/>")]
+    [InlineData("<rect style=\"fill:url(https://example.test/fill.svg)\"/>")]
+    [InlineData("<style>rect{fill:url('../fill.svg')}</style>")]
+    public void Stage_RejectsExternalSvgResources(string content)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                $"<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{{from{{opacity:0}}to{{opacity:1}}}}rect{{animation:fade 1s}}</style>{content}<rect width=\"1\" height=\"1\"/></svg>"));
+
+        Assert.Contains("self-contained", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Stage_AcceptsFragmentOnlySvgReferences()
+    {
+        StageSvg(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><linearGradient id=\"fill\"><stop offset=\"0\"/></linearGradient></defs><style>@keyframes fade{from{opacity:0}to{opacity:1}}rect{animation:fade 1s;fill:url(#fill)}</style><rect width=\"1\" height=\"1\"/></svg>");
+    }
+
     private static void StageSvg(string svg)
     {
         var root = WebVisualStoryStagerTests.CreateBundle();
