@@ -9,6 +9,97 @@ public sealed partial class AppleReleaseWorkflowTests
     private const string TestKeyId = "ABC123DEFG";
 
     [Fact]
+    public void PinnedLocalOperatorRequiresExactToolAndCleanMergedConsumerSources()
+    {
+        var root = FindRepoRoot();
+        var script = Read(root, "scripts", "Invoke-PinnedPowerForge.ps1");
+        Assert.Contains("RequiredCommit $ExpectedCommit", script, StringComparison.Ordinal);
+        Assert.Contains("ExpectedConsumerRepository", script, StringComparison.Ordinal);
+        Assert.Contains("symbolic-ref', '--short', 'HEAD", script, StringComparison.Ordinal);
+        Assert.Contains("fetch', '--quiet', 'origin', $RequiredBranch", script, StringComparison.Ordinal);
+        Assert.Contains("refs/remotes/origin/$RequiredBranch", script, StringComparison.Ordinal);
+        Assert.Contains("status', '--porcelain=v1', '--untracked-files=all", script, StringComparison.Ordinal);
+        Assert.Contains("ls-files', '--error-unmatch'", script, StringComparison.Ordinal);
+        Assert.Contains("--artifacts-path", script, StringComparison.Ordinal);
+        Assert.Contains("Push-Location $consumer", script, StringComparison.Ordinal);
+        Assert.Contains("run download $runId", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("requires an explicit --config", script, StringComparison.Ordinal);
+        Assert.Contains("Invoke-TrackedInputValidator -SourceCommit $consumerHead", script, StringComparison.Ordinal);
+        Assert.Contains("Get-RedactedToolText -Text ($stdout.GetAwaiter().GetResult())", script, StringComparison.Ordinal);
+        Assert.Contains("appStoreConnectApi(?:KeyPath|KeyId|IssuerId)", script, StringComparison.Ordinal);
+        Assert.Contains("Get-Content -LiteralPath $keyPath -Raw", script, StringComparison.Ordinal);
+        Assert.Contains("[Console]::Error.Write($safeStdErr)", script, StringComparison.Ordinal);
+        Assert.Contains("[Diagnostics.ProcessStartInfo]::new()", script, StringComparison.Ordinal);
+        Assert.Contains("RedirectStandardError = $true", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("[string] $DotNet =", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ScreenshotCaptureProvenanceInventoriesExactPngBytesAndDimensions()
+    {
+        var root = FindRepoRoot();
+        var workflow = Read(root, ".github", "workflows", "powerforge-apple-screenshot-capture.yml");
+        Assert.Contains("Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256", workflow, StringComparison.Ordinal);
+        Assert.Contains("sips -g pixelWidth -g pixelHeight", workflow, StringComparison.Ordinal);
+        Assert.Contains("path = [IO.Path]::GetRelativePath($artifactRoot, $_.FullName)", workflow, StringComparison.Ordinal);
+        Assert.Contains("screenshots = $screenshots", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TrackedReleaseInputValidatorRejectsAnIgnoredAppleProject()
+    {
+        var root = FindRepoRoot();
+        var sandbox = Path.Combine(root, ".test-temp", $"powerforge-tracked-project-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(sandbox, ".powerforge"));
+            var project = Directory.CreateDirectory(Path.Combine(sandbox, "Ignored.xcodeproj"));
+            var configPath = Path.Combine(sandbox, "powerforge.release.json");
+            var manifestPath = Path.Combine(sandbox, ".powerforge", "powerforge.tool.json");
+            File.WriteAllText(configPath,
+                """{ "AppleApps": { "ProjectRoot": ".", "Apps": [ { "ProjectPath": "Ignored.xcodeproj" } ] } }""");
+            File.WriteAllText(manifestPath, "{}");
+            File.WriteAllText(Path.Combine(sandbox, ".gitignore"), "Ignored.xcodeproj/\n");
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), "// ignored project");
+            Run("git", sandbox, "init", "--quiet").EnsureSuccess();
+            Run("git", sandbox, "add", "powerforge.release.json", ".powerforge/powerforge.tool.json", ".gitignore").EnsureSuccess();
+            Run(
+                "git",
+                sandbox,
+                "-c", "user.name=PowerForge Tests",
+                "-c", "user.email=powerforge-tests@example.invalid",
+                "commit", "--quiet", "-m", "Tracked release project").EnsureSuccess();
+            var commit = Run("git", sandbox, "rev-parse", "HEAD").EnsureSuccess().StandardOutput.Trim();
+            var validator = Path.Combine(
+                root,
+                ".github",
+                "actions",
+                "apple-release",
+                "Assert-TrackedAppleReleaseInputs.ps1");
+
+            var result = Run(
+                "pwsh",
+                sandbox,
+                "-NoProfile",
+                "-File", validator,
+                "-ConfigPath", configPath,
+                "-ToolManifestPath", manifestPath,
+                "-SourceCommit", commit);
+
+            Assert.NotEqual(0, result.ExitCode);
+            var output = result.StandardOutput + result.StandardError;
+            Assert.True(
+                output.Contains("AppleApps.Apps.ProjectPath/project.pbxproj", StringComparison.OrdinalIgnoreCase) &&
+                output.Contains("must be tracked at the exact source", StringComparison.OrdinalIgnoreCase),
+                output);
+        }
+        finally
+        {
+            if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+        }
+    }
+
+    [Fact]
     public void RunnerLocalDoctorUsesPrivateProfileWithoutSerializingCredentials()
     {
         if (!OperatingSystem.IsMacOS() || !CommandExists("pwsh")) return;

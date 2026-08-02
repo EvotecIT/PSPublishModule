@@ -158,7 +158,26 @@ jobs:
           CAPTURE_DEVICE: ${{ inputs.device }}
           CAPTURE_THEME: ${{ inputs.theme }}
           CAPTURE_SCENARIO: ${{ inputs.scenario }}
+          CAPTURE_ARTIFACT_PATH: ${{ inputs.capture_artifact_path }}
         run: |
+          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source')
+          $artifactRoot = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_ARTIFACT_PATH))
+          $screenshots = @(Get-ChildItem -LiteralPath $artifactRoot -File -Filter '*.png' -Recurse | Sort-Object FullName | ForEach-Object {
+            $dimensions = @(& sips -g pixelWidth -g pixelHeight $_.FullName 2>&1)
+            if ($LASTEXITCODE -ne 0) { throw "Unable to read PNG dimensions: $($_.FullName)" }
+            $widthLine = $dimensions | Where-Object { $_ -match '^\s*pixelWidth:\s*(\d+)\s*$' } | Select-Object -First 1
+            $heightLine = $dimensions | Where-Object { $_ -match '^\s*pixelHeight:\s*(\d+)\s*$' } | Select-Object -First 1
+            if (-not $widthLine -or -not $heightLine) { throw "Unable to parse PNG dimensions: $($_.FullName)" }
+            $width = [int]([regex]::Match($widthLine, '(\d+)\s*$').Groups[1].Value)
+            $height = [int]([regex]::Match($heightLine, '(\d+)\s*$').Groups[1].Value)
+            [ordered]@{
+              path = [IO.Path]::GetRelativePath($artifactRoot, $_.FullName).Replace('\\', '/')
+              sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              width = $width
+              height = $height
+            }
+          })
+          if ($screenshots.Count -eq 0) { throw 'Capture provenance requires at least one PNG screenshot.' }
           $xcodeVersion = (& xcodebuild -version) -join ' '
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($xcodeVersion)) { throw 'Unable to record the capture Xcode version.' }
           $captureRuntime = "$(& sw_vers -productName) $(& sw_vers -productVersion) ($([Runtime.InteropServices.RuntimeInformation]::OSArchitecture))"
@@ -174,6 +193,7 @@ jobs:
             device = $env:CAPTURE_DEVICE
             theme = $env:CAPTURE_THEME
             scenario = $env:CAPTURE_SCENARIO
+            screenshots = $screenshots
           }
           $provenance | ConvertTo-Json -Depth 5 -Compress |
             Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-screenshot-provenance.json') -Encoding utf8

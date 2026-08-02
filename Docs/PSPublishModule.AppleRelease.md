@@ -557,10 +557,11 @@ hashes or dimensions:
 ```text
 powerforge apple-screenshots manifest \
   --config scripts/appstoreconnect-screenshots-ios.json \
+  --capture-provenance build/appstore-screenshots/powerforge-apple-screenshot-provenance.json \
+  --expected-repository EvotecIT/MyApp \
+  --expected-workflow-ref EvotecIT/MyApp/.github/workflows/apple-screenshots.yml@refs/heads/main \
   --release-config powerforge.release.json \
   --target "Primary iOS App" \
-  --version 1.6.0 \
-  --source-commit 0123456789abcdef0123456789abcdef01234567 \
   --approved-by release-owner \
   --allowed-root build/appstore-screenshots \
   --runtime "iOS 26.0" \
@@ -568,6 +569,22 @@ powerforge apple-screenshots manifest \
   --theme light \
   --scenario app-store
 ```
+
+`--capture-provenance` derives the marketing version, exact source commit, Xcode,
+runtime, device, theme, scenario, and exact PNG byte inventory from the retained
+capture artifact. The selected files must match its path, SHA-256, width, and
+height inventory exactly. Explicit `--version`, `--source-commit`, or
+capture-metadata options may still be supplied for recovery, but they must match
+the provenance document exactly.
+
+For local publication, invoke the command through the reviewed
+`scripts/Invoke-PinnedPowerForge.ps1` helper. It requires the exact merged
+PSPublishModule commit, a clean consumer `main` equal to `origin/main`, and the
+expected GitHub repository. It also re-downloads the named provenance artifact
+from the successful source-bound GitHub run and compares its exact bytes before
+building the CLI into an isolated temporary artifacts directory. This prevents
+an editable local provenance copy, a stale ignored binary, or another checkout
+from becoming the publication authority.
 
 In GitHub Actions, `ApprovedBy` names the protected environment boundary—not the
 workflow initiator. `InitiatedBy` records who started the run, while

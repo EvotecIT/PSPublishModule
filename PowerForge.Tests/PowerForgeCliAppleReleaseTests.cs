@@ -49,6 +49,14 @@ public sealed class PowerForgeCliAppleReleaseTests
                 Assert.Equal("status", Assert.Single(result.GetProperty("enabledSteps").EnumerateArray()).GetString());
             }
 
+            var detailedStatus = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-release Status --config \"{configPath}\" --plan --output json");
+            Assert.Equal(0, detailedStatus.ExitCode);
+            Assert.DoesNotContain("TEST123456", detailedStatus.StdOut + detailedStatus.StdErr, StringComparison.Ordinal);
+            Assert.DoesNotContain("00000000-0000-0000-0000-000000000000", detailedStatus.StdOut + detailedStatus.StdErr, StringComparison.Ordinal);
+            Assert.DoesNotContain("AuthKey_TEST123456.p8", detailedStatus.StdOut + detailedStatus.StdErr, StringComparison.Ordinal);
+
             var doctor = await RunCliAsync(
                 repoRoot,
                 $"\"{GetCliPath(repoRoot)}\" apple-release Doctor --config \"{configPath}\" --plan --summary --output json");
@@ -126,6 +134,38 @@ public sealed class PowerForgeCliAppleReleaseTests
     }
 
     [Fact]
+    public async Task AppleRelease_CliRedactsCredentialMetadataFromFailureJson()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = CreateTempDirectory();
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(tempRoot, "Sample.xcodeproj"));
+            File.WriteAllText(Path.Combine(projectDirectory.FullName, "project.pbxproj"),
+                "{ MARKETING_VERSION = 1.2.0; CURRENT_PROJECT_VERSION = 9; }");
+            var configPath = Path.Combine(tempRoot, "powerforge.release.json");
+            WriteReleaseConfig(configPath, submitForReview: false, includeInvalidModule: false);
+
+            var result = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-release Status --config \"{configPath}\" --plan --output json");
+
+            Assert.NotEqual(0, result.ExitCode);
+            var combined = result.StdOut + result.StdErr;
+            Assert.DoesNotContain("TEST123456", combined, StringComparison.Ordinal);
+            Assert.DoesNotContain("00000000-0000-0000-0000-000000000000", combined, StringComparison.Ordinal);
+            Assert.DoesNotContain("AuthKey_TEST123456.p8", combined, StringComparison.Ordinal);
+            using var document = JsonDocument.Parse(result.StdOut);
+            Assert.False(document.RootElement.GetProperty("success").GetBoolean());
+            Assert.Contains("[REDACTED]", document.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task AppleScreenshots_ManifestResolvesBlankAppIdFromSelectedReleaseTarget()
     {
         var repoRoot = FindRepositoryRoot();
@@ -189,6 +229,64 @@ public sealed class PowerForgeCliAppleReleaseTests
         {
             if (Directory.Exists(tempRoot))
                 Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AppleScreenshots_ManifestDerivesVersionAndSourceFromCaptureProvenance()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = CreateTempDirectory();
+        try
+        {
+            var screenshotDirectory = Directory.CreateDirectory(Path.Combine(tempRoot, "screenshots"));
+            File.WriteAllBytes(Path.Combine(screenshotDirectory.FullName, "01-home.png"),
+                Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII="));
+            var configPath = Path.Combine(tempRoot, "screenshots.json");
+            File.WriteAllText(configPath,
+                """{ "AppId": "1234567890", "Platform": "iOS", "Locale": "en-US", "ScreenshotSets": [ { "ScreenshotDisplayType": "APP_IPHONE_67", "Path": "screenshots", "AllowedDimensions": [ "1x1" ] } ], "Quality": { "Enabled": true, "MinimumFileBytes": 1, "MinimumKilobytesPerMegapixel": 0 } }""");
+            var provenancePath = Path.Combine(tempRoot, "powerforge-apple-screenshot-provenance.json");
+            File.WriteAllText(provenancePath,
+                $$"""{ "schemaVersion": 2, "repository": "EvotecIT/Sample", "captureRunId": "123", "sourceCommit": "{{ApprovedSourceCommit}}", "marketingVersion": "1.5.0", "workflowRef": "EvotecIT/Sample/.github/workflows/apple-screenshots.yml@refs/heads/main", "xcodeVersion": "Xcode 26", "runtime": "macOS 26 arm64", "device": "Mac", "theme": "all", "scenario": "app-store", "screenshots": [ { "path": "01-home.png", "sha256": "d268b9b4a10c5990e181efed7c66f7369e43f3382bdef6c6ea9858098e0fab95", "width": 1, "height": 1 } ] }""");
+            var manifestPath = Path.Combine(tempRoot, "approval.json");
+
+            var result = await RunCliAsync(repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-screenshots manifest --config \"{configPath}\" --capture-provenance \"{provenancePath}\" --expected-repository EvotecIT/Sample --expected-workflow-ref EvotecIT/Sample/.github/workflows/apple-screenshots.yml@refs/heads/main --approved-by release-owner --allowed-root \"{screenshotDirectory.FullName}\" --out \"{manifestPath}\" --output json");
+
+            Assert.Equal(0, result.ExitCode);
+            var manifest = JsonSerializer.Deserialize<AppStoreConnectScreenshotApprovalManifest>(
+                File.ReadAllText(manifestPath),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true, Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } });
+            Assert.NotNull(manifest);
+            Assert.Equal("1.5.0", manifest!.VersionString);
+            Assert.Equal(ApprovedSourceCommit, manifest.SourceCommit);
+            Assert.Equal("Xcode 26", manifest.XcodeVersion);
+            Assert.Equal("123", manifest.CaptureRunId);
+            Assert.Equal("EvotecIT/Sample", manifest.CaptureRepository);
+            Assert.Equal("EvotecIT/Sample/.github/workflows/apple-screenshots.yml@refs/heads/main", manifest.CaptureWorkflowRef);
+
+            var mismatch = await RunCliAsync(repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-screenshots manifest --config \"{configPath}\" --capture-provenance \"{provenancePath}\" --expected-repository Other/Repo --expected-workflow-ref EvotecIT/Sample/.github/workflows/apple-screenshots.yml@refs/heads/main --approved-by release-owner --allowed-root \"{screenshotDirectory.FullName}\" --out \"{manifestPath}\" --output json");
+            Assert.Equal(1, mismatch.ExitCode);
+            Assert.Contains("does not match expected repository", mismatch.StdOut + mismatch.StdErr, StringComparison.OrdinalIgnoreCase);
+
+            File.WriteAllText(provenancePath,
+                $$"""{ "schemaVersion": 2, "repository": "EvotecIT/Sample", "captureRunId": "123", "sourceCommit": "{{ApprovedSourceCommit}}", "marketingVersion": "1.5.0", "workflowRef": "EvotecIT/Sample/.github/workflows/apple-screenshots.yml@refs/heads/main", "xcodeVersion": "Xcode 26", "runtime": "macOS 26 arm64", "device": "Mac", "theme": "all", "scenario": "app-store", "screenshots": [ { "path": "01-home.png", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "width": 1, "height": 1 } ] }""");
+            var byteMismatch = await RunCliAsync(repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-screenshots manifest --config \"{configPath}\" --capture-provenance \"{provenancePath}\" --expected-repository EvotecIT/Sample --expected-workflow-ref EvotecIT/Sample/.github/workflows/apple-screenshots.yml@refs/heads/main --approved-by release-owner --allowed-root \"{screenshotDirectory.FullName}\" --out \"{manifestPath}\" --output json");
+            Assert.Equal(1, byteMismatch.ExitCode);
+            Assert.Contains("do not exactly match", byteMismatch.StdOut + byteMismatch.StdErr, StringComparison.OrdinalIgnoreCase);
+
+            File.WriteAllText(provenancePath,
+                $$"""{ "schemaVersion": 2, "repository": "EvotecIT/Sample", "captureRunId": "123", "sourceCommit": "{{ApprovedSourceCommit}}", "marketingVersion": "1.5.0", "workflowRef": "EvotecIT/Sample/.github/workflows/apple-screenshots.yml@refs/heads/main", "xcodeVersion": "Xcode 26", "runtime": "macOS 26 arm64", "device": "Mac", "theme": "all", "scenario": "app-store", "screenshots": [ { "path": "/01-home.png", "sha256": "d268b9b4a10c5990e181efed7c66f7369e43f3382bdef6c6ea9858098e0fab95", "width": 1, "height": 1 } ] }""");
+            var unsafePath = await RunCliAsync(repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-screenshots manifest --config \"{configPath}\" --capture-provenance \"{provenancePath}\" --expected-repository EvotecIT/Sample --expected-workflow-ref EvotecIT/Sample/.github/workflows/apple-screenshots.yml@refs/heads/main --approved-by release-owner --allowed-root \"{screenshotDirectory.FullName}\" --out \"{manifestPath}\" --output json");
+            Assert.Equal(1, unsafePath.ExitCode);
+            Assert.Contains("unsafe screenshot path", unsafePath.StdOut + unsafePath.StdErr, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
         }
     }
 

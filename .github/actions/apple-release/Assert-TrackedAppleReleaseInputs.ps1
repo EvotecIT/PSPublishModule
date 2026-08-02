@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory)] [string] $ConfigPath,
     [string] $ToolManifestPath,
     [string] $SourceCommit,
+    [string] $GitPath = 'git',
     [switch] $SkipToolManifest
 )
 
@@ -36,15 +37,15 @@ function Assert-TrackedSourceFile {
     }
 
     $relative = [IO.Path]::GetRelativePath($root, $candidate).Replace('\', '/')
-    & git -C $root ls-files --error-unmatch -- $relative *> $null
+    & $GitPath -C $root ls-files --error-unmatch -- $relative *> $null
     if ($LASTEXITCODE -ne 0) { throw "$Name must be tracked at the exact source commit: $relative" }
-    & git -C $root diff --quiet HEAD -- $relative
+    & $GitPath -C $root diff --quiet HEAD -- $relative
     if ($LASTEXITCODE -ne 0) { throw "$Name differs from the exact source commit: $relative" }
 }
 
 $configFullPath = [IO.Path]::GetFullPath($ConfigPath)
 $configDirectory = Split-Path -Parent $configFullPath
-$sourceRoot = (& git -C $configDirectory rev-parse --show-toplevel).Trim()
+$sourceRoot = (& $GitPath -C $configDirectory rev-parse --show-toplevel).Trim()
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($sourceRoot)) {
     throw 'config-path must belong to a Git checkout.'
 }
@@ -52,7 +53,7 @@ $sourceRoot = [IO.Path]::GetFullPath($sourceRoot)
 
 if (-not [string]::IsNullOrWhiteSpace($SourceCommit)) {
     if ($SourceCommit -notmatch '^[0-9A-Fa-f]{40}$') { throw 'source-commit must be an exact 40-character commit SHA.' }
-    $actualCommit = (& git -C $sourceRoot rev-parse HEAD).Trim()
+    $actualCommit = (& $GitPath -C $sourceRoot rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $actualCommit.Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Checked-out source '$actualCommit' does not match source-commit '$SourceCommit'."
     }
@@ -113,6 +114,34 @@ foreach ($propertyName in $trackedInputProperties) {
             -SourceRoot $sourceRoot `
             -Path $inputPath `
             -Name "AppleApps.$propertyName"
+    }
+}
+
+foreach ($app in @($config.AppleApps.Apps)) {
+    $configuredProjectPath = [string] $app.ProjectPath
+    if ([string]::IsNullOrWhiteSpace($configuredProjectPath)) { continue }
+    $projectPath = if ([IO.Path]::IsPathRooted($configuredProjectPath)) {
+        [IO.Path]::GetFullPath($configuredProjectPath)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $projectRoot $configuredProjectPath))
+    }
+    if (-not $projectPath.StartsWith($sourcePrefix, $comparison)) {
+        throw "AppleApps.Apps.ProjectPath must resolve inside the exact checked-out source: $projectPath"
+    }
+    if (Test-Path -LiteralPath $projectPath -PathType Leaf) {
+        Assert-TrackedSourceFile -SourceRoot $sourceRoot -Path $projectPath -Name 'AppleApps.Apps.ProjectPath'
+    } elseif (Test-Path -LiteralPath $projectPath -PathType Container) {
+        Assert-TrackedSourceFile `
+            -SourceRoot $sourceRoot `
+            -Path (Join-Path $projectPath 'project.pbxproj') `
+            -Name 'AppleApps.Apps.ProjectPath/project.pbxproj'
+    } elseif ([bool] $app.GenerateProjectIfMissing) {
+        Assert-TrackedSourceFile `
+            -SourceRoot $sourceRoot `
+            -Path (Join-Path $projectRoot 'project.yml') `
+            -Name 'AppleApps.Apps.ProjectPath generation source'
+    } else {
+        throw "AppleApps.Apps.ProjectPath was not found inside the exact checked-out source: $projectPath"
     }
 }
 

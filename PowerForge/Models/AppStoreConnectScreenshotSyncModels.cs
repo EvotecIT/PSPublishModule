@@ -101,6 +101,15 @@ public sealed class AppStoreConnectScreenshotApprovalManifest
     /// <summary>Source commit used by the capture.</summary>
     public string SourceCommit { get; set; } = string.Empty;
 
+    /// <summary>GitHub Actions run that produced the exact reviewed capture bytes.</summary>
+    public string? CaptureRunId { get; set; }
+
+    /// <summary>Repository that produced the exact reviewed capture bytes.</summary>
+    public string? CaptureRepository { get; set; }
+
+    /// <summary>Reusable workflow identity that produced the exact reviewed capture bytes.</summary>
+    public string? CaptureWorkflowRef { get; set; }
+
     /// <summary>Xcode version used for capture.</summary>
     public string? XcodeVersion { get; set; }
 
@@ -180,6 +189,15 @@ public sealed class AppStoreConnectScreenshotApprovalRequest
 
     /// <summary>Exact source commit used by capture automation.</summary>
     public string SourceCommit { get; set; } = string.Empty;
+
+    /// <summary>GitHub Actions run that produced the reviewed capture bytes.</summary>
+    public string? CaptureRunId { get; set; }
+
+    /// <summary>Repository that produced the reviewed capture bytes.</summary>
+    public string? CaptureRepository { get; set; }
+
+    /// <summary>Reusable workflow identity that produced the reviewed capture bytes.</summary>
+    public string? CaptureWorkflowRef { get; set; }
 
     /// <summary>Human reviewer or protected approval boundary.</summary>
     public string ApprovedBy { get; set; } = string.Empty;
