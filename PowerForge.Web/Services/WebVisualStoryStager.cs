@@ -104,6 +104,7 @@ public static class WebVisualStoryStager
             var sha256 = ComputeSha256(sourcePath);
             ValidateDeclaredIntegrity(artifact, info.Length, sha256);
             var relativePath = Path.GetRelativePath(sourceRoot, sourcePath).Replace('\\', '/');
+            VisualStoryPortablePathValidator.Validate(relativePath);
             ValidateReservedStagedPath(relativePath);
             if (!relativePaths.Add(relativePath))
                 throw new InvalidOperationException($"Visual-story artifact paths must be unique: {relativePath}");
@@ -298,6 +299,8 @@ public static class WebVisualStoryStager
                 manifestRoot,
                 artifact.Path,
                 "artifact");
+            var portableRelativePath = Path.GetRelativePath(manifestRoot, artifactPath).Replace('\\', '/');
+            VisualStoryPortablePathValidator.Validate(portableRelativePath);
             if (!File.Exists(artifactPath))
                 throw new FileNotFoundException($"Visual-story artifact was not found: {artifact.Path}", artifactPath);
             var info = new FileInfo(artifactPath);

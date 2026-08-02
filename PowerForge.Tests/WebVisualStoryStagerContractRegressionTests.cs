@@ -18,6 +18,31 @@ public class WebVisualStoryStagerContractRegressionTests
     }
 
     [Theory]
+    [InlineData("media/demo:final.png")]
+    [InlineData("media/CON.png")]
+    [InlineData("media/com1.log")]
+    [InlineData("media/CON .txt")]
+    [InlineData("media/trailing-dot.")]
+    [InlineData("media/trailing-space ")]
+    [InlineData("media/bad?.png")]
+    public void PortableArtifactPath_RejectsWindowsIncompatibleSegments(string path)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            VisualStoryPortablePathValidator.Validate(path));
+
+        Assert.Contains("not portable to Windows", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("media/console.png")]
+    [InlineData("media/company.lpt10.svg")]
+    [InlineData("media/chart-final.png")]
+    public void PortableArtifactPath_AcceptsPortableSegments(string path)
+    {
+        VisualStoryPortablePathValidator.Validate(path);
+    }
+
+    [Theory]
     [InlineData("id")]
     [InlineData("title")]
     [InlineData("alt")]

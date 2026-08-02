@@ -5,6 +5,14 @@ namespace PowerForge.Tests;
 public partial class WebSiteAuditOptimizeBuildTests
 {
     [Fact]
+    public void ProtectedStoryPaths_UseCaseInsensitiveComparisonOnMacOS()
+    {
+        Assert.Same(StringComparer.OrdinalIgnoreCase, WebAssetOptimizer.GetFileSystemPathComparer(false, true));
+        Assert.Same(StringComparer.OrdinalIgnoreCase, WebAssetOptimizer.GetFileSystemPathComparer(true, false));
+        Assert.Same(StringComparer.Ordinal, WebAssetOptimizer.GetFileSystemPathComparer(false, false));
+    }
+
+    [Fact]
     public void OptimizeDetailed_DoesNotOverwriteProtectedStoriesWithAuxiliaryOutputs()
     {
         var bundleRoot = WebVisualStoryStagerTests.CreateBundle();

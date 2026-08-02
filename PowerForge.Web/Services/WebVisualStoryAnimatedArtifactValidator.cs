@@ -123,17 +123,18 @@ internal static class WebVisualStoryAnimatedArtifactValidator
             }
             var sawDeclarativeAnimation = false;
             var sawCssKeyframes = false;
-            var sawCssAnimationDeclaration = false;
+            var rootInlineStyle = reader.GetAttribute("style");
+            var sawCssAnimationDeclaration = !string.IsNullOrWhiteSpace(rootInlineStyle) &&
+                                             WebVisualStoryCssAnimationValidator.ContainsEffectiveAnimation(rootInlineStyle);
             var insideStyle = false;
             var pendingAnimateMotionDepth = -1;
             while (reader.Read())
             {
                 if (reader.NodeType is XmlNodeType.Text or XmlNodeType.CDATA && insideStyle)
                 {
-                    sawCssKeyframes |=
-                        reader.Value.IndexOf("@keyframes", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        reader.Value.IndexOf("@-webkit-keyframes", StringComparison.OrdinalIgnoreCase) >= 0;
-                    sawCssAnimationDeclaration |= ContainsCssAnimationDeclaration(reader.Value);
+                    sawCssKeyframes |= WebVisualStoryCssAnimationValidator.ContainsKeyframes(reader.Value);
+                    sawCssAnimationDeclaration |=
+                        WebVisualStoryCssAnimationValidator.ContainsEffectiveAnimation(reader.Value);
                     continue;
                 }
                 if (reader.NodeType == XmlNodeType.EndElement &&
@@ -168,7 +169,8 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                     sawDeclarativeAnimation = true;
 
                 var inlineStyle = reader.GetAttribute("style");
-                if (!string.IsNullOrWhiteSpace(inlineStyle) && ContainsCssAnimationDeclaration(inlineStyle))
+                if (!string.IsNullOrWhiteSpace(inlineStyle) &&
+                    WebVisualStoryCssAnimationValidator.ContainsEffectiveAnimation(inlineStyle))
                     sawCssAnimationDeclaration = true;
 
                 insideStyle = string.Equals(reader.LocalName, "style", StringComparison.Ordinal) && !reader.IsEmptyElement;
@@ -220,36 +222,6 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                         reader.GetAttribute("href", "http://www.w3.org/1999/xlink");
         return reference is { Length: > 1 } && reference[0] == '#';
     }
-
-    private static bool ContainsCssAnimationDeclaration(string css)
-    {
-        const string property = "animation";
-        for (var searchFrom = 0; searchFrom < css.Length;)
-        {
-            var index = css.IndexOf(property, searchFrom, StringComparison.OrdinalIgnoreCase);
-            if (index < 0)
-                return false;
-
-            var beforeIsIdentifier = index > 0 && IsCssIdentifierCharacter(css[index - 1]);
-            var cursor = index + property.Length;
-            if (cursor + 5 <= css.Length &&
-                string.Equals(css.Substring(cursor, 5), "-name", StringComparison.OrdinalIgnoreCase))
-            {
-                cursor += 5;
-            }
-            while (cursor < css.Length && char.IsWhiteSpace(css[cursor]))
-                cursor++;
-            if (!beforeIsIdentifier && cursor < css.Length && css[cursor] == ':')
-                return true;
-
-            searchFrom = index + property.Length;
-        }
-
-        return false;
-    }
-
-    private static bool IsCssIdentifierCharacter(char value)
-        => char.IsLetterOrDigit(value) || value is '-' or '_';
 
     private static void ValidateApng(string path, string displayPath)
     {

@@ -321,8 +321,7 @@ public static partial class WebAssetOptimizer
 
     private static HashSet<string> FindVisualStoryArtifactPaths(string siteRoot)
     {
-        var paths = new HashSet<string>(
-            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        var paths = new HashSet<string>(FileSystemPathComparer);
         foreach (var manifestPath in Directory.EnumerateFiles(
                      siteRoot,
                      "visual-story.json",

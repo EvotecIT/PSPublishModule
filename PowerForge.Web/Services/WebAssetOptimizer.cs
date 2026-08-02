@@ -14,6 +14,9 @@ namespace PowerForge.Web;
 public static partial class WebAssetOptimizer
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly StringComparer FileSystemPathComparer = GetFileSystemPathComparer(
+        OperatingSystem.IsWindows(),
+        OperatingSystem.IsMacOS());
     private static readonly HttpClient RewriteDownloadClient = CreateRewriteDownloadClient();
     private static readonly Regex HtmlAttrRegex = new("(?<attr>href|src)=\"(?<url>[^\"]+)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex HtmlSrcSetAttrRegex = new("(?<attr>\\b(?:srcset|imagesrcset))\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
@@ -60,6 +63,12 @@ public static partial class WebAssetOptimizer
         };
         return client;
     }
+
+    internal static StringComparer GetFileSystemPathComparer(bool isWindows, bool isMacOS)
+        => isWindows || isMacOS
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+
     /// <summary>Runs asset optimization and returns the count of updated HTML files.</summary>
     /// <param name="options">Optimization options.</param>
     /// <returns>Number of HTML files updated with critical CSS.</returns>
