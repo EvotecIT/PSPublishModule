@@ -108,7 +108,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("IsPathRooted($projectRootSetting)", script, StringComparison.Ordinal);
         Assert.True(
             script.IndexOf("Write-ReleaseOutput -Name 'receipt-path'", StringComparison.Ordinal) <
-            script.IndexOf("& $env:POWERFORGE_TOOL_PATH", StringComparison.Ordinal));
+            script.IndexOf("Invoke-SecretSafeNativeProcess -FilePath $env:POWERFORGE_TOOL_PATH", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -278,9 +278,17 @@ public sealed partial class AppleReleaseWorkflowTests
         var workflow = Read(root, ".github", "workflows", "powerforge-apple-monitor.yml");
         var action = Read(root, ".github", "actions", "apple-release", "action.yml");
         var script = Read(root, ".github", "actions", "apple-release", "Invoke-PowerForgeAppleRelease.ps1");
+        var localCredentialResolver = Read(root, ".github", "actions", "apple-release", "Resolve-RunnerLocalAppleCredentials.ps1");
 
         Assert.Contains("action: Doctor", workflow, StringComparison.Ordinal);
-        Assert.Contains("environment: ${{ inputs.environment_name }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner-local-credentials: \"true\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("source_ref must equal the exact default-branch workflow commit", workflow, StringComparison.Ordinal);
+        Assert.Contains("may run only from the caller repository default branch", workflow, StringComparison.Ordinal);
+        Assert.Contains("powerforge_ref must be a commit already merged", workflow, StringComparison.Ordinal);
+        Assert.Contains("merge_base_commit.sha", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("environment:", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("APP_STORE_CONNECT_", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("caller_app_store_connect_", workflow, StringComparison.Ordinal);
         Assert.Contains("Build the exact monitored PowerForge source", workflow, StringComparison.Ordinal);
         Assert.Contains("./powerforge-shared/.github/actions/build-powerforge", workflow, StringComparison.Ordinal);
         Assert.Contains("runtime: ${{ inputs.tool_runtime }}", workflow, StringComparison.Ordinal);
@@ -314,6 +322,15 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("diagnostics:", action, StringComparison.Ordinal);
         Assert.Contains("'Status', 'Doctor'", script, StringComparison.Ordinal);
         Assert.Contains("reportedDiagnostics", script, StringComparison.Ordinal);
+        Assert.Contains("APPLE_RUNNER_LOCAL_CREDENTIALS_INVALID", script, StringComparison.Ordinal);
+        Assert.Contains("allowed only for the read-only Doctor action", localCredentialResolver, StringComparison.Ordinal);
+        Assert.Contains("require a self-hosted macOS runner", localCredentialResolver, StringComparison.Ordinal);
+        Assert.Contains("GetUnixFileMode", localCredentialResolver, StringComparison.Ordinal);
+        Assert.Contains("unencrypted P-256 PKCS#8 PEM", localCredentialResolver, StringComparison.Ordinal);
+        Assert.DoesNotContain("GITHUB_OUTPUT", localCredentialResolver, StringComparison.Ordinal);
+        Assert.DoesNotContain("GITHUB_ENV", localCredentialResolver, StringComparison.Ordinal);
+        Assert.DoesNotContain("Write-Host", localCredentialResolver, StringComparison.Ordinal);
+        Assert.DoesNotContain("[pscustomobject]", localCredentialResolver, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("IsNullOrWhiteSpace($env:PRIVATE_KEY)", action, StringComparison.Ordinal);
         Assert.True(
             action.IndexOf("IsNullOrWhiteSpace($env:PRIVATE_KEY)", StringComparison.Ordinal) <
@@ -321,12 +338,11 @@ public sealed partial class AppleReleaseWorkflowTests
     }
 
     [Fact]
-    public void AppleReusableWorkflowsPreferProtectedEnvironmentCredentialsWithCallerFallback()
+    public void MutatingAppleReusableWorkflowsPreferProtectedEnvironmentCredentialsWithCallerFallback()
     {
         var root = FindRepoRoot();
         var workflows = new[]
         {
-            "powerforge-apple-monitor.yml",
             "powerforge-apple-version-pr.yml",
             "powerforge-apple-advance.yml",
             "powerforge-apple-approval.yml",
@@ -581,14 +597,13 @@ public sealed partial class AppleReleaseWorkflowTests
     }
 
     [Fact]
-    public void AppleCallerCredentialFallbacksRemainOptionalAtTheWorkflowCallBoundary()
+    public void MutatingAppleCallerCredentialFallbacksRemainOptionalAtTheWorkflowCallBoundary()
     {
         var root = FindRepoRoot();
         foreach (var workflowName in new[]
                  {
                      "powerforge-apple-screenshots.yml",
                      "powerforge-apple-screenshot-approve.yml",
-                     "powerforge-apple-monitor.yml",
                      "powerforge-apple-version-pr.yml",
                      "powerforge-apple-advance.yml",
                      "powerforge-apple-governance.yml",

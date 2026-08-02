@@ -81,7 +81,7 @@ public sealed partial class AppleReleaseWorkflowTests
             var diagnostic = Assert.Single(rootElement.GetProperty("diagnostics").EnumerateArray());
             Assert.Equal("APPLE_APP_STORE_CONNECT_CREDENTIALS_MISSING", diagnostic.GetProperty("code").GetString());
             Assert.Equal("credential", diagnostic.GetProperty("category").GetString());
-            Assert.Contains("protected Apple environment", diagnostic.GetProperty("action").GetString(), StringComparison.Ordinal);
+            Assert.Contains("complete App Store Connect credential tuple", diagnostic.GetProperty("action").GetString(), StringComparison.Ordinal);
 
             var outputs = File.ReadAllText(outputPath);
             Assert.Contains("receipt-path=", outputs, StringComparison.Ordinal);
