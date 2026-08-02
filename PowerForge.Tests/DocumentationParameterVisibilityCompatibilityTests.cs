@@ -19,10 +19,12 @@ function Get-VisibilityFixture {
     [CmdletBinding()]
     param(
         [Nullable[VisibilityMode]] $Mode,
-        [Parameter(DontShow = $true)] [string] $HiddenTransport
+        [Parameter(DontShow = $true, Position = 0)] [string] $HiddenTransport
     )
 }
-Export-ModuleMember -Function Get-VisibilityFixture
+function GetDocumentationParameterDeclaringMetadata { throw 'Target helper shadow was invoked.' }
+function TestDocumentationParameterDontShow { throw 'Target helper shadow was invoked.' }
+Export-ModuleMember -Function Get-VisibilityFixture,GetDocumentationParameterDeclaringMetadata,TestDocumentationParameterDontShow
 """, new UTF8Encoding(false));
             File.WriteAllText(manifestPath, """
 @{
@@ -31,7 +33,7 @@ Export-ModuleMember -Function Get-VisibilityFixture
     GUID = '34343434-3434-3434-3434-343434343434'
     Author = 'PowerForge.Tests'
     Description = 'Parameter visibility fixture.'
-    FunctionsToExport = @('Get-VisibilityFixture')
+    FunctionsToExport = @('Get-VisibilityFixture','GetDocumentationParameterDeclaringMetadata','TestDocumentationParameterDontShow')
     CmdletsToExport = @()
     AliasesToExport = @()
     VariablesToExport = @()
@@ -45,7 +47,7 @@ Export-ModuleMember -Function Get-VisibilityFixture
             {
                 var engine = new DocumentationEngine(new ExecutablePowerShellRunner(host, root), new NullLogger());
                 var payload = engine.ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
-                var command = Assert.Single(payload.Commands);
+                var command = Assert.Single(payload.Commands, item => item.Name == "Get-VisibilityFixture");
                 var mode = Assert.Single(command.Parameters);
 
                 Assert.Equal("Mode", mode.Name);

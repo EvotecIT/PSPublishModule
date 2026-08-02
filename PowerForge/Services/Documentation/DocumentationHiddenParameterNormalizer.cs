@@ -47,6 +47,11 @@ internal static class DocumentationHiddenParameterNormalizer
         var escaped = Regex.Escape(name);
         value = Regex.Replace(
             value,
+            @"\s*\[\[-" + escaped + @"\](?:\s+<[^>\r\n]+>)?\]",
+            string.Empty,
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        value = Regex.Replace(
+            value,
             @"\s*\[-" + escaped + @"(?:\s+<[^>\r\n]+>)?\]",
             string.Empty,
             RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);

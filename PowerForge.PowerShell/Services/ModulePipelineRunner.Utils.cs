@@ -117,17 +117,20 @@ public sealed partial class ModulePipelineRunner
             if (existingHelpFiles.Length == 0) return;
 
             var externalHelpDir = Path.GetDirectoryName(existingHelpFiles[0]);
-            var cultureFolder = string.IsNullOrWhiteSpace(externalHelpDir)
-                ? plan.DocumentationBuild.ExternalHelpCulture
-                : new DirectoryInfo(externalHelpDir).Name;
-
-            var targetCultureDir = Path.Combine(projectRoot, cultureFolder);
-            Directory.CreateDirectory(targetCultureDir);
-            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(targetCultureDir);
+            var stagingRoot = string.IsNullOrWhiteSpace(externalHelpDir)
+                ? string.Empty
+                : Directory.GetParent(externalHelpDir)?.FullName ?? string.Empty;
+            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(projectRoot);
 
             foreach (var sourceHelpFile in existingHelpFiles)
             {
-                var targetHelpFile = Path.Combine(targetCultureDir, Path.GetFileName(sourceHelpFile));
+                var relativeHelpPath = string.IsNullOrWhiteSpace(stagingRoot)
+                    ? Path.GetFileName(sourceHelpFile)
+                    : GetRelativePath(stagingRoot, sourceHelpFile);
+                var targetHelpFile = Path.Combine(projectRoot, relativeHelpPath);
+                var targetHelpDirectory = Path.GetDirectoryName(targetHelpFile);
+                if (!string.IsNullOrWhiteSpace(targetHelpDirectory))
+                    Directory.CreateDirectory(targetHelpDirectory);
                 if (!SamePath(sourceHelpFile, targetHelpFile))
                     File.Copy(sourceHelpFile, targetHelpFile, overwrite: true);
             }

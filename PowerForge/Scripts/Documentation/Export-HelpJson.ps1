@@ -392,7 +392,8 @@ try {
 
     $parameters = @()
     foreach ($pn in $paramNames) {
-      $parameterRuntimeMetadata = & $collectorProtocol.GetParameterRuntimeMetadata $c $pn
+      $parameterRuntimeMetadata = & $collectorProtocol.GetParameterRuntimeMetadata `
+        $c $pn $collectorProtocol.GetParameterDeclaringMetadata $collectorProtocol.TestParameterDontShow
       $pmeta = $parameterRuntimeMetadata.Metadata
 
       $aliases = @()

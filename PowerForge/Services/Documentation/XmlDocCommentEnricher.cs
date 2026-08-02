@@ -70,66 +70,67 @@ internal sealed class XmlDocCommentEnricher
         {
             var implementingType = cmd.ImplementingType!.Trim();
             var xml = LoadXmlForAssembly(cmd.AssemblyPath, cmd.Name);
-            if (xml is null) continue;
-
-            var typeMember = xml.TryGetMember("T:" + implementingType);
-            if (typeMember is not null)
+            if (xml is not null)
             {
-                if (NeedsSynopsis(cmd.Name, cmd.Synopsis) && !string.IsNullOrWhiteSpace(typeMember.Summary))
-                    cmd.Synopsis = typeMember.Summary!;
-
-                if (NeedsText(cmd.Description) || LooksLikeSynopsisOnly(cmd.Description, cmd.Synopsis))
+                var typeMember = xml.TryGetMember("T:" + implementingType);
+                if (typeMember is not null)
                 {
-                    var desc = typeMember.Remarks;
-                    if (string.IsNullOrWhiteSpace(desc)) desc = typeMember.Body;
-                    if (string.IsNullOrWhiteSpace(desc)) desc = typeMember.Summary;
-                    if (!string.IsNullOrWhiteSpace(desc)) cmd.Description = desc!;
-                }
+                    if (NeedsSynopsis(cmd.Name, cmd.Synopsis) && !string.IsNullOrWhiteSpace(typeMember.Summary))
+                        cmd.Synopsis = typeMember.Summary!;
 
-                if (!HasMeaningfulExamples(cmd.Examples) && typeMember.Examples.Length > 0)
-                {
-                    cmd.Examples ??= new List<DocumentationExampleHelp>();      
-                    foreach (var ex in typeMember.Examples)
+                    if (NeedsText(cmd.Description) || LooksLikeSynopsisOnly(cmd.Description, cmd.Synopsis))
                     {
-                        cmd.Examples.Add(new DocumentationExampleHelp
-                        {
-                            Title = ex.Title ?? string.Empty,
-                            Introduction = ex.Introduction ?? string.Empty,
-                            Code = ex.Code ?? string.Empty,
-                            Remarks = ex.Remarks ?? string.Empty
-                        });
+                        var desc = typeMember.Remarks;
+                        if (string.IsNullOrWhiteSpace(desc)) desc = typeMember.Body;
+                        if (string.IsNullOrWhiteSpace(desc)) desc = typeMember.Summary;
+                        if (!string.IsNullOrWhiteSpace(desc)) cmd.Description = desc!;
                     }
-                }
 
-                if ((cmd.RelatedLinks?.Count ?? 0) == 0 && typeMember.SeeAlso.Length > 0)
-                {
-                    cmd.RelatedLinks ??= new List<DocumentationLinkHelp>();
-                    foreach (var link in typeMember.SeeAlso)
+                    if (!HasMeaningfulExamples(cmd.Examples) && typeMember.Examples.Length > 0)
                     {
-                        if (string.IsNullOrWhiteSpace(link.Uri) && string.IsNullOrWhiteSpace(link.Text))
-                            continue;
-
-                        cmd.RelatedLinks.Add(new DocumentationLinkHelp
+                        cmd.Examples ??= new List<DocumentationExampleHelp>();
+                        foreach (var ex in typeMember.Examples)
                         {
-                            Text = link.Text ?? string.Empty,
-                            Uri = link.Uri ?? string.Empty
-                        });
+                            cmd.Examples.Add(new DocumentationExampleHelp
+                            {
+                                Title = ex.Title ?? string.Empty,
+                                Introduction = ex.Introduction ?? string.Empty,
+                                Code = ex.Code ?? string.Empty,
+                                Remarks = ex.Remarks ?? string.Empty
+                            });
+                        }
                     }
-                }
 
-                if ((cmd.Notes?.Count ?? 0) == 0 && typeMember.Alerts.Length > 0)
-                {
-                    cmd.Notes ??= new List<DocumentationNoteHelp>();
-                    foreach (var alert in typeMember.Alerts)
+                    if ((cmd.RelatedLinks?.Count ?? 0) == 0 && typeMember.SeeAlso.Length > 0)
                     {
-                        if (string.IsNullOrWhiteSpace(alert.Title) && string.IsNullOrWhiteSpace(alert.Text))
-                            continue;
-
-                        cmd.Notes.Add(new DocumentationNoteHelp
+                        cmd.RelatedLinks ??= new List<DocumentationLinkHelp>();
+                        foreach (var link in typeMember.SeeAlso)
                         {
-                            Title = alert.Title ?? string.Empty,
-                            Text = alert.Text ?? string.Empty
-                        });
+                            if (string.IsNullOrWhiteSpace(link.Uri) && string.IsNullOrWhiteSpace(link.Text))
+                                continue;
+
+                            cmd.RelatedLinks.Add(new DocumentationLinkHelp
+                            {
+                                Text = link.Text ?? string.Empty,
+                                Uri = link.Uri ?? string.Empty
+                            });
+                        }
+                    }
+
+                    if ((cmd.Notes?.Count ?? 0) == 0 && typeMember.Alerts.Length > 0)
+                    {
+                        cmd.Notes ??= new List<DocumentationNoteHelp>();
+                        foreach (var alert in typeMember.Alerts)
+                        {
+                            if (string.IsNullOrWhiteSpace(alert.Title) && string.IsNullOrWhiteSpace(alert.Text))
+                                continue;
+
+                            cmd.Notes.Add(new DocumentationNoteHelp
+                            {
+                                Title = alert.Title ?? string.Empty,
+                                Text = alert.Text ?? string.Empty
+                            });
+                        }
                     }
                 }
             }
@@ -146,11 +147,12 @@ internal sealed class XmlDocCommentEnricher
                 var parameterXml = string.IsNullOrWhiteSpace(p.DeclaringAssemblyPath)
                     ? xml
                     : LoadXmlForAssembly(p.DeclaringAssemblyPath, cmd.Name) ?? xml;
+                if (parameterXml is null) continue;
                 var member =
                     parameterXml.TryGetMember("P:" + declaringType + "." + p.Name.Trim()) ??
                     parameterXml.TryGetMember("F:" + declaringType + "." + p.Name.Trim()) ??
-                    xml.TryGetMember("P:" + implementingType + "." + p.Name.Trim()) ??
-                    xml.TryGetMember("F:" + implementingType + "." + p.Name.Trim());
+                    xml?.TryGetMember("P:" + implementingType + "." + p.Name.Trim()) ??
+                    xml?.TryGetMember("F:" + implementingType + "." + p.Name.Trim());
 
                 if (member is null) continue;
 
@@ -160,8 +162,11 @@ internal sealed class XmlDocCommentEnricher
                 if (!string.IsNullOrWhiteSpace(desc)) p.Description = desc!;
             }
 
-            EnrichTypeDescriptions(cmd.Inputs, xml);
-            EnrichTypeDescriptions(cmd.Outputs, xml);
+            if (xml is not null)
+            {
+                EnrichTypeDescriptions(cmd.Inputs, xml);
+                EnrichTypeDescriptions(cmd.Outputs, xml);
+            }
         }
     }
 

@@ -492,7 +492,7 @@ public sealed class DocumentationEngine
             if (string.IsNullOrWhiteSpace(fileName)) fileName = $"{moduleName}-help.xml";
 
             var externalHelpFile = Path.Combine(externalHelpDir, fileName);
-            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(externalHelpDir);
+            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(stagingPath);
             if (File.Exists(externalHelpFile))
             {
                 try { File.Delete(externalHelpFile); } catch { /* best effort */ }

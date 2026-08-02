@@ -17,13 +17,16 @@ public sealed class DocumentationBinaryMetadataContractTests
 
         try
         {
+            var binaryDirectory = Path.Combine(root, "Lib", "Core");
+            Directory.CreateDirectory(binaryDirectory);
             foreach (var file in Directory.EnumerateFiles(outputDirectory))
-                File.Copy(file, Path.Combine(root, Path.GetFileName(file)), overwrite: true);
+                File.Copy(file, Path.Combine(binaryDirectory, Path.GetFileName(file)), overwrite: true);
+            File.Delete(Path.Combine(binaryDirectory, "BinaryDocFixture.xml"));
 
             var manifestPath = Path.Combine(root, "MetadataFixture.psd1");
             File.WriteAllText(manifestPath, """
 @{
-    RootModule = 'BinaryDocFixture.dll'
+    RootModule = 'Lib/Core/BinaryDocFixture.dll'
     ModuleVersion = '1.0.0'
     GUID = '12121212-1212-1212-1212-121212121212'
     Author = 'PowerForge.Tests'
@@ -65,7 +68,7 @@ public sealed class DocumentationBinaryMetadataContractTests
 
             Assert.True(result.Succeeded, result.ErrorMessage);
             var primary = Path.Combine(root, "en-US", "MetadataFixture-help.xml");
-            var binaryAlias = Path.Combine(root, "en-US", "BinaryDocFixture.dll-Help.xml");
+            var binaryAlias = Path.Combine(root, "Lib", "Core", "en-US", "BinaryDocFixture.dll-Help.xml");
             Assert.True(File.Exists(primary));
             Assert.True(File.Exists(binaryAlias));
             var primaryDocument = System.Xml.Linq.XDocument.Load(primary);
