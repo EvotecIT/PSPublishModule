@@ -4,7 +4,8 @@ param(
     [string] $SourceCommit,
     [string] $GitPath = 'git',
     [switch] $SkipToolManifest,
-    [switch] $RejectCredentialOverrides
+    [switch] $RejectCredentialOverrides,
+    [switch] $AllowMissingProject
 )
 
 $ErrorActionPreference = 'Stop'
@@ -129,44 +130,46 @@ foreach ($propertyName in $trackedInputProperties) {
     }
 }
 
-foreach ($app in @($config.AppleApps.Apps)) {
-    if ($null -ne $app.PSObject.Properties['Enabled'] -and -not [bool] $app.Enabled) { continue }
-    $configuredProjectPath = [string] $app.ProjectPath
-    if ([string]::IsNullOrWhiteSpace($configuredProjectPath)) { continue }
-    $projectPath = if ([IO.Path]::IsPathRooted($configuredProjectPath)) {
-        [IO.Path]::GetFullPath($configuredProjectPath)
-    } else {
-        [IO.Path]::GetFullPath((Join-Path $projectRoot $configuredProjectPath))
-    }
-    if (-not $projectPath.StartsWith($sourcePrefix, $comparison)) {
-        throw "AppleApps.Apps.ProjectPath must resolve inside the exact checked-out source: $projectPath"
-    }
-    $projectExists = Test-Path -LiteralPath $projectPath
-    if (Test-Path -LiteralPath $projectPath -PathType Leaf) {
-        Assert-TrackedSourceFile -SourceRoot $sourceRoot -Path $projectPath -Name 'AppleApps.Apps.ProjectPath'
-    } elseif (Test-Path -LiteralPath $projectPath -PathType Container) {
-        $projectMetadataName = if ($projectPath.EndsWith('.xcworkspace', [StringComparison]::OrdinalIgnoreCase)) {
-            'contents.xcworkspacedata'
+if (-not $AllowMissingProject) {
+    foreach ($app in @($config.AppleApps.Apps)) {
+        if ($null -ne $app.PSObject.Properties['Enabled'] -and -not [bool] $app.Enabled) { continue }
+        $configuredProjectPath = [string] $app.ProjectPath
+        if ([string]::IsNullOrWhiteSpace($configuredProjectPath)) { continue }
+        $projectPath = if ([IO.Path]::IsPathRooted($configuredProjectPath)) {
+            [IO.Path]::GetFullPath($configuredProjectPath)
         } else {
-            'project.pbxproj'
+            [IO.Path]::GetFullPath((Join-Path $projectRoot $configuredProjectPath))
         }
-        Assert-TrackedSourceFile `
-            -SourceRoot $sourceRoot `
-            -Path (Join-Path $projectPath $projectMetadataName) `
-            -Name "AppleApps.Apps.ProjectPath/$projectMetadataName"
-    } elseif ([bool] $app.GenerateProjectIfMissing) {
-        Assert-TrackedSourceFile `
-            -SourceRoot $sourceRoot `
-            -Path (Join-Path (Split-Path -Parent $projectPath) 'project.yml') `
-            -Name 'AppleApps.Apps.ProjectPath generation source'
-    } else {
-        throw "AppleApps.Apps.ProjectPath was not found inside the exact checked-out source: $projectPath"
-    }
-    if ($projectExists -and [bool] $app.RegenerateProject) {
-        Assert-TrackedSourceFile `
-            -SourceRoot $sourceRoot `
-            -Path (Join-Path (Split-Path -Parent $projectPath) 'project.yml') `
-            -Name 'AppleApps.Apps.ProjectPath regeneration source'
+        if (-not $projectPath.StartsWith($sourcePrefix, $comparison)) {
+            throw "AppleApps.Apps.ProjectPath must resolve inside the exact checked-out source: $projectPath"
+        }
+        $projectExists = Test-Path -LiteralPath $projectPath
+        if (Test-Path -LiteralPath $projectPath -PathType Leaf) {
+            Assert-TrackedSourceFile -SourceRoot $sourceRoot -Path $projectPath -Name 'AppleApps.Apps.ProjectPath'
+        } elseif (Test-Path -LiteralPath $projectPath -PathType Container) {
+            $projectMetadataName = if ($projectPath.EndsWith('.xcworkspace', [StringComparison]::OrdinalIgnoreCase)) {
+                'contents.xcworkspacedata'
+            } else {
+                'project.pbxproj'
+            }
+            Assert-TrackedSourceFile `
+                -SourceRoot $sourceRoot `
+                -Path (Join-Path $projectPath $projectMetadataName) `
+                -Name "AppleApps.Apps.ProjectPath/$projectMetadataName"
+        } elseif ([bool] $app.GenerateProjectIfMissing) {
+            Assert-TrackedSourceFile `
+                -SourceRoot $sourceRoot `
+                -Path (Join-Path (Split-Path -Parent $projectPath) 'project.yml') `
+                -Name 'AppleApps.Apps.ProjectPath generation source'
+        } else {
+            throw "AppleApps.Apps.ProjectPath was not found inside the exact checked-out source: $projectPath"
+        }
+        if ($projectExists -and [bool] $app.RegenerateProject) {
+            Assert-TrackedSourceFile `
+                -SourceRoot $sourceRoot `
+                -Path (Join-Path (Split-Path -Parent $projectPath) 'project.yml') `
+                -Name 'AppleApps.Apps.ProjectPath regeneration source'
+        }
     }
 }
 

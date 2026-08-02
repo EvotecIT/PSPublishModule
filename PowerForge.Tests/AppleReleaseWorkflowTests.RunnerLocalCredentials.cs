@@ -13,14 +13,16 @@ public sealed partial class AppleReleaseWorkflowTests
     {
         var root = FindRepoRoot();
         var script = Read(root, "scripts", "Invoke-PinnedPowerForge.ps1");
+        var evidence = Read(root, "scripts", "Invoke-PinnedPowerForge.Evidence.ps1");
         Assert.Contains("RequiredCommit $ExpectedCommit", script, StringComparison.Ordinal);
         Assert.Contains("ExpectedConsumerRepository", script, StringComparison.Ordinal);
         Assert.Contains("symbolic-ref', '--short', 'HEAD", script, StringComparison.Ordinal);
         Assert.Contains("fetch', '--quiet', 'origin', $RequiredBranch", script, StringComparison.Ordinal);
         Assert.Contains("refs/remotes/origin/$RequiredBranch", script, StringComparison.Ordinal);
         Assert.Contains("status', '--porcelain=v1', '--untracked-files=all", script, StringComparison.Ordinal);
-        Assert.Contains("status', '--ignored=matching', '--porcelain=v1', '--untracked-files=all", script, StringComparison.Ordinal);
-        Assert.Contains("must not contain ignored files before Apple release work", script, StringComparison.Ordinal);
+        Assert.Contains("-DeferContentCheck", script, StringComparison.Ordinal);
+        Assert.Contains("ls-files', '--others', '--ignored', '--exclude-standard", evidence, StringComparison.Ordinal);
+        Assert.Contains("Consumer source contains non-reviewed content", evidence, StringComparison.Ordinal);
         Assert.Contains("GIT_NO_REPLACE_OBJECTS", script, StringComparison.Ordinal);
         Assert.Contains("for-each-ref', '--format=%(refname)', 'refs/replace", script, StringComparison.Ordinal);
         Assert.Contains("core.fsmonitor=false", script, StringComparison.Ordinal);
@@ -53,11 +55,11 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("Capture provenance source commit", script, StringComparison.Ordinal);
         Assert.Contains("--apple-source-commit must match the exact consumer HEAD", script, StringComparison.Ordinal);
         Assert.Contains("Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead", script, StringComparison.Ordinal);
-        Assert.Contains("if ($ArgumentList[0] -ne 'apple-release')", script, StringComparison.Ordinal);
+        Assert.Contains("if ($ArgumentList[0] -ne 'apple-release' -or", evidence, StringComparison.Ordinal);
         Assert.Contains("$argument -eq '--capture-provenance'", script, StringComparison.Ordinal);
-        Assert.Contains("Screenshot approval manifests do not match the retained capture byte inventory", script, StringComparison.Ordinal);
-        Assert.Contains("Resolve-PathFromBase -BasePath", script, StringComparison.Ordinal);
-        Assert.Contains("No screenshot configuration matches the selected release targets", script, StringComparison.Ordinal);
+        Assert.Contains("Screenshot approval manifests do not identify one exact retained capture root and inventory", evidence, StringComparison.Ordinal);
+        Assert.Contains("Resolve-PathFromBase -BasePath", evidence, StringComparison.Ordinal);
+        Assert.Contains("No screenshot configuration matches the selected release targets", evidence, StringComparison.Ordinal);
         Assert.Contains("permissions must not grant group or other access", script, StringComparison.Ordinal);
         Assert.Contains("must not grant access through a POSIX ACL", script, StringComparison.Ordinal);
         Assert.Contains("must not have hard links", script, StringComparison.Ordinal);
@@ -614,7 +616,8 @@ public sealed partial class AppleReleaseWorkflowTests
         string configPath,
         string manifestPath,
         string commit,
-        bool rejectCredentialOverrides = false)
+        bool rejectCredentialOverrides = false,
+        bool allowMissingProject = false)
     {
         var arguments = new List<string>
         {
@@ -625,6 +628,7 @@ public sealed partial class AppleReleaseWorkflowTests
             "-SourceCommit", commit
         };
         if (rejectCredentialOverrides) arguments.Add("-RejectCredentialOverrides");
+        if (allowMissingProject) arguments.Add("-AllowMissingProject");
         return Run("pwsh", sandbox, arguments.ToArray());
     }
 

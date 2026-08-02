@@ -589,11 +589,16 @@ byte and dimension inventory.
 For local publication, invoke the command through the reviewed
 `scripts/Invoke-PinnedPowerForge.ps1` helper. It requires the exact merged
 PSPublishModule commit, a clean consumer `main` equal to `origin/main`, and the
-expected GitHub repository. Use a fresh checkout or worktree: ignored files are
-rejected as well as modified and untracked files, because Xcode projects and build
-phases can otherwise consume bytes that are absent from the reviewed commit. Git
-replacement refs are also rejected. The helper re-downloads the named provenance
-artifact from the successful source-bound GitHub run and compares its exact bytes before
+expected GitHub repository. Use a fresh checkout or worktree. Modified, untracked,
+and ignored files are rejected because Xcode projects and build phases can otherwise
+consume bytes that are absent from the reviewed commit. The only exceptions are
+individual screenshot PNGs and provenance files whose paths and bytes match the
+retained capture artifact, plus approval manifests whose identity and complete image
+inventory validate against that provenance. An unrelated file beside that evidence
+still fails closed. Git replacement refs are
+also rejected. Cleanup alone permits an app project already removed by the completed
+release while continuing to validate every remaining tracked release input. The helper
+re-downloads the named provenance artifact from the successful source-bound GitHub run and compares its exact bytes before
 building the CLI into an isolated temporary artifacts directory. This prevents
 an editable local provenance copy, a stale ignored binary, or another checkout
 from becoming the publication authority. Capture callers must supply the exact

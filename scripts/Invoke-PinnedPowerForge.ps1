@@ -20,10 +20,12 @@ $consumer = [IO.Path]::GetFullPath($ConsumerRoot)
 $requiredBranch = 'main'
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ("PowerForge.LocalOperator." + [guid]::NewGuid().ToString('N'))
 $script:validatedCredentialEnvironment = @{}
+$script:allowedConsumerEvidencePaths = [Collections.Generic.HashSet[string]]::new(
+    $(if ($IsWindows) { [StringComparer]::OrdinalIgnoreCase } else { [StringComparer]::Ordinal }))
 
 function Invoke-GitText {
     param([Parameter(Mandatory)][string] $Root, [Parameter(Mandatory)][string[]] $Arguments)
-    $output = @(& $script:gitPath -c core.fsmonitor=false -c core.hooksPath=/dev/null -C $Root @Arguments 2>&1)
+    $output = @(& $script:gitPath -c core.fsmonitor=false -c core.hooksPath=/dev/null -c core.quotePath=false -C $Root @Arguments 2>&1)
     if ($LASTEXITCODE -ne 0) { throw "Git failed in '$Root': git $($Arguments -join ' ')" }
     return ($output -join [Environment]::NewLine).Trim()
 }
@@ -73,7 +75,7 @@ function Assert-CleanRepository {
         [string] $RequiredCommit,
         [string] $RequiredBranch,
         [string] $ExpectedRepository,
-        [switch] $RejectIgnored
+        [switch] $DeferContentCheck
     )
     Assert-UnlinkedDirectory -Path $Root -Name $Name
     if ((Invoke-GitText -Root $Root -Arguments @('rev-parse', '--is-inside-work-tree')) -ne 'true') {
@@ -91,13 +93,9 @@ function Assert-CleanRepository {
         $remote = (Invoke-GitText -Root $Root -Arguments @('rev-parse', "refs/remotes/origin/$RequiredBranch")).ToLowerInvariant()
         if ($head -ne $remote) { throw "$Name HEAD '$head' does not match origin/$RequiredBranch '$remote'." }
     }
-    $status = Invoke-GitText -Root $Root -Arguments @('status', '--porcelain=v1', '--untracked-files=all')
-    if (-not [string]::IsNullOrWhiteSpace($status)) { throw "$Name must be clean before Apple release work." }
-    if ($RejectIgnored) {
-        $ignored = Invoke-GitText -Root $Root -Arguments @('status', '--ignored=matching', '--porcelain=v1', '--untracked-files=all')
-        if (@($ignored -split '\r?\n' | Where-Object { $_.StartsWith('!! ') }).Count -gt 0) {
-            throw "$Name must not contain ignored files before Apple release work; use a fresh exact checkout."
-        }
+    if (-not $DeferContentCheck) {
+        $status = Invoke-GitText -Root $Root -Arguments @('status', '--porcelain=v1', '--untracked-files=all')
+        if (-not [string]::IsNullOrWhiteSpace($status)) { throw "$Name must be clean before Apple release work." }
     }
     return $head
 }
@@ -221,6 +219,7 @@ function Assert-SafeArguments {
             $path = Resolve-OptionPath -Value $value
             if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "$option input was not found: $path" }
             Assert-UnlinkedPath -Path $path -Name $option
+            if ($option -eq '--reviewed-plan') { Add-AllowedConsumerEvidencePath -Path $path -Name $option }
         }
     }
     foreach ($option in @('--allowed-root', '--out', '--write-root', '--receipt')) {
@@ -266,13 +265,15 @@ function Invoke-TrackedInputValidator {
     $relative = [IO.Path]::GetRelativePath($toolRoot, $validator).Replace('\', '/')
     Invoke-GitText -Root $toolRoot -Arguments @('ls-files', '--error-unmatch', '--', $relative) | Out-Null
     Invoke-GitText -Root $toolRoot -Arguments @('diff', '--quiet', 'HEAD', '--', $relative) | Out-Null
+    $allowMissingProject = $ArgumentList[0] -eq 'apple-release' -and $ArgumentList.Count -gt 1 -and $ArgumentList[1] -ieq 'Cleanup'
     foreach ($configPath in @($script:validatedConfigPaths | Select-Object -Unique)) {
         & $validator `
             -ConfigPath $configPath `
             -SourceCommit $SourceCommit `
             -GitPath $script:gitPath `
             -SkipToolManifest `
-            -RejectCredentialOverrides
+            -RejectCredentialOverrides `
+            -AllowMissingProject:$allowMissingProject
     }
 }
 
@@ -444,102 +445,7 @@ function Assert-AuthoritativeCaptureProvenance {
     $actualHash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
     if ($expectedHash -ne $actualHash) { throw 'Local capture provenance differs from the retained GitHub Actions artifact.' }
     $script:validatedCaptureProvenance = $provenance
-}
-
-function Assert-ScreenshotPublicationBinding {
-    param([Parameter(Mandatory)][string] $SourceCommit)
-    if ($ArgumentList[0] -ne 'apple-release' -or $ArgumentList.Count -lt 2) { return }
-    $operation = $ArgumentList[1]
-    if ($operation -notin @('Screenshots', 'Advance', 'SubmitAppReview', 'Release')) { return }
-
-    $releaseConfigPath = Resolve-OptionPath -Value (Get-OptionValue -Option '--config')
-    $release = Get-Content -LiteralPath $releaseConfigPath -Raw | ConvertFrom-Json
-    $apple = $release.AppleApps
-    $projectRootValue = if ([string]::IsNullOrWhiteSpace([string]$apple.ProjectRoot)) { '.' } else { [string]$apple.ProjectRoot }
-    $projectRoot = Resolve-PathFromBase -BasePath (Split-Path -Parent $releaseConfigPath) -Value $projectRootValue
-    $configValues = @(
-        @([string]$apple.ScreenshotConfigPath) + @($apple.ScreenshotConfigPaths) |
-            Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
-            ForEach-Object { Resolve-PathFromBase -BasePath $projectRoot -Value ([string]$_) } |
-            Sort-Object -Unique
-    )
-    $requiresBinding = $operation -eq 'Screenshots' -or
-        ($operation -eq 'Advance' -and $apple.SyncScreenshots -eq $true) -or
-        ($operation -in @('SubmitAppReview', 'Release') -and $configValues.Count -gt 0)
-    if (-not $requiresBinding) { return }
-    if ($configValues.Count -eq 0) { throw "apple-release $operation requires at least one screenshot configuration." }
-    if ($null -eq $script:validatedCaptureProvenance) {
-        throw "apple-release $operation requires --capture-provenance so screenshot publication remains bound to the retained capture artifact."
-    }
-
-    $provenance = $script:validatedCaptureProvenance
-    $selectedTargets = @((Get-OptionValue -Option '--target') -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    $selectedApps = @($apple.Apps | Where-Object {
-        $_.Enabled -ne $false -and
-        ($selectedTargets.Count -eq 0 -or $selectedTargets -contains [string]$_.Name -or
-         $selectedTargets -contains [string]$_.Scheme -or $selectedTargets -contains [string]$_.BundleId)
-    })
-    if ($selectedTargets.Count -gt 0 -and $selectedApps.Count -eq 0) {
-        throw "--target does not match an enabled Apple app in '$releaseConfigPath'."
-    }
-
-    $inventoryCounts = @{}
-    $provenanceEntries = @($provenance.screenshots)
-    foreach ($entry in $provenanceEntries) {
-        $relativePath = ([string]$entry.path).Replace('\', '/')
-        $key = "$relativePath|$( ([string]$entry.sha256).ToLowerInvariant() )|$([int]$entry.width)|$([int]$entry.height)"
-        $inventoryCounts[$key] = 1 + [int]($inventoryCounts[$key] ?? 0)
-    }
-    $approvedCounts = @{}
-    $matchedConfigCount = 0
-    foreach ($configValue in $configValues) {
-        $screenshotConfigPath = $configValue
-        $screenshotConfig = Get-Content -LiteralPath $screenshotConfigPath -Raw | ConvertFrom-Json
-        if ($selectedTargets.Count -gt 0) {
-            $matchesSelectedApp = @($selectedApps | Where-Object {
-                ([string]::IsNullOrWhiteSpace([string]$screenshotConfig.AppId) -or
-                 [string]$screenshotConfig.AppId -eq [string]$_.AppStoreConnectAppId) -and
-                [string]$screenshotConfig.Platform -eq [string]$_.Platform
-            }).Count -gt 0
-            if (-not $matchesSelectedApp) { continue }
-        }
-        $matchedConfigCount++
-        $manifestValue = [string]$screenshotConfig.Quality.ApprovalManifestPath
-        if ([string]::IsNullOrWhiteSpace($manifestValue)) {
-            throw "Screenshot configuration '$screenshotConfigPath' must name Quality.ApprovalManifestPath."
-        }
-        $manifestPath = Resolve-PathFromBase -BasePath (Split-Path -Parent $screenshotConfigPath) -Value $manifestValue
-        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-        if ([string]$manifest.CaptureRunId -ne [string]$provenance.captureRunId -or
-            -not ([string]$manifest.CaptureRepository).Equals([string]$provenance.repository, [StringComparison]::OrdinalIgnoreCase) -or
-            [string]$manifest.CaptureWorkflowRef -ne [string]$provenance.workflowRef -or
-            ([string]$manifest.SourceCommit).ToLowerInvariant() -ne $SourceCommit.ToLowerInvariant() -or
-            [string]$manifest.VersionString -ne [string]$provenance.marketingVersion) {
-            throw "Screenshot approval manifest '$manifestPath' is not bound to the authoritative capture run, repository, workflow, source commit, and marketing version."
-        }
-        foreach ($entry in @($manifest.Screenshots)) {
-            $approvedPath = (Resolve-PathFromBase -BasePath (Split-Path -Parent $screenshotConfigPath) -Value ([string]$entry.File)).Replace('\', '/')
-            $matches = @($provenanceEntries | Where-Object {
-                $candidate = ([string]$_.path).Replace('\', '/')
-                $approvedPath.EndsWith("/$candidate", [StringComparison]::Ordinal)
-            })
-            if ($matches.Count -ne 1) {
-                throw "Screenshot approval entry '$([string]$entry.File)' does not identify exactly one retained capture path."
-            }
-            $relativePath = ([string]$matches[0].path).Replace('\', '/')
-            $key = "$relativePath|$( ([string]$entry.Sha256).ToLowerInvariant() )|$([int]$entry.Width)|$([int]$entry.Height)"
-            $approvedCounts[$key] = 1 + [int]($approvedCounts[$key] ?? 0)
-        }
-    }
-    if ($matchedConfigCount -eq 0) { throw 'No screenshot configuration matches the selected release targets.' }
-    if ($inventoryCounts.Count -ne $approvedCounts.Count) {
-        throw 'Screenshot approval manifests do not match the retained capture byte inventory.'
-    }
-    foreach ($key in $inventoryCounts.Keys) {
-        if ([int]$approvedCounts[$key] -ne [int]$inventoryCounts[$key]) {
-            throw 'Screenshot approval manifests do not match the retained capture byte inventory.'
-        }
-    }
+    Add-AllowedConsumerEvidencePath -Path $path -Name '--capture-provenance'
 }
 
 function Get-RedactedToolText {
@@ -653,12 +559,17 @@ try {
     Set-SafeGitEnvironment
     $script:gitPath = Resolve-FixedTool -Name git
     $toolHead = Assert-CleanRepository -Root $toolRoot -Name 'PSPublishModule source' -RequiredCommit $ExpectedCommit -ExpectedRepository 'EvotecIT/PSPublishModule'
-    $consumerHead = Assert-CleanRepository -Root $consumer -Name 'Consumer source' -RequiredBranch $requiredBranch -ExpectedRepository $ExpectedConsumerRepository -RejectIgnored
+    $consumerHead = Assert-CleanRepository -Root $consumer -Name 'Consumer source' -RequiredBranch $requiredBranch -ExpectedRepository $ExpectedConsumerRepository -DeferContentCheck
     Assert-NoReplaceRefs -Root $toolRoot -Name 'PSPublishModule source'
     Assert-NoReplaceRefs -Root $consumer -Name 'Consumer source'
     $scriptRelative = [IO.Path]::GetRelativePath($toolRoot, $PSCommandPath).Replace('\', '/')
     Invoke-GitText -Root $toolRoot -Arguments @('ls-files', '--error-unmatch', '--', $scriptRelative) | Out-Null
     Invoke-GitText -Root $toolRoot -Arguments @('diff', '--quiet', 'HEAD', '--', $scriptRelative) | Out-Null
+    $evidenceSupport = Join-Path $PSScriptRoot 'Invoke-PinnedPowerForge.Evidence.ps1'
+    $evidenceRelative = [IO.Path]::GetRelativePath($toolRoot, $evidenceSupport).Replace('\', '/')
+    Invoke-GitText -Root $toolRoot -Arguments @('ls-files', '--error-unmatch', '--', $evidenceRelative) | Out-Null
+    Invoke-GitText -Root $toolRoot -Arguments @('diff', '--quiet', 'HEAD', '--', $evidenceRelative) | Out-Null
+    . $evidenceSupport
     Assert-SafeArguments
     Assert-FixedAppleToolConfiguration
     Invoke-TrackedInputValidator -SourceCommit $consumerHead
@@ -673,7 +584,9 @@ try {
         $gh = Resolve-FixedTool -Name gh
         Assert-AuthoritativeCaptureProvenance -GhPath $gh -SourceCommit $consumerHead
     }
+    Register-StandaloneScreenshotEvidence
     Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead
+    Assert-ConsumerRepositoryContent
     $tar = Resolve-FixedTool -Name tar
     $buildToolRoot = New-TrackedToolSnapshot -TarPath $tar
     $cliProject = Join-Path $buildToolRoot 'PowerForge.Cli/PowerForge.Cli.csproj'
