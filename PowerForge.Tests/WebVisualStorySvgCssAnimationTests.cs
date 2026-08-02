@@ -72,6 +72,34 @@ public class WebVisualStorySvgCssAnimationTests
         Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Stage_RejectsAnimationAppliedOnlyToMissingElements()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{from{opacity:0}to{opacity:1}}.missing{animation:fade 1s}</style><rect class=\"present\" width=\"1\" height=\"1\"/></svg>"));
+
+        Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("rect")]
+    [InlineData(".present")]
+    [InlineData("#target")]
+    [InlineData("rect.present#target")]
+    public void Stage_AcceptsAnimationAppliedToExistingElements(string selector)
+    {
+        StageSvg(
+            $"<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{{from{{opacity:0}}to{{opacity:1}}}}{selector}{{animation:fade 1s}}</style><rect id=\"target\" class=\"present\" width=\"1\" height=\"1\"/></svg>");
+    }
+
+    [Fact]
+    public void Stage_CombinesAdjacentStyleTextAndCdataNodes()
+    {
+        StageSvg(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{from{opacity:0}to{opacity:1}}<![CDATA[rect{animation:fade 1s}]]></style><rect width=\"1\" height=\"1\"/></svg>");
+    }
+
     [Theory]
     [InlineData("0s")]
     [InlineData("0ms")]
@@ -97,10 +125,33 @@ public class WebVisualStorySvgCssAnimationTests
     }
 
     [Theory]
+    [InlineData("begin", "indefinite")]
+    [InlineData("begin", "click")]
+    [InlineData("repeatCount", "0")]
+    [InlineData("repeatDur", "0s")]
+    public void Stage_RejectsSmilAnimationThatCannotRunAutomatically(string attribute, string value)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                $"<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1\" height=\"1\"><animate attributeName=\"opacity\" dur=\"1s\" {attribute}=\"{value}\" values=\"0;1\"/></rect></svg>"));
+
+        Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Stage_AcceptsSmilAnimationWithAutomaticClockBegin()
+    {
+        StageSvg(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1\" height=\"1\"><animate attributeName=\"opacity\" dur=\"1s\" begin=\"250ms\" repeatCount=\"2\" values=\"0;1\"/></rect></svg>");
+    }
+
+    [Theory]
     [InlineData("<image href=\"https://example.test/frame.png\"/>")]
     [InlineData("<image href=\"../frame.png\"/>")]
     [InlineData("<rect style=\"fill:url(https://example.test/fill.svg)\"/>")]
     [InlineData("<style>rect{fill:url('../fill.svg')}</style>")]
+    [InlineData("<rect filter=\"url(https://example.test/filter.svg#blur)\"/>")]
+    [InlineData("<rect fill=\"url(../paint.svg#gradient)\"/>")]
     public void Stage_RejectsExternalSvgResources(string content)
     {
         var error = Assert.Throws<InvalidOperationException>(() =>
@@ -114,7 +165,7 @@ public class WebVisualStorySvgCssAnimationTests
     public void Stage_AcceptsFragmentOnlySvgReferences()
     {
         StageSvg(
-            "<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><linearGradient id=\"fill\"><stop offset=\"0\"/></linearGradient></defs><style>@keyframes fade{from{opacity:0}to{opacity:1}}rect{animation:fade 1s;fill:url(#fill)}</style><rect width=\"1\" height=\"1\"/></svg>");
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><linearGradient id=\"fill\"><stop offset=\"0\"/></linearGradient></defs><style>@keyframes fade{from{opacity:0}to{opacity:1}}rect{animation:fade 1s;fill:url(#fill)}</style><rect fill=\"url(#fill)\" width=\"1\" height=\"1\"/></svg>");
     }
 
     private static void StageSvg(string svg)

@@ -40,6 +40,7 @@ internal static class VisualStoryPathGuard
     {
         var fullRoot = Path.GetFullPath(root);
         var fullPath = Path.GetFullPath(path);
+        EnsureExistingPathIsNotLink(fullRoot, label);
         if (string.Equals(fullRoot, fullPath, PathComparison))
         {
             if (!allowRoot)
@@ -53,6 +54,29 @@ internal static class VisualStoryPathGuard
             throw new InvalidOperationException($"Visual-story {label} path escapes its allowed root.");
 
         EnsureNoLinkTraversal(fullRoot, fullPath, label);
+    }
+
+    private static void EnsureExistingPathIsNotLink(string path, string label)
+    {
+        FileAttributes attributes;
+        try
+        {
+            attributes = File.GetAttributes(path);
+        }
+        catch (FileNotFoundException)
+        {
+            return;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return;
+        }
+
+        if ((attributes & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"Visual-story {label} path cannot be a symbolic link or reparse point.");
+        }
     }
 
     private static void EnsureNoLinkTraversal(string root, string path, string label)

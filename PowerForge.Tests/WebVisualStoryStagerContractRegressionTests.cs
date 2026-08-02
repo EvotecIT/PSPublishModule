@@ -17,6 +17,17 @@ public class WebVisualStoryStagerContractRegressionTests
         Assert.Contains("both a file and directory", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void PortablePathTopology_RejectsUnicodeNormalizationCollisions()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            WebVisualStoryStager.ValidatePortablePathTopologyForTesting(
+                "media/caf\u00e9.png",
+                "media/cafe\u0301.png"));
+
+        Assert.Contains("Unicode normalization", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("media/demo:final.png")]
     [InlineData("media/CON.png")]

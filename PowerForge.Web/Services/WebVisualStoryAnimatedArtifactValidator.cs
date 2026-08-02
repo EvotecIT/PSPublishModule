@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text;
 using System.Xml;
 using ImageMagick;
 
@@ -9,6 +10,8 @@ namespace PowerForge.Web;
 /// </summary>
 internal static class WebVisualStoryAnimatedArtifactValidator
 {
+    private readonly record struct SvgElementIdentity(string LocalName, string? Id, string[] Classes);
+
     private const int MaximumGifFrames = 240;
     private const ulong MaximumGifDecodedPixels = 128_000_000UL;
     private const int MaximumApngFrames = 240;
@@ -124,23 +127,34 @@ internal static class WebVisualStoryAnimatedArtifactValidator
             var sawDeclarativeAnimation = false;
             var cssKeyframeNames = new HashSet<string>(StringComparer.Ordinal);
             var cssAnimationNames = new HashSet<string>(StringComparer.Ordinal);
+            var cssStyleBlocks = new List<string>();
+            var svgElements = new List<SvgElementIdentity> { ReadSvgElementIdentity(reader) };
             var rootInlineStyle = reader.GetAttribute("style");
             ValidateSelfContainedReferences(reader, displayPath);
             AddCssAnimationNames(rootInlineStyle, cssAnimationNames, displayPath);
             var insideStyle = false;
+            StringBuilder? currentStyle = null;
             var pendingAnimateMotionDepth = -1;
             while (reader.Read())
             {
                 if (reader.NodeType is XmlNodeType.Text or XmlNodeType.CDATA && insideStyle)
                 {
-                    AddNames(cssKeyframeNames, WebVisualStoryCssAnimationValidator.GetKeyframeNames(reader.Value));
-                    AddCssAnimationNames(reader.Value, cssAnimationNames, displayPath);
+                    currentStyle!.Append(reader.Value);
                     continue;
                 }
                 if (reader.NodeType == XmlNodeType.EndElement &&
                     string.Equals(reader.LocalName, "style", StringComparison.Ordinal) &&
                     string.Equals(reader.NamespaceURI, SvgNamespace, StringComparison.Ordinal))
                 {
+                    var css = currentStyle?.ToString() ?? string.Empty;
+                    AddNames(cssKeyframeNames, WebVisualStoryCssAnimationValidator.GetKeyframeNames(css));
+                    if (WebVisualStoryCssAnimationValidator.ContainsExternalResourceReference(css))
+                    {
+                        throw new InvalidOperationException(
+                            $"Visual-story SVG artifacts must be self-contained and cannot reference external resources: {displayPath}");
+                    }
+                    cssStyleBlocks.Add(css);
+                    currentStyle = null;
                     insideStyle = false;
                     continue;
                 }
@@ -157,10 +171,11 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                     continue;
 
                 ValidateSelfContainedReferences(reader, displayPath);
+                svgElements.Add(ReadSvgElementIdentity(reader));
                 if (IsDeclarativeAnimationElement(reader))
                     sawDeclarativeAnimation = true;
                 else if (string.Equals(reader.LocalName, "animateMotion", StringComparison.Ordinal) &&
-                         HasPositiveSmilDuration(reader.GetAttribute("dur")) &&
+                         HasEffectiveSmilTiming(reader) &&
                          !reader.IsEmptyElement)
                     pendingAnimateMotionDepth = reader.Depth;
                 else if (pendingAnimateMotionDepth >= 0 &&
@@ -173,6 +188,16 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                 AddCssAnimationNames(inlineStyle, cssAnimationNames, displayPath);
 
                 insideStyle = string.Equals(reader.LocalName, "style", StringComparison.Ordinal) && !reader.IsEmptyElement;
+                if (insideStyle)
+                    currentStyle = new StringBuilder();
+            }
+            foreach (var css in cssStyleBlocks)
+            {
+                AddNames(
+                    cssAnimationNames,
+                    WebVisualStoryCssAnimationValidator.GetEffectiveAnimationNamesForMatchingSelectors(
+                        css,
+                        selector => svgElements.Any(element => MatchesSimpleSelector(selector, element))));
             }
             if (requireAnimation &&
                 !sawDeclarativeAnimation &&
@@ -196,14 +221,15 @@ internal static class WebVisualStoryAnimatedArtifactValidator
         {
             case "set":
                 return reader.GetAttribute("attributeName") is { Length: > 0 } &&
-                       reader.GetAttribute("to") is { Length: > 0 };
+                       reader.GetAttribute("to") is { Length: > 0 } &&
+                       HasAutomaticSmilBegin(reader.GetAttribute("begin"));
             case "animate":
             case "animateTransform":
                 return reader.GetAttribute("attributeName") is { Length: > 0 } &&
-                       HasPositiveSmilDuration(reader.GetAttribute("dur")) &&
+                       HasEffectiveSmilTiming(reader) &&
                        HasAnimationValue(reader);
             case "animateMotion":
-                return HasPositiveSmilDuration(reader.GetAttribute("dur")) &&
+                return HasEffectiveSmilTiming(reader) &&
                        (reader.GetAttribute("path") is { Length: > 0 } || HasAnimationValue(reader));
             default:
                 return false;
@@ -221,6 +247,57 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                         reader.GetAttribute("href", "http://www.w3.org/1999/xlink");
         return reference is { Length: > 1 } && reference[0] == '#';
     }
+
+    private static SvgElementIdentity ReadSvgElementIdentity(XmlReader reader)
+    {
+        var classes = (reader.GetAttribute("class") ?? string.Empty)
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        return new SvgElementIdentity(reader.LocalName, reader.GetAttribute("id"), classes);
+    }
+
+    private static bool MatchesSimpleSelector(string selector, SvgElementIdentity element)
+    {
+        var token = selector.Trim();
+        if (token.Length == 0 || token.Any(char.IsWhiteSpace))
+            return false;
+
+        var index = 0;
+        if (token[index] == '*')
+            index++;
+        else if (token[index] is not ('.' or '#'))
+        {
+            var start = index;
+            while (index < token.Length && IsSimpleCssIdentifierCharacter(token[index]))
+                index++;
+            if (index == start ||
+                !string.Equals(token.Substring(start, index - start), element.LocalName, StringComparison.Ordinal))
+                return false;
+        }
+
+        while (index < token.Length)
+        {
+            var prefix = token[index++];
+            if (prefix is not ('.' or '#'))
+                return false;
+            var start = index;
+            while (index < token.Length && IsSimpleCssIdentifierCharacter(token[index]))
+                index++;
+            if (index == start)
+                return false;
+            var value = token.Substring(start, index - start);
+            if (prefix == '#')
+            {
+                if (!string.Equals(value, element.Id, StringComparison.Ordinal))
+                    return false;
+            }
+            else if (!element.Classes.Contains(value, StringComparer.Ordinal))
+                return false;
+        }
+        return true;
+    }
+
+    private static bool IsSimpleCssIdentifierCharacter(char value)
+        => char.IsLetterOrDigit(value) || value is '-' or '_';
 
     private static void AddCssAnimationNames(
         string? css,
@@ -251,11 +328,11 @@ internal static class WebVisualStoryAnimatedArtifactValidator
             return;
         do
         {
-            if (!string.Equals(reader.LocalName, "href", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(reader.LocalName, "src", StringComparison.OrdinalIgnoreCase))
-                continue;
             var reference = reader.Value.Trim();
-            if (reference.Length > 0 && reference[0] != '#')
+            var isDirectReference = string.Equals(reader.LocalName, "href", StringComparison.OrdinalIgnoreCase) ||
+                                    string.Equals(reader.LocalName, "src", StringComparison.OrdinalIgnoreCase);
+            if (isDirectReference && reference.Length > 0 && reference[0] != '#' ||
+                WebVisualStoryCssAnimationValidator.ContainsExternalResourceReference(reference))
             {
                 throw new InvalidOperationException(
                     $"Visual-story SVG artifacts must be self-contained and cannot reference external resources: {displayPath}");
@@ -264,15 +341,52 @@ internal static class WebVisualStoryAnimatedArtifactValidator
         reader.MoveToElement();
     }
 
+    private static bool HasEffectiveSmilTiming(XmlReader reader)
+        => HasPositiveSmilDuration(reader.GetAttribute("dur")) &&
+           HasAutomaticSmilBegin(reader.GetAttribute("begin")) &&
+           HasActiveSmilRepeat(reader.GetAttribute("repeatCount"), reader.GetAttribute("repeatDur"));
+
+    private static bool HasAutomaticSmilBegin(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+        return value.Split(';', StringSplitOptions.RemoveEmptyEntries)
+            .Select(static token => token.Trim())
+            .Any(static token => token == "0" || TryParseSmilClockValue(token, out var milliseconds) && milliseconds >= 0);
+    }
+
+    private static bool HasActiveSmilRepeat(string? repeatCount, string? repeatDuration)
+    {
+        if (!string.IsNullOrWhiteSpace(repeatCount) &&
+            !string.Equals(repeatCount.Trim(), "indefinite", StringComparison.OrdinalIgnoreCase) &&
+            (!double.TryParse(
+                repeatCount.Trim(),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var count) ||
+             !double.IsFinite(count) ||
+             count <= 0))
+            return false;
+        return string.IsNullOrWhiteSpace(repeatDuration) ||
+               string.Equals(repeatDuration.Trim(), "indefinite", StringComparison.OrdinalIgnoreCase) ||
+               HasPositiveSmilDuration(repeatDuration);
+    }
+
     private static bool HasPositiveSmilDuration(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return false;
-        var token = value.Trim();
+        return TryParseSmilClockValue(value.Trim(), out var milliseconds) && milliseconds > 0;
+    }
+
+    private static bool TryParseSmilClockValue(string token, out double milliseconds)
+    {
+        milliseconds = 0;
         if (token.EndsWith("ms", StringComparison.OrdinalIgnoreCase) &&
-            double.TryParse(token[..^2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var milliseconds))
+            double.TryParse(token[..^2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsedMilliseconds))
         {
-            return double.IsFinite(milliseconds) && milliseconds > 0;
+            milliseconds = parsedMilliseconds;
+            return double.IsFinite(milliseconds);
         }
         var units = new[] { (Suffix: "min", Multiplier: 60d), (Suffix: "h", Multiplier: 3600d), (Suffix: "s", Multiplier: 1d) };
         foreach (var unit in units)
@@ -280,10 +394,13 @@ internal static class WebVisualStoryAnimatedArtifactValidator
             if (!token.EndsWith(unit.Suffix, StringComparison.OrdinalIgnoreCase) ||
                 !double.TryParse(token[..^unit.Suffix.Length], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var number))
                 continue;
-            return double.IsFinite(number) && number * unit.Multiplier > 0;
+            milliseconds = number * unit.Multiplier * 1000d;
+            return double.IsFinite(milliseconds);
         }
-        return TimeSpan.TryParse(token, System.Globalization.CultureInfo.InvariantCulture, out var duration) &&
-               duration > TimeSpan.Zero;
+        if (!TimeSpan.TryParse(token, System.Globalization.CultureInfo.InvariantCulture, out var duration))
+            return false;
+        milliseconds = duration.TotalMilliseconds;
+        return double.IsFinite(milliseconds);
     }
 
     private static void ValidateApng(string path, string displayPath)

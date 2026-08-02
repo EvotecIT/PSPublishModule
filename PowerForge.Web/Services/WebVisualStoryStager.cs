@@ -215,8 +215,9 @@ public static partial class WebVisualStoryStager
         for (var index = 0; index < segments.Length; index++)
         {
             prefix = prefix.Length == 0 ? segments[index] : prefix + "/" + segments[index];
+            var portableIdentity = prefix.Normalize(NormalizationForm.FormC);
             var isDirectory = index < segments.Length - 1;
-            if (portablePaths.TryGetValue(prefix, out var declared))
+            if (portablePaths.TryGetValue(portableIdentity, out var declared))
             {
                 if (declared.IsDirectory != isDirectory)
                 {
@@ -226,12 +227,12 @@ public static partial class WebVisualStoryStager
                 if (!string.Equals(prefix, declared.DeclaredPath, StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException(
-                        $"Visual-story artifact paths must use consistent casing: {declared.DeclaredPath} and {prefix}");
+                        $"Visual-story artifact paths must use consistent casing and Unicode normalization: {declared.DeclaredPath} and {prefix}");
                 }
             }
             else
             {
-                portablePaths.Add(prefix, (prefix, isDirectory));
+                portablePaths.Add(portableIdentity, (prefix, isDirectory));
             }
         }
     }

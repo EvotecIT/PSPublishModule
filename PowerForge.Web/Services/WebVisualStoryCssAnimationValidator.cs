@@ -7,6 +7,7 @@ namespace PowerForge.Web;
 internal static class WebVisualStoryCssAnimationValidator
 {
     private readonly record struct AnimationDefinition(string? Name, double DurationMilliseconds, bool Paused);
+    private readonly record struct StyleRule(string Selector, string Declarations);
 
     private static readonly HashSet<string> AnimationKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -23,6 +24,23 @@ internal static class WebVisualStoryCssAnimationValidator
         foreach (var declarationBlock in GetDeclarationBlocks(normalizedCss))
         {
             foreach (var name in GetEffectiveAnimationNamesFromDeclaration(declarationBlock))
+                names.Add(name);
+        }
+        return names;
+    }
+
+    internal static IReadOnlySet<string> GetEffectiveAnimationNamesForMatchingSelectors(
+        string css,
+        Func<string, bool> selectorMatches)
+    {
+        ArgumentNullException.ThrowIfNull(selectorMatches);
+        var normalizedCss = RemoveComments(css);
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var rule in GetStyleRules(normalizedCss))
+        {
+            if (!SplitTopLevel(rule.Selector, ',').Any(selectorMatches))
+                continue;
+            foreach (var name in GetEffectiveAnimationNamesFromDeclaration(rule.Declarations))
                 names.Add(name);
         }
         return names;
@@ -464,6 +482,107 @@ internal static class WebVisualStoryCssAnimationValidator
         if (!sawBlock)
             blocks.Add(css);
         return blocks;
+    }
+
+    private static IReadOnlyList<StyleRule> GetStyleRules(string css)
+    {
+        var rules = new List<StyleRule>();
+        var stack = new List<(int ContentStart, string Selector, bool HasNestedBlock, int SegmentStart)>();
+        var rootSegmentStart = 0;
+        var quote = '\0';
+        var escaped = false;
+        var inComment = false;
+        var parentheses = 0;
+        for (var index = 0; index < css.Length; index++)
+        {
+            var value = css[index];
+            var next = index + 1 < css.Length ? css[index + 1] : '\0';
+            if (inComment)
+            {
+                if (value == '*' && next == '/')
+                {
+                    inComment = false;
+                    index++;
+                }
+                continue;
+            }
+            if (quote != '\0')
+            {
+                if (escaped)
+                    escaped = false;
+                else if (value == '\\')
+                    escaped = true;
+                else if (value == quote)
+                    quote = '\0';
+                continue;
+            }
+            if (value == '/' && next == '*')
+            {
+                inComment = true;
+                index++;
+                continue;
+            }
+            if (value is '\'' or '"')
+            {
+                quote = value;
+                continue;
+            }
+            if (value == '(')
+            {
+                parentheses++;
+                continue;
+            }
+            if (value == ')' && parentheses > 0)
+            {
+                parentheses--;
+                continue;
+            }
+            if (parentheses > 0)
+                continue;
+
+            if (value == ';')
+            {
+                if (stack.Count == 0)
+                    rootSegmentStart = index + 1;
+                else
+                {
+                    var frame = stack[^1];
+                    stack[^1] = (frame.ContentStart, frame.Selector, frame.HasNestedBlock, index + 1);
+                }
+                continue;
+            }
+            if (value == '{')
+            {
+                var selectorStart = stack.Count == 0 ? rootSegmentStart : stack[^1].SegmentStart;
+                var selector = css.Substring(selectorStart, index - selectorStart).Trim();
+                if (stack.Count > 0)
+                {
+                    var parent = stack[^1];
+                    stack[^1] = (parent.ContentStart, parent.Selector, true, parent.SegmentStart);
+                }
+                stack.Add((index + 1, selector, false, index + 1));
+                continue;
+            }
+            if (value != '}' || stack.Count == 0)
+                continue;
+
+            var block = stack[^1];
+            stack.RemoveAt(stack.Count - 1);
+            if (!block.HasNestedBlock && block.Selector.Length > 0 && block.Selector[0] != '@')
+            {
+                rules.Add(new StyleRule(
+                    block.Selector,
+                    css.Substring(block.ContentStart, index - block.ContentStart)));
+            }
+            if (stack.Count == 0)
+                rootSegmentStart = index + 1;
+            else
+            {
+                var parent = stack[^1];
+                stack[^1] = (parent.ContentStart, parent.Selector, parent.HasNestedBlock, index + 1);
+            }
+        }
+        return rules;
     }
 
     private static IReadOnlyList<string> SplitTopLevelWhitespace(string value)

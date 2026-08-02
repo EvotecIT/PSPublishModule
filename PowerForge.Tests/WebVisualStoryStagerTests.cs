@@ -813,6 +813,35 @@ public class WebVisualStoryStagerTests
     }
 
     [Fact]
+    public void Stage_RejectsSymbolicLinkOutputRootBeforeRecovery()
+    {
+        var root = CreateBundle();
+        try
+        {
+            var target = Path.Combine(root, "output-target");
+            Directory.CreateDirectory(target);
+            File.WriteAllText(Path.Combine(target, "visual-story.json"), "not-json");
+            var linkedOutput = Path.Combine(root, "linked-output");
+            Directory.CreateSymbolicLink(linkedOutput, target);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = Path.Combine(root, "source", "story.json"),
+                    OutputPath = linkedOutput
+                }));
+
+            Assert.Contains("symbolic link", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(Directory.Exists(linkedOutput));
+            Assert.Equal("not-json", File.ReadAllText(Path.Combine(target, "visual-story.json")));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Load_RejectsCompletedArtifactWhoseExtensionDoesNotMatchPng()
     {
         var root = CreateBundle();
