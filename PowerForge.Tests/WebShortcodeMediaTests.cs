@@ -414,6 +414,22 @@ public class WebShortcodeMediaTests
         Assert.DoesNotContain("/content/pages/demo/story/", html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void TryGetContainedRelativePath_SupportsCaseInsensitiveFileSystems()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "StoryRoot");
+        var path = Path.Combine(Path.GetTempPath(), "storyroot", "nested", "visual-story.json");
+
+        var contained = ShortcodeDefaults.TryGetContainedRelativePath(
+            root,
+            path,
+            out var relative,
+            StringComparison.OrdinalIgnoreCase);
+
+        Assert.True(contained);
+        Assert.Equal("nested/visual-story.json", relative);
+    }
+
     private static string BuildSinglePageSite(
         string markdown,
         Action<string>? setup = null,

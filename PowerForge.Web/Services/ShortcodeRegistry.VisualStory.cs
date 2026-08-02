@@ -4,6 +4,11 @@ namespace PowerForge.Web;
 
 internal static partial class ShortcodeDefaults
 {
+    private static readonly StringComparison VisualStoryFileSystemPathComparison =
+        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
     internal static string RenderVisualStory(ShortcodeRenderContext context, Dictionary<string, string> attrs)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -224,17 +229,32 @@ internal static partial class ShortcodeDefaults
             .FirstOrDefault();
     }
 
-    private static bool TryGetContainedRelativePath(
+    internal static bool TryGetContainedRelativePath(
         string root,
         string path,
-        out string relativePath)
+        out string relativePath,
+        StringComparison? comparison = null)
     {
-        relativePath = Path.GetRelativePath(root, path).Replace('\\', '/');
-        return relativePath.Length > 0 &&
-               relativePath != "." &&
-               !relativePath.Equals("..", StringComparison.Ordinal) &&
-               !relativePath.StartsWith("../", StringComparison.Ordinal) &&
-               !Path.IsPathRooted(relativePath);
+        var fullRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        var fullPath = Path.GetFullPath(path);
+        var pathComparison = comparison ?? VisualStoryFileSystemPathComparison;
+        if (string.Equals(fullRoot, fullPath, pathComparison))
+        {
+            relativePath = string.Empty;
+            return false;
+        }
+
+        var prefix = Path.EndsInDirectorySeparator(fullRoot)
+            ? fullRoot
+            : fullRoot + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(prefix, pathComparison))
+        {
+            relativePath = string.Empty;
+            return false;
+        }
+
+        relativePath = fullPath.Substring(prefix.Length).Replace('\\', '/');
+        return relativePath.Length > 0 && !Path.IsPathRooted(relativePath);
     }
 
     private static bool PathsEqual(string left, string right)

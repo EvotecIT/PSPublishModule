@@ -187,6 +187,50 @@ public class WebVisualStorySvgCssAnimationTests
             "<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><linearGradient id=\"fill\"><stop offset=\"0\"/></linearGradient></defs><style>@keyframes fade{from{opacity:0}to{opacity:1}}rect{animation:fade 1s;fill:url(#fill)}</style><rect fill=\"url(#fill)\" width=\"1\" height=\"1\"/></svg>");
     }
 
+    [Theory]
+    [InlineData("<script>alert(1)</script>")]
+    [InlineData("<foreignObject><div xmlns=\"http://www.w3.org/1999/xhtml\">active</div></foreignObject>")]
+    [InlineData("<rect onload=\"alert(1)\" width=\"1\" height=\"1\"/>")]
+    [InlineData("<a href=\"#target\"><set attributeName=\"href\" to=\"javascript:alert(1)\" dur=\"1s\"/></a>")]
+    public void Stage_RejectsActiveSvgContent(string content)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                $"<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{{from{{opacity:0}}to{{opacity:1}}}}rect{{animation:fade 1s}}</style>{content}<rect width=\"1\" height=\"1\"/></svg>"));
+
+        Assert.Contains("Visual-story SVG artifacts cannot", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("@media print")]
+    [InlineData("@supports (display:grid)")]
+    [InlineData("@container (min-width:1px)")]
+    public void Stage_RejectsAnimationAvailableOnlyInsideConditionalRules(string conditionalRule)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                $"<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{{from{{opacity:0}}to{{opacity:1}}}}{conditionalRule}{{rect{{animation:fade 1s}}}}</style><rect width=\"1\" height=\"1\"/></svg>"));
+
+        Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Stage_RejectsKeyframesAvailableOnlyInsideConditionalRules()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            StageSvg(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@media print{@keyframes fade{from{opacity:0}to{opacity:1}}}rect{animation:fade 1s}</style><rect width=\"1\" height=\"1\"/></svg>"));
+
+        Assert.Contains("supported animation", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Stage_AcceptsAnimationInsideNonConditionalLayer()
+    {
+        StageSvg(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"><style>@keyframes fade{from{opacity:0}to{opacity:1}}@layer story{rect{animation:fade 1s}}</style><rect width=\"1\" height=\"1\"/></svg>");
+    }
+
     private static void StageSvg(string svg)
     {
         var root = WebVisualStoryStagerTests.CreateBundle();

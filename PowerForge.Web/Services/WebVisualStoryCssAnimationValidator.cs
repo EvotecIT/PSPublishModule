@@ -4,7 +4,7 @@ using System.Text;
 namespace PowerForge.Web;
 
 /// <summary>Recognizes effective CSS animations without executing or rendering SVG content.</summary>
-internal static class WebVisualStoryCssAnimationValidator
+internal static partial class WebVisualStoryCssAnimationValidator
 {
     private readonly record struct AnimationDefinition(string? Name, double DurationMilliseconds, bool Paused);
     private readonly record struct StyleRule(string Selector, string Declarations);
@@ -19,7 +19,7 @@ internal static class WebVisualStoryCssAnimationValidator
 
     internal static IReadOnlySet<string> GetEffectiveAnimationNames(string css)
     {
-        var normalizedCss = RemoveComments(css);
+        var normalizedCss = RemoveUnsupportedConditionalRuleBlocks(RemoveComments(css));
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var declarationBlock in GetDeclarationBlocks(normalizedCss))
         {
@@ -34,7 +34,7 @@ internal static class WebVisualStoryCssAnimationValidator
         Func<string, bool> selectorMatches)
     {
         ArgumentNullException.ThrowIfNull(selectorMatches);
-        var normalizedCss = RemoveComments(css);
+        var normalizedCss = RemoveUnsupportedConditionalRuleBlocks(RemoveComments(css));
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var rule in GetStyleRules(normalizedCss))
         {
@@ -48,7 +48,7 @@ internal static class WebVisualStoryCssAnimationValidator
 
     internal static IReadOnlySet<string> GetKeyframeNames(string css)
     {
-        var normalizedCss = RemoveComments(css);
+        var normalizedCss = RemoveUnsupportedConditionalRuleBlocks(RemoveComments(css));
         var names = new HashSet<string>(StringComparer.Ordinal);
         var quote = '\0';
         var escaped = false;

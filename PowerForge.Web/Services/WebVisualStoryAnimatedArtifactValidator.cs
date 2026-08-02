@@ -8,7 +8,7 @@ namespace PowerForge.Web;
 /// <summary>
 /// Validates browser-renderable visual-story animation payloads without executing producer code.
 /// </summary>
-internal static class WebVisualStoryAnimatedArtifactValidator
+internal static partial class WebVisualStoryAnimatedArtifactValidator
 {
     private readonly record struct SvgElementIdentity(string LocalName, string? Id, string[] Classes);
 
@@ -130,6 +130,7 @@ internal static class WebVisualStoryAnimatedArtifactValidator
             var cssStyleBlocks = new List<string>();
             var svgElements = new List<SvgElementIdentity> { ReadSvgElementIdentity(reader) };
             var rootInlineStyle = reader.GetAttribute("style");
+            ValidatePassiveSvgContent(reader, displayPath);
             ValidateSelfContainedReferences(reader, displayPath);
             AddCssAnimationNames(rootInlineStyle, cssAnimationNames, displayPath);
             var insideStyle = false;
@@ -170,6 +171,7 @@ internal static class WebVisualStoryAnimatedArtifactValidator
                     !string.Equals(reader.NamespaceURI, SvgNamespace, StringComparison.Ordinal))
                     continue;
 
+                ValidatePassiveSvgContent(reader, displayPath);
                 ValidateSelfContainedReferences(reader, displayPath);
                 svgElements.Add(ReadSvgElementIdentity(reader));
                 if (IsDeclarativeAnimationElement(reader))
