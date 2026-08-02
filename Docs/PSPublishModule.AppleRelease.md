@@ -449,8 +449,13 @@ The reusable workflow boundary mirrors the human approval boundary:
   the exact source, action, observed Apple state, and App Review readiness evidence still
   produce the reviewed SHA-256. The reviewed hash is also passed into the release engine,
   which recomputes and rejects drift immediately before the first Apple mutation.
-- `powerforge-apple-monitor.yml` runs scheduled `Doctor`, retains the compact receipt,
-  and maintains one marker-owned GitHub incident until errors and warnings are cleared.
+- `powerforge-apple-monitor.yml` runs scheduled `Doctor` on a trusted self-hosted macOS
+  runner, reads its private `~/.appstoreconnect/env` profile only inside that action
+  process, retains the compact receipt, and maintains one marker-owned GitHub incident
+  until errors and warnings are cleared. The profile and referenced `.p8` file must be
+  runner-owned regular files with one link, grant no group, other, or ACL access, and
+  must not contain or traverse symbolic links. The monitor accepts only the exact
+  default-branch commit that invoked it.
 - `powerforge-apple-screenshots.yml` captures from an exact source commit, retains the
   PNG artifact for review, waits at a protected environment, binds the reviewer to
   exact image hashes, and then performs the confirmed screenshot sync.
@@ -465,14 +470,21 @@ The reusable workflow boundary mirrors the human approval boundary:
 
 Callers must pass 40-character commit SHAs for `powerforge_ref` and release
 `source_ref`; the workflows reject branches and tags and verify both checked-out
-commits. The reusable jobs select the caller repository's protected environment and
-resolve its environment-scoped App Store Connect secrets there. Approval callers also
-provide a non-protected planning environment with read-only App Store Connect credentials.
+commits. Mutating reusable jobs select protected environments and require explicitly
+supplied App Store Connect credentials. The monitor is intentionally different: its
+read-only Doctor action uses only the fixed private profile on the self-hosted Mac and
+never copies that credential tuple into GitHub secrets, inputs, outputs, artifacts, or
+receipts. Runner-local credentials cannot be enabled for Version, Advance, governance,
+screenshots, review submission, release, or any other mutating action.
+Runner-local mode also rejects any `AppStoreConnectApiKeyPath`,
+`AppStoreConnectApiKeyId`, or `AppStoreConnectApiIssuerId` in the tracked release
+configuration so repository content cannot override the validated private profile.
 Release configs and tool manifests must be tracked, unchanged files beneath the exact
 checkout and must not traverse symbolic links or reparse points. Do not add
-repository-wide `secrets: inherit`; that would weaken the environment boundary. The composite
-action writes the private key to a permission-restricted temporary file and removes
-it after every plan or action. Mutating release workflows, including both screenshot
+repository-wide `secrets: inherit`; that would weaken the environment boundary. When
+explicit secret content is supplied, the composite action writes the private key to a
+permission-restricted temporary file and removes it after every plan or action. Mutating
+release workflows, including both screenshot
 approve-and-sync variants, share one repository-scoped concurrency group. Monitoring
 and screenshot capture have dedicated groups so a long capture cannot cancel a release,
 two publication captures cannot overlap, and App Review never observes a partially
@@ -634,8 +646,15 @@ the direct parent, then list their bundle identifiers in the parent
 
 Run `Doctor` on a schedule as well as before a release. The reusable
 `powerforge-apple-monitor.yml` workflow checks out exact 40-character source and
-PowerForge commits, builds that exact shared source, runs Doctor on a trusted Apple
-runner, retains the compact receipt, and maintains one stable GitHub incident. Errors
+PowerForge commits, builds that exact shared source, and runs Doctor on a trusted
+self-hosted macOS runner. The action uses only canonical variables from the runner's
+permission-restricted `~/.appstoreconnect/env`; optional `ASC_*` compatibility entries
+must be exact references to their canonical values. It requires the `.p8` file to remain inside
+that same private directory, validates an unencrypted PKCS#8 PEM shape, and keeps all
+values process-local. It accepts only the exact default-branch commit that invoked the
+workflow and executes only a `powerforge_ref` already merged into PSPublishModule's
+default branch, then retains the compact
+receipt and maintains one stable GitHub incident. Errors
 and warnings open the issue; a clean later run closes only incidents carrying the
 PowerForge monitor ownership marker, never an unrelated same-title issue. This catches upload/build
 state, review, metadata, screenshot, compliance, observability, and TestFlight feedback

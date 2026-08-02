@@ -36,18 +36,6 @@ on:
         required: false
         default: Apple release monitor detected a failure
         type: string
-      environment_name:
-        description: GitHub environment containing Apple monitoring credentials.
-        required: false
-        default: apple-release
-        type: string
-    secrets:
-      caller_app_store_connect_issuer_id:
-        required: false
-      caller_app_store_connect_key_id:
-        required: false
-      caller_app_store_connect_private_key:
-        required: false
 
 concurrency:
   group: powerforge-apple-monitor-${{ github.repository }}
@@ -57,7 +45,6 @@ jobs:
   doctor:
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: 30
-    environment: ${{ inputs.environment_name }}
     permissions:
       contents: read
       issues: write
@@ -67,9 +54,19 @@ jobs:
         env:
           SOURCE_REF: ${{ inputs.source_ref }}
           POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+          CALLER_SHA: ${{ github.sha }}
+          CALLER_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           foreach ($entry in @{ source_ref = $env:SOURCE_REF; powerforge_ref = $env:POWERFORGE_REF }.GetEnumerator()) {
             if ($entry.Value -notmatch '^[0-9A-Fa-f]{40}$') { throw "$($entry.Key) must be an exact 40-character commit SHA." }
+          }
+          if ([string]::IsNullOrWhiteSpace($env:DEFAULT_BRANCH) -or
+              $env:CALLER_REF -ne "refs/heads/$($env:DEFAULT_BRANCH)") {
+            throw 'Runner-local Apple Doctor may run only from the caller repository default branch.'
+          }
+          if ($env:SOURCE_REF -ine $env:CALLER_SHA) {
+            throw 'Runner-local Apple Doctor source_ref must equal the exact default-branch workflow commit.'
           }
 
       - name: Checkout exact monitored source
@@ -79,6 +76,24 @@ jobs:
           fetch-depth: 1
           path: source
           persist-credentials: false
+
+      - name: Require merged shared monitor source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $repository = gh api repos/EvotecIT/PSPublishModule | ConvertFrom-Json -Depth 20
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string] $repository.default_branch)) {
+            throw 'Unable to resolve the PSPublishModule default branch.'
+          }
+          $comparison = gh api "repos/EvotecIT/PSPublishModule/compare/$($env:POWERFORGE_REF)...$($repository.default_branch)" |
+            ConvertFrom-Json -Depth 20
+          if ($LASTEXITCODE -ne 0 -or
+              [string] $comparison.merge_base_commit.sha -ine $env:POWERFORGE_REF) {
+            throw 'powerforge_ref must be a commit already merged into the PSPublishModule default branch.'
+          }
 
       - name: Checkout pinned PowerForge monitor
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -107,9 +122,7 @@ jobs:
           tool-manifest-path: ${{ github.workspace }}/source/${{ inputs.tool_manifest_path }}
           tool-path: ${{ steps.build-powerforge.outputs.tool-path }}
           plan-only: "false"
-          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || secrets.caller_app_store_connect_issuer_id }}
-          key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID || secrets.caller_app_store_connect_key_id }}
-          private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY || secrets.caller_app_store_connect_private_key }}
+          runner-local-credentials: "true"
 
       - name: Retain compact doctor receipt
         if: always() && steps.doctor.outputs.receipt-path != ''

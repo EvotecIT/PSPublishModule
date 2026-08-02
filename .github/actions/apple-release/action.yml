@@ -41,15 +41,22 @@ inputs:
     description: Pass the explicit Apple mutation confirmation flag.
     required: false
     default: "false"
+  runner-local-credentials:
+    description: Load the fixed private ~/.appstoreconnect profile in-process. Allowed only for Doctor on a self-hosted macOS runner.
+    required: false
+    default: "false"
   issuer-id:
     description: App Store Connect issuer id supplied from a protected secret.
-    required: true
+    required: false
+    default: ""
   key-id:
     description: App Store Connect API key id supplied from a protected secret.
-    required: true
+    required: false
+    default: ""
   private-key:
     description: App Store Connect private key content supplied from a protected secret.
-    required: true
+    required: false
+    default: ""
 
 outputs:
   action:
@@ -148,6 +155,7 @@ runs:
         INPUT_TARGET: ${{ inputs.target }}
         INPUT_PLAN_ONLY: ${{ inputs.plan-only }}
         INPUT_CONFIRM: ${{ inputs.confirm }}
+        INPUT_RUNNER_LOCAL_CREDENTIALS: ${{ inputs.runner-local-credentials }}
         POWERFORGE_TOOL_PATH: ${{ steps.tool.outputs.path }}
         POWERFORGE_VERSION: ${{ steps.tool.outputs.version }}
         APP_STORE_CONNECT_ISSUER_ID: ${{ inputs.issuer-id }}
