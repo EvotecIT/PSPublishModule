@@ -94,6 +94,10 @@ internal sealed class DocumentationCommandHelp
     [DataMember(Name = "inputs")]
     public List<DocumentationTypeHelp> Inputs { get; set; } = new();
 
+    /// <summary>Runtime pipeline input metadata captured from CommandInfo before reconciliation.</summary>
+    [DataMember(Name = "runtimeInputs")]
+    public List<DocumentationTypeHelp> RuntimeInputs { get; set; } = new();
+
     /// <summary>Return/output types (from Get-Help).</summary>
     [DataMember(Name = "outputs")]
     public List<DocumentationTypeHelp> Outputs { get; set; } = new();

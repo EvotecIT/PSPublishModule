@@ -654,9 +654,9 @@ try {
     } catch {
       # best effort: older hosts can omit or reshape InputTypes entirely
     }
-    if (-not $inputs -or $inputs.Count -eq 0) {
-      $seenInputs = @{}
-      foreach ($pn in $paramNames) {
+    $runtimeInputs = @()
+    $seenInputs = @{}
+    foreach ($pn in $paramNames) {
         $pmeta = $null
         try { $pmeta = $c.Parameters[$pn] } catch { $pmeta = $null }
         if (-not $pmeta) { continue }
@@ -691,8 +691,10 @@ try {
         $key = if ($inputTypeClrName) { $inputTypeClrName } else { $inputTypeName }
         if ($seenInputs.ContainsKey($key)) { continue }
         $seenInputs[$key] = $true
-        $inputs += [ordered]@{ name = $inputTypeName; clrTypeName = $inputTypeClrName; description = '' }
-      }
+        $runtimeInputs += [ordered]@{ name = $inputTypeName; clrTypeName = $inputTypeClrName; description = '' }
+    }
+    if (-not $inputs -or $inputs.Count -eq 0) {
+      $inputs = @($runtimeInputs)
     }
 
     $helpOutputs = @()
@@ -786,6 +788,7 @@ try {
       parameters = @($parameters)
       examples = @($examples)
       inputs = @($inputs)
+      runtimeInputs = @($runtimeInputs)
       outputs = @()
       authoredOutputs = @($helpOutputs)
       runtimeOutputs = @($runtimeOutputs)
