@@ -19,10 +19,11 @@ $toolRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $consumer = [IO.Path]::GetFullPath($ConsumerRoot)
 $requiredBranch = 'main'
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ("PowerForge.LocalOperator." + [guid]::NewGuid().ToString('N'))
+$script:validatedCredentialEnvironment = @{}
 
 function Invoke-GitText {
     param([Parameter(Mandatory)][string] $Root, [Parameter(Mandatory)][string[]] $Arguments)
-    $output = @(& $script:gitPath -C $Root @Arguments 2>&1)
+    $output = @(& $script:gitPath -c core.fsmonitor=false -c core.hooksPath=/dev/null -C $Root @Arguments 2>&1)
     if ($LASTEXITCODE -ne 0) { throw "Git failed in '$Root': git $($Arguments -join ' ')" }
     return ($output -join [Environment]::NewLine).Trim()
 }
@@ -71,7 +72,8 @@ function Assert-CleanRepository {
         [Parameter(Mandatory)][string] $Name,
         [string] $RequiredCommit,
         [string] $RequiredBranch,
-        [string] $ExpectedRepository
+        [string] $ExpectedRepository,
+        [switch] $RejectIgnored
     )
     Assert-UnlinkedDirectory -Path $Root -Name $Name
     if ((Invoke-GitText -Root $Root -Arguments @('rev-parse', '--is-inside-work-tree')) -ne 'true') {
@@ -91,7 +93,21 @@ function Assert-CleanRepository {
     }
     $status = Invoke-GitText -Root $Root -Arguments @('status', '--porcelain=v1', '--untracked-files=all')
     if (-not [string]::IsNullOrWhiteSpace($status)) { throw "$Name must be clean before Apple release work." }
+    if ($RejectIgnored) {
+        $ignored = Invoke-GitText -Root $Root -Arguments @('status', '--ignored=matching', '--porcelain=v1', '--untracked-files=all')
+        if (@($ignored -split '\r?\n' | Where-Object { $_.StartsWith('!! ') }).Count -gt 0) {
+            throw "$Name must not contain ignored files before Apple release work; use a fresh exact checkout."
+        }
+    }
     return $head
+}
+
+function Assert-NoReplaceRefs {
+    param([Parameter(Mandatory)][string] $Root, [Parameter(Mandatory)][string] $Name)
+    $replaceRefs = Invoke-GitText -Root $Root -Arguments @('for-each-ref', '--format=%(refname)', 'refs/replace')
+    if (-not [string]::IsNullOrWhiteSpace($replaceRefs)) {
+        throw "$Name must not contain Git replacement refs."
+    }
 }
 
 function Resolve-FixedTool {
@@ -213,6 +229,36 @@ function Assert-SafeArguments {
     }
 }
 
+function Assert-FixedAppleToolConfiguration {
+    $allowed = @{
+        XcodeBuildExecutable = @('xcodebuild', '/usr/bin/xcodebuild')
+        XcodeGenExecutable = @('xcodegen', '/opt/homebrew/bin/xcodegen')
+        XcrunExecutable = @('xcrun', '/usr/bin/xcrun')
+        DittoExecutable = @('ditto', '/usr/bin/ditto')
+        SpctlExecutable = @('spctl', '/usr/sbin/spctl')
+    }
+    function Test-Node {
+        param($Node)
+        if ($null -eq $Node -or $Node -is [string] -or $Node.GetType().IsPrimitive) { return }
+        if ($Node -is [Collections.IEnumerable] -and $Node -isnot [Management.Automation.PSCustomObject]) {
+            foreach ($item in $Node) { Test-Node -Node $item }
+            return
+        }
+        foreach ($property in $Node.PSObject.Properties) {
+            if ($allowed.ContainsKey($property.Name)) {
+                $value = [string]$property.Value
+                if (-not [string]::IsNullOrWhiteSpace($value) -and $value.Trim() -notin $allowed[$property.Name]) {
+                    throw "$($property.Name) must use the fixed trusted Apple tool at the pinned local operator boundary."
+                }
+            }
+            Test-Node -Node $property.Value
+        }
+    }
+    foreach ($configPath in @($script:validatedConfigPaths | Sort-Object -Unique)) {
+        Test-Node -Node (Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json)
+    }
+}
+
 function Invoke-TrackedInputValidator {
     param([Parameter(Mandatory)][string] $SourceCommit)
     $validator = Join-Path $toolRoot '.github/actions/apple-release/Assert-TrackedAppleReleaseInputs.ps1'
@@ -230,10 +276,10 @@ function Invoke-TrackedInputValidator {
     }
 }
 
-function Get-FirstEnvironmentValue {
-    param([Parameter(Mandatory)][string[]] $Names)
+function Get-SavedEnvironmentValue {
+    param([Parameter(Mandatory)][hashtable] $Saved, [Parameter(Mandatory)][string[]] $Names)
     foreach ($name in $Names) {
-        $value = [Environment]::GetEnvironmentVariable($name)
+        $value = $Saved[$name]
         if (-not [string]::IsNullOrWhiteSpace($value)) { return $value.Trim() }
     }
     return $null
@@ -250,12 +296,14 @@ function Suspend-AppleCredentialEnvironment {
     return $saved
 }
 
-function Restore-AppleCredentialEnvironment {
-    param([Parameter(Mandatory)][hashtable] $Saved)
-    foreach ($name in $Saved.Keys) {
-        $value = $Saved[$name]
-        [Environment]::SetEnvironmentVariable($name, $(if ($null -eq $value) { $null } else { [string]$value }))
+function Set-SafeGitEnvironment {
+    foreach ($entry in [Environment]::GetEnvironmentVariables().Keys) {
+        $name = [string]$entry
+        if ($name.StartsWith('GIT_', [StringComparison]::OrdinalIgnoreCase)) {
+            [Environment]::SetEnvironmentVariable($name, $null)
+        }
     }
+    [Environment]::SetEnvironmentVariable('GIT_NO_REPLACE_OBJECTS', '1')
 }
 
 function Assert-PrivateUnixPath {
@@ -292,9 +340,10 @@ function Assert-PrivateUnixPath {
 }
 
 function Assert-FixedLocalCredentialProfile {
-    $keyPath = Get-FirstEnvironmentValue -Names @('APP_STORE_CONNECT_PRIVATE_KEY_PATH', 'ASC_PRIVATE_KEY_PATH')
-    $keyId = Get-FirstEnvironmentValue -Names @('APP_STORE_CONNECT_KEY_ID', 'ASC_KEY_ID')
-    $issuerId = Get-FirstEnvironmentValue -Names @('APP_STORE_CONNECT_ISSUER_ID', 'ASC_ISSUER_ID')
+    param([Parameter(Mandatory)][hashtable] $Saved)
+    $keyPath = Get-SavedEnvironmentValue -Saved $Saved -Names @('APP_STORE_CONNECT_PRIVATE_KEY_PATH', 'ASC_PRIVATE_KEY_PATH')
+    $keyId = Get-SavedEnvironmentValue -Saved $Saved -Names @('APP_STORE_CONNECT_KEY_ID', 'ASC_KEY_ID')
+    $issuerId = Get-SavedEnvironmentValue -Saved $Saved -Names @('APP_STORE_CONNECT_ISSUER_ID', 'ASC_ISSUER_ID')
     $configuredCount = @($keyPath, $keyId, $issuerId).Where({ -not [string]::IsNullOrWhiteSpace($_) }).Count
     if ($configuredCount -eq 0) {
         $script:validatedCredentialKeyPath = $null
@@ -325,6 +374,11 @@ function Assert-FixedLocalCredentialProfile {
         if ([string]::IsNullOrWhiteSpace($current)) { throw 'App Store Connect private-key path escaped the private profile directory.' }
     }
     $script:validatedCredentialKeyPath = $fullKeyPath
+    $script:validatedCredentialEnvironment = @{
+        APP_STORE_CONNECT_PRIVATE_KEY_PATH = $fullKeyPath
+        APP_STORE_CONNECT_KEY_ID = $keyId
+        APP_STORE_CONNECT_ISSUER_ID = $issuerId
+    }
 }
 
 function New-TrackedToolSnapshot {
@@ -403,9 +457,12 @@ function Assert-ScreenshotPublicationBinding {
     $apple = $release.AppleApps
     $projectRootValue = if ([string]::IsNullOrWhiteSpace([string]$apple.ProjectRoot)) { '.' } else { [string]$apple.ProjectRoot }
     $projectRoot = Resolve-PathFromBase -BasePath (Split-Path -Parent $releaseConfigPath) -Value $projectRootValue
-    $configValues = @()
-    if (-not [string]::IsNullOrWhiteSpace([string]$apple.ScreenshotConfigPath)) { $configValues += [string]$apple.ScreenshotConfigPath }
-    $configValues += @($apple.ScreenshotConfigPaths | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    $configValues = @(
+        @([string]$apple.ScreenshotConfigPath) + @($apple.ScreenshotConfigPaths) |
+            Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+            ForEach-Object { Resolve-PathFromBase -BasePath $projectRoot -Value ([string]$_) } |
+            Sort-Object -Unique
+    )
     $requiresBinding = $operation -eq 'Screenshots' -or
         ($operation -eq 'Advance' -and $apple.SyncScreenshots -eq $true) -or
         ($operation -in @('SubmitAppReview', 'Release') -and $configValues.Count -gt 0)
@@ -436,7 +493,7 @@ function Assert-ScreenshotPublicationBinding {
     $approvedCounts = @{}
     $matchedConfigCount = 0
     foreach ($configValue in $configValues) {
-        $screenshotConfigPath = Resolve-PathFromBase -BasePath $projectRoot -Value $configValue
+        $screenshotConfigPath = $configValue
         $screenshotConfig = Get-Content -LiteralPath $screenshotConfigPath -Raw | ConvertFrom-Json
         if ($selectedTargets.Count -gt 0) {
             $matchesSelectedApp = @($selectedApps | Where-Object {
@@ -491,7 +548,7 @@ function Get-RedactedToolText {
     foreach ($name in @(
         'APP_STORE_CONNECT_KEY_ID', 'APP_STORE_CONNECT_ISSUER_ID', 'APP_STORE_CONNECT_PRIVATE_KEY_PATH',
         'APP_STORE_CONNECT_PRIVATE_KEY', 'ASC_KEY_ID', 'ASC_ISSUER_ID', 'ASC_PRIVATE_KEY_PATH', 'ASC_PRIVATE_KEY')) {
-        $value = [Environment]::GetEnvironmentVariable($name)
+        $value = $script:validatedCredentialEnvironment[$name]
         if (-not [string]::IsNullOrWhiteSpace($value)) { $sensitiveValues.Add($value) }
     }
     $keyPath = $script:validatedCredentialKeyPath
@@ -541,7 +598,8 @@ function Invoke-RedactedProcess {
         [Parameter(Mandatory)][string] $FilePath,
         [Parameter(Mandatory)][string] $WorkingDirectory,
         [Parameter(Mandatory)][string[]] $Arguments,
-        [Parameter(Mandatory)][string] $NuGetPackagesPath
+        [Parameter(Mandatory)][string] $NuGetPackagesPath,
+        [switch] $IncludeAppleCredentials
     )
     $start = [Diagnostics.ProcessStartInfo]::new()
     $start.FileName = $FilePath
@@ -550,7 +608,25 @@ function Invoke-RedactedProcess {
     $start.CreateNoWindow = $true
     $start.RedirectStandardOutput = $true
     $start.RedirectStandardError = $true
+    $start.Environment.Clear()
+    $safeEnvironment = @{
+        HOME = [Environment]::GetFolderPath('UserProfile')
+        LANG = 'en_US.UTF-8'
+        LC_ALL = 'en_US.UTF-8'
+        PATH = $(if ($IsMacOS) { '/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin' } elseif ($IsWindows) { "$env:SystemRoot\System32;$env:SystemRoot" } else { '/usr/bin:/bin:/usr/sbin:/sbin' })
+        TMPDIR = [IO.Path]::GetTempPath()
+    }
+    foreach ($name in @('USER', 'LOGNAME', 'SHELL', 'SSH_AUTH_SOCK', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'SSL_CERT_FILE', 'SSL_CERT_DIR')) {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if (-not [string]::IsNullOrWhiteSpace($value)) { $safeEnvironment[$name] = $value }
+    }
+    foreach ($entry in $safeEnvironment.GetEnumerator()) { $start.Environment[$entry.Key] = [string]$entry.Value }
     $start.Environment['NUGET_PACKAGES'] = $NuGetPackagesPath
+    if ($IncludeAppleCredentials) {
+        foreach ($entry in $script:validatedCredentialEnvironment.GetEnumerator()) {
+            $start.Environment[$entry.Key] = [string]$entry.Value
+        }
+    }
     foreach ($argument in $Arguments) {
         $start.ArgumentList.Add($argument)
     }
@@ -573,54 +649,54 @@ function Invoke-RedactedProcess {
 
 try {
     New-Item -ItemType Directory -Path $temporaryRoot -Force | Out-Null
+    $savedCredentialEnvironment = Suspend-AppleCredentialEnvironment
+    Set-SafeGitEnvironment
     $script:gitPath = Resolve-FixedTool -Name git
     $toolHead = Assert-CleanRepository -Root $toolRoot -Name 'PSPublishModule source' -RequiredCommit $ExpectedCommit -ExpectedRepository 'EvotecIT/PSPublishModule'
-    $consumerHead = Assert-CleanRepository -Root $consumer -Name 'Consumer source' -RequiredBranch $requiredBranch -ExpectedRepository $ExpectedConsumerRepository
+    $consumerHead = Assert-CleanRepository -Root $consumer -Name 'Consumer source' -RequiredBranch $requiredBranch -ExpectedRepository $ExpectedConsumerRepository -RejectIgnored
+    Assert-NoReplaceRefs -Root $toolRoot -Name 'PSPublishModule source'
+    Assert-NoReplaceRefs -Root $consumer -Name 'Consumer source'
     $scriptRelative = [IO.Path]::GetRelativePath($toolRoot, $PSCommandPath).Replace('\', '/')
     Invoke-GitText -Root $toolRoot -Arguments @('ls-files', '--error-unmatch', '--', $scriptRelative) | Out-Null
     Invoke-GitText -Root $toolRoot -Arguments @('diff', '--quiet', 'HEAD', '--', $scriptRelative) | Out-Null
     Assert-SafeArguments
+    Assert-FixedAppleToolConfiguration
     Invoke-TrackedInputValidator -SourceCommit $consumerHead
-    Assert-FixedLocalCredentialProfile
+    Assert-FixedLocalCredentialProfile -Saved $savedCredentialEnvironment
     $configuredSourceCommit = Get-OptionValue -Option '--apple-source-commit'
     if ($configuredSourceCommit -and $configuredSourceCommit.ToLowerInvariant() -ne $consumerHead) {
         throw "--apple-source-commit must match the exact consumer HEAD '$consumerHead'."
     }
 
-    $savedCredentialEnvironment = Suspend-AppleCredentialEnvironment
-    try {
-        $dotnet = Resolve-FixedTool -Name dotnet
-        if ($null -ne (Get-OptionValue -Option '--capture-provenance')) {
-            $gh = Resolve-FixedTool -Name gh
-            Assert-AuthoritativeCaptureProvenance -GhPath $gh -SourceCommit $consumerHead
-        }
-        Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead
-        $tar = Resolve-FixedTool -Name tar
-        $buildToolRoot = New-TrackedToolSnapshot -TarPath $tar
-        $cliProject = Join-Path $buildToolRoot 'PowerForge.Cli/PowerForge.Cli.csproj'
-        if (-not (Test-Path -LiteralPath $cliProject -PathType Leaf)) { throw "PowerForge CLI project is missing: $cliProject" }
-
-        $nugetPackages = Join-Path $temporaryRoot 'nuget-packages'
-        $artifactsRoot = Join-Path $temporaryRoot 'artifacts'
-        $cliOutput = Join-Path $temporaryRoot 'cli'
-        New-Item -ItemType Directory -Path $nugetPackages, $artifactsRoot, $cliOutput -Force | Out-Null
-        $restoreExitCode = Invoke-RedactedProcess `
-            -FilePath $dotnet `
-            -WorkingDirectory $buildToolRoot `
-            -Arguments @('restore', $cliProject, '--locked-mode', '--packages', $nugetPackages, '--artifacts-path', $artifactsRoot, '--verbosity', 'minimal') `
-            -NuGetPackagesPath $nugetPackages
-        if ($restoreExitCode -ne 0) { exit $restoreExitCode }
-        $buildExitCode = Invoke-RedactedProcess `
-            -FilePath $dotnet `
-            -WorkingDirectory $buildToolRoot `
-            -Arguments @('build', $cliProject, '--configuration', 'Release', '--framework', 'net10.0', '--no-restore', '--artifacts-path', $artifactsRoot, '--output', $cliOutput, "--property:RestorePackagesPath=$nugetPackages", '--verbosity', 'minimal') `
-            -NuGetPackagesPath $nugetPackages
-        if ($buildExitCode -ne 0) { exit $buildExitCode }
-        $cliAssembly = Join-Path $cliOutput 'PowerForge.Cli.dll'
-        if (-not (Test-Path -LiteralPath $cliAssembly -PathType Leaf)) { throw "PowerForge CLI build output is missing: $cliAssembly" }
-    } finally {
-        Restore-AppleCredentialEnvironment -Saved $savedCredentialEnvironment
+    $dotnet = Resolve-FixedTool -Name dotnet
+    if ($null -ne (Get-OptionValue -Option '--capture-provenance')) {
+        $gh = Resolve-FixedTool -Name gh
+        Assert-AuthoritativeCaptureProvenance -GhPath $gh -SourceCommit $consumerHead
     }
+    Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead
+    $tar = Resolve-FixedTool -Name tar
+    $buildToolRoot = New-TrackedToolSnapshot -TarPath $tar
+    $cliProject = Join-Path $buildToolRoot 'PowerForge.Cli/PowerForge.Cli.csproj'
+    if (-not (Test-Path -LiteralPath $cliProject -PathType Leaf)) { throw "PowerForge CLI project is missing: $cliProject" }
+
+    $nugetPackages = Join-Path $temporaryRoot 'nuget-packages'
+    $artifactsRoot = Join-Path $temporaryRoot 'artifacts'
+    $cliOutput = Join-Path $temporaryRoot 'cli'
+    New-Item -ItemType Directory -Path $nugetPackages, $artifactsRoot, $cliOutput -Force | Out-Null
+    $restoreExitCode = Invoke-RedactedProcess `
+        -FilePath $dotnet `
+        -WorkingDirectory $buildToolRoot `
+        -Arguments @('restore', $cliProject, '--locked-mode', '--packages', $nugetPackages, '--artifacts-path', $artifactsRoot, '--verbosity', 'minimal') `
+        -NuGetPackagesPath $nugetPackages
+    if ($restoreExitCode -ne 0) { exit $restoreExitCode }
+    $buildExitCode = Invoke-RedactedProcess `
+        -FilePath $dotnet `
+        -WorkingDirectory $buildToolRoot `
+        -Arguments @('build', $cliProject, '--configuration', 'Release', '--framework', 'net10.0', '--no-restore', '--artifacts-path', $artifactsRoot, '--output', $cliOutput, "--property:RestorePackagesPath=$nugetPackages", '--verbosity', 'minimal') `
+        -NuGetPackagesPath $nugetPackages
+    if ($buildExitCode -ne 0) { exit $buildExitCode }
+    $cliAssembly = Join-Path $cliOutput 'PowerForge.Cli.dll'
+    if (-not (Test-Path -LiteralPath $cliAssembly -PathType Leaf)) { throw "PowerForge CLI build output is missing: $cliAssembly" }
 
     Write-Host "PowerForge source: $toolHead"
     Write-Host "Consumer source: $consumerHead"
@@ -628,7 +704,8 @@ try {
         -FilePath $dotnet `
         -WorkingDirectory $consumer `
         -Arguments (@($cliAssembly) + (Get-ForwardedArgumentList)) `
-        -NuGetPackagesPath $nugetPackages
+        -NuGetPackagesPath $nugetPackages `
+        -IncludeAppleCredentials
     if ($toolExitCode -ne 0) { exit $toolExitCode }
 } finally {
     if (Test-Path -LiteralPath $temporaryRoot) { Remove-Item -LiteralPath $temporaryRoot -Recurse -Force }

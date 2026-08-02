@@ -589,8 +589,11 @@ byte and dimension inventory.
 For local publication, invoke the command through the reviewed
 `scripts/Invoke-PinnedPowerForge.ps1` helper. It requires the exact merged
 PSPublishModule commit, a clean consumer `main` equal to `origin/main`, and the
-expected GitHub repository. It also re-downloads the named provenance artifact
-from the successful source-bound GitHub run and compares its exact bytes before
+expected GitHub repository. Use a fresh checkout or worktree: ignored files are
+rejected as well as modified and untracked files, because Xcode projects and build
+phases can otherwise consume bytes that are absent from the reviewed commit. Git
+replacement refs are also rejected. The helper re-downloads the named provenance
+artifact from the successful source-bound GitHub run and compares its exact bytes before
 building the CLI into an isolated temporary artifacts directory. This prevents
 an editable local provenance copy, a stale ignored binary, or another checkout
 from becoming the publication authority. Capture callers must supply the exact
@@ -602,6 +605,10 @@ It restores locked packages into a fresh private NuGet cache, builds from the
 pinned PSPublishModule commit's tracked-only archive so ignored or untracked files
 cannot enter the executable, uses that archive's `global.json` to select the SDK,
 and only then executes the built CLI with the consumer as its working directory.
+It launches the CLI with a minimal environment, fixed Apple tool resolution, and
+only the validated local credential tuple; inherited .NET hooks, profilers, loader
+variables, tool overrides, and other process-injection settings do not cross that
+boundary. Apple credentials are suspended before any Git or build command runs.
 The local credential profile, key, and every key-path directory must be owned by
 the operator and grant no group, other, ACL, link, or hard-link access. Targeted
 commands validate only screenshot maps matching the selected release targets.

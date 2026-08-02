@@ -329,6 +329,9 @@ public sealed class AppleAppArchiveService
     private static string NormalizeExecutable(string? executable)
     {
         var value = executable?.Trim();
+        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX) &&
+            (string.IsNullOrWhiteSpace(value) || value == "xcodebuild"))
+            return "/usr/bin/xcodebuild";
         return string.IsNullOrWhiteSpace(value) ? "xcodebuild" : value!;
     }
 

@@ -19,6 +19,11 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("fetch', '--quiet', 'origin', $RequiredBranch", script, StringComparison.Ordinal);
         Assert.Contains("refs/remotes/origin/$RequiredBranch", script, StringComparison.Ordinal);
         Assert.Contains("status', '--porcelain=v1', '--untracked-files=all", script, StringComparison.Ordinal);
+        Assert.Contains("status', '--ignored=matching', '--porcelain=v1', '--untracked-files=all", script, StringComparison.Ordinal);
+        Assert.Contains("must not contain ignored files before Apple release work", script, StringComparison.Ordinal);
+        Assert.Contains("GIT_NO_REPLACE_OBJECTS", script, StringComparison.Ordinal);
+        Assert.Contains("for-each-ref', '--format=%(refname)', 'refs/replace", script, StringComparison.Ordinal);
+        Assert.Contains("core.fsmonitor=false", script, StringComparison.Ordinal);
         Assert.Contains("ls-files', '--error-unmatch'", script, StringComparison.Ordinal);
         Assert.Contains("'restore', $cliProject, '--locked-mode', '--packages', $nugetPackages, '--artifacts-path', $artifactsRoot", script, StringComparison.Ordinal);
         Assert.Contains("-WorkingDirectory $buildToolRoot", script, StringComparison.Ordinal);
@@ -28,7 +33,10 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("$buildToolRoot = New-TrackedToolSnapshot", script, StringComparison.Ordinal);
         Assert.Contains("build snapshot must not contain symbolic links or reparse points", script, StringComparison.Ordinal);
         Assert.Contains("$savedCredentialEnvironment = Suspend-AppleCredentialEnvironment", script, StringComparison.Ordinal);
-        Assert.Contains("Restore-AppleCredentialEnvironment -Saved $savedCredentialEnvironment", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Restore-AppleCredentialEnvironment", script, StringComparison.Ordinal);
+        Assert.True(
+            script.IndexOf("$savedCredentialEnvironment = Suspend-AppleCredentialEnvironment", StringComparison.Ordinal) <
+            script.IndexOf("Assert-CleanRepository -Root $toolRoot", StringComparison.Ordinal));
         Assert.Contains("run download $runId", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("requires an explicit --config", script, StringComparison.Ordinal);
         Assert.Contains("Invoke-TrackedInputValidator -SourceCommit $consumerHead", script, StringComparison.Ordinal);
@@ -55,6 +63,10 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("must not have hard links", script, StringComparison.Ordinal);
         Assert.Contains("[Diagnostics.ProcessStartInfo]::new()", script, StringComparison.Ordinal);
         Assert.Contains("RedirectStandardError = $true", script, StringComparison.Ordinal);
+        Assert.Contains("$start.Environment.Clear()", script, StringComparison.Ordinal);
+        Assert.Contains("-IncludeAppleCredentials", script, StringComparison.Ordinal);
+        Assert.Contains("Assert-FixedAppleToolConfiguration", script, StringComparison.Ordinal);
+        Assert.Contains("/usr/bin/xcodebuild", script, StringComparison.Ordinal);
         Assert.DoesNotContain("[string] $DotNet =", script, StringComparison.Ordinal);
 
         var captureWorkflow = Read(root, ".github", "workflows", "powerforge-apple-screenshot-capture.yml");

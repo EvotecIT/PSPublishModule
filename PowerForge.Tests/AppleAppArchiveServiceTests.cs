@@ -12,6 +12,33 @@ namespace PowerForge.Tests;
 public sealed class AppleAppArchiveServiceTests
 {
     [Fact]
+    public async Task CreateArchiveAsync_resolves_default_xcodebuild_to_system_binary_on_macOS()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "App.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var runner = new CapturingProcessRunner();
+            var service = new AppleAppArchiveService(runner);
+
+            await service.CreateArchiveAsync(new AppleAppArchiveRequest
+            {
+                ProjectPath = project.FullName,
+                Scheme = "App",
+                ArchivePath = Path.Combine(root.FullName, "App.xcarchive")
+            });
+
+            Assert.Equal("/usr/bin/xcodebuild", Assert.Single(runner.Requests).FileName);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task CreateArchiveAsync_builds_xcodebuild_archive_command()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
