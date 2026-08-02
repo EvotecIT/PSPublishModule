@@ -3,7 +3,6 @@ using PowerForge.Cli;
 using PowerForge.ConsoleShared;
 using System.Diagnostics;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 internal static partial class Program
 {
@@ -130,7 +129,7 @@ internal static partial class Program
                         Result = compactResult,
                         Logs = request.AppleSummaryOnly ? null : LogsToJsonElement(logBuffer)
                     },
-                    redactOutput: text => RedactAppleCredentialText(text, sensitiveValues));
+                    redactOutput: text => RedactAppleCredentialJson(text, sensitiveValues));
                 return exitCode;
             }
 
@@ -297,75 +296,6 @@ internal static partial class Program
                 1,
                 RedactAppleCredentialText(ex.Message, CollectAppleCredentialMetadata(specForRedaction, null)),
                 logger);
-        }
-    }
-
-    private static string[] CollectAppleCredentialMetadata(PowerForgeReleaseSpec? spec, PowerForgeReleaseResult? result)
-    {
-        var values = new List<string?>
-        {
-            spec?.AppleApps?.AppStoreConnectApiKeyPath,
-            spec?.AppleApps?.AppStoreConnectApiKeyId,
-            spec?.AppleApps?.AppStoreConnectApiIssuerId,
-            result?.AppleAppPlan?.AppStoreConnectApiKeyPath,
-            result?.AppleAppPlan?.AppStoreConnectApiKeyId,
-            result?.AppleAppPlan?.AppStoreConnectApiIssuerId
-        };
-        foreach (var name in new[]
-                 {
-                     "APP_STORE_CONNECT_PRIVATE_KEY_PATH", "APP_STORE_CONNECT_PRIVATE_KEY", "APP_STORE_CONNECT_KEY_ID", "APP_STORE_CONNECT_ISSUER_ID",
-                     "ASC_PRIVATE_KEY_PATH", "ASC_PRIVATE_KEY", "ASC_KEY_ID", "ASC_ISSUER_ID"
-                 })
-        {
-            values.Add(Environment.GetEnvironmentVariable(name));
-        }
-        return values
-            .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .Select(static value => value!.Trim())
-            .Distinct(StringComparer.Ordinal)
-            .OrderByDescending(static value => value.Length)
-            .ToArray();
-    }
-
-    private static string RedactAppleCredentialText(string? text, IEnumerable<string> sensitiveValues)
-    {
-        var safe = text ?? string.Empty;
-        foreach (var value in sensitiveValues)
-        {
-            safe = safe.Replace(value, "[REDACTED]", StringComparison.Ordinal);
-            var encoded = JsonEncodedText.Encode(value).ToString();
-            if (!encoded.Equals(value, StringComparison.Ordinal))
-                safe = safe.Replace(encoded, "[REDACTED]", StringComparison.Ordinal);
-        }
-        safe = Regex.Replace(
-            safe,
-            "(?i)(\\\"appStoreConnectApi(?:KeyPath|KeyId|IssuerId)\\\"\\s*:\\s*)\\\"[^\\\"]*\\\"",
-            "$1\\\"[REDACTED]\\\"");
-        safe = Regex.Replace(
-            safe,
-            "(?i)(?:[A-Za-z]:)?[^\\s\\\"']*\\.appstoreconnect[/\\\\][^\\s\\\"']+",
-            "[REDACTED_PROFILE_PATH]");
-        safe = Regex.Replace(
-            safe,
-            "-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----.*?-----END(?: [A-Z0-9]+)? PRIVATE KEY-----",
-            "[REDACTED_PRIVATE_KEY]",
-            RegexOptions.Singleline | RegexOptions.IgnoreCase);
-        return safe;
-    }
-
-    private static void RedactAppleCredentialMetadata(PowerForgeReleaseSpec spec, PowerForgeReleaseResult result)
-    {
-        if (spec.AppleApps is not null)
-        {
-            spec.AppleApps.AppStoreConnectApiKeyPath = null;
-            spec.AppleApps.AppStoreConnectApiKeyId = null;
-            spec.AppleApps.AppStoreConnectApiIssuerId = null;
-        }
-        if (result.AppleAppPlan is not null)
-        {
-            result.AppleAppPlan.AppStoreConnectApiKeyPath = null;
-            result.AppleAppPlan.AppStoreConnectApiKeyId = null;
-            result.AppleAppPlan.AppStoreConnectApiIssuerId = null;
         }
     }
 

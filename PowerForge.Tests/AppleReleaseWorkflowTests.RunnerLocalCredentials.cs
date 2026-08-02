@@ -21,9 +21,14 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("status', '--porcelain=v1', '--untracked-files=all", script, StringComparison.Ordinal);
         Assert.Contains("ls-files', '--error-unmatch'", script, StringComparison.Ordinal);
         Assert.Contains("'restore', $cliProject, '--locked-mode', '--packages', $nugetPackages, '--artifacts-path', $artifactsRoot", script, StringComparison.Ordinal);
-        Assert.Contains("-WorkingDirectory $toolRoot", script, StringComparison.Ordinal);
+        Assert.Contains("-WorkingDirectory $buildToolRoot", script, StringComparison.Ordinal);
         Assert.Contains("-WorkingDirectory $consumer", script, StringComparison.Ordinal);
         Assert.Contains("$start.Environment['NUGET_PACKAGES'] = $NuGetPackagesPath", script, StringComparison.Ordinal);
+        Assert.Contains("archive --format=tar --output=$archivePath HEAD", script, StringComparison.Ordinal);
+        Assert.Contains("$buildToolRoot = New-TrackedToolSnapshot", script, StringComparison.Ordinal);
+        Assert.Contains("build snapshot must not contain symbolic links or reparse points", script, StringComparison.Ordinal);
+        Assert.Contains("$savedCredentialEnvironment = Suspend-AppleCredentialEnvironment", script, StringComparison.Ordinal);
+        Assert.Contains("Restore-AppleCredentialEnvironment -Saved $savedCredentialEnvironment", script, StringComparison.Ordinal);
         Assert.Contains("run download $runId", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("requires an explicit --config", script, StringComparison.Ordinal);
         Assert.Contains("Invoke-TrackedInputValidator -SourceCommit $consumerHead", script, StringComparison.Ordinal);
@@ -43,6 +48,11 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("if ($ArgumentList[0] -ne 'apple-release')", script, StringComparison.Ordinal);
         Assert.Contains("$argument -eq '--capture-provenance'", script, StringComparison.Ordinal);
         Assert.Contains("Screenshot approval manifests do not match the retained capture byte inventory", script, StringComparison.Ordinal);
+        Assert.Contains("Resolve-PathFromBase -BasePath", script, StringComparison.Ordinal);
+        Assert.Contains("No screenshot configuration matches the selected release targets", script, StringComparison.Ordinal);
+        Assert.Contains("permissions must not grant group or other access", script, StringComparison.Ordinal);
+        Assert.Contains("must not grant access through a POSIX ACL", script, StringComparison.Ordinal);
+        Assert.Contains("must not have hard links", script, StringComparison.Ordinal);
         Assert.Contains("[Diagnostics.ProcessStartInfo]::new()", script, StringComparison.Ordinal);
         Assert.Contains("RedirectStandardError = $true", script, StringComparison.Ordinal);
         Assert.DoesNotContain("[string] $DotNet =", script, StringComparison.Ordinal);

@@ -8,6 +8,37 @@ public sealed class PowerForgeCliAppleReleaseTests
     private const string ApprovedSourceCommit = "0123456789abcdef0123456789abcdef01234567";
 
     [Fact]
+    public async Task AppleRelease_JsonRedactionPreservesPropertyNames()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = CreateTempDirectory();
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(tempRoot, "Sample.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(projectDirectory.FullName, "project.pbxproj"),
+                "{ MARKETING_VERSION = 1.2.0; CURRENT_PROJECT_VERSION = 9; }");
+            File.WriteAllText(Path.Combine(tempRoot, "result"), "test-private-key");
+            var configPath = Path.Combine(tempRoot, "powerforge.release.json");
+            WriteReleaseConfig(configPath, submitForReview: false, includeInvalidModule: false, apiKeyPath: "result");
+
+            var result = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" release --config \"{configPath}\" --plan --summary --output json");
+
+            Assert.True(result.ExitCode == 0, $"STDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
+            using var document = JsonDocument.Parse(result.StdOut);
+            Assert.True(document.RootElement.TryGetProperty("result", out var releaseResult));
+            Assert.Equal("Configured", releaseResult.GetProperty("action").GetString());
+            Assert.DoesNotContain("\"[REDACTED]\":", result.StdOut, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task AppleRelease_CliUsesDedicatedEnvelopeAndReportsLegacyConfirmation()
     {
         var repoRoot = FindRepositoryRoot();
@@ -404,7 +435,8 @@ public sealed class PowerForgeCliAppleReleaseTests
         string path,
         bool submitForReview,
         bool includeInvalidModule,
-        bool includeGovernance = false)
+        bool includeGovernance = false,
+        string apiKeyPath = ".appstoreconnect/AuthKey_TEST123456.p8")
         => File.WriteAllText(
             path,
             $$"""
@@ -417,7 +449,7 @@ public sealed class PowerForgeCliAppleReleaseTests
               """ : string.Empty)}}
               "AppleApps": {
                 "ProjectRoot": ".",
-                "AppStoreConnectApiKeyPath": ".appstoreconnect/AuthKey_TEST123456.p8",
+                "AppStoreConnectApiKeyPath": "{{apiKeyPath}}",
                 "AppStoreConnectApiKeyId": "TEST123456",
                 "AppStoreConnectApiIssuerId": "00000000-0000-0000-0000-000000000000",
                 {{(includeGovernance ? "\"GovernanceConfigPath\": \"governance.json\"," : string.Empty)}}

@@ -599,9 +599,13 @@ simulator runtime rather than the macOS host. The pinned helper intentionally
 rejects `UploadExisting` because an ignored prebuilt archive has no reviewed
 source or byte provenance; use `Upload` to build and upload from the bound source.
 It restores locked packages into a fresh private NuGet cache, builds from the
-pinned PSPublishModule root so its `global.json` selects the SDK, and only then
-executes the built CLI with the consumer as its working directory. GitHub CLI is
-required only when a retained capture-provenance artifact is used.
+pinned PSPublishModule commit's tracked-only archive so ignored or untracked files
+cannot enter the executable, uses that archive's `global.json` to select the SDK,
+and only then executes the built CLI with the consumer as its working directory.
+The local credential profile, key, and every key-path directory must be owned by
+the operator and grant no group, other, ACL, link, or hard-link access. Targeted
+commands validate only screenshot maps matching the selected release targets.
+GitHub CLI is required only when a retained capture-provenance artifact is used.
 
 In GitHub Actions, `ApprovedBy` names the protected environment boundary—not the
 workflow initiator. `InitiatedBy` records who started the run, while

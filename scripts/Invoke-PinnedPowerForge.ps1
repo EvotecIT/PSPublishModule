@@ -111,6 +111,10 @@ function Resolve-FixedTool {
             if ($IsWindows) { Join-Path $env:ProgramFiles 'Git/cmd/git.exe' }
             else { '/usr/bin/git' }
         }
+        'tar' {
+            if ($IsWindows) { Join-Path $env:SystemRoot 'System32/tar.exe' }
+            else { '/usr/bin/tar' }
+        }
     }
     if (-not (Test-Path -LiteralPath $candidates -PathType Leaf)) { throw "Required fixed $Name executable was not found: $candidates" }
     return [IO.Path]::GetFullPath($candidates)
@@ -120,6 +124,12 @@ function Resolve-OptionPath {
     param([Parameter(Mandatory)][string] $Value)
     if ([IO.Path]::IsPathRooted($Value)) { return [IO.Path]::GetFullPath($Value) }
     return [IO.Path]::GetFullPath((Join-Path $consumer $Value))
+}
+
+function Resolve-PathFromBase {
+    param([Parameter(Mandatory)][string] $BasePath, [Parameter(Mandatory)][string] $Value)
+    if ([IO.Path]::IsPathRooted($Value)) { return [IO.Path]::GetFullPath($Value) }
+    return [IO.Path]::GetFullPath((Join-Path $BasePath $Value))
 }
 
 function Assert-TrackedConsumerInput {
@@ -229,6 +239,58 @@ function Get-FirstEnvironmentValue {
     return $null
 }
 
+function Suspend-AppleCredentialEnvironment {
+    $saved = @{}
+    foreach ($name in @(
+        'APP_STORE_CONNECT_KEY_ID', 'APP_STORE_CONNECT_ISSUER_ID', 'APP_STORE_CONNECT_PRIVATE_KEY_PATH', 'APP_STORE_CONNECT_PRIVATE_KEY',
+        'ASC_KEY_ID', 'ASC_ISSUER_ID', 'ASC_PRIVATE_KEY_PATH', 'ASC_PRIVATE_KEY')) {
+        $saved[$name] = [Environment]::GetEnvironmentVariable($name)
+        [Environment]::SetEnvironmentVariable($name, $null)
+    }
+    return $saved
+}
+
+function Restore-AppleCredentialEnvironment {
+    param([Parameter(Mandatory)][hashtable] $Saved)
+    foreach ($name in $Saved.Keys) {
+        $value = $Saved[$name]
+        [Environment]::SetEnvironmentVariable($name, $(if ($null -eq $value) { $null } else { [string]$value }))
+    }
+}
+
+function Assert-PrivateUnixPath {
+    param(
+        [Parameter(Mandatory)][string] $Path,
+        [Parameter(Mandatory)][bool] $Directory,
+        [Parameter(Mandatory)][string] $Description
+    )
+    if (-not $IsMacOS) { throw 'The fixed private App Store Connect profile is supported only on the trusted macOS operator host.' }
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) { throw "$Description is missing." }
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "$Description must not be a symbolic link or reparse point." }
+    if ($Directory -and -not $item.PSIsContainer) { throw "$Description must be a directory." }
+    if (-not $Directory -and $item.PSIsContainer) { throw "$Description must be a regular file." }
+    $stat = @(& /usr/bin/stat -f '%u|%l|%HT' $item.FullName 2>$null)
+    $statExitCode = $LASTEXITCODE
+    $currentUid = [string](& /usr/bin/id -u)
+    $idExitCode = $LASTEXITCODE
+    if ($statExitCode -ne 0 -or $idExitCode -ne 0 -or $stat.Count -ne 1 -or [string]::IsNullOrWhiteSpace($currentUid)) { throw "$Description metadata could not be verified." }
+    $parts = $stat[0].Split('|')
+    $expectedType = if ($Directory) { 'Directory' } else { 'Regular File' }
+    if ($parts.Count -ne 3 -or $parts[0] -ne $currentUid -or $parts[2] -ne $expectedType) {
+        throw "$Description must be a $($expectedType.ToLowerInvariant()) owned by the operator user."
+    }
+    if (-not $Directory -and $parts[1] -ne '1') { throw "$Description must not have hard links." }
+    $listing = @(& /bin/ls -lde $item.FullName 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $listing.Count -eq 0) { throw "$Description access controls could not be verified." }
+    if ((($listing[0] -split '\s+', 2)[0]).Contains('+')) { throw "$Description must not grant access through a POSIX ACL." }
+    $shared = [IO.UnixFileMode]::GroupRead -bor [IO.UnixFileMode]::GroupWrite -bor [IO.UnixFileMode]::GroupExecute -bor
+        [IO.UnixFileMode]::OtherRead -bor [IO.UnixFileMode]::OtherWrite -bor [IO.UnixFileMode]::OtherExecute
+    if (([IO.File]::GetUnixFileMode($item.FullName) -band $shared) -ne 0) {
+        throw "$Description permissions must not grant group or other access."
+    }
+}
+
 function Assert-FixedLocalCredentialProfile {
     $keyPath = Get-FirstEnvironmentValue -Names @('APP_STORE_CONNECT_PRIVATE_KEY_PATH', 'ASC_PRIVATE_KEY_PATH')
     $keyId = Get-FirstEnvironmentValue -Names @('APP_STORE_CONNECT_KEY_ID', 'ASC_KEY_ID')
@@ -255,7 +317,37 @@ function Assert-FixedLocalCredentialProfile {
         throw "The fixed local App Store Connect private key was not found: $fullKeyPath"
     }
     Assert-UnlinkedPath -Path $fullKeyPath -Name 'App Store Connect private key'
+    Assert-PrivateUnixPath -Path $profileRoot -Directory $true -Description 'App Store Connect profile directory'
+    $current = $fullKeyPath
+    while (-not $current.Equals($profileRoot, $comparison)) {
+        Assert-PrivateUnixPath -Path $current -Directory:$($current -ne $fullKeyPath) -Description 'App Store Connect private-key path'
+        $current = [IO.Directory]::GetParent($current)?.FullName
+        if ([string]::IsNullOrWhiteSpace($current)) { throw 'App Store Connect private-key path escaped the private profile directory.' }
+    }
     $script:validatedCredentialKeyPath = $fullKeyPath
+}
+
+function New-TrackedToolSnapshot {
+    param([Parameter(Mandatory)][string] $TarPath)
+    $snapshotRoot = Join-Path $temporaryRoot 'tool-source'
+    $archivePath = Join-Path $temporaryRoot 'tool-source.tar'
+    New-Item -ItemType Directory -Path $snapshotRoot -Force | Out-Null
+    & $script:gitPath -C $toolRoot archive --format=tar --output=$archivePath HEAD
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
+        throw 'Unable to materialize the exact tracked PSPublishModule source snapshot.'
+    }
+    & $TarPath -xf $archivePath -C $snapshotRoot
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to extract the exact tracked PSPublishModule source snapshot.' }
+    $snapshotItem = Get-Item -LiteralPath $snapshotRoot -Force
+    if (-not $snapshotItem.PSIsContainer -or $snapshotItem.LinkType -or
+        ($snapshotItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'Tracked PSPublishModule build snapshot must be an unlinked directory.'
+    }
+    $linkedEntries = @(Get-ChildItem -LiteralPath $snapshotRoot -Recurse -Force | Where-Object {
+        $_.LinkType -or ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)
+    })
+    if ($linkedEntries.Count -gt 0) { throw 'Tracked PSPublishModule build snapshot must not contain symbolic links or reparse points.' }
+    return $snapshotRoot
 }
 
 function Assert-AuthoritativeCaptureProvenance {
@@ -310,7 +402,7 @@ function Assert-ScreenshotPublicationBinding {
     $release = Get-Content -LiteralPath $releaseConfigPath -Raw | ConvertFrom-Json
     $apple = $release.AppleApps
     $projectRootValue = if ([string]::IsNullOrWhiteSpace([string]$apple.ProjectRoot)) { '.' } else { [string]$apple.ProjectRoot }
-    $projectRoot = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $releaseConfigPath) $projectRootValue))
+    $projectRoot = Resolve-PathFromBase -BasePath (Split-Path -Parent $releaseConfigPath) -Value $projectRootValue
     $configValues = @()
     if (-not [string]::IsNullOrWhiteSpace([string]$apple.ScreenshotConfigPath)) { $configValues += [string]$apple.ScreenshotConfigPath }
     $configValues += @($apple.ScreenshotConfigPaths | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
@@ -324,6 +416,15 @@ function Assert-ScreenshotPublicationBinding {
     }
 
     $provenance = $script:validatedCaptureProvenance
+    $selectedTargets = @((Get-OptionValue -Option '--target') -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $selectedApps = @($apple.Apps | Where-Object {
+        $_.Enabled -ne $false -and
+        ($selectedTargets.Count -eq 0 -or $selectedTargets -contains [string]$_.Name -or
+         $selectedTargets -contains [string]$_.Scheme -or $selectedTargets -contains [string]$_.BundleId)
+    })
+    if ($selectedTargets.Count -gt 0 -and $selectedApps.Count -eq 0) {
+        throw "--target does not match an enabled Apple app in '$releaseConfigPath'."
+    }
 
     $inventoryCounts = @{}
     $provenanceEntries = @($provenance.screenshots)
@@ -333,14 +434,24 @@ function Assert-ScreenshotPublicationBinding {
         $inventoryCounts[$key] = 1 + [int]($inventoryCounts[$key] ?? 0)
     }
     $approvedCounts = @{}
+    $matchedConfigCount = 0
     foreach ($configValue in $configValues) {
-        $screenshotConfigPath = [IO.Path]::GetFullPath((Join-Path $projectRoot $configValue))
+        $screenshotConfigPath = Resolve-PathFromBase -BasePath $projectRoot -Value $configValue
         $screenshotConfig = Get-Content -LiteralPath $screenshotConfigPath -Raw | ConvertFrom-Json
+        if ($selectedTargets.Count -gt 0) {
+            $matchesSelectedApp = @($selectedApps | Where-Object {
+                ([string]::IsNullOrWhiteSpace([string]$screenshotConfig.AppId) -or
+                 [string]$screenshotConfig.AppId -eq [string]$_.AppStoreConnectAppId) -and
+                [string]$screenshotConfig.Platform -eq [string]$_.Platform
+            }).Count -gt 0
+            if (-not $matchesSelectedApp) { continue }
+        }
+        $matchedConfigCount++
         $manifestValue = [string]$screenshotConfig.Quality.ApprovalManifestPath
         if ([string]::IsNullOrWhiteSpace($manifestValue)) {
             throw "Screenshot configuration '$screenshotConfigPath' must name Quality.ApprovalManifestPath."
         }
-        $manifestPath = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $screenshotConfigPath) $manifestValue))
+        $manifestPath = Resolve-PathFromBase -BasePath (Split-Path -Parent $screenshotConfigPath) -Value $manifestValue
         $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
         if ([string]$manifest.CaptureRunId -ne [string]$provenance.captureRunId -or
             -not ([string]$manifest.CaptureRepository).Equals([string]$provenance.repository, [StringComparison]::OrdinalIgnoreCase) -or
@@ -350,7 +461,7 @@ function Assert-ScreenshotPublicationBinding {
             throw "Screenshot approval manifest '$manifestPath' is not bound to the authoritative capture run, repository, workflow, source commit, and marketing version."
         }
         foreach ($entry in @($manifest.Screenshots)) {
-            $approvedPath = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $screenshotConfigPath) ([string]$entry.File))).Replace('\', '/')
+            $approvedPath = (Resolve-PathFromBase -BasePath (Split-Path -Parent $screenshotConfigPath) -Value ([string]$entry.File)).Replace('\', '/')
             $matches = @($provenanceEntries | Where-Object {
                 $candidate = ([string]$_.path).Replace('\', '/')
                 $approvedPath.EndsWith("/$candidate", [StringComparison]::Ordinal)
@@ -363,6 +474,7 @@ function Assert-ScreenshotPublicationBinding {
             $approvedCounts[$key] = 1 + [int]($approvedCounts[$key] ?? 0)
         }
     }
+    if ($matchedConfigCount -eq 0) { throw 'No screenshot configuration matches the selected release targets.' }
     if ($inventoryCounts.Count -ne $approvedCounts.Count) {
         throw 'Screenshot approval manifests do not match the retained capture byte inventory.'
     }
@@ -475,33 +587,40 @@ try {
         throw "--apple-source-commit must match the exact consumer HEAD '$consumerHead'."
     }
 
-    $dotnet = Resolve-FixedTool -Name dotnet
-    if ($null -ne (Get-OptionValue -Option '--capture-provenance')) {
-        $gh = Resolve-FixedTool -Name gh
-        Assert-AuthoritativeCaptureProvenance -GhPath $gh -SourceCommit $consumerHead
-    }
-    Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead
-    $cliProject = Join-Path $toolRoot 'PowerForge.Cli/PowerForge.Cli.csproj'
-    if (-not (Test-Path -LiteralPath $cliProject -PathType Leaf)) { throw "PowerForge CLI project is missing: $cliProject" }
+    $savedCredentialEnvironment = Suspend-AppleCredentialEnvironment
+    try {
+        $dotnet = Resolve-FixedTool -Name dotnet
+        if ($null -ne (Get-OptionValue -Option '--capture-provenance')) {
+            $gh = Resolve-FixedTool -Name gh
+            Assert-AuthoritativeCaptureProvenance -GhPath $gh -SourceCommit $consumerHead
+        }
+        Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead
+        $tar = Resolve-FixedTool -Name tar
+        $buildToolRoot = New-TrackedToolSnapshot -TarPath $tar
+        $cliProject = Join-Path $buildToolRoot 'PowerForge.Cli/PowerForge.Cli.csproj'
+        if (-not (Test-Path -LiteralPath $cliProject -PathType Leaf)) { throw "PowerForge CLI project is missing: $cliProject" }
 
-    $nugetPackages = Join-Path $temporaryRoot 'nuget-packages'
-    $artifactsRoot = Join-Path $temporaryRoot 'artifacts'
-    $cliOutput = Join-Path $temporaryRoot 'cli'
-    New-Item -ItemType Directory -Path $nugetPackages, $artifactsRoot, $cliOutput -Force | Out-Null
-    $restoreExitCode = Invoke-RedactedProcess `
-        -FilePath $dotnet `
-        -WorkingDirectory $toolRoot `
-        -Arguments @('restore', $cliProject, '--locked-mode', '--packages', $nugetPackages, '--artifacts-path', $artifactsRoot, '--verbosity', 'minimal') `
-        -NuGetPackagesPath $nugetPackages
-    if ($restoreExitCode -ne 0) { exit $restoreExitCode }
-    $buildExitCode = Invoke-RedactedProcess `
-        -FilePath $dotnet `
-        -WorkingDirectory $toolRoot `
-        -Arguments @('build', $cliProject, '--configuration', 'Release', '--framework', 'net10.0', '--no-restore', '--artifacts-path', $artifactsRoot, '--output', $cliOutput, "--property:RestorePackagesPath=$nugetPackages", '--verbosity', 'minimal') `
-        -NuGetPackagesPath $nugetPackages
-    if ($buildExitCode -ne 0) { exit $buildExitCode }
-    $cliAssembly = Join-Path $cliOutput 'PowerForge.Cli.dll'
-    if (-not (Test-Path -LiteralPath $cliAssembly -PathType Leaf)) { throw "PowerForge CLI build output is missing: $cliAssembly" }
+        $nugetPackages = Join-Path $temporaryRoot 'nuget-packages'
+        $artifactsRoot = Join-Path $temporaryRoot 'artifacts'
+        $cliOutput = Join-Path $temporaryRoot 'cli'
+        New-Item -ItemType Directory -Path $nugetPackages, $artifactsRoot, $cliOutput -Force | Out-Null
+        $restoreExitCode = Invoke-RedactedProcess `
+            -FilePath $dotnet `
+            -WorkingDirectory $buildToolRoot `
+            -Arguments @('restore', $cliProject, '--locked-mode', '--packages', $nugetPackages, '--artifacts-path', $artifactsRoot, '--verbosity', 'minimal') `
+            -NuGetPackagesPath $nugetPackages
+        if ($restoreExitCode -ne 0) { exit $restoreExitCode }
+        $buildExitCode = Invoke-RedactedProcess `
+            -FilePath $dotnet `
+            -WorkingDirectory $buildToolRoot `
+            -Arguments @('build', $cliProject, '--configuration', 'Release', '--framework', 'net10.0', '--no-restore', '--artifacts-path', $artifactsRoot, '--output', $cliOutput, "--property:RestorePackagesPath=$nugetPackages", '--verbosity', 'minimal') `
+            -NuGetPackagesPath $nugetPackages
+        if ($buildExitCode -ne 0) { exit $buildExitCode }
+        $cliAssembly = Join-Path $cliOutput 'PowerForge.Cli.dll'
+        if (-not (Test-Path -LiteralPath $cliAssembly -PathType Leaf)) { throw "PowerForge CLI build output is missing: $cliAssembly" }
+    } finally {
+        Restore-AppleCredentialEnvironment -Saved $savedCredentialEnvironment
+    }
 
     Write-Host "PowerForge source: $toolHead"
     Write-Host "Consumer source: $consumerHead"
