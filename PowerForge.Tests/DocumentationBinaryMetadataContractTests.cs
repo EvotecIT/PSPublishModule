@@ -133,6 +133,18 @@ public sealed class DocumentationBinaryMetadataContractTests
             File.WriteAllText(
                 otherAlias,
                 DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OtherModule") + "<helpItems />");
+            var sameNameModuleRoot = Path.Combine(root, "BundledOwner");
+            var sameNameAlias = Path.Combine(sameNameModuleRoot, "Lib", "en-US", "Bundled.DLL-Help.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(sameNameAlias)!);
+            File.WriteAllText(Path.Combine(sameNameModuleRoot, "OwnerModule.psd1"), "@{ RootModule = '' }");
+            File.WriteAllText(
+                sameNameAlias,
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "<helpItems />");
+            var staleMixedCaseAlias = Path.Combine(root, "Lib", "Removed", "en-US", "Removed.DLL-Help.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(staleMixedCaseAlias)!);
+            File.WriteAllText(
+                staleMixedCaseAlias,
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "<helpItems />");
 
             var payload = new DocumentationExtractionPayload
             {
@@ -156,6 +168,8 @@ public sealed class DocumentationBinaryMetadataContractTests
             Assert.False(File.Exists(nestedAlias));
             Assert.True(File.Exists(authoredAlias));
             Assert.True(File.Exists(otherAlias));
+            Assert.True(File.Exists(sameNameAlias));
+            Assert.False(File.Exists(staleMixedCaseAlias));
         }
         finally
         {

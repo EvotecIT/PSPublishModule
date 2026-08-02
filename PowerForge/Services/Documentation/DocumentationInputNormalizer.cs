@@ -60,14 +60,10 @@ internal static class DocumentationInputNormalizer
             usedRuntimeInputs.Add(runtimeIndex);
 
             var runtimeInput = runtimeInputs[runtimeIndex];
-            var rawNames = new HashSet<string>(StringComparer.Ordinal);
-            AddRawName(rawNames, runtimeInput.Name);
-            AddRawName(rawNames, runtimeInput.ClrTypeName);
-            AddRawName(rawNames, runtimeInput.CanonicalTypeName);
 
             foreach (var input in command.Inputs ?? new List<DocumentationTypeHelp>())
             {
-                if (input is null || !MatchesAnyIdentity(input, rawNames)) continue;
+                if (input is null || !MatchesRuntimeInput(input, runtimeInput, runtimeInputs)) continue;
                 input.Name = displayType!;
                 input.ClrTypeName = displayType!;
                 input.CanonicalTypeName = displayType!;
@@ -93,22 +89,37 @@ internal static class DocumentationInputNormalizer
         return -1;
     }
 
-    private static bool MatchesAnyIdentity(DocumentationTypeHelp input, ISet<string> rawNames)
-        => MatchesRawIdentity(input.Name, rawNames) ||
-           MatchesRawIdentity(input.ClrTypeName, rawNames) ||
-           MatchesRawIdentity(input.CanonicalTypeName, rawNames);
-
-    private static bool MatchesRawIdentity(string? value, ISet<string> rawNames)
+    private static bool MatchesRuntimeInput(
+        DocumentationTypeHelp input,
+        DocumentationTypeHelp runtimeInput,
+        IReadOnlyList<DocumentationTypeHelp> runtimeInputs)
     {
-        if (string.IsNullOrEmpty(value)) return false;
-        if (rawNames.Contains(value!)) return true;
-        var withoutHelpLineBreaks = value!.TrimEnd('\r', '\n');
-        return withoutHelpLineBreaks.Length != value.Length && rawNames.Contains(withoutHelpLineBreaks);
+        foreach (var expected in new[] { runtimeInput.ClrTypeName, runtimeInput.CanonicalTypeName })
+        {
+            if (string.IsNullOrEmpty(expected)) continue;
+            if (MatchesIdentity(input.Name, expected) ||
+                MatchesIdentity(input.ClrTypeName, expected) ||
+                MatchesIdentity(input.CanonicalTypeName, expected))
+                return true;
+        }
+
+        if (string.IsNullOrEmpty(runtimeInput.Name) ||
+            runtimeInputs.Count(candidate => string.Equals(
+                candidate.Name, runtimeInput.Name, StringComparison.Ordinal)) != 1)
+            return false;
+
+        return MatchesIdentity(input.Name, runtimeInput.Name) ||
+               MatchesIdentity(input.ClrTypeName, runtimeInput.Name) ||
+               MatchesIdentity(input.CanonicalTypeName, runtimeInput.Name);
     }
 
-    private static void AddRawName(ISet<string> rawNames, string? value)
+    private static bool MatchesIdentity(string? actual, string? expected)
     {
-        if (!string.IsNullOrEmpty(value)) rawNames.Add(value!);
+        if (string.IsNullOrEmpty(actual) || string.IsNullOrEmpty(expected)) return false;
+        if (string.Equals(actual, expected, StringComparison.Ordinal)) return true;
+        var withoutHelpLineBreaks = actual!.TrimEnd('\r', '\n');
+        return withoutHelpLineBreaks.Length != actual.Length &&
+               string.Equals(withoutHelpLineBreaks, expected, StringComparison.Ordinal);
     }
 
     private static bool TryParsePowerShellInputAggregate(

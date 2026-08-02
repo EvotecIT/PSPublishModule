@@ -29,17 +29,22 @@ internal static class DocumentationExternalHelpAliasWriter
 
         foreach (var aliasPath in Directory.EnumerateFiles(
                      rootDirectory,
-                     "*.dll-Help.xml",
-                     SearchOption.AllDirectories))
+                     "*",
+                     SearchOption.AllDirectories)
+                 .Where(path => Path.GetFileName(path)
+                     .EndsWith(".dll-Help.xml", StringComparison.OrdinalIgnoreCase)))
         {
             try
             {
                 var prefix = ReadPrefix(aliasPath);
-                var ownedByCurrentModule = prefix.Contains(marker, StringComparison.Ordinal);
+                var insideNestedModule = nestedModuleRoots.Any(root => IsPathWithinRoot(root, aliasPath));
+                var ownedByCurrentModule =
+                    !insideNestedModule &&
+                    prefix.Contains(marker, StringComparison.Ordinal);
                 var legacyOwnedByCurrentModule =
                     legacyPrimaryContent.Count > 0 &&
                     prefix.Contains(LegacyGeneratedAliasMarker, StringComparison.Ordinal) &&
-                    !nestedModuleRoots.Any(root => IsPathWithinRoot(root, aliasPath)) &&
+                    !insideNestedModule &&
                     legacyPrimaryContent.Contains(NormalizeLegacyContent(File.ReadAllText(aliasPath)));
                 if (ownedByCurrentModule || legacyOwnedByCurrentModule)
                     File.Delete(aliasPath);

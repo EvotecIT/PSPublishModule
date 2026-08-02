@@ -23,6 +23,25 @@ internal static class DocumentationHiddenParameterNormalizer
             .ToArray();
         if (hiddenNames.Length == 0) return;
 
+        var hiddenPipelineTypes = parameters
+            .Where(parameter => parameter is not null && parameter.DontShow && AcceptsPipelineInput(parameter))
+            .Select(parameter => parameter.Type ?? string.Empty)
+            .Where(type => type.Length > 0)
+            .ToHashSet(StringComparer.Ordinal);
+        var visiblePipelineTypes = parameters
+            .Where(parameter => parameter is not null && !parameter.DontShow && AcceptsPipelineInput(parameter))
+            .Select(parameter => parameter.Type ?? string.Empty)
+            .Where(type => type.Length > 0)
+            .ToHashSet(StringComparer.Ordinal);
+        if (hiddenPipelineTypes.Count > 0)
+        {
+            command.RuntimeInputs = (command.RuntimeInputs ?? new List<DocumentationTypeHelp>())
+                .Where(input => input is not null &&
+                                (!MatchesParameterType(input, hiddenPipelineTypes) ||
+                                 MatchesParameterType(input, visiblePipelineTypes)))
+                .ToList();
+        }
+
         command.Parameters = parameters
             .Where(parameter => parameter is not null && !parameter.DontShow)
             .ToList();
@@ -40,6 +59,14 @@ internal static class DocumentationHiddenParameterNormalizer
             command.Description = StripSyntaxParameter(command.Description, name);
         }
     }
+
+    private static bool AcceptsPipelineInput(DocumentationParameterHelp parameter)
+        => !string.IsNullOrWhiteSpace(parameter.PipelineInput) &&
+           !parameter.PipelineInput.StartsWith("False", StringComparison.OrdinalIgnoreCase);
+
+    private static bool MatchesParameterType(DocumentationTypeHelp input, ISet<string> parameterTypes)
+        => parameterTypes.Contains(input.Name ?? string.Empty) ||
+           parameterTypes.Contains(input.ClrTypeName ?? string.Empty);
 
     private static string StripSyntaxParameter(string? text, string name)
     {

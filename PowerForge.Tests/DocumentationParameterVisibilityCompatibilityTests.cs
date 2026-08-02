@@ -20,7 +20,7 @@ function Get-VisibilityFixture {
     param(
         [Nullable[VisibilityMode]] $Mode,
         [Parameter(ValueFromPipeline = $true)] [Nullable[VisibilityMode][]] $Modes,
-        [Parameter(Mandatory = $true, DontShow = $true, Position = 0)] [string] $HiddenTransport
+        [Parameter(Mandatory = $true, DontShow = $true, Position = 0, ValueFromPipelineByPropertyName = $true)] [string] $HiddenTransport
     )
 }
 function GetDocumentationParameterDeclaringMetadata { throw 'Target helper shadow was invoked.' }

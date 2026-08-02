@@ -147,4 +147,43 @@ public sealed class DocumentationInputTypeNormalizationTests
         Assert.Equal("VisibilityMode[]", input.ClrTypeName);
         Assert.DoesNotContain("Nullable", MarkdownHelpWriter.RenderCommandMarkdown("Demo", command));
     }
+
+    [Fact]
+    public void Normalize_UnwrapsDistinctNullablePipelineInputsByClrIdentity()
+    {
+        const string firstClrType = "System.Nullable`1[[FirstMode, Demo]]";
+        const string secondClrType = "System.Nullable`1[[SecondMode, Demo]]";
+        var command = new DocumentationCommandHelp
+        {
+            RuntimeInputs =
+            [
+                new DocumentationTypeHelp { Name = "Nullable`1", ClrTypeName = firstClrType },
+                new DocumentationTypeHelp { Name = "Nullable`1", ClrTypeName = secondClrType }
+            ],
+            Parameters =
+            [
+                new DocumentationParameterHelp
+                {
+                    Name = "First",
+                    Type = "Nullable`1",
+                    NullableUnderlyingTypeName = "FirstMode",
+                    PipelineInput = "True (ByValue)"
+                },
+                new DocumentationParameterHelp
+                {
+                    Name = "Second",
+                    Type = "Nullable`1",
+                    NullableUnderlyingTypeName = "SecondMode",
+                    PipelineInput = "True (ByPropertyName)"
+                }
+            ]
+        };
+
+        DocumentationMetadataNormalizer.Normalize(new DocumentationExtractionPayload { Commands = [command] });
+
+        Assert.Collection(
+            command.Inputs,
+            input => Assert.Equal("FirstMode", input.Name),
+            input => Assert.Equal("SecondMode", input.Name));
+    }
 }
