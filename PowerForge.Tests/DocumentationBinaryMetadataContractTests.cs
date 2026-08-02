@@ -322,6 +322,48 @@ public sealed class DocumentationBinaryMetadataContractTests
     }
 
     [Fact]
+    public void ExternalHelpAliases_DoNotWriteThroughCultureDirectoryLinks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-binary-alias-culture-link-root-" + Guid.NewGuid().ToString("N"));
+        var outside = Path.Combine(Path.GetTempPath(), "pf-binary-alias-culture-link-target-" + Guid.NewGuid().ToString("N"));
+        var primaryDirectory = Path.Combine(root, "en-US");
+        var assemblyDirectory = Path.Combine(root, "Lib");
+        Directory.CreateDirectory(primaryDirectory);
+        Directory.CreateDirectory(assemblyDirectory);
+        Directory.CreateDirectory(outside);
+
+        try
+        {
+            var primary = Path.Combine(primaryDirectory, "Owner-help.xml");
+            File.WriteAllText(primary, "<helpItems />");
+            var assemblyPath = Path.Combine(assemblyDirectory, "Foo.dll");
+            File.WriteAllText(assemblyPath, string.Empty);
+
+            var linkedCulture = Path.Combine(assemblyDirectory, "en-US");
+            try { Directory.CreateSymbolicLink(linkedCulture, outside); }
+            catch (Exception exception) when (exception is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+            {
+                return;
+            }
+
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands = [new DocumentationCommandHelp { AssemblyPath = assemblyPath }]
+            };
+
+            var paths = DocumentationExternalHelpAliasWriter.WriteAliases(payload, primary, "OwnerModule");
+
+            Assert.Single(paths);
+            Assert.False(File.Exists(Path.Combine(outside, "Foo.dll-Help.xml")));
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+            try { Directory.Delete(outside, true); } catch { }
+        }
+    }
+
+    [Fact]
     public void ExternalHelpAliases_DoNotWriteThroughFileLinks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-binary-alias-write-file-link-root-" + Guid.NewGuid().ToString("N"));

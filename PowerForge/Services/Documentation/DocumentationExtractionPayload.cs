@@ -82,6 +82,9 @@ internal sealed class DocumentationCommandHelp
     [DataMember(Name = "syntax")]
     public List<DocumentationSyntaxHelp> Syntax { get; set; } = new();
 
+    /// <summary>Prevents writers from synthesizing syntax after every collected set was removed as unreachable.</summary>
+    internal bool SuppressSyntheticSyntax { get; set; }
+
     /// <summary>Parameter documentation entries.</summary>
     [DataMember(Name = "parameters")]
     public List<DocumentationParameterHelp> Parameters { get; set; } = new();

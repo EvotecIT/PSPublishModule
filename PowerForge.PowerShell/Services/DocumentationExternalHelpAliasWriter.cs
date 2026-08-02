@@ -102,6 +102,8 @@ internal static class DocumentationExternalHelpAliasWriter
             if (PathTraversesDirectoryReparsePoint(stagingRoot, assemblyDirectory))
                 continue;
             var aliasDirectory = Path.Combine(assemblyDirectory, culture);
+            if (PathTraversesDirectoryReparsePoint(stagingRoot, aliasDirectory))
+                continue;
             var aliasPath = Path.Combine(aliasDirectory, aliasName);
             if (string.Equals(aliasPath, externalHelpFilePath, pathComparison))
                 continue;

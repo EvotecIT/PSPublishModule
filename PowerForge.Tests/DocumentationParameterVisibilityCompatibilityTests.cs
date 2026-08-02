@@ -68,10 +68,18 @@ function Get-HiddenOptionalDefaultSetFixture {
         [switch] $Visible
     )
 }
+function Get-SoleHiddenRequiredSetFixture {
+    [CmdletBinding(DefaultParameterSetName = 'Only')]
+    param(
+        [Parameter(ParameterSetName = 'Only', DontShow = $true, Mandatory = $true)]
+        [string] $Secret,
+        [string] $Shared
+    )
+}
 function GetDocumentationParameterDeclaringMetadata { throw 'Target helper shadow was invoked.' }
 function TestDocumentationParameterDontShow { throw 'Target helper shadow was invoked.' }
 function GetDocumentationRuntimeInputs { throw 'Target helper shadow was invoked.' }
-Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture,Get-GenericVisibilityCollisionFixture,Get-MixedVisibilityFixture,Get-HiddenOnlySetFixture,Get-HiddenOptionalDefaultSetFixture,GetDocumentationParameterDeclaringMetadata,TestDocumentationParameterDontShow,GetDocumentationRuntimeInputs
+Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture,Get-GenericVisibilityCollisionFixture,Get-MixedVisibilityFixture,Get-HiddenOnlySetFixture,Get-HiddenOptionalDefaultSetFixture,Get-SoleHiddenRequiredSetFixture,GetDocumentationParameterDeclaringMetadata,TestDocumentationParameterDontShow,GetDocumentationRuntimeInputs
 """, new UTF8Encoding(false));
             File.WriteAllText(manifestPath, """
 @{
@@ -80,7 +88,7 @@ Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture
     GUID = '34343434-3434-3434-3434-343434343434'
     Author = 'PowerForge.Tests'
     Description = 'Parameter visibility fixture.'
-    FunctionsToExport = @('Get-VisibilityFixture','Get-GenericVisibilityFixture','Get-GenericVisibilityCollisionFixture','Get-MixedVisibilityFixture','Get-HiddenOnlySetFixture','Get-HiddenOptionalDefaultSetFixture','GetDocumentationParameterDeclaringMetadata','TestDocumentationParameterDontShow','GetDocumentationRuntimeInputs')
+    FunctionsToExport = @('Get-VisibilityFixture','Get-GenericVisibilityFixture','Get-GenericVisibilityCollisionFixture','Get-MixedVisibilityFixture','Get-HiddenOnlySetFixture','Get-HiddenOptionalDefaultSetFixture','Get-SoleHiddenRequiredSetFixture','GetDocumentationParameterDeclaringMetadata','TestDocumentationParameterDontShow','GetDocumentationRuntimeInputs')
     CmdletsToExport = @()
     AliasesToExport = @()
     VariablesToExport = @()
@@ -184,6 +192,22 @@ Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture
                         "HiddenDefault",
                         StringComparison.OrdinalIgnoreCase));
                 Assert.DoesNotContain("Secret", hiddenDefaultCommandElement.Value, StringComparison.Ordinal);
+
+                var soleHiddenCommand = Assert.Single(payload.Commands, item => item.Name == "Get-SoleHiddenRequiredSetFixture");
+                Assert.Single(soleHiddenCommand.Parameters, parameter => parameter.Name == "Shared");
+                Assert.Empty(soleHiddenCommand.Syntax);
+
+                var soleHiddenMarkdown = File.ReadAllText(Path.Combine(docsRoot, "Get-SoleHiddenRequiredSetFixture.md"));
+                Assert.DoesNotContain("### Only", soleHiddenMarkdown, StringComparison.OrdinalIgnoreCase);
+                var soleHiddenCommandElement = Assert.Single(
+                    hiddenOnlyMaml.Descendants(),
+                    element => element.Name.LocalName == "command" &&
+                               element.Descendants().Any(child =>
+                                   child.Name.LocalName == "name" &&
+                                   child.Value == "Get-SoleHiddenRequiredSetFixture"));
+                Assert.DoesNotContain(
+                    soleHiddenCommandElement.Descendants(),
+                    element => element.Name.LocalName == "syntaxItem");
             }
         }
         finally

@@ -70,6 +70,7 @@ internal static class DocumentationHiddenParameterNormalizer
             .Where(syntax => syntax is not null &&
                              !IsHiddenOnlyParameterSet(syntax, parameters, namedParameterSets))
             .ToList();
+        command.SuppressSyntheticSyntax = syntaxItems.Count > 0 && command.Syntax.Count == 0;
 
         command.Parameters = parameters
             .Where(parameter => parameter is not null && !parameter.DontShow)
@@ -130,8 +131,19 @@ internal static class DocumentationHiddenParameterNormalizer
         DocumentationParameterHelp parameter,
         IEnumerable<string> namedParameterSets)
     {
+        var requiredBySet = parameter.ParameterSetRequired ?? new Dictionary<string, bool>();
+        if (requiredBySet.Keys.Any(name =>
+                string.Equals(name, "__AllParameterSets", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(name, "(All)", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        var namedSets = namedParameterSets.ToArray();
+        if (namedSets.Length < 2) return false;
+
         var parameterSets = parameter.ParameterSets ?? new List<string>();
-        return namedParameterSets.All(name => parameterSets.Any(set =>
+        return namedSets.All(name => parameterSets.Any(set =>
             string.Equals(set, name, StringComparison.OrdinalIgnoreCase)));
     }
 
