@@ -142,7 +142,7 @@ internal static class DocumentationExternalHelpAliasWriter
     {
         if (!File.Exists(path)) return true;
         var prefix = ReadPrefix(path);
-        return prefix.Contains(GetGeneratedAliasMarker(moduleName), StringComparison.Ordinal) ||
+        return prefix.Contains(GeneratedAliasMarkerPrefix, StringComparison.Ordinal) ||
                prefix.Contains(LegacyGeneratedAliasMarker, StringComparison.Ordinal);
     }
 

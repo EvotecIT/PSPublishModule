@@ -124,6 +124,11 @@ public sealed class DocumentationBinaryMetadataContractTests
             File.WriteAllText(primary, "<helpItems />");
             var assemblyPath = Path.Combine(coreDirectory, "Foo.dll");
             File.WriteAllText(assemblyPath, string.Empty);
+            var renamedAlias = Path.Combine(coreDirectory, "en-US", "Foo.dll-Help.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(renamedAlias)!);
+            File.WriteAllText(
+                renamedAlias,
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OldModuleName") + "\n<staleHelpItems />");
             var authoredAssemblyPath = Path.Combine(root, "Lib", "Authored", "Authored.dll");
             File.WriteAllText(authoredAssemblyPath, string.Empty);
             var authoredAlias = Path.Combine(authoredDirectory, "Authored.dll-Help.xml");
@@ -187,6 +192,11 @@ public sealed class DocumentationBinaryMetadataContractTests
 
             Assert.Contains(nestedAlias, paths, StringComparer.OrdinalIgnoreCase);
             Assert.True(File.Exists(nestedAlias));
+            Assert.Contains(
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule"),
+                File.ReadAllText(nestedAlias),
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("staleHelpItems", File.ReadAllText(nestedAlias), StringComparison.Ordinal);
             Assert.Equal("<authoredHelpItems />", File.ReadAllText(authoredAlias));
             Assert.DoesNotContain(authoredAlias, paths, StringComparer.OrdinalIgnoreCase);
             Assert.Equal(

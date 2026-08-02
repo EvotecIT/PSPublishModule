@@ -102,6 +102,7 @@ Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture
             {
                 var engine = new DocumentationEngine(new ExecutablePowerShellRunner(host, root), new NullLogger());
                 var payload = engine.ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
+                DocumentationFallbackEnricher.Enrich(payload, new NullLogger());
                 var command = Assert.Single(payload.Commands, item => item.Name == "Get-VisibilityFixture");
                 Assert.Equal(2, command.Parameters.Count);
                 var mode = Assert.Single(command.Parameters, parameter => parameter.Name == "Mode");
@@ -196,9 +197,14 @@ Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture
                 var soleHiddenCommand = Assert.Single(payload.Commands, item => item.Name == "Get-SoleHiddenRequiredSetFixture");
                 Assert.Single(soleHiddenCommand.Parameters, parameter => parameter.Name == "Shared");
                 Assert.Empty(soleHiddenCommand.Syntax);
+                Assert.Empty(soleHiddenCommand.Examples);
 
                 var soleHiddenMarkdown = File.ReadAllText(Path.Combine(docsRoot, "Get-SoleHiddenRequiredSetFixture.md"));
                 Assert.DoesNotContain("### Only", soleHiddenMarkdown, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(
+                    "```powershell\nGet-SoleHiddenRequiredSetFixture\n```",
+                    soleHiddenMarkdown.Replace("\r\n", "\n"),
+                    StringComparison.Ordinal);
                 var soleHiddenCommandElement = Assert.Single(
                     hiddenOnlyMaml.Descendants(),
                     element => element.Name.LocalName == "command" &&

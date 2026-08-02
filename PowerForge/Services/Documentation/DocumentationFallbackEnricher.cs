@@ -36,7 +36,7 @@ internal static class DocumentationFallbackEnricher
     {
         var hasExamples = (cmd.Examples ?? new List<DocumentationExampleHelp>())
             .Any(e => e is not null && (!string.IsNullOrWhiteSpace(e.Code) || !string.IsNullOrWhiteSpace(e.Remarks)));
-        if (hasExamples) return;
+        if (hasExamples || cmd.SuppressSyntheticSyntax) return;
 
         var examples = new List<DocumentationExampleHelp>();
 

@@ -135,7 +135,7 @@ internal sealed class MarkdownHelpWriter
         var syntax = (cmd.Syntax ?? Enumerable.Empty<DocumentationSyntaxHelp>())
             .Where(s => s is not null && !string.IsNullOrWhiteSpace(s.Text))
             .ToArray();
-        if (syntax.Length == 0)
+        if (syntax.Length == 0 && !cmd.SuppressSyntheticSyntax)
         {
             doc.CodeFence("powershell", cmd.Name.Trim());
         }
@@ -160,7 +160,7 @@ internal sealed class MarkdownHelpWriter
         var examples = (cmd.Examples ?? Enumerable.Empty<DocumentationExampleHelp>())
             .Where(e => e is not null)
             .ToArray();
-        if (examples.Length == 0)
+        if (examples.Length == 0 && !cmd.SuppressSyntheticSyntax)
         {
             doc.RawLine("### EXAMPLE 1");
             doc.CodeFence("powershell", cmd.Name.Trim());
