@@ -74,7 +74,8 @@ internal static class DocumentationExternalHelpAliasWriter
         var pathComparer = pathComparison == StringComparison.Ordinal
             ? StringComparer.Ordinal
             : StringComparer.OrdinalIgnoreCase;
-        var nestedModuleRoots = GetNestedModuleRoots(stagingRoot);
+        var sameNameNestedModuleRoots = GetNestedModuleRoots(stagingRoot, moduleName);
+        var nestedModuleOwnedAssemblies = GetNestedModuleOwnedAssemblyPaths(stagingRoot);
         var assemblyPaths = (payload.Commands ?? new List<DocumentationCommandHelp>())
             .Where(command => command is not null && !string.IsNullOrWhiteSpace(command.AssemblyPath))
             .Select(command => command.AssemblyPath!.Trim().Trim('"'))
@@ -107,7 +108,8 @@ internal static class DocumentationExternalHelpAliasWriter
             var aliasPath = Path.Combine(aliasDirectory, aliasName);
             if (string.Equals(aliasPath, externalHelpFilePath, pathComparison))
                 continue;
-            if (nestedModuleRoots.Any(root => IsPathWithinRoot(root, aliasPath)))
+            if (sameNameNestedModuleRoots.Any(root => IsPathWithinRoot(root, aliasPath)) ||
+                nestedModuleOwnedAssemblies.Contains(assemblyPath))
                 continue;
 
             Directory.CreateDirectory(aliasDirectory);
@@ -241,6 +243,82 @@ internal static class DocumentationExternalHelpAliasWriter
             .ToArray();
     }
 
+    private static HashSet<string> GetNestedModuleOwnedAssemblyPaths(string rootDirectory)
+    {
+        var fullRoot = Path.GetFullPath(rootDirectory);
+        var pathComparison = FrameworkCompatibility.GetPathStringComparison(fullRoot);
+        var pathComparer = pathComparison == StringComparison.Ordinal
+            ? StringComparer.Ordinal
+            : StringComparer.OrdinalIgnoreCase;
+        var paths = new HashSet<string>(pathComparer);
+
+        foreach (var manifestPath in EnumerateFilesWithoutDirectoryLinks(fullRoot)
+                     .Where(path => Path.GetFileName(path).EndsWith(".psd1", StringComparison.OrdinalIgnoreCase))
+                     .Where(path => !string.Equals(
+                         Path.GetDirectoryName(Path.GetFullPath(path)),
+                         fullRoot,
+                         pathComparison))
+                     .Where(IsModuleManifest))
+        {
+            foreach (var assemblyPath in GetManifestAssemblyPaths(manifestPath, fullRoot))
+                paths.Add(assemblyPath);
+        }
+
+        return paths;
+    }
+
+    private static IEnumerable<string> GetManifestAssemblyPaths(string manifestPath, string rootDirectory)
+    {
+        HashtableAst? manifest;
+        try
+        {
+            var ast = Parser.ParseFile(manifestPath, out _, out var errors);
+            if (errors is { Length: > 0 }) yield break;
+            manifest = ast.Find(
+                node => node is HashtableAst table && !HasHashtableAncestor(table),
+                searchNestedScriptBlocks: false) as HashtableAst;
+        }
+        catch
+        {
+            yield break;
+        }
+
+        if (manifest is null) yield break;
+        var manifestDirectory = Path.GetDirectoryName(Path.GetFullPath(manifestPath));
+        if (string.IsNullOrWhiteSpace(manifestDirectory)) yield break;
+
+        foreach (var pair in manifest.KeyValuePairs)
+        {
+            var key = GetManifestKey(pair.Item1);
+            if (!ManifestAssemblyKeys.Contains(key ?? string.Empty, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            foreach (var value in pair.Item2.FindAll(
+                         node => node is StringConstantExpressionAst,
+                         searchNestedScriptBlocks: false)
+                     .OfType<StringConstantExpressionAst>()
+                     .Select(node => node.Value)
+                     .Where(value => value.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
+            {
+                string candidate;
+                try
+                {
+                    var normalized = value
+                        .Replace('\\', Path.DirectorySeparatorChar)
+                        .Replace('/', Path.DirectorySeparatorChar);
+                    candidate = Path.GetFullPath(Path.Combine(manifestDirectory, normalized));
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (IsPathWithinRoot(rootDirectory, candidate))
+                    yield return candidate;
+            }
+        }
+    }
+
     internal static bool PathTraversesDirectoryReparsePoint(string rootDirectory, string candidateDirectory)
     {
         var fullRoot = Path.GetFullPath(rootDirectory)
@@ -355,6 +433,11 @@ internal static class DocumentationExternalHelpAliasWriter
         "RootModule", "ModuleToProcess", "NestedModules", "RequiredModules",
         "FunctionsToExport", "CmdletsToExport", "AliasesToExport", "VariablesToExport",
         "FormatsToProcess", "TypesToProcess", "ScriptsToProcess"
+    };
+
+    private static readonly string[] ManifestAssemblyKeys =
+    {
+        "RootModule", "ModuleToProcess", "NestedModules"
     };
 
     private static string NormalizeLegacyContent(string content)

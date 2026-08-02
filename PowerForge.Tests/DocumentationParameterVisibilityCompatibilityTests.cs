@@ -76,10 +76,21 @@ function Get-SoleHiddenRequiredSetFixture {
         [string] $Shared
     )
 }
+function Get-HiddenRequiredAllSetsFixture {
+    [CmdletBinding(DefaultParameterSetName = 'ByName')]
+    param(
+        [Parameter(Mandatory = $true, DontShow = $true)]
+        [string] $Secret,
+        [Parameter(ParameterSetName = 'ByName')]
+        [string] $Name,
+        [Parameter(ParameterSetName = 'ById')]
+        [int] $Id
+    )
+}
 function GetDocumentationParameterDeclaringMetadata { throw 'Target helper shadow was invoked.' }
 function TestDocumentationParameterDontShow { throw 'Target helper shadow was invoked.' }
 function GetDocumentationRuntimeInputs { throw 'Target helper shadow was invoked.' }
-Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture,Get-GenericVisibilityCollisionFixture,Get-MixedVisibilityFixture,Get-HiddenOnlySetFixture,Get-HiddenOptionalDefaultSetFixture,Get-SoleHiddenRequiredSetFixture,GetDocumentationParameterDeclaringMetadata,TestDocumentationParameterDontShow,GetDocumentationRuntimeInputs
+Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture,Get-GenericVisibilityCollisionFixture,Get-MixedVisibilityFixture,Get-HiddenOnlySetFixture,Get-HiddenOptionalDefaultSetFixture,Get-SoleHiddenRequiredSetFixture,Get-HiddenRequiredAllSetsFixture,GetDocumentationParameterDeclaringMetadata,TestDocumentationParameterDontShow,GetDocumentationRuntimeInputs
 """, new UTF8Encoding(false));
             File.WriteAllText(manifestPath, """
 @{
@@ -88,7 +99,7 @@ Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture
     GUID = '34343434-3434-3434-3434-343434343434'
     Author = 'PowerForge.Tests'
     Description = 'Parameter visibility fixture.'
-    FunctionsToExport = @('Get-VisibilityFixture','Get-GenericVisibilityFixture','Get-GenericVisibilityCollisionFixture','Get-MixedVisibilityFixture','Get-HiddenOnlySetFixture','Get-HiddenOptionalDefaultSetFixture','Get-SoleHiddenRequiredSetFixture','GetDocumentationParameterDeclaringMetadata','TestDocumentationParameterDontShow','GetDocumentationRuntimeInputs')
+    FunctionsToExport = @('Get-VisibilityFixture','Get-GenericVisibilityFixture','Get-GenericVisibilityCollisionFixture','Get-MixedVisibilityFixture','Get-HiddenOnlySetFixture','Get-HiddenOptionalDefaultSetFixture','Get-SoleHiddenRequiredSetFixture','Get-HiddenRequiredAllSetsFixture','GetDocumentationParameterDeclaringMetadata','TestDocumentationParameterDontShow','GetDocumentationRuntimeInputs')
     CmdletsToExport = @()
     AliasesToExport = @()
     VariablesToExport = @()
@@ -213,6 +224,25 @@ Export-ModuleMember -Function Get-VisibilityFixture,Get-GenericVisibilityFixture
                                    child.Value == "Get-SoleHiddenRequiredSetFixture"));
                 Assert.DoesNotContain(
                     soleHiddenCommandElement.Descendants(),
+                    element => element.Name.LocalName == "syntaxItem");
+
+                var hiddenAllSetsCommand = Assert.Single(payload.Commands, item => item.Name == "Get-HiddenRequiredAllSetsFixture");
+                Assert.Equal(2, hiddenAllSetsCommand.Parameters.Count);
+                Assert.Empty(hiddenAllSetsCommand.Syntax);
+                Assert.Empty(hiddenAllSetsCommand.Examples);
+                var hiddenAllSetsMarkdown = File.ReadAllText(Path.Combine(docsRoot, "Get-HiddenRequiredAllSetsFixture.md"));
+                Assert.DoesNotContain(
+                    "```powershell\nGet-HiddenRequiredAllSetsFixture\n```",
+                    hiddenAllSetsMarkdown.Replace("\r\n", "\n"),
+                    StringComparison.Ordinal);
+                var hiddenAllSetsCommandElement = Assert.Single(
+                    hiddenOnlyMaml.Descendants(),
+                    element => element.Name.LocalName == "command" &&
+                               element.Descendants().Any(child =>
+                                   child.Name.LocalName == "name" &&
+                                   child.Value == "Get-HiddenRequiredAllSetsFixture"));
+                Assert.DoesNotContain(
+                    hiddenAllSetsCommandElement.Descendants(),
                     element => element.Name.LocalName == "syntaxItem");
             }
         }

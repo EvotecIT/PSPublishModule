@@ -150,7 +150,11 @@ public sealed class DocumentationBinaryMetadataContractTests
             var otherNameModuleRoot = Path.Combine(root, "BundledOther");
             var outerAliasUnderOtherModule = Path.Combine(otherNameModuleRoot, "Lib", "en-US", "Outer.DLL-Help.xml");
             Directory.CreateDirectory(Path.GetDirectoryName(outerAliasUnderOtherModule)!);
-            File.WriteAllText(Path.Combine(otherNameModuleRoot, "OtherModule.psd1"), "@{ RootModule = ''; ModuleVersion = '1.0.0' }");
+            File.WriteAllText(
+                Path.Combine(otherNameModuleRoot, "OtherModule.psd1"),
+                "@{ RootModule = 'Lib/Legacy.DLL'; ModuleVersion = '1.0.0' }");
+            var outerAssemblyPath = Path.Combine(otherNameModuleRoot, "Lib", "Outer.DLL");
+            File.WriteAllText(outerAssemblyPath, string.Empty);
             File.WriteAllText(
                 outerAliasUnderOtherModule,
                 DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule") + "<helpItems />");
@@ -184,7 +188,8 @@ public sealed class DocumentationBinaryMetadataContractTests
                     new DocumentationCommandHelp { AssemblyPath = assemblyPath },
                     new DocumentationCommandHelp { AssemblyPath = authoredAssemblyPath },
                     new DocumentationCommandHelp { AssemblyPath = sameNameAssemblyPath },
-                    new DocumentationCommandHelp { AssemblyPath = legacyAssemblyPath }
+                    new DocumentationCommandHelp { AssemblyPath = legacyAssemblyPath },
+                    new DocumentationCommandHelp { AssemblyPath = outerAssemblyPath }
                 ]
             };
             var paths = DocumentationExternalHelpAliasWriter.WriteAliases(payload, primary, "OwnerModule");
@@ -205,6 +210,11 @@ public sealed class DocumentationBinaryMetadataContractTests
             Assert.Equal(legacyAliasContent, File.ReadAllText(legacyAliasUnderOtherModule));
             Assert.DoesNotContain(sameNameAlias, paths, StringComparer.OrdinalIgnoreCase);
             Assert.DoesNotContain(legacyAliasUnderOtherModule, paths, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(outerAliasUnderOtherModule, paths, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule"),
+                File.ReadAllText(outerAliasUnderOtherModule),
+                StringComparison.Ordinal);
 
             DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(root, "OwnerModule");
 

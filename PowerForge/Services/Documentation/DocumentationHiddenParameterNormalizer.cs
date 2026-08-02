@@ -100,6 +100,14 @@ internal static class DocumentationHiddenParameterNormalizer
         IReadOnlyCollection<string> namedParameterSets)
     {
         if (string.IsNullOrWhiteSpace(syntax.Name)) return false;
+        if (parameters.Any(parameter => parameter is not null &&
+                                        parameter.DontShow &&
+                                        BelongsToEveryNamedSet(parameter, namedParameterSets) &&
+                                        IsRequiredInSet(parameter, syntax.Name)))
+        {
+            return true;
+        }
+
         var setSpecificParameters = parameters
             .Where(parameter => parameter is not null &&
                                 (parameter.ParameterSets ?? new List<string>()).Any(set =>
@@ -122,6 +130,15 @@ internal static class DocumentationHiddenParameterNormalizer
         {
             if (string.Equals(pair.Key, setName, StringComparison.OrdinalIgnoreCase))
                 return pair.Value;
+        }
+
+        foreach (var pair in requiredBySet)
+        {
+            if (string.Equals(pair.Key, "__AllParameterSets", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(pair.Key, "(All)", StringComparison.OrdinalIgnoreCase))
+            {
+                return pair.Value;
+            }
         }
 
         return requiredBySet.Count == 0 && parameter.Required;
