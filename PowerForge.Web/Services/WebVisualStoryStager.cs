@@ -7,10 +7,6 @@ namespace PowerForge.Web;
 /// <summary>Validates producer output and stages a portable visual-story bundle.</summary>
 public static partial class WebVisualStoryStager
 {
-    private static readonly StringComparison FileSystemPathComparison =
-        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
     internal const long DefaultMaximumArtifactBytes = 25L * 1024L * 1024L;
     internal const long DefaultMaximumTotalArtifactBytes = 100L * 1024L * 1024L;
     internal const int MaximumManifestBytes = 1024 * 1024;
@@ -117,8 +113,10 @@ public static partial class WebVisualStoryStager
 
         if (!options.Overwrite)
         {
+            var outputPathComparison = GetFileSystemPathComparison(outputRoot);
             var collision = resolved.FirstOrDefault(item =>
-                !SamePath(item.SourcePath, item.DestinationPath) && File.Exists(item.DestinationPath));
+                !SamePath(item.SourcePath, item.DestinationPath, outputPathComparison) &&
+                File.Exists(item.DestinationPath));
             if (collision.Artifact is not null)
                 throw new IOException($"Visual-story artifact already exists: {collision.DestinationPath}");
         }
@@ -429,18 +427,10 @@ public static partial class WebVisualStoryStager
         Directory.Delete(path, recursive: true);
     }
 
-    private static bool SamePath(string left, string right)
-        => string.Equals(
-            Path.GetFullPath(left),
-            Path.GetFullPath(right),
-            FileSystemPathComparison);
-
-    internal static bool SamePathForTesting(string left, string right, StringComparison comparison)
-        => string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), comparison);
-
     private static void DeleteEmptyParents(string? directory, string root)
     {
-        while (!string.IsNullOrWhiteSpace(directory) && !SamePath(directory, root))
+        var comparison = GetFileSystemPathComparison(root);
+        while (!string.IsNullOrWhiteSpace(directory) && !SamePath(directory, root, comparison))
         {
             if (!Directory.Exists(directory) ||
                 Directory.EnumerateFileSystemEntries(directory).Any())

@@ -469,7 +469,8 @@ public static partial class WebSiteBuilder
                 var sourcePath = Path.IsPathRooted(asset.Source)
                     ? asset.Source
                     : Path.Combine(rootPath, asset.Source);
-                if (NormalizeRootPathForSink(sourcePath).Equals(conventionalRoot, FileSystemPathComparison))
+                var normalizedSource = NormalizeRootPathForSink(sourcePath);
+                if (IsPathWithinRoot(conventionalRoot, normalizedSource))
                     return true;
             }
             catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)

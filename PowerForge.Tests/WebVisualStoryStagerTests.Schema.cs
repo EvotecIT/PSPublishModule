@@ -93,20 +93,25 @@ public partial class WebVisualStoryStagerTests
             "Schemas",
             "powerforge.web.visualstory.schema.json"));
         var schemaDocument = JsonNode.Parse(File.ReadAllText(schemaPath))!;
-        var artifacts = schemaDocument["properties"]!["artifacts"]!;
-        Assert.Equal(64, artifacts["maxItems"]!.GetValue<int>());
-        Assert.Equal(1, artifacts["minContains"]!.GetValue<int>());
-        Assert.Equal(1, artifacts["maxContains"]!.GetValue<int>());
-        Assert.Equal(
-            "completed",
-            artifacts["contains"]!["properties"]!["role"]!["const"]!.GetValue<string>());
-        Assert.Equal(
-            "png",
-            artifacts["items"]!["allOf"]![0]!["then"]!["properties"]!["format"]!["const"]!.GetValue<string>());
-        var transcriptFormats = artifacts["items"]!["allOf"]![1]!["then"]!["properties"]!["format"]!["enum"]!;
-        Assert.Equal(new[] { "text", "txt" }, transcriptFormats.AsArray().Select(node => node!.GetValue<string>()));
-        var animatedFormats = artifacts["items"]!["allOf"]![2]!["then"]!["properties"]!["format"]!["enum"]!;
-        Assert.Equal(new[] { "svg", "gif", "apng" }, animatedFormats.AsArray().Select(node => node!.GetValue<string>()));
+        var schema = JsonSchema.FromText(
+            schemaDocument["properties"]!["artifacts"]!.ToJsonString());
+        var valid = JsonNode.Parse(
+            """
+            [
+                { "role": "ANIMATED", "format": "SVG", "path": "story.svg" },
+                { "role": "COMPLETED", "format": "PNG", "path": "story.png" },
+                { "role": "Transcript", "format": "Txt", "path": "story.txt" }
+            ]
+            """)!;
+        var invalidFormat = valid.DeepClone();
+        invalidFormat[1]!["format"] = "GIF";
+        var duplicateCompleted = valid.DeepClone();
+        duplicateCompleted.AsArray().Add(JsonNode.Parse(
+            """{ "role": "completed", "format": "png", "path": "second.png" }"""));
+
+        Assert.True(schema.Evaluate(valid, new EvaluationOptions()).IsValid);
+        Assert.False(schema.Evaluate(invalidFormat, new EvaluationOptions()).IsValid);
+        Assert.False(schema.Evaluate(duplicateCompleted, new EvaluationOptions()).IsValid);
     }
 
     [Theory]

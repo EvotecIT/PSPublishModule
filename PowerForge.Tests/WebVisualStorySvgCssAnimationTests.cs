@@ -31,6 +31,8 @@ public class WebVisualStorySvgCssAnimationTests
     [InlineData("animation:fade 1s paused")]
     [InlineData("animation:fade 1s;animation:none")]
     [InlineData("animation:fade 1s;animation-play-state:paused")]
+    [InlineData("animation:fade 1s 0")]
+    [InlineData("animation-name:fade;animation-duration:1s;animation-iteration-count:0")]
     [InlineData("animation-name:fade")]
     [InlineData("animation-name:fade;animation-duration:0s")]
     public void Stage_RejectsCssThatDoesNotProduceMotion(string declarations)

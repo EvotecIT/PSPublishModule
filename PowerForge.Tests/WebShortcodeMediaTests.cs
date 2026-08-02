@@ -319,6 +319,30 @@ public class WebShortcodeMediaTests
     }
 
     [Fact]
+    public void Build_UsesExplicitSubtreeMappingsInsteadOfAlsoPublishingTheWholeStaticRoot()
+    {
+        _ = BuildSinglePageSite(
+            "Ready",
+            root =>
+            {
+                var images = Path.Combine(root, "static", "images");
+                Directory.CreateDirectory(images);
+                File.WriteAllText(Path.Combine(images, "selected.txt"), "selected");
+                File.WriteAllText(Path.Combine(root, "static", "unselected.txt"), "unselected");
+            },
+            spec => spec.StaticAssets =
+            [
+                new StaticAssetSpec { Source = "static/images", Destination = "assets/images" }
+            ],
+            assertOutput: output =>
+            {
+                Assert.True(File.Exists(Path.Combine(output, "assets", "images", "selected.txt")));
+                Assert.False(File.Exists(Path.Combine(output, "images", "selected.txt")));
+                Assert.False(File.Exists(Path.Combine(output, "unselected.txt")));
+            });
+    }
+
+    [Fact]
     public void Build_DerivesStoryUrlsFromConfiguredStaticAssetMapping()
     {
         var html = BuildSinglePageSite(

@@ -32,7 +32,7 @@
         "type": "object",
         "required": ["role"],
         "properties": {
-          "role": { "const": "completed" }
+          "role": { "type": "string", "pattern": "^[Cc][Oo][Mm][Pp][Ll][Ee][Tt][Ee][Dd]$" }
         }
       },
       "minContains": 1,
@@ -42,8 +42,8 @@
         "additionalProperties": false,
         "required": ["role", "format", "path"],
         "properties": {
-          "role": { "enum": ["animated", "completed", "transcript", "source", "html"] },
-          "format": { "enum": ["svg", "gif", "apng", "png", "html", "text", "txt"] },
+          "role": { "type": "string", "pattern": "^(?:[Aa][Nn][Ii][Mm][Aa][Tt][Ee][Dd]|[Cc][Oo][Mm][Pp][Ll][Ee][Tt][Ee][Dd]|[Tt][Rr][Aa][Nn][Ss][Cc][Rr][Ii][Pp][Tt]|[Ss][Oo][Uu][Rr][Cc][Ee]|[Hh][Tt][Mm][Ll])$" },
+          "format": { "type": "string", "pattern": "^(?:[Ss][Vv][Gg]|[Gg][Ii][Ff]|[Aa][Pp][Nn][Gg]|[Pp][Nn][Gg]|[Hh][Tt][Mm][Ll]|[Tt][Ee][Xx][Tt]|[Tt][Xx][Tt])$" },
           "path": {
             "type": "string",
             "minLength": 1,
@@ -58,12 +58,12 @@
             "if": {
               "required": ["role"],
               "properties": {
-                "role": { "const": "completed" }
+                "role": { "type": "string", "pattern": "^[Cc][Oo][Mm][Pp][Ll][Ee][Tt][Ee][Dd]$" }
               }
             },
             "then": {
               "properties": {
-                "format": { "const": "png" }
+                "format": { "type": "string", "pattern": "^[Pp][Nn][Gg]$" }
               }
             }
           },
@@ -71,12 +71,12 @@
             "if": {
               "required": ["role"],
               "properties": {
-                "role": { "const": "transcript" }
+                "role": { "type": "string", "pattern": "^[Tt][Rr][Aa][Nn][Ss][Cc][Rr][Ii][Pp][Tt]$" }
               }
             },
             "then": {
               "properties": {
-                "format": { "enum": ["text", "txt"] }
+                "format": { "type": "string", "pattern": "^(?:[Tt][Ee][Xx][Tt]|[Tt][Xx][Tt])$" }
               }
             }
           },
@@ -84,12 +84,12 @@
             "if": {
               "required": ["role"],
               "properties": {
-                "role": { "const": "animated" }
+                "role": { "type": "string", "pattern": "^[Aa][Nn][Ii][Mm][Aa][Tt][Ee][Dd]$" }
               }
             },
             "then": {
               "properties": {
-                "format": { "enum": ["svg", "gif", "apng"] }
+                "format": { "type": "string", "pattern": "^(?:[Ss][Vv][Gg]|[Gg][Ii][Ff]|[Aa][Pp][Nn][Gg])$" }
               }
             }
           }

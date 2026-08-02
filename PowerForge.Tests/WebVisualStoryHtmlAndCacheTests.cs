@@ -18,6 +18,8 @@ public sealed class WebVisualStoryHtmlAndCacheTests
     [InlineData("<link rel=\"stylesheet\" href=\"https://example.test/app.css\">")]
     [InlineData("<img src=\"missing.png\" alt=\"Frame\">")]
     [InlineData("<svg><image href=\"https://example.test/frame.png\"></image></svg>")]
+    [InlineData("<svg><filter><feImage href=\"https://example.test/frame.png\"></feImage></filter></svg>")]
+    [InlineData("<svg><a id=\"target\"></a><set href=\"#target\" attributeName=\"href\" to=\"javascript:alert(1)\" dur=\"1s\"></set></svg>")]
     [InlineData("<meta http-equiv=\"refresh\" content=\"0;url=https://example.test\">")]
     [InlineData("<script>document.body.textContent = 'owned'</script>")]
     [InlineData("<img src=\"demo.png\" onload=\"document.body.textContent = 'owned'\">")]
@@ -25,6 +27,7 @@ public sealed class WebVisualStoryHtmlAndCacheTests
     [InlineData("<a href=\"javascript:alert(1)\">Open</a>")]
     [InlineData("<img srcset=\"data:image/png;base64,AAAA 1x, https://example.test/frame.png 2x\">")]
     [InlineData("<img srcset=\"data:image/png;base64,AAAA, https://example.test/frame.png 2x\">")]
+    [InlineData("<div style=\"background-image: \\75rl('https://example.test/frame.png')\"></div>")]
     public void Stage_RejectsHtmlDependenciesOutsideDeclaredBundleArtifacts(string html)
     {
         var root = CreateBundle(html);

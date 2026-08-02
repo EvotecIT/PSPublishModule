@@ -8,11 +8,12 @@ internal static class WebVisualStoryHtmlArtifactValidator
 {
     private static readonly HashSet<string> ActiveElements = new(StringComparer.OrdinalIgnoreCase)
     {
-        "applet", "embed", "frame", "frameset", "iframe", "object", "portal", "script"
+        "animate", "animateMotion", "animateTransform", "applet", "discard", "embed", "frame",
+        "frameset", "iframe", "object", "portal", "script", "set"
     };
     private static readonly HashSet<string> ResourceHrefElements = new(StringComparer.OrdinalIgnoreCase)
     {
-        "image", "use"
+        "feImage", "image", "use"
     };
     private static readonly HashSet<string> ResourceLinkRelations = new(StringComparer.OrdinalIgnoreCase)
     {

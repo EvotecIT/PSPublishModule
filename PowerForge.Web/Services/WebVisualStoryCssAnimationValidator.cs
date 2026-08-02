@@ -6,7 +6,11 @@ namespace PowerForge.Web;
 /// <summary>Recognizes effective CSS animations without executing or rendering SVG content.</summary>
 internal static partial class WebVisualStoryCssAnimationValidator
 {
-    private readonly record struct AnimationDefinition(string? Name, double DurationMilliseconds, bool Paused);
+    private readonly record struct AnimationDefinition(
+        string? Name,
+        double DurationMilliseconds,
+        bool Paused,
+        double IterationCount);
     private readonly record struct StyleRule(string Selector, string Declarations);
 
     private static readonly HashSet<string> AnimationKeywords = new(StringComparer.OrdinalIgnoreCase)
@@ -127,7 +131,7 @@ internal static partial class WebVisualStoryCssAnimationValidator
 
     internal static bool ContainsExternalResourceReference(string css)
     {
-        var normalizedCss = RemoveComments(css);
+        var normalizedCss = DecodeCssEscapes(RemoveComments(css));
         var quote = '\0';
         var escaped = false;
         for (var index = 0; index < normalizedCss.Length; index++)
@@ -199,7 +203,7 @@ internal static partial class WebVisualStoryCssAnimationValidator
                     break;
                 value.Append(character);
             }
-            var reference = value.ToString().Trim();
+            var reference = DecodeCssEscapes(value.ToString()).Trim();
             if (reference.Length > 0 && reference[0] != '#')
                 return true;
         }
@@ -208,10 +212,11 @@ internal static partial class WebVisualStoryCssAnimationValidator
 
     private static IReadOnlyList<string> GetEffectiveAnimationNamesFromDeclaration(string declarations)
     {
-        AnimationDefinition[] shorthand = [new(null, 0, false)];
+        AnimationDefinition[] shorthand = [new(null, 0, false, 1)];
         string?[]? names = null;
         double[]? durations = null;
         bool[]? playStates = null;
+        double[]? iterationCounts = null;
         foreach (var declaration in ParseDeclarations(declarations))
         {
             switch (declaration.Property.ToLowerInvariant())
@@ -223,6 +228,7 @@ internal static partial class WebVisualStoryCssAnimationValidator
                     names = null;
                     durations = null;
                     playStates = null;
+                    iterationCounts = null;
                     break;
                 case "animation-name":
                     names = SplitTopLevel(declaration.Value, ',')
@@ -241,12 +247,21 @@ internal static partial class WebVisualStoryCssAnimationValidator
                             string.Equals(value.Trim(), "paused", StringComparison.OrdinalIgnoreCase))
                         .ToArray();
                     break;
+                case "animation-iteration-count":
+                    iterationCounts = SplitTopLevel(declaration.Value, ',')
+                        .Select(ParseIterationCount)
+                        .ToArray();
+                    break;
             }
         }
 
         var count = Math.Max(
             shorthand.Length,
-            Math.Max(names?.Length ?? 0, Math.Max(durations?.Length ?? 0, playStates?.Length ?? 0)));
+            Math.Max(
+                names?.Length ?? 0,
+                Math.Max(
+                    durations?.Length ?? 0,
+                    Math.Max(playStates?.Length ?? 0, iterationCounts?.Length ?? 0))));
         var effectiveNames = new List<string>();
         for (var index = 0; index < count; index++)
         {
@@ -258,7 +273,10 @@ internal static partial class WebVisualStoryCssAnimationValidator
             var paused = playStates is { Length: > 0 }
                 ? playStates[index % playStates.Length]
                 : basis.Paused;
-            if (name is not null && duration > 0 && !paused)
+            var iterationCount = iterationCounts is { Length: > 0 }
+                ? iterationCounts[index % iterationCounts.Length]
+                : basis.IterationCount;
+            if (name is not null && duration > 0 && !paused && iterationCount > 0)
                 effectiveNames.Add(name);
         }
         return effectiveNames;
@@ -271,6 +289,7 @@ internal static partial class WebVisualStoryCssAnimationValidator
         var sawDuration = false;
         string? name = null;
         var paused = false;
+        var iterationCount = 1d;
         foreach (var token in tokens)
         {
             if (TryParseCssTime(token, out var milliseconds))
@@ -283,12 +302,28 @@ internal static partial class WebVisualStoryCssAnimationValidator
                 continue;
             }
 
-            if (string.Equals(token, "paused", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(token, "infinite", StringComparison.OrdinalIgnoreCase))
+                iterationCount = double.PositiveInfinity;
+            else if (double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedCount))
+                iterationCount = double.IsFinite(parsedCount) && parsedCount >= 0 ? parsedCount : 0;
+            else if (string.Equals(token, "paused", StringComparison.OrdinalIgnoreCase))
                 paused = true;
             else if (NormalizeAnimationName(token) is { } animationName)
                 name = animationName;
         }
-        return new AnimationDefinition(name, hasPositiveDuration ? 1 : 0, paused);
+        return new AnimationDefinition(name, hasPositiveDuration ? 1 : 0, paused, iterationCount);
+    }
+
+    private static double ParseIterationCount(string value)
+    {
+        var token = value.Trim();
+        if (string.Equals(token, "infinite", StringComparison.OrdinalIgnoreCase))
+            return double.PositiveInfinity;
+        return double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var count) &&
+               double.IsFinite(count) &&
+               count >= 0
+            ? count
+            : 0;
     }
 
     private static string? NormalizeAnimationName(string value)

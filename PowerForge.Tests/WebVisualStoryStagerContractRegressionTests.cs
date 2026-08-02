@@ -7,19 +7,24 @@ namespace PowerForge.Tests;
 public class WebVisualStoryStagerContractRegressionTests
 {
     [Fact]
-    public void SamePath_UsesCaseInsensitiveIdentityForMacStyleFileSystems()
+    public void FileSystemPathComparison_MatchesTheActualTargetVolume()
     {
-        var root = Path.Combine(Path.GetTempPath(), "Story", "demo.png");
-        var alternate = Path.Combine(Path.GetTempPath(), "story", "DEMO.png");
+        var root = Path.Combine(Path.GetTempPath(), "pf-path-identity-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var lower = Path.Combine(root, "marker");
+            File.WriteAllText(lower, "probe");
+            var expected = File.Exists(Path.Combine(root, "MARKER"))
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
 
-        Assert.True(WebVisualStoryStager.SamePathForTesting(
-            root,
-            alternate,
-            StringComparison.OrdinalIgnoreCase));
-        Assert.False(WebVisualStoryStager.SamePathForTesting(
-            root,
-            alternate,
-            StringComparison.Ordinal));
+            Assert.Equal(expected, WebVisualStoryStager.GetFileSystemPathComparisonForTesting(root));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]
