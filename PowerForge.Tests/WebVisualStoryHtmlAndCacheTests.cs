@@ -19,6 +19,12 @@ public sealed class WebVisualStoryHtmlAndCacheTests
     [InlineData("<img src=\"missing.png\" alt=\"Frame\">")]
     [InlineData("<svg><image href=\"https://example.test/frame.png\"></image></svg>")]
     [InlineData("<meta http-equiv=\"refresh\" content=\"0;url=https://example.test\">")]
+    [InlineData("<script>document.body.textContent = 'owned'</script>")]
+    [InlineData("<img src=\"demo.png\" onload=\"document.body.textContent = 'owned'\">")]
+    [InlineData("<iframe src=\"demo.html\"></iframe>")]
+    [InlineData("<a href=\"javascript:alert(1)\">Open</a>")]
+    [InlineData("<img srcset=\"data:image/png;base64,AAAA 1x, https://example.test/frame.png 2x\">")]
+    [InlineData("<img srcset=\"data:image/png;base64,AAAA, https://example.test/frame.png 2x\">")]
     public void Stage_RejectsHtmlDependenciesOutsideDeclaredBundleArtifacts(string html)
     {
         var root = CreateBundle(html);
@@ -33,6 +39,27 @@ public sealed class WebVisualStoryHtmlAndCacheTests
 
             Assert.Contains("self-contained", error.Message, StringComparison.OrdinalIgnoreCase);
             Assert.False(File.Exists(Path.Combine(root, "published", "visual-story.json")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Stage_AllowsDataAndDeclaredCandidatesInSourceSets()
+    {
+        var root = CreateBundle(
+            "<img srcset=\"data:image/png;base64,AAAA 1x, demo.png 2x\" alt=\"Completed result\">");
+        try
+        {
+            var result = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = Path.Combine(root, "source", "story.json"),
+                OutputPath = Path.Combine(root, "published")
+            });
+
+            Assert.Contains(result.Bundle.Artifacts, artifact => artifact.Format == "html");
         }
         finally
         {

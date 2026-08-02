@@ -233,6 +233,38 @@ public class WebVisualStoryAnimatedArtifactTests
     }
 
     [Theory]
+    [InlineData("<svg xmlns=\"http://www.w3.org/2000/svg\"><rect><animate href=\"#missing\" attributeName=\"opacity\" dur=\"1s\" values=\"0;1\"/></rect></svg>")]
+    [InlineData("<svg xmlns=\"http://www.w3.org/2000/svg\"><circle><animateMotion dur=\"1s\"><mpath href=\"#missing\"/></animateMotion></circle></svg>")]
+    [InlineData("<svg xmlns=\"http://www.w3.org/2000/svg\"><rect id=\"route\"/><circle><animateMotion dur=\"1s\"><mpath href=\"#route\"/></animateMotion></circle></svg>")]
+    public void Stage_RejectsSvgMotionWithMissingOrInvalidFragmentTargets(string svg)
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            File.WriteAllText(Path.Combine(source, "missing-target.svg"), svg);
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = ReadBundle(manifest);
+            var animated = Assert.Single(bundle.Artifacts, artifact => artifact.Role == "animated");
+            animated.Path = "missing-target.svg";
+            WriteBundle(manifest, bundle);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("local fragment", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Theory]
     [InlineData("gif", "animated.gif", MagickFormat.Gif)]
     [InlineData("apng", "animated.png", MagickFormat.APng)]
     public void Stage_AcceptsDecodableAnimatedRasterArtifacts(

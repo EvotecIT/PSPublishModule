@@ -129,6 +129,7 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
             var cssAnimationNames = new HashSet<string>(StringComparer.Ordinal);
             var cssStyleBlocks = new List<string>();
             var svgElements = new List<SvgElementIdentity> { ReadSvgElementIdentity(reader) };
+            var smilFragmentReferences = new List<SvgFragmentReference>();
             var rootInlineStyle = reader.GetAttribute("style");
             ValidatePassiveSvgContent(reader, displayPath);
             ValidateSelfContainedReferences(reader, displayPath);
@@ -175,16 +176,25 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
                 ValidateSelfContainedReferences(reader, displayPath);
                 svgElements.Add(ReadSvgElementIdentity(reader));
                 if (IsDeclarativeAnimationElement(reader))
+                {
                     sawDeclarativeAnimation = true;
+                    AddSmilTargetReference(reader, smilFragmentReferences, mustBePath: false);
+                }
                 else if (string.Equals(reader.LocalName, "animateMotion", StringComparison.Ordinal) &&
                          HasEffectiveSmilTiming(reader) &&
                          !reader.IsEmptyElement)
+                {
                     pendingAnimateMotionDepth = reader.Depth;
+                    AddSmilTargetReference(reader, smilFragmentReferences, mustBePath: false);
+                }
                 else if (pendingAnimateMotionDepth >= 0 &&
                          reader.Depth == pendingAnimateMotionDepth + 1 &&
                          string.Equals(reader.LocalName, "mpath", StringComparison.Ordinal) &&
                          HasLocalMotionPathReference(reader))
+                {
                     sawDeclarativeAnimation = true;
+                    AddSmilTargetReference(reader, smilFragmentReferences, mustBePath: true);
+                }
 
                 var inlineStyle = reader.GetAttribute("style");
                 AddCssAnimationNames(inlineStyle, cssAnimationNames, displayPath);
@@ -193,6 +203,7 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
                 if (insideStyle)
                     currentStyle = new StringBuilder();
             }
+            ValidateSmilFragmentReferences(svgElements, smilFragmentReferences, displayPath);
             foreach (var css in cssStyleBlocks)
             {
                 AddNames(

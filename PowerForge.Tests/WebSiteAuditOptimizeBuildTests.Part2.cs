@@ -1182,7 +1182,9 @@ public partial class WebSiteAuditOptimizeBuildTests
         try
         {
             var unrelatedPath = Path.Combine(root, "visual-story.json");
-            File.WriteAllText(unrelatedPath, """{ "application": "download-catalog" }""");
+            const string unrelatedCatalog =
+                """{ "application": "download-catalog", "schemaVersion": 1, "artifacts": [] }""";
+            File.WriteAllText(unrelatedPath, unrelatedCatalog);
             File.WriteAllText(
                 Path.Combine(root, "index.html"),
                 "<!doctype html><html><body><p>Ready</p></body></html>");
@@ -1193,7 +1195,7 @@ public partial class WebSiteAuditOptimizeBuildTests
                 MinifyHtml = true
             });
 
-            Assert.Equal("""{ "application": "download-catalog" }""", File.ReadAllText(unrelatedPath));
+            Assert.Equal(unrelatedCatalog, File.ReadAllText(unrelatedPath));
             Assert.True(result.HtmlFileCount == 1);
         }
         finally
@@ -1216,7 +1218,7 @@ public partial class WebSiteAuditOptimizeBuildTests
             var sourceManifest = Path.Combine(bundleRoot, "source", "story.json");
             var sourceHtml = Path.Combine(bundleRoot, "source", "demo.html");
             var htmlBytes = System.Text.Encoding.UTF8.GetBytes(
-                "<!doctype html>\n<html>\n  <body>\n    <img src=\"/hero.png\" />\n  </body>\n</html>\n");
+                "<!doctype html>\n<html>\n  <body>\n    <img src=\"demo.png\" />\n  </body>\n</html>\n");
             File.WriteAllBytes(sourceHtml, htmlBytes);
             var sourceBundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(
                 File.ReadAllText(sourceManifest),

@@ -7,6 +7,10 @@ namespace PowerForge.Web;
 /// <summary>Validates producer output and stages a portable visual-story bundle.</summary>
 public static partial class WebVisualStoryStager
 {
+    private static readonly StringComparison FileSystemPathComparison =
+        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
     internal const long DefaultMaximumArtifactBytes = 25L * 1024L * 1024L;
     internal const long DefaultMaximumTotalArtifactBytes = 100L * 1024L * 1024L;
     internal const int MaximumManifestBytes = 1024 * 1024;
@@ -429,7 +433,10 @@ public static partial class WebVisualStoryStager
         => string.Equals(
             Path.GetFullPath(left),
             Path.GetFullPath(right),
-            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+            FileSystemPathComparison);
+
+    internal static bool SamePathForTesting(string left, string right, StringComparison comparison)
+        => string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), comparison);
 
     private static void DeleteEmptyParents(string? directory, string root)
     {

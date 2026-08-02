@@ -6,6 +6,10 @@ namespace PowerForge.Web;
 /// <summary>Validates that an HTML story artifact depends only on declared files in its bundle.</summary>
 internal static class WebVisualStoryHtmlArtifactValidator
 {
+    private static readonly HashSet<string> ActiveElements = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "applet", "embed", "frame", "frameset", "iframe", "object", "portal", "script"
+    };
     private static readonly HashSet<string> ResourceHrefElements = new(StringComparer.OrdinalIgnoreCase)
     {
         "image", "use"
@@ -27,6 +31,7 @@ internal static class WebVisualStoryHtmlArtifactValidator
 
         foreach (var element in document.All)
         {
+            ValidatePassiveContent(element, displayPath);
             ValidateAttribute(element, "src", displayPath, bundleRoot, declaredArtifactPaths);
             if (string.Equals(element.LocalName, "video", StringComparison.OrdinalIgnoreCase))
                 ValidateAttribute(element, "poster", displayPath, bundleRoot, declaredArtifactPaths);
@@ -78,6 +83,44 @@ internal static class WebVisualStoryHtmlArtifactValidator
         }
     }
 
+    private static void ValidatePassiveContent(IElement element, string displayPath)
+    {
+        if (ActiveElements.Contains(element.LocalName))
+        {
+            throw Invalid(displayPath, $"active <{element.LocalName}> content is not allowed");
+        }
+
+        foreach (var attribute in element.Attributes)
+        {
+            if (attribute.LocalName.StartsWith("on", StringComparison.OrdinalIgnoreCase))
+            {
+                throw Invalid(displayPath, $"event-handler attribute is not allowed: {attribute.LocalName}");
+            }
+        }
+
+        if (string.Equals(element.LocalName, "link", StringComparison.OrdinalIgnoreCase) &&
+            HasLinkRelation(element.GetAttribute("rel"), "stylesheet"))
+        {
+            throw Invalid(displayPath, "external stylesheets are not allowed; use validated embedded CSS");
+        }
+
+        ValidatePassiveNavigation(element, "href", displayPath);
+        ValidatePassiveNavigation(element, "action", displayPath);
+        ValidatePassiveNavigation(element, "formaction", displayPath);
+    }
+
+    private static void ValidatePassiveNavigation(IElement element, string attributeName, string displayPath)
+    {
+        var value = System.Net.WebUtility.HtmlDecode(element.GetAttribute(attributeName) ?? string.Empty).Trim();
+        if (value.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) ||
+            value.StartsWith("vbscript:", StringComparison.OrdinalIgnoreCase) ||
+            value.StartsWith("data:text/html", StringComparison.OrdinalIgnoreCase) ||
+            value.StartsWith("data:application/xhtml+xml", StringComparison.OrdinalIgnoreCase))
+        {
+            throw Invalid(displayPath, $"active navigation is not allowed: {attributeName}");
+        }
+    }
+
     private static void ValidateAttribute(
         IElement element,
         string attributeName,
@@ -94,6 +137,11 @@ internal static class WebVisualStoryHtmlArtifactValidator
         => !string.IsNullOrWhiteSpace(relation) &&
            relation.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
                .Any(ResourceLinkRelations.Contains);
+
+    private static bool HasLinkRelation(string? relation, string expected)
+        => !string.IsNullOrWhiteSpace(relation) &&
+           relation.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+               .Any(token => string.Equals(token, expected, StringComparison.OrdinalIgnoreCase));
 
     private static void ValidateReference(
         string rawReference,
@@ -157,20 +205,84 @@ internal static class WebVisualStoryHtmlArtifactValidator
 
     private static IEnumerable<string> ParseSourceSet(string sourceSet)
     {
-        if (sourceSet.TrimStart().StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        var index = 0;
+        while (index < sourceSet.Length)
         {
-            yield return sourceSet.Trim().Split((char[]?)null, 2, StringSplitOptions.RemoveEmptyEntries)[0];
-            yield break;
-        }
-        foreach (var candidate in sourceSet.Split(','))
-        {
-            var parts = candidate.Trim().Split((char[]?)null, 2, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 0)
-                continue;
-            var reference = parts[0];
+            while (index < sourceSet.Length &&
+                   (char.IsWhiteSpace(sourceSet[index]) || sourceSet[index] == ','))
+            {
+                index++;
+            }
+            if (index >= sourceSet.Length)
+            {
+                yield break;
+            }
+
+            var start = index;
+            var isData = sourceSet.AsSpan(index).StartsWith("data:", StringComparison.OrdinalIgnoreCase);
+            while (index < sourceSet.Length &&
+                   !char.IsWhiteSpace(sourceSet[index]) &&
+                   (isData || sourceSet[index] != ','))
+            {
+                index++;
+            }
+
+            var reference = sourceSet[start..index].Trim();
             if (reference.Length > 0)
+            {
                 yield return reference;
+            }
+
+            while (index < sourceSet.Length && char.IsWhiteSpace(sourceSet[index]))
+            {
+                index++;
+            }
+            if (isData && reference.EndsWith(",", StringComparison.Ordinal) &&
+                index < sourceSet.Length && !LooksLikeSourceSetDescriptor(sourceSet, index))
+            {
+                continue;
+            }
+            if (index < sourceSet.Length && sourceSet[index] == ',')
+            {
+                index++;
+                continue;
+            }
+
+            while (index < sourceSet.Length && sourceSet[index] != ',')
+            {
+                index++;
+            }
+            if (index < sourceSet.Length)
+            {
+                index++;
+            }
         }
+    }
+
+    private static bool LooksLikeSourceSetDescriptor(string sourceSet, int start)
+    {
+        var end = start;
+        while (end < sourceSet.Length &&
+               !char.IsWhiteSpace(sourceSet[end]) &&
+               sourceSet[end] != ',')
+        {
+            end++;
+        }
+        if (end - start < 2)
+        {
+            return false;
+        }
+
+        var suffix = sourceSet[end - 1];
+        if (suffix is not ('w' or 'x' or 'h'))
+        {
+            return false;
+        }
+        return double.TryParse(
+            sourceSet.AsSpan(start, end - start - 1),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var value) && value > 0 && double.IsFinite(value);
     }
 
     private static InvalidOperationException Invalid(string displayPath, string reason)

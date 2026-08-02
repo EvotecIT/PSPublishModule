@@ -7,6 +7,22 @@ namespace PowerForge.Tests;
 public class WebVisualStoryStagerContractRegressionTests
 {
     [Fact]
+    public void SamePath_UsesCaseInsensitiveIdentityForMacStyleFileSystems()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "Story", "demo.png");
+        var alternate = Path.Combine(Path.GetTempPath(), "story", "DEMO.png");
+
+        Assert.True(WebVisualStoryStager.SamePathForTesting(
+            root,
+            alternate,
+            StringComparison.OrdinalIgnoreCase));
+        Assert.False(WebVisualStoryStager.SamePathForTesting(
+            root,
+            alternate,
+            StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void PortablePathTopology_RejectsCaseFoldedFileDirectoryCollisions()
     {
         var error = Assert.Throws<InvalidOperationException>(() =>
