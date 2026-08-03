@@ -40,6 +40,9 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
         var decodedFrameBytes = 0L;
         var currentFrameAllowsIdat = false;
         var visualFrameSignatures = new HashSet<string>(StringComparer.Ordinal);
+        byte[]? pngHeader = null;
+        var sharedChunks = new List<(byte[] Type, byte[] Data)>();
+        ApngRenderedFrameAccumulator? renderedFrames = null;
         using var defaultImageData = new MemoryStream();
         while (offset + 12 <= bytes.Length)
         {
@@ -77,6 +80,7 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
                 colorType = bytes[dataOffset + 9];
                 interlaceMethod = bytes[dataOffset + 12];
                 ValidatePngPixelFormat(bitDepth, colorType, interlaceMethod, displayPath);
+                pngHeader = bytes.AsSpan(dataOffset, dataLength).ToArray();
                 sawHeader = true;
             }
             else if (first == 'a' && second == 'c' && third == 'T' && fourth == 'L')
@@ -129,6 +133,15 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
                     frameY,
                     frameDisposal,
                     frameBlend);
+                renderedFrames?.AddFrame(
+                    frameData,
+                    frameWidth,
+                    frameHeight,
+                    frameX,
+                    frameY,
+                    frameDisposal,
+                    frameBlend,
+                    displayPath);
                 if (!sawAnimationControl || dataLength != 26 ||
                     ReadUInt32(bytes, dataOffset) != expectedSequence++)
                 {
@@ -157,6 +170,11 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
                         colorType,
                         interlaceMethod),
                     displayPath);
+                renderedFrames ??= new ApngRenderedFrameAccumulator(
+                    pngHeader!,
+                    sharedChunks,
+                    canvasWidth,
+                    canvasHeight);
                 frameData?.Dispose();
                 frameData = new MemoryStream();
                 currentFrameAllowsIdat = frameCount == 0 && !sawImageData;
@@ -204,9 +222,24 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
                     frameY,
                     frameDisposal,
                     frameBlend);
+                renderedFrames?.AddFrame(
+                    frameData,
+                    frameWidth,
+                    frameHeight,
+                    frameX,
+                    frameY,
+                    frameDisposal,
+                    frameBlend,
+                    displayPath);
                 sawEnd = true;
                 offset += dataLength + 12;
                 break;
+            }
+            else if (!sawImageData && first is not (byte)'a' and not (byte)'f')
+            {
+                sharedChunks.Add((
+                    bytes.AsSpan(offset + 4, 4).ToArray(),
+                    bytes.AsSpan(dataOffset, dataLength).ToArray()));
             }
             offset += dataLength + 12;
         }
@@ -219,7 +252,7 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
                 $"Visual-story animated artifact is not a complete APNG: {displayPath}");
         }
         ValidatePngEnvelope(path, displayPath);
-        if (visualFrameSignatures.Count < 2)
+        if (visualFrameSignatures.Count < 2 || renderedFrames?.VisibleStateCount < 2)
         {
             throw new InvalidOperationException(
                 $"Visual-story animated APNG artifact must contain a visible frame change: {displayPath}");
@@ -292,13 +325,11 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
                 colorType,
                 interlaceMethod);
             var total = 0L;
-            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             while (true)
             {
                 var read = zlib.Read(buffer, 0, buffer.Length);
                 if (read == 0) break;
                 filterValidator.Consume(buffer, read, displayPath);
-                hash.AppendData(buffer, 0, read);
                 total += read;
                 if (total > expectedBytes)
                     throw new InvalidOperationException($"Visual-story APNG frame expands beyond its dimensions: {displayPath}");
@@ -306,7 +337,7 @@ internal static partial class WebVisualStoryAnimatedArtifactValidator
             if (total != expectedBytes)
                 throw new InvalidOperationException($"Visual-story APNG frame has incomplete pixel data: {displayPath}");
             filterValidator.EnsureComplete(displayPath);
-            return Convert.ToBase64String(hash.GetHashAndReset());
+            return filterValidator.GetCanonicalSignature();
         }
         catch (InvalidDataException ex)
         {

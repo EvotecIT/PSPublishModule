@@ -459,6 +459,7 @@ public static partial class WebSiteBuilder
             return false;
 
         var conventionalRoot = NormalizeRootPathForSink(Path.Combine(rootPath, "static"));
+        var pathComparison = WebVisualStoryStager.GetFileSystemPathComparison(rootPath);
         foreach (var asset in spec.StaticAssets)
         {
             if (string.IsNullOrWhiteSpace(asset.Source))
@@ -470,7 +471,7 @@ public static partial class WebSiteBuilder
                     ? asset.Source
                     : Path.Combine(rootPath, asset.Source);
                 var normalizedSource = NormalizeRootPathForSink(sourcePath);
-                if (IsPathWithinRoot(conventionalRoot, normalizedSource))
+                if (IsPathWithinRoot(conventionalRoot, normalizedSource, pathComparison))
                     return true;
             }
             catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
@@ -583,14 +584,20 @@ public static partial class WebSiteBuilder
     }
 
     private static bool IsPathWithinRoot(string normalizedRoot, string candidatePath)
+        => IsPathWithinRoot(normalizedRoot, candidatePath, FileSystemPathComparison);
+
+    private static bool IsPathWithinRoot(
+        string normalizedRoot,
+        string candidatePath,
+        StringComparison comparison)
     {
         var root = normalizedRoot
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var full = Path.GetFullPath(candidatePath);
-        if (full.Equals(root, FileSystemPathComparison))
+        if (full.Equals(root, comparison))
             return true;
 
-        return full.StartsWith(root + Path.DirectorySeparatorChar, FileSystemPathComparison);
+        return full.StartsWith(root + Path.DirectorySeparatorChar, comparison);
     }
 
 }

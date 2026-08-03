@@ -1,14 +1,20 @@
 namespace PowerForge.Web;
 
-/// <summary>Validates PNG scanline filter bytes without retaining decompressed frame payloads.</summary>
+/// <summary>Validates and reverses PNG scanline filters into a canonical pixel-byte stream.</summary>
 internal sealed class PngScanlineFilterValidator
 {
     private readonly long[] _rowBytes;
     private readonly uint[] _rowCounts;
+    private readonly int _bytesPerPixel;
+    private readonly MemoryStream _canonicalBytes = new();
     private int _passIndex;
     private uint _rowIndex;
     private long _remainingRowBytes;
     private bool _expectsFilter = true;
+    private byte _filter;
+    private int _rowPosition;
+    private byte[]? _currentRow;
+    private byte[]? _previousRow;
 
     internal PngScanlineFilterValidator(
         uint width,
@@ -25,6 +31,7 @@ internal sealed class PngScanlineFilterValidator
             6 => 4,
             _ => throw new InvalidOperationException("Unsupported PNG color type.")
         };
+        _bytesPerPixel = Math.Max(1, checked((channels * bitDepth + 7) / 8));
         if (interlaceMethod == 0)
         {
             _rowBytes = [ComputeRowBytes(width, channels, bitDepth)];
@@ -65,18 +72,45 @@ internal sealed class PngScanlineFilterValidator
             {
                 if (buffer[index] > 4)
                     throw new InvalidOperationException($"Visual-story APNG frame contains an invalid scanline filter: {displayPath}");
+                _filter = buffer[index];
                 _remainingRowBytes = _rowBytes[_passIndex];
+                var rowLength = checked((int)_remainingRowBytes);
+                if (_currentRow is null || _currentRow.Length != rowLength)
+                {
+                    _currentRow = new byte[rowLength];
+                    _previousRow = new byte[rowLength];
+                }
+                _rowPosition = 0;
                 _expectsFilter = false;
                 continue;
             }
 
+            var filtered = buffer[index];
+            var left = _rowPosition >= _bytesPerPixel ? _currentRow![_rowPosition - _bytesPerPixel] : (byte)0;
+            var up = _previousRow![_rowPosition];
+            var upLeft = _rowPosition >= _bytesPerPixel ? _previousRow[_rowPosition - _bytesPerPixel] : (byte)0;
+            var value = _filter switch
+            {
+                0 => filtered,
+                1 => unchecked((byte)(filtered + left)),
+                2 => unchecked((byte)(filtered + up)),
+                3 => unchecked((byte)(filtered + ((left + up) >> 1))),
+                4 => unchecked((byte)(filtered + Paeth(left, up, upLeft))),
+                _ => throw new InvalidOperationException($"Visual-story APNG frame contains an invalid scanline filter: {displayPath}")
+            };
+            _currentRow![_rowPosition++] = value;
+            _canonicalBytes.WriteByte(value);
             _remainingRowBytes--;
             if (_remainingRowBytes != 0) continue;
+            (_currentRow, _previousRow) = (_previousRow, _currentRow);
+            Array.Clear(_currentRow!);
             _rowIndex++;
             _expectsFilter = true;
             if (_rowIndex < _rowCounts[_passIndex]) continue;
             _passIndex++;
             _rowIndex = 0;
+            _currentRow = null;
+            _previousRow = null;
             AdvanceEmptyPasses();
         }
     }
@@ -85,6 +119,23 @@ internal sealed class PngScanlineFilterValidator
     {
         if (_passIndex != _rowBytes.Length || !_expectsFilter)
             throw new InvalidOperationException($"Visual-story APNG frame has incomplete pixel data: {displayPath}");
+    }
+
+    internal string GetCanonicalSignature()
+    {
+        var hash = System.Security.Cryptography.SHA256.HashData(_canonicalBytes.GetBuffer().AsSpan(0, checked((int)_canonicalBytes.Length)));
+        return Convert.ToBase64String(hash);
+    }
+
+    private static byte Paeth(byte left, byte up, byte upLeft)
+    {
+        var estimate = left + up - upLeft;
+        var leftDistance = Math.Abs(estimate - left);
+        var upDistance = Math.Abs(estimate - up);
+        var upperLeftDistance = Math.Abs(estimate - upLeft);
+        return leftDistance <= upDistance && leftDistance <= upperLeftDistance
+            ? left
+            : upDistance <= upperLeftDistance ? up : upLeft;
     }
 
     private void AdvanceEmptyPasses()

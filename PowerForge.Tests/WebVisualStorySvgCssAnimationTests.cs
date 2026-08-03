@@ -36,6 +36,8 @@ public class WebVisualStorySvgCssAnimationTests
     [InlineData("from{}to{}")]
     [InlineData("from{opacity:1}to{opacity:1}")]
     [InlineData("0%{opacity:1}50%{opacity:1}100%{opacity:1}")]
+    [InlineData("0%,100%{opacity:1}")]
+    [InlineData("from,to{opacity:1}")]
     public void Stage_RejectsKeyframesThatCannotProduceMotion(string frames)
     {
         var error = Assert.Throws<InvalidOperationException>(() =>

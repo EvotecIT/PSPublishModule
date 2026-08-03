@@ -135,10 +135,19 @@ internal static partial class ShortcodeDefaults
         var publishedPath = ResolvePublishedVisualStoryManifestPath(context.Site, root, manifestPath);
         if (publishedPath is null && TryResolvePageBundleVisualStoryBaseUrl(context, manifestPath, out var pageBundleBaseUrl))
             return pageBundleBaseUrl;
-        var normalized = publishedPath ?? Path.GetRelativePath(root, manifestPath).Replace('\\', '/');
-        if (publishedPath is null &&
-            !normalized.Equals("static", StringComparison.OrdinalIgnoreCase) &&
-            !normalized.StartsWith("static/", StringComparison.OrdinalIgnoreCase))
+        string normalized;
+        if (publishedPath is not null)
+        {
+            normalized = publishedPath;
+        }
+        else if (TryGetContainedRelativePath(
+                     Path.Combine(root, "static"),
+                     manifestPath,
+                     out var conventionalRelative))
+        {
+            normalized = "static/" + conventionalRelative;
+        }
+        else
         {
             throw new InvalidOperationException(
                 "story shortcode requires an explicit base URL unless its manifest is published by a static mapping, the conventional static directory, or a page bundle.");
@@ -147,12 +156,12 @@ internal static partial class ShortcodeDefaults
             ? normalized[..normalized.LastIndexOf('/')]
             : string.Empty;
         if (publishedPath is null &&
-            normalized.StartsWith("static/", StringComparison.OrdinalIgnoreCase) &&
-            directory.Equals("static", StringComparison.OrdinalIgnoreCase))
+            normalized.StartsWith("static/", StringComparison.Ordinal) &&
+            directory.Equals("static", StringComparison.Ordinal))
             directory = string.Empty;
         else if (publishedPath is null &&
-                 normalized.StartsWith("static/", StringComparison.OrdinalIgnoreCase) &&
-                 directory.StartsWith("static/", StringComparison.OrdinalIgnoreCase))
+                 normalized.StartsWith("static/", StringComparison.Ordinal) &&
+                 directory.StartsWith("static/", StringComparison.Ordinal))
             directory = directory["static/".Length..];
         var encodedDirectory = string.Join(
             "/",

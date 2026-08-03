@@ -365,6 +365,9 @@ public class WebSiteLocalizationFeaturesTests
                 Environment.NewLine +
                 "Literal /docs/story/demo.svg remains." + Environment.NewLine + Environment.NewLine +
                 "`/docs/story/demo.svg`" + Environment.NewLine + Environment.NewLine +
+                "<style>.story-poster{background-image:url('/docs/story/demo.png')}</style>" +
+                "<div class=\"story-poster\" style=\"mask-image:url('/docs/story/demo.svg')\">Styled story</div>" +
+                Environment.NewLine +
                 "<a href=\"https://evotec.xyz/docs/story/demo.svg\">Absolute story link</a>" +
                 Environment.NewLine +
                 "{{< story manifest=\"content/docs/en/story/visual-story.json\" transcript=\"hidden\" >}}");
@@ -419,6 +422,8 @@ public class WebSiteLocalizationFeaturesTests
             Assert.Contains("src=\"/docs/story/demo.svg\"", enHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("src=\"/pl/docs/story/demo.svg\"", plHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("srcset=\"/pl/docs/story/demo.png\"", plHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("background-image:url('/pl/docs/story/demo.png')", plHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("mask-image:url('/pl/docs/story/demo.svg')", plHtml, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("src=\"/docs/story/demo.svg\"", plHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Literal /docs/story/demo.svg remains.", plHtml, StringComparison.Ordinal);
             Assert.Contains("<code>/docs/story/demo.svg</code>", plHtml, StringComparison.OrdinalIgnoreCase);

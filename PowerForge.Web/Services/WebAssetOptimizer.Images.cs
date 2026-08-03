@@ -324,8 +324,12 @@ public static partial class WebAssetOptimizer
         var paths = new HashSet<string>(FileSystemPathComparer);
         foreach (var manifestPath in Directory.EnumerateFiles(
                      siteRoot,
-                     "*.json",
-                     SearchOption.AllDirectories))
+                     "*",
+                     SearchOption.AllDirectories)
+                 .Where(static path => string.Equals(
+                     Path.GetExtension(path),
+                     ".json",
+                     StringComparison.OrdinalIgnoreCase)))
         {
             if (!WebVisualStoryManifestDiscovery.IsRecognizable(manifestPath))
                 continue;

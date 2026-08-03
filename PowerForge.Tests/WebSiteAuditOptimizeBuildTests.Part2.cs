@@ -1252,6 +1252,8 @@ public partial class WebSiteAuditOptimizeBuildTests
                 ManifestPath = Path.Combine(bundleRoot, "source", "story.json"),
                 OutputPath = storyRoot
             });
+            var caseVariantManifest = Path.Combine(storyRoot, "visual-story.JSON");
+            File.Move(staged.ManifestPath, caseVariantManifest);
             var completedPath = Path.Combine(storyRoot, "demo.png");
             var completedBefore = File.ReadAllBytes(completedPath);
             var htmlPath = Path.Combine(storyRoot, "demo.html");
@@ -1279,8 +1281,8 @@ public partial class WebSiteAuditOptimizeBuildTests
             Assert.Equal(1, result.ImageOptimizedCount);
             Assert.Equal(completedBefore, File.ReadAllBytes(completedPath));
             Assert.Equal(htmlBefore, File.ReadAllBytes(htmlPath));
-            Assert.True(File.Exists(staged.ManifestPath));
-            Assert.Equal(4, WebVisualStoryStager.Load(staged.ManifestPath).Artifacts.Length);
+            Assert.True(File.Exists(caseVariantManifest));
+            Assert.Equal(4, WebVisualStoryStager.Load(caseVariantManifest).Artifacts.Length);
         }
         finally
         {

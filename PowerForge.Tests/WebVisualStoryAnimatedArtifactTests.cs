@@ -636,6 +636,37 @@ public class WebVisualStoryAnimatedArtifactTests
         }
     }
 
+    [Fact]
+    public void Stage_RejectsApngWhoseIdenticalPixelsUseDifferentScanlineFilters()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var animationPath = Path.Combine(source, "same-filter-independent-frames.png");
+            WriteTinyApng(animationPath, secondFrameFilter: 1, repeatFirstFrame: true);
+            var manifest = Path.Combine(source, "story.json");
+            var bundle = ReadBundle(manifest);
+            var animated = Assert.Single(bundle.Artifacts, artifact => artifact.Role == "animated");
+            animated.Format = "apng";
+            animated.Path = Path.GetFileName(animationPath);
+            WriteBundle(manifest, bundle);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+                {
+                    ManifestPath = manifest,
+                    OutputPath = Path.Combine(root, "published")
+                }));
+
+            Assert.Contains("visible frame change", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     private static WebVisualStoryBundle ReadBundle(string manifest)
         => JsonSerializer.Deserialize<WebVisualStoryBundle>(File.ReadAllText(manifest), JsonOptions)!;
 

@@ -62,6 +62,21 @@ internal static class WebFallbackResourceUrlRewriter
                 if (!string.Equals(sourceSet, rewritten, StringComparison.Ordinal))
                     element.SetAttribute("srcset", rewritten);
             }
+
+            var inlineStyle = element.GetAttribute("style");
+            if (!string.IsNullOrWhiteSpace(inlineStyle))
+            {
+                var rewritten = RewriteCssUrls(inlineStyle, replacements);
+                if (!string.Equals(inlineStyle, rewritten, StringComparison.Ordinal))
+                    element.SetAttribute("style", rewritten);
+            }
+        }
+        foreach (var style in document.QuerySelectorAll("style"))
+        {
+            var css = style.TextContent;
+            var rewritten = RewriteCssUrls(css, replacements);
+            if (!string.Equals(css, rewritten, StringComparison.Ordinal))
+                style.TextContent = rewritten;
         }
         return document.Body?.InnerHtml ?? html;
     }
@@ -107,5 +122,122 @@ internal static class WebFallbackResourceUrlRewriter
             output.Append(RewriteRootRelativeUrl(value.Substring(start, index - start), replacements));
         }
         return output.ToString();
+    }
+
+    private static string RewriteCssUrls(
+        string css,
+        IReadOnlyDictionary<string, string> replacements)
+    {
+        var output = new System.Text.StringBuilder(css.Length);
+        var copiedThrough = 0;
+        var quote = '\0';
+        var escaped = false;
+        var inComment = false;
+        for (var index = 0; index < css.Length; index++)
+        {
+            var character = css[index];
+            var next = index + 1 < css.Length ? css[index + 1] : '\0';
+            if (inComment)
+            {
+                if (character == '*' && next == '/')
+                {
+                    inComment = false;
+                    index++;
+                }
+                continue;
+            }
+            if (quote != '\0')
+            {
+                if (escaped)
+                    escaped = false;
+                else if (character == '\\')
+                    escaped = true;
+                else if (character == quote)
+                    quote = '\0';
+                continue;
+            }
+            if (character == '/' && next == '*')
+            {
+                inComment = true;
+                index++;
+                continue;
+            }
+            if (character is '\'' or '"')
+            {
+                quote = character;
+                continue;
+            }
+            if (!IsUrlFunctionAt(css, index, out var valueStart, out var valueEnd))
+                continue;
+
+            var original = css.Substring(valueStart, valueEnd - valueStart);
+            var rewritten = RewriteRootRelativeUrl(original, replacements);
+            if (!string.Equals(original, rewritten, StringComparison.Ordinal))
+            {
+                output.Append(css, copiedThrough, valueStart - copiedThrough);
+                output.Append(rewritten);
+                copiedThrough = valueEnd;
+            }
+            index = valueEnd;
+        }
+        if (copiedThrough == 0)
+            return css;
+        output.Append(css, copiedThrough, css.Length - copiedThrough);
+        return output.ToString();
+    }
+
+    private static bool IsUrlFunctionAt(string css, int index, out int valueStart, out int valueEnd)
+    {
+        valueStart = 0;
+        valueEnd = 0;
+        if (index > 0 && (char.IsLetterOrDigit(css[index - 1]) || css[index - 1] is '-' or '_') ||
+            index + 3 > css.Length ||
+            !string.Equals(css.Substring(index, 3), "url", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var cursor = index + 3;
+        while (cursor < css.Length && char.IsWhiteSpace(css[cursor]))
+            cursor++;
+        if (cursor >= css.Length || css[cursor] != '(')
+            return false;
+        cursor++;
+        while (cursor < css.Length && char.IsWhiteSpace(css[cursor]))
+            cursor++;
+        var valueQuote = cursor < css.Length && css[cursor] is '\'' or '"' ? css[cursor++] : '\0';
+        valueStart = cursor;
+        var escaped = false;
+        while (cursor < css.Length)
+        {
+            var character = css[cursor];
+            if (escaped)
+            {
+                escaped = false;
+                cursor++;
+                continue;
+            }
+            if (character == '\\')
+            {
+                escaped = true;
+                cursor++;
+                continue;
+            }
+            if (valueQuote != '\0' ? character == valueQuote : character == ')')
+                break;
+            cursor++;
+        }
+        if (cursor >= css.Length)
+            return false;
+        valueEnd = cursor;
+        if (valueQuote != '\0')
+        {
+            cursor++;
+            while (cursor < css.Length && char.IsWhiteSpace(css[cursor]))
+                cursor++;
+            if (cursor >= css.Length || css[cursor] != ')')
+                return false;
+        }
+        return true;
     }
 }

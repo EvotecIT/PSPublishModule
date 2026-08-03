@@ -13,7 +13,8 @@ internal static class WebVisualStoryHtmlArtifactValidator
     };
     private static readonly HashSet<string> ResourceHrefElements = new(StringComparer.OrdinalIgnoreCase)
     {
-        "feImage", "image", "use"
+        "feImage", "filter", "image", "linearGradient", "marker", "mask", "pattern",
+        "radialGradient", "textPath", "use"
     };
     private static readonly HashSet<string> ResourceLinkRelations = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -126,7 +127,10 @@ internal static class WebVisualStoryHtmlArtifactValidator
         if (value.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) ||
             value.StartsWith("vbscript:", StringComparison.OrdinalIgnoreCase) ||
             value.StartsWith("data:text/html", StringComparison.OrdinalIgnoreCase) ||
-            value.StartsWith("data:application/xhtml+xml", StringComparison.OrdinalIgnoreCase))
+            value.StartsWith("data:application/xhtml+xml", StringComparison.OrdinalIgnoreCase) ||
+            value.StartsWith("data:image/svg+xml", StringComparison.OrdinalIgnoreCase) ||
+            value.StartsWith("data:text/xml", StringComparison.OrdinalIgnoreCase) ||
+            value.StartsWith("data:application/xml", StringComparison.OrdinalIgnoreCase))
         {
             throw Invalid(displayPath, $"active navigation is not allowed: {attributeName}");
         }

@@ -110,15 +110,31 @@ internal static partial class WebVisualStoryCssAnimationValidator
 
     private static bool KeyframesCanProduceMotion(string body)
     {
-        var signatures = GetDeclarationBlocks(body)
-            .Select(CreateDeclarationSignature)
+        var rules = GetStyleRules(body);
+        var signatures = rules
+            .Select(static rule => CreateDeclarationSignature(rule.Declarations))
             .ToArray();
         if (signatures.Length == 0 || signatures.All(static signature => signature.Length == 0))
             return false;
         if (signatures.Length == 1)
-            return true;
+            return !PinsBothAnimationEndpoints(rules[0].Selector);
         return signatures.Skip(1).Any(signature =>
             !string.Equals(signature, signatures[0], StringComparison.Ordinal));
+    }
+
+    private static bool PinsBothAnimationEndpoints(string selector)
+    {
+        var endpoints = selector.Split(',')
+            .Select(static value => value.Trim())
+            .Where(static value => value.Length > 0)
+            .ToArray();
+        var hasStart = endpoints.Any(static value =>
+            string.Equals(value, "from", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "0%", StringComparison.Ordinal));
+        var hasEnd = endpoints.Any(static value =>
+            string.Equals(value, "to", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "100%", StringComparison.Ordinal));
+        return hasStart && hasEnd;
     }
 
     private static string CreateDeclarationSignature(string declarations)

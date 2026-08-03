@@ -40,7 +40,9 @@ internal static partial class WebVisualStoryCssAnimationValidator
                 var importCursor = index + 7;
                 while (importCursor < normalizedCss.Length && char.IsWhiteSpace(normalizedCss[importCursor]))
                     importCursor++;
-                if (importCursor < normalizedCss.Length && normalizedCss[importCursor] is '\'' or '"')
+                if (importCursor < normalizedCss.Length &&
+                    (normalizedCss[importCursor] is '\'' or '"' ||
+                     StartsWithCssKeyword(normalizedCss, importCursor, "url")))
                     return true;
             }
             if (!StartsWithCssKeyword(normalizedCss, index, "url"))

@@ -502,7 +502,7 @@ public class WebApiDocsGeneratorSourceAndCssTests
                     <code>Sample.Run();</code>
                     <media kind="terminal" src="/casts/sample.cast" title="Terminal playback" caption="Recorded terminal output." poster="/images/sample-terminal.png" mimeType="application/x-asciicast" />
                     <media kind="video" src="/videos/sample" title="Video playback" caption="Recorded video output." mimeType="video/mp4" />
-                    <media kind="story" src="/stories/sample.svg" title="Visual story" alt="Code runs and the result appears." caption="A complete code-to-result demonstration." poster="/stories/sample final.png" />
+                    <media kind="story" src="/stories/sample.png" mimeType="image/apng" title="Visual story" alt="Code runs and the result appears." caption="A complete code-to-result demonstration." poster="/stories/sample final.png" />
                     <image src="/images/sample-output.png" alt="Rendered sample output" caption="Example screenshot." width="1280" height="720" />
                   </example>
                 </member>
@@ -550,7 +550,7 @@ public class WebApiDocsGeneratorSourceAndCssTests
             Assert.Contains("class=\"example-media example-media-story\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("<source media=\"print\" srcset=\"/stories/sample%20final.png\" type=\"image/png\" />", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("prefers-reduced-motion: reduce", html, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("src=\"/stories/sample.svg\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("src=\"/stories/sample.png\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("srcset=\"/stories/sample%20final.png\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("class=\"example-media example-media-image\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("src=\"/images/sample-output.png\"", html, StringComparison.OrdinalIgnoreCase);
