@@ -30,6 +30,8 @@ public static partial class WebAssetOptimizer
         var generatedVariants = new List<WebOptimizeImageVariantEntry>();
         var budgetWarnings = new List<string>();
         var rewritePlans = new Dictionary<string, ImageRewritePlan>(StringComparer.OrdinalIgnoreCase);
+        var metadataPolicy = ResolveImageMetadataPolicy(options);
+        result.ImageMetadataPolicy = metadataPolicy;
         foreach (var file in Directory.EnumerateFiles(siteRoot, "*.*", SearchOption.AllDirectories)
                      .Where(path => extensionSet.Contains(Path.GetExtension(path)) &&
                                     !protectedStoryArtifacts.Contains(Path.GetFullPath(path))))
@@ -52,31 +54,35 @@ public static partial class WebAssetOptimizer
                 using var image = new MagickImage(file);
                 imageWidth = (int)image.Width;
                 imageHeight = (int)image.Height;
-                if (options.ImageStripMetadata)
+                if (metadataPolicy == WebImageMetadataPolicy.StripAll)
                     image.Strip();
                 if (SupportsQualitySetting(image.Format))
                     image.Quality = (uint)quality;
 
-                using var optimizedStream = new MemoryStream();
-                image.Write(optimizedStream);
-                var optimizedBytes = optimizedStream.Length;
-                if (optimizedBytes > 0 && optimizedBytes < originalBytes)
+                if (metadataPolicy == WebImageMetadataPolicy.StripAll)
                 {
-                    optimizedStream.Position = 0;
-                    using var fileStream = new FileStream(file, FileMode.Create, FileAccess.Write, FileShare.None);
-                    optimizedStream.CopyTo(fileStream);
-                    finalBytes = optimizedBytes;
-                    var savedBytes = originalBytes - optimizedBytes;
-                    result.ImageOptimizedCount++;
-                    result.ImageBytesSaved += savedBytes;
-                    optimizedImages.Add(new WebOptimizeImageEntry
+                    using var optimizedStream = new MemoryStream();
+                    image.Write(optimizedStream);
+                    var optimizedBytes = optimizedStream.Length;
+                    if (optimizedBytes > 0)
                     {
-                        Path = relative,
-                        BytesBefore = originalBytes,
-                        BytesAfter = optimizedBytes,
-                        BytesSaved = savedBytes
-                    });
-                    onUpdated?.Invoke(file);
+                        optimizedStream.Position = 0;
+                        using var fileStream = new FileStream(file, FileMode.Create, FileAccess.Write, FileShare.None);
+                        optimizedStream.CopyTo(fileStream);
+                        finalBytes = optimizedBytes;
+                        var savedBytes = Math.Max(0, originalBytes - optimizedBytes);
+                        result.ImageOptimizedCount++;
+                        result.ImageMetadataPolicyAppliedCount++;
+                        result.ImageBytesSaved += savedBytes;
+                        optimizedImages.Add(new WebOptimizeImageEntry
+                        {
+                            Path = relative,
+                            BytesBefore = originalBytes,
+                            BytesAfter = optimizedBytes,
+                            BytesSaved = savedBytes
+                        });
+                        onUpdated?.Invoke(file);
+                    }
                 }
 
                 var plan = new ImageRewritePlan
@@ -201,6 +207,13 @@ public static partial class WebAssetOptimizer
         result.ImageVariantCount = result.GeneratedImageVariants.Length;
         result.ImageBudgetWarnings = budgetWarnings.ToArray();
         result.ImageBudgetExceeded = budgetWarnings.Count > 0;
+    }
+
+    private static WebImageMetadataPolicy ResolveImageMetadataPolicy(WebAssetOptimizerOptions options)
+    {
+        return options.ImageStripMetadata
+            ? WebImageMetadataPolicy.StripAll
+            : options.ImageMetadataPolicy;
     }
 
     private static void RewriteHtmlImageTags(

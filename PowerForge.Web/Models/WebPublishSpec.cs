@@ -95,8 +95,10 @@ public sealed class WebPublishOptimizeSpec
     public string[] ImageExclude { get; set; } = Array.Empty<string>();
     /// <summary>Image quality target (1-100).</summary>
     public int? ImageQuality { get; set; }
-    /// <summary>When true, strip image metadata while optimizing.</summary>
+    /// <summary>Legacy compatibility setting. True maps to StripAll; false maps to Preserve.</summary>
     public bool? ImageStripMetadata { get; set; }
+    /// <summary>Metadata policy for original images. Preserve is the safe default.</summary>
+    public WebImageMetadataPolicy? ImageMetadataPolicy { get; set; }
     /// <summary>When true, generate WebP variants for supported source images.</summary>
     public bool ImageGenerateWebp { get; set; }
     /// <summary>When true, generate AVIF variants for supported source images.</summary>

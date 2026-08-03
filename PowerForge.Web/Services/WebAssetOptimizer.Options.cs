@@ -33,8 +33,10 @@ public sealed class WebAssetOptimizerOptions
     public string[] ImageExclude { get; set; } = Array.Empty<string>();
     /// <summary>Image quality target in range 1-100.</summary>
     public int ImageQuality { get; set; } = 82;
-    /// <summary>When true, strip metadata from optimized images.</summary>
-    public bool ImageStripMetadata { get; set; } = true;
+    /// <summary>Metadata policy for original images. Preserve is the safe default.</summary>
+    public WebImageMetadataPolicy ImageMetadataPolicy { get; set; } = WebImageMetadataPolicy.Preserve;
+    /// <summary>Legacy compatibility switch. When true, overrides ImageMetadataPolicy with StripAll.</summary>
+    public bool ImageStripMetadata { get; set; } = false;
     /// <summary>When true, generate WebP variants for supported images.</summary>
     public bool ImageGenerateWebp { get; set; } = false;
     /// <summary>When true, generate AVIF variants for supported images.</summary>

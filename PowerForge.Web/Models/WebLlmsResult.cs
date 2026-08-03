@@ -199,6 +199,10 @@ public sealed class WebOptimizeResult
     public long ImageBytesSaved { get; set; }
     /// <summary>Number of images that failed to decode/optimize.</summary>
     public int ImageFailedCount { get; set; }
+    /// <summary>Metadata policy applied to original image files.</summary>
+    public WebImageMetadataPolicy ImageMetadataPolicy { get; set; } = WebImageMetadataPolicy.Preserve;
+    /// <summary>Number of original images rewritten to enforce the metadata policy.</summary>
+    public int ImageMetadataPolicyAppliedCount { get; set; }
     /// <summary>Detailed image optimization entries for files that changed.</summary>
     public WebOptimizeImageEntry[] OptimizedImages { get; set; } = Array.Empty<WebOptimizeImageEntry>();
     /// <summary>Detailed entries for image files that failed to decode/optimize.</summary>
