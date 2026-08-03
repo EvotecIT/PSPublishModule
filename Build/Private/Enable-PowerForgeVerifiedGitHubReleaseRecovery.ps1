@@ -25,13 +25,117 @@ function Invoke-PowerForgeGitHubReleaseProbe {
             if (-not $response.IsSuccessStatusCode) {
                 throw "GitHub release recovery probe failed ($([int] $response.StatusCode) $($response.ReasonPhrase))."
             }
-            $content | ConvertFrom-Json -Depth 20
+            $content | ConvertFrom-Json
         } finally {
             $response.Dispose()
         }
     } finally {
         $client.Dispose()
     }
+}
+
+function Get-PowerForgeGitHubTagCommit {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string] $Owner,
+
+        [Parameter(Mandatory)]
+        [string] $Repository,
+
+        [Parameter(Mandatory)]
+        [string] $Tag,
+
+        [Parameter(Mandatory)]
+        [string] $Token,
+
+        [scriptblock] $Probe
+    )
+
+    if ($null -eq $Probe) {
+        $Probe = {
+            param($probeUri, $probeToken)
+            Invoke-PowerForgeGitHubReleaseProbe `
+                -Uri $probeUri `
+                -Token $probeToken
+        }
+    }
+
+    $escapedTag = [Uri]::EscapeDataString($Tag)
+    $tagReference = & $Probe `
+        "https://api.github.com/repos/$Owner/$Repository/git/ref/tags/$escapedTag" `
+        $Token
+    if ($null -eq $tagReference) {
+        return $null
+    }
+
+    $expectedReference = "refs/tags/$Tag"
+    $referenceNameProperty = $tagReference.PSObject.Properties['ref']
+    $referenceObjectProperty = $tagReference.PSObject.Properties['object']
+    if ($null -eq $referenceNameProperty `
+        -or [string] $referenceNameProperty.Value -cne $expectedReference `
+        -or $null -eq $referenceObjectProperty `
+        -or $null -eq $referenceObjectProperty.Value) {
+        throw "GitHub tag '$Tag' returned an invalid exact tag reference."
+    }
+
+    $target = $referenceObjectProperty.Value
+    for ($depth = 0; $depth -lt 16; $depth++) {
+        $typeProperty = $target.PSObject.Properties['type']
+        $shaProperty = $target.PSObject.Properties['sha']
+        $targetType = if ($null -eq $typeProperty) {
+            $null
+        } else {
+            [string] $typeProperty.Value
+        }
+        $targetSha = if ($null -eq $shaProperty) {
+            $null
+        } else {
+            [string] $shaProperty.Value
+        }
+        if ($targetSha -notmatch '^[0-9a-fA-F]{40}$') {
+            throw "GitHub tag '$Tag' returned an invalid target object."
+        }
+        if ($targetType -eq 'commit') {
+            return $targetSha
+        }
+        if ($targetType -ne 'tag') {
+            throw "GitHub tag '$Tag' resolves to unsupported object type '$targetType'."
+        }
+
+        $tagObject = & $Probe `
+            "https://api.github.com/repos/$Owner/$Repository/git/tags/$targetSha" `
+            $Token
+        if ($null -eq $tagObject) {
+            throw "GitHub tag '$Tag' exists but its annotated tag object is not accessible."
+        }
+        $tagObjectTargetProperty = $tagObject.PSObject.Properties['object']
+        if ($null -eq $tagObjectTargetProperty `
+            -or $null -eq $tagObjectTargetProperty.Value) {
+            throw "GitHub tag '$Tag' returned an invalid annotated tag object."
+        }
+        $target = $tagObjectTargetProperty.Value
+    }
+
+    throw "GitHub tag '$Tag' exceeds the supported annotated tag depth."
+}
+
+function Test-PowerForgeGitHubRepositoryWritePermission {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [psobject] $RepositoryState
+    )
+
+    $permissionsProperty = $RepositoryState.PSObject.Properties['permissions']
+    if ($null -eq $permissionsProperty -or $null -eq $permissionsProperty.Value) {
+        return $false
+    }
+    $permissions = $permissionsProperty.Value
+    $pushProperty = $permissions.PSObject.Properties['push']
+    $adminProperty = $permissions.PSObject.Properties['admin']
+    return ($null -ne $pushProperty -and $pushProperty.Value -eq $true) `
+        -or ($null -ne $adminProperty -and $adminProperty.Value -eq $true)
 }
 
 function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
@@ -59,6 +163,8 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
         [string] $NuGetSource = 'https://api.nuget.org/v3/index.json',
 
         [string] $ModuleName = 'PSPublishModule',
+
+        [scriptblock] $GetRepository,
 
         [scriptblock] $GetReleaseByTag,
 
@@ -99,6 +205,14 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
     $gitHub | Add-Member -NotePropertyName RecoverPublishedRegistryAssetsBeforeGitHubRelease -NotePropertyValue $false -Force
     $gitHub | Add-Member -NotePropertyName PublishedModuleAlreadyExists -NotePropertyValue $false -Force
 
+    if ($null -eq $GetRepository) {
+        $GetRepository = {
+            param($probeOwner, $probeRepository, $probeToken)
+            Invoke-PowerForgeGitHubReleaseProbe `
+                -Uri "https://api.github.com/repos/$probeOwner/$probeRepository" `
+                -Token $probeToken
+        }
+    }
     if ($null -eq $GetReleaseByTag) {
         $GetReleaseByTag = {
             param($probeOwner, $probeRepository, $probeTag, $probeToken)
@@ -111,15 +225,22 @@ function Enable-PowerForgeVerifiedGitHubReleaseRecovery {
     if ($null -eq $GetTagCommit) {
         $GetTagCommit = {
             param($probeOwner, $probeRepository, $probeTag, $probeToken)
-            $escapedTag = [Uri]::EscapeDataString([string] $probeTag)
-            $commit = Invoke-PowerForgeGitHubReleaseProbe `
-                -Uri "https://api.github.com/repos/$probeOwner/$probeRepository/commits/$escapedTag" `
+            Get-PowerForgeGitHubTagCommit `
+                -Owner $probeOwner `
+                -Repository $probeRepository `
+                -Tag $probeTag `
                 -Token $probeToken
-            if ($null -eq $commit) { return $null }
-            [string] $commit.sha
         }
     }
 
+    $repositoryState = & $GetRepository $owner $repository $Token
+    if ($null -eq $repositoryState) {
+        throw "GitHub repository '$owner/$repository' is not accessible with the configured release token; endpoint absence cannot be verified safely."
+    }
+    if (-not (Test-PowerForgeGitHubRepositoryWritePermission `
+            -RepositoryState $repositoryState)) {
+        throw "GitHub repository '$owner/$repository' is not writable with the configured release token; registry publication cannot start safely."
+    }
     $release = & $GetReleaseByTag $owner $repository $tagName $Token
     $tagCommit = & $GetTagCommit $owner $repository $tagName $Token
     if ($null -eq $release -and [string]::IsNullOrWhiteSpace([string] $tagCommit)) {
