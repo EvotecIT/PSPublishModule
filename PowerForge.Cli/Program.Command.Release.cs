@@ -75,10 +75,12 @@ internal static partial class Program
             return 2;
         }
 
+        PowerForgeReleaseSpec? specForRedaction = null;
         try
         {
             var loaded = LoadPowerForgeReleaseSpecWithPath(configPath);
             var spec = loaded.Value;
+            specForRedaction = spec;
             var fullConfigPath = loaded.FullPath;
 
             var request = BuildReleaseRequestFromArgs(argv, fullConfigPath, planOnly, validateOnly, packagesOnly, moduleOnly, toolsOnly);
@@ -108,22 +110,26 @@ internal static partial class Program
 
             if (outputJson)
             {
+                var sensitiveValues = CollectAppleCredentialMetadata(spec, result);
+                RedactAppleCredentialMetadata(spec, result);
                 var compactResult = request.AppleSummaryOnly
                     ? CreateAppleSummaryElement(result, request)
                     : CliJson.SerializeToElement(result, CliJson.Context.PowerForgeReleaseResult);
-                WriteJson(new CliJsonEnvelope
-                {
-                    SchemaVersion = OutputSchemaVersion,
-                    Command = commandName,
-                    Success = result.Success,
-                    ExitCode = exitCode,
-                    Error = result.ErrorMessage,
-                    Config = "release",
-                    ConfigPath = fullConfigPath,
-                    Spec = request.AppleSummaryOnly ? null : CliJson.SerializeToElement(spec, CliJson.Context.PowerForgeReleaseSpec),
-                    Result = compactResult,
-                    Logs = request.AppleSummaryOnly ? null : LogsToJsonElement(logBuffer)
-                });
+                WriteJson(
+                    new CliJsonEnvelope
+                    {
+                        SchemaVersion = OutputSchemaVersion,
+                        Command = commandName,
+                        Success = result.Success,
+                        ExitCode = exitCode,
+                        Error = result.ErrorMessage,
+                        Config = "release",
+                        ConfigPath = fullConfigPath,
+                        Spec = request.AppleSummaryOnly ? null : CliJson.SerializeToElement(spec, CliJson.Context.PowerForgeReleaseSpec),
+                        Result = compactResult,
+                        Logs = request.AppleSummaryOnly ? null : LogsToJsonElement(logBuffer)
+                    },
+                    redactOutput: text => RedactAppleCredentialJson(text, sensitiveValues));
                 return exitCode;
             }
 
@@ -284,7 +290,12 @@ internal static partial class Program
         }
         catch (Exception ex)
         {
-            return WriteReleaseError(outputJson, commandName, 1, ex.Message, logger);
+            return WriteReleaseError(
+                outputJson,
+                commandName,
+                1,
+                RedactAppleCredentialText(ex.Message, CollectAppleCredentialMetadata(specForRedaction, null)),
+                logger);
         }
     }
 

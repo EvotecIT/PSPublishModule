@@ -4,6 +4,20 @@ namespace PowerForge.Tests;
 
 public sealed class PowerForgeScriptsTests
 {
+    [Theory]
+    [InlineData("Scripts/PSResourceGet/Ensure-Repository.ps1")]
+    [InlineData("Scripts/PSResourceGet/Test-Availability.ps1")]
+    [InlineData("Scripts/PSResourceGet/Unregister-Repository.ps1")]
+    [InlineData("Scripts/PowerShellGet/Ensure-Repository.ps1")]
+    [InlineData("Scripts/PowerShellGet/Test-Availability.ps1")]
+    [InlineData("Scripts/PowerShellGet/Unregister-Repository.ps1")]
+    public void Load_ProviderRepositoryScripts_PreservesPathQualifiedResources(string path)
+    {
+        var script = PowerForgeScripts.Load(path);
+
+        Assert.False(string.IsNullOrWhiteSpace(script));
+    }
+
     [Fact]
     public void Load_ImportModulesScript_IncludesDesktopCapacitySafeguardBeforeImports()
     {

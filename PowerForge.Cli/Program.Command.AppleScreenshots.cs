@@ -5,8 +5,9 @@ using PowerForge.Cli;
 internal static partial class Program
 {
     private const string AppleScreenshotsUsage =
-        "Usage: powerforge apple-screenshots manifest --config <screenshots.json> --version <x.y.z> " +
-        "--source-commit <sha> --approved-by <identity> --allowed-root <reviewed-capture-root> [--out <manifest.json>] " +
+        "Usage: powerforge apple-screenshots manifest --config <screenshots.json> " +
+        "[--capture-provenance <json> --expected-repository <owner/repo> --expected-workflow-ref <workflow-ref> | --version <x.y.z> --source-commit <sha>] " +
+        "--approved-by <identity> --allowed-root <reviewed-capture-root> [--out <manifest.json>] " +
         "[--write-root <trusted-output-root>] " +
         "[--app-id <asc-app-id> | --release-config <powerforge.release.json> [--target <name-or-scheme>]] " +
         "[--initiated-by <identity>] [--approval-evidence <url-or-id>] " +
@@ -33,24 +34,31 @@ internal static partial class Program
                 CliJson.Context.AppStoreConnectScreenshotSyncSpec,
                 configPath);
             var appId = ResolveScreenshotApprovalAppId(argv, spec);
+            var allowedRoot = Path.GetFullPath(RequiredOption(argv, "--allowed-root"));
+            var provenance = ResolveScreenshotCaptureProvenance(argv);
             var manifest = new AppStoreConnectScreenshotApprovalService().Create(
                 new AppStoreConnectScreenshotApprovalRequest
                 {
                     Spec = spec,
                     AppId = appId,
                     BaseDirectory = baseDirectory,
-                    AllowedRoot = Path.GetFullPath(RequiredOption(argv, "--allowed-root")),
-                    VersionString = RequiredOption(argv, "--version"),
-                    SourceCommit = RequiredOption(argv, "--source-commit"),
+                    AllowedRoot = allowedRoot,
+                    VersionString = ResolveProvenanceBoundOption(argv, "--version", provenance?.MarketingVersion)!,
+                    SourceCommit = ResolveProvenanceBoundOption(argv, "--source-commit", provenance?.SourceCommit)!,
+                    CaptureRunId = provenance?.CaptureRunId,
+                    CaptureRepository = provenance?.Repository,
+                    CaptureWorkflowRef = provenance?.WorkflowRef,
                     ApprovedBy = RequiredOption(argv, "--approved-by"),
                     InitiatedBy = TryGetOptionValue(argv, "--initiated-by"),
                     ApprovalEvidence = TryGetOptionValue(argv, "--approval-evidence"),
-                    XcodeVersion = TryGetOptionValue(argv, "--xcode-version"),
-                    Runtime = TryGetOptionValue(argv, "--runtime"),
-                    Device = TryGetOptionValue(argv, "--device"),
-                    Theme = TryGetOptionValue(argv, "--theme"),
-                    Scenario = TryGetOptionValue(argv, "--scenario")
+                    XcodeVersion = ResolveProvenanceBoundOption(argv, "--xcode-version", provenance?.XcodeVersion, required: false),
+                    Runtime = ResolveProvenanceBoundOption(argv, "--runtime", provenance?.Runtime, required: false),
+                    Device = ResolveProvenanceBoundOption(argv, "--device", provenance?.Device, required: false),
+                    Theme = ResolveProvenanceBoundOption(argv, "--theme", provenance?.Theme, required: false),
+                    Scenario = ResolveProvenanceBoundOption(argv, "--scenario", provenance?.Scenario, required: false)
                 });
+            if (provenance is not null)
+                ValidateScreenshotCaptureInventory(provenance, manifest, baseDirectory, allowedRoot);
             var configuredOutput = spec.Quality?.ApprovalManifestPath;
             var outputPath = ResolvePathFromBase(
                 baseDirectory,
@@ -96,6 +104,135 @@ internal static partial class Program
             return WriteReleaseError(outputJson, "apple-screenshots.manifest", 1, exception.Message, logger);
         }
     }
+
+    private static ScreenshotCaptureProvenance? ResolveScreenshotCaptureProvenance(string[] argv)
+    {
+        var configuredPath = TryGetOptionValue(argv, "--capture-provenance");
+        if (string.IsNullOrWhiteSpace(configuredPath)) return null;
+
+        var path = Path.GetFullPath(configuredPath);
+        if (!File.Exists(path)) throw new FileNotFoundException("Screenshot capture provenance was not found.", path);
+        EnsureTrustedScreenshotManifestPath(path, Path.GetDirectoryName(path)!);
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("schemaVersion", out var schema) || schema.GetInt32() != 2)
+            throw new InvalidOperationException("Screenshot capture provenance must use schemaVersion 2.");
+
+        static string RequiredString(JsonElement value, string name)
+        {
+            if (!value.TryGetProperty(name, out var property))
+                throw new InvalidOperationException($"Screenshot capture provenance is missing '{name}'.");
+            var text = property.ValueKind == JsonValueKind.String ? property.GetString() : property.ToString();
+            if (string.IsNullOrWhiteSpace(text))
+                throw new InvalidOperationException($"Screenshot capture provenance has an empty '{name}'.");
+            return text.Trim();
+        }
+
+        var repository = RequiredString(root, "repository");
+        var workflowRef = RequiredString(root, "workflowRef");
+        var expectedRepository = RequiredOption(argv, "--expected-repository").Trim();
+        var expectedWorkflowRef = RequiredOption(argv, "--expected-workflow-ref").Trim();
+        if (!repository.Equals(expectedRepository, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Screenshot capture repository '{repository}' does not match expected repository '{expectedRepository}'.");
+        if (!workflowRef.Equals(expectedWorkflowRef, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Screenshot capture workflow '{workflowRef}' does not match expected workflow '{expectedWorkflowRef}'.");
+        var captureRunId = RequiredString(root, "captureRunId");
+
+        var sourceCommit = RequiredString(root, "sourceCommit").ToLowerInvariant();
+        if (sourceCommit.Length != 40 || !sourceCommit.All(Uri.IsHexDigit))
+            throw new InvalidOperationException("Screenshot capture provenance SourceCommit must be an exact 40-character Git commit SHA.");
+
+        if (!root.TryGetProperty("screenshots", out var screenshotsElement) || screenshotsElement.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("Screenshot capture provenance must contain an exact screenshots inventory.");
+        var screenshots = screenshotsElement.EnumerateArray().Select(item =>
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException("Screenshot capture provenance contains an invalid screenshot inventory entry.");
+            var relativePath = RequiredString(item, "path").Replace('\\', '/');
+            if (relativePath.Length == 0 || relativePath[0] == '/' ||
+                Path.IsPathRooted(relativePath) || relativePath.Split('/').Any(part => part is "." or ".."))
+                throw new InvalidOperationException($"Screenshot capture provenance contains unsafe screenshot path '{relativePath}'.");
+            var sha256 = RequiredString(item, "sha256").ToLowerInvariant();
+            if (sha256.Length != 64 || !sha256.All(Uri.IsHexDigit))
+                throw new InvalidOperationException($"Screenshot capture provenance contains invalid SHA-256 for '{relativePath}'.");
+            if (!item.TryGetProperty("width", out var widthElement) || !widthElement.TryGetInt32(out var width) || width <= 0 ||
+                !item.TryGetProperty("height", out var heightElement) || !heightElement.TryGetInt32(out var height) || height <= 0)
+                throw new InvalidOperationException($"Screenshot capture provenance contains invalid dimensions for '{relativePath}'.");
+            return new ScreenshotCaptureInventoryEntry(relativePath, sha256, width, height);
+        }).ToArray();
+        if (screenshots.Length == 0 || screenshots.Select(static item => item.Path).Distinct(StringComparer.Ordinal).Count() != screenshots.Length)
+            throw new InvalidOperationException("Screenshot capture provenance must contain a non-empty inventory with unique paths.");
+
+        return new ScreenshotCaptureProvenance(
+            repository,
+            captureRunId,
+            workflowRef,
+            RequiredString(root, "marketingVersion"),
+            sourceCommit,
+            RequiredString(root, "xcodeVersion"),
+            RequiredString(root, "runtime"),
+            RequiredString(root, "device"),
+            RequiredString(root, "theme"),
+            RequiredString(root, "scenario"),
+            screenshots);
+    }
+
+    private static void ValidateScreenshotCaptureInventory(
+        ScreenshotCaptureProvenance provenance,
+        AppStoreConnectScreenshotApprovalManifest manifest,
+        string baseDirectory,
+        string allowedRoot)
+    {
+        var expected = provenance.Screenshots
+            .OrderBy(static item => item.Path, StringComparer.Ordinal)
+            .ToArray();
+        var actual = manifest.Screenshots.Select(item =>
+        {
+            var fullPath = Path.GetFullPath(Path.Combine(baseDirectory, item.File));
+            var relative = Path.GetRelativePath(allowedRoot, fullPath).Replace('\\', '/');
+            if (Path.IsPathRooted(relative) || relative.Equals("..", StringComparison.Ordinal) || relative.StartsWith("../", StringComparison.Ordinal))
+                throw new InvalidOperationException($"Approved screenshot '{item.File}' escapes the capture inventory root.");
+            return new ScreenshotCaptureInventoryEntry(relative, item.Sha256.ToLowerInvariant(), item.Width, item.Height);
+        }).OrderBy(static item => item.Path, StringComparer.Ordinal).ToArray();
+
+        if (expected.Length != actual.Length || !expected.SequenceEqual(actual))
+            throw new InvalidOperationException("Selected screenshots do not exactly match the retained capture provenance byte inventory.");
+    }
+
+    private static string? ResolveProvenanceBoundOption(
+        string[] argv,
+        string option,
+        string? provenanceValue,
+        bool required = true)
+    {
+        var explicitValue = TryGetOptionValue(argv, option)?.Trim();
+        if (!string.IsNullOrWhiteSpace(provenanceValue))
+        {
+            if (!string.IsNullOrWhiteSpace(explicitValue) &&
+                !explicitValue.Equals(provenanceValue, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"{option} does not match the retained screenshot capture provenance.");
+            return provenanceValue;
+        }
+        if (!string.IsNullOrWhiteSpace(explicitValue)) return explicitValue;
+        if (required) throw new ArgumentException($"Missing required option '{option}'.");
+        return null;
+    }
+
+    private sealed record ScreenshotCaptureProvenance(
+        string Repository,
+        string CaptureRunId,
+        string WorkflowRef,
+        string MarketingVersion,
+        string SourceCommit,
+        string XcodeVersion,
+        string Runtime,
+        string Device,
+        string Theme,
+        string Scenario,
+        ScreenshotCaptureInventoryEntry[] Screenshots);
+
+    private sealed record ScreenshotCaptureInventoryEntry(string Path, string Sha256, int Width, int Height);
 
     private static string? ResolveScreenshotApprovalAppId(
         string[] argv,

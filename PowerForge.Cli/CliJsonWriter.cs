@@ -24,7 +24,10 @@ internal sealed class CliJsonEnvelope
 
 internal static class CliJsonWriter
 {
-    internal static void Write(CliJsonEnvelope envelope, Action<Utf8JsonWriter>? writeAdditionalProperties = null)
+    internal static void Write(
+        CliJsonEnvelope envelope,
+        Action<Utf8JsonWriter>? writeAdditionalProperties = null,
+        Func<string, string>? redactOutput = null)
     {
         if (envelope is null) throw new ArgumentNullException(nameof(envelope));
 
@@ -59,7 +62,8 @@ internal static class CliJsonWriter
             writer.WriteEndObject();
         }
 
-        Console.WriteLine(Encoding.UTF8.GetString(buffer.ToArray()));
+        var json = Encoding.UTF8.GetString(buffer.ToArray());
+        Console.WriteLine(redactOutput is null ? json : redactOutput(json));
     }
 
     private static void WriteElement(Utf8JsonWriter writer, string name, JsonElement? element)
@@ -69,4 +73,3 @@ internal static class CliJsonWriter
         element.Value.WriteTo(writer);
     }
 }
-

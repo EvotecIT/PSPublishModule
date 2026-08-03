@@ -557,10 +557,11 @@ hashes or dimensions:
 ```text
 powerforge apple-screenshots manifest \
   --config scripts/appstoreconnect-screenshots-ios.json \
+  --capture-provenance build/appstore-screenshots/powerforge-apple-screenshot-provenance.json \
+  --expected-repository EvotecIT/MyApp \
+  --expected-workflow-ref EvotecIT/MyApp/.github/workflows/apple-screenshots.yml@refs/heads/main \
   --release-config powerforge.release.json \
   --target "Primary iOS App" \
-  --version 1.6.0 \
-  --source-commit 0123456789abcdef0123456789abcdef01234567 \
   --approved-by release-owner \
   --allowed-root build/appstore-screenshots \
   --runtime "iOS 26.0" \
@@ -568,6 +569,58 @@ powerforge apple-screenshots manifest \
   --theme light \
   --scenario app-store
 ```
+
+`--capture-provenance` derives the marketing version, exact source commit, Xcode,
+runtime, device, theme, scenario, and exact PNG byte inventory from the retained
+capture artifact. The selected files must match its path, SHA-256, width, and
+height inventory exactly. Explicit `--version`, `--source-commit`, or
+capture-metadata options may still be supplied for recovery, but they must match
+the provenance document exactly.
+
+The capture workflow therefore requires the exact three-part marketing version;
+blank or branch-relative capture evidence cannot be approved. The pinned helper
+also requires the retained provenance for every local `Screenshots` action, for
+an `Advance` action configured to synchronize screenshots, and for final review
+submission or release when screenshot configs are present. Before any mutation, it
+re-downloads that artifact and proves that the approval manifests name the same
+run, repository, workflow, source commit, version, and complete path-bound PNG
+byte and dimension inventory.
+
+For local publication, invoke the command through the reviewed
+`scripts/Invoke-PinnedPowerForge.ps1` helper. It requires the exact merged
+PSPublishModule commit, a clean consumer `main` equal to `origin/main`, and the
+expected GitHub repository. Use a fresh checkout or worktree. Modified, untracked,
+and ignored files are rejected because Xcode projects and build phases can otherwise
+consume bytes that are absent from the reviewed commit. The only exceptions are
+individual screenshot PNGs and provenance files whose paths and bytes match the
+retained capture artifact, plus approval manifests whose identity and complete image
+inventory validate against that provenance. An unrelated file beside that evidence
+still fails closed. Git replacement refs are
+also rejected. Tracked symbolic links must resolve through relative targets entirely
+inside the consumer checkout, and Git submodules are rejected because their live
+worktree bytes are not contained by the consumer commit. Cleanup alone permits an app project already removed by the completed
+release while continuing to validate every remaining tracked release input. The helper
+re-downloads the named provenance artifact from the successful source-bound GitHub run and compares its exact bytes before
+building the CLI into an isolated temporary artifacts directory. This prevents
+an editable local provenance copy, a stale ignored binary, or another checkout
+from becoming the publication authority. Capture callers must supply the exact
+platform runtime represented by their images; simulator captures must name the
+simulator runtime rather than the macOS host. The pinned helper intentionally
+rejects `UploadExisting` because an ignored prebuilt archive has no reviewed
+source or byte provenance; use `Upload` to build and upload from the bound source.
+It restores locked packages into a fresh private NuGet cache, builds from the
+pinned PSPublishModule commit's tracked-only archive so ignored or untracked files
+cannot enter the executable, uses that archive's `global.json` to select the SDK,
+and only then executes the built CLI with the consumer as its working directory.
+It launches the CLI with a minimal environment, fixed Apple tool resolution, and
+only the validated local credential tuple; inherited .NET hooks, profilers, loader
+variables, tool overrides, and other process-injection settings do not cross that
+boundary. Apple credentials are suspended before any Git or build command runs.
+Tracked `DirectDistribution.KeychainProfile` overrides are rejected so `notarytool`
+cannot select credentials outside this boundary. The local credential profile, key, and every key-path directory must be owned by
+the operator and grant no group, other, ACL, link, or hard-link access. Targeted
+commands validate only screenshot maps matching the selected release targets.
+GitHub CLI is required only when a retained capture-provenance artifact is used.
 
 In GitHub Actions, `ApprovedBy` names the protected environment boundary—not the
 workflow initiator. `InitiatedBy` records who started the run, while

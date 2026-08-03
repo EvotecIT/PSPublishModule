@@ -857,9 +857,12 @@ internal static partial class Program
         });
     }
 
-    static void WriteJson(CliJsonEnvelope envelope, Action<Utf8JsonWriter>? writeAdditionalProperties = null)
+    static void WriteJson(
+        CliJsonEnvelope envelope,
+        Action<Utf8JsonWriter>? writeAdditionalProperties = null,
+        Func<string, string>? redactOutput = null)
     {
-        CliJsonWriter.Write(envelope, writeAdditionalProperties);
+        CliJsonWriter.Write(envelope, writeAdditionalProperties, redactOutput);
     }
 
     sealed record ProcessResult(int ExitCode, string Output, string Error);

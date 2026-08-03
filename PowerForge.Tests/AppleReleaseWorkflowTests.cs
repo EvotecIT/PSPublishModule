@@ -65,6 +65,9 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("does not match source-commit", trackedInputs, StringComparison.Ordinal);
         Assert.Contains("AppleApps.ProjectRoot must resolve inside the exact checked-out source", trackedInputs, StringComparison.Ordinal);
         Assert.Contains("AppleApps.ProjectRoot must not traverse a symbolic link or reparse point", trackedInputs, StringComparison.Ordinal);
+        Assert.Contains("AppleApps.Apps.ProjectPath", trackedInputs, StringComparison.Ordinal);
+        Assert.Contains("'contents.xcworkspacedata'", trackedInputs, StringComparison.Ordinal);
+        Assert.Contains("'project.pbxproj'", trackedInputs, StringComparison.Ordinal);
         foreach (var property in new[]
                  {
                      "ScreenshotConfigPath", "ScreenshotConfigPaths",

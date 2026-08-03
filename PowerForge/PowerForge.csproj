@@ -55,7 +55,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Scripts\\**\\*.ps1" />
+    <EmbeddedResource Include="Scripts\\**\\*.ps1"
+                      LogicalName="PowerForge.$([System.String]::Copy('%(Identity)').Replace('\', '.').Replace('/', '.'))" />
     <EmbeddedResource Include="..\\Module\\Data\\Example-*.*"
                       Link="Templates\\ModuleScaffold\\%(Filename)%(Extension)"
                       LogicalName="PowerForge.Templates.ModuleScaffold.%(Filename)%(Extension)" />

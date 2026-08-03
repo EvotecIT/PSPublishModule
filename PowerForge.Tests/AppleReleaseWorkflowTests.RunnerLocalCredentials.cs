@@ -9,6 +9,282 @@ public sealed partial class AppleReleaseWorkflowTests
     private const string TestKeyId = "ABC123DEFG";
 
     [Fact]
+    public void PinnedLocalOperatorRequiresExactToolAndCleanMergedConsumerSources()
+    {
+        var root = FindRepoRoot();
+        var script = Read(root, "scripts", "Invoke-PinnedPowerForge.ps1");
+        var evidence = Read(root, "scripts", "Invoke-PinnedPowerForge.Evidence.ps1");
+        Assert.Contains("RequiredCommit $ExpectedCommit", script, StringComparison.Ordinal);
+        Assert.Contains("ExpectedConsumerRepository", script, StringComparison.Ordinal);
+        Assert.Contains("symbolic-ref', '--short', 'HEAD", script, StringComparison.Ordinal);
+        Assert.Contains("fetch', '--quiet', 'origin', $RequiredBranch", script, StringComparison.Ordinal);
+        Assert.Contains("refs/remotes/origin/$RequiredBranch", script, StringComparison.Ordinal);
+        Assert.Contains("status', '--porcelain=v1', '--untracked-files=all", script, StringComparison.Ordinal);
+        Assert.Contains("-DeferContentCheck", script, StringComparison.Ordinal);
+        Assert.Contains("ls-files', '--others', '--ignored', '--exclude-standard", evidence, StringComparison.Ordinal);
+        Assert.Contains("Consumer source contains non-reviewed content", evidence, StringComparison.Ordinal);
+        Assert.Contains("GIT_NO_REPLACE_OBJECTS", script, StringComparison.Ordinal);
+        Assert.Contains("for-each-ref', '--format=%(refname)', 'refs/replace", script, StringComparison.Ordinal);
+        Assert.Contains("core.fsmonitor=false", script, StringComparison.Ordinal);
+        Assert.Contains("ls-files', '--error-unmatch'", script, StringComparison.Ordinal);
+        Assert.Contains("'restore', $cliProject, '--locked-mode', '--packages', $nugetPackages, '--artifacts-path', $artifactsRoot", script, StringComparison.Ordinal);
+        Assert.Contains("-WorkingDirectory $buildToolRoot", script, StringComparison.Ordinal);
+        Assert.Contains("-WorkingDirectory $consumer", script, StringComparison.Ordinal);
+        Assert.Contains("$start.Environment['NUGET_PACKAGES'] = $NuGetPackagesPath", script, StringComparison.Ordinal);
+        Assert.Contains("archive --format=tar --output=$archivePath HEAD", script, StringComparison.Ordinal);
+        Assert.Contains("$buildToolRoot = New-TrackedToolSnapshot", script, StringComparison.Ordinal);
+        Assert.Contains("build snapshot must not contain symbolic links or reparse points", script, StringComparison.Ordinal);
+        Assert.Contains("$savedCredentialEnvironment = Suspend-AppleCredentialEnvironment", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Restore-AppleCredentialEnvironment", script, StringComparison.Ordinal);
+        Assert.True(
+            script.IndexOf("$savedCredentialEnvironment = Suspend-AppleCredentialEnvironment", StringComparison.Ordinal) <
+            script.IndexOf("Assert-CleanRepository -Root $toolRoot", StringComparison.Ordinal));
+        Assert.Contains("run download $runId", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("requires an explicit --config", script, StringComparison.Ordinal);
+        Assert.Contains("Invoke-TrackedInputValidator -SourceCommit $consumerHead", script, StringComparison.Ordinal);
+        Assert.Contains("Get-RedactedToolText -Text ($stdout.GetAwaiter().GetResult())", script, StringComparison.Ordinal);
+        Assert.Contains("appStoreConnectApi(?:KeyPath|KeyId|IssuerId)", script, StringComparison.Ordinal);
+        Assert.Contains("Get-Content -LiteralPath $keyPath -Raw", script, StringComparison.Ordinal);
+        Assert.Contains("[Console]::Error.Write($safeStdErr)", script, StringComparison.Ordinal);
+        Assert.Contains("Assert-FixedLocalCredentialProfile", script, StringComparison.Ordinal);
+        Assert.Contains("$run.event -ne 'workflow_dispatch'", script, StringComparison.Ordinal);
+        Assert.Contains("$run.path -ne $workflowMatch.Groups['path'].Value", script, StringComparison.Ordinal);
+        Assert.Contains("$run.head_repository.full_name -ne $repository", script, StringComparison.Ordinal);
+        Assert.Contains("UploadExisting is forbidden at the pinned local operator boundary", script, StringComparison.Ordinal);
+        Assert.Contains("if ($null -ne (Get-OptionValue -Option '--capture-provenance'))", script, StringComparison.Ordinal);
+        Assert.Contains("Capture provenance source commit", script, StringComparison.Ordinal);
+        Assert.Contains("--apple-source-commit must match the exact consumer HEAD", script, StringComparison.Ordinal);
+        Assert.Contains("Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead", script, StringComparison.Ordinal);
+        Assert.Contains("if ($ArgumentList[0] -ne 'apple-release' -or", evidence, StringComparison.Ordinal);
+        Assert.Contains("$argument -eq '--capture-provenance'", script, StringComparison.Ordinal);
+        Assert.Contains("Screenshot approval manifests do not identify one exact retained capture root and inventory", evidence, StringComparison.Ordinal);
+        Assert.Contains("Resolve-PathFromBase -BasePath", evidence, StringComparison.Ordinal);
+        Assert.Contains("No screenshot configuration matches the selected release targets", evidence, StringComparison.Ordinal);
+        Assert.Contains("permissions must not grant group or other access", script, StringComparison.Ordinal);
+        Assert.Contains("must not grant access through a POSIX ACL", script, StringComparison.Ordinal);
+        Assert.Contains("must not have hard links", script, StringComparison.Ordinal);
+        Assert.Contains("[Diagnostics.ProcessStartInfo]::new()", script, StringComparison.Ordinal);
+        Assert.Contains("RedirectStandardError = $true", script, StringComparison.Ordinal);
+        Assert.Contains("$start.Environment.Clear()", script, StringComparison.Ordinal);
+        Assert.Contains("-IncludeAppleCredentials", script, StringComparison.Ordinal);
+        Assert.Contains("Assert-FixedAppleToolConfiguration", script, StringComparison.Ordinal);
+        Assert.Contains("/usr/bin/xcodebuild", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("[string] $DotNet =", script, StringComparison.Ordinal);
+
+        var captureWorkflow = Read(root, ".github", "workflows", "powerforge-apple-screenshot-capture.yml");
+        Assert.Contains("marketing_version:\n        description: Exact x.y.z", captureWorkflow, StringComparison.Ordinal);
+        Assert.Contains("marketing_version must use x.y.z", captureWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("marketing_version must be blank", captureWorkflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ScreenshotCaptureProvenanceInventoriesExactPngBytesAndDimensions()
+    {
+        var root = FindRepoRoot();
+        var workflow = Read(root, ".github", "workflows", "powerforge-apple-screenshot-capture.yml");
+        Assert.Contains("Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256", workflow, StringComparison.Ordinal);
+        Assert.Contains("sips -g pixelWidth -g pixelHeight", workflow, StringComparison.Ordinal);
+        Assert.Contains("path = [IO.Path]::GetRelativePath($artifactRoot, $_.FullName)", workflow, StringComparison.Ordinal);
+        Assert.Contains("screenshots = $screenshots", workflow, StringComparison.Ordinal);
+        Assert.Contains("CAPTURE_RUNTIME: ${{ inputs.runtime }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("$captureRuntime = $env:CAPTURE_RUNTIME.Trim()", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("sw_vers", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TrackedReleaseInputValidatorRejectsAnIgnoredAppleProject()
+    {
+        var root = FindRepoRoot();
+        var sandbox = Path.Combine(root, ".test-temp", $"powerforge-tracked-project-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(sandbox, ".powerforge"));
+            var project = Directory.CreateDirectory(Path.Combine(sandbox, "Ignored.xcodeproj"));
+            var configPath = Path.Combine(sandbox, "powerforge.release.json");
+            var manifestPath = Path.Combine(sandbox, ".powerforge", "powerforge.tool.json");
+            File.WriteAllText(configPath,
+                """{ "AppleApps": { "ProjectRoot": ".", "Apps": [ { "ProjectPath": "Ignored.xcodeproj" } ] } }""");
+            File.WriteAllText(manifestPath, "{}");
+            File.WriteAllText(Path.Combine(sandbox, ".gitignore"), "Ignored.xcodeproj/\n");
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), "// ignored project");
+            Run("git", sandbox, "init", "--quiet").EnsureSuccess();
+            Run("git", sandbox, "add", "powerforge.release.json", ".powerforge/powerforge.tool.json", ".gitignore").EnsureSuccess();
+            Run(
+                "git",
+                sandbox,
+                "-c", "user.name=PowerForge Tests",
+                "-c", "user.email=powerforge-tests@example.invalid",
+                "commit", "--quiet", "-m", "Tracked release project").EnsureSuccess();
+            var commit = Run("git", sandbox, "rev-parse", "HEAD").EnsureSuccess().StandardOutput.Trim();
+            var validator = Path.Combine(
+                root,
+                ".github",
+                "actions",
+                "apple-release",
+                "Assert-TrackedAppleReleaseInputs.ps1");
+
+            var result = Run(
+                "pwsh",
+                sandbox,
+                "-NoProfile",
+                "-File", validator,
+                "-ConfigPath", configPath,
+                "-ToolManifestPath", manifestPath,
+                "-SourceCommit", commit);
+
+            Assert.NotEqual(0, result.ExitCode);
+            var output = result.StandardOutput + result.StandardError;
+            Assert.True(
+                output.Contains("AppleApps.Apps.ProjectPath/project.pbxproj", StringComparison.OrdinalIgnoreCase) &&
+                output.Contains("must be tracked at the exact source", StringComparison.OrdinalIgnoreCase),
+                output);
+        }
+        finally
+        {
+            if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TrackedReleaseInputValidatorAcceptsWorkspaceMetadataAndSkipsDisabledTargets()
+    {
+        var root = FindRepoRoot();
+        var sandbox = Path.Combine(root, ".test-temp", $"powerforge-tracked-workspace-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(sandbox, ".powerforge"));
+            var workspace = Directory.CreateDirectory(Path.Combine(sandbox, "Sample.xcworkspace"));
+            var configPath = Path.Combine(sandbox, "powerforge.release.json");
+            var manifestPath = Path.Combine(sandbox, ".powerforge", "powerforge.tool.json");
+            File.WriteAllText(
+                configPath,
+                """{ "AppleApps": { "ProjectRoot": ".", "Apps": [ { "ProjectPath": "Sample.xcworkspace" }, { "Enabled": false, "ProjectPath": "Removed.xcodeproj" } ] } }""");
+            File.WriteAllText(manifestPath, "{}");
+            File.WriteAllText(Path.Combine(workspace.FullName, "contents.xcworkspacedata"), "<Workspace version=\"1.0\" />");
+            Run("git", sandbox, "init", "--quiet").EnsureSuccess();
+            Run("git", sandbox, "add", ".").EnsureSuccess();
+            CommitTrackedReleaseSandbox(sandbox, "Tracked workspace");
+            var commit = Run("git", sandbox, "rev-parse", "HEAD").EnsureSuccess().StandardOutput.Trim();
+
+            var result = RunTrackedReleaseInputValidator(root, sandbox, configPath, manifestPath, commit);
+
+            Assert.Equal(0, result.ExitCode);
+        }
+        finally
+        {
+            if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TrackedReleaseInputValidatorUsesNestedProjectGenerationSource()
+    {
+        var root = FindRepoRoot();
+        var sandbox = Path.Combine(root, ".test-temp", $"powerforge-tracked-generation-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(sandbox, ".powerforge"));
+            Directory.CreateDirectory(Path.Combine(sandbox, "ios"));
+            var configPath = Path.Combine(sandbox, "powerforge.release.json");
+            var manifestPath = Path.Combine(sandbox, ".powerforge", "powerforge.tool.json");
+            File.WriteAllText(
+                configPath,
+                """{ "AppleApps": { "ProjectRoot": ".", "Apps": [ { "ProjectPath": "ios/App.xcodeproj", "GenerateProjectIfMissing": true } ] } }""");
+            File.WriteAllText(manifestPath, "{}");
+            File.WriteAllText(Path.Combine(sandbox, "ios", "project.yml"), "name: App\n");
+            Run("git", sandbox, "init", "--quiet").EnsureSuccess();
+            Run("git", sandbox, "add", "powerforge.release.json", ".powerforge/powerforge.tool.json").EnsureSuccess();
+            CommitTrackedReleaseSandbox(sandbox, "Tracked config without generation input");
+            var untrackedCommit = Run("git", sandbox, "rev-parse", "HEAD").EnsureSuccess().StandardOutput.Trim();
+
+            var rejected = RunTrackedReleaseInputValidator(root, sandbox, configPath, manifestPath, untrackedCommit);
+
+            Assert.NotEqual(0, rejected.ExitCode);
+            Assert.Contains("ios/project.yml", rejected.StandardOutput + rejected.StandardError, StringComparison.OrdinalIgnoreCase);
+            Run("git", sandbox, "add", "ios/project.yml").EnsureSuccess();
+            CommitTrackedReleaseSandbox(sandbox, "Track nested generation input");
+            var trackedCommit = Run("git", sandbox, "rev-parse", "HEAD").EnsureSuccess().StandardOutput.Trim();
+
+            var accepted = RunTrackedReleaseInputValidator(root, sandbox, configPath, manifestPath, trackedCommit);
+
+            Assert.Equal(0, accepted.ExitCode);
+        }
+        finally
+        {
+            if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("AppStoreConnectApiKeyPath", ".appstoreconnect/AuthKey_CONFIG.p8")]
+    [InlineData("AppStoreConnectApiKeyId", "CONFIGKEY1")]
+    [InlineData("AppStoreConnectApiIssuerId", "00000000-0000-0000-0000-000000000000")]
+    public void TrackedReleaseInputValidatorRejectsCredentialOverrides(string propertyName, string value)
+    {
+        var root = FindRepoRoot();
+        var sandbox = Path.Combine(root, ".test-temp", $"powerforge-tracked-credential-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(sandbox, ".powerforge"));
+            var configPath = Path.Combine(sandbox, "powerforge.release.json");
+            var manifestPath = Path.Combine(sandbox, ".powerforge", "powerforge.tool.json");
+            File.WriteAllText(
+                configPath,
+                JsonSerializer.Serialize(new
+                {
+                    AppleApps = new Dictionary<string, object?>
+                    {
+                        ["ProjectRoot"] = ".",
+                        [propertyName] = value
+                    }
+                }));
+            File.WriteAllText(manifestPath, "{}");
+            Run("git", sandbox, "init", "--quiet").EnsureSuccess();
+            Run("git", sandbox, "add", ".").EnsureSuccess();
+            CommitTrackedReleaseSandbox(sandbox, "Tracked credential override");
+            var commit = Run("git", sandbox, "rev-parse", "HEAD").EnsureSuccess().StandardOutput.Trim();
+
+            var result = RunTrackedReleaseInputValidator(root, sandbox, configPath, manifestPath, commit, rejectCredentialOverrides: true);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains($"AppleApps.{propertyName} is forbidden", result.StandardOutput + result.StandardError, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TrackedReleaseInputValidatorRejectsNotarytoolKeychainProfileOverride()
+    {
+        var root = FindRepoRoot();
+        var sandbox = Path.Combine(root, ".test-temp", $"powerforge-keychain-profile-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(sandbox, ".powerforge"));
+            var configPath = Path.Combine(sandbox, "powerforge.release.json");
+            var manifestPath = Path.Combine(sandbox, ".powerforge", "powerforge.tool.json");
+            File.WriteAllText(configPath,
+                """{ "AppleApps": { "ProjectRoot": ".", "DirectDistribution": { "KeychainProfile": "unreviewed-notary-profile" } } }""");
+            File.WriteAllText(manifestPath, "{}");
+            Run("git", sandbox, "init", "--quiet").EnsureSuccess();
+            Run("git", sandbox, "add", ".").EnsureSuccess();
+            CommitTrackedReleaseSandbox(sandbox, "Tracked notary credential override");
+            var commit = Run("git", sandbox, "rev-parse", "HEAD").EnsureSuccess().StandardOutput.Trim();
+
+            var result = RunTrackedReleaseInputValidator(root, sandbox, configPath, manifestPath, commit, rejectCredentialOverrides: true);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("AppleApps.DirectDistribution.KeychainProfile is forbidden", result.StandardOutput + result.StandardError, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+        }
+    }
+
+    [Fact]
     public void RunnerLocalDoctorUsesPrivateProfileWithoutSerializingCredentials()
     {
         if (!OperatingSystem.IsMacOS() || !CommandExists("pwsh")) return;
@@ -351,6 +627,38 @@ public sealed partial class AppleReleaseWorkflowTests
             Path.Combine(sandbox, "powerforge.release.json"),
             """{"AppleApps":{"ProjectRoot":".","Automation":{"ReceiptPath":"build/powerforge/apple/release-receipt.json"}}}""");
         return sandbox;
+    }
+
+    private static void CommitTrackedReleaseSandbox(string sandbox, string message)
+    {
+        Run(
+            "git",
+            sandbox,
+            "-c", "user.name=PowerForge Tests",
+            "-c", "user.email=powerforge-tests@example.invalid",
+            "commit", "--quiet", "-m", message).EnsureSuccess();
+    }
+
+    private static ProcessResult RunTrackedReleaseInputValidator(
+        string root,
+        string sandbox,
+        string configPath,
+        string manifestPath,
+        string commit,
+        bool rejectCredentialOverrides = false,
+        bool allowMissingProject = false)
+    {
+        var arguments = new List<string>
+        {
+            "-NoProfile",
+            "-File", Path.Combine(root, ".github", "actions", "apple-release", "Assert-TrackedAppleReleaseInputs.ps1"),
+            "-ConfigPath", configPath,
+            "-ToolManifestPath", manifestPath,
+            "-SourceCommit", commit
+        };
+        if (rejectCredentialOverrides) arguments.Add("-RejectCredentialOverrides");
+        if (allowMissingProject) arguments.Add("-AllowMissingProject");
+        return Run("pwsh", sandbox, arguments.ToArray());
     }
 
     private static ProcessResult RunRunnerLocalWrapper(

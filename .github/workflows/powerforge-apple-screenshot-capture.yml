@@ -8,9 +8,8 @@ on:
         required: true
         type: string
       marketing_version:
-        description: Optional exact x.y.z App Store version represented by the captures; required by the approval workflow.
-        required: false
-        default: ""
+        description: Exact x.y.z App Store version represented by the captures and approval.
+        required: true
         type: string
       capture_script:
         description: Repository-relative deterministic capture script.
@@ -35,6 +34,10 @@ on:
         description: Device matrix identity captured with the screenshot evidence.
         required: false
         default: configured Apple screenshot matrix
+        type: string
+      runtime:
+        description: Exact platform runtime represented by the captures, such as iOS 26.0 Simulator or macOS 26.0.
+        required: true
         type: string
       theme:
         description: Appearance matrix captured with the screenshot evidence.
@@ -64,10 +67,14 @@ jobs:
           SOURCE_REF: ${{ inputs.source_ref }}
           MARKETING_VERSION: ${{ inputs.marketing_version }}
           CAPTURE_SHELL: ${{ inputs.capture_shell }}
+          CAPTURE_RUNTIME: ${{ inputs.runtime }}
         run: |
           if ($env:SOURCE_REF -notmatch '^[0-9A-Fa-f]{40}$') { throw 'source_ref must be an exact 40-character commit SHA.' }
-          if (-not [string]::IsNullOrWhiteSpace($env:MARKETING_VERSION) -and $env:MARKETING_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'marketing_version must be blank or use x.y.z.' }
+          if ($env:MARKETING_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'marketing_version must use x.y.z.' }
           if ($env:CAPTURE_SHELL -notin @('bash', 'pwsh')) { throw 'capture_shell must be bash or pwsh.' }
+          if ([string]::IsNullOrWhiteSpace($env:CAPTURE_RUNTIME) -or $env:CAPTURE_RUNTIME.Length -gt 200 -or $env:CAPTURE_RUNTIME -match '[\r\n]') {
+            throw 'runtime must be a non-empty single-line platform runtime no longer than 200 characters.'
+          }
 
       - name: Checkout exact screenshot source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -156,12 +163,32 @@ jobs:
           SOURCE_REF: ${{ inputs.source_ref }}
           MARKETING_VERSION: ${{ inputs.marketing_version }}
           CAPTURE_DEVICE: ${{ inputs.device }}
+          CAPTURE_RUNTIME: ${{ inputs.runtime }}
           CAPTURE_THEME: ${{ inputs.theme }}
           CAPTURE_SCENARIO: ${{ inputs.scenario }}
+          CAPTURE_ARTIFACT_PATH: ${{ inputs.capture_artifact_path }}
         run: |
+          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source')
+          $artifactRoot = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_ARTIFACT_PATH))
+          $screenshots = @(Get-ChildItem -LiteralPath $artifactRoot -File -Filter '*.png' -Recurse | Sort-Object FullName | ForEach-Object {
+            $dimensions = @(& sips -g pixelWidth -g pixelHeight $_.FullName 2>&1)
+            if ($LASTEXITCODE -ne 0) { throw "Unable to read PNG dimensions: $($_.FullName)" }
+            $widthLine = $dimensions | Where-Object { $_ -match '^\s*pixelWidth:\s*(\d+)\s*$' } | Select-Object -First 1
+            $heightLine = $dimensions | Where-Object { $_ -match '^\s*pixelHeight:\s*(\d+)\s*$' } | Select-Object -First 1
+            if (-not $widthLine -or -not $heightLine) { throw "Unable to parse PNG dimensions: $($_.FullName)" }
+            $width = [int]([regex]::Match($widthLine, '(\d+)\s*$').Groups[1].Value)
+            $height = [int]([regex]::Match($heightLine, '(\d+)\s*$').Groups[1].Value)
+            [ordered]@{
+              path = [IO.Path]::GetRelativePath($artifactRoot, $_.FullName).Replace('\\', '/')
+              sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              width = $width
+              height = $height
+            }
+          })
+          if ($screenshots.Count -eq 0) { throw 'Capture provenance requires at least one PNG screenshot.' }
           $xcodeVersion = (& xcodebuild -version) -join ' '
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($xcodeVersion)) { throw 'Unable to record the capture Xcode version.' }
-          $captureRuntime = "$(& sw_vers -productName) $(& sw_vers -productVersion) ($([Runtime.InteropServices.RuntimeInformation]::OSArchitecture))"
+          $captureRuntime = $env:CAPTURE_RUNTIME.Trim()
           $provenance = [ordered]@{
             schemaVersion = 2
             repository = $env:GITHUB_REPOSITORY
@@ -174,6 +201,7 @@ jobs:
             device = $env:CAPTURE_DEVICE
             theme = $env:CAPTURE_THEME
             scenario = $env:CAPTURE_SCENARIO
+            screenshots = $screenshots
           }
           $provenance | ConvertTo-Json -Depth 5 -Compress |
             Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-screenshot-provenance.json') -Encoding utf8
