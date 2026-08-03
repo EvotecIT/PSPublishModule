@@ -745,6 +745,70 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task GovernancePlan_SurfacesChildDriftAlongsideExistingParentUpdates()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptionGroups", "id": "group-1", "attributes": { "referenceName": "Legacy Pro" } } ] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptions", "id": "sub-1", "attributes": { "productId": "pro.monthly", "name": "Legacy Monthly", "subscriptionPeriod": "ONE_MONTH", "familySharable": false } } ] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptionLocalizations", "id": "loc-1", "attributes": { "locale": "en-US", "name": "Legacy Monthly", "description": "Old description" } } ] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var plan = await new AppStoreConnectGovernanceService(client).PlanAsync(new AppStoreConnectGovernanceSpec
+        {
+            AppId = "app-1",
+            SubscriptionGroups = [new AppStoreConnectSubscriptionGroupSpec
+            {
+                Id = "group-1",
+                ReferenceName = "Pro",
+                Subscriptions = [new AppStoreConnectSubscriptionSpec
+                {
+                    ProductId = "pro.monthly",
+                    Name = "Pro Monthly",
+                    SubscriptionPeriod = "ONE_MONTH",
+                    FamilySharable = true,
+                    Localizations = [new AppStoreConnectSubscriptionLocalizationSpec
+                    {
+                        Locale = "en-US",
+                        Name = "Pro Monthly",
+                        Description = "New description"
+                    }],
+                    IntroductoryOffers = [new AppStoreConnectSubscriptionIntroductoryOfferSpec
+                    {
+                        Duration = "TWO_WEEKS",
+                        OfferMode = "FREE_TRIAL",
+                        NumberOfPeriods = 1,
+                        TerritoryIds = ["USA"]
+                    }],
+                    Availabilities = [new AppStoreConnectSubscriptionAvailabilitySpec
+                    {
+                        PlanType = "UPFRONT",
+                        AvailableInNewTerritories = true,
+                        TerritoryIds = ["USA"]
+                    }]
+                }]
+            }]
+        });
+
+        Assert.Equal(
+            ["SubscriptionGroup", "Subscription", "SubscriptionLocalization", "SubscriptionIntroductoryOffer", "SubscriptionPlanAvailability"],
+            plan.Changes.Select(change => change.ResourceType).ToArray());
+        Assert.Equal(
+            [AppStoreConnectGovernanceChangeAction.Update, AppStoreConnectGovernanceChangeAction.Update,
+                AppStoreConnectGovernanceChangeAction.Update, AppStoreConnectGovernanceChangeAction.Create,
+                AppStoreConnectGovernanceChangeAction.Create],
+            plan.Changes.Select(change => change.Action).ToArray());
+        Assert.Contains(handler.RequestUris, uri => uri.AbsolutePath.EndsWith("/subscriptions/sub-1/subscriptionLocalizations", StringComparison.Ordinal));
+        Assert.Contains(handler.RequestUris, uri => uri.AbsolutePath.EndsWith("/subscriptions/sub-1/prices", StringComparison.Ordinal));
+        Assert.Contains(handler.RequestUris, uri => uri.AbsolutePath.EndsWith("/subscriptions/sub-1/introductoryOffers", StringComparison.Ordinal));
+        Assert.Contains(handler.RequestUris, uri => uri.AbsolutePath.EndsWith("/subscriptions/sub-1/planAvailabilities", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task GovernancePlan_DetectsExplicitPreserveCurrentPriceDrift()
     {
         var handler = new SequenceHandler(
