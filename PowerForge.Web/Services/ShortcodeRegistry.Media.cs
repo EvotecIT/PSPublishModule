@@ -13,8 +13,16 @@ internal static partial class ShortcodeDefaults
     private const string MediaBaseCss = """
 <style>
 /* pf-media-base-v1 */
-.pf-media,.pf-screenshot,.pf-screenshots{width:100%}
+.pf-media,.pf-screenshot,.pf-screenshots,.pf-story{width:100%}
 .pf-media-frame iframe,.pf-media-frame img{display:block}
+.pf-story-frame{overflow:hidden;border:1px solid color-mix(in srgb,currentColor 16%,transparent);border-radius:16px;background:#090b10;box-shadow:0 20px 60px rgba(2,6,23,.22)}
+.pf-story-frame img{display:block;width:100%;height:auto}
+.pf-story-caption{display:grid;gap:.25rem;margin-top:.7rem}
+.pf-story-caption strong{font-size:.95rem}
+.pf-story-caption span{font-size:.9rem;opacity:.78}
+.pf-story-transcript{margin-top:.75rem}
+.pf-story-transcript pre{max-height:24rem;overflow:auto;padding:1rem;border-radius:12px;background:color-mix(in srgb,currentColor 7%,transparent);white-space:pre-wrap}
+.pf-story-actions{display:flex;flex-wrap:wrap;gap:.7rem;margin-top:.7rem;font-size:.86rem}
 .pf-media-youtube-lite:focus-visible{outline:2px solid #f59e0b;outline-offset:2px}
 .pf-media-youtube-lite button{pointer-events:none;backdrop-filter:blur(2px)}
 .pf-screenshots-strip{scroll-snap-type:x proximity}
@@ -174,6 +182,7 @@ internal static partial class ShortcodeDefaults
             "iframe" or "embed" => RenderIFrame(context, attrs),
             "image" or "screenshot" => RenderScreenshot(context, attrs),
             "screenshots" or "gallery" => RenderScreenshots(context, attrs),
+            "story" or "visual-story" => RenderVisualStory(context, attrs),
             _ => string.Empty
         };
     }

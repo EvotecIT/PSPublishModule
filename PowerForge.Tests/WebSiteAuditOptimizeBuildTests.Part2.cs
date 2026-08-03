@@ -1,5 +1,6 @@
 using PowerForge.Web;
 using ImageMagick;
+using System.Text.Json;
 using System.Xml.Linq;
 
 namespace PowerForge.Tests;
@@ -895,6 +896,48 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void OptimizeDetailed_DoesNotOverwriteProtectedStoryHashDestination()
+    {
+        var root = WebVisualStoryStagerTests.CreateBundle();
+        try
+        {
+            var siteRoot = Path.Combine(root, "source");
+            var manifestPath = Path.Combine(siteRoot, "story.json");
+            var manifest = JsonSerializer.Deserialize<WebVisualStoryBundle>(
+                File.ReadAllText(manifestPath),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+            var sourcePng = File.ReadAllBytes(Path.Combine(siteRoot, "demo.png"));
+            using var replacement = new ImageMagick.MagickImage(ImageMagick.MagickColors.Red, 2, 2);
+            var ordinaryPng = replacement.ToByteArray(ImageMagick.MagickFormat.Png);
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(ordinaryPng))
+                .Substring(0, 8)
+                .ToLowerInvariant();
+            var protectedName = $"demo.{hash}.png";
+            File.WriteAllBytes(Path.Combine(siteRoot, protectedName), sourcePng);
+            File.WriteAllBytes(Path.Combine(siteRoot, "demo.png"), ordinaryPng);
+            Assert.Single(manifest.Artifacts, artifact => artifact.Role == "completed").Path = protectedName;
+            var visualManifest = Path.Combine(siteRoot, "renamed-story.json");
+            File.WriteAllText(visualManifest, JsonSerializer.Serialize(manifest));
+            File.Delete(manifestPath);
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = siteRoot,
+                HashAssets = true,
+                HashExtensions = new[] { ".png" }
+            });
+
+            Assert.Equal(0, result.HashedAssetCount);
+            Assert.Equal(ordinaryPng, File.ReadAllBytes(Path.Combine(siteRoot, "demo.png")));
+            Assert.Equal(sourcePng, File.ReadAllBytes(Path.Combine(siteRoot, protectedName)));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void OptimizeDetailed_HashedImages_RewritesSrcSetReferencesWithoutChangingDataUrls()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-hash-srcset-" + Guid.NewGuid().ToString("N"));
@@ -1028,6 +1071,27 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void AssetRewriteDownloadHelpers_ProtectStoryArtifactsFromCssDependencies()
+    {
+        var siteRoot = Path.Combine(Path.GetTempPath(), "pf-web-opt-story-dependency-" + Guid.NewGuid().ToString("N"));
+        var cssPath = Path.Combine(siteRoot, "stories", "demo", "site.css");
+        var artifactPath = Path.Combine(siteRoot, "stories", "demo", "font.1234.woff2");
+        var protectedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            Path.GetFullPath(artifactPath)
+        };
+
+        Assert.True(WebAssetOptimizer.IsDownloadedDependencyPathProtectedForTesting(
+            cssPath,
+            "font.1234.woff2",
+            protectedPaths));
+        Assert.False(WebAssetOptimizer.IsDownloadedDependencyPathProtectedForTesting(
+            cssPath,
+            "font.other.woff2",
+            protectedPaths));
+    }
+
+    [Fact]
     public void OptimizeDetailed_WritesReportWithUpdatedFilesAndByteSavings()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-report-" + Guid.NewGuid().ToString("N"));
@@ -1106,6 +1170,178 @@ public partial class WebSiteAuditOptimizeBuildTests
         {
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void OptimizeDetailed_IgnoresUnrelatedSameNameJsonAssets()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-unrelated-story-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var unrelatedPath = Path.Combine(root, "visual-story.json");
+            const string unrelatedCatalog =
+                """{ "application": "download-catalog", "schemaVersion": 1, "artifacts": [] }""";
+            File.WriteAllText(unrelatedPath, unrelatedCatalog);
+            File.WriteAllText(
+                Path.Combine(root, "index.html"),
+                "<!doctype html><html><body><p>Ready</p></body></html>");
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                MinifyHtml = true
+            });
+
+            Assert.Equal(unrelatedCatalog, File.ReadAllText(unrelatedPath));
+            Assert.True(result.HtmlFileCount == 1);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void OptimizeDetailed_PreservesIntegrityBoundVisualStoryArtifacts()
+    {
+        var bundleRoot = WebVisualStoryStagerTests.CreateBundle();
+        var siteRoot = Path.Combine(Path.GetTempPath(), "pf-web-opt-story-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(siteRoot);
+
+        try
+        {
+            var sourcePng = Path.Combine(bundleRoot, "source", "demo.png");
+            var sourceManifest = Path.Combine(bundleRoot, "source", "story.json");
+            var sourceHtml = Path.Combine(bundleRoot, "source", "demo.html");
+            var htmlBytes = System.Text.Encoding.UTF8.GetBytes(
+                "<!doctype html>\n<html>\n  <body>\n    <img src=\"demo.png\" />\n  </body>\n</html>\n");
+            File.WriteAllBytes(sourceHtml, htmlBytes);
+            var sourceBundle = JsonSerializer.Deserialize<WebVisualStoryBundle>(
+                File.ReadAllText(sourceManifest),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+            sourceBundle.Artifacts = sourceBundle.Artifacts
+                .Append(new WebVisualStoryArtifact
+                {
+                    Role = "html",
+                    Format = "html",
+                    Path = "demo.html",
+                    MediaType = "text/html"
+                })
+                .ToArray();
+            File.WriteAllText(
+                sourceManifest,
+                JsonSerializer.Serialize(
+                    sourceBundle,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                        WriteIndented = true
+                    }));
+            using (var image = new MagickImage(sourcePng))
+            {
+                image.Comment = new string('x', 40000);
+                image.Write(sourcePng, MagickFormat.Png);
+            }
+            var storyRoot = Path.Combine(siteRoot, "stories", "demo");
+            var staged = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = Path.Combine(bundleRoot, "source", "story.json"),
+                OutputPath = storyRoot
+            });
+            var caseVariantManifest = Path.Combine(storyRoot, "visual-story.JSON");
+            File.Move(staged.ManifestPath, caseVariantManifest);
+            var completedPath = Path.Combine(storyRoot, "demo.png");
+            var completedBefore = File.ReadAllBytes(completedPath);
+            var htmlPath = Path.Combine(storyRoot, "demo.html");
+            var htmlBefore = File.ReadAllBytes(htmlPath);
+
+            var heroPath = Path.Combine(siteRoot, "hero.png");
+            using (var image = new MagickImage(MagickColors.DeepSkyBlue, 512, 256))
+            {
+                image.Comment = new string('x', 40000);
+                image.Write(heroPath, MagickFormat.Png);
+            }
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = siteRoot,
+                OptimizeImages = true,
+                ImageExtensions = [".png"],
+                ImageStripMetadata = true,
+                MinifyHtml = true,
+                HashAssets = true,
+                HashExtensions = [".html", ".json"]
+            });
+
+            Assert.Equal(1, result.ImageFileCount);
+            Assert.Equal(1, result.ImageOptimizedCount);
+            Assert.Equal(completedBefore, File.ReadAllBytes(completedPath));
+            Assert.Equal(htmlBefore, File.ReadAllBytes(htmlPath));
+            Assert.True(File.Exists(caseVariantManifest));
+            Assert.Equal(4, WebVisualStoryStager.Load(caseVariantManifest).Artifacts.Length);
+        }
+        finally
+        {
+            Directory.Delete(bundleRoot, true);
+            Directory.Delete(siteRoot, true);
+        }
+    }
+
+    [Fact]
+    public void OptimizeDetailed_DoesNotRewriteReferencesWhenProtectedStoryCopyIsRejected()
+    {
+        var bundleRoot = WebVisualStoryStagerTests.CreateBundle();
+        var siteRoot = Path.Combine(Path.GetTempPath(), "pf-web-opt-story-rewrite-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(siteRoot);
+
+        try
+        {
+            var storyRoot = Path.Combine(siteRoot, "stories", "demo");
+            var staged = WebVisualStoryStager.Stage(new WebVisualStoryStageOptions
+            {
+                ManifestPath = Path.Combine(bundleRoot, "source", "story.json"),
+                OutputPath = storyRoot
+            });
+            var completedPath = Path.Combine(storyRoot, "demo.png");
+            var completedBefore = File.ReadAllBytes(completedPath);
+            var replacementPath = Path.Combine(bundleRoot, "replacement.png");
+            File.WriteAllBytes(replacementPath, new byte[] { 1, 2, 3, 4 });
+            var htmlPath = Path.Combine(siteRoot, "index.html");
+            File.WriteAllText(
+                htmlPath,
+                "<!doctype html><html><body><img src=\"/old.png\" /></body></html>");
+
+            WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = siteRoot,
+                AssetPolicy = new AssetPolicySpec
+                {
+                    Rewrites =
+                    [
+                        new AssetRewriteSpec
+                        {
+                            Match = "/old.png",
+                            Replace = "/stories/demo/demo.png",
+                            MatchType = "exact",
+                            Source = replacementPath,
+                            Destination = "stories/demo/demo.png"
+                        }
+                    ]
+                }
+            });
+
+            Assert.Equal(completedBefore, File.ReadAllBytes(completedPath));
+            Assert.Contains("src=\"/old.png\"", File.ReadAllText(htmlPath), StringComparison.Ordinal);
+            Assert.Equal(3, WebVisualStoryStager.Load(staged.ManifestPath).Artifacts.Length);
+        }
+        finally
+        {
+            Directory.Delete(bundleRoot, true);
+            Directory.Delete(siteRoot, true);
         }
     }
 

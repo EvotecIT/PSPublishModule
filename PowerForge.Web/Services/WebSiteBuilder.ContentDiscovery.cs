@@ -60,6 +60,7 @@ public static partial class WebSiteBuilder
         var localization = ResolveLocalizationConfig(spec);
         var contentRoots = BuildContentRoots(plan);
         var gitLastModifiedCache = new Dictionary<string, DateTimeOffset?>(StringComparer.OrdinalIgnoreCase);
+        var visualStoryCache = new WebVisualStoryBundleCache();
 
         foreach (var collection in spec.Collections)
         {
@@ -102,6 +103,19 @@ public static partial class WebSiteBuilder
                 if (matter is not null)
                     matter.EditUrl = editUrl;
                 var dataForShortcodes = ResolveDataForProject(data, projectSlug);
+                var relativePath = ResolveRelativePath(collectionRoot, file);
+                var resolvedLanguage = ResolveItemLanguage(spec, relativePath, matter, out var localizedRelativePath, out var localizedRelativeDir);
+                var resolvedAliases = ResolveAliasesForLanguage(matter, resolvedLanguage, localization);
+                var relativeDir = localizedRelativeDir;
+                var isSectionIndex = IsSectionIndex(file);
+                var isBundleIndex = IsLeafBundleIndex(file);
+                var slugPath = ResolveSlugPath(localizedRelativePath, relativeDir, matter?.Slug);
+                if (isSectionIndex || isBundleIndex)
+                    slugPath = ApplySlugOverride(relativeDir, matter?.Slug);
+                var baseOutput = ReplaceProjectPlaceholder(resolvedCollection.Output, projectSlug);
+                var route = BuildRoute(baseOutput, slugPath, spec.TrailingSlash);
+                route = ApplyLanguagePrefixToRoute(spec, route, resolvedLanguage);
+                var kind = ResolvePageKind(route, resolvedCollection, isSectionIndex);
                 var shortcodeContext = new ShortcodeRenderContext
                 {
                     Site = spec,
@@ -110,11 +124,13 @@ public static partial class WebSiteBuilder
                     EditUrl = editUrl,
                     Project = projectSpec,
                     SourcePath = file,
+                    PageResourceBaseUrl = isSectionIndex || isBundleIndex ? route : string.Empty,
                     Data = dataForShortcodes,
                     ThemeManifest = manifest,
                     ThemeRoot = themeRoot,
                     Engine = shortcodeEngine,
-                    PartialResolver = partialResolver
+                    PartialResolver = partialResolver,
+                    VisualStoryCache = visualStoryCache
                 };
                 var processedBody = ShortcodeProcessor.Apply(effectiveBody, shortcodeContext);
                 var skipMarkdown = false;
@@ -144,19 +160,6 @@ public static partial class WebSiteBuilder
 
                 var title = matter?.Title ?? FrontMatterParser.ExtractTitleFromMarkdown(processedBody) ?? Path.GetFileNameWithoutExtension(file);
                 var description = matter?.Description ?? string.Empty;
-                var relativePath = ResolveRelativePath(collectionRoot, file);
-                var resolvedLanguage = ResolveItemLanguage(spec, relativePath, matter, out var localizedRelativePath, out var localizedRelativeDir);
-                var resolvedAliases = ResolveAliasesForLanguage(matter, resolvedLanguage, localization);
-                var relativeDir = localizedRelativeDir;
-                var isSectionIndex = IsSectionIndex(file);
-                var isBundleIndex = IsLeafBundleIndex(file);
-                var slugPath = ResolveSlugPath(localizedRelativePath, relativeDir, matter?.Slug);
-                if (isSectionIndex || isBundleIndex)
-                    slugPath = ApplySlugOverride(relativeDir, matter?.Slug);
-                var baseOutput = ReplaceProjectPlaceholder(resolvedCollection.Output, projectSlug);
-                var route = BuildRoute(baseOutput, slugPath, spec.TrailingSlash);
-                route = ApplyLanguagePrefixToRoute(spec, route, resolvedLanguage);
-                var kind = ResolvePageKind(route, resolvedCollection, isSectionIndex);
                 var layout = matter?.Layout;
                 if (string.IsNullOrWhiteSpace(layout))
                 {
@@ -379,7 +382,11 @@ public static partial class WebSiteBuilder
             Layout = source.Layout,
             Template = source.Template,
             Kind = source.Kind,
-            HtmlContent = source.HtmlContent,
+            HtmlContent = RebaseFallbackPageResourceUrls(
+                source.HtmlContent,
+                source.OutputPath,
+                outputPath,
+                source.Resources),
             TocHtml = source.TocHtml,
             Resources = source.Resources?.Select(static resource => new PageResource
             {
@@ -393,6 +400,13 @@ public static partial class WebSiteBuilder
             Outputs = source.Outputs?.ToArray() ?? Array.Empty<string>()
         };
     }
+
+    private static string RebaseFallbackPageResourceUrls(
+        string html,
+        string sourceRoute,
+        string targetRoute,
+        IReadOnlyList<PageResource>? resources)
+        => WebFallbackResourceUrlRewriter.Rewrite(html, sourceRoute, targetRoute, resources);
 
     private static Dictionary<string, object?> CloneFallbackMeta(
         IReadOnlyDictionary<string, object?>? source,
@@ -889,6 +903,7 @@ public static partial class WebSiteBuilder
             ".js" => "text/javascript",
             ".json" => "application/json",
             ".svg" => "image/svg+xml",
+            ".apng" => "image/png",
             ".png" => "image/png",
             ".jpg" => "image/jpeg",
             ".jpeg" => "image/jpeg",

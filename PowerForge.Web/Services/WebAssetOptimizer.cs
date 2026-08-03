@@ -14,6 +14,9 @@ namespace PowerForge.Web;
 public static partial class WebAssetOptimizer
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly StringComparer FileSystemPathComparer = GetFileSystemPathComparer(
+        OperatingSystem.IsWindows(),
+        OperatingSystem.IsMacOS());
     private static readonly HttpClient RewriteDownloadClient = CreateRewriteDownloadClient();
     private static readonly Regex HtmlAttrRegex = new("(?<attr>href|src)=\"(?<url>[^\"]+)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex HtmlSrcSetAttrRegex = new("(?<attr>\\b(?:srcset|imagesrcset))\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
@@ -60,6 +63,12 @@ public static partial class WebAssetOptimizer
         };
         return client;
     }
+
+    internal static StringComparer GetFileSystemPathComparer(bool isWindows, bool isMacOS)
+        => isWindows || isMacOS
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+
     /// <summary>Runs asset optimization and returns the count of updated HTML files.</summary>
     /// <param name="options">Optimization options.</param>
     /// <returns>Number of HTML files updated with critical CSS.</returns>
@@ -88,8 +97,12 @@ public static partial class WebAssetOptimizer
                 result.UpdatedCount++;
         }
 
+        var protectedStoryArtifacts = FindVisualStoryArtifactPaths(siteRoot);
         var allHtmlFiles = Directory.EnumerateFiles(siteRoot, "*.html", SearchOption.AllDirectories).ToArray();
-        var htmlFiles = allHtmlFiles;
+        var mutableHtmlFiles = allHtmlFiles
+            .Where(path => !protectedStoryArtifacts.Contains(Path.GetFullPath(path)))
+            .ToArray();
+        var htmlFiles = mutableHtmlFiles;
         var cssFiles = Directory.EnumerateFiles(siteRoot, "*.css", SearchOption.AllDirectories).ToArray();
         var jsFiles = Directory.EnumerateFiles(siteRoot, "*.js", SearchOption.AllDirectories).ToArray();
         result.HtmlFileCount = allHtmlFiles.Length;
@@ -119,12 +132,23 @@ public static partial class WebAssetOptimizer
         var policy = options.AssetPolicy;
         if (policy?.Rewrites is { Length: > 0 })
         {
-            CopyRewriteAssets(policy.Rewrites, siteRoot);
+            var applicableRewrites = CopyRewriteAssets(
+                policy.Rewrites,
+                siteRoot,
+                protectedStoryArtifacts);
+            protectedStoryArtifacts.UnionWith(FindVisualStoryArtifactPaths(siteRoot));
+            mutableHtmlFiles = mutableHtmlFiles
+                .Where(path => !protectedStoryArtifacts.Contains(Path.GetFullPath(path)))
+                .ToArray();
+            htmlFiles = htmlFiles
+                .Where(path => !protectedStoryArtifacts.Contains(Path.GetFullPath(path)))
+                .ToArray();
+            result.HtmlSelectedFileCount = htmlFiles.Length;
             foreach (var htmlFile in htmlFiles)
             {
                 var content = File.ReadAllText(htmlFile);
                 if (string.IsNullOrWhiteSpace(content)) continue;
-                var updated = RewriteHtmlAssets(content, policy.Rewrites);
+                var updated = RewriteHtmlAssets(content, applicableRewrites);
                 updated = WebSiteBuilder.OptimizeNetworkHints(updated);
                 if (!string.Equals(updated, content, StringComparison.Ordinal))
                 {
@@ -165,7 +189,7 @@ public static partial class WebAssetOptimizer
         // Optimize images before hashing so hashed filenames always match final image bytes.
         if (options.OptimizeImages)
         {
-            OptimizeImages(siteRoot, htmlFiles, options, result, MarkUpdated);
+            OptimizeImages(siteRoot, htmlFiles, protectedStoryArtifacts, options, result, MarkUpdated);
         }
 
         var hashSpec = ResolveHashSpec(options, policy);
@@ -173,18 +197,33 @@ public static partial class WebAssetOptimizer
         // Fingerprinting moves shared assets and therefore requires every generated HTML
         // reference to be rewritten in the same pass. A sampled/incremental HTML scope
         // must never hash assets because untouched pages would retain broken old URLs.
-        var hasCompleteHtmlScope = htmlFiles.Length == allHtmlFiles.Length;
+        var hasCompleteHtmlScope = htmlFiles.Length == mutableHtmlFiles.Length;
         if (hashSpec.Enabled && hasCompleteHtmlScope)
         {
-            hashMap = HashAssets(siteRoot, hashSpec, out var hashedAssetCount, out var hashedAssets, MarkUpdated);
+            hashMap = HashAssets(
+                siteRoot,
+                hashSpec,
+                protectedStoryArtifacts,
+                out var hashedAssetCount,
+                out var hashedAssets,
+                MarkUpdated);
             result.HashedAssetCount = hashedAssetCount;
             result.HashedAssets = hashedAssets.ToArray();
             if (hashMap.Count > 0)
             {
-                var rewrites = RewriteHashedReferences(siteRoot, htmlFiles, hashMap, MarkUpdated);
+                var rewrites = RewriteHashedReferences(
+                    siteRoot,
+                    htmlFiles,
+                    hashMap,
+                    protectedStoryArtifacts,
+                    MarkUpdated);
                 result.HtmlHashRewriteCount = rewrites.HtmlFilesRewritten;
                 result.CssHashRewriteCount = rewrites.CssFilesRewritten;
-                var manifestPath = WriteHashManifest(siteRoot, hashSpec, hashMap);
+                var manifestPath = WriteHashManifest(
+                    siteRoot,
+                    hashSpec,
+                    hashMap,
+                    protectedStoryArtifacts);
                 if (!string.IsNullOrWhiteSpace(manifestPath))
                 {
                     result.HashManifestPath = manifestPath;
@@ -224,7 +263,8 @@ public static partial class WebAssetOptimizer
 
         if (options.MinifyCss)
         {
-            foreach (var cssFile in Directory.EnumerateFiles(siteRoot, "*.css", SearchOption.AllDirectories))
+            foreach (var cssFile in Directory.EnumerateFiles(siteRoot, "*.css", SearchOption.AllDirectories)
+                         .Where(path => !protectedStoryArtifacts.Contains(Path.GetFullPath(path))))
             {
                 var css = File.ReadAllText(cssFile);
                 if (string.IsNullOrWhiteSpace(css)) continue;
@@ -252,7 +292,8 @@ public static partial class WebAssetOptimizer
 
         if (options.MinifyJs)
         {
-            foreach (var jsFile in Directory.EnumerateFiles(siteRoot, "*.js", SearchOption.AllDirectories))
+            foreach (var jsFile in Directory.EnumerateFiles(siteRoot, "*.js", SearchOption.AllDirectories)
+                         .Where(path => !protectedStoryArtifacts.Contains(Path.GetFullPath(path))))
             {
                 var js = File.ReadAllText(jsFile);
                 if (string.IsNullOrWhiteSpace(js)) continue;
@@ -280,7 +321,11 @@ public static partial class WebAssetOptimizer
 
         if (policy?.CacheHeaders?.Enabled == true)
         {
-            var headersPath = WriteCacheHeaders(siteRoot, policy.CacheHeaders, hashMap);
+            var headersPath = WriteCacheHeaders(
+                siteRoot,
+                policy.CacheHeaders,
+                hashMap,
+                protectedStoryArtifacts);
             if (!string.IsNullOrWhiteSpace(headersPath))
             {
                 result.CacheHeadersWritten = true;
@@ -307,21 +352,28 @@ public static partial class WebAssetOptimizer
         {
             if (TryResolveUnderRoot(siteRoot, options.ReportPath.TrimStart('/', '\\'), out var reportPath))
             {
-                result.ReportPath = reportPath;
-                var json = JsonSerializer.Serialize(result, new JsonSerializerOptions
+                if (protectedStoryArtifacts.Contains(Path.GetFullPath(reportPath)))
                 {
-                    WriteIndented = true
-                });
-                var write = true;
-                if (File.Exists(reportPath))
-                {
-                    var existing = File.ReadAllText(reportPath);
-                    write = !string.Equals(existing, json, StringComparison.Ordinal);
+                    Trace.TraceWarning($"Optimize report path is protected by a visual-story manifest: {options.ReportPath}");
                 }
-                if (write)
+                else
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
-                    File.WriteAllText(reportPath, json);
+                    result.ReportPath = reportPath;
+                    var json = JsonSerializer.Serialize(result, new JsonSerializerOptions
+                    {
+                        WriteIndented = true
+                    });
+                    var write = true;
+                    if (File.Exists(reportPath))
+                    {
+                        var existing = File.ReadAllText(reportPath);
+                        write = !string.Equals(existing, json, StringComparison.Ordinal);
+                    }
+                    if (write)
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
+                        File.WriteAllText(reportPath, json);
+                    }
                 }
             }
             else
@@ -357,12 +409,28 @@ public static partial class WebAssetOptimizer
         return policy?.Hashing ?? new AssetHashSpec { Enabled = false };
     }
 
-    private static void CopyRewriteAssets(IEnumerable<AssetRewriteSpec> rewrites, string siteRoot)
+    private static AssetRewriteSpec[] CopyRewriteAssets(
+        IEnumerable<AssetRewriteSpec> rewrites,
+        string siteRoot,
+        IReadOnlySet<string> protectedStoryArtifacts)
     {
+        var applicable = new List<AssetRewriteSpec>();
         foreach (var rewrite in rewrites)
         {
-            if (string.IsNullOrWhiteSpace(rewrite.Destination))
+            var hasCopySource =
+                !string.IsNullOrWhiteSpace(rewrite.Source) ||
+                !string.IsNullOrWhiteSpace(rewrite.SourceUrl);
+            if (!hasCopySource)
+            {
+                applicable.Add(rewrite);
                 continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(rewrite.Destination))
+            {
+                Trace.TraceWarning("Asset rewrite with a copy source requires a destination.");
+                continue;
+            }
 
             var destRelative = rewrite.Destination.TrimStart('/', '\\');
             if (!TryResolveUnderRoot(siteRoot, destRelative, out var dest))
@@ -370,290 +438,36 @@ public static partial class WebAssetOptimizer
                 Trace.TraceWarning($"Asset rewrite destination outside site root: {rewrite.Destination}");
                 continue;
             }
+            if (protectedStoryArtifacts.Contains(Path.GetFullPath(dest)))
+            {
+                Trace.TraceWarning($"Asset rewrite destination is protected by a visual-story manifest: {rewrite.Destination}");
+                continue;
+            }
 
             if (!string.IsNullOrWhiteSpace(rewrite.Source))
             {
                 var source = Path.GetFullPath(rewrite.Source);
                 if (!File.Exists(source))
+                {
+                    Trace.TraceWarning($"Asset rewrite source file was not found: {rewrite.Source}");
                     continue;
+                }
 
                 var destinationDirectory = Path.GetDirectoryName(dest);
                 if (!string.IsNullOrWhiteSpace(destinationDirectory))
                     Directory.CreateDirectory(destinationDirectory);
                 File.Copy(source, dest, overwrite: true);
+                applicable.Add(rewrite);
                 continue;
             }
 
-            if (!string.IsNullOrWhiteSpace(rewrite.SourceUrl))
+            if (!string.IsNullOrWhiteSpace(rewrite.SourceUrl) &&
+                DownloadRewriteAsset(rewrite, dest, protectedStoryArtifacts))
             {
-                DownloadRewriteAsset(rewrite, dest);
+                applicable.Add(rewrite);
             }
         }
-    }
-
-    private static void DownloadRewriteAsset(AssetRewriteSpec rewrite, string destinationPath)
-    {
-        if (string.IsNullOrWhiteSpace(rewrite.SourceUrl))
-            return;
-
-        if (!Uri.TryCreate(rewrite.SourceUrl, UriKind.Absolute, out var sourceUri) ||
-            sourceUri.Scheme != Uri.UriSchemeHttps)
-        {
-            Trace.TraceWarning($"Asset rewrite sourceUrl is not a valid https URL: {rewrite.SourceUrl}");
-            return;
-        }
-
-        if (!IsAllowedRewriteSourceUri(sourceUri, rewrite.SourceUrlAllowedHosts))
-        {
-            Trace.TraceWarning($"Asset rewrite sourceUrl host is not allowed for remote download: {sourceUri.Host}");
-            return;
-        }
-
-        try
-        {
-            var destinationDirectory = Path.GetDirectoryName(destinationPath);
-            if (!string.IsNullOrWhiteSpace(destinationDirectory))
-                Directory.CreateDirectory(destinationDirectory);
-
-            if (destinationPath.EndsWith(".css", StringComparison.OrdinalIgnoreCase))
-            {
-                var css = DownloadText(sourceUri, rewrite.UserAgent);
-                if (rewrite.DownloadDependencies)
-                    css = RewriteDownloadedCssDependencies(css, sourceUri, destinationPath, rewrite.UserAgent);
-                File.WriteAllText(destinationPath, css, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                return;
-            }
-
-            var bytes = DownloadBytes(sourceUri, rewrite.UserAgent);
-            File.WriteAllBytes(destinationPath, bytes);
-        }
-        catch (Exception ex)
-        {
-            Trace.TraceWarning($"Asset rewrite download failed for {rewrite.SourceUrl}: {ex.GetType().Name}: {ex.Message}");
-        }
-    }
-
-    private static string RewriteDownloadedCssDependencies(string css, Uri sourceUri, string destinationPath, string? userAgent)
-    {
-        if (string.IsNullOrWhiteSpace(css))
-            return css;
-
-        var destinationDir = Path.GetDirectoryName(destinationPath);
-        if (string.IsNullOrWhiteSpace(destinationDir))
-            return css;
-
-        var downloaded = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        return CssUrlRegex.Replace(css, match =>
-        {
-            var url = match.Groups["url"].Value.Trim();
-            if (!TryResolveDownloadUri(sourceUri, url, out var resolvedUri))
-                return match.Value;
-
-            if (!downloaded.TryGetValue(resolvedUri.AbsoluteUri, out var fileName))
-            {
-                fileName = BuildDownloadedAssetFileName(resolvedUri);
-                var localPath = Path.Combine(destinationDir, fileName);
-                try
-                {
-                    var bytes = DownloadBytes(resolvedUri, userAgent);
-                    File.WriteAllBytes(localPath, bytes);
-                    downloaded[resolvedUri.AbsoluteUri] = fileName;
-                }
-                catch (Exception ex)
-                {
-                    Trace.TraceWarning($"Asset rewrite dependency download failed for {resolvedUri}: {ex.GetType().Name}: {ex.Message}");
-                    return match.Value;
-                }
-            }
-
-            var quote = match.Groups["quote"].Value;
-            return $"url({quote}{fileName}{quote})";
-        });
-    }
-
-    private static bool TryResolveDownloadUri(Uri baseUri, string rawUrl, out Uri resolvedUri)
-    {
-        resolvedUri = baseUri;
-        if (string.IsNullOrWhiteSpace(rawUrl) ||
-            rawUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ||
-            rawUrl.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) ||
-            rawUrl.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) ||
-            rawUrl.StartsWith("#", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (Uri.TryCreate(rawUrl, UriKind.Absolute, out var absoluteUri))
-        {
-            resolvedUri = absoluteUri;
-            return resolvedUri.Scheme == Uri.UriSchemeHttp || resolvedUri.Scheme == Uri.UriSchemeHttps;
-        }
-
-        if (rawUrl.StartsWith("//", StringComparison.Ordinal))
-        {
-            if (Uri.TryCreate($"{baseUri.Scheme}:{rawUrl}", UriKind.Absolute, out var protocolRelativeUri))
-            {
-                resolvedUri = protocolRelativeUri;
-                return true;
-            }
-
-            return false;
-        }
-
-        if (!Uri.TryCreate(baseUri, rawUrl, out var relativeUri))
-            return false;
-
-        resolvedUri = relativeUri;
-        return resolvedUri.Scheme == Uri.UriSchemeHttp || resolvedUri.Scheme == Uri.UriSchemeHttps;
-    }
-
-    private static string BuildDownloadedAssetFileName(Uri uri)
-    {
-        var pathName = Path.GetFileName(uri.AbsolutePath);
-        if (string.IsNullOrWhiteSpace(pathName))
-            pathName = "asset";
-
-        foreach (var invalid in Path.GetInvalidFileNameChars())
-            pathName = pathName.Replace(invalid, '-');
-
-        var extension = Path.GetExtension(pathName);
-        var stem = pathName[..Math.Max(0, pathName.Length - extension.Length)];
-        if (string.IsNullOrWhiteSpace(stem))
-            stem = "asset";
-
-        var hash = ComputeShortHash(Encoding.UTF8.GetBytes(uri.AbsoluteUri));
-        return $"{stem}.{hash}{extension}";
-    }
-
-    private static string DownloadText(Uri uri, string? userAgent)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-        var safeUserAgent = NormalizeHeaderSingleLine(userAgent);
-        if (!string.IsNullOrWhiteSpace(safeUserAgent))
-            request.Headers.TryAddWithoutValidation("User-Agent", safeUserAgent);
-
-        using var response = RewriteDownloadClient.Send(request);
-        response.EnsureSuccessStatusCode();
-        using var stream = response.Content.ReadAsStream();
-        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-        return reader.ReadToEnd();
-    }
-
-    private static byte[] DownloadBytes(Uri uri, string? userAgent)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-        var safeUserAgent = NormalizeHeaderSingleLine(userAgent);
-        if (!string.IsNullOrWhiteSpace(safeUserAgent))
-            request.Headers.TryAddWithoutValidation("User-Agent", safeUserAgent);
-
-        using var response = RewriteDownloadClient.Send(request);
-        response.EnsureSuccessStatusCode();
-        using var stream = response.Content.ReadAsStream();
-        using var memory = new MemoryStream();
-        stream.CopyTo(memory);
-        return memory.ToArray();
-    }
-
-    internal static bool IsAllowedRewriteSourceUriForTesting(Uri uri, string[]? allowedHosts = null)
-    {
-        return IsAllowedRewriteSourceUri(uri, allowedHosts);
-    }
-
-    internal static string NormalizeHeaderSingleLineForTesting(string? value)
-    {
-        return NormalizeHeaderSingleLine(value);
-    }
-
-    private static string NormalizeHeaderSingleLine(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return string.Empty;
-
-        var firstLine = value.Split(new[] { '\r', '\n' }, StringSplitOptions.None)[0].Trim();
-        var builder = new StringBuilder(Math.Min(firstLine.Length, 512));
-        foreach (var character in firstLine)
-        {
-            if (character is >= ' ' and <= '~')
-                builder.Append(character);
-
-            if (builder.Length >= 512)
-                break;
-        }
-
-        return builder.ToString().Trim();
-    }
-
-    private static bool IsAllowedRewriteSourceUri(Uri uri, string[]? allowedHosts)
-    {
-        if (uri is null ||
-            uri.Scheme != Uri.UriSchemeHttps ||
-            IsUnsafeRemoteHost(uri.Host))
-        {
-            return false;
-        }
-
-        var configuredHosts = allowedHosts?
-            .Select(static host => host?.Trim().TrimEnd('.').ToLowerInvariant() ?? string.Empty)
-            .Where(static host => host.Length > 0)
-            .ToArray() ?? Array.Empty<string>();
-        if (configuredHosts.Length == 0)
-            return false;
-
-        var sourceHost = uri.Host.TrimEnd('.').ToLowerInvariant();
-        foreach (var allowedHost in configuredHosts)
-        {
-            if (string.Equals(allowedHost, "*", StringComparison.Ordinal))
-                return true;
-
-            if (string.Equals(sourceHost, allowedHost, StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            if (allowedHost.StartsWith("*.", StringComparison.Ordinal) &&
-                sourceHost.EndsWith(allowedHost[1..], StringComparison.OrdinalIgnoreCase) &&
-                sourceHost.Length > allowedHost.Length - 1)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool IsUnsafeRemoteHost(string host)
-    {
-        if (string.IsNullOrWhiteSpace(host))
-            return true;
-
-        var normalized = host.Trim().TrimEnd('.');
-        if (normalized.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
-            normalized.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return IPAddress.TryParse(normalized, out var address) && IsUnsafeRemoteAddress(address);
-    }
-
-    private static bool IsUnsafeRemoteAddress(IPAddress address)
-    {
-        if (IPAddress.IsLoopback(address))
-            return true;
-
-        if (address.AddressFamily == AddressFamily.InterNetwork)
-        {
-            var bytes = address.GetAddressBytes();
-            return bytes[0] == 10 ||
-                   (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
-                   (bytes[0] == 192 && bytes[1] == 168) ||
-                   (bytes[0] == 169 && bytes[1] == 254) ||
-                   bytes[0] == 0;
-        }
-
-        return address.IsIPv6LinkLocal ||
-               address.IsIPv6SiteLocal ||
-               address.IsIPv6Multicast ||
-               address.Equals(IPAddress.IPv6None) ||
-               address.Equals(IPAddress.IPv6Any);
+        return applicable.ToArray();
     }
 
     private static string RewriteHtmlAssets(string html, AssetRewriteSpec[] rewrites)
@@ -717,6 +531,7 @@ public static partial class WebAssetOptimizer
     private static Dictionary<string, string> HashAssets(
         string siteRoot,
         AssetHashSpec spec,
+        IReadOnlySet<string> protectedStoryArtifacts,
         out int hashedAssetCount,
         out List<WebOptimizeHashedAssetEntry> hashedAssets,
         Action<string>? onUpdated = null)
@@ -731,6 +546,8 @@ public static partial class WebAssetOptimizer
 
         foreach (var file in files)
         {
+            if (protectedStoryArtifacts.Contains(Path.GetFullPath(file)))
+                continue;
             var relative = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
             if (IsExcluded(relative, spec.Exclude))
                 continue;
@@ -740,7 +557,12 @@ public static partial class WebAssetOptimizer
             if (relative.Length <= ext.Length) continue;
             var without = relative.Substring(0, relative.Length - ext.Length);
             var hashedName = $"{without}.{hash}{ext}";
-            var target = Path.Combine(siteRoot, hashedName.Replace('/', Path.DirectorySeparatorChar));
+            var target = Path.GetFullPath(Path.Combine(siteRoot, hashedName.Replace('/', Path.DirectorySeparatorChar)));
+            if (protectedStoryArtifacts.Contains(target))
+            {
+                Trace.TraceWarning($"Hashed asset destination is protected by a visual-story manifest: {hashedName}");
+                continue;
+            }
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Move(file, target, overwrite: true);
             onUpdated?.Invoke(target);
@@ -762,6 +584,7 @@ public static partial class WebAssetOptimizer
         string siteRoot,
         string[] htmlFiles,
         Dictionary<string, string> map,
+        IReadOnlySet<string> protectedStoryArtifacts,
         Action<string>? onUpdated = null)
     {
         var htmlFilesRewritten = 0;
@@ -781,6 +604,8 @@ public static partial class WebAssetOptimizer
 
         foreach (var cssFile in Directory.EnumerateFiles(siteRoot, "*.css", SearchOption.AllDirectories))
         {
+            if (protectedStoryArtifacts.Contains(Path.GetFullPath(cssFile)))
+                continue;
             var css = File.ReadAllText(cssFile);
             if (string.IsNullOrWhiteSpace(css)) continue;
             var updated = RewriteCssUrls(css, map);

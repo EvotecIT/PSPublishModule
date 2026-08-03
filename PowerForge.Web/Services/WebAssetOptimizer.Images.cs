@@ -13,6 +13,7 @@ public static partial class WebAssetOptimizer
     private static void OptimizeImages(
         string siteRoot,
         string[] htmlFiles,
+        IReadOnlySet<string> protectedStoryArtifacts,
         WebAssetOptimizerOptions options,
         WebOptimizeResult result,
         Action<string>? onUpdated = null)
@@ -29,9 +30,9 @@ public static partial class WebAssetOptimizer
         var generatedVariants = new List<WebOptimizeImageVariantEntry>();
         var budgetWarnings = new List<string>();
         var rewritePlans = new Dictionary<string, ImageRewritePlan>(StringComparer.OrdinalIgnoreCase);
-
         foreach (var file in Directory.EnumerateFiles(siteRoot, "*.*", SearchOption.AllDirectories)
-                     .Where(path => extensionSet.Contains(Path.GetExtension(path))))
+                     .Where(path => extensionSet.Contains(Path.GetExtension(path)) &&
+                                    !protectedStoryArtifacts.Contains(Path.GetFullPath(path))))
         {
             var relative = ToRelative(siteRoot, file);
             if (options.ImageInclude is { Length: > 0 } && !IsIncluded(relative, options.ImageInclude))
@@ -90,7 +91,7 @@ public static partial class WebAssetOptimizer
                 if (options.ImageGenerateWebp && TryEncodeVariant(image, null, MagickFormat.WebP, quality, out var webpBytes))
                 {
                     if (webpBytes.LongLength > 0 && webpBytes.LongLength < finalBytes &&
-                        TryWriteVariant(siteRoot, relative, null, "webp", webpBytes, out var webpRelative, onUpdated))
+                        TryWriteVariant(siteRoot, relative, null, "webp", webpBytes, protectedStoryArtifacts, out var webpRelative, onUpdated))
                     {
                         generatedVariants.Add(new WebOptimizeImageVariantEntry
                         {
@@ -111,7 +112,7 @@ public static partial class WebAssetOptimizer
                 if (options.ImageGenerateAvif && TryEncodeVariant(image, null, MagickFormat.Avif, quality, out var avifBytes))
                 {
                     if (avifBytes.LongLength > 0 && avifBytes.LongLength < finalBytes &&
-                        TryWriteVariant(siteRoot, relative, null, "avif", avifBytes, out var avifRelative, onUpdated))
+                        TryWriteVariant(siteRoot, relative, null, "avif", avifBytes, protectedStoryArtifacts, out var avifRelative, onUpdated))
                     {
                         generatedVariants.Add(new WebOptimizeImageVariantEntry
                         {
@@ -141,7 +142,7 @@ public static partial class WebAssetOptimizer
                             continue;
                         if (responsiveBytes.LongLength <= 0 || responsiveBytes.LongLength >= preferredBytes)
                             continue;
-                        if (!TryWriteVariant(siteRoot, plan.PreferredRelativePath, width, responsiveExtension, responsiveBytes, out var variantRelative, onUpdated))
+                        if (!TryWriteVariant(siteRoot, plan.PreferredRelativePath, width, responsiveExtension, responsiveBytes, protectedStoryArtifacts, out var variantRelative, onUpdated))
                             continue;
 
                         plan.ResponsiveVariants.Add(new ImageVariantPlan
@@ -318,6 +319,36 @@ public static partial class WebAssetOptimizer
         }
     }
 
+    private static HashSet<string> FindVisualStoryArtifactPaths(string siteRoot)
+    {
+        var paths = new HashSet<string>(FileSystemPathComparer);
+        foreach (var manifestPath in Directory.EnumerateFiles(
+                     siteRoot,
+                     "*",
+                     SearchOption.AllDirectories)
+                 .Where(static path => string.Equals(
+                     Path.GetExtension(path),
+                     ".json",
+                     StringComparison.OrdinalIgnoreCase)))
+        {
+            if (!WebVisualStoryManifestDiscovery.IsRecognizable(manifestPath))
+                continue;
+
+            var bundle = WebVisualStoryStager.Load(manifestPath);
+            paths.Add(Path.GetFullPath(manifestPath));
+            var bundleRoot = Path.GetDirectoryName(manifestPath)
+                             ?? throw new InvalidOperationException("Visual-story manifest has no parent directory.");
+            foreach (var artifact in bundle.Artifacts)
+            {
+                paths.Add(VisualStoryPathGuard.ResolveRelativePath(
+                    bundleRoot,
+                    artifact.Path,
+                    "optimized visual-story artifact"));
+            }
+        }
+        return paths;
+    }
+
     private static bool HasHtmlSelfClosingMarker(string attributes)
     {
         if (!attributes.EndsWith("/", StringComparison.Ordinal))
@@ -472,6 +503,7 @@ public static partial class WebAssetOptimizer
         int? width,
         string formatExtension,
         byte[] bytes,
+        IReadOnlySet<string> protectedStoryArtifacts,
         out string variantRelativePath,
         Action<string>? onUpdated = null)
     {
@@ -496,7 +528,9 @@ public static partial class WebAssetOptimizer
             ? $"{relativeNoExt}.w{width.Value}.{ext}"
             : $"{relativeNoExt}.{ext}";
 
-        var variantPath = Path.Combine(siteRoot, variantName.Replace('/', Path.DirectorySeparatorChar));
+        var variantPath = Path.GetFullPath(Path.Combine(siteRoot, variantName.Replace('/', Path.DirectorySeparatorChar)));
+        if (protectedStoryArtifacts.Contains(variantPath))
+            return false;
         Directory.CreateDirectory(Path.GetDirectoryName(variantPath)!);
         File.WriteAllBytes(variantPath, bytes);
         onUpdated?.Invoke(variantPath);
@@ -576,7 +610,11 @@ public static partial class WebAssetOptimizer
         return Convert.ToHexString(hash).Substring(0, 8).ToLowerInvariant();
     }
 
-    private static string? WriteHashManifest(string siteRoot, AssetHashSpec spec, Dictionary<string, string> map)
+    private static string? WriteHashManifest(
+        string siteRoot,
+        AssetHashSpec spec,
+        Dictionary<string, string> map,
+        IReadOnlySet<string> protectedStoryArtifacts)
     {
         if (map.Count == 0) return null;
         var manifestRelative = string.IsNullOrWhiteSpace(spec.ManifestPath)
@@ -587,6 +625,11 @@ public static partial class WebAssetOptimizer
             Trace.TraceWarning($"Hash manifest path outside site root: {spec.ManifestPath}");
             return null;
         }
+        if (protectedStoryArtifacts.Contains(Path.GetFullPath(path)))
+        {
+            Trace.TraceWarning($"Hash manifest path is protected by a visual-story manifest: {spec.ManifestPath}");
+            return null;
+        }
         var json = System.Text.Json.JsonSerializer.Serialize(map, new System.Text.Json.JsonSerializerOptions
         {
             WriteIndented = true
@@ -595,12 +638,21 @@ public static partial class WebAssetOptimizer
         return path;
     }
 
-    private static string? WriteCacheHeaders(string siteRoot, CacheHeadersSpec headers, Dictionary<string, string>? map)
+    private static string? WriteCacheHeaders(
+        string siteRoot,
+        CacheHeadersSpec headers,
+        Dictionary<string, string>? map,
+        IReadOnlySet<string> protectedStoryArtifacts)
     {
         var output = string.IsNullOrWhiteSpace(headers.OutputPath) ? "_headers" : headers.OutputPath;
         if (!TryResolveUnderRoot(siteRoot, output.TrimStart('/', '\\'), out var outputPath))
         {
             Trace.TraceWarning($"Cache headers output path outside site root: {headers.OutputPath}");
+            return null;
+        }
+        if (protectedStoryArtifacts.Contains(Path.GetFullPath(outputPath)))
+        {
+            Trace.TraceWarning($"Cache headers output path is protected by a visual-story manifest: {headers.OutputPath}");
             return null;
         }
         var htmlCache = string.IsNullOrWhiteSpace(headers.HtmlCacheControl)

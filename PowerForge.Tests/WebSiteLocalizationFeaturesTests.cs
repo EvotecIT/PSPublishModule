@@ -359,6 +359,40 @@ public class WebSiteLocalizationFeaturesTests
         try
         {
             CreateDefaultLanguageOnlyDocsContent(root);
+            var docsEnPath = Path.Combine(root, "content", "docs", "en");
+            File.AppendAllText(
+                Path.Combine(docsEnPath, "index.md"),
+                Environment.NewLine +
+                "Literal /docs/story/demo.svg remains." + Environment.NewLine + Environment.NewLine +
+                "`/docs/story/demo.svg`" + Environment.NewLine + Environment.NewLine +
+                "<style>.story-poster{background-image:url('/docs/story/demo.png')}</style>" +
+                "<div class=\"story-poster\" style=\"mask-image:url('/docs/story/demo.svg')\">Styled story</div>" +
+                Environment.NewLine +
+                "<a href=\"https://evotec.xyz/docs/story/demo.svg\">Absolute story link</a>" +
+                Environment.NewLine +
+                "{{< story manifest=\"content/docs/en/story/visual-story.json\" transcript=\"hidden\" >}}");
+            var storyRoot = Path.Combine(docsEnPath, "story");
+            Directory.CreateDirectory(storyRoot);
+            File.WriteAllText(
+                Path.Combine(storyRoot, "demo.svg"),
+                "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"1\" height=\"1\"><animate attributeName=\"opacity\" dur=\"1s\" values=\"0;1\"/></rect></svg>");
+            using (var completed = new ImageMagick.MagickImage(ImageMagick.MagickColors.Transparent, 2, 2))
+                completed.Write(Path.Combine(storyRoot, "demo.png"), ImageMagick.MagickFormat.Png);
+            File.WriteAllText(
+                Path.Combine(storyRoot, "visual-story.json"),
+                """
+                {
+                  "schemaVersion": 1,
+                  "id": "localized-story",
+                  "title": "Localized story",
+                  "alt": "Animated example followed by its result.",
+                  "outcome": "The result is visible.",
+                  "artifacts": [
+                    { "role": "animated", "format": "svg", "path": "demo.svg" },
+                    { "role": "completed", "format": "png", "path": "demo.png" }
+                  ]
+                }
+                """);
             CreateSeoTheme(root, "localization-fallback-theme", "docs");
 
             var spec = CreateLocalizedDocsSpec("Localization Features Fallback Build Test", "localization-fallback-theme");
@@ -385,6 +419,15 @@ public class WebSiteLocalizationFeaturesTests
             Assert.Contains("hreflang=\"pl\" href=\"https://evotec.pl/pl/docs", plHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("<link rel=\"canonical\" href=\"https://evotec.pl/pl/docs/\" />", plHtml, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("<link rel=\"canonical\" href=\"https://evotec.xyz/docs/\" />", plHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("src=\"/docs/story/demo.svg\"", enHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("src=\"/pl/docs/story/demo.svg\"", plHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("srcset=\"/pl/docs/story/demo.png\"", plHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("background-image:url('/pl/docs/story/demo.png')", plHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("mask-image:url('/pl/docs/story/demo.svg')", plHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("src=\"/docs/story/demo.svg\"", plHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Literal /docs/story/demo.svg remains.", plHtml, StringComparison.Ordinal);
+            Assert.Contains("<code>/docs/story/demo.svg</code>", plHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"https://evotec.xyz/docs/story/demo.svg\"", plHtml, StringComparison.OrdinalIgnoreCase);
 
             var allSearchPath = Path.Combine(result.OutputPath, "search", "index.json");
             Assert.True(File.Exists(allSearchPath));

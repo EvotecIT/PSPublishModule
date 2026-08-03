@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Management.Automation;
+using System.Reflection;
 using PowerForge;
 using PSPublishModule;
 using Xunit;
@@ -50,6 +51,17 @@ public class ModuleDocumentationReviewRegressionTests
         Assert.True(InstallModuleScriptCommand.MatchesAnyForTesting(fullPath, root, System.Array.Empty<string>(), emptyMatches: true));
         Assert.False(InstallModuleScriptCommand.MatchesAnyForTesting(fullPath, root, System.Array.Empty<string>(), emptyMatches: false));
         Assert.True(InstallModuleScriptCommand.MatchesAnyForTesting(fullPath, root, new[] { "Repair-*" }, emptyMatches: false));
+    }
+
+    [Fact]
+    public void InstallModuleScript_DeclaresWildcardParameters()
+    {
+        Assert.NotNull(typeof(InstallModuleScriptCommand)
+            .GetProperty(nameof(InstallModuleScriptCommand.Include))!
+            .GetCustomAttribute<SupportsWildcardsAttribute>());
+        Assert.NotNull(typeof(InstallModuleScriptCommand)
+            .GetProperty(nameof(InstallModuleScriptCommand.Exclude))!
+            .GetCustomAttribute<SupportsWildcardsAttribute>());
     }
 
     [Fact]

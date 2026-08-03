@@ -32,6 +32,9 @@ internal static partial class WebPipelineRunner
             return false;
         if (task.Equals("exec", StringComparison.OrdinalIgnoreCase))
             return false;
+        if (task.Equals("visual-story", StringComparison.OrdinalIgnoreCase) ||
+            task.Equals("visualstory", StringComparison.OrdinalIgnoreCase))
+            return false;
         if (task.Equals("hook", StringComparison.OrdinalIgnoreCase))
             return false;
         if (task.Equals("html-transform", StringComparison.OrdinalIgnoreCase))

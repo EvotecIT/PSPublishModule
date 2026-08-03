@@ -75,6 +75,7 @@
         { "$ref": "#/$defs/DataTransformStep" },
         { "$ref": "#/$defs/ModelTransformStep" },
         { "$ref": "#/$defs/ExecStep" },
+        { "$ref": "#/$defs/VisualStoryStep" },
         { "$ref": "#/$defs/GitSyncStep" },
         { "$ref": "#/$defs/SourcesSyncStep" },
         { "$ref": "#/$defs/EcosystemStatsStep" },
@@ -1291,6 +1292,67 @@
         { "required": ["command"] },
         { "required": ["cmd"] },
         { "required": ["file"] }
+      ]
+    },
+    "VisualStoryStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "enum": ["visual-story", "visualstory"] },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "manifest": { "type": "string", "description": "Producer-emitted visual-story manifest, relative to the pipeline root." },
+        "manifestPath": { "type": "string", "description": "Alias for manifest." },
+        "manifest-path": { "type": "string", "description": "Alias for manifest." },
+        "out": { "type": "string", "description": "Destination for the validated self-contained story bundle." },
+        "output": { "type": "string", "description": "Alias for out." },
+        "outputPath": { "type": "string", "description": "Alias for out." },
+        "output-path": { "type": "string", "description": "Alias for out." },
+        "maximumArtifactBytes": { "type": "integer", "minimum": 1 },
+        "maximum-artifact-bytes": { "type": "integer", "minimum": 1, "description": "Alias for maximumArtifactBytes." },
+        "maximumTotalArtifactBytes": { "type": "integer", "minimum": 1 },
+        "maximum-total-artifact-bytes": { "type": "integer", "minimum": 1, "description": "Alias for maximumTotalArtifactBytes." },
+        "overwrite": { "type": "boolean" },
+        "command": { "type": "string", "description": "Optional trusted producer command. No command is run when omitted." },
+        "cmd": { "type": "string", "description": "Alias for command." },
+        "file": { "type": "string", "description": "Alias for command." },
+        "args": { "type": "string" },
+        "arguments": { "type": "string", "description": "Alias for args." },
+        "argsList": { "type": "array", "items": { "type": "string" } },
+        "args-list": { "type": "array", "items": { "type": "string" }, "description": "Alias for argsList." },
+        "argumentsList": { "type": "array", "items": { "type": "string" }, "description": "Alias for argsList." },
+        "arguments-list": { "type": "array", "items": { "type": "string" }, "description": "Alias for argsList." },
+        "workingDirectory": { "type": "string" },
+        "workingDir": { "type": "string", "description": "Alias for workingDirectory." },
+        "cwd": { "type": "string", "description": "Alias for workingDirectory." },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "timeout-seconds": { "type": "integer", "minimum": 1, "description": "Alias for timeoutSeconds." },
+        "allowFailure": { "const": false, "description": "Producer failures cannot be ignored." },
+        "continueOnError": { "const": false, "description": "Producer failures cannot be ignored." }
+      },
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["manifest"] },
+            { "required": ["manifestPath"] },
+            { "required": ["manifest-path"] }
+          ]
+        },
+        {
+          "anyOf": [
+            { "required": ["out"] },
+            { "required": ["output"] },
+            { "required": ["outputPath"] },
+            { "required": ["output-path"] }
+          ]
+        }
       ]
     },
     "GitSyncStep": {

@@ -311,7 +311,18 @@ Supported media nodes:
 - `<image ... />` / `<img ... />` / `<screenshot ... />`
 - `<video ... />`
 - `<terminal ... />`
-- `<media kind="image|video|terminal|link" ... />`
+- `<media kind="image|video|terminal|story|link" ... />`
+
+Use `kind="story"` for a complete code-to-result presentation. `src` points at animated SVG/GIF/APNG and `poster` points at the completed PNG outcome. Generated API pages automatically select the completed PNG under `prefers-reduced-motion`:
+
+```xml
+<media kind="story"
+       src="/stories/chart-five-lines/demo.svg"
+       poster="/stories/chart-five-lines/demo.png"
+       title="Create a chart in five lines"
+       alt="Five lines of source followed by the rendered chart."
+       caption="The completed scene contains the promised chart." />
+```
 
 Generated JSON keeps those entries under `examples[]` with `kind: "media"` and a structured `media` object (`type`, `url`, `title`, `alt`, `caption`, `posterUrl`, `mimeType`, `width`, `height`, optional `capturedAtUtc`, optional `sourceUpdatedAtUtc`).
 

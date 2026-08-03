@@ -502,6 +502,7 @@ public class WebApiDocsGeneratorSourceAndCssTests
                     <code>Sample.Run();</code>
                     <media kind="terminal" src="/casts/sample.cast" title="Terminal playback" caption="Recorded terminal output." poster="/images/sample-terminal.png" mimeType="application/x-asciicast" />
                     <media kind="video" src="/videos/sample" title="Video playback" caption="Recorded video output." mimeType="video/mp4" />
+                    <media kind="story" src="/stories/sample.png" mimeType="image/apng" title="Visual story" alt="Code runs and the result appears." caption="A complete code-to-result demonstration." poster="/stories/sample final.png" />
                     <image src="/images/sample-output.png" alt="Rendered sample output" caption="Example screenshot." width="1280" height="720" />
                   </example>
                 </member>
@@ -546,11 +547,216 @@ public class WebApiDocsGeneratorSourceAndCssTests
             Assert.DoesNotContain("class=\"example-media-meta\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("class=\"example-media example-media-video\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("<source src=\"/videos/sample\" type=\"video/mp4\" />", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("class=\"example-media example-media-story\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<source media=\"print\" srcset=\"/stories/sample%20final.png\" type=\"image/png\" />", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("prefers-reduced-motion: reduce", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("src=\"/stories/sample.png\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("srcset=\"/stories/sample%20final.png\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("class=\"example-media example-media-image\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("src=\"/images/sample-output.png\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("alt=\"Rendered sample output\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("width=\"1280\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("height=\"720\"", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_RejectsVisualStoryWithoutCompletedPoster()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-story-poster-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                  <example>
+                    <media kind="story" src="/stories/sample.svg" alt="Code runs and the result appears." />
+                  </example>
+                </member>
+              </members>
+            </doc>
+            """);
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = Path.Combine(root, "api"),
+            Format = "both",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+
+        try
+        {
+            var error = Assert.Throws<InvalidOperationException>(() => WebApiDocsGenerator.Generate(options));
+            Assert.Contains("completed poster", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_RejectsVisualStoryPosterThatIsNotPng()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-story-poster-format-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                  <example>
+                    <media kind="story" src="/stories/sample.svg" alt="Code runs and the result appears." poster="/stories/loading.gif" />
+                  </example>
+                </member>
+              </members>
+            </doc>
+            """);
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = Path.Combine(root, "api"),
+            Format = "both",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+
+        try
+        {
+            var error = Assert.Throws<InvalidOperationException>(() => WebApiDocsGenerator.Generate(options));
+            Assert.Contains("completed PNG poster", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_RejectsUnsupportedVisualStorySourceFormat()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-story-source-format-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                  <example>
+                    <media kind="story" src="/stories/sample.mp4?download=1" alt="Code runs and the result appears." poster="/stories/sample.png" />
+                  </example>
+                </member>
+              </members>
+            </doc>
+            """);
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = Path.Combine(root, "api"),
+            Format = "both",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+
+        try
+        {
+            var error = Assert.Throws<InvalidOperationException>(() => WebApiDocsGenerator.Generate(options));
+            Assert.Contains("animated SVG, GIF, or APNG", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_RejectsAmbiguousPngVisualStorySource()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-story-source-png-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                  <example>
+                    <media kind="story" src="/stories/sample.png" alt="Code runs and the result appears." poster="/stories/sample-poster.png" />
+                  </example>
+                </member>
+              </members>
+            </doc>
+            """);
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = Path.Combine(root, "api"),
+            Format = "both",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+
+        try
+        {
+            var error = Assert.Throws<InvalidOperationException>(() => WebApiDocsGenerator.Generate(options));
+            Assert.Contains("animated SVG, GIF, or APNG", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_RejectsVisualStoryWithoutAlternativeText()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-story-alt-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                  <example>
+                    <media kind="story" src="/stories/sample.svg" poster="/stories/sample.png" />
+                  </example>
+                </member>
+              </members>
+            </doc>
+            """);
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = Path.Combine(root, "api"),
+            Format = "both",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+
+        try
+        {
+            var error = Assert.Throws<InvalidOperationException>(() => WebApiDocsGenerator.Generate(options));
+            Assert.Contains("alternative text", error.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

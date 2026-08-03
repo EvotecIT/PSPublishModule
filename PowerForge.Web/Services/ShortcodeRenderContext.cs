@@ -15,6 +15,8 @@ public sealed class ShortcodeRenderContext
     public ProjectSpec? Project { get; init; }
     /// <summary>Source file path for the current page.</summary>
     public string SourcePath { get; init; } = string.Empty;
+    /// <summary>Published URL base for resources attached to the current page bundle.</summary>
+    public string PageResourceBaseUrl { get; init; } = string.Empty;
     /// <summary>Data dictionary available to shortcodes.</summary>
     public IReadOnlyDictionary<string, object?> Data { get; init; } = new Dictionary<string, object?>();
     /// <summary>Resolved theme manifest.</summary>
@@ -23,6 +25,7 @@ public sealed class ShortcodeRenderContext
     public string? ThemeRoot { get; init; }
     internal ITemplateEngine? Engine { get; init; }
     internal Func<string, string?>? PartialResolver { get; init; }
+    internal WebVisualStoryBundleCache VisualStoryCache { get; init; } = new();
 
     internal static ShortcodeRenderContext FromDataOnly(IReadOnlyDictionary<string, object?> data)
     {

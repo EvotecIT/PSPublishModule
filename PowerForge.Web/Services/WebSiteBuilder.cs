@@ -166,6 +166,10 @@ public static partial class WebSiteBuilder
             };
             var rendered = 0;
             var lastProgressReportAt = buildStopwatch.Elapsed;
+            ReportProgress("copying theme assets");
+            CopyThemeAssets(spec, plan.RootPath, outDir);
+            ReportProgress("copying static assets");
+            CopyStaticAssets(spec, plan.RootPath, outDir);
             ReportProgress("rendering content");
             foreach (var item in renderItems)
             {
@@ -203,10 +207,6 @@ public static partial class WebSiteBuilder
                 }
             }
 
-            ReportProgress("copying theme assets");
-            CopyThemeAssets(spec, plan.RootPath, outDir);
-            ReportProgress("copying static assets");
-            CopyStaticAssets(spec, plan.RootPath, outDir);
             ReportProgress("writing navigation/search/diagnostic outputs");
             WriteSiteNavData(spec, outDir, menuSpecs);
             WriteSearchIndex(spec, outDir, renderItems);
@@ -367,23 +367,38 @@ public static partial class WebSiteBuilder
 
     private static void CopyDirectory(string source, string destination)
     {
+        var sourceDirectory = new DirectoryInfo(source);
+        RejectLinkedAsset(sourceDirectory);
         Directory.CreateDirectory(destination);
 
-        foreach (var file in Directory.GetFiles(source))
+        foreach (var file in sourceDirectory.EnumerateFiles())
         {
-            var destFile = Path.Combine(destination, Path.GetFileName(file));
-            CopyFileIfChanged(file, destFile);
+            RejectLinkedAsset(file);
+            var destFile = Path.Combine(destination, file.Name);
+            CopyFileIfChanged(file.FullName, destFile);
         }
 
-        foreach (var dir in Directory.GetDirectories(source))
+        foreach (var directory in sourceDirectory.EnumerateDirectories())
         {
-            var destDir = Path.Combine(destination, Path.GetFileName(dir));
-            CopyDirectory(dir, destDir);
+            RejectLinkedAsset(directory);
+            var destDir = Path.Combine(destination, directory.Name);
+            CopyDirectory(directory.FullName, destDir);
+        }
+    }
+
+    private static void RejectLinkedAsset(FileSystemInfo entry)
+    {
+        if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"Website asset source cannot contain a symbolic link or reparse point: {entry.FullName}");
         }
     }
 
     private static void CopyStaticAssets(SiteSpec spec, string rootPath, string outputRoot)
     {
+        if (!HasExplicitConventionalStaticMapping(spec, rootPath))
+            CopyConventionalStaticAssets(rootPath, outputRoot);
         if (spec.StaticAssets is null || spec.StaticAssets.Length == 0)
             return;
 
@@ -404,6 +419,7 @@ public static partial class WebSiteBuilder
             var destination = (asset.Destination ?? string.Empty).TrimStart('/', '\\');
             if (File.Exists(sourcePath))
             {
+                RejectLinkedAsset(new FileInfo(sourcePath));
                 var destPath = string.IsNullOrWhiteSpace(destination)
                     ? Path.Combine(outputRoot, Path.GetFileName(sourcePath))
                     : (Path.HasExtension(destination)
@@ -435,6 +451,54 @@ public static partial class WebSiteBuilder
             }
             CopyDirectory(sourcePath, targetRoot);
         }
+    }
+
+    private static bool HasExplicitConventionalStaticMapping(SiteSpec spec, string rootPath)
+    {
+        if (spec.StaticAssets is null || spec.StaticAssets.Length == 0)
+            return false;
+
+        var conventionalRoot = NormalizeRootPathForSink(Path.Combine(rootPath, "static"));
+        var pathComparison = WebVisualStoryStager.GetFileSystemPathComparison(rootPath);
+        foreach (var asset in spec.StaticAssets)
+        {
+            if (string.IsNullOrWhiteSpace(asset.Source))
+                continue;
+
+            try
+            {
+                var sourcePath = Path.IsPathRooted(asset.Source)
+                    ? asset.Source
+                    : Path.Combine(rootPath, asset.Source);
+                var normalizedSource = NormalizeRootPathForSink(sourcePath);
+                if (IsPathWithinRoot(conventionalRoot, normalizedSource, pathComparison))
+                    return true;
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                Trace.TraceWarning($"Skipping invalid static asset source path: {asset.Source}");
+            }
+        }
+
+        return false;
+    }
+
+    private static void CopyConventionalStaticAssets(string rootPath, string outputRoot)
+    {
+        var conventionalRoot = Path.GetFullPath(Path.Combine(rootPath, "static"));
+        if (!Directory.Exists(conventionalRoot))
+            return;
+
+        var normalizedConventionalRoot = NormalizeRootPathForSink(conventionalRoot);
+        var conventionalOutputRoot = NormalizeRootPathForSink(outputRoot);
+        if (IsPathWithinRoot(normalizedConventionalRoot, Path.GetFullPath(outputRoot)))
+        {
+            Trace.TraceWarning(
+                $"Skipping conventional static asset copy because output is inside the source root: {conventionalRoot}");
+            return;
+        }
+
+        CopyDirectory(conventionalRoot, conventionalOutputRoot);
     }
 
     private static bool WriteAllTextIfChanged(string path, string content)
@@ -520,14 +584,20 @@ public static partial class WebSiteBuilder
     }
 
     private static bool IsPathWithinRoot(string normalizedRoot, string candidatePath)
+        => IsPathWithinRoot(normalizedRoot, candidatePath, FileSystemPathComparison);
+
+    private static bool IsPathWithinRoot(
+        string normalizedRoot,
+        string candidatePath,
+        StringComparison comparison)
     {
         var root = normalizedRoot
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var full = Path.GetFullPath(candidatePath);
-        if (full.Equals(root, FileSystemPathComparison))
+        if (full.Equals(root, comparison))
             return true;
 
-        return full.StartsWith(root + Path.DirectorySeparatorChar, FileSystemPathComparison);
+        return full.StartsWith(root + Path.DirectorySeparatorChar, comparison);
     }
 
 }

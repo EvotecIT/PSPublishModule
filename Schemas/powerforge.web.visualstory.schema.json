@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.web.visualstory.schema.json",
+  "title": "PowerForge Web Visual Story Bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "title", "alt", "outcome", "artifacts"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "title": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "alt": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "caption": { "type": ["string", "null"] },
+    "outcome": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "generatedAtUtc": { "type": ["string", "null"], "format": "date-time" },
+    "producer": { "type": ["string", "null"] },
+    "resourceLimits": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["maximumArtifactBytes", "maximumTotalArtifactBytes"],
+      "properties": {
+        "maximumArtifactBytes": { "type": "integer", "minimum": 1 },
+        "maximumTotalArtifactBytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "contains": {
+        "type": "object",
+        "required": ["role"],
+        "properties": {
+          "role": { "type": "string", "pattern": "^[Cc][Oo][Mm][Pp][Ll][Ee][Tt][Ee][Dd]$" }
+        }
+      },
+      "minContains": 1,
+      "maxContains": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "format", "path"],
+        "properties": {
+          "role": { "type": "string", "pattern": "^(?:[Aa][Nn][Ii][Mm][Aa][Tt][Ee][Dd]|[Cc][Oo][Mm][Pp][Ll][Ee][Tt][Ee][Dd]|[Tt][Rr][Aa][Nn][Ss][Cc][Rr][Ii][Pp][Tt]|[Ss][Oo][Uu][Rr][Cc][Ee]|[Hh][Tt][Mm][Ll])$" },
+          "format": { "type": "string", "pattern": "^(?:[Ss][Vv][Gg]|[Gg][Ii][Ff]|[Aa][Pp][Nn][Gg]|[Pp][Nn][Gg]|[Hh][Tt][Mm][Ll]|[Tt][Ee][Xx][Tt]|[Tt][Xx][Tt])$" },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?![A-Za-z]:)(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+          },
+          "mediaType": { "type": ["string", "null"] },
+          "bytes": { "type": ["integer", "null"], "minimum": 0 },
+          "sha256": { "type": ["string", "null"], "pattern": "^[0-9a-fA-F]{64}$" }
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": ["role"],
+              "properties": {
+                "role": { "type": "string", "pattern": "^[Cc][Oo][Mm][Pp][Ll][Ee][Tt][Ee][Dd]$" }
+              }
+            },
+            "then": {
+              "properties": {
+                "format": { "type": "string", "pattern": "^[Pp][Nn][Gg]$" }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": ["role"],
+              "properties": {
+                "role": { "type": "string", "pattern": "^[Tt][Rr][Aa][Nn][Ss][Cc][Rr][Ii][Pp][Tt]$" }
+              }
+            },
+            "then": {
+              "properties": {
+                "format": { "type": "string", "pattern": "^(?:[Tt][Ee][Xx][Tt]|[Tt][Xx][Tt])$" }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": ["role"],
+              "properties": {
+                "role": { "type": "string", "pattern": "^[Aa][Nn][Ii][Mm][Aa][Tt][Ee][Dd]$" }
+              }
+            },
+            "then": {
+              "properties": {
+                "format": { "type": "string", "pattern": "^(?:[Ss][Vv][Gg]|[Gg][Ii][Ff]|[Aa][Pp][Nn][Gg])$" }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -263,27 +264,55 @@ public static partial class WebApiDocsGenerator
         if (string.IsNullOrWhiteSpace(url))
             return false;
 
+        var posterUrl = NormalizeInlineHref(
+            element.Attribute("poster")?.Value ??
+            element.Attribute("thumbnail")?.Value ??
+            element.Attribute("thumb")?.Value);
+        var mediaMimeType = Normalize(
+            element.Attribute("mimeType")?.Value ??
+            element.Attribute("mime-type")?.Value ??
+            element.Attribute("contentType")?.Value ??
+            element.Attribute("content-type")?.Value ??
+            string.Empty);
+        if (type.Equals("story", StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(posterUrl))
+        {
+            throw new InvalidOperationException(
+                "API visual-story media requires a completed poster for reduced-motion and print output.");
+        }
+        if (type.Equals("story", StringComparison.OrdinalIgnoreCase) &&
+            !IsCompletedPngHref(posterUrl))
+        {
+            throw new InvalidOperationException(
+                "API visual-story media requires a completed PNG poster for reduced-motion and print output.");
+        }
+        if (type.Equals("story", StringComparison.OrdinalIgnoreCase) &&
+            !IsAnimatedStoryHref(url, mediaMimeType))
+        {
+            throw new InvalidOperationException(
+                "API visual-story media source must use animated SVG, GIF, or APNG content.");
+        }
+        var alt = Normalize(element.Attribute("alt")?.Value ?? string.Empty);
+        if (type.Equals("story", StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(alt))
+        {
+            throw new InvalidOperationException(
+                "API visual-story media requires alternative text that describes the code-to-result presentation.");
+        }
+
         media = new ApiExampleMediaModel
         {
             Type = type,
             Url = url,
             Title = Normalize(element.Attribute("title")?.Value ?? element.Attribute("label")?.Value ?? string.Empty),
-            Alt = Normalize(element.Attribute("alt")?.Value ?? string.Empty),
+            Alt = alt,
             Caption = Normalize(
                 element.Attribute("caption")?.Value ??
                 element.Attribute("description")?.Value ??
                 NormalizeXmlText(element) ??
                 string.Empty),
-            PosterUrl = NormalizeInlineHref(
-                element.Attribute("poster")?.Value ??
-                element.Attribute("thumbnail")?.Value ??
-                element.Attribute("thumb")?.Value),
-            MimeType = Normalize(
-                element.Attribute("mimeType")?.Value ??
-                element.Attribute("mime-type")?.Value ??
-                element.Attribute("contentType")?.Value ??
-                element.Attribute("content-type")?.Value ??
-                string.Empty),
+            PosterUrl = posterUrl,
+            MimeType = mediaMimeType,
             Width = ParseNullableInt(element.Attribute("width")?.Value),
             Height = ParseNullableInt(element.Attribute("height")?.Value)
         };
@@ -314,6 +343,7 @@ public static partial class WebApiDocsGenerator
             "img" or "image" or "screenshot" => "image",
             "video" => "video",
             "terminal" or "terminalcast" or "asciinema" => "terminal",
+            "story" or "visual-story" or "visualstory" => "story",
             "media" => "link",
             "link" or "download" or "asset" => "link",
             _ => string.Empty
@@ -645,6 +675,31 @@ public static partial class WebApiDocsGenerator
 
         return trimmed;
     }
+
+    private static bool IsCompletedPngHref(string href)
+    {
+        var path = href;
+        var delimiter = path.IndexOfAny(new[] { '?', '#' });
+        if (delimiter >= 0)
+            path = path[..delimiter];
+        return path.EndsWith(".png", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAnimatedStoryHref(string href, string mimeType)
+    {
+        var path = href;
+        var delimiter = path.IndexOfAny(new[] { '?', '#' });
+        if (delimiter >= 0)
+            path = path[..delimiter];
+        return path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase) ||
+               path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) ||
+               path.EndsWith(".apng", StringComparison.OrdinalIgnoreCase) ||
+               path.EndsWith(".png", StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(mimeType, "image/apng", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string EncodeSrcSetUrl(string href)
+        => SrcSetUrlEncoder.Encode(href);
 
     private static string InferTypeKind(string name)
     {
