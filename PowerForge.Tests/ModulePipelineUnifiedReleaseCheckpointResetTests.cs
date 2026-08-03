@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Xunit;
@@ -124,6 +125,117 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Fact]
+    public void Run_DiscardsValidBoundPayloadWithZeroRemoteAttemptsAfterConfigurationCorrection()
+    {
+        var fixture = CreateBoundPrePublishCredentialFailure();
+        try
+        {
+            var payloadCachePath = ResolveTestPayloadCachePath(fixture.CheckpointPath);
+            var secondHosted = new FakeHostedOperations(new List<string>());
+            var secondRunner = CreateRunner(secondHosted, fixture.ExecutePackageBuild);
+            var secondSpec = CreateGalleryReleaseSpec(
+                fixture.Root.FullName,
+                fixture.SecondStagingPath,
+                fixture.ModuleName);
+            SetGalleryRepositoryName(secondSpec, "CorrectedRepository");
+
+            var result = secondRunner.Run(secondSpec);
+
+            Assert.Equal("2.0.11", result.Plan.ResolvedVersion);
+            Assert.Equal(new[] { "2.0.11" }, secondHosted.PublishedModuleVersions);
+            Assert.False(File.Exists(fixture.CheckpointPath));
+            Assert.False(Directory.Exists(payloadCachePath));
+            Assert.Equal(2, fixture.PackageBuildCount());
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public void Run_PreservesMalformedBoundPayloadAfterConfigurationCorrection()
+    {
+        var fixture = CreateBoundPrePublishCredentialFailure();
+        try
+        {
+            var payloadCachePath = ResolveTestPayloadCachePath(fixture.CheckpointPath);
+            var cachedModuleFiles = Directory.GetFiles(
+                Path.Combine(payloadCachePath, "module"),
+                "*",
+                SearchOption.AllDirectories);
+            Assert.NotEmpty(cachedModuleFiles);
+            var cachedModuleFile = cachedModuleFiles[0];
+            File.AppendAllText(cachedModuleFile, "tampered");
+
+            var hosted = new FakeHostedOperations(new List<string>());
+            var runner = CreateRunner(hosted, fixture.ExecutePackageBuild);
+            var spec = CreateGalleryReleaseSpec(
+                fixture.Root.FullName,
+                fixture.SecondStagingPath,
+                fixture.ModuleName);
+            SetGalleryRepositoryName(spec, "CorrectedRepository");
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("configuration no longer matches", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(hosted.PublishedModuleVersions);
+            Assert.True(File.Exists(fixture.CheckpointPath));
+            Assert.True(Directory.Exists(payloadCachePath));
+            Assert.Equal(1, fixture.PackageBuildCount());
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public void Run_PreservesBoundPayloadCacheContainingNestedReparsePoint()
+    {
+        var fixture = CreateBoundPrePublishCredentialFailure();
+        try
+        {
+            var payloadCachePath = ResolveTestPayloadCachePath(fixture.CheckpointPath);
+            var outsidePath = Path.Combine(fixture.Root.FullName, "outside-bound-payload");
+            Directory.CreateDirectory(outsidePath);
+            var sentinelPath = Path.Combine(outsidePath, "sentinel.txt");
+            File.WriteAllText(sentinelPath, "preserve");
+            var linkPath = Path.Combine(payloadCachePath, "module", "linked");
+            try
+            {
+                Directory.CreateSymbolicLink(linkPath, outsidePath);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+            {
+                return;
+            }
+
+            var hosted = new FakeHostedOperations(new List<string>());
+            var runner = CreateRunner(hosted, fixture.ExecutePackageBuild);
+            var spec = CreateGalleryReleaseSpec(
+                fixture.Root.FullName,
+                fixture.SecondStagingPath,
+                fixture.ModuleName);
+            SetGalleryRepositoryName(spec, "CorrectedRepository");
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("configuration no longer matches", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(hosted.PublishedModuleVersions);
+            Assert.True(File.Exists(fixture.CheckpointPath));
+            Assert.True(Directory.Exists(payloadCachePath));
+            Assert.True(File.Exists(sentinelPath));
+            Assert.Equal("preserve", File.ReadAllText(sentinelPath));
+            Assert.Equal(1, fixture.PackageBuildCount());
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
     public void Run_UnlinksUnboundPayloadCacheReparsePointWithoutDeletingTarget()
     {
         var fixture = CreatePrePublishArtefactIdentityFailure();
@@ -195,6 +307,88 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
         Assert.Contains(expectedMessage, exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(hosted.PublishedModuleVersions);
+    }
+
+    private static string ResolveTestPayloadCachePath(string checkpointPath)
+        => Path.Combine(
+            Path.GetDirectoryName(checkpointPath)!,
+            Path.GetFileNameWithoutExtension(checkpointPath) + ".payload");
+
+    private static void SetGalleryRepositoryName(ModulePipelineSpec spec, string repositoryName)
+    {
+        var publish = Assert.Single(spec.Segments.OfType<ConfigurationPublishSegment>());
+        publish.Configuration.RepositoryName = repositoryName;
+    }
+
+    private static PrePublishCheckpointFixture CreateBoundPrePublishCredentialFailure()
+    {
+        const string moduleName = "TestModule";
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        var firstStagingPath = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.Staging",
+            Guid.NewGuid().ToString("N"));
+        var secondStagingPath = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.Staging",
+            Guid.NewGuid().ToString("N"));
+        var packageBuildCount = 0;
+
+        ProjectBuildHostExecutionResult ExecutePackageBuild(
+            ProjectBuildHostRequest request,
+            ProjectBuildConfiguration? configuration,
+            string? configPath)
+        {
+            packageBuildCount++;
+            return CreateProjectBuildResult(
+                root.FullName,
+                moduleName,
+                "2.0.11",
+                Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                request,
+                configPath,
+                includePackage: false);
+        }
+
+        WriteMinimalModule(root.FullName, moduleName, "2.0.10");
+        WriteSynchronizedProjectBuildConfig(
+            root.FullName,
+            "project.build.json",
+            moduleName,
+            publishNuGet: false);
+
+        var hosted = new FakeHostedOperations(new List<string>())
+        {
+            ModulePublishPreflightAction = (_, _) =>
+                throw new InvalidOperationException("Simulated missing publish credential.")
+        };
+        var runner = CreateRunner(hosted, ExecutePackageBuild);
+        var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(
+            CreateGalleryReleaseSpec(root.FullName, firstStagingPath, moduleName)));
+
+        Assert.Contains("missing publish credential", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(hosted.PublishedModuleVersions);
+        var checkpointPath = Assert.Single(Directory.GetFiles(
+            GetCoordinatedReleaseCheckpointRoot(root.FullName),
+            "*.json"));
+        var checkpoint = JsonNode.Parse(File.ReadAllText(checkpointPath))!;
+        Assert.NotEqual(string.Empty, checkpoint["SourceFingerprint"]!.GetValue<string>());
+        Assert.NotEqual(string.Empty, checkpoint["PayloadFingerprint"]!.GetValue<string>());
+        Assert.Empty(checkpoint["AttemptedOperations"]!.AsArray());
+        Assert.Empty(checkpoint["CompletedOperations"]!.AsArray());
+        Assert.True(Directory.Exists(ResolveTestPayloadCachePath(checkpointPath)));
+
+        return new PrePublishCheckpointFixture(
+            root,
+            firstStagingPath,
+            secondStagingPath,
+            moduleName,
+            checkpointPath,
+            ExecutePackageBuild,
+            () => packageBuildCount);
     }
 
     private static PrePublishCheckpointFixture CreatePrePublishArtefactIdentityFailure()

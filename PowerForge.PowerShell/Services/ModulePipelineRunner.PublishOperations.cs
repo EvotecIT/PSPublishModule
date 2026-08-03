@@ -62,7 +62,8 @@ public sealed partial class ModulePipelineRunner
 
     private void PreflightSynchronizedPackageGitHubRetrySafety(
         ModulePipelinePlan plan,
-        ModulePipelineRunState state)
+        ModulePipelineRunState state,
+        bool onlyAvailableResults = false)
     {
         if (state.SynchronizedReleaseCheckpoint is null)
             return;
@@ -82,8 +83,14 @@ public sealed partial class ModulePipelineRunner
             if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
                 continue;
 
+            if (!TryGetProjectBuildReleaseForCoordinatedGitHubPreflight(state, segment, out var release))
+            {
+                if (onlyAvailableResults)
+                    continue;
+                throw CreateMissingCoordinatedGitHubPreflightReleaseException();
+            }
+
             var configPath = ResolvePackageBuildPath(plan.ProjectRoot, segment.Configuration.ConfigPath);
-            var release = RequireProjectBuildReleaseForCoordinatedGitHubPreflight(state, segment);
             ValidateCoordinatedProjectBuildGitHubRetrySafety(
                 LoadProjectBuildConfiguration(configPath, segment.Configuration),
                 release);
@@ -104,26 +111,38 @@ public sealed partial class ModulePipelineRunner
             if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
                 continue;
 
-            var release = RequireProjectBuildReleaseForCoordinatedGitHubPreflight(state, segment);
+            if (!TryGetProjectBuildReleaseForCoordinatedGitHubPreflight(state, segment, out var release))
+            {
+                if (onlyAvailableResults)
+                    continue;
+                throw CreateMissingCoordinatedGitHubPreflightReleaseException();
+            }
+
             ValidateCoordinatedProjectBuildGitHubRetrySafety(
                 MapPackageBuildConfiguration(segment.Configuration, plan.ProjectRoot),
                 release);
         }
     }
 
-    private static DotNetRepositoryReleaseResult RequireProjectBuildReleaseForCoordinatedGitHubPreflight(
+    private static bool TryGetProjectBuildReleaseForCoordinatedGitHubPreflight(
         ModulePipelineRunState state,
-        object segment)
+        object segment,
+        out DotNetRepositoryReleaseResult release)
     {
         if (state.PackageBuildResultsBySegment.TryGetValue(segment, out var existing) &&
             existing.Result.Release is not null)
         {
-            return existing.Result.Release;
+            release = existing.Result.Release;
+            return true;
         }
 
-        throw new InvalidOperationException(
-            "Coordinated GitHub retry preflight requires the planned package release result before any remote publish destination can run.");
+        release = null!;
+        return false;
     }
+
+    private static InvalidOperationException CreateMissingCoordinatedGitHubPreflightReleaseException()
+        => new(
+            "Coordinated GitHub retry preflight requires the planned package release result before any remote publish destination can run.");
 
     private static void ValidateCoordinatedProjectBuildGitHubRetrySafety(
         ProjectBuildConfiguration configuration,

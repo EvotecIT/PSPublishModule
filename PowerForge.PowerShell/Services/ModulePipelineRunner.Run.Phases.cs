@@ -24,6 +24,7 @@ public sealed partial class ModulePipelineRunner
             ExecutePackageBuildsBeforeModule(plan, session, state);
             SynchronizeModuleVersionFromReleaseSource(plan, state);
             InitializeSynchronizedReleaseCheckpoint(plan, state);
+            PreflightSynchronizedPackageGitHubRetrySafety(plan, state, onlyAvailableResults: true);
         }
 
         ExecuteActions(ModulePipelineActionStage.BeforeDependencies, plan, session, state);
@@ -35,6 +36,7 @@ public sealed partial class ModulePipelineRunner
             ExecutePackageBuildsBeforeModule(plan, session, state);
             SynchronizeModuleVersionFromReleaseSource(plan, state);
             InitializeSynchronizedReleaseCheckpoint(plan, state);
+            PreflightSynchronizedPackageGitHubRetrySafety(plan, state, onlyAvailableResults: true);
         }
 
         ExecuteActions(ModulePipelineActionStage.BeforeVersioning, plan, session, state);
