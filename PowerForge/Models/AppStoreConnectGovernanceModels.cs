@@ -288,6 +288,7 @@ public sealed class AppStoreConnectSubscriptionLocalizationInfo
     public string? Locale { get; set; }
     public string? Name { get; set; }
     public string? Description { get; set; }
+    public string? State { get; set; }
 }
 
 public sealed class AppStoreConnectSubscriptionGroupLocalizationInfo
@@ -296,6 +297,7 @@ public sealed class AppStoreConnectSubscriptionGroupLocalizationInfo
     public string? Locale { get; set; }
     public string? Name { get; set; }
     public string? CustomAppName { get; set; }
+    public string? State { get; set; }
 }
 
 public sealed class AppStoreConnectSubscriptionPriceInfo
