@@ -468,7 +468,6 @@ public sealed partial class AppStoreConnectGovernanceService
             {
                 Add(changes, "Subscriptions", "SubscriptionGroup", groupKey, AppStoreConnectGovernanceChangeAction.Update,
                     $"Rename subscription group to '{desiredGroup.ReferenceName}'.", group.Id);
-                continue;
             }
             await PlanSubscriptionGroupChildrenAsync(desiredGroup, group, changes, cancellationToken).ConfigureAwait(false);
         }
@@ -511,7 +510,6 @@ public sealed partial class AppStoreConnectGovernanceService
             {
                 Add(changes, "Subscriptions", "Subscription", desired.ProductId, AppStoreConnectGovernanceChangeAction.Update,
                     $"Update subscription '{desired.ProductId}'.", existing.Id, group.Id);
-                continue;
             }
             await PlanSubscriptionChildrenAsync(desired, existing, changes, cancellationToken).ConfigureAwait(false);
         }
