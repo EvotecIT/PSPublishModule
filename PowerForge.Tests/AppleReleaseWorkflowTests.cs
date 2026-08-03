@@ -322,6 +322,9 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.DoesNotContain("Select-Object -First 10", workflow, StringComparison.Ordinal);
         Assert.Contains("$maxDiagnosticEntryLength = 4000", workflow, StringComparison.Ordinal);
         Assert.Contains("$maxRenderedDiagnosticCharacters = 48000", workflow, StringComparison.Ordinal);
+        Assert.Contains("$errorDiagnostics = @($receiptDiagnostics | Where-Object { $_.severity -eq 'error' })", workflow, StringComparison.Ordinal);
+        Assert.Contains("$specificErrors = @($errorDiagnostics | Where-Object { $_.code -ne 'APPLE_UNKNOWN' })", workflow, StringComparison.Ordinal);
+        Assert.Contains("foreach ($diagnostic in $incidentDiagnostics)", workflow, StringComparison.Ordinal);
         Assert.Contains("$omittedDiagnosticCount additional diagnostics omitted", workflow, StringComparison.Ordinal);
         Assert.Contains("Diagnostic state: ``$stateHash``", workflow, StringComparison.Ordinal);
         Assert.Contains("$previousState.Groups[1].Value -ne $stateHash", workflow, StringComparison.Ordinal);
@@ -333,6 +336,8 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("GH_REPO: ${{ github.repository }}", workflow, StringComparison.Ordinal);
         Assert.Contains("source-commit: ${{ inputs.source_ref }}", workflow, StringComparison.Ordinal);
         Assert.Contains("Fail when Apple Doctor found a problem", workflow, StringComparison.Ordinal);
+        Assert.Contains("Where-Object { $_.severity -eq 'error' }", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("$_.severity -in @('error', 'warning')", workflow, StringComparison.Ordinal);
         Assert.Contains("diagnostics:", action, StringComparison.Ordinal);
         Assert.Contains("'Status', 'Doctor'", script, StringComparison.Ordinal);
         Assert.Contains("reportedDiagnostics", script, StringComparison.Ordinal);

@@ -205,13 +205,19 @@ function Assert-SafeArguments {
         ($command -eq 'apple-governance' -and $operation -ne 'snapshot')) -and -not $config) {
         throw "$command requires an explicit --config at the pinned local operator boundary."
     }
-    $script:validatedConfigPaths = @()
+    $script:validatedReleaseConfigPaths = @()
     foreach ($option in @('--config', '--release-config')) {
         $value = Get-OptionValue -Option $option
         if ($value) {
             Assert-TrackedConsumerInput -Value $value -Option $option
-            $script:validatedConfigPaths += Resolve-OptionPath -Value $value
         }
+    }
+    if ($command -eq 'apple-release' -and $config) {
+        $script:validatedReleaseConfigPaths += Resolve-OptionPath -Value $config
+    }
+    $releaseConfig = Get-OptionValue -Option '--release-config'
+    if ($releaseConfig) {
+        $script:validatedReleaseConfigPaths += Resolve-OptionPath -Value $releaseConfig
     }
     foreach ($option in @('--capture-provenance', '--reviewed-plan')) {
         $value = Get-OptionValue -Option $option
@@ -253,7 +259,7 @@ function Assert-FixedAppleToolConfiguration {
             Test-Node -Node $property.Value
         }
     }
-    foreach ($configPath in @($script:validatedConfigPaths | Sort-Object -Unique)) {
+    foreach ($configPath in @($script:validatedReleaseConfigPaths | Sort-Object -Unique)) {
         Test-Node -Node (Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json)
     }
 }
@@ -266,7 +272,7 @@ function Invoke-TrackedInputValidator {
     Invoke-GitText -Root $toolRoot -Arguments @('ls-files', '--error-unmatch', '--', $relative) | Out-Null
     Invoke-GitText -Root $toolRoot -Arguments @('diff', '--quiet', 'HEAD', '--', $relative) | Out-Null
     $allowMissingProject = $ArgumentList[0] -eq 'apple-release' -and $ArgumentList.Count -gt 1 -and $ArgumentList[1] -ieq 'Cleanup'
-    foreach ($configPath in @($script:validatedConfigPaths | Select-Object -Unique)) {
+    foreach ($configPath in @($script:validatedReleaseConfigPaths | Select-Object -Unique)) {
         & $validator `
             -ConfigPath $configPath `
             -SourceCommit $SourceCommit `
