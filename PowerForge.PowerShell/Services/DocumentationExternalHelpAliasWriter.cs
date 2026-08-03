@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Management.Automation.Language;
 
 namespace PowerForge;
@@ -375,8 +376,8 @@ internal static class DocumentationExternalHelpAliasWriter
 
             foreach (var value in command.CommandElements
                          .Skip(1)
-                         .OfType<StringConstantExpressionAst>()
-                         .Select(node => node.Value)
+                         .Select(element => GetStaticModuleImportPath(element, scriptDirectory))
+                         .OfType<string>()
                          .Where(value => value.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
                                          value.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase)))
             {
@@ -409,6 +410,28 @@ internal static class DocumentationExternalHelpAliasWriter
                     yield return assemblyPath;
             }
         }
+    }
+
+    private static string? GetStaticModuleImportPath(CommandElementAst element, string scriptDirectory)
+    {
+        if (element is StringConstantExpressionAst literal)
+            return literal.Value;
+
+        if (element is not ExpandableStringExpressionAst expandable ||
+            expandable.NestedExpressions.Count == 0 ||
+            expandable.NestedExpressions.Any(expression =>
+                expression is not VariableExpressionAst variable ||
+                !string.Equals(
+                    variable.VariablePath.UserPath,
+                    "PSScriptRoot",
+                    StringComparison.OrdinalIgnoreCase)))
+            return null;
+
+        return Regex.Replace(
+            expandable.Value,
+            @"\$\{?PSScriptRoot\}?",
+            _ => scriptDirectory,
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
     internal static bool PathTraversesDirectoryReparsePoint(string rootDirectory, string candidateDirectory)

@@ -174,13 +174,27 @@ public sealed class DocumentationBinaryMetadataContractTests
                 "@{ RootModule = 'ScriptModule.psm1'; ModuleVersion = '1.0.0' }");
             File.WriteAllText(
                 Path.Combine(scriptModuleRoot, "ScriptModule.psm1"),
-                "Microsoft.PowerShell.Core\\Import-Module -Name './Lib/ScriptOwned.dll'");
+                "Microsoft.PowerShell.Core\\Import-Module -Name './Lib/ScriptOwned.dll'" + Environment.NewLine +
+                "Import-Module \"$PSScriptRoot/Lib/ExpandableOwned.dll\"" + Environment.NewLine +
+                "Import-Module \"${PSScriptRoot}\\Lib\\BracedOwned.dll\"");
             var scriptOwnedAssemblyPath = Path.Combine(scriptModuleLibrary, "ScriptOwned.dll");
             File.WriteAllText(scriptOwnedAssemblyPath, string.Empty);
             var scriptOwnedAlias = Path.Combine(scriptOwnedAliasDirectory, "ScriptOwned.dll-Help.xml");
             var scriptOwnedAliasContent =
                 DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("ScriptModule") + "\n<scriptOwned />";
             File.WriteAllText(scriptOwnedAlias, scriptOwnedAliasContent);
+            var expandableOwnedAssemblyPath = Path.Combine(scriptModuleLibrary, "ExpandableOwned.dll");
+            File.WriteAllText(expandableOwnedAssemblyPath, string.Empty);
+            var expandableOwnedAlias = Path.Combine(scriptOwnedAliasDirectory, "ExpandableOwned.dll-Help.xml");
+            var expandableOwnedAliasContent =
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("ScriptModule") + "\n<expandableOwned />";
+            File.WriteAllText(expandableOwnedAlias, expandableOwnedAliasContent);
+            var bracedOwnedAssemblyPath = Path.Combine(scriptModuleLibrary, "BracedOwned.dll");
+            File.WriteAllText(bracedOwnedAssemblyPath, string.Empty);
+            var bracedOwnedAlias = Path.Combine(scriptOwnedAliasDirectory, "BracedOwned.dll-Help.xml");
+            var bracedOwnedAliasContent =
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("ScriptModule") + "\n<bracedOwned />";
+            File.WriteAllText(bracedOwnedAlias, bracedOwnedAliasContent);
             var staleMixedCaseAlias = Path.Combine(root, "Lib", "Removed", "en-US", "Removed.DLL-Help.xml");
             Directory.CreateDirectory(Path.GetDirectoryName(staleMixedCaseAlias)!);
             File.WriteAllText(
@@ -206,6 +220,8 @@ public sealed class DocumentationBinaryMetadataContractTests
                     new DocumentationCommandHelp { AssemblyPath = sameNameAssemblyPath },
                     new DocumentationCommandHelp { AssemblyPath = legacyAssemblyPath },
                     new DocumentationCommandHelp { AssemblyPath = scriptOwnedAssemblyPath },
+                    new DocumentationCommandHelp { AssemblyPath = expandableOwnedAssemblyPath },
+                    new DocumentationCommandHelp { AssemblyPath = bracedOwnedAssemblyPath },
                     new DocumentationCommandHelp { AssemblyPath = outerAssemblyPath }
                 ]
             };
@@ -229,6 +245,10 @@ public sealed class DocumentationBinaryMetadataContractTests
             Assert.DoesNotContain(legacyAliasUnderOtherModule, paths, StringComparer.OrdinalIgnoreCase);
             Assert.DoesNotContain(scriptOwnedAlias, paths, StringComparer.OrdinalIgnoreCase);
             Assert.Equal(scriptOwnedAliasContent, File.ReadAllText(scriptOwnedAlias));
+            Assert.DoesNotContain(expandableOwnedAlias, paths, StringComparer.OrdinalIgnoreCase);
+            Assert.Equal(expandableOwnedAliasContent, File.ReadAllText(expandableOwnedAlias));
+            Assert.DoesNotContain(bracedOwnedAlias, paths, StringComparer.OrdinalIgnoreCase);
+            Assert.Equal(bracedOwnedAliasContent, File.ReadAllText(bracedOwnedAlias));
             Assert.Contains(outerAliasUnderOtherModule, paths, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(
                 DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule"),
