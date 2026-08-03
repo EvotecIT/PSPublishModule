@@ -286,6 +286,11 @@ internal static class DocumentationExternalHelpAliasWriter
         if (manifest is null) yield break;
         var manifestDirectory = Path.GetDirectoryName(Path.GetFullPath(manifestPath));
         if (string.IsNullOrWhiteSpace(manifestDirectory)) yield break;
+        var pathComparison = FrameworkCompatibility.GetPathStringComparison(rootDirectory);
+        var pathComparer = pathComparison == StringComparison.Ordinal
+            ? StringComparer.Ordinal
+            : StringComparer.OrdinalIgnoreCase;
+        var scriptModulePaths = new HashSet<string>(pathComparer);
 
         foreach (var pair in manifest.KeyValuePairs)
         {
@@ -298,7 +303,8 @@ internal static class DocumentationExternalHelpAliasWriter
                          searchNestedScriptBlocks: false)
                      .OfType<StringConstantExpressionAst>()
                      .Select(node => node.Value)
-                     .Where(value => value.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
+                     .Where(value => value.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
+                                     value.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase)))
             {
                 string candidate;
                 try
@@ -313,8 +319,94 @@ internal static class DocumentationExternalHelpAliasWriter
                     continue;
                 }
 
-                if (IsPathWithinRoot(rootDirectory, candidate))
+                if (!IsPathWithinRoot(rootDirectory, candidate))
+                    continue;
+
+                if (value.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                     yield return candidate;
+                else
+                    scriptModulePaths.Add(candidate);
+            }
+        }
+
+        var visitedScriptModules = new HashSet<string>(pathComparer);
+        foreach (var scriptModulePath in scriptModulePaths)
+        {
+            foreach (var assemblyPath in GetScriptModuleAssemblyPaths(
+                         scriptModulePath,
+                         rootDirectory,
+                         visitedScriptModules))
+                yield return assemblyPath;
+        }
+    }
+
+    private static IEnumerable<string> GetScriptModuleAssemblyPaths(
+        string scriptModulePath,
+        string rootDirectory,
+        HashSet<string> visitedScriptModules)
+    {
+        if (!visitedScriptModules.Add(scriptModulePath) || !File.Exists(scriptModulePath))
+            yield break;
+
+        ScriptBlockAst script;
+        try
+        {
+            script = Parser.ParseFile(scriptModulePath, out _, out var errors);
+            if (errors is { Length: > 0 }) yield break;
+        }
+        catch
+        {
+            yield break;
+        }
+
+        var scriptDirectory = Path.GetDirectoryName(Path.GetFullPath(scriptModulePath));
+        if (string.IsNullOrWhiteSpace(scriptDirectory)) yield break;
+
+        foreach (var command in script.FindAll(
+                     node => node is CommandAst,
+                     searchNestedScriptBlocks: true)
+                 .OfType<CommandAst>())
+        {
+            var commandName = command.GetCommandName();
+            if (string.IsNullOrWhiteSpace(commandName) ||
+                !(string.Equals(commandName, "Import-Module", StringComparison.OrdinalIgnoreCase) ||
+                  commandName.EndsWith("\\Import-Module", StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            foreach (var value in command.CommandElements
+                         .Skip(1)
+                         .OfType<StringConstantExpressionAst>()
+                         .Select(node => node.Value)
+                         .Where(value => value.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
+                                         value.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase)))
+            {
+                string candidate;
+                try
+                {
+                    var normalized = value
+                        .Replace('\\', Path.DirectorySeparatorChar)
+                        .Replace('/', Path.DirectorySeparatorChar);
+                    candidate = Path.GetFullPath(Path.Combine(scriptDirectory, normalized));
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (!IsPathWithinRoot(rootDirectory, candidate))
+                    continue;
+
+                if (value.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                {
+                    yield return candidate;
+                    continue;
+                }
+
+                foreach (var assemblyPath in GetScriptModuleAssemblyPaths(
+                             candidate,
+                             rootDirectory,
+                             visitedScriptModules))
+                    yield return assemblyPath;
             }
         }
     }

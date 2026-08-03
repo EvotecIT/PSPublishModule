@@ -165,6 +165,22 @@ public sealed class DocumentationBinaryMetadataContractTests
             File.WriteAllText(
                 legacyAliasUnderOtherModule,
                 legacyAliasContent);
+            var scriptModuleRoot = Path.Combine(root, "BundledScript");
+            var scriptModuleLibrary = Path.Combine(scriptModuleRoot, "Lib");
+            var scriptOwnedAliasDirectory = Path.Combine(scriptModuleLibrary, "en-US");
+            Directory.CreateDirectory(scriptOwnedAliasDirectory);
+            File.WriteAllText(
+                Path.Combine(scriptModuleRoot, "ScriptModule.psd1"),
+                "@{ RootModule = 'ScriptModule.psm1'; ModuleVersion = '1.0.0' }");
+            File.WriteAllText(
+                Path.Combine(scriptModuleRoot, "ScriptModule.psm1"),
+                "Microsoft.PowerShell.Core\\Import-Module -Name './Lib/ScriptOwned.dll'");
+            var scriptOwnedAssemblyPath = Path.Combine(scriptModuleLibrary, "ScriptOwned.dll");
+            File.WriteAllText(scriptOwnedAssemblyPath, string.Empty);
+            var scriptOwnedAlias = Path.Combine(scriptOwnedAliasDirectory, "ScriptOwned.dll-Help.xml");
+            var scriptOwnedAliasContent =
+                DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("ScriptModule") + "\n<scriptOwned />";
+            File.WriteAllText(scriptOwnedAlias, scriptOwnedAliasContent);
             var staleMixedCaseAlias = Path.Combine(root, "Lib", "Removed", "en-US", "Removed.DLL-Help.xml");
             Directory.CreateDirectory(Path.GetDirectoryName(staleMixedCaseAlias)!);
             File.WriteAllText(
@@ -189,6 +205,7 @@ public sealed class DocumentationBinaryMetadataContractTests
                     new DocumentationCommandHelp { AssemblyPath = authoredAssemblyPath },
                     new DocumentationCommandHelp { AssemblyPath = sameNameAssemblyPath },
                     new DocumentationCommandHelp { AssemblyPath = legacyAssemblyPath },
+                    new DocumentationCommandHelp { AssemblyPath = scriptOwnedAssemblyPath },
                     new DocumentationCommandHelp { AssemblyPath = outerAssemblyPath }
                 ]
             };
@@ -210,6 +227,8 @@ public sealed class DocumentationBinaryMetadataContractTests
             Assert.Equal(legacyAliasContent, File.ReadAllText(legacyAliasUnderOtherModule));
             Assert.DoesNotContain(sameNameAlias, paths, StringComparer.OrdinalIgnoreCase);
             Assert.DoesNotContain(legacyAliasUnderOtherModule, paths, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(scriptOwnedAlias, paths, StringComparer.OrdinalIgnoreCase);
+            Assert.Equal(scriptOwnedAliasContent, File.ReadAllText(scriptOwnedAlias));
             Assert.Contains(outerAliasUnderOtherModule, paths, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(
                 DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker("OwnerModule"),
