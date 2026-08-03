@@ -197,6 +197,8 @@ public sealed class AppStoreConnectGovernanceConfiguration
             if (item is null) { Error(findings, "Governance.Subscriptions.NullLocalization", path, "Localization must not be null."); continue; }
             Required(findings, item.Locale, path + ".locale", "Governance.Subscriptions.Locale", "Locale is required.");
             Required(findings, item.Name, path + ".name", "Governance.Subscriptions.LocalizationName", "Localized name is required.");
+            if (item.Description?.Trim() is { Length: > 55 })
+                Error(findings, "Governance.Subscriptions.LocalizationDescriptionTooLong", path + ".description", "Localized description must not exceed 55 characters.");
         }
     }
 

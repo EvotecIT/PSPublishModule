@@ -406,7 +406,8 @@ public sealed partial class AppStoreConnectClient
             Id = GetString(item, "id") ?? string.Empty,
             Locale = GetString(attributes, "locale"),
             Name = GetString(attributes, "name"),
-            CustomAppName = GetString(attributes, "customAppName")
+            CustomAppName = GetString(attributes, "customAppName"),
+            State = GetString(attributes, "state")
         };
     }
 
@@ -418,7 +419,8 @@ public sealed partial class AppStoreConnectClient
             Id = GetString(item, "id") ?? string.Empty,
             Locale = GetString(attributes, "locale"),
             Name = GetString(attributes, "name"),
-            Description = GetString(attributes, "description")
+            Description = GetString(attributes, "description"),
+            State = GetString(attributes, "state")
         };
     }
 
@@ -478,6 +480,8 @@ public sealed partial class AppStoreConnectClient
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         RequireValue(spec.Locale, nameof(spec), "Locale");
         RequireValue(spec.Name, nameof(spec), "Name");
+        if (Normalize(spec.Description) is { Length: > 55 })
+            throw new ArgumentException("Subscription localization Description must not exceed 55 characters.", nameof(spec));
     }
 
     private static void ValidateSubscription(AppStoreConnectSubscriptionSpec spec)

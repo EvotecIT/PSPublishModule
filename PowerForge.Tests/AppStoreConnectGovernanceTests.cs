@@ -751,7 +751,7 @@ public sealed partial class AppStoreConnectClientTests
             new SequenceResponse(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptionGroups", "id": "group-1", "attributes": { "referenceName": "Legacy Pro" } } ] }"""),
             new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
             new SequenceResponse(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptions", "id": "sub-1", "attributes": { "productId": "pro.monthly", "name": "Legacy Monthly", "subscriptionPeriod": "ONE_MONTH", "familySharable": false } } ] }"""),
-            new SequenceResponse(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptionLocalizations", "id": "loc-1", "attributes": { "locale": "en-US", "name": "Legacy Monthly", "description": "Old description" } } ] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptionLocalizations", "id": "loc-1", "attributes": { "locale": "en-US", "name": "Legacy Monthly", "description": "Old description", "state": "PREPARE_FOR_SUBMISSION" } } ] }"""),
             new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
             new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
             new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""));

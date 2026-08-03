@@ -487,7 +487,19 @@ public sealed partial class AppStoreConnectGovernanceService
             if (existing is null)
                 Add(changes, "Subscriptions", "SubscriptionGroupLocalization", key, AppStoreConnectGovernanceChangeAction.Create, $"Create group localization '{desired.Locale}'.", parentId: group.Id);
             else if (!Same(existing.Name, desired.Name) || !SameOptional(existing.CustomAppName, desired.CustomAppName))
-                Add(changes, "Subscriptions", "SubscriptionGroupLocalization", key, AppStoreConnectGovernanceChangeAction.Update, $"Update group localization '{desired.Locale}'.", existing.Id, group.Id);
+            {
+                if (!SubscriptionLocalizationCanUpdate(existing.State))
+                {
+                    var observedState = string.IsNullOrWhiteSpace(existing.State) ? "unknown" : existing.State;
+                    Add(changes, "Subscriptions", "SubscriptionGroupLocalization", key, AppStoreConnectGovernanceChangeAction.Blocked,
+                        $"Subscription group localization '{desired.Locale}' is {observedState} and cannot be safely edited. Align governance with the accepted App Store Connect localization.", existing.Id, group.Id);
+                }
+                else
+                {
+                    Add(changes, "Subscriptions", "SubscriptionGroupLocalization", key, AppStoreConnectGovernanceChangeAction.Update,
+                        $"Update group localization '{desired.Locale}'.", existing.Id, group.Id);
+                }
+            }
         }
 
         var subscriptions = await _client.GetSubscriptionsAsync(group.Id, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -529,7 +541,19 @@ public sealed partial class AppStoreConnectGovernanceService
             if (existing is null)
                 Add(changes, "Subscriptions", "SubscriptionLocalization", key, AppStoreConnectGovernanceChangeAction.Create, $"Create subscription localization '{desiredLocalization.Locale}'.", parentId: subscription.Id);
             else if (!Same(existing.Name, desiredLocalization.Name) || !SameOptional(existing.Description, desiredLocalization.Description))
-                Add(changes, "Subscriptions", "SubscriptionLocalization", key, AppStoreConnectGovernanceChangeAction.Update, $"Update subscription localization '{desiredLocalization.Locale}'.", existing.Id, subscription.Id);
+            {
+                if (!SubscriptionLocalizationCanUpdate(existing.State))
+                {
+                    var observedState = string.IsNullOrWhiteSpace(existing.State) ? "unknown" : existing.State;
+                    Add(changes, "Subscriptions", "SubscriptionLocalization", key, AppStoreConnectGovernanceChangeAction.Blocked,
+                        $"Subscription localization '{desiredLocalization.Locale}' is {observedState} and cannot be safely edited. Align governance with the accepted App Store Connect localization.", existing.Id, subscription.Id);
+                }
+                else
+                {
+                    Add(changes, "Subscriptions", "SubscriptionLocalization", key, AppStoreConnectGovernanceChangeAction.Update,
+                        $"Update subscription localization '{desiredLocalization.Locale}'.", existing.Id, subscription.Id);
+                }
+            }
         }
 
         var prices = await _client.GetSubscriptionPricesAsync(subscription.Id, cancellationToken).ConfigureAwait(false);
@@ -569,6 +593,9 @@ public sealed partial class AppStoreConnectGovernanceService
             }
         }
     }
+
+    private static bool SubscriptionLocalizationCanUpdate(string? state) =>
+        Same(state, "PREPARE_FOR_SUBMISSION") || Same(state, "REJECTED");
 
     private static void Add(List<AppStoreConnectGovernanceChange> changes, string section, string type, string key,
         AppStoreConnectGovernanceChangeAction action, string summary, string? resourceId = null, string? parentId = null) =>
