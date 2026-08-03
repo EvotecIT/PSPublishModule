@@ -54,6 +54,7 @@ public sealed class DotNetRepositoryReleaseServiceVersioningTests
 
     [Theory]
     [InlineData("2.0.12", "2.1.7", "2.1.7")]
+    [InlineData("2.1.7", "2.1.7", "2.1.8")]
     [InlineData("2.1.9", "2.1.7", "2.1.10")]
     [InlineData("2.1.6", "2.1.7-beta.2", "2.1.7-beta.2")]
     [InlineData("2.1.7", "2.1.7-beta.2", "2.1.8")]

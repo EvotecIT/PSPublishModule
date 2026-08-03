@@ -164,7 +164,10 @@ public sealed partial class ModulePipelineRunner
         var cfg = segment.Configuration ?? throw new InvalidOperationException("ProjectBuild configuration is missing.");
         var configPath = ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath);
         var configuration = LoadProjectBuildConfiguration(configPath, cfg);
-        ApplySynchronizedNuGetRetryPolicy(configuration, useDuplicateTolerantNuGetRetry);
+        ApplySynchronizedNuGetRetryPolicy(
+            configuration,
+            useDuplicateTolerantNuGetRetry,
+            coordinatedReleaseCheckpointActive);
         if (!CanPublishExistingPackageBuildResult(configuration, configPath, destination))
             return false;
         if (!HasReusablePackageBuildArtifacts(existing.Result.Release, destination))
@@ -207,7 +210,10 @@ public sealed partial class ModulePipelineRunner
             return false;
 
         var configuration = MapPackageBuildConfiguration(segment.Configuration, plan.ProjectRoot);
-        ApplySynchronizedNuGetRetryPolicy(configuration, useDuplicateTolerantNuGetRetry);
+        ApplySynchronizedNuGetRetryPolicy(
+            configuration,
+            useDuplicateTolerantNuGetRetry,
+            coordinatedReleaseCheckpointActive);
         var configPath = Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
         if (!CanPublishExistingPackageBuildResult(configuration, configPath, destination))
             return false;
@@ -285,10 +291,17 @@ public sealed partial class ModulePipelineRunner
 
     private static void ApplySynchronizedNuGetRetryPolicy(
         ProjectBuildConfiguration configuration,
-        bool useDuplicateTolerantNuGetRetry)
+        bool useDuplicateTolerantNuGetRetry,
+        bool coordinatedReleaseCheckpointActive)
     {
-        if (useDuplicateTolerantNuGetRetry)
-            configuration.SkipDuplicate = true;
+        if (!coordinatedReleaseCheckpointActive)
+        {
+            if (useDuplicateTolerantNuGetRetry)
+                configuration.SkipDuplicate = true;
+            return;
+        }
+
+        configuration.SkipDuplicate = useDuplicateTolerantNuGetRetry;
     }
 
     private void PublishExistingPackageBuildResult(
@@ -654,7 +667,10 @@ public sealed partial class ModulePipelineRunner
 
         var configPath = ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath);
         var configuration = LoadProjectBuildConfiguration(configPath, cfg);
-        ApplySynchronizedNuGetRetryPolicy(configuration, useDuplicateTolerantNuGetRetry);
+        ApplySynchronizedNuGetRetryPolicy(
+            configuration,
+            useDuplicateTolerantNuGetRetry,
+            coordinatedReleaseCheckpointActive);
         var laneLabel = cfg.Name ?? configPath;
         var checkpointKey = ResolveSynchronizedReleaseLaneKey(
             plan,
@@ -710,7 +726,10 @@ public sealed partial class ModulePipelineRunner
     {
         var cfg = segment.Configuration ?? throw new InvalidOperationException("PackageBuild configuration is missing.");
         var projectBuildConfig = MapPackageBuildConfiguration(cfg, plan.ProjectRoot);
-        ApplySynchronizedNuGetRetryPolicy(projectBuildConfig, useDuplicateTolerantNuGetRetry);
+        ApplySynchronizedNuGetRetryPolicy(
+            projectBuildConfig,
+            useDuplicateTolerantNuGetRetry,
+            coordinatedReleaseCheckpointActive);
         var laneLabel = cfg.Name ?? Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
         var checkpointKey = ResolveSynchronizedReleaseLaneKey(
             plan,
