@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -31,7 +32,10 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 (request, configuration, configPath) =>
                 {
                     if (request.PublishNuget == true || request.PublishGitHub == true)
+                    {
+                        request.RemotePublishAttempted?.Invoke();
                         remotePublishRequests++;
+                    }
 
                     return CreateProjectBuildResult(
                         root.FullName,
@@ -45,6 +49,180 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             var spec = CreateNuGetOnlyReleaseSpec(root.FullName, stagingPath, moduleName);
             var release = Assert.IsType<ConfigurationReleaseSegment>(spec.Segments[^1]);
             release.Configuration.PublishOrder = new[] { "NuGet", "GitHub" };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("GitHubReleaseMode 'Single'", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, remotePublishRequests);
+            var checkpointPath = Assert.Single(Directory.GetFiles(
+                GetCoordinatedReleaseCheckpointRoot(root.FullName),
+                "*.json"));
+            var checkpoint = JsonNode.Parse(File.ReadAllText(checkpointPath))!;
+            Assert.Equal(string.Empty, checkpoint["SourceFingerprint"]!.GetValue<string>());
+            Assert.Equal(string.Empty, checkpoint["PayloadFingerprint"]!.GetValue<string>());
+
+            WriteSynchronizedProjectBuildConfig(
+                root.FullName,
+                "project.build.json",
+                moduleName,
+                publishNuGet: true,
+                publishGitHub: false);
+            var correctedRunner = CreateRunner(
+                new FakeHostedOperations(new List<string>()),
+                (request, configuration, configPath) =>
+                {
+                    if (request.PublishNuget == true || request.PublishGitHub == true)
+                    {
+                        request.RemotePublishAttempted?.Invoke();
+                        remotePublishRequests++;
+                    }
+
+                    return CreateProjectBuildResult(
+                        root.FullName,
+                        moduleName,
+                        "2.0.11",
+                        Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                        request,
+                        configPath,
+                        includePackage: true);
+                });
+
+            var result = correctedRunner.Run(
+                CreateNuGetOnlyReleaseSpec(root.FullName, stagingPath, moduleName));
+
+            Assert.Equal("2.0.11", result.Plan.ResolvedVersion);
+            Assert.Equal(1, remotePublishRequests);
+            AssertNoCoordinatedReleaseCheckpoint(root.FullName);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_DefersGitHubRetryPreflightForPackageLaneBuiltAfterModule()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string companionName = "Companion";
+            WriteMinimalModule(root.FullName, moduleName, "2.0.10");
+            WriteSynchronizedProjectBuildConfig(
+                root.FullName,
+                "source.build.json",
+                moduleName,
+                publishNuGet: false);
+            WriteSynchronizedProjectBuildConfig(
+                root.FullName,
+                "companion.build.json",
+                companionName,
+                publishNuGet: false,
+                publishGitHub: true,
+                gitHubReleaseMode: "Single");
+
+            var githubPublishRequests = 0;
+            var runner = CreateRunner(
+                new FakeHostedOperations(new List<string>()),
+                (request, configuration, configPath) =>
+                {
+                    if (request.PublishGitHub == true)
+                    {
+                        request.RemotePublishAttempted?.Invoke();
+                        githubPublishRequests++;
+                    }
+
+                    var projectName = configPath!.EndsWith("companion.build.json", StringComparison.OrdinalIgnoreCase)
+                        ? companionName
+                        : moduleName;
+                    return CreateProjectBuildResult(
+                        root.FullName,
+                        projectName,
+                        "2.0.11",
+                        Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                        request,
+                        configPath,
+                        includePackage: true);
+                });
+            var spec = CreatePackageOnlyReleaseSpec(
+                root.FullName,
+                stagingPath,
+                moduleName,
+                companionName,
+                companionBuildBeforeModule: false);
+            var release = Assert.IsType<ConfigurationReleaseSegment>(spec.Segments[^1]);
+            release.Configuration.PublishOrder = new[] { "GitHub" };
+
+            var result = runner.Run(spec);
+
+            Assert.Equal("2.0.11", result.Plan.ResolvedVersion);
+            Assert.Equal(1, githubPublishRequests);
+            AssertNoCoordinatedReleaseCheckpoint(root.FullName);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_RejectsUnsafeGitHubRetrySettingsForPackageLaneBuiltAfterModule()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string companionName = "Companion";
+            WriteMinimalModule(root.FullName, moduleName, "2.0.10");
+            WriteSynchronizedProjectBuildConfig(
+                root.FullName,
+                "source.build.json",
+                moduleName,
+                publishNuGet: false);
+            WriteSynchronizedProjectBuildConfig(
+                root.FullName,
+                "companion.build.json",
+                companionName,
+                publishNuGet: false,
+                publishGitHub: true,
+                gitHubReleaseMode: "PerProject");
+
+            var remotePublishRequests = 0;
+            var runner = CreateRunner(
+                new FakeHostedOperations(new List<string>()),
+                (request, configuration, configPath) =>
+                {
+                    if (request.PublishGitHub == true)
+                    {
+                        request.RemotePublishAttempted?.Invoke();
+                        remotePublishRequests++;
+                    }
+
+                    var projectName = configPath!.EndsWith("companion.build.json", StringComparison.OrdinalIgnoreCase)
+                        ? companionName
+                        : moduleName;
+                    return CreateProjectBuildResult(
+                        root.FullName,
+                        projectName,
+                        "2.0.11",
+                        Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                        request,
+                        configPath,
+                        includePackage: true);
+                });
+            var spec = CreatePackageOnlyReleaseSpec(
+                root.FullName,
+                stagingPath,
+                moduleName,
+                companionName,
+                companionBuildBeforeModule: false);
+            var release = Assert.IsType<ConfigurationReleaseSegment>(spec.Segments[^1]);
+            release.Configuration.PublishOrder = new[] { "GitHub" };
 
             var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
 

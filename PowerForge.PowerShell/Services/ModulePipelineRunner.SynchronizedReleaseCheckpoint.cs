@@ -56,7 +56,7 @@ public sealed partial class ModulePipelineRunner
 
         if (!shouldUseCheckpoint && !sourceMutatingGate)
         {
-            if (IsResettableSynchronizedReleaseCheckpoint(checkpoint))
+            if (IsResettableSynchronizedReleaseCheckpoint(checkpoint, path))
             {
                 DeleteResettableSynchronizedReleaseCheckpoint(
                     path,
@@ -70,7 +70,7 @@ public sealed partial class ModulePipelineRunner
 
         if (sourceMutatingGate)
         {
-            if (IsResettableSynchronizedReleaseCheckpoint(checkpoint))
+            if (IsResettableSynchronizedReleaseCheckpoint(checkpoint, path))
             {
                 DeleteResettableSynchronizedReleaseCheckpoint(
                     path,
@@ -86,7 +86,7 @@ public sealed partial class ModulePipelineRunner
         {
             ValidateSynchronizedReleaseCheckpoint(plan, state, checkpoint, path);
         }
-        catch (InvalidOperationException) when (IsResettableSynchronizedReleaseCheckpoint(checkpoint))
+        catch (InvalidOperationException) when (IsResettableSynchronizedReleaseCheckpoint(checkpoint, path))
         {
             DeleteResettableSynchronizedReleaseCheckpoint(
                 path,
@@ -712,90 +712,7 @@ public sealed partial class ModulePipelineRunner
             ? "none"
             : $"{checkpoint.CompletedOperations.Length} of {checkpoint.PlannedOperations.Length}";
 
-    private void DeleteResettableSynchronizedReleaseCheckpoint(string path, string reason)
-    {
-        var payloadCachePath = ResolveSynchronizedReleasePayloadCachePath(path);
-        if (Directory.Exists(payloadCachePath))
-        {
-            if ((File.GetAttributes(payloadCachePath) & FileAttributes.ReparsePoint) != 0)
-                Directory.Delete(payloadCachePath, recursive: false);
-            else
-                DeleteDirectoryWithRetries(payloadCachePath);
-        }
-        else if (File.Exists(payloadCachePath))
-            File.Delete(payloadCachePath);
-
-        File.Delete(path);
-        DeleteEmptySynchronizedReleaseCheckpointDirectories(path);
-        _logger.Warn($"Discarded unused coordinated release checkpoint '{path}' {reason}.");
-    }
-
-    private static bool IsResettableSynchronizedReleaseCheckpoint(
-        SynchronizedReleaseCheckpoint checkpoint)
-        => !string.IsNullOrWhiteSpace(checkpoint.ModuleName) &&
-           Enum.IsDefined(typeof(ReleaseVersionSource), checkpoint.ReleaseSource) &&
-           (checkpoint.PrimaryProject is null || !string.IsNullOrWhiteSpace(checkpoint.PrimaryProject)) &&
-           checkpoint.Version is not null &&
-           checkpoint.PlannedOperations is { Length: > 0 } &&
-           checkpoint.PlannedOperations.All(IsSynchronizedReleaseFingerprint) &&
-           checkpoint.PlannedOperations.Distinct(StringComparer.OrdinalIgnoreCase).Count() == checkpoint.PlannedOperations.Length &&
-           checkpoint.AttemptedOperations is { Length: 0 } &&
-           checkpoint.CompletedOperations is { Length: 0 } &&
-           checkpoint.OperationFingerprints is { Length: > 0 } &&
-           checkpoint.OperationFingerprints.All(IsSynchronizedReleaseFingerprint) &&
-           checkpoint.SourceFingerprint is not null &&
-           checkpoint.SourceFingerprint.Length == 0 &&
-           checkpoint.SourceComponents is { Length: 0 } &&
-           checkpoint.PayloadFingerprint is not null &&
-           checkpoint.PayloadFingerprint.Length == 0 &&
-           checkpoint.PayloadComponents is { Length: 0 } &&
-           checkpoint.PlannedLanes is { Length: > 0 } &&
-           checkpoint.PlannedLanes.All(IsSynchronizedReleaseFingerprint) &&
-           checkpoint.PlannedLanes.Distinct(StringComparer.OrdinalIgnoreCase).Count() == checkpoint.PlannedLanes.Length &&
-           checkpoint.CreatedUtc != default &&
-           (checkpoint.Version.Length == 0 ||
-            PackageVersionUtility.TryNormalizeExact(checkpoint.Version, out _)) &&
-           checkpoint.AttemptedLanes is not null &&
-           checkpoint.AttemptedLanes.Distinct(StringComparer.OrdinalIgnoreCase).Count() == checkpoint.AttemptedLanes.Length &&
-           checkpoint.AttemptedLanes.All(lane =>
-               !string.IsNullOrWhiteSpace(lane) &&
-               checkpoint.PlannedLanes!.Contains(lane, StringComparer.OrdinalIgnoreCase)) &&
-           checkpoint.Lanes is not null &&
-           checkpoint.Lanes.Length == checkpoint.AttemptedLanes.Length &&
-           checkpoint.Lanes
-               .Select(lane => lane?.CheckpointKey)
-               .Where(key => !string.IsNullOrWhiteSpace(key))
-               .Distinct(StringComparer.OrdinalIgnoreCase)
-               .Count() == checkpoint.Lanes.Length &&
-           checkpoint.Lanes.All(lane =>
-               lane is not null &&
-               Enum.IsDefined(typeof(ReleaseVersionSource), lane.Source) &&
-               !string.IsNullOrWhiteSpace(lane.Label) &&
-               IsSynchronizedReleaseFingerprint(lane.CheckpointKey) &&
-               checkpoint.AttemptedLanes!.Contains(lane.CheckpointKey, StringComparer.OrdinalIgnoreCase) &&
-               PackageVersionUtility.TryNormalizeExact(lane.DefaultVersion, out _) &&
-               lane.VersionsByProject is not null &&
-               lane.VersionsByProject.All(entry =>
-                   !string.IsNullOrWhiteSpace(entry.Key) &&
-                   PackageVersionUtility.TryNormalizeExact(entry.Value, out _))) &&
-           !checkpoint.AuxiliaryRemoteSideEffectsObserved;
-
     private static string? NormalizeCheckpointValue(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
-
-    private static bool IsSynchronizedReleaseFingerprint(string? value)
-        => value?.Length == 64 && value.All(static character =>
-            character is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F');
-
-    private static bool IsValidSynchronizedReleaseFingerprintState(
-        string? fingerprint,
-        string[] components)
-        => IsSynchronizedReleaseFingerprint(fingerprint) &&
-           components.Length > 0 &&
-           components.All(static component => !string.IsNullOrWhiteSpace(component)) &&
-           string.Equals(
-               fingerprint,
-               CreateSynchronizedReleaseFingerprint(components),
-               StringComparison.OrdinalIgnoreCase);
 
 }
