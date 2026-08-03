@@ -49,12 +49,6 @@ public sealed partial class ModulePipelineRunner
         foreach (var result in state.ArtefactResults)
         {
             var id = result.Id?.Trim();
-            if (state.ArtefactResults.Count > 1 && string.IsNullOrWhiteSpace(id))
-            {
-                throw new InvalidOperationException(
-                    "A coordinated release with multiple module artefacts requires a stable ID on every artefact.");
-            }
-
             var normalizedOutputPath = result.OutputPath.TrimEnd(
                 Path.DirectorySeparatorChar,
                 Path.AltDirectorySeparatorChar);
@@ -69,8 +63,11 @@ public sealed partial class ModulePipelineRunner
             var identity = result.Type + "\n" + stableId + "\n" + outputName;
             if (!identities.Add(identity))
             {
+                var idGuidance = string.IsNullOrWhiteSpace(id)
+                    ? " Assign explicit unique artefact IDs to disambiguate outputs with the same type and filename."
+                    : string.Empty;
                 throw new InvalidOperationException(
-                    $"Coordinated release contains duplicate artefact identity '{result.Type}'/'{stableId}'/'{outputName}'.");
+                    $"Coordinated release contains duplicate artefact identity '{result.Type}'/'{stableId}'/'{outputName}'.{idGuidance}");
             }
 
             artefacts.Add(new SynchronizedReleasePayloadArtefact(

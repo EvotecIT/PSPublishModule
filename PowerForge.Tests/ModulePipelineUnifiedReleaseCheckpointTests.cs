@@ -124,6 +124,125 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Fact]
+    public void Run_DerivesCheckpointIdentityForMultipleUnidentifiedArtefacts()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string synchronizedVersion = "2.0.11";
+            WriteMinimalModule(root.FullName, moduleName, "2.0.10");
+            WriteSynchronizedProjectBuildConfig(root.FullName, "project.build.json", moduleName, publishNuGet: false);
+
+            var hosted = new FakeHostedOperations(new List<string>())
+            {
+                ModulePublishAction = (_, _) => throw new InvalidOperationException("Simulated gallery outage.")
+            };
+            var runner = CreateRunner(
+                hosted,
+                (request, configuration, configPath) => CreateProjectBuildResult(
+                    root.FullName,
+                    moduleName,
+                    synchronizedVersion,
+                    Path.Combine(root.FullName, "PackageOutput", "NuGet"),
+                    request,
+                    configPath,
+                    includePackage: false));
+            var spec = CreateGalleryReleaseSpec(root.FullName, stagingPath, moduleName);
+            var segments = spec.Segments.ToList();
+            segments.Insert(1, new ConfigurationArtefactSegment
+            {
+                ArtefactType = ArtefactType.Unpacked,
+                Configuration = new ArtefactConfiguration
+                {
+                    Enabled = true,
+                    Path = Path.Combine(root.FullName, "Artifacts", "Unpacked")
+                }
+            });
+            segments.Insert(2, new ConfigurationArtefactSegment
+            {
+                ArtefactType = ArtefactType.Packed,
+                Configuration = new ArtefactConfiguration
+                {
+                    Enabled = true,
+                    Path = Path.Combine(root.FullName, "Artifacts", "Packed"),
+                    ArtefactName = $"{moduleName}.zip"
+                }
+            });
+            spec.Segments = segments.ToArray();
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("gallery outage", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Single(Directory.GetFiles(GetCoordinatedReleaseCheckpointRoot(root.FullName), "*.json"));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_RequiresIdsOnlyWhenUnidentifiedArtefactIdentityIsAmbiguous()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string synchronizedVersion = "2.0.11";
+            WriteMinimalModule(root.FullName, moduleName, "2.0.10");
+            WriteSynchronizedProjectBuildConfig(root.FullName, "project.build.json", moduleName, publishNuGet: false);
+
+            var runner = CreateRunner(
+                new FakeHostedOperations(new List<string>()),
+                (request, configuration, configPath) => CreateProjectBuildResult(
+                    root.FullName,
+                    moduleName,
+                    synchronizedVersion,
+                    Path.Combine(root.FullName, "PackageOutput", "NuGet"),
+                    request,
+                    configPath,
+                    includePackage: false));
+            var spec = CreateGalleryReleaseSpec(root.FullName, stagingPath, moduleName);
+            var segments = spec.Segments.ToList();
+            segments.Insert(1, new ConfigurationArtefactSegment
+            {
+                ArtefactType = ArtefactType.Packed,
+                Configuration = new ArtefactConfiguration
+                {
+                    Enabled = true,
+                    Path = Path.Combine(root.FullName, "Artifacts", "First"),
+                    ArtefactName = $"{moduleName}.zip"
+                }
+            });
+            segments.Insert(2, new ConfigurationArtefactSegment
+            {
+                ArtefactType = ArtefactType.Packed,
+                Configuration = new ArtefactConfiguration
+                {
+                    Enabled = true,
+                    Path = Path.Combine(root.FullName, "Artifacts", "Second"),
+                    ArtefactName = $"{moduleName}.zip"
+                }
+            });
+            spec.Segments = segments.ToArray();
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("duplicate artefact identity", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("explicit unique artefact IDs", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_SkipsCompletedModuleGitHubPublishAfterPostPublishFailure()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
