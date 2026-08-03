@@ -77,6 +77,9 @@ if ($RejectCredentialOverrides) {
             throw "AppleApps.$credentialProperty is forbidden in tracked release configuration; use the fixed private runner profile."
         }
     }
+    if (-not [string]::IsNullOrWhiteSpace([string] $config.AppleApps.DirectDistribution.KeychainProfile)) {
+        throw 'AppleApps.DirectDistribution.KeychainProfile is forbidden in tracked release configuration; use the fixed private runner profile.'
+    }
 }
 $projectRootSetting = [string] $config.AppleApps.ProjectRoot
 if ([string]::IsNullOrWhiteSpace($projectRootSetting)) { $projectRootSetting = '.' }

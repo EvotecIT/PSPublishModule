@@ -587,6 +587,7 @@ try {
     Register-StandaloneScreenshotEvidence
     Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead
     Assert-ConsumerRepositoryContent
+    Assert-TrackedSourceLinks
     $tar = Resolve-FixedTool -Name tar
     $buildToolRoot = New-TrackedToolSnapshot -TarPath $tar
     $cliProject = Join-Path $buildToolRoot 'PowerForge.Cli/PowerForge.Cli.csproj'

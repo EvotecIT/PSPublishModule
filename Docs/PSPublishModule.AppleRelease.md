@@ -596,7 +596,9 @@ individual screenshot PNGs and provenance files whose paths and bytes match the
 retained capture artifact, plus approval manifests whose identity and complete image
 inventory validate against that provenance. An unrelated file beside that evidence
 still fails closed. Git replacement refs are
-also rejected. Cleanup alone permits an app project already removed by the completed
+also rejected. Tracked symbolic links must resolve through relative targets entirely
+inside the consumer checkout, and Git submodules are rejected because their live
+worktree bytes are not contained by the consumer commit. Cleanup alone permits an app project already removed by the completed
 release while continuing to validate every remaining tracked release input. The helper
 re-downloads the named provenance artifact from the successful source-bound GitHub run and compares its exact bytes before
 building the CLI into an isolated temporary artifacts directory. This prevents
@@ -614,7 +616,8 @@ It launches the CLI with a minimal environment, fixed Apple tool resolution, and
 only the validated local credential tuple; inherited .NET hooks, profilers, loader
 variables, tool overrides, and other process-injection settings do not cross that
 boundary. Apple credentials are suspended before any Git or build command runs.
-The local credential profile, key, and every key-path directory must be owned by
+Tracked `DirectDistribution.KeychainProfile` overrides are rejected so `notarytool`
+cannot select credentials outside this boundary. The local credential profile, key, and every key-path directory must be owned by
 the operator and grant no group, other, ACL, link, or hard-link access. Targeted
 commands validate only screenshot maps matching the selected release targets.
 GitHub CLI is required only when a retained capture-provenance artifact is used.

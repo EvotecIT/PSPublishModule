@@ -32,6 +32,46 @@ function Assert-ConsumerRepositoryContent {
     }
 }
 
+function Assert-TrackedSourceLinks {
+    $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $rootPrefix = $consumer.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $index = Invoke-GitText -Root $consumer -Arguments @('ls-files', '--stage')
+    if (@($index -split '\r?\n' | Where-Object { $_.StartsWith('160000 ', [StringComparison]::Ordinal) }).Count -gt 0) {
+        throw 'Tracked Git submodules are forbidden at the pinned local operator boundary; their worktree bytes are not contained by the consumer commit.'
+    }
+    foreach ($line in @($index -split '\r?\n' | Where-Object { $_.StartsWith('120000 ', [StringComparison]::Ordinal) })) {
+        $separator = $line.IndexOf("`t", [StringComparison]::Ordinal)
+        if ($separator -lt 0) { throw 'Consumer source contains a tracked link path that cannot be safely classified.' }
+        $relative = $line.Substring($separator + 1)
+        if ([string]::IsNullOrWhiteSpace($relative) -or $relative.StartsWith('"') -or
+            $relative.Contains("`r") -or $relative.Contains("`n")) {
+            throw 'Consumer source contains a tracked link path that cannot be safely classified.'
+        }
+        $linkPath = [IO.Path]::GetFullPath((Join-Path $consumer $relative))
+        if (-not $linkPath.StartsWith($rootPrefix, $comparison)) {
+            throw "Tracked source link escapes the exact consumer checkout: $relative"
+        }
+        $visited = [Collections.Generic.HashSet[string]]::new(
+            $(if ($IsWindows) { [StringComparer]::OrdinalIgnoreCase } else { [StringComparer]::Ordinal }))
+        $current = Get-Item -LiteralPath $linkPath -Force -ErrorAction Stop
+        if (-not $current.LinkType) {
+            throw "Tracked source link is not materialized as a symbolic link: $relative"
+        }
+        while ($current.LinkType) {
+            if (-not $visited.Add($current.FullName)) { throw "Tracked source link cycle is forbidden: $relative" }
+            $target = [string]$current.LinkTarget
+            if ([string]::IsNullOrWhiteSpace($target) -or [IO.Path]::IsPathRooted($target)) {
+                throw "Tracked source link must use a contained relative target: $relative"
+            }
+            $next = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $current.FullName) $target))
+            if (-not $next.StartsWith($rootPrefix, $comparison)) {
+                throw "Tracked source link escapes the exact consumer checkout: $relative"
+            }
+            $current = Get-Item -LiteralPath $next -Force -ErrorAction Stop
+        }
+    }
+}
+
 function Register-StandaloneScreenshotEvidence {
     if ($ArgumentList[0] -ne 'apple-screenshots' -or $null -eq $script:validatedCaptureProvenance) { return }
     $allowedRoot = Resolve-OptionPath -Value (Get-OptionValue -Option '--allowed-root')

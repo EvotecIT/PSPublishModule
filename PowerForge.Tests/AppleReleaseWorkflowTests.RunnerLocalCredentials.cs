@@ -256,6 +256,35 @@ public sealed partial class AppleReleaseWorkflowTests
     }
 
     [Fact]
+    public void TrackedReleaseInputValidatorRejectsNotarytoolKeychainProfileOverride()
+    {
+        var root = FindRepoRoot();
+        var sandbox = Path.Combine(root, ".test-temp", $"powerforge-keychain-profile-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(sandbox, ".powerforge"));
+            var configPath = Path.Combine(sandbox, "powerforge.release.json");
+            var manifestPath = Path.Combine(sandbox, ".powerforge", "powerforge.tool.json");
+            File.WriteAllText(configPath,
+                """{ "AppleApps": { "ProjectRoot": ".", "DirectDistribution": { "KeychainProfile": "unreviewed-notary-profile" } } }""");
+            File.WriteAllText(manifestPath, "{}");
+            Run("git", sandbox, "init", "--quiet").EnsureSuccess();
+            Run("git", sandbox, "add", ".").EnsureSuccess();
+            CommitTrackedReleaseSandbox(sandbox, "Tracked notary credential override");
+            var commit = Run("git", sandbox, "rev-parse", "HEAD").EnsureSuccess().StandardOutput.Trim();
+
+            var result = RunTrackedReleaseInputValidator(root, sandbox, configPath, manifestPath, commit, rejectCredentialOverrides: true);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("AppleApps.DirectDistribution.KeychainProfile is forbidden", result.StandardOutput + result.StandardError, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+        }
+    }
+
+    [Fact]
     public void RunnerLocalDoctorUsesPrivateProfileWithoutSerializingCredentials()
     {
         if (!OperatingSystem.IsMacOS() || !CommandExists("pwsh")) return;

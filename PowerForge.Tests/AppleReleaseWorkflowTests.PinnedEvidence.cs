@@ -6,6 +6,64 @@ namespace PowerForge.Tests;
 public sealed partial class AppleReleaseWorkflowTests
 {
     [Fact]
+    public void TrackedSourceLinksMustRemainInsideTheExactConsumerCheckout()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var root = FindRepoRoot();
+        var parent = Path.Combine(root, ".test-temp", $"powerforge-source-links-{Guid.NewGuid():N}");
+        var sandbox = Path.Combine(parent, "consumer");
+        try
+        {
+            Directory.CreateDirectory(sandbox);
+            File.WriteAllText(Path.Combine(sandbox, "target.txt"), "tracked target");
+            File.CreateSymbolicLink(Path.Combine(sandbox, "internal-link.txt"), "target.txt");
+            Run("git", sandbox, "init", "--quiet").EnsureSuccess();
+            Run("git", sandbox, "add", ".").EnsureSuccess();
+            CommitTrackedReleaseSandbox(sandbox, "Contained source link");
+
+            var harness = Path.Combine(parent, "link-harness.ps1");
+            File.WriteAllText(harness,
+                """
+                param([string] $Consumer, [string] $Support)
+                $ErrorActionPreference = 'Stop'
+                $script:gitPath = '/usr/bin/git'
+                $consumer = [IO.Path]::GetFullPath($Consumer)
+                function Invoke-GitText { param([string]$Root,[string[]]$Arguments); $o=@(& $script:gitPath -c core.quotePath=false -C $Root @Arguments 2>&1); if($LASTEXITCODE -ne 0){throw 'git failed'}; return ($o -join [Environment]::NewLine).Trim() }
+                . $Support
+                Assert-TrackedSourceLinks
+                'PASS'
+                """);
+            var accepted = Run("pwsh", parent, "-NoLogo", "-NoProfile", "-File", harness,
+                "-Consumer", sandbox, "-Support", Path.Combine(root, "scripts", "Invoke-PinnedPowerForge.Evidence.ps1"));
+            accepted.EnsureSuccess();
+
+            var linkedCommit = Run("git", sandbox, "rev-parse", "HEAD").EnsureSuccess().StandardOutput.Trim();
+            Run("git", sandbox, "update-index", "--add", "--cacheinfo", $"160000,{linkedCommit},nested-module").EnsureSuccess();
+            CommitTrackedReleaseSandbox(sandbox, "Tracked submodule entry");
+            var submoduleRejected = Run("pwsh", parent, "-NoLogo", "-NoProfile", "-File", harness,
+                "-Consumer", sandbox, "-Support", Path.Combine(root, "scripts", "Invoke-PinnedPowerForge.Evidence.ps1"));
+            Assert.NotEqual(0, submoduleRejected.ExitCode);
+            Assert.Contains("Tracked Git submodules are forbidden", submoduleRejected.StandardOutput + submoduleRejected.StandardError, StringComparison.Ordinal);
+            Run("git", sandbox, "rm", "--cached", "nested-module").EnsureSuccess();
+            CommitTrackedReleaseSandbox(sandbox, "Remove submodule entry");
+
+            File.WriteAllText(Path.Combine(parent, "outside.txt"), "unreviewed external bytes");
+            File.CreateSymbolicLink(Path.Combine(sandbox, "escaping-link.txt"), "../outside.txt");
+            Run("git", sandbox, "add", "escaping-link.txt").EnsureSuccess();
+            CommitTrackedReleaseSandbox(sandbox, "Escaping source link");
+            var rejected = Run("pwsh", parent, "-NoLogo", "-NoProfile", "-File", harness,
+                "-Consumer", sandbox, "-Support", Path.Combine(root, "scripts", "Invoke-PinnedPowerForge.Evidence.ps1"));
+
+            Assert.NotEqual(0, rejected.ExitCode);
+            Assert.Contains("escapes the exact consumer checkout", rejected.StandardOutput + rejected.StandardError, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(parent)) Directory.Delete(parent, recursive: true);
+        }
+    }
+
+    [Fact]
     public void CleanupTrackedInputValidationAllowsAProjectRemovedByTheRelease()
     {
         var root = FindRepoRoot();
