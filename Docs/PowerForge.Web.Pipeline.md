@@ -906,6 +906,7 @@ Applies critical CSS, minifies HTML/CSS/JS, optimizes images, and can hash asset
   "optimizeImages": true,
   "imageExtensions": [".png", ".jpg", ".jpeg", ".webp"],
   "imageQuality": 82,
+  "imageMetadataPolicy": "preserve",
   "imageGenerateWebp": true,
   "imagePreferNextGen": true,
   "imageWidths": [480, 960, 1440],
@@ -924,6 +925,9 @@ Notes:
 - `hashAssets` fingerprints files and rewrites references (HTML + CSS).
 - `cacheHeaders` writes `_headers` with cache-control rules (Netlify/Cloudflare Pages compatible).
 - `imageGenerateWebp` / `imageGenerateAvif` can create next-gen variants when they are smaller than source output.
+- `imageMetadataPolicy` controls the original file. `preserve` (default) leaves it byte-for-byte unchanged, including rights, color profiles, and Content Credentials. `stripAll` always rewrites the original after removing encoder-supported metadata, even when the rewritten file is larger.
+- Generated WebP, AVIF, and responsive files are derivatives. They do not inherit a valid C2PA signature from the source; sign them separately when their provenance must remain verifiable.
+- The older `imageStripMetadata: true` setting still maps to `stripAll`. Prefer the named policy in new configuration.
 - `imagePreferNextGen` rewrites `<img src>` to next-gen output when available.
 - `imageWidths` generates responsive variants and `srcset` entries.
 - `imageEnhanceTags` injects `loading=\"lazy\"`, `decoding=\"async\"`, and intrinsic `width`/`height` (when known) on rewritten image tags.

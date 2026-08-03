@@ -36,7 +36,10 @@ internal static partial class WebPipelineRunner
         var imageInclude = GetArrayOfStrings(step, "imageInclude") ?? GetArrayOfStrings(step, "image-include");
         var imageExclude = GetArrayOfStrings(step, "imageExclude") ?? GetArrayOfStrings(step, "image-exclude");
         var imageQuality = GetInt(step, "imageQuality") ?? GetInt(step, "image-quality") ?? 82;
-        var imageStripMetadata = GetBool(step, "imageStripMetadata") ?? GetBool(step, "image-strip-metadata") ?? true;
+        var imageStripMetadata = GetBool(step, "imageStripMetadata") ?? GetBool(step, "image-strip-metadata");
+        var imageMetadataPolicy = WebCliHelpers.ParseImageMetadataPolicy(
+            GetString(step, "imageMetadataPolicy") ?? GetString(step, "image-metadata-policy"),
+            imageStripMetadata);
         var imageGenerateWebp = GetBool(step, "imageGenerateWebp") ?? GetBool(step, "image-generate-webp") ?? false;
         var imageGenerateAvif = GetBool(step, "imageGenerateAvif") ?? GetBool(step, "image-generate-avif") ?? false;
         var imagePreferNextGen = GetBool(step, "imagePreferNextGen") ?? GetBool(step, "image-prefer-nextgen") ?? false;
@@ -162,7 +165,7 @@ internal static partial class WebPipelineRunner
             ImageInclude = imageInclude ?? Array.Empty<string>(),
             ImageExclude = imageExclude ?? Array.Empty<string>(),
             ImageQuality = imageQuality,
-            ImageStripMetadata = imageStripMetadata,
+            ImageMetadataPolicy = imageMetadataPolicy,
             ImageGenerateWebp = imageGenerateWebp,
             ImageGenerateAvif = imageGenerateAvif,
             ImagePreferNextGen = imagePreferNextGen,

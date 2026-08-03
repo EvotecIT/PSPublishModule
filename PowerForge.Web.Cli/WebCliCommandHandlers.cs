@@ -130,7 +130,9 @@ internal static partial class WebCliCommandHandlers
                 ImageInclude = publishSpec.Optimize.ImageInclude ?? Array.Empty<string>(),
                 ImageExclude = publishSpec.Optimize.ImageExclude ?? Array.Empty<string>(),
                 ImageQuality = publishSpec.Optimize.ImageQuality ?? 82,
-                ImageStripMetadata = publishSpec.Optimize.ImageStripMetadata ?? true,
+                ImageMetadataPolicy = ParseImageMetadataPolicy(
+                    publishSpec.Optimize.ImageMetadataPolicy?.ToString(),
+                    publishSpec.Optimize.ImageStripMetadata),
                 ImageGenerateWebp = publishSpec.Optimize.ImageGenerateWebp,
                 ImageGenerateAvif = publishSpec.Optimize.ImageGenerateAvif,
                 ImagePreferNextGen = publishSpec.Optimize.ImagePreferNextGen,
@@ -691,7 +693,16 @@ internal static partial class WebCliCommandHandlers
         var imageInclude = ReadOptionList(subArgs, "--image-include");
         var imageExclude = ReadOptionList(subArgs, "--image-exclude");
         var imageQuality = ParseIntOption(TryGetOptionValue(subArgs, "--image-quality"), 82);
-        var imageStripMetadata = !HasOption(subArgs, "--image-keep-metadata");
+        if (HasOption(subArgs, "--image-strip-metadata") && HasOption(subArgs, "--image-keep-metadata"))
+            return Fail("--image-strip-metadata and --image-keep-metadata cannot be used together.", outputJson, logger, "web.optimize");
+
+        var imageMetadataPolicy = ParseImageMetadataPolicy(
+            TryGetOptionValue(subArgs, "--image-metadata-policy"),
+            HasOption(subArgs, "--image-strip-metadata")
+                ? true
+                : HasOption(subArgs, "--image-keep-metadata")
+                    ? false
+                    : null);
         var imageGenerateWebp = HasOption(subArgs, "--image-generate-webp");
         var imageGenerateAvif = HasOption(subArgs, "--image-generate-avif");
         var imagePreferNextGen = HasOption(subArgs, "--image-prefer-nextgen");
@@ -750,7 +761,7 @@ internal static partial class WebCliCommandHandlers
             ImageInclude = imageInclude.Count > 0 ? imageInclude.ToArray() : Array.Empty<string>(),
             ImageExclude = imageExclude.Count > 0 ? imageExclude.ToArray() : Array.Empty<string>(),
             ImageQuality = imageQuality,
-            ImageStripMetadata = imageStripMetadata,
+            ImageMetadataPolicy = imageMetadataPolicy,
             ImageGenerateWebp = imageGenerateWebp,
             ImageGenerateAvif = imageGenerateAvif,
             ImagePreferNextGen = imagePreferNextGen,

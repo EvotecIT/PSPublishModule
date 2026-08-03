@@ -104,7 +104,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web optimize --site-root <dir> [--config <site.json>] [--critical-css <file>] [--css-pattern <regex>]");
         Console.WriteLine("                     [--minify-html] [--minify-css] [--minify-js]");
         Console.WriteLine("                     [--optimize-images] [--image-ext <.png,.jpg,.jpeg,.webp>] [--image-include <glob[,glob]>] [--image-exclude <glob[,glob]>]");
-        Console.WriteLine("                     [--image-quality <1-100>] [--image-keep-metadata] [--image-generate-webp] [--image-generate-avif]");
+        Console.WriteLine("                     [--image-quality <1-100>] [--image-metadata-policy <preserve|strip-all>] [--image-generate-webp] [--image-generate-avif]");
         Console.WriteLine("                     [--image-prefer-nextgen] [--image-widths <320,640,1024>] [--image-enhance-tags]");
         Console.WriteLine("                     [--image-max-bytes <n>] [--image-max-total-bytes <n>] [--image-fail-on-budget]");
         Console.WriteLine("                     [--hash-assets] [--hash-ext <.css,.js>] [--hash-exclude <glob[,glob]>] [--hash-manifest <file>]");
@@ -170,6 +170,35 @@ internal static partial class WebCliHelpers
         }
 
         return null;
+    }
+
+    internal static WebImageMetadataPolicy ParseImageMetadataPolicy(string? value, bool? legacyStripMetadata = null)
+    {
+        WebImageMetadataPolicy policy;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            policy = legacyStripMetadata == true
+                ? WebImageMetadataPolicy.StripAll
+                : WebImageMetadataPolicy.Preserve;
+        }
+        else
+        {
+            policy = value.Trim().Replace("-", string.Empty, StringComparison.Ordinal).ToLowerInvariant() switch
+            {
+                "preserve" => WebImageMetadataPolicy.Preserve,
+                "stripall" => WebImageMetadataPolicy.StripAll,
+                _ => throw new ArgumentException(
+                    $"Unsupported image metadata policy '{value}'. Use preserve or strip-all.")
+            };
+        }
+
+        if (legacyStripMetadata.HasValue &&
+            legacyStripMetadata.Value != (policy == WebImageMetadataPolicy.StripAll))
+        {
+            throw new ArgumentException("The legacy image metadata switch conflicts with imageMetadataPolicy.");
+        }
+
+        return policy;
     }
 
     internal static List<string> ReadOptionList(string[] argv, params string[] optionNames)
