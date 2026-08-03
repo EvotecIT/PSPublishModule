@@ -162,8 +162,12 @@ jobs:
           } else {
             @($env:STRUCTURED_DIAGNOSTICS | ConvertFrom-Json -Depth 20)
           }
+          # Doctor warnings remain available in the compact receipt, but only an
+          # execution failure or an error-level diagnostic should create a red
+          # proactive incident. Warning-only runs are advisory and recover any
+          # earlier monitor incident instead of keeping required CI red forever.
           $unhealthy = $env:DOCTOR_OUTCOME -ne 'success' -or
-            @($structured | Where-Object { $_.severity -in @('error', 'warning') }).Count -gt 0
+            @($structured | Where-Object { $_.severity -eq 'error' }).Count -gt 0
           $healthyOutput = (!$unhealthy).ToString().ToLowerInvariant()
           "healthy=$healthyOutput" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           if (-not $unhealthy) {
@@ -181,7 +185,18 @@ jobs:
           if ($receiptDiagnostics.Count -eq 0) {
             $receiptDiagnostics = @($structured)
           }
-          $stateDiagnostics = @($receiptDiagnostics | ForEach-Object {
+          $errorDiagnostics = @($receiptDiagnostics | Where-Object { $_.severity -eq 'error' })
+          $specificErrors = @($errorDiagnostics | Where-Object { $_.code -ne 'APPLE_UNKNOWN' })
+          $incidentDiagnostics = if ($specificErrors.Count -gt 0) {
+            $specificErrors
+          } elseif ($errorDiagnostics.Count -gt 0) {
+            $errorDiagnostics
+          } else {
+            # An execution failure can precede structured classification. Keep
+            # whatever diagnostics exist, then fall back to the linked run.
+            $receiptDiagnostics
+          }
+          $stateDiagnostics = @($incidentDiagnostics | ForEach-Object {
             [ordered]@{
               code = [string] $_.code
               severity = [string] $_.severity
@@ -207,7 +222,7 @@ jobs:
           $maxRenderedDiagnosticCharacters = 48000
           $renderedDiagnostics = [Collections.Generic.List[string]]::new()
           $renderedCharacters = 0
-          foreach ($diagnostic in $receiptDiagnostics) {
+          foreach ($diagnostic in $incidentDiagnostics) {
             $line = "- **$($diagnostic.code)** [$($diagnostic.severity)]: $($diagnostic.summary)`n  - Action: $($diagnostic.action)"
             if ($line.Length -gt $maxDiagnosticEntryLength) {
               $line = $line.Substring(0, $maxDiagnosticEntryLength - 1) + '…'
@@ -218,7 +233,7 @@ jobs:
             $renderedDiagnostics.Add($line)
             $renderedCharacters += $line.Length + 1
           }
-          $omittedDiagnosticCount = $receiptDiagnostics.Count - $renderedDiagnostics.Count
+          $omittedDiagnosticCount = $incidentDiagnostics.Count - $renderedDiagnostics.Count
           $diagnosticLines = if ($renderedDiagnostics.Count -gt 0) {
             $renderedDiagnostics -join "`n"
           } else {

@@ -68,6 +68,10 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("$start.Environment.Clear()", script, StringComparison.Ordinal);
         Assert.Contains("-IncludeAppleCredentials", script, StringComparison.Ordinal);
         Assert.Contains("Assert-FixedAppleToolConfiguration", script, StringComparison.Ordinal);
+        Assert.Contains("$script:validatedReleaseConfigPaths", script, StringComparison.Ordinal);
+        Assert.Contains("if ($command -eq 'apple-release' -and $config)", script, StringComparison.Ordinal);
+        Assert.Contains("Get-OptionValue -Option '--release-config'", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("$script:validatedConfigPaths", script, StringComparison.Ordinal);
         Assert.Contains("/usr/bin/xcodebuild", script, StringComparison.Ordinal);
         Assert.DoesNotContain("[string] $DotNet =", script, StringComparison.Ordinal);
 
