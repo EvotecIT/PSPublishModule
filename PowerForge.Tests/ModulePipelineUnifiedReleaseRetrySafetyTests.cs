@@ -251,11 +251,11 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 "project.build.json",
                 moduleName,
                 publishNuGet: true,
-                skipDuplicate: false);
+                skipDuplicate: true);
 
             var runNumber = 1;
             var publishAttempts = 0;
-            var firstAttemptPreservedConfiguration = false;
+            var firstAttemptRejectedDuplicateTolerance = false;
             var retryUsedDuplicateTolerance = false;
             ProjectBuildHostExecutionResult ExecutePackageBuild(
                 ProjectBuildHostRequest request,
@@ -276,7 +276,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                     publishAttempts++;
                     if (runNumber == 1)
                     {
-                        firstAttemptPreservedConfiguration = configuration?.SkipDuplicate == false;
+                        firstAttemptRejectedDuplicateTolerance = configuration?.SkipDuplicate == false;
                         result.Success = false;
                         result.ErrorMessage = "Simulated second-package failure after the first package was published.";
                     }
@@ -299,7 +299,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             var result = secondRunner.Run(CreateNuGetOnlyReleaseSpec(root.FullName, secondStagingPath, moduleName));
 
             Assert.Equal("2.0.11", result.Plan.ResolvedVersion);
-            Assert.True(firstAttemptPreservedConfiguration);
+            Assert.True(firstAttemptRejectedDuplicateTolerance);
             Assert.True(retryUsedDuplicateTolerance);
             Assert.Equal(2, publishAttempts);
             AssertNoCoordinatedReleaseCheckpoint(root.FullName);

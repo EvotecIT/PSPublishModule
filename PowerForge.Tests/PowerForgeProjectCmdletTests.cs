@@ -216,7 +216,6 @@ public sealed class PowerForgeProjectCmdletTests
         ps.AddCommand("New-ConfigurationRelease")
             .AddParameter("VersionSource", ReleaseVersionSource.PackageBuild)
             .AddParameter("PrimaryProject", "HtmlTinkerX")
-            .AddParameter("SynchronizeModuleVersion")
             .AddParameter("BuildOrder", new[] { "PackageBuild", "Module" })
             .AddParameter("PublishOrder", new[] { "NuGet", "PowerShellGallery", "GitHub" });
 

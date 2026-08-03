@@ -164,8 +164,14 @@ hashtable for additional fields.
 
 ## How Version Coordination Works
 
-`-SynchronizeModuleVersion` coordinates the module with `-PrimaryProject`. It does not, by itself, assign one version
-to every NuGet package in the repository.
+`New-ConfigurationRelease` automatically coordinates the module with `-PrimaryProject` when `ProjectBuild` or
+`PackageBuild` is selected as the version source. `-SynchronizeModuleVersion` remains available as an explicit
+declaration for readability. This does not, by itself, assign one version to every NuGet package in the repository;
+use `AlignPackageVersions` or a shared version track for that package group.
+
+For an initial coordinated publish, duplicate NuGet versions are release conflicts rather than successful skips.
+Duplicate tolerance is enabled only when resuming a checkpoint that proves the same NuGet lane was already
+attempted, so an occupied package version cannot silently lead to an older PSGallery or GitHub release.
 
 PowerForge makes the version decision in this order:
 

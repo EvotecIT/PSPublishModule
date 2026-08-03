@@ -463,7 +463,9 @@ public sealed class ReleaseConfiguration
     public string? PrimaryProject { get; set; }
 
     /// <summary>
-    /// When enabled, coordinates the module and selected primary package on one version.
+    /// Coordinates the module and selected primary package on one version.
+    /// The PowerShell <c>New-ConfigurationRelease</c> surface enables this automatically when
+    /// <see cref="VersionSource"/> is a project/package build and <see cref="PrimaryProject"/> is configured.
     /// The next available module version becomes a floor for the primary package; a higher numeric package version still wins.
     /// At the same numeric version, a stable X-pattern candidate does not erase the configured module prerelease;
     /// explicit prerelease versions retain normal semantic-version ordering.
