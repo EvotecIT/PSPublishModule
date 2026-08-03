@@ -139,7 +139,7 @@ public sealed partial class AppStoreConnectClient
             data = new
             {
                 type = "subscriptions",
-                attributes = BuildSubscriptionAttributes(spec, includeProductId: true),
+                attributes = BuildSubscriptionAttributes(spec, includeCreateOnlyAttributes: true),
                 relationships = new
                 {
                     group = new { data = new { type = "subscriptionGroups", id = subscriptionGroupId.Trim() } }
@@ -163,7 +163,7 @@ public sealed partial class AppStoreConnectClient
             {
                 type = "subscriptions",
                 id = subscriptionId.Trim(),
-                attributes = BuildSubscriptionAttributes(spec, includeProductId: false)
+                attributes = BuildSubscriptionAttributes(spec, includeCreateOnlyAttributes: false)
             }
         };
         return PatchSingleAsync(
@@ -379,19 +379,21 @@ public sealed partial class AppStoreConnectClient
             cancellationToken);
     }
 
-    private static object BuildSubscriptionAttributes(AppStoreConnectSubscriptionSpec spec, bool includeProductId)
+    private static object BuildSubscriptionAttributes(AppStoreConnectSubscriptionSpec spec, bool includeCreateOnlyAttributes)
     {
         var attributes = new Dictionary<string, object?>
         {
             ["name"] = spec.Name.Trim(),
             ["familySharable"] = spec.FamilySharable,
-            ["subscriptionPeriod"] = spec.SubscriptionPeriod.Trim().ToUpperInvariant(),
             ["groupLevel"] = spec.GroupLevel
         };
         if (spec.ReviewNote is not null)
             attributes["reviewNote"] = spec.ReviewNote.Trim();
-        if (includeProductId)
+        if (includeCreateOnlyAttributes)
+        {
             attributes["productId"] = spec.ProductId.Trim();
+            attributes["subscriptionPeriod"] = spec.SubscriptionPeriod.Trim().ToUpperInvariant();
+        }
         return attributes.Where(static pair => pair.Value is not null)
             .ToDictionary(static pair => pair.Key, static pair => pair.Value);
     }

@@ -1,12 +1,41 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
 /// <summary>Copies private App Review contact settings between exact versions without serializing the values.</summary>
 public sealed class AppStoreConnectReviewDetailsCopyService
 {
+    private static readonly HashSet<string> SafeProviderErrorCodes = new(StringComparer.Ordinal)
+    {
+        "ENTITY_ERROR.ATTRIBUTE.INVALID",
+        "ENTITY_ERROR.ATTRIBUTE.REQUIRED",
+        "ENTITY_ERROR.ATTRIBUTE.UNMODIFIABLE",
+        "ENTITY_ERROR.RELATIONSHIP.INVALID",
+        "ENTITY_ERROR.RELATIONSHIP.REQUIRED"
+    };
+
+    private static readonly HashSet<string> SafeProviderErrorPointers = new(StringComparer.Ordinal)
+    {
+        "/data/attributes/platform",
+        "/data/attributes/versionString",
+        "/data/attributes/contactFirstName",
+        "/data/attributes/contactLastName",
+        "/data/attributes/contactPhone",
+        "/data/attributes/contactEmail",
+        "/data/attributes/demoAccountRequired",
+        "/data/attributes/demoAccountName",
+        "/data/attributes/demoAccountPassword",
+        "/data/relationships/app",
+        "/data/relationships/app/data",
+        "/data/relationships/app/data/id",
+        "/data/relationships/appStoreVersion",
+        "/data/relationships/appStoreVersion/data",
+        "/data/relationships/appStoreVersion/data/id"
+    };
+
     private readonly AppStoreConnectClient _client;
 
     /// <summary>Creates the service.</summary>
@@ -83,11 +112,13 @@ public sealed class AppStoreConnectReviewDetailsCopyService
 
         var targetVersionId = current.TargetVersionId;
         var createdVersion = false;
+        var operation = "revalidate-target";
         AppStoreConnectReviewDetailsInfo? existing = null;
         try
         {
             if (!current.TargetVersionExists)
             {
+                operation = "create-target-version";
                 var created = await _client.CreateVersionAsync(
                     spec.Target.AppId.Trim(),
                     spec.Target.VersionString.Trim(),
@@ -99,15 +130,23 @@ public sealed class AppStoreConnectReviewDetailsCopyService
             if (string.IsNullOrWhiteSpace(targetVersionId))
                 throw new InvalidOperationException("The exact target App Store version could not be resolved for App Review details.");
 
+            operation = "read-target-details";
             existing = await _client.GetReviewDetailsAsync(targetVersionId!, cancellationToken).ConfigureAwait(false);
             if (!string.Equals(existing is null ? null : ComputeDetailsFingerprint(existing), current.ObservedFingerprint, StringComparison.Ordinal))
                 throw new InvalidOperationException("Target App Review details changed after review.");
 
             if (existing is null)
+            {
+                operation = "create-review-details";
                 await _client.CreateReviewDetailsAsync(targetVersionId!, source, cancellationToken).ConfigureAwait(false);
+            }
             else
+            {
+                operation = "update-review-details";
                 await _client.UpdateReviewDetailsAsync(existing.Id, source, cancellationToken).ConfigureAwait(false);
+            }
 
+            operation = "verify-final-state";
             var final = await PlanAsync(spec, cancellationToken).ConfigureAwait(false);
             return new AppStoreConnectReviewDetailsCopyResult
             {
@@ -119,6 +158,7 @@ public sealed class AppStoreConnectReviewDetailsCopyService
                 ErrorMessage = final.IsConverged
                     ? null
                     : "App Review details did not converge after mutation. Contact values were suppressed; generate a new Plan before retrying.",
+                FailureOperation = final.IsConverged ? null : operation,
                 InitialPlan = current,
                 FinalPlan = final
             };
@@ -130,10 +170,11 @@ public sealed class AppStoreConnectReviewDetailsCopyService
             {
                 finalAfterFailure = await PlanAsync(spec, cancellationToken).ConfigureAwait(false);
             }
-            catch
+            catch (Exception replanError) when (replanError is not OperationCanceledException)
             {
                 finalAfterFailure = current;
             }
+            var providerError = ExtractProviderError(ex);
             var convergedAfterFailure = finalAfterFailure.IsConverged;
             return new AppStoreConnectReviewDetailsCopyResult
             {
@@ -144,7 +185,11 @@ public sealed class AppStoreConnectReviewDetailsCopyService
                 ErrorCode = convergedAfterFailure ? null : "APPLE_REVIEW_DETAILS_APPLY_FAILED",
                 ErrorMessage = convergedAfterFailure
                     ? null
-                    : "App Review details did not converge. Contact values were suppressed; rerun Plan to inspect the remaining non-sensitive state before retrying.",
+                    : "App Review details did not converge. Contact values and provider messages were suppressed; use the operation, status, codes, and pointers in this receipt before retrying.",
+                FailureOperation = convergedAfterFailure ? null : operation,
+                ProviderStatusCode = convergedAfterFailure ? null : providerError.StatusCode,
+                ProviderErrorCodes = convergedAfterFailure ? Array.Empty<string>() : providerError.Codes,
+                ProviderErrorPointers = convergedAfterFailure ? Array.Empty<string>() : providerError.Pointers,
                 InitialPlan = current,
                 FinalPlan = finalAfterFailure
             };
@@ -245,5 +290,72 @@ public sealed class AppStoreConnectReviewDetailsCopyService
         });
         using var sha256 = SHA256.Create();
         return BitConverter.ToString(sha256.ComputeHash(Encoding.UTF8.GetBytes(binding))).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static ProviderErrorSummary ExtractProviderError(Exception exception)
+    {
+        var message = exception.Message ?? string.Empty;
+        int? statusCode = null;
+        var status = Regex.Match(message, @"failed \((?<status>[0-9]{3})(?:\s|\))", RegexOptions.CultureInvariant);
+        if (status.Success && int.TryParse(status.Groups["status"].Value, out var parsedStatus))
+            statusCode = parsedStatus;
+
+        var codes = new HashSet<string>(StringComparer.Ordinal);
+        var pointers = new HashSet<string>(StringComparer.Ordinal);
+        var jsonStart = message.IndexOf('{');
+        if (jsonStart >= 0)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(message.Substring(jsonStart));
+                if (document.RootElement.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var error in errors.EnumerateArray())
+                    {
+                        AddAllowlistedValue(error, "code", codes, SafeProviderErrorCodes);
+                        if (error.TryGetProperty("source", out var source) && source.ValueKind == JsonValueKind.Object)
+                            AddAllowlistedValue(source, "pointer", pointers, SafeProviderErrorPointers);
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                // Provider messages are never copied when the structured response cannot be parsed safely.
+            }
+        }
+
+        return new ProviderErrorSummary(
+            statusCode,
+            codes.OrderBy(static value => value, StringComparer.Ordinal).Take(10).ToArray(),
+            pointers.OrderBy(static value => value, StringComparer.Ordinal).Take(10).ToArray());
+    }
+
+    private static void AddAllowlistedValue(
+        JsonElement element,
+        string propertyName,
+        HashSet<string> destination,
+        HashSet<string> allowlist)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.String)
+            return;
+        var value = property.GetString();
+        if (!string.IsNullOrWhiteSpace(value) && allowlist.Contains(value!))
+            destination.Add(value!);
+    }
+
+    private sealed class ProviderErrorSummary
+    {
+        public ProviderErrorSummary(int? statusCode, string[] codes, string[] pointers)
+        {
+            StatusCode = statusCode;
+            Codes = codes;
+            Pointers = pointers;
+        }
+
+        public int? StatusCode { get; }
+
+        public string[] Codes { get; }
+
+        public string[] Pointers { get; }
     }
 }

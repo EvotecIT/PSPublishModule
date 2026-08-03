@@ -222,8 +222,13 @@ public sealed partial class AppStoreConnectClientTests
 
         using var clearBody = JsonDocument.Parse(handler.RequestBodies[0]);
         using var unmanagedBody = JsonDocument.Parse(handler.RequestBodies[1]);
-        Assert.Equal(string.Empty, clearBody.RootElement.GetProperty("data").GetProperty("attributes").GetProperty("reviewNote").GetString());
-        Assert.False(unmanagedBody.RootElement.GetProperty("data").GetProperty("attributes").TryGetProperty("reviewNote", out _));
+        var clearAttributes = clearBody.RootElement.GetProperty("data").GetProperty("attributes");
+        var unmanagedAttributes = unmanagedBody.RootElement.GetProperty("data").GetProperty("attributes");
+        Assert.Equal(string.Empty, clearAttributes.GetProperty("reviewNote").GetString());
+        Assert.False(unmanagedAttributes.TryGetProperty("reviewNote", out _));
+        Assert.False(clearAttributes.TryGetProperty("subscriptionPeriod", out _));
+        Assert.False(unmanagedAttributes.TryGetProperty("subscriptionPeriod", out _));
+        Assert.False(clearAttributes.TryGetProperty("productId", out _));
     }
 
     [Fact]
@@ -705,6 +710,38 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal(AppStoreConnectGovernanceChangeAction.Blocked, change.Action);
         Assert.Contains("group-current", change.Summary, StringComparison.Ordinal);
         Assert.Equal(HttpMethod.Get, Assert.Single(handler.Methods));
+    }
+
+    [Fact]
+    public async Task GovernancePlan_BlocksImmutableSubscriptionPeriodDriftBeforeMutation()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptionGroups", "id": "group-1", "attributes": { "referenceName": "Pro" } } ] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [ { "type": "subscriptions", "id": "sub-1", "attributes": { "productId": "pro.monthly", "name": "Pro Monthly", "subscriptionPeriod": "ONE_MONTH", "familySharable": false } } ] }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var plan = await new AppStoreConnectGovernanceService(client).PlanAsync(new AppStoreConnectGovernanceSpec
+        {
+            AppId = "app-1",
+            SubscriptionGroups = [new AppStoreConnectSubscriptionGroupSpec
+            {
+                ReferenceName = "Pro",
+                Subscriptions = [new AppStoreConnectSubscriptionSpec
+                {
+                    ProductId = "pro.monthly",
+                    Name = "Pro Monthly Updated",
+                    SubscriptionPeriod = "ONE_YEAR",
+                    FamilySharable = true
+                }]
+            }]
+        });
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(AppStoreConnectGovernanceChangeAction.Blocked, change.Action);
+        Assert.Contains("immutable", change.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal([HttpMethod.Get, HttpMethod.Get, HttpMethod.Get], handler.Methods);
     }
 
     [Fact]
