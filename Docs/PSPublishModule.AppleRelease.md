@@ -405,6 +405,62 @@ published API cannot safely mutate an existing property, such as
 that exact item in App Store Connect, then rerun the plan. A blocked receipt is never
 reported as successful convergence.
 
+### App Review contact without tracked personal data
+
+App Review contact details belong to an App Store version, but names, phone numbers,
+email addresses, and demo credentials do not belong in a repository. The
+`apple-review-details` command copies those fields directly from one existing,
+complete App Store version to another exact draft version. The checked-in config holds
+only app ids, version strings, and platforms:
+
+```json
+{
+  "schemaVersion": 1,
+  "source": {
+    "appId": "1234567890",
+    "versionString": "1.4.0",
+    "platform": "iOS"
+  },
+  "target": {
+    "appId": "0987654321",
+    "versionString": "0.1.0",
+    "platform": "macOS"
+  },
+  "createTargetVersion": true
+}
+```
+
+Run it through `scripts/Invoke-PinnedPowerForge.ps1` on the trusted private Mac so the
+App Store Connect key remains in the fixed owner-only `~/.appstoreconnect` profile:
+
+```powershell
+./scripts/Invoke-PinnedPowerForge.ps1 `
+  -ExpectedCommit '<merged-powerforge-sha>' `
+  -ConsumerRoot '<clean-consumer-main>' `
+  -ExpectedConsumerRepository 'owner/repository' `
+  apple-review-details plan `
+  --config scripts/appstoreconnect-review-details.json `
+  --receipt build/powerforge/apple/review-details-plan.json
+
+./scripts/Invoke-PinnedPowerForge.ps1 `
+  -ExpectedCommit '<merged-powerforge-sha>' `
+  -ConsumerRoot '<clean-consumer-main>' `
+  -ExpectedConsumerRepository 'owner/repository' `
+  apple-review-details apply `
+  --config scripts/appstoreconnect-review-details.json `
+  --reviewed-plan build/powerforge/apple/review-details-plan.json `
+  --receipt build/powerforge/apple/review-details-receipt.json `
+  --confirm
+```
+
+Plan and apply receipts contain only exact version ids, convergence state, and one-way
+bindings. Contact values and demo credentials are never written to configs, output, or
+receipts. Apply replans immediately and refuses mutation if either version's observed
+details changed after review. Review notes are intentionally not copied because they
+are product-specific. When `createTargetVersion` is true, the reviewed apply may first
+create that exact draft version if it is still absent. This command prepares a draft version only; it does not submit
+Beta App Review, submit App Review, or release the app.
+
 ## Reusable GitHub workflows
 
 The reusable workflows build the exact 40-character `powerforge_ref` through the

@@ -41,6 +41,7 @@ public sealed partial class AppleReleaseWorkflowTests
             script.IndexOf("Assert-CleanRepository -Root $toolRoot", StringComparison.Ordinal));
         Assert.Contains("run download $runId", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("requires an explicit --config", script, StringComparison.Ordinal);
+        Assert.Contains("'apple-review-details'", script, StringComparison.Ordinal);
         Assert.Contains("Invoke-TrackedInputValidator -SourceCommit $consumerHead", script, StringComparison.Ordinal);
         Assert.Contains("Get-RedactedToolText -Text ($stdout.GetAwaiter().GetResult())", script, StringComparison.Ordinal);
         Assert.Contains("appStoreConnectApi(?:KeyPath|KeyId|IssuerId)", script, StringComparison.Ordinal);

@@ -189,7 +189,7 @@ function Get-ForwardedArgumentList {
 }
 
 function Assert-SafeArguments {
-    if ($ArgumentList.Count -lt 1 -or $ArgumentList[0] -notin @('apple-release', 'apple-screenshots', 'apple-governance')) {
+    if ($ArgumentList.Count -lt 1 -or $ArgumentList[0] -notin @('apple-release', 'apple-screenshots', 'apple-governance', 'apple-review-details')) {
         throw 'Pinned local operator accepts only Apple PowerForge commands.'
     }
     foreach ($forbidden in @('--key-path', '--key-id', '--issuer-id')) {
@@ -201,7 +201,7 @@ function Assert-SafeArguments {
         throw 'UploadExisting is forbidden at the pinned local operator boundary because existing archive bytes lack reviewed provenance.'
     }
     $config = Get-OptionValue -Option '--config'
-    if (($command -eq 'apple-release' -or $command -eq 'apple-screenshots' -or
+    if (($command -eq 'apple-release' -or $command -eq 'apple-screenshots' -or $command -eq 'apple-review-details' -or
         ($command -eq 'apple-governance' -and $operation -ne 'snapshot')) -and -not $config) {
         throw "$command requires an explicit --config at the pinned local operator boundary."
     }
