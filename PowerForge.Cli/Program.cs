@@ -80,6 +80,8 @@ internal static partial class Program
             return CommandAppleScreenshots(filteredArgs, cli, logger);
         case "apple-governance":
             return CommandAppleGovernance(filteredArgs, cli, logger);
+        case "apple-review-details":
+            return CommandAppleReviewDetails(filteredArgs, cli, logger);
         case "store":
             return CommandStore(filteredArgs, cli, logger);
         case "run":
