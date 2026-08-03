@@ -3,6 +3,7 @@ using System.Text;
 
 namespace PowerForge.Tests;
 
+[Collection("BinaryDocFixture")]
 public sealed class DocumentationBinaryFixtureTests
 {
     [Fact]
@@ -49,6 +50,14 @@ public sealed class DocumentationBinaryFixtureTests
                 Path.Combine(staleHelpDirectory, "BinaryDocFixture-help.xml"),
                 staleExternalHelp,
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            File.WriteAllText(
+                Path.Combine(staleHelpDirectory, "Removed.Binary.dll-Help.xml"),
+                staleExternalHelp.Replace("?>", "?>\r\n<!-- PowerForgeGeneratedExternalHelpAlias -->", StringComparison.Ordinal),
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            File.WriteAllText(
+                Path.Combine(staleHelpDirectory, "Authored.Binary.dll-Help.xml"),
+                staleExternalHelp,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             var engine = new DocumentationEngine(new PowerShellRunner(), new NullLogger());
             var extracted = engine.ExtractHelpPayload(tempRoot, manifestPath, TimeSpan.FromMinutes(1));
@@ -80,6 +89,8 @@ public sealed class DocumentationBinaryFixtureTests
             var externalHelpPath = Path.Combine(tempRoot, "en-US", "BinaryDocFixture-help.xml");
             Assert.True(File.Exists(markdownPath), $"Expected generated markdown help at '{markdownPath}'.");
             Assert.True(File.Exists(externalHelpPath), $"Expected generated MAML help at '{externalHelpPath}'.");
+            Assert.False(File.Exists(Path.Combine(staleHelpDirectory, "Removed.Binary.dll-Help.xml")));
+            Assert.True(File.Exists(Path.Combine(staleHelpDirectory, "Authored.Binary.dll-Help.xml")));
 
             Assert.Equal(
                 NormalizeText(File.ReadAllText(Path.Combine(expectedRoot, "Get-BinaryDocSample.md"))),

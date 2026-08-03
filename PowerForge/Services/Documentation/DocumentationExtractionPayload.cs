@@ -82,6 +82,9 @@ internal sealed class DocumentationCommandHelp
     [DataMember(Name = "syntax")]
     public List<DocumentationSyntaxHelp> Syntax { get; set; } = new();
 
+    /// <summary>Prevents writers from synthesizing syntax after every collected set was removed as unreachable.</summary>
+    internal bool SuppressSyntheticSyntax { get; set; }
+
     /// <summary>Parameter documentation entries.</summary>
     [DataMember(Name = "parameters")]
     public List<DocumentationParameterHelp> Parameters { get; set; } = new();
@@ -239,6 +242,34 @@ internal sealed class DocumentationParameterHelp
     /// <summary>Parameter type name.</summary>
     [DataMember(Name = "type")]
     public string Type { get; set; } = string.Empty;
+
+    /// <summary>Full CLR identity captured from the target runtime before display normalization.</summary>
+    [DataMember(Name = "runtimeTypeName")]
+    public string RuntimeTypeName { get; set; } = string.Empty;
+
+    /// <summary>Runtime <see cref="Type.FullName"/> captured for exact Get-Help identity matching.</summary>
+    [DataMember(Name = "runtimeClrTypeName")]
+    public string RuntimeClrTypeName { get; set; } = string.Empty;
+
+    /// <summary>Underlying nullable type name captured from the target runtime.</summary>
+    [DataMember(Name = "nullableUnderlyingTypeName")]
+    public string? NullableUnderlyingTypeName { get; set; }
+
+    /// <summary>Outer-to-inner CLR array ranks surrounding the nullable element type.</summary>
+    [DataMember(Name = "nullableArrayRanks")]
+    public List<int> NullableArrayRanks { get; set; } = new();
+
+    /// <summary>Full name of the .NET type that declares the cmdlet property.</summary>
+    [DataMember(Name = "declaringType")]
+    public string? DeclaringType { get; set; }
+
+    /// <summary>Assembly path of the .NET type that declares the cmdlet property.</summary>
+    [DataMember(Name = "declaringAssemblyPath")]
+    public string? DeclaringAssemblyPath { get; set; }
+
+    /// <summary>True when PowerShell marks the parameter as hidden from help.</summary>
+    [DataMember(Name = "dontShow")]
+    public bool DontShow { get; set; }
 
     /// <summary>Parameter description.</summary>
     [DataMember(Name = "description")]

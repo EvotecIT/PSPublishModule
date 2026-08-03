@@ -18,10 +18,11 @@
   <ItemGroup>
     <ProjectReference Include="AssemblyDistinctA\BinaryDocOutputAssemblyA.csproj" Aliases="DistinctA" />
     <ProjectReference Include="AssemblyDistinctB\BinaryDocOutputAssemblyB.csproj" Aliases="DistinctB" />
+    <ProjectReference Include="InheritedBase\BinaryDocInheritedBase.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="AssemblyDistinctA\**;AssemblyDistinctB\**" />
+    <Compile Remove="AssemblyDistinctA\**;AssemblyDistinctB\**;InheritedBase\**" />
   </ItemGroup>
 
 </Project>

@@ -112,7 +112,8 @@ internal sealed class MamlHelpWriter
 
         if (syntaxSets.Length == 0)
         {
-            WriteSyntaxItem(writer, commandName, setName: null, cmd.Parameters);
+            if (!cmd.SuppressSyntheticSyntax)
+                WriteSyntaxItem(writer, commandName, setName: null, cmd.Parameters);
             writer.WriteEndElement(); // syntax
             return;
         }

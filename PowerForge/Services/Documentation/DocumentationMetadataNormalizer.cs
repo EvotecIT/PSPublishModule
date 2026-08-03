@@ -23,6 +23,7 @@ internal static class DocumentationMetadataNormalizer
         foreach (var command in payload.Commands ?? new List<DocumentationCommandHelp>())
         {
             if (command is null) continue;
+            DocumentationHiddenParameterNormalizer.Normalize(command);
             NormalizeBindableIdentities(command);
             NormalizeParameterSetIdentities(command);
             RestoreTypeIdentityText(command.Inputs);
@@ -322,6 +323,15 @@ internal static class DocumentationMetadataNormalizer
         {
             if (parameter is null) continue;
 
+            var nullableTypeName = GetNullableParameterTypeName(parameter);
+            if (!string.IsNullOrWhiteSpace(nullableTypeName))
+            {
+                parameter.Type = nullableTypeName!;
+                NormalizeSyntaxParameterType(command, parameter.Name, parameter.Type);
+            }
+            parameter.NullableUnderlyingTypeName = null;
+            parameter.NullableArrayRanks = new List<int>();
+
             parameter.Aliases = (parameter.Aliases ?? new List<string>())
                 .Where(alias => !string.IsNullOrEmpty(alias))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -355,6 +365,42 @@ internal static class DocumentationMetadataNormalizer
             parameter.HasMetadataDefault = false;
         }
     }
+
+    internal static string? GetNullableParameterTypeName(DocumentationParameterHelp parameter)
+    {
+        if (parameter is null || string.IsNullOrWhiteSpace(parameter.NullableUnderlyingTypeName))
+            return null;
+
+        var suffix = string.Concat((parameter.NullableArrayRanks ?? new List<int>())
+            .AsEnumerable()
+            .Reverse()
+            .Select(rank => rank <= 1 ? "[]" : "[" + new string(',', rank - 1) + "]"));
+        return parameter.NullableUnderlyingTypeName + suffix;
+    }
+
+    private static void NormalizeSyntaxParameterType(
+        DocumentationCommandHelp command,
+        string parameterName,
+        string parameterType)
+    {
+        if (string.IsNullOrEmpty(parameterName) || string.IsNullOrEmpty(parameterType)) return;
+
+        var pattern = @"(?<prefix>\[{0,2}-" + Regex.Escape(parameterName) + @"(?:\])?\s+)<[^>\r\n]+>";
+        foreach (var syntax in command.Syntax ?? new List<DocumentationSyntaxHelp>())
+        {
+            if (syntax is null || string.IsNullOrEmpty(syntax.Text)) continue;
+            syntax.Text = ReplaceSyntaxParameterType(syntax.Text, pattern, parameterType);
+        }
+        command.Synopsis = ReplaceSyntaxParameterType(command.Synopsis, pattern, parameterType);
+        command.Description = ReplaceSyntaxParameterType(command.Description, pattern, parameterType);
+    }
+
+    private static string ReplaceSyntaxParameterType(string? text, string pattern, string parameterType)
+        => Regex.Replace(
+            text ?? string.Empty,
+            pattern,
+            match => match.Groups["prefix"].Value + "<" + parameterType + ">",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static void NormalizeOutputs(DocumentationCommandHelp command)
     {

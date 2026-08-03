@@ -203,6 +203,7 @@ public sealed class DocumentationEngine
             }
 
             var externalHelpFile = string.Empty;
+            IReadOnlyList<string> externalHelpFiles = Array.Empty<string>();
             if (buildDocumentation.GenerateExternalHelp)
             {
                 var culture = NormalizeExternalHelpCulture(buildDocumentation.ExternalHelpCulture);
@@ -216,6 +217,7 @@ public sealed class DocumentationEngine
                 try
                 {
                     externalHelpFile = mamlWriter.WriteExternalHelpFile(extracted, moduleName, externalHelpDir, fileName);
+                    externalHelpFiles = DocumentationExternalHelpAliasWriter.WriteAliases(extracted, externalHelpFile, moduleName);
                     if (buildDocumentation.IncludeAboutTopics)
                         new AboutTopicWriter().WriteExternalHelpFiles(stagingPath, externalHelpDir, buildDocumentation.AboutTopicsSourcePath);
                     SafeDone(externalHelpStep);
@@ -235,7 +237,8 @@ public sealed class DocumentationEngine
                 exitCode: 0,
                 markdownFiles: CountMarkdownFiles(docsPath),
                 externalHelpFilePath: externalHelpFile,
-                errorMessage: null);
+                errorMessage: null,
+                externalHelpFilePaths: externalHelpFiles);
         }
         catch (Exception ex)
         {
@@ -346,6 +349,12 @@ public sealed class DocumentationEngine
     {
         var value = (culture ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(value)) value = "en-US";
+
+        if (string.Equals(value, ".", StringComparison.Ordinal) ||
+            string.Equals(value, "..", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("External help culture must be a single folder name and cannot be '.' or '..'.", nameof(culture));
+        }
 
         // Avoid path traversal and invalid characters; culture should be a folder name like "en-US".
         value = value.Replace(Path.DirectorySeparatorChar, '_').Replace(Path.AltDirectorySeparatorChar, '_');
@@ -479,14 +488,15 @@ public sealed class DocumentationEngine
             if (string.IsNullOrWhiteSpace(stagingPath)) return;
             if (string.IsNullOrWhiteSpace(moduleName)) return;
 
-            var culture = NormalizeExternalHelpCulture(buildDocumentation.ExternalHelpCulture);
-            var externalHelpDir = Path.Combine(stagingPath, culture);
-            if (!Directory.Exists(externalHelpDir)) return;
-
             var fileName = string.IsNullOrWhiteSpace(buildDocumentation.ExternalHelpFileName)
                 ? $"{moduleName}-help.xml"
                 : Path.GetFileName(buildDocumentation.ExternalHelpFileName.Trim());
             if (string.IsNullOrWhiteSpace(fileName)) fileName = $"{moduleName}-help.xml";
+
+            var culture = NormalizeExternalHelpCulture(buildDocumentation.ExternalHelpCulture);
+            var externalHelpDir = Path.Combine(stagingPath, culture);
+            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(stagingPath, moduleName, fileName);
+            if (!Directory.Exists(externalHelpDir)) return;
 
             var externalHelpFile = Path.Combine(externalHelpDir, fileName);
             if (File.Exists(externalHelpFile))

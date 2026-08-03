@@ -388,37 +388,24 @@ try {
       }
     }
 
-    $commonParamNames = @('Verbose','Debug','ErrorAction','ErrorVariable','WarningAction','WarningVariable','InformationAction','InformationVariable','OutVariable','OutBuffer','PipelineVariable','WhatIf','Confirm','ProgressAction')
-    $paramNames = @()
-    try {
-      if ($c -and $c.Parameters) {
-        $paramNames = @($c.Parameters.GetEnumerator() | Microsoft.PowerShell.Core\ForEach-Object { [string]$_.Key })
-      }
-    } catch { $paramNames = @() }
-    foreach ($hp in $helpParameters) { try { $paramNames += [string]$hp.Name } catch {
-      # best effort: keep extracting other parameters even when one help node is incomplete
-    } }
-    $paramNames = @($paramNames | Microsoft.PowerShell.Core\Where-Object { $_ -and ($commonParamNames -notcontains $_) } | Microsoft.PowerShell.Utility\Sort-Object -Unique)
+    $paramNames = @(& $collectorProtocol.GetParameterNames $c $helpParameters)
 
     $parameters = @()
     foreach ($pn in $paramNames) {
-      $pmeta = $null
-      try { $pmeta = $c.Parameters[$pn] } catch { $pmeta = $null }
+      $parameterRuntimeMetadata = & $collectorProtocol.GetParameterRuntimeMetadata `
+        $c $pn $collectorProtocol.GetParameterDeclaringMetadata $collectorProtocol.TestParameterDontShow `
+        $collectorProtocol.GetCanonicalTypeNameFromType
+      $pmeta = $parameterRuntimeMetadata.Metadata
 
       $aliases = @()
       try { if ($pmeta -and $pmeta.Aliases) { foreach ($a in @($pmeta.Aliases)) { $aliases += [string]$a } } } catch { $aliases = @() }
 
-      $typeName = ''
-      $parameterType = $null
-      try {
-        if ($pmeta -and $pmeta.ParameterType) {
-          $parameterType = $pmeta.ParameterType
-          $typeName = [string]$pmeta.ParameterType.Name
-        }
-      } catch {
-        $parameterType = $null
-        $typeName = ''
-      }
+      $typeName = $parameterRuntimeMetadata.DisplayName
+      $parameterType = $parameterRuntimeMetadata.ParameterType
+      $enumType = $parameterRuntimeMetadata.EnumType
+      $declaringType = $parameterRuntimeMetadata.DeclaringType
+      $declaringAssemblyPath = $parameterRuntimeMetadata.DeclaringAssemblyPath
+      $dontShow = [bool]$parameterRuntimeMetadata.DontShow
       $possibleValues = @()
       $enumPossibleValues = @()
       $hasValidateSet = $false
@@ -497,8 +484,6 @@ try {
         # best effort: not every parameter exposes validation attributes in help metadata
       }
       try {
-        $enumType = $parameterType
-        if ($enumType -and $enumType.IsArray) { $enumType = $enumType.GetElementType() }
         if ($enumType -and $enumType.IsEnum) {
           foreach ($enumName in [System.Enum]::GetNames($enumType)) {
             if ($enumName) { $enumPossibleValues += [string]$enumName }
@@ -559,7 +544,6 @@ try {
       if (-not $sets -or $sets.Count -eq 0) { $sets = @('(All)') }
 
       $positionText = if ($named -or $null -eq $pos) { 'named' } else { [string]$pos }
-
       $pipelineInput = 'False'
       if ($pipeByValue -and $pipeByProp) { $pipelineInput = 'True (ByValue, ByPropertyName)' }
       elseif ($pipeByValue) { $pipelineInput = 'True (ByValue)' }
@@ -568,6 +552,13 @@ try {
       $parameters += [ordered]@{
         name = $pn
         type = $typeName
+        runtimeTypeName = $parameterRuntimeMetadata.RuntimeTypeName
+        runtimeClrTypeName = $parameterRuntimeMetadata.RuntimeClrTypeName
+        nullableUnderlyingTypeName = $parameterRuntimeMetadata.NullableUnderlyingTypeName
+        nullableArrayRanks = @($parameterRuntimeMetadata.NullableArrayRanks)
+        declaringType = $declaringType
+        declaringAssemblyPath = $declaringAssemblyPath
+        dontShow = [bool]$dontShow
         description = $desc
         parameterSets = @($sets)
         aliases = @($aliases)
@@ -654,45 +645,8 @@ try {
     } catch {
       # best effort: older hosts can omit or reshape InputTypes entirely
     }
-    $runtimeInputs = @()
-    $seenInputs = @{}
-    foreach ($pn in $paramNames) {
-        $pmeta = $null
-        try { $pmeta = $c.Parameters[$pn] } catch { $pmeta = $null }
-        if (-not $pmeta) { continue }
-
-        $supportsPipeline = $false
-        try {
-          foreach ($setEntry in @($pmeta.ParameterSets.GetEnumerator())) {
-            $psm = $setEntry.Value
-            if ($psm -and ($psm.ValueFromPipeline -or $psm.ValueFromPipelineByPropertyName)) {
-              $supportsPipeline = $true
-              break
-            }
-          }
-        } catch {
-          # best effort: pipeline metadata can differ between hosts and proxy commands
-        }
-
-        if (-not $supportsPipeline) { continue }
-
-        $inputTypeName = ''
-        $inputTypeClrName = ''
-        try {
-          if ($pmeta.ParameterType) {
-            $inputTypeName = [string]$pmeta.ParameterType.Name
-            $inputTypeClrName = [string]$pmeta.ParameterType.FullName
-          }
-        } catch {
-          # best effort: pipeline parameter type metadata is not always available on proxy commands
-        }
-
-        if (-not $inputTypeName) { continue }
-        $key = if ($inputTypeClrName) { $inputTypeClrName } else { $inputTypeName }
-        if ($seenInputs.ContainsKey($key)) { continue }
-        $seenInputs[$key] = $true
-        $runtimeInputs += [ordered]@{ name = $inputTypeName; clrTypeName = $inputTypeClrName; description = '' }
-    }
+    $runtimeInputs = @(& $collectorProtocol.GetRuntimeInputs `
+      $c $paramNames $collectorProtocol.GetCanonicalTypeNameFromType)
     if (-not $inputs -or $inputs.Count -eq 0) {
       $inputs = @($runtimeInputs)
     }

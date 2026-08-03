@@ -21,6 +21,7 @@ internal static class DocumentationInputNormalizer
         {
             command.Inputs = runtimeInputs;
             command.RuntimeInputs = new List<DocumentationTypeHelp>();
+            NormalizeNullablePipelineInputs(command, runtimeInputs);
             return;
         }
 
@@ -38,9 +39,90 @@ internal static class DocumentationInputNormalizer
 
         command.Inputs = normalized;
         command.RuntimeInputs = new List<DocumentationTypeHelp>();
+        NormalizeNullablePipelineInputs(command, runtimeInputs);
     }
 
-    private static bool TryParsePowerShellInputAggregate(
+    private static void NormalizeNullablePipelineInputs(
+        DocumentationCommandHelp command,
+        IReadOnlyList<DocumentationTypeHelp> runtimeInputs)
+    {
+        var usedRuntimeInputs = new HashSet<int>();
+        foreach (var parameter in command.Parameters ?? new List<DocumentationParameterHelp>())
+        {
+            var displayType = DocumentationMetadataNormalizer.GetNullableParameterTypeName(parameter);
+            if (string.IsNullOrWhiteSpace(displayType) ||
+                string.IsNullOrWhiteSpace(parameter.PipelineInput) ||
+                parameter.PipelineInput.StartsWith("False", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var runtimeIndex = FindRuntimeInput(parameter.Type, runtimeInputs, usedRuntimeInputs);
+            if (runtimeIndex < 0) continue;
+            usedRuntimeInputs.Add(runtimeIndex);
+
+            var runtimeInput = runtimeInputs[runtimeIndex];
+
+            foreach (var input in command.Inputs ?? new List<DocumentationTypeHelp>())
+            {
+                if (input is null || !MatchesRuntimeInput(input, runtimeInput, runtimeInputs)) continue;
+                input.Name = displayType!;
+                input.ClrTypeName = displayType!;
+                input.CanonicalTypeName = displayType!;
+                input.LookupName = displayType!;
+                input.LookupClrTypeName = displayType!;
+            }
+        }
+    }
+
+    private static int FindRuntimeInput(
+        string parameterType,
+        IReadOnlyList<DocumentationTypeHelp> runtimeInputs,
+        ISet<int> usedRuntimeInputs)
+    {
+        for (var index = 0; index < runtimeInputs.Count; index++)
+        {
+            if (usedRuntimeInputs.Contains(index)) continue;
+            var runtimeInput = runtimeInputs[index];
+            if (string.Equals(parameterType, runtimeInput.Name, StringComparison.Ordinal) ||
+                string.Equals(parameterType, runtimeInput.ClrTypeName, StringComparison.Ordinal))
+                return index;
+        }
+        return -1;
+    }
+
+    private static bool MatchesRuntimeInput(
+        DocumentationTypeHelp input,
+        DocumentationTypeHelp runtimeInput,
+        IReadOnlyList<DocumentationTypeHelp> runtimeInputs)
+    {
+        foreach (var expected in new[] { runtimeInput.ClrTypeName, runtimeInput.CanonicalTypeName })
+        {
+            if (string.IsNullOrEmpty(expected)) continue;
+            if (MatchesIdentity(input.Name, expected) ||
+                MatchesIdentity(input.ClrTypeName, expected) ||
+                MatchesIdentity(input.CanonicalTypeName, expected))
+                return true;
+        }
+
+        if (string.IsNullOrEmpty(runtimeInput.Name) ||
+            runtimeInputs.Count(candidate => string.Equals(
+                candidate.Name, runtimeInput.Name, StringComparison.Ordinal)) != 1)
+            return false;
+
+        return MatchesIdentity(input.Name, runtimeInput.Name) ||
+               MatchesIdentity(input.ClrTypeName, runtimeInput.Name) ||
+               MatchesIdentity(input.CanonicalTypeName, runtimeInput.Name);
+    }
+
+    private static bool MatchesIdentity(string? actual, string? expected)
+    {
+        if (string.IsNullOrEmpty(actual) || string.IsNullOrEmpty(expected)) return false;
+        if (string.Equals(actual, expected, StringComparison.Ordinal)) return true;
+        var withoutHelpLineBreaks = actual!.TrimEnd('\r', '\n');
+        return withoutHelpLineBreaks.Length != actual.Length &&
+               string.Equals(withoutHelpLineBreaks, expected, StringComparison.Ordinal);
+    }
+
+    internal static bool TryParsePowerShellInputAggregate(
         DocumentationTypeHelp input,
         IReadOnlyList<DocumentationTypeHelp> runtimeInputs,
         out IReadOnlyList<DocumentationTypeHelp> parsedInputs)

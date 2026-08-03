@@ -7,6 +7,61 @@ namespace PowerForge.Tests;
 
 public sealed class DocumentationEngineSafetyTests
 {
+    [Theory]
+    [InlineData(".")]
+    [InlineData("..")]
+    public void Build_RejectsDotSegmentExternalHelpCulture(string culture)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var stagingRoot = Path.Combine(root.FullName, "Staging");
+            Directory.CreateDirectory(stagingRoot);
+            var manifestPath = Path.Combine(stagingRoot, "TestModule.psd1");
+            File.WriteAllText(manifestPath, "@{ ModuleVersion = '1.0.0'; RootModule = 'TestModule.psm1' }");
+
+            var payload = new DocumentationExtractionPayload
+            {
+                ModuleName = "TestModule",
+                Commands =
+                [
+                    new DocumentationCommandHelp
+                    {
+                        Name = "Get-Test",
+                        Synopsis = "Gets a test item.",
+                        Description = "Gets a test item."
+                    }
+                ]
+            };
+
+            var engine = new DocumentationEngine(new PayloadPowerShellRunner(payload), new NullLogger());
+            var result = engine.Build(
+                moduleName: "TestModule",
+                stagingPath: stagingRoot,
+                moduleManifestPath: manifestPath,
+                documentation: new DocumentationConfiguration
+                {
+                    Path = "Docs",
+                    PathReadme = Path.Combine("Docs", "Readme.md")
+                },
+                buildDocumentation: new BuildDocumentationConfiguration
+                {
+                    Enable = true,
+                    GenerateExternalHelp = true,
+                    ExternalHelpCulture = culture
+                });
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("cannot be '.' or '..'", result.ErrorMessage, StringComparison.Ordinal);
+            Assert.False(File.Exists(Path.Combine(stagingRoot, "TestModule-help.xml")));
+            Assert.False(File.Exists(Path.Combine(root.FullName, "TestModule-help.xml")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void Build_RefusesProjectRootDocsPathBeforeDeleting()
     {

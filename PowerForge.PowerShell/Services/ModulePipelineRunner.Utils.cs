@@ -108,20 +108,45 @@ public sealed partial class ModulePipelineRunner
         if (plan.DocumentationBuild.GenerateExternalHelp &&
             (plan.DocumentationBuild.SyncExternalHelpToProjectRoot ||
              plan.GateMode == ConfigurationGateMode.Documentation) &&
-            !string.IsNullOrWhiteSpace(documentationResult.ExternalHelpFilePath) &&
-            File.Exists(documentationResult.ExternalHelpFilePath))
+            documentationResult.ExternalHelpFilePaths.Count > 0)
         {
-            var externalHelpDir = Path.GetDirectoryName(Path.GetFullPath(documentationResult.ExternalHelpFilePath));
-            var cultureFolder = string.IsNullOrWhiteSpace(externalHelpDir)
-                ? plan.DocumentationBuild.ExternalHelpCulture
-                : new DirectoryInfo(externalHelpDir).Name;
+            var existingHelpFiles = documentationResult.ExternalHelpFilePaths
+                .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                .Select(Path.GetFullPath)
+                .ToArray();
+            if (existingHelpFiles.Length == 0) return;
 
-            var targetCultureDir = Path.Combine(projectRoot, cultureFolder);
-            Directory.CreateDirectory(targetCultureDir);
+            var externalHelpDir = Path.GetDirectoryName(existingHelpFiles[0]);
+            var stagingRoot = string.IsNullOrWhiteSpace(externalHelpDir)
+                ? string.Empty
+                : Directory.GetParent(externalHelpDir)?.FullName ?? string.Empty;
+            DocumentationExternalHelpAliasWriter.PruneGeneratedAliases(
+                projectRoot,
+                plan.ModuleName,
+                Path.GetFileName(documentationResult.ExternalHelpFilePath));
 
-            var targetHelpFile = Path.Combine(targetCultureDir, Path.GetFileName(documentationResult.ExternalHelpFilePath));
-            if (!SamePath(documentationResult.ExternalHelpFilePath, targetHelpFile))
-                File.Copy(documentationResult.ExternalHelpFilePath, targetHelpFile, overwrite: true);
+            foreach (var sourceHelpFile in existingHelpFiles)
+            {
+                var relativeHelpPath = string.IsNullOrWhiteSpace(stagingRoot)
+                    ? Path.GetFileName(sourceHelpFile)
+                    : GetRelativePath(stagingRoot, sourceHelpFile);
+                var targetHelpFile = Path.Combine(projectRoot, relativeHelpPath);
+                var targetHelpDirectory = Path.GetDirectoryName(targetHelpFile);
+                if (!string.IsNullOrWhiteSpace(targetHelpDirectory) &&
+                    DocumentationExternalHelpAliasWriter.PathTraversesDirectoryReparsePoint(
+                        projectRoot,
+                        targetHelpDirectory))
+                    continue;
+                if (!string.IsNullOrWhiteSpace(targetHelpDirectory))
+                    Directory.CreateDirectory(targetHelpDirectory);
+                if (DocumentationExternalHelpAliasWriter.IsReparsePoint(targetHelpFile))
+                    continue;
+                if (DocumentationExternalHelpAliasWriter.IsGeneratedAlias(sourceHelpFile) &&
+                    !DocumentationExternalHelpAliasWriter.CanWriteGeneratedAlias(targetHelpFile, plan.ModuleName))
+                    continue;
+                if (!SamePath(sourceHelpFile, targetHelpFile))
+                    File.Copy(sourceHelpFile, targetHelpFile, overwrite: true);
+            }
         }
 
         _logger.Success($"Updated project documentation at '{targetDocs}'.");

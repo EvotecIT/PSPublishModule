@@ -100,6 +100,7 @@ public sealed class ModulePipelineDocumentationSyncTests
     public void SyncGeneratedDocumentationToProjectRoot_DocumentationGateSyncsExternalHelpByDefault()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var outsideRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         try
         {
             const string moduleName = "TestModule";
@@ -116,6 +117,75 @@ public sealed class ModulePipelineDocumentationSyncTests
             Directory.CreateDirectory(stagedHelpDir);
             var stagedHelp = Path.Combine(stagedHelpDir, "TestModule-help.xml");
             File.WriteAllText(stagedHelp, "<helpItems />");
+            var stagedBinaryHelp = Path.Combine(stagedHelpDir, "TestModule.Binary.dll-Help.xml");
+            File.WriteAllText(stagedBinaryHelp, "<helpItems />");
+            var generatedMarker = DocumentationExternalHelpAliasWriter.GetGeneratedAliasMarker(moduleName);
+            var stagedAuthoredCollision = Path.Combine(stagedHelpDir, "Authored.Binary.dll-Help.xml");
+            File.WriteAllText(stagedAuthoredCollision, generatedMarker + "<replacementHelpItems />");
+            var stagedNestedHelpDir = Path.Combine(root.FullName, "Staging", "Lib", "Core", "en-US");
+            Directory.CreateDirectory(stagedNestedHelpDir);
+            var stagedNestedBinaryHelp = Path.Combine(stagedNestedHelpDir, "Nested.Binary.dll-Help.xml");
+            File.WriteAllText(stagedNestedBinaryHelp, generatedMarker + "<helpItems />");
+            var externalHelpFilePaths = new System.Collections.Generic.List<string>
+            {
+                stagedHelp, stagedBinaryHelp, stagedAuthoredCollision, stagedNestedBinaryHelp
+            };
+            Directory.CreateDirectory(outsideRoot);
+            var linkedTargetDirectory = Path.Combine(projectRoot, "Linked");
+            var linkedTargetCreated = false;
+            try
+            {
+                Directory.CreateSymbolicLink(linkedTargetDirectory, outsideRoot);
+                linkedTargetCreated = true;
+                var stagedLinkedHelpDirectory = Path.Combine(root.FullName, "Staging", "Linked", "en-US");
+                Directory.CreateDirectory(stagedLinkedHelpDirectory);
+                var stagedLinkedHelp = Path.Combine(stagedLinkedHelpDirectory, "Linked.Binary.dll-Help.xml");
+                File.WriteAllText(stagedLinkedHelp, generatedMarker + "<helpItems />");
+                externalHelpFilePaths.Add(stagedLinkedHelp);
+            }
+            catch (Exception exception) when (exception is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+            {
+                // Link creation is not available on every test host.
+            }
+            var outsideFile = Path.Combine(outsideRoot, "linked-file.xml");
+            const string outsideFileContent = "<!-- PowerForgeGeneratedExternalHelpAlias --><outside />";
+            File.WriteAllText(outsideFile, outsideFileContent);
+            var linkedFileCreated = false;
+            var linkedFileTargetDirectory = Path.Combine(projectRoot, "FileLinked", "en-US");
+            Directory.CreateDirectory(linkedFileTargetDirectory);
+            var linkedFileTarget = Path.Combine(linkedFileTargetDirectory, "FileLinked.Binary.dll-Help.xml");
+            try
+            {
+                File.CreateSymbolicLink(linkedFileTarget, outsideFile);
+                linkedFileCreated = true;
+                var stagedFileLinkedHelpDirectory = Path.Combine(root.FullName, "Staging", "FileLinked", "en-US");
+                Directory.CreateDirectory(stagedFileLinkedHelpDirectory);
+                var stagedFileLinkedHelp = Path.Combine(stagedFileLinkedHelpDirectory, "FileLinked.Binary.dll-Help.xml");
+                File.WriteAllText(stagedFileLinkedHelp, generatedMarker + "<helpItems />");
+                externalHelpFilePaths.Add(stagedFileLinkedHelp);
+            }
+            catch (Exception exception) when (exception is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+            {
+                // Link creation is not available on every test host.
+            }
+            var targetHelpDir = Path.Combine(projectRoot, "en-US");
+            Directory.CreateDirectory(targetHelpDir);
+            File.WriteAllText(Path.Combine(targetHelpDir, "TestModule-help.xml"), "<oldHelpItems />");
+            File.WriteAllText(
+                Path.Combine(targetHelpDir, "Removed.Binary.dll-Help.xml"),
+                DocumentationExternalHelpAliasWriter.GetLegacyGeneratedAliasMarker() + "<oldHelpItems />");
+            File.WriteAllText(Path.Combine(targetHelpDir, "Authored.Binary.dll-Help.xml"), "<oldHelpItems />");
+            var staleNestedHelpDir = Path.Combine(projectRoot, "Lib", "Removed", "en-US");
+            Directory.CreateDirectory(staleNestedHelpDir);
+            File.WriteAllText(
+                Path.Combine(staleNestedHelpDir, "Removed.Nested.dll-Help.xml"),
+                generatedMarker + "<oldHelpItems />");
+            var otherModuleHelp = Path.Combine(projectRoot, "Bundled", "en-US", "Bundled.dll-Help.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(otherModuleHelp)!);
+            File.WriteAllText(Path.Combine(projectRoot, "Bundled", "Bundled.psd1"), "@{ RootModule = ''; ModuleVersion = '1.0.0' }");
+            File.WriteAllText(
+                otherModuleHelp,
+                DocumentationExternalHelpAliasWriter.GetLegacyGeneratedAliasMarker() + "<oldHelpItems />");
 
             var runner = new ModulePipelineRunner(new NullLogger());
             var plan = runner.Plan(new ModulePipelineSpec
@@ -164,15 +234,29 @@ public sealed class ModulePipelineDocumentationSyncTests
                 exitCode: 0,
                 markdownFiles: 1,
                 externalHelpFilePath: stagedHelp,
-                errorMessage: null);
+                errorMessage: null,
+                externalHelpFilePaths: externalHelpFilePaths);
 
             InvokeSync(runner, plan, result);
 
             Assert.True(File.Exists(Path.Combine(projectRoot, "en-US", "TestModule-help.xml")));
+            Assert.True(File.Exists(Path.Combine(projectRoot, "en-US", "TestModule.Binary.dll-Help.xml")));
+            Assert.True(File.Exists(Path.Combine(projectRoot, "Lib", "Core", "en-US", "Nested.Binary.dll-Help.xml")));
+            Assert.False(File.Exists(Path.Combine(projectRoot, "en-US", "Removed.Binary.dll-Help.xml")));
+            Assert.False(File.Exists(Path.Combine(staleNestedHelpDir, "Removed.Nested.dll-Help.xml")));
+            Assert.Equal(
+                "<oldHelpItems />",
+                File.ReadAllText(Path.Combine(projectRoot, "en-US", "Authored.Binary.dll-Help.xml")));
+            Assert.True(File.Exists(otherModuleHelp));
+            if (linkedTargetCreated)
+                Assert.False(File.Exists(Path.Combine(outsideRoot, "en-US", "Linked.Binary.dll-Help.xml")));
+            if (linkedFileCreated)
+                Assert.Equal(outsideFileContent, File.ReadAllText(outsideFile));
         }
         finally
         {
             try { root.Delete(recursive: true); } catch { /* best effort */ }
+            try { Directory.Delete(outsideRoot, recursive: true); } catch { /* best effort */ }
         }
     }
 

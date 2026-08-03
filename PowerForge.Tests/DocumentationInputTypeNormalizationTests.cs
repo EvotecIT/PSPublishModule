@@ -111,4 +111,79 @@ public sealed class DocumentationInputTypeNormalizationTests
         var markdown = MarkdownHelpWriter.RenderCommandMarkdown("DemoModule", command);
         Assert.Contains("- `System.String`: This is string input.", markdown, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Normalize_UnwrapsNullablePipelineInputIdentity()
+    {
+        const string runtimeType = "System.Nullable`1[[VisibilityMode, Demo]][]";
+        var command = new DocumentationCommandHelp
+        {
+            Inputs = [new DocumentationTypeHelp { Name = runtimeType, ClrTypeName = runtimeType }],
+            RuntimeInputs =
+            [
+                new DocumentationTypeHelp
+                {
+                    Name = "Nullable`1[]",
+                    ClrTypeName = runtimeType
+                }
+            ],
+            Parameters =
+            [
+                new DocumentationParameterHelp
+                {
+                    Name = "Modes",
+                    Type = "Nullable`1[]",
+                    NullableUnderlyingTypeName = "VisibilityMode",
+                    NullableArrayRanks = [1],
+                    PipelineInput = "True (ByValue)"
+                }
+            ]
+        };
+
+        DocumentationMetadataNormalizer.Normalize(new DocumentationExtractionPayload { Commands = [command] });
+
+        var input = Assert.Single(command.Inputs);
+        Assert.Equal("VisibilityMode[]", input.Name);
+        Assert.Equal("VisibilityMode[]", input.ClrTypeName);
+        Assert.DoesNotContain("Nullable", MarkdownHelpWriter.RenderCommandMarkdown("Demo", command));
+    }
+
+    [Fact]
+    public void Normalize_UnwrapsDistinctNullablePipelineInputsByClrIdentity()
+    {
+        const string firstClrType = "System.Nullable`1[[FirstMode, Demo]]";
+        const string secondClrType = "System.Nullable`1[[SecondMode, Demo]]";
+        var command = new DocumentationCommandHelp
+        {
+            RuntimeInputs =
+            [
+                new DocumentationTypeHelp { Name = "Nullable`1", ClrTypeName = firstClrType },
+                new DocumentationTypeHelp { Name = "Nullable`1", ClrTypeName = secondClrType }
+            ],
+            Parameters =
+            [
+                new DocumentationParameterHelp
+                {
+                    Name = "First",
+                    Type = "Nullable`1",
+                    NullableUnderlyingTypeName = "FirstMode",
+                    PipelineInput = "True (ByValue)"
+                },
+                new DocumentationParameterHelp
+                {
+                    Name = "Second",
+                    Type = "Nullable`1",
+                    NullableUnderlyingTypeName = "SecondMode",
+                    PipelineInput = "True (ByPropertyName)"
+                }
+            ]
+        };
+
+        DocumentationMetadataNormalizer.Normalize(new DocumentationExtractionPayload { Commands = [command] });
+
+        Assert.Collection(
+            command.Inputs,
+            input => Assert.Equal("FirstMode", input.Name),
+            input => Assert.Equal("SecondMode", input.Name));
+    }
 }
