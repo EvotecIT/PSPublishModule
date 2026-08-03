@@ -121,6 +121,18 @@ public sealed class AppStoreConnectReviewDetailsCopyResult
     /// <summary>Privacy-safe remediation message without contact values.</summary>
     public string? ErrorMessage { get; set; }
 
+    /// <summary>Privacy-safe operation stage that failed, when known.</summary>
+    public string? FailureOperation { get; set; }
+
+    /// <summary>HTTP status returned by App Store Connect, without response details.</summary>
+    public int? ProviderStatusCode { get; set; }
+
+    /// <summary>Validated App Store Connect error codes without messages or attribute values.</summary>
+    public string[] ProviderErrorCodes { get; set; } = Array.Empty<string>();
+
+    /// <summary>Validated JSON pointers identifying rejected request fields without their values.</summary>
+    public string[] ProviderErrorPointers { get; set; } = Array.Empty<string>();
+
     /// <summary>Plan that was approved and revalidated immediately before mutation.</summary>
     public AppStoreConnectReviewDetailsCopyPlan InitialPlan { get; set; } = new();
 

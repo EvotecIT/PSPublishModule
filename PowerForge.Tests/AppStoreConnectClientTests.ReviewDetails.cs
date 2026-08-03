@@ -141,6 +141,52 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Null(result.ErrorMessage);
     }
 
+    [Fact]
+    public async Task ReviewDetailsApplyReportsOnlySafeProviderClassification()
+    {
+        var handler = new ReviewDetailsCopyHandler { FailVersionMutation = true };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectReviewDetailsCopyService(client);
+        var spec = ReviewDetailsCopySpec();
+        var reviewed = await service.PlanAsync(spec);
+
+        var result = await service.ApplyAsync(spec, reviewed, confirmApply: true);
+
+        Assert.False(result.Success);
+        Assert.Equal("create-target-version", result.FailureOperation);
+        Assert.Equal(409, result.ProviderStatusCode);
+        Assert.Equal(["ENTITY_ERROR.ATTRIBUTE.INVALID"], result.ProviderErrorCodes);
+        Assert.Equal(["/data/attributes/versionString"], result.ProviderErrorPointers);
+        var serialized = JsonSerializer.Serialize(result);
+        foreach (var sensitive in ReviewDetailsCopyHandler.SensitiveValues)
+            Assert.DoesNotContain(sensitive, serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("provider secret detail", serialized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReviewDetailsApplyRejectsSecretBearingProviderClassification()
+    {
+        const string secret = "DemoPassword123";
+        var handler = new ReviewDetailsCopyHandler
+        {
+            VersionFailureBody = $$"""{ "errors": [{ "status": "409", "code": "{{secret}}", "source": { "pointer": "/data/attributes/demoAccountPassword/{{secret}}" } }] }"""
+        };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectReviewDetailsCopyService(client);
+        var spec = ReviewDetailsCopySpec();
+        var reviewed = await service.PlanAsync(spec);
+
+        var result = await service.ApplyAsync(spec, reviewed, confirmApply: true);
+
+        Assert.False(result.Success);
+        Assert.Equal(409, result.ProviderStatusCode);
+        Assert.Empty(result.ProviderErrorCodes);
+        Assert.Empty(result.ProviderErrorPointers);
+        Assert.DoesNotContain(secret, JsonSerializer.Serialize(result), StringComparison.Ordinal);
+    }
+
     private static AppStoreConnectReviewDetailsInfo CompleteReviewDetails()
         => new()
         {
@@ -185,6 +231,10 @@ public sealed partial class AppStoreConnectClientTests
 
         public bool ApplyThenFailDetailsMutation { get; set; }
 
+        public bool FailVersionMutation { get; set; }
+
+        public string? VersionFailureBody { get; set; }
+
         public List<string> MutationBodies { get; } = new();
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -199,6 +249,11 @@ public sealed partial class AppStoreConnectClientTests
             if (request.Method == HttpMethod.Post && path.EndsWith("/appStoreVersions", StringComparison.Ordinal))
             {
                 MutationBodies.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
+                if (FailVersionMutation || VersionFailureBody is not null)
+                {
+                    return Json(HttpStatusCode.Conflict,
+                        VersionFailureBody ?? """{ "errors": [{ "status": "409", "code": "ENTITY_ERROR.ATTRIBUTE.INVALID", "detail": "provider secret detail review@example.test", "source": { "pointer": "/data/attributes/versionString" } }] }""");
+                }
                 TargetVersionExists = true;
                 return Json(HttpStatusCode.Created,
                     """{ "data": { "type": "appStoreVersions", "id": "target-version", "attributes": { "versionString": "0.1.0", "platform": "MAC_OS", "appStoreState": "PREPARE_FOR_SUBMISSION" } } }""");
