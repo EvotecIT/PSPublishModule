@@ -16,8 +16,9 @@ public sealed partial class ModulePipelineRunner
         var sourceMutatingGate = plan.GateMode is ConfigurationGateMode.Manifest or
             ConfigurationGateMode.Documentation or
             ConfigurationGateMode.Build;
+        var shouldUseCheckpoint = ShouldUseSynchronizedReleaseCheckpoint(plan, state);
         var inspectSourceMutatingGateCheckpoint = checkpointExists && sourceMutatingGate;
-        if (!ShouldUseSynchronizedReleaseCheckpoint(plan, state) && !inspectSourceMutatingGateCheckpoint)
+        if (!shouldUseCheckpoint && !inspectSourceMutatingGateCheckpoint)
         {
             if (plan.GateMode is ConfigurationGateMode.Manifest or
                 ConfigurationGateMode.Documentation or
@@ -25,12 +26,8 @@ public sealed partial class ModulePipelineRunner
             {
                 return;
             }
-            if (checkpointExists)
-            {
-                throw new InvalidOperationException(
-                    $"Coordinated release configuration no longer matches incomplete checkpoint '{path}'. Restore synchronization and publishing or delete the checkpoint only if that release should be abandoned.");
-            }
-            return;
+            if (!checkpointExists)
+                return;
         }
 
         state.SynchronizedReleaseCheckpointPath = path;
@@ -57,14 +54,27 @@ public sealed partial class ModulePipelineRunner
                 $"Coordinated release checkpoint '{path}' has an unsupported schema. Delete it only if the incomplete release should be abandoned.");
         }
 
+        if (!shouldUseCheckpoint && !sourceMutatingGate)
+        {
+            if (IsResettableSynchronizedReleaseCheckpoint(checkpoint))
+            {
+                DeleteResettableSynchronizedReleaseCheckpoint(
+                    path,
+                    "because release synchronization changed before any publish operation or remote side effect started");
+                return;
+            }
+
+            throw new InvalidOperationException(
+                $"Coordinated release configuration no longer matches incomplete checkpoint '{path}'. Restore synchronization and publishing or delete the checkpoint only if that release should be abandoned.");
+        }
+
         if (sourceMutatingGate)
         {
-            if (IsPristineSynchronizedReleaseCheckpoint(checkpoint))
+            if (IsResettableSynchronizedReleaseCheckpoint(checkpoint))
             {
-                File.Delete(path);
-                DeleteEmptySynchronizedReleaseCheckpointDirectories(path);
-                _logger.Warn(
-                    $"Discarded unused coordinated release checkpoint '{path}' before running the {plan.GateMode} gate because no package lane or publish operation had started.");
+                DeleteResettableSynchronizedReleaseCheckpoint(
+                    path,
+                    $"before running the {plan.GateMode} gate because no publish operation or remote side effect had started");
                 return;
             }
 
@@ -76,12 +86,11 @@ public sealed partial class ModulePipelineRunner
         {
             ValidateSynchronizedReleaseCheckpoint(plan, state, checkpoint, path);
         }
-        catch (InvalidOperationException) when (IsPristineSynchronizedReleaseCheckpoint(checkpoint))
+        catch (InvalidOperationException) when (IsResettableSynchronizedReleaseCheckpoint(checkpoint))
         {
-            File.Delete(path);
-            DeleteEmptySynchronizedReleaseCheckpointDirectories(path);
-            _logger.Warn(
-                $"Discarded unused coordinated release checkpoint '{path}' because release configuration changed before any package lane or publish operation started.");
+            DeleteResettableSynchronizedReleaseCheckpoint(
+                path,
+                "because release configuration changed before any publish operation or remote side effect started");
             return;
         }
 
@@ -703,20 +712,73 @@ public sealed partial class ModulePipelineRunner
             ? "none"
             : $"{checkpoint.CompletedOperations.Length} of {checkpoint.PlannedOperations.Length}";
 
-    private static bool IsPristineSynchronizedReleaseCheckpoint(SynchronizedReleaseCheckpoint checkpoint)
-        => (checkpoint.PlannedOperations?.Length ?? 0) > 0 &&
-           (checkpoint.PlannedLanes?.Length ?? 0) > 0 &&
-           (checkpoint.OperationFingerprints?.Length ?? 0) > 0 &&
-           string.IsNullOrWhiteSpace(checkpoint.SourceFingerprint) &&
-           (checkpoint.SourceComponents?.Length ?? 0) == 0 &&
-           string.IsNullOrWhiteSpace(checkpoint.PayloadFingerprint) &&
-           (checkpoint.PayloadComponents?.Length ?? 0) == 0 &&
-           string.IsNullOrWhiteSpace(checkpoint.Version) &&
-           (checkpoint.AttemptedLanes?.Length ?? 0) == 0 &&
-           (checkpoint.Lanes?.Length ?? 0) == 0 &&
-           !checkpoint.AuxiliaryRemoteSideEffectsObserved &&
-           (checkpoint.AttemptedOperations?.Length ?? 0) == 0 &&
-           (checkpoint.CompletedOperations?.Length ?? 0) == 0;
+    private void DeleteResettableSynchronizedReleaseCheckpoint(string path, string reason)
+    {
+        var payloadCachePath = ResolveSynchronizedReleasePayloadCachePath(path);
+        if (Directory.Exists(payloadCachePath))
+        {
+            if ((File.GetAttributes(payloadCachePath) & FileAttributes.ReparsePoint) != 0)
+                Directory.Delete(payloadCachePath, recursive: false);
+            else
+                DeleteDirectoryWithRetries(payloadCachePath);
+        }
+        else if (File.Exists(payloadCachePath))
+            File.Delete(payloadCachePath);
+
+        File.Delete(path);
+        DeleteEmptySynchronizedReleaseCheckpointDirectories(path);
+        _logger.Warn($"Discarded unused coordinated release checkpoint '{path}' {reason}.");
+    }
+
+    private static bool IsResettableSynchronizedReleaseCheckpoint(
+        SynchronizedReleaseCheckpoint checkpoint)
+        => !string.IsNullOrWhiteSpace(checkpoint.ModuleName) &&
+           Enum.IsDefined(typeof(ReleaseVersionSource), checkpoint.ReleaseSource) &&
+           (checkpoint.PrimaryProject is null || !string.IsNullOrWhiteSpace(checkpoint.PrimaryProject)) &&
+           checkpoint.Version is not null &&
+           checkpoint.PlannedOperations is { Length: > 0 } &&
+           checkpoint.PlannedOperations.All(IsSynchronizedReleaseFingerprint) &&
+           checkpoint.PlannedOperations.Distinct(StringComparer.OrdinalIgnoreCase).Count() == checkpoint.PlannedOperations.Length &&
+           checkpoint.AttemptedOperations is { Length: 0 } &&
+           checkpoint.CompletedOperations is { Length: 0 } &&
+           checkpoint.OperationFingerprints is { Length: > 0 } &&
+           checkpoint.OperationFingerprints.All(IsSynchronizedReleaseFingerprint) &&
+           checkpoint.SourceFingerprint is not null &&
+           checkpoint.SourceFingerprint.Length == 0 &&
+           checkpoint.SourceComponents is { Length: 0 } &&
+           checkpoint.PayloadFingerprint is not null &&
+           checkpoint.PayloadFingerprint.Length == 0 &&
+           checkpoint.PayloadComponents is { Length: 0 } &&
+           checkpoint.PlannedLanes is { Length: > 0 } &&
+           checkpoint.PlannedLanes.All(IsSynchronizedReleaseFingerprint) &&
+           checkpoint.PlannedLanes.Distinct(StringComparer.OrdinalIgnoreCase).Count() == checkpoint.PlannedLanes.Length &&
+           checkpoint.CreatedUtc != default &&
+           (checkpoint.Version.Length == 0 ||
+            PackageVersionUtility.TryNormalizeExact(checkpoint.Version, out _)) &&
+           checkpoint.AttemptedLanes is not null &&
+           checkpoint.AttemptedLanes.Distinct(StringComparer.OrdinalIgnoreCase).Count() == checkpoint.AttemptedLanes.Length &&
+           checkpoint.AttemptedLanes.All(lane =>
+               !string.IsNullOrWhiteSpace(lane) &&
+               checkpoint.PlannedLanes!.Contains(lane, StringComparer.OrdinalIgnoreCase)) &&
+           checkpoint.Lanes is not null &&
+           checkpoint.Lanes.Length == checkpoint.AttemptedLanes.Length &&
+           checkpoint.Lanes
+               .Select(lane => lane?.CheckpointKey)
+               .Where(key => !string.IsNullOrWhiteSpace(key))
+               .Distinct(StringComparer.OrdinalIgnoreCase)
+               .Count() == checkpoint.Lanes.Length &&
+           checkpoint.Lanes.All(lane =>
+               lane is not null &&
+               Enum.IsDefined(typeof(ReleaseVersionSource), lane.Source) &&
+               !string.IsNullOrWhiteSpace(lane.Label) &&
+               IsSynchronizedReleaseFingerprint(lane.CheckpointKey) &&
+               checkpoint.AttemptedLanes!.Contains(lane.CheckpointKey, StringComparer.OrdinalIgnoreCase) &&
+               PackageVersionUtility.TryNormalizeExact(lane.DefaultVersion, out _) &&
+               lane.VersionsByProject is not null &&
+               lane.VersionsByProject.All(entry =>
+                   !string.IsNullOrWhiteSpace(entry.Key) &&
+                   PackageVersionUtility.TryNormalizeExact(entry.Value, out _))) &&
+           !checkpoint.AuxiliaryRemoteSideEffectsObserved;
 
     private static string? NormalizeCheckpointValue(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();

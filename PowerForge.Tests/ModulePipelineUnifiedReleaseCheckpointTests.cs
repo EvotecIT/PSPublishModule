@@ -738,6 +738,32 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             }
         };
 
+    private static void AddDuplicatePackedArtefacts(
+        ModulePipelineSpec spec,
+        string rootPath,
+        string moduleName,
+        bool useExplicitIds)
+    {
+        var outputPath = Path.Combine(rootPath, "Artifacts", "Module");
+        var artefacts = new[] { "Primary", "Secondary" }
+            .Select(id => new ConfigurationArtefactSegment
+            {
+                ArtefactType = ArtefactType.Packed,
+                Configuration = new ArtefactConfiguration
+                {
+                    ID = useExplicitIds ? id : null,
+                    Enabled = true,
+                    Path = outputPath,
+                    ArtefactName = $"{moduleName}.zip"
+                }
+            })
+            .Cast<IConfigurationSegment>();
+        spec.Segments = spec.Segments.Take(1)
+            .Concat(artefacts)
+            .Concat(spec.Segments.Skip(1))
+            .ToArray();
+    }
+
     private static ModulePipelineSpec CreateGitHubPostPublishSpec(
         string rootPath,
         string stagingPath,
