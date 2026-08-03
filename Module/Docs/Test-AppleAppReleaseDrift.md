@@ -127,10 +127,10 @@ Accept wildcard characters: False
 Platform filter.
 
 ```yaml
-Type: Nullable`1
+Type: ApplePlatform
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: iOS, iPadOS, macOS, tvOS, watchOS, visionOS
 
 Required: False
 Position: named

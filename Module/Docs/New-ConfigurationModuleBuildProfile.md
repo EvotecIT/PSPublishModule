@@ -410,10 +410,10 @@ Accept wildcard characters: False
 Controls type accelerator exposure for binary-module dependencies.
 
 ```yaml
-Type: Nullable`1
+Type: AssemblyTypeAcceleratorExportMode
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: None, AllowList, Assembly, Enums
 
 Required: False
 Position: named

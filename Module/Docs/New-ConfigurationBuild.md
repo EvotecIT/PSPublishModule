@@ -460,10 +460,10 @@ Accept wildcard characters: False
 Controls optional type accelerator exposure for dependency types loaded in the module AssemblyLoadContext.
 
 ```yaml
-Type: Nullable`1
+Type: AssemblyTypeAcceleratorExportMode
 Parameter Sets: __AllParameterSets
 Aliases: AssemblyTypeAcceleratorMode
-Possible values:
+Possible values: None, AllowList, Assembly, Enums
 
 Required: False
 Position: named
@@ -588,10 +588,10 @@ Accept wildcard characters: False
 Controls when the generated source bootstrapper loads local development binaries.
 
 ```yaml
-Type: Nullable`1
+Type: ModuleDevelopmentBinaryMode
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: Off, Environment, Auto
 
 Required: False
 Position: named
@@ -636,10 +636,10 @@ Accept wildcard characters: False
 Controls how the source PSM1 is maintained when development binary bootstrapping is enabled.
 
 ```yaml
-Type: Nullable`1
+Type: ModuleDevelopmentSourceBootstrapperMode
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: PreserveSingleFile, ReplaceSingleFile
 
 Required: False
 Position: named
@@ -1103,10 +1103,10 @@ Accept wildcard characters: False
 How to handle legacy flat module installs during install.
 
 ```yaml
-Type: Nullable`1
+Type: LegacyFlatModuleHandling
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: Warn, Convert, Delete, Ignore
 
 Required: False
 Position: named
@@ -1135,10 +1135,10 @@ Accept wildcard characters: False
 Controls how the module is installed into user Module roots after build.
 
 ```yaml
-Type: Nullable`1
+Type: InstallationStrategy
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: Exact, AutoRevision
 
 Required: False
 Position: named

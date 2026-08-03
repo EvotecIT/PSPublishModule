@@ -31,10 +31,10 @@ Set-BenchmarkProfile -Name 'Value'
 Cleanup mode used by profile-owned temporary state.
 
 ```yaml
-Type: Nullable`1
+Type: PowerShellBenchmarkCleanupMode
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: Always, KeepOnFailure, KeepAlways
 
 Required: False
 Position: named

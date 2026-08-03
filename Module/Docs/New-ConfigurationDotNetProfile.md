@@ -95,10 +95,10 @@ Accept wildcard characters: False
 Optional style override.
 
 ```yaml
-Type: Nullable`1
+Type: DotNetPublishStyle
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: Portable, PortableCompat, PortableSize, FrameworkDependent, AotSpeed, AotSize
 
 Required: False
 Position: named

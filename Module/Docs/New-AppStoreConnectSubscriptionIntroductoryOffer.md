@@ -11,7 +11,7 @@ Creates an App Store Connect introductory offer for an auto-renewable subscripti
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-AppStoreConnectSubscriptionIntroductoryOffer -IssuerId <string> -KeyId <string> -SubscriptionId <string> -Duration <AppStoreConnectSubscriptionOfferDuration> -OfferMode <AppStoreConnectSubscriptionOfferMode> -TerritoryId <string[]> [-PrivateKey <string>] [-PrivateKeyPath <string>] [-TokenLifetimeMinutes <int>] [-NumberOfPeriods <int>] [-StartDate <datetime>] [-EndDate <datetime>] [-SubscriptionPricePointId <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
+New-AppStoreConnectSubscriptionIntroductoryOffer -IssuerId <string> -KeyId <string> -SubscriptionId <string> -Duration <AppStoreConnectSubscriptionOfferDuration> -OfferMode <AppStoreConnectSubscriptionOfferMode> -TerritoryId <string[]> [-PrivateKey <string>] [-PrivateKeyPath <string>] [-TokenLifetimeMinutes <int>] [-NumberOfPeriods <int>] [-StartDate <DateTime>] [-EndDate <DateTime>] [-SubscriptionPricePointId <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -47,7 +47,7 @@ Accept wildcard characters: False
 Optional offer end date.
 
 ```yaml
-Type: Nullable`1
+Type: DateTime
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -159,7 +159,7 @@ Accept wildcard characters: False
 Optional offer start date.
 
 ```yaml
-Type: Nullable`1
+Type: DateTime
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

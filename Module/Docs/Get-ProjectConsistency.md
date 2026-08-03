@@ -129,10 +129,10 @@ Accept wildcard characters: False
 The encoding standard you want to achieve (optional).
 
 ```yaml
-Type: Nullable`1
+Type: TextEncodingKind
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: Ascii, BigEndianUnicode, Unicode, UTF7, UTF8, UTF8BOM, UTF32, Default, OEM, Any
 
 Required: False
 Position: named
@@ -145,10 +145,10 @@ Accept wildcard characters: False
 The line ending standard you want to achieve (optional).
 
 ```yaml
-Type: Nullable`1
+Type: FileConsistencyLineEnding
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: CRLF, LF
 
 Required: False
 Position: named

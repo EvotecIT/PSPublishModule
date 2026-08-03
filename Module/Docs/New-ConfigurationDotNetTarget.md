@@ -11,7 +11,7 @@ Creates a DotNet publish target entry for DotNet publish DSL.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDotNetTarget -Name <string> -Framework <string> [-ProjectId <string>] [-ProjectPath <string>] [-Kind <DotNetPublishTargetKind>] [-Frameworks <string[]>] [-Runtimes <string[]>] [-Style <DotNetPublishStyle>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-RenameTo <string>] [-UseStaging <bool>] [-ClearOutput <bool>] [-Slim <bool>] [-KeepSymbols] [-KeepDocs] [-PruneReferences <bool>] [-Zip] [-ZipPath <string>] [-ZipNameTemplate <string>] [-ReadyToRun <bool>] [-Sign <DotNetPublishSignOptions>] [-Service <DotNetPublishServicePackageOptions>] [-State <DotNetPublishStatePreservationOptions>] [<CommonParameters>]
+New-ConfigurationDotNetTarget -Name <string> -Framework <string> [-ProjectId <string>] [-ProjectPath <string>] [-Kind <DotNetPublishTargetKind>] [-Frameworks <string[]>] [-Runtimes <string[]>] [-Style <DotNetPublishStyle>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-RenameTo <string>] [-UseStaging <bool>] [-ClearOutput <bool>] [-Slim <bool>] [-KeepSymbols] [-KeepDocs] [-PruneReferences <bool>] [-Zip] [-ZipPath <string>] [-ZipNameTemplate <string>] [-ReadyToRun <Boolean>] [-Sign <DotNetPublishSignOptions>] [-Service <DotNetPublishServicePackageOptions>] [-State <DotNetPublishStatePreservationOptions>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -207,7 +207,7 @@ Accept wildcard characters: False
 Optional ReadyToRun toggle for non-AOT styles.
 
 ```yaml
-Type: Nullable`1
+Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

@@ -16,7 +16,7 @@ Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <stri
 
 ### Config
 ```powershell
-Invoke-ModuleBuild -ConfigPath <string> [-RunMode <ConfigurationGateMode>] [-ModuleVersion <string>] [-PreReleaseTag <string>] [-BuildConfiguration <string>] [-BuildFramework <string>] [-NoDotnetBuild] [-NoSign] [-SignModule] [-IncludeProjectPackages <bool>] [-IncludeModulePublishing <bool>] [-PowerForgeUnifiedGitHubRelease] [-CertificateThumbprint <string>] [-SignIncludeBinaries <bool>] [-SignIncludeInternals <bool>] [-SignIncludeExe <bool>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-StagingPath <string>] [-ReuseStaging] [-SkipInstall] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild -ConfigPath <string> [-RunMode <ConfigurationGateMode>] [-ModuleVersion <string>] [-PreReleaseTag <string>] [-BuildConfiguration <string>] [-BuildFramework <string>] [-NoDotnetBuild] [-NoSign] [-SignModule] [-IncludeProjectPackages <bool>] [-IncludeModulePublishing <bool>] [-PowerForgeUnifiedGitHubRelease] [-CertificateThumbprint <string>] [-SignIncludeBinaries <Boolean>] [-SignIncludeInternals <Boolean>] [-SignIncludeExe <Boolean>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-StagingPath <string>] [-SkipInstall] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Configuration
@@ -338,7 +338,7 @@ Accept wildcard characters: False
 Fails the build when diagnostics at or above the specified severity are present.
 
 ```yaml
-Type: Nullable`1
+Type: BuildDiagnosticSeverity
 Parameter Sets: Modern, Config, Configuration
 Aliases: None
 Possible values: Warning, Error
@@ -867,32 +867,16 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -ReuseStaging
-Reuses an existing staged module output for an internal deferred publication pass.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: Config
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -RunMode
 High-level module build lane. Manifest refreshes PSD1 metadata only, Documentation regenerates command Markdown
 and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,
 and Publish enables configured publish destinations.
 
 ```yaml
-Type: Nullable`1
+Type: ConfigurationGateMode
 Parameter Sets: Modern, Config, Configuration
 Aliases: ConfigurationGateMode
-Possible values:
+Possible values: Manifest, Build, Publish, Documentation
 
 Required: False
 Position: named
@@ -921,7 +905,7 @@ Accept wildcard characters: False
 Overrides whether binary files are signed for a JSON configuration.
 
 ```yaml
-Type: Nullable`1
+Type: Boolean
 Parameter Sets: Config
 Aliases: None
 Possible values:
@@ -937,7 +921,7 @@ Accept wildcard characters: False
 Overrides whether executable files are signed for a JSON configuration.
 
 ```yaml
-Type: Nullable`1
+Type: Boolean
 Parameter Sets: Config
 Aliases: None
 Possible values:
@@ -953,7 +937,7 @@ Accept wildcard characters: False
 Overrides whether internal files are signed for a JSON configuration.
 
 ```yaml
-Type: Nullable`1
+Type: Boolean
 Parameter Sets: Config
 Aliases: None
 Possible values:

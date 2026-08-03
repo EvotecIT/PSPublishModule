@@ -11,12 +11,12 @@ Runs a reusable PowerShell benchmark suite.
 ## SYNTAX
 ### Path (Default)
 ```powershell
-Invoke-BenchmarkSuite [-Path] <string> [-OutputRoot <string>] [-WarmupCount <int>] [-IterationCount <int>] [-RunMode <string>] [-RunOrder <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <int>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [-Suite <string>] [-Case <string[]>] [-Engine <string[]>] [-Operation <string[]>] [-HostName <string[]>] [-ExternalHostTimeoutSeconds <int>] [-Profile <PowerShellBenchmarkProfileKind>] [-Cleanup <PowerShellBenchmarkCleanupMode>] [-Variable <hashtable>] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-BenchmarkSuite [-Path] <string> [-OutputRoot <string>] [-WarmupCount <Int32>] [-IterationCount <Int32>] [-RunMode <string>] [-RunOrder <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <Int32>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [-Suite <string>] [-Case <string[]>] [-Engine <string[]>] [-Operation <string[]>] [-HostName <string[]>] [-ExternalHostTimeoutSeconds <int>] [-Profile <PowerShellBenchmarkProfileKind>] [-Cleanup <PowerShellBenchmarkCleanupMode>] [-Variable <hashtable>] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Settings
 ```powershell
-Invoke-BenchmarkSuite [-Settings] <scriptblock> [-OutputRoot <string>] [-WarmupCount <int>] [-IterationCount <int>] [-RunMode <string>] [-RunOrder <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <int>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [-Suite <string>] [-Case <string[]>] [-Engine <string[]>] [-Operation <string[]>] [-HostName <string[]>] [-ExternalHostTimeoutSeconds <int>] [-Profile <PowerShellBenchmarkProfileKind>] [-Cleanup <PowerShellBenchmarkCleanupMode>] [-Variable <hashtable>] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-BenchmarkSuite [-Settings] <scriptblock> [-OutputRoot <string>] [-WarmupCount <Int32>] [-IterationCount <Int32>] [-RunMode <string>] [-RunOrder <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <Int32>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [-Suite <string>] [-Case <string[]>] [-Engine <string[]>] [-Operation <string[]>] [-HostName <string[]>] [-ExternalHostTimeoutSeconds <int>] [-Profile <PowerShellBenchmarkProfileKind>] [-Cleanup <PowerShellBenchmarkCleanupMode>] [-Variable <hashtable>] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -52,10 +52,10 @@ Accept wildcard characters: False
 Optional cleanup override.
 
 ```yaml
-Type: Nullable`1
+Type: PowerShellBenchmarkCleanupMode
 Parameter Sets: Path, Settings
 Aliases: None
-Possible values:
+Possible values: Always, KeepOnFailure, KeepAlways
 
 Required: False
 Position: named
@@ -68,7 +68,7 @@ Accept wildcard characters: False
 Optional delay between measured samples, in milliseconds.
 
 ```yaml
-Type: Nullable`1
+Type: Int32
 Parameter Sets: Path, Settings
 Aliases: None
 Possible values:
@@ -132,7 +132,7 @@ Accept wildcard characters: False
 Optional measured iteration count override.
 
 ```yaml
-Type: Nullable`1
+Type: Int32
 Parameter Sets: Path, Settings
 Aliases: None
 Possible values:
@@ -148,10 +148,10 @@ Accept wildcard characters: False
 Optional managed-memory cleanup override.
 
 ```yaml
-Type: Nullable`1
+Type: PowerShellBenchmarkMemoryCleanupMode
 Parameter Sets: Path, Settings
 Aliases: None
-Possible values:
+Possible values: None, BeforeIteration
 
 Required: False
 Position: named
@@ -180,10 +180,10 @@ Accept wildcard characters: False
 Optional summary outlier policy override.
 
 ```yaml
-Type: Nullable`1
+Type: PowerShellBenchmarkOutlierMode
 Parameter Sets: Path, Settings
 Aliases: None
-Possible values:
+Possible values: None, ExcludeMinMax
 
 Required: False
 Position: named
@@ -244,10 +244,10 @@ Accept wildcard characters: False
 Optional profile override.
 
 ```yaml
-Type: Nullable`1
+Type: PowerShellBenchmarkProfileKind
 Parameter Sets: Path, Settings
 Aliases: None
-Possible values:
+Possible values: Current, TemporaryLocalUser
 
 Required: False
 Position: named
@@ -276,10 +276,10 @@ Accept wildcard characters: False
 Optional work-item ordering override.
 
 ```yaml
-Type: Nullable`1
+Type: PowerShellBenchmarkRunOrder
 Parameter Sets: Path, Settings
 Aliases: None
-Possible values:
+Possible values: Sequential, Rotated, Randomized, GroupedRotated
 
 Required: False
 Position: named
@@ -340,7 +340,7 @@ Accept wildcard characters: False
 Optional warmup count override.
 
 ```yaml
-Type: Nullable`1
+Type: Int32
 Parameter Sets: Path, Settings
 Aliases: None
 Possible values:

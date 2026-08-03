@@ -11,12 +11,12 @@ Registers a managed module repository profile using PSResourceGet-shaped paramet
 ## SYNTAX
 ### Name (Default)
 ```powershell
-Register-ManagedModuleRepository [-Name] <string> [-Uri] <string> [-Trusted] [-Priority <int>] [-ApiVersion <RepositoryApiVersion>] [-Force] [-PassThru] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Register-ManagedModuleRepository [-Name] <string> [-Uri] <string> [-Trusted] [-Priority <Int32>] [-ApiVersion <RepositoryApiVersion>] [-Force] [-PassThru] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### PSGallery
 ```powershell
-Register-ManagedModuleRepository -PSGallery [-Trusted] [-Priority <int>] [-Force] [-PassThru] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Register-ManagedModuleRepository -PSGallery [-Trusted] [-Priority <Int32>] [-Force] [-PassThru] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Repository
@@ -117,7 +117,7 @@ Accept wildcard characters: False
 Repository priority.
 
 ```yaml
-Type: Nullable`1
+Type: Int32
 Parameter Sets: Name, PSGallery
 Aliases: None
 Possible values:

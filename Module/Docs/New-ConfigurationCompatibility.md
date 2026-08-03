@@ -183,10 +183,10 @@ Accept wildcard characters: False
 Severity for compatibility issues (overrides FailOnIncompatibility when specified).
 
 ```yaml
-Type: Nullable`1
+Type: ValidationSeverity
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: Off, Warning, Error
 
 Required: False
 Position: named

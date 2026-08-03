@@ -11,7 +11,7 @@ Refreshes package metadata in a local managed module catalog.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Update-ManagedModuleCatalog [[-Name] <string>] [[-PackageName] <string[]>] [-IncludePrerelease <bool>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Update-ManagedModuleCatalog [[-Name] <string>] [[-PackageName] <string[]>] [-IncludePrerelease <Boolean>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -96,7 +96,7 @@ Accept wildcard characters: False
 Override the catalog's prerelease refresh setting for this run.
 
 ```yaml
-Type: Nullable`1
+Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

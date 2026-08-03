@@ -248,10 +248,10 @@ Accept wildcard characters: False
 Project kind used to derive default include patterns.
 
 ```yaml
-Type: Nullable`1
+Type: ProjectKind
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: PowerShell, CSharp, Mixed, All
 
 Required: False
 Position: named
@@ -328,10 +328,10 @@ Accept wildcard characters: False
 Severity for consistency issues (overrides FailOnInconsistency when specified).
 
 ```yaml
-Type: Nullable`1
+Type: ValidationSeverity
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: Off, Warning, Error
 
 Required: False
 Position: named

@@ -11,17 +11,17 @@ Creates a module pipeline lifecycle action.
 ## SYNTAX
 ### Inline (Default)
 ```powershell
-New-ConfigurationExecute -InlineScript <string> [-Name <string>] [-At <ModulePipelineActionStage>] [-WorkingDirectory <string>] [-Environment <hashtable>] [-TimeoutSeconds <int>] [-ContinueOnError] [-Disabled] [-PreferWindowsPowerShell] [<CommonParameters>]
+New-ConfigurationExecute -InlineScript <string> [-Name <string>] [-At <ModulePipelineActionStage>] [-WorkingDirectory <string>] [-Environment <hashtable>] [-TimeoutSeconds <Int32>] [-ContinueOnError] [-Disabled] [-PreferWindowsPowerShell] [<CommonParameters>]
 ```
 
 ### File
 ```powershell
-New-ConfigurationExecute -FilePath <string> [-Name <string>] [-At <ModulePipelineActionStage>] [-WorkingDirectory <string>] [-Environment <hashtable>] [-TimeoutSeconds <int>] [-ContinueOnError] [-Disabled] [-PreferWindowsPowerShell] [<CommonParameters>]
+New-ConfigurationExecute -FilePath <string> [-Name <string>] [-At <ModulePipelineActionStage>] [-WorkingDirectory <string>] [-Environment <hashtable>] [-TimeoutSeconds <Int32>] [-ContinueOnError] [-Disabled] [-PreferWindowsPowerShell] [<CommonParameters>]
 ```
 
 ### ScriptBlock
 ```powershell
-New-ConfigurationExecute -ScriptBlock <scriptblock> [-Name <string>] [-At <ModulePipelineActionStage>] [-WorkingDirectory <string>] [-Environment <hashtable>] [-TimeoutSeconds <int>] [-ContinueOnError] [-Disabled] [-PreferWindowsPowerShell] [<CommonParameters>]
+New-ConfigurationExecute -ScriptBlock <scriptblock> [-Name <string>] [-At <ModulePipelineActionStage>] [-WorkingDirectory <string>] [-Environment <hashtable>] [-TimeoutSeconds <Int32>] [-ContinueOnError] [-Disabled] [-PreferWindowsPowerShell] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -199,7 +199,7 @@ Accept wildcard characters: False
 Action timeout in seconds. Defaults to five minutes.
 
 ```yaml
-Type: Nullable`1
+Type: Int32
 Parameter Sets: Inline, File, ScriptBlock
 Aliases: None
 Possible values:

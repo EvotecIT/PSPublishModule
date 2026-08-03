@@ -11,7 +11,7 @@ Analyzes PowerShell files and folders to determine compatibility with Windows Po
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Get-PowerShellCompatibility -Path <string> [-Recurse] [-ExcludeDirectories <string[]>] [-ShowDetails] [-ExportPath <string>] [-Internal] [<CommonParameters>]
+Get-PowerShellCompatibility -Path <string> [-Recurse] [-ExcludeDirectories <string[]>] [-ShowDetails] [-ExportPath <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -67,22 +67,6 @@ Export the detailed report to a CSV file at the specified path.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Internal
-Internal mode used by build pipelines to suppress host output.
-
-```yaml
-Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

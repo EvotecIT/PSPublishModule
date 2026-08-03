@@ -11,7 +11,7 @@ Sets benchmark run policy defaults.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Set-BenchmarkPolicy [-Warmup <int>] [-Iteration <int>] [-RunMode <string>] [-Order <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <int>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [<CommonParameters>]
+Set-BenchmarkPolicy [-Warmup <Int32>] [-Iteration <Int32>] [-RunMode <string>] [-Order <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <Int32>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -21,7 +21,7 @@ Sets benchmark run policy defaults.
 
 ### EXAMPLE 1
 ```powershell
-Set-BenchmarkPolicy -CooldownMilliseconds 'Value'
+Set-BenchmarkPolicy -CooldownMilliseconds 1
 ```
 
 
@@ -31,7 +31,7 @@ Set-BenchmarkPolicy -CooldownMilliseconds 'Value'
 Delay between measured samples, in milliseconds.
 
 ```yaml
-Type: Nullable`1
+Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -47,7 +47,7 @@ Accept wildcard characters: False
 Measured iteration count.
 
 ```yaml
-Type: Nullable`1
+Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: Iterations
 Possible values:
@@ -63,10 +63,10 @@ Accept wildcard characters: False
 Managed-memory cleanup performed outside timed operations.
 
 ```yaml
-Type: Nullable`1
+Type: PowerShellBenchmarkMemoryCleanupMode
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: None, BeforeIteration
 
 Required: False
 Position: named
@@ -79,10 +79,10 @@ Accept wildcard characters: False
 Work-item ordering strategy.
 
 ```yaml
-Type: Nullable`1
+Type: PowerShellBenchmarkRunOrder
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: Sequential, Rotated, Randomized, GroupedRotated
 
 Required: False
 Position: named
@@ -95,10 +95,10 @@ Accept wildcard characters: False
 Summary outlier policy.
 
 ```yaml
-Type: Nullable`1
+Type: PowerShellBenchmarkOutlierMode
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: None, ExcludeMinMax
 
 Required: False
 Position: named
@@ -127,7 +127,7 @@ Accept wildcard characters: False
 Warmup iteration count.
 
 ```yaml
-Type: Nullable`1
+Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

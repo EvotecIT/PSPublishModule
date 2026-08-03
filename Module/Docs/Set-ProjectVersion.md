@@ -122,10 +122,10 @@ Accept wildcard characters: False
 The type of version increment: Major, Minor, Build, or Revision.
 
 ```yaml
-Type: Nullable`1
+Type: ProjectVersionIncrementKind
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
+Possible values: Major, Minor, Build, Revision
 
 Required: False
 Position: named

@@ -11,7 +11,7 @@ Creates a high-level target entry for a PowerShell-authored project build.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationProjectTarget -Name <string> -ProjectPath <string> [-Kind <DotNetPublishTargetKind>] [-Framework <string>] [-Frameworks <string[]>] [-Runtimes <string[]>] [-Style <DotNetPublishStyle>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-OutputType <ConfigurationProjectTargetOutputType[]>] [-Zip] [-UseStaging <bool>] [-ClearOutput <bool>] [-KeepSymbols] [-KeepDocs] [-ReadyToRun <bool>] [<CommonParameters>]
+New-ConfigurationProjectTarget -Name <string> -ProjectPath <string> [-Kind <DotNetPublishTargetKind>] [-Framework <string>] [-Frameworks <string[]>] [-Runtimes <string[]>] [-Style <DotNetPublishStyle>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-OutputType <ConfigurationProjectTargetOutputType[]>] [-Zip] [-UseStaging <bool>] [-ClearOutput <bool>] [-KeepSymbols] [-KeepDocs] [-ReadyToRun <Boolean>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -191,7 +191,7 @@ Accept wildcard characters: False
 Optional ReadyToRun override.
 
 ```yaml
-Type: Nullable`1
+Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

@@ -21,12 +21,12 @@ Initialize-ManagedModuleRepository [-Path] <string> [-ProfileName <string>] [-Ov
 
 ### Repository
 ```powershell
-Initialize-ManagedModuleRepository [-ProfileName] <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsOrganization <string>] [-AzureDevOpsProject <string>] [-AzureArtifactsFeed <string>] [-Repository <string>] [-RepositoryName <string>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-JFrogBaseUri <string>] [-JFrogRepository <string>] [-GitHubOwner <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-BootstrapPath <string>] [-BootstrapScriptName <string>] [-BootstrapProfileFileName <string>] [-InstallModule <string[]>] [-BootstrapForce] [-SkipConnect] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Initialize-ManagedModuleRepository [-ProfileName] <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsOrganization <string>] [-AzureDevOpsProject <string>] [-AzureArtifactsFeed <string>] [-Repository <string>] [-RepositoryName <string>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-JFrogBaseUri <string>] [-JFrogRepository <string>] [-GitHubOwner <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <Int32>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-BootstrapPath <string>] [-BootstrapScriptName <string>] [-BootstrapProfileFileName <string>] [-InstallModule <string[]>] [-BootstrapForce] [-SkipConnect] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### MicrosoftArtifactRegistry
 ```powershell
-Initialize-ManagedModuleRepository -MicrosoftArtifactRegistry [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-Trusted <bool>] [-Priority <int>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-BootstrapPath <string>] [-BootstrapScriptName <string>] [-BootstrapProfileFileName <string>] [-InstallModule <string[]>] [-BootstrapForce] [-SkipConnect] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Initialize-ManagedModuleRepository -MicrosoftArtifactRegistry [-RepositoryName <string>] [-Tool <RepositoryRegistrationTool>] [-Trusted <bool>] [-Priority <Int32>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-PromptForCredential] [-InstallPrerequisites] [-BootstrapPath <string>] [-BootstrapScriptName <string>] [-BootstrapProfileFileName <string>] [-InstallModule <string[]>] [-BootstrapForce] [-SkipConnect] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -369,7 +369,7 @@ Accept wildcard characters: False
 Optional PSResourceGet repository priority.
 
 ```yaml
-Type: Nullable`1
+Type: Int32
 Parameter Sets: Repository, MicrosoftArtifactRegistry
 Aliases: None
 Possible values:
