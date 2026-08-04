@@ -146,7 +146,7 @@ public sealed class ModulePipelineExecutionSessionTests
             Assert.Equal(step!.Key, update.Key);
             Assert.Equal(50, update.Value);
             Assert.Equal(400, update.Maximum);
-            Assert.Contains("1/2 one.zip", update.Detail, StringComparison.Ordinal);
+            Assert.Contains("Asset 01/02 one.zip", update.Detail, StringComparison.Ordinal);
         }
         finally
         {

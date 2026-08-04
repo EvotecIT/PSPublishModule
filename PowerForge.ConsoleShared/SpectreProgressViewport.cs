@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
@@ -25,13 +26,30 @@ internal static class SpectreProgressViewport
             return renderable;
 
         var activeIndex = FindActiveIndex(tasks);
+        return ProjectAtIndex(renderable, tasks, maximumRows, activeIndex);
+    }
+
+    internal static IRenderable ProjectAtIndex(
+        IRenderable renderable,
+        IReadOnlyList<ProgressTask> tasks,
+        int maximumRows,
+        int focusIndex)
+    {
+        if (renderable is null) throw new ArgumentNullException(nameof(renderable));
+        if (tasks is null) throw new ArgumentNullException(nameof(tasks));
+
+        maximumRows = Math.Max(1, maximumRows);
+        if (tasks.Count <= maximumRows)
+            return renderable;
+
+        focusIndex = Math.Max(0, Math.Min(tasks.Count - 1, focusIndex));
         var startIndex = Math.Min(
             tasks.Count - maximumRows,
-            Math.Max(0, activeIndex - maximumRows + 1));
+            Math.Max(0, focusIndex - maximumRows + 1));
         return new WindowedRenderable(renderable, startIndex, maximumRows, tasks.Count);
     }
 
-    private static int FindActiveIndex(IReadOnlyList<ProgressTask> tasks)
+    internal static int FindActiveIndex(IReadOnlyList<ProgressTask> tasks)
     {
         for (var index = tasks.Count - 1; index >= 0; index--)
         {
@@ -99,6 +117,48 @@ internal static class SpectreProgressViewport
                 if (lineIndex < selected.Length - 1)
                     yield return Segment.LineBreak;
             }
+        }
+    }
+}
+
+/// <summary>
+/// Keeps a live progress viewport focused on the furthest work reached. A brief
+/// gap between adjacent tasks must not jump back to an older concurrent task.
+/// </summary>
+internal sealed class SpectreProgressViewportState
+{
+    private int _furthestFocusIndex = -1;
+
+    internal IRenderable Project(
+        IRenderable renderable,
+        IReadOnlyList<ProgressTask> tasks,
+        int maximumRows)
+    {
+        if (renderable is null) throw new ArgumentNullException(nameof(renderable));
+        if (tasks is null) throw new ArgumentNullException(nameof(tasks));
+        if (tasks.Count == 0)
+            return renderable;
+
+        var activeIndex = SpectreProgressViewport.FindActiveIndex(tasks);
+        AdvanceFocus(activeIndex);
+        var focusIndex = Math.Min(Volatile.Read(ref _furthestFocusIndex), tasks.Count - 1);
+        return SpectreProgressViewport.ProjectAtIndex(
+            renderable,
+            tasks,
+            maximumRows,
+            focusIndex);
+    }
+
+    private void AdvanceFocus(int candidate)
+    {
+        var observed = Volatile.Read(ref _furthestFocusIndex);
+        while (candidate > observed)
+        {
+            var actual = Interlocked.CompareExchange(ref _furthestFocusIndex, candidate, observed);
+            if (actual == observed)
+                return;
+
+            observed = actual;
         }
     }
 }

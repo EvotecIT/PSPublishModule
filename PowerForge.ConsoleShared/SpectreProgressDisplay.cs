@@ -26,6 +26,7 @@ internal static class SpectreProgressDisplay
         if (action is null) throw new ArgumentNullException(nameof(action));
 
         IRenderable? finalFrame = null;
+        var viewport = new SpectreProgressViewportState();
         console.Progress()
             .AutoRefresh(true)
             .AutoClear(true)
@@ -35,7 +36,7 @@ internal static class SpectreProgressDisplay
             {
                 finalFrame = renderable;
                 taskObserver?.Invoke(tasks);
-                return SpectreProgressViewport.Project(
+                return viewport.Project(
                     renderable,
                     tasks,
                     Math.Max(1, console.Profile.Height - 2));

@@ -61,7 +61,7 @@ internal sealed class SpectreProgressPresentation
         if (item is null) throw new ArgumentNullException(nameof(item));
 
         var ordinal = item.Position > 0 && item.Total > 0
-            ? FormatOrdinal(item.Position, item.Total)
+            ? ProgressCounterFormatter.Format(item.CounterLabel, item.Position, item.Total)
             : string.Empty;
         var idWidth = ordinal.Length;
         var detailSuffix = string.IsNullOrWhiteSpace(detail) ? string.Empty : $" — {detail}";
@@ -173,14 +173,6 @@ internal sealed class SpectreProgressPresentation
         if (viewportWidth >= 100) return 14;
         if (viewportWidth >= 80) return 12;
         return 10;
-    }
-
-    private static string FormatOrdinal(int position, int total)
-    {
-        var safeTotal = Math.Max(1, total);
-        var digits = Math.Max(2, safeTotal.ToString().Length);
-        var format = new string('0', digits);
-        return $"{Math.Max(0, position).ToString(format)}/{safeTotal.ToString(format)}";
     }
 
     private static string PadOrEllipsis(string input, int width)

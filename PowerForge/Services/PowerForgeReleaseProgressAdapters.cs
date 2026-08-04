@@ -6,6 +6,7 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
     private readonly PowerForgeReleaseProgressPhase _releasePhase;
     private readonly Dictionary<ProjectBuildProgressPhase, PowerForgeReleaseProgressItem> _items = new();
     private readonly Dictionary<string, PowerForgeReleaseProgressItem> _projectItems = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<ProjectBuildProgressPhase, (int Completed, int Total)> _phaseCounts = new();
 
     internal ProjectBuildReleaseProgressAdapter(
         IPowerForgeReleaseProgressReporterV2 release,
@@ -17,8 +18,9 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
 
     public void PhaseStarted(ProjectBuildProgressPhase phase, int totalItems, string? detail = null)
     {
+        RememberCount(phase, 0, totalItems);
         var item = GetOrCreate(phase);
-        _release.ItemUpdated(item, PowerForgeReleaseProgressItemState.Started, WithCount(detail, 0, totalItems));
+        _release.ItemUpdated(item, PowerForgeReleaseProgressItemState.Started, WithCount(phase, detail, 0, totalItems));
     }
 
     public void PhaseUpdated(
@@ -27,18 +29,31 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
         int totalItems,
         string? detail = null)
     {
+        RememberCount(phase, completedItems, totalItems);
         var item = GetOrCreate(phase);
         _release.ItemUpdated(
             item,
             PowerForgeReleaseProgressItemState.Started,
-            WithCount(detail, completedItems, totalItems));
+            WithCount(phase, detail, completedItems, totalItems));
     }
 
     public void PhaseCompleted(ProjectBuildProgressPhase phase, string? detail = null)
-        => _release.ItemUpdated(GetOrCreate(phase), PowerForgeReleaseProgressItemState.Completed, detail);
+    {
+        var count = GetTerminalCount(phase, completed: true);
+        _release.ItemUpdated(
+            GetOrCreate(phase),
+            PowerForgeReleaseProgressItemState.Completed,
+            WithCount(phase, detail, count.Completed, count.Total));
+    }
 
     public void PhaseFailed(ProjectBuildProgressPhase phase, string? detail = null)
-        => _release.ItemUpdated(GetOrCreate(phase), PowerForgeReleaseProgressItemState.Failed, detail);
+    {
+        var count = GetTerminalCount(phase, completed: false);
+        _release.ItemUpdated(
+            GetOrCreate(phase),
+            PowerForgeReleaseProgressItemState.Failed,
+            WithCount(phase, detail, count.Completed, count.Total));
+    }
 
     public void ItemsPlanned(
         ProjectBuildProgressPhase phase,
@@ -129,12 +144,42 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
             _ => phase.ToString()
         };
 
-    private static string? WithCount(string? detail, int completed, int total)
+    private void RememberCount(
+        ProjectBuildProgressPhase phase,
+        int completed,
+        int total)
+    {
+        if (total <= 0) {
+            return;
+        }
+
+        _phaseCounts[phase] = (Math.Min(Math.Max(0, completed), total), total);
+    }
+
+    private (int Completed, int Total) GetTerminalCount(
+        ProjectBuildProgressPhase phase,
+        bool completed)
+    {
+        if (!_phaseCounts.TryGetValue(phase, out var count)) {
+            return (0, 0);
+        }
+
+        return completed ? (count.Total, count.Total) : count;
+    }
+
+    private static string? WithCount(
+        ProjectBuildProgressPhase phase,
+        string? detail,
+        int completed,
+        int total)
     {
         if (total <= 0)
             return detail;
 
-        var count = $"{Math.Max(0, completed)}/{total}";
+        var count = ProgressCounterFormatter.Format(
+            ProgressCounterFormatter.GetProjectBuildScope(phase),
+            completed,
+            total);
         return string.IsNullOrWhiteSpace(detail) ? count : $"{count} — {detail}";
     }
 }
