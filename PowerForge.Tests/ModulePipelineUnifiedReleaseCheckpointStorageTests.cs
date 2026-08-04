@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -9,6 +11,207 @@ namespace PowerForge.Tests;
 
 public sealed partial class ModulePipelineUnifiedReleaseTests
 {
+    [Fact]
+    public void Run_RecoversNewerTemporaryCheckpointWithoutRepeatingCompletedPublish()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var firstStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        var secondStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "2.0.10");
+            WriteSynchronizedProjectBuildConfig(root.FullName, "project.build.json", moduleName, publishNuGet: false);
+
+            var firstHosted = new FakeHostedOperations(new List<string>())
+            {
+                ModulePublishAction = (_, _) => throw new InvalidOperationException("Simulated interruption after the remote side effect.")
+            };
+            var firstRunner = CreateRunner(
+                firstHosted,
+                (request, configuration, configPath) => CreateProjectBuildResult(
+                    root.FullName,
+                    moduleName,
+                    "2.0.11",
+                    Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                    request,
+                    configPath,
+                    includePackage: false));
+            Assert.Throws<InvalidOperationException>(() => firstRunner.Run(
+                CreateGalleryReleaseSpec(root.FullName, firstStagingPath, moduleName)));
+
+            var checkpointPath = Assert.Single(Directory.GetFiles(
+                GetCoordinatedReleaseCheckpointRoot(root.FullName),
+                "*.json"));
+            WriteCompletedTemporaryCheckpoint(checkpointPath);
+
+            var repeatedPublishes = 0;
+            var secondHosted = new FakeHostedOperations(new List<string>())
+            {
+                ModulePublishAction = (_, _) => repeatedPublishes++
+            };
+            var secondRunner = CreateRunner(
+                secondHosted,
+                (request, configuration, configPath) => CreateProjectBuildResult(
+                    root.FullName,
+                    moduleName,
+                    "2.0.11",
+                    Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                    request,
+                    configPath,
+                    includePackage: false));
+
+            secondRunner.Run(CreateGalleryReleaseSpec(root.FullName, secondStagingPath, moduleName));
+
+            Assert.Equal(0, repeatedPublishes);
+            Assert.False(File.Exists(checkpointPath));
+            Assert.False(File.Exists(checkpointPath + ".tmp"));
+            AssertNoCoordinatedReleaseCheckpoint(root.FullName);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(firstStagingPath)) Directory.Delete(firstStagingPath, recursive: true); } catch { }
+            try { if (Directory.Exists(secondStagingPath)) Directory.Delete(secondStagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_RejectsTemporaryCheckpointThatChangesReleaseIdentity()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var firstStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        var secondStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "2.0.10");
+            WriteSynchronizedProjectBuildConfig(root.FullName, "project.build.json", moduleName, publishNuGet: false);
+
+            var firstHosted = new FakeHostedOperations(new List<string>())
+            {
+                ModulePublishAction = (_, _) => throw new InvalidOperationException("Simulated interruption after the remote side effect.")
+            };
+            var firstRunner = CreateRunner(
+                firstHosted,
+                (request, configuration, configPath) => CreateProjectBuildResult(
+                    root.FullName,
+                    moduleName,
+                    "2.0.11",
+                    Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                    request,
+                    configPath,
+                    includePackage: false));
+            Assert.Throws<InvalidOperationException>(() => firstRunner.Run(
+                CreateGalleryReleaseSpec(root.FullName, firstStagingPath, moduleName)));
+
+            var checkpointPath = Assert.Single(Directory.GetFiles(
+                GetCoordinatedReleaseCheckpointRoot(root.FullName),
+                "*.json"));
+            var temporary = WriteCompletedTemporaryCheckpoint(checkpointPath);
+            temporary["ModuleName"] = "DifferentModule";
+            File.WriteAllText(
+                checkpointPath + ".tmp",
+                temporary.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+
+            var repeatedPublishes = 0;
+            var secondHosted = new FakeHostedOperations(new List<string>())
+            {
+                ModulePublishAction = (_, _) => repeatedPublishes++
+            };
+            var secondRunner = CreateRunner(
+                secondHosted,
+                (request, configuration, configPath) => CreateProjectBuildResult(
+                    root.FullName,
+                    moduleName,
+                    "2.0.11",
+                    Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                    request,
+                    configPath,
+                    includePackage: false));
+
+            var exception = Assert.Throws<InvalidOperationException>(() => secondRunner.Run(
+                CreateGalleryReleaseSpec(root.FullName, secondStagingPath, moduleName)));
+
+            Assert.Contains("cannot be proven", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, repeatedPublishes);
+            Assert.True(File.Exists(checkpointPath));
+            Assert.True(File.Exists(checkpointPath + ".tmp"));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(firstStagingPath)) Directory.Delete(firstStagingPath, recursive: true); } catch { }
+            try { if (Directory.Exists(secondStagingPath)) Directory.Delete(secondStagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_FailsClosedWhenTemporaryCheckpointIsUnreadable()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var firstStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        var secondStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "2.0.10");
+            WriteSynchronizedProjectBuildConfig(root.FullName, "project.build.json", moduleName, publishNuGet: false);
+
+            var firstHosted = new FakeHostedOperations(new List<string>())
+            {
+                ModulePublishAction = (_, _) => throw new InvalidOperationException("Simulated interruption after the remote side effect.")
+            };
+            var firstRunner = CreateRunner(
+                firstHosted,
+                (request, configuration, configPath) => CreateProjectBuildResult(
+                    root.FullName,
+                    moduleName,
+                    "2.0.11",
+                    Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                    request,
+                    configPath,
+                    includePackage: false));
+            Assert.Throws<InvalidOperationException>(() => firstRunner.Run(
+                CreateGalleryReleaseSpec(root.FullName, firstStagingPath, moduleName)));
+
+            var checkpointPath = Assert.Single(Directory.GetFiles(
+                GetCoordinatedReleaseCheckpointRoot(root.FullName),
+                "*.json"));
+            File.WriteAllText(checkpointPath + ".tmp", "{");
+
+            var repeatedPublishes = 0;
+            var secondHosted = new FakeHostedOperations(new List<string>())
+            {
+                ModulePublishAction = (_, _) => repeatedPublishes++
+            };
+            var secondRunner = CreateRunner(
+                secondHosted,
+                (request, configuration, configPath) => CreateProjectBuildResult(
+                    root.FullName,
+                    moduleName,
+                    "2.0.11",
+                    Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                    request,
+                    configPath,
+                    includePackage: false));
+
+            var exception = Assert.Throws<InvalidOperationException>(() => secondRunner.Run(
+                CreateGalleryReleaseSpec(root.FullName, secondStagingPath, moduleName)));
+
+            Assert.Contains("could not be read", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, repeatedPublishes);
+            Assert.True(File.Exists(checkpointPath));
+            Assert.True(File.Exists(checkpointPath + ".tmp"));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(firstStagingPath)) Directory.Delete(firstStagingPath, recursive: true); } catch { }
+            try { if (Directory.Exists(secondStagingPath)) Directory.Delete(secondStagingPath, recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public void ResolveCheckpointStateRoot_UsesUserLocalStorageOutsideNonGitProject()
     {
@@ -138,5 +341,19 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             try { if (Directory.Exists(firstStagingPath)) Directory.Delete(firstStagingPath, recursive: true); } catch { }
             try { if (Directory.Exists(secondStagingPath)) Directory.Delete(secondStagingPath, recursive: true); } catch { }
         }
+    }
+
+    private static JsonObject WriteCompletedTemporaryCheckpoint(string checkpointPath)
+    {
+        var checkpoint = JsonNode.Parse(File.ReadAllText(checkpointPath))!.AsObject();
+        var attempted = checkpoint["AttemptedOperations"]!.AsArray();
+        var completed = new JsonArray();
+        foreach (var operation in attempted)
+            completed.Add(operation!.GetValue<string>());
+        checkpoint["CompletedOperations"] = completed;
+        File.WriteAllText(
+            checkpointPath + ".tmp",
+            checkpoint.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        return checkpoint;
     }
 }

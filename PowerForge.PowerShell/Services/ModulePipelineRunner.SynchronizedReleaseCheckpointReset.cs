@@ -20,6 +20,7 @@ public sealed partial class ModulePipelineRunner
             File.Delete(payloadCachePath);
 
         File.Delete(path);
+        File.Delete(path + ".tmp");
         DeleteEmptySynchronizedReleaseCheckpointDirectories(path);
         _logger.Warn($"Discarded unused coordinated release checkpoint '{path}' {reason}.");
     }
