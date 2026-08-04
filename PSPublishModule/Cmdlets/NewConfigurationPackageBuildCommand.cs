@@ -441,10 +441,17 @@ public sealed class NewConfigurationReleaseCommand : PSCmdlet
     /// explicit prerelease versions retain normal semantic-version ordering.
     /// <c>PrimaryProject</c> is required, and exactly one selected lane must run before the module and use
     /// <c>UseAsReleaseVersionSource</c>. Package groups using <c>AlignPackageVersions</c> are raised together.
-    /// Publish runs persist a credential-free checkpoint so a partial release resumes the exact versions
-    /// and skips destinations that already completed.
+    /// Publish runs persist a credential-free checkpoint for optional recovery. A normal invocation archives
+    /// an incomplete checkpoint and starts fresh; use <c>ResumeIncompleteRelease</c> to retain the exact versions
+    /// and skip destinations that already completed.
     /// </summary>
     [Parameter] public SwitchParameter SynchronizeModuleVersion { get; set; }
+
+    /// <summary>
+    /// Explicitly resumes a compatible incomplete synchronized release checkpoint.
+    /// Without this switch, an older checkpoint is archived and the invocation starts a fresh release.
+    /// </summary>
+    [Parameter] public SwitchParameter ResumeIncompleteRelease { get; set; }
 
     /// <summary>Preferred build order for high-level release lanes.</summary>
     [Parameter] public string[]? BuildOrder { get; set; }
@@ -466,6 +473,7 @@ public sealed class NewConfigurationReleaseCommand : PSCmdlet
                 SynchronizeModuleVersion = SynchronizeModuleVersion.IsPresent ||
                     (!string.IsNullOrWhiteSpace(PrimaryProject) &&
                      VersionSource is ReleaseVersionSource.ProjectBuild or ReleaseVersionSource.PackageBuild),
+                ResumeIncompleteRelease = ResumeIncompleteRelease.IsPresent,
                 BuildOrder = BuildOrder,
                 PublishOrder = PublishOrder
             }

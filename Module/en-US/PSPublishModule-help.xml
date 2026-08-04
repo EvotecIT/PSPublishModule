@@ -194,13 +194,7 @@
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -411,13 +405,7 @@
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -508,13 +496,7 @@
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -605,13 +587,7 @@
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -678,13 +654,7 @@
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -778,13 +748,7 @@
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -947,13 +911,7 @@
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -1044,13 +1002,7 @@
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -1141,13 +1093,7 @@
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -1238,13 +1184,7 @@
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -1335,13 +1275,7 @@
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -1456,13 +1390,7 @@
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -1529,13 +1457,7 @@
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -1602,13 +1524,7 @@
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -2800,13 +2716,7 @@ It can also export a post-conversion report so you can validate what remains inc
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -3091,8 +3001,12 @@ It can also export a post-conversion report so you can validate what remains inc
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.IO.FileInfo&#xD;
-PowerForge.AppStoreConnectGovernanceSpec</maml:name>
+          <maml:name>System.IO.FileInfo</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.AppStoreConnectGovernanceSpec</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -4219,9 +4133,17 @@ Command-name and DSC-resource-name searches inspect package contents and remain 
           <maml:description>
             <maml:para>Platform filter.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ApplePlatform</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">iOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">iPadOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">macOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">tvOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">watchOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">visionOS</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>ApplePlatform</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -4342,9 +4264,17 @@ Command-name and DSC-resource-name searches inspect package contents and remain 
         <maml:description>
           <maml:para>Platform filter.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">ApplePlatform</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">iOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">iPadOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">macOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">tvOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">watchOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">visionOS</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>ApplePlatform</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -5431,9 +5361,17 @@ Command-name and DSC-resource-name searches inspect package contents and remain 
           <maml:description>
             <maml:para>Platform filter from the related pre-release version.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ApplePlatform</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">iOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">iPadOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">macOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">tvOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">watchOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">visionOS</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>ApplePlatform</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -5554,9 +5492,17 @@ Command-name and DSC-resource-name searches inspect package contents and remain 
         <maml:description>
           <maml:para>Platform filter from the related pre-release version.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">ApplePlatform</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">iOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">iPadOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">macOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">tvOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">watchOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">visionOS</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>ApplePlatform</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -7375,9 +7321,17 @@ Command-name and DSC-resource-name searches inspect package contents and remain 
           <maml:description>
             <maml:para>Platform filter.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ApplePlatform</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">iOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">iPadOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">macOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">tvOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">watchOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">visionOS</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>ApplePlatform</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -7486,9 +7440,17 @@ Command-name and DSC-resource-name searches inspect package contents and remain 
         <maml:description>
           <maml:para>Platform filter.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">ApplePlatform</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">iOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">iPadOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">macOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">tvOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">watchOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">visionOS</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>ApplePlatform</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -8257,9 +8219,17 @@ Command-name and DSC-resource-name searches inspect package contents and remain 
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.String&#xD;
-System.Int32&#xD;
-System.Boolean</maml:name>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Int32</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Boolean</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -8737,9 +8707,23 @@ those rows can be piped directly to Uninstall-ManagedModule.</maml:para>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PSPublishModule.ModuleStateInstalledModuleResult&#xD;
-PSPublishModule.ModuleStateInventoryResult&#xD;
-System.String</maml:name>
+          <maml:name>PSPublishModule.ModuleStateInstalledModuleResult</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>PowerShell-facing installed module inventory entry.</maml:para>
+        </maml:description>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PSPublishModule.ModuleStateInventoryResult</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>PowerShell-facing module-state inventory result.</maml:para>
+        </maml:description>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -8884,8 +8868,12 @@ System.String</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.ManagedModuleCatalog&#xD;
-PowerForge.ManagedModuleCatalogPackage</maml:name>
+          <maml:name>PowerForge.ManagedModuleCatalog</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ManagedModuleCatalogPackage</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -9096,8 +9084,15 @@ onboarding readiness, or export profile definitions for another machine without 
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PSPublishModule.ModuleRepositoryProfileResult&#xD;
-PSPublishModule.ModuleRepositoryProfileReadinessResult</maml:name>
+          <maml:name>PSPublishModule.ModuleRepositoryProfileResult</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>User-facing private module repository profile saved by PSPublishModule.</maml:para>
+        </maml:description>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PSPublishModule.ModuleRepositoryProfileReadinessResult</maml:name>
         </dev:type>
         <maml:description>
           <maml:para>Readiness information for a saved private module repository profile.</maml:para>
@@ -9473,13 +9468,7 @@ It is useful when building “portable” scripts/modules where you want to dete
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -10859,18 +10848,16 @@ It is useful when building “portable” scripts/modules where you want to dete
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String&#xD;
-System.Management.Automation.PSModuleInfo</maml:name>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:inputType>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.Management.Automation.PSModuleInfo</maml:name>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -10940,13 +10927,7 @@ containing common fields such as module name, version, required modules, and the
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -11216,13 +11197,7 @@ or a precomputed ModuleTestFailureAnalysis.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -11315,13 +11290,7 @@ the PowerShell surface.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -11393,18 +11362,6 @@ when supporting Windows PowerShell 5.1.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Internal</maml:name>
-          <maml:description>
-            <maml:para>Internal mode used by build pipelines to suppress host output.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
@@ -11468,18 +11425,6 @@ when supporting Windows PowerShell 5.1.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
-        <maml:name>Internal</maml:name>
-        <maml:description>
-          <maml:para>Internal mode used by build pipelines to suppress host output.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
       <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>Path</maml:name>
         <maml:description>
@@ -11524,13 +11469,7 @@ when supporting Windows PowerShell 5.1.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -11659,9 +11598,21 @@ It is intended to be run before bulk conversions (encoding/line endings) and bef
           <maml:description>
             <maml:para>The encoding standard you want to achieve (optional).</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">TextEncodingKind</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Ascii</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BigEndianUnicode</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Unicode</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">UTF7</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">UTF8</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">UTF8BOM</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">UTF32</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Default</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">OEM</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Any</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>TextEncodingKind</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -11671,9 +11622,13 @@ It is intended to be run before bulk conversions (encoding/line endings) and bef
           <maml:description>
             <maml:para>The line ending standard you want to achieve (optional).</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">FileConsistencyLineEnding</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">CRLF</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">LF</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>FileConsistencyLineEnding</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -11765,9 +11720,21 @@ It is intended to be run before bulk conversions (encoding/line endings) and bef
         <maml:description>
           <maml:para>The encoding standard you want to achieve (optional).</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">TextEncodingKind</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Ascii</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BigEndianUnicode</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Unicode</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">UTF7</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">UTF8</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">UTF8BOM</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">UTF32</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Default</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">OEM</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Any</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>TextEncodingKind</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -11777,9 +11744,13 @@ It is intended to be run before bulk conversions (encoding/line endings) and bef
         <maml:description>
           <maml:para>The line ending standard you want to achieve (optional).</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">FileConsistencyLineEnding</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">CRLF</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">LF</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>FileConsistencyLineEnding</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -11804,13 +11775,7 @@ It is intended to be run before bulk conversions (encoding/line endings) and bef
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -13067,18 +13032,16 @@ the private runtime copy without relying on PSModulePath discovery.</maml:para>
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String&#xD;
-System.Management.Automation.PSObject</maml:name>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:inputType>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.Management.Automation.PSObject</maml:name>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -13676,9 +13639,9 @@ non-secret bootstrap package for other machines.</maml:para>
           <maml:description>
             <maml:para>Optional PSResourceGet repository priority.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -13974,9 +13937,9 @@ non-secret bootstrap package for other machines.</maml:para>
           <maml:description>
             <maml:para>Optional PSResourceGet repository priority.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -14306,9 +14269,9 @@ non-secret bootstrap package for other machines.</maml:para>
         <maml:description>
           <maml:para>Optional PSResourceGet repository priority.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -14487,8 +14450,15 @@ non-secret bootstrap package for other machines.</maml:para>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PSPublishModule.ModuleRepositoryOnboardingResult&#xD;
-PSPublishModule.ModuleRepositoryRegistrationResult</maml:name>
+          <maml:name>PSPublishModule.ModuleRepositoryOnboardingResult</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>Result returned by Initialize-ManagedModuleRepository for managed repository onboarding.</maml:para>
+        </maml:description>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PSPublishModule.ModuleRepositoryRegistrationResult</maml:name>
         </dev:type>
         <maml:description>
           <maml:para>Result returned when registering or refreshing a private module repository.</maml:para>
@@ -16651,16 +16621,24 @@ trust policies instead of a one-invocation prompt-suppression switch.</maml:para
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String[]&#xD;
-PowerForge.ManagedModuleVersionInfo[]</maml:name>
+          <maml:name>System.String[]</maml:name>
+        </dev:type>
+      </command:inputType>
+      <command:inputType>
+        <dev:type>
+          <maml:name>PowerForge.ManagedModuleVersionInfo[]</maml:name>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.ManagedModuleInstallResult&#xD;
-PowerForge.ManagedModuleInstallPlan</maml:name>
+          <maml:name>PowerForge.ManagedModuleInstallResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ManagedModuleInstallPlan</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -17391,8 +17369,12 @@ PowerForge.ManagedModuleInstallPlan</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.ManagedScriptInstallResult&#xD;
-PowerForge.ManagedScriptInstallPlan</maml:name>
+          <maml:name>PowerForge.ManagedScriptInstallResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ManagedScriptInstallPlan</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -17724,8 +17706,12 @@ into PSModulePath unless the chosen path is already part of PSModulePath.</maml:
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String&#xD;
-System.Management.Automation.PSObject</maml:name>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:inputType>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.Management.Automation.PSObject</maml:name>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
@@ -18194,8 +18180,12 @@ System.Management.Automation.PSObject</maml:name>
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String&#xD;
-System.Management.Automation.PSModuleInfo</maml:name>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:inputType>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.Management.Automation.PSModuleInfo</maml:name>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
@@ -18705,18 +18695,16 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String&#xD;
-System.Management.Automation.PSObject</maml:name>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:inputType>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.Management.Automation.PSObject</maml:name>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -18788,9 +18776,14 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional cleanup override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkCleanupMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Always</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">KeepOnFailure</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">KeepAlways</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>PowerShellBenchmarkCleanupMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -18800,9 +18793,9 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional delay between measured samples, in milliseconds.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -18848,9 +18841,9 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional measured iteration count override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -18860,9 +18853,13 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional managed-memory cleanup override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkMemoryCleanupMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeIteration</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>PowerShellBenchmarkMemoryCleanupMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -18884,9 +18881,13 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional summary outlier policy override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkOutlierMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">ExcludeMinMax</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>PowerShellBenchmarkOutlierMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -18932,9 +18933,13 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional profile override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkProfileKind</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Current</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">TemporaryLocalUser</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>PowerShellBenchmarkProfileKind</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -18956,9 +18961,15 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional work-item ordering override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkRunOrder</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Sequential</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Rotated</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Randomized</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GroupedRotated</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>PowerShellBenchmarkRunOrder</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -18992,9 +19003,9 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional warmup count override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -19019,9 +19030,14 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional cleanup override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkCleanupMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Always</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">KeepOnFailure</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">KeepAlways</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>PowerShellBenchmarkCleanupMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -19031,9 +19047,9 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional delay between measured samples, in milliseconds.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -19079,9 +19095,9 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional measured iteration count override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -19091,9 +19107,13 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional managed-memory cleanup override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkMemoryCleanupMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeIteration</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>PowerShellBenchmarkMemoryCleanupMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -19115,9 +19135,13 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional summary outlier policy override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkOutlierMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">ExcludeMinMax</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>PowerShellBenchmarkOutlierMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -19151,9 +19175,13 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional profile override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkProfileKind</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Current</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">TemporaryLocalUser</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>PowerShellBenchmarkProfileKind</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -19175,9 +19203,15 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional work-item ordering override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkRunOrder</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Sequential</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Rotated</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Randomized</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GroupedRotated</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>PowerShellBenchmarkRunOrder</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -19223,9 +19257,9 @@ System.Management.Automation.PSObject</maml:name>
           <maml:description>
             <maml:para>Optional warmup count override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -19250,9 +19284,14 @@ System.Management.Automation.PSObject</maml:name>
         <maml:description>
           <maml:para>Optional cleanup override.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkCleanupMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Always</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">KeepOnFailure</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">KeepAlways</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>PowerShellBenchmarkCleanupMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -19262,9 +19301,9 @@ System.Management.Automation.PSObject</maml:name>
         <maml:description>
           <maml:para>Optional delay between measured samples, in milliseconds.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -19310,9 +19349,9 @@ System.Management.Automation.PSObject</maml:name>
         <maml:description>
           <maml:para>Optional measured iteration count override.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -19322,9 +19361,13 @@ System.Management.Automation.PSObject</maml:name>
         <maml:description>
           <maml:para>Optional managed-memory cleanup override.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkMemoryCleanupMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BeforeIteration</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>PowerShellBenchmarkMemoryCleanupMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -19346,9 +19389,13 @@ System.Management.Automation.PSObject</maml:name>
         <maml:description>
           <maml:para>Optional summary outlier policy override.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkOutlierMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ExcludeMinMax</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>PowerShellBenchmarkOutlierMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -19394,9 +19441,13 @@ System.Management.Automation.PSObject</maml:name>
         <maml:description>
           <maml:para>Optional profile override.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkProfileKind</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Current</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">TemporaryLocalUser</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>PowerShellBenchmarkProfileKind</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -19418,9 +19469,15 @@ System.Management.Automation.PSObject</maml:name>
         <maml:description>
           <maml:para>Optional work-item ordering override.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkRunOrder</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Sequential</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Rotated</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Randomized</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GroupedRotated</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>PowerShellBenchmarkRunOrder</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -19466,9 +19523,9 @@ System.Management.Automation.PSObject</maml:name>
         <maml:description>
           <maml:para>Optional warmup count override.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -19484,8 +19541,12 @@ System.Management.Automation.PSObject</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.BenchmarkRunResult&#xD;
-PowerForge.PowerShellBenchmarkWorkItem</maml:name>
+          <maml:name>PowerForge.BenchmarkRunResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.PowerShellBenchmarkWorkItem</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -20223,8 +20284,12 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.DotNetPublishPlan&#xD;
-PowerForge.DotNetPublishResult</maml:name>
+          <maml:name>PowerForge.DotNetPublishPlan</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.DotNetPublishResult</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -21451,13 +21516,13 @@ When provided, conflict findings can participate in diagnostics baselines and po
           <maml:description>
             <maml:para>Fails the build when diagnostics at or above the specified severity are present.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BuildDiagnosticSeverity</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Warning</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Error</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>BuildDiagnosticSeverity</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -21781,9 +21846,15 @@ Defaults to powerforge.json in the project root.</maml:para>
 and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,&#xD;
 and Publish enables configured publish destinations.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ConfigurationGateMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Build</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Publish</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Documentation</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>ConfigurationGateMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -21963,13 +22034,13 @@ When provided, conflict findings can participate in diagnostics baselines and po
           <maml:description>
             <maml:para>Fails the build when diagnostics at or above the specified severity are present.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BuildDiagnosticSeverity</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Warning</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Error</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>BuildDiagnosticSeverity</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -22159,18 +22230,6 @@ GitHub publish segments declared by the JSON module configuration.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ReuseStaging</maml:name>
-          <maml:description>
-            <maml:para>Reuses an existing staged module output for an internal deferred publication pass.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
           <maml:name>RunMode</maml:name>
           <maml:description>
@@ -22178,9 +22237,15 @@ GitHub publish segments declared by the JSON module configuration.</maml:para>
 and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,&#xD;
 and Publish enables configured publish destinations.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ConfigurationGateMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Build</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Publish</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Documentation</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>ConfigurationGateMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -22190,9 +22255,9 @@ and Publish enables configured publish destinations.</maml:para>
           <maml:description>
             <maml:para>Overrides whether binary files are signed for a JSON configuration.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Boolean</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -22202,9 +22267,9 @@ and Publish enables configured publish destinations.</maml:para>
           <maml:description>
             <maml:para>Overrides whether executable files are signed for a JSON configuration.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Boolean</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -22214,9 +22279,9 @@ and Publish enables configured publish destinations.</maml:para>
           <maml:description>
             <maml:para>Overrides whether internal files are signed for a JSON configuration.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Boolean</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -22350,13 +22415,13 @@ When provided, conflict findings can participate in diagnostics baselines and po
           <maml:description>
             <maml:para>Fails the build when diagnostics at or above the specified severity are present.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BuildDiagnosticSeverity</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Warning</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Error</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>BuildDiagnosticSeverity</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -22466,9 +22531,15 @@ Defaults to powerforge.json in the project root.</maml:para>
 and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,&#xD;
 and Publish enables configured publish destinations.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ConfigurationGateMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Build</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Publish</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Documentation</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>ConfigurationGateMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -22688,13 +22759,13 @@ When provided, conflict findings can participate in diagnostics baselines and po
         <maml:description>
           <maml:para>Fails the build when diagnostics at or above the specified severity are present.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">BuildDiagnosticSeverity</command:parameterValue>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">Warning</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Error</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>BuildDiagnosticSeverity</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -23098,18 +23169,6 @@ GitHub publish segments declared by the JSON module configuration.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
-        <maml:name>ReuseStaging</maml:name>
-        <maml:description>
-          <maml:para>Reuses an existing staged module output for an internal deferred publication pass.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
         <maml:name>RunMode</maml:name>
         <maml:description>
@@ -23117,9 +23176,15 @@ GitHub publish segments declared by the JSON module configuration.</maml:para>
 and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,&#xD;
 and Publish enables configured publish destinations.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">ConfigurationGateMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Build</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Publish</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Documentation</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>ConfigurationGateMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -23141,9 +23206,9 @@ and Publish enables configured publish destinations.</maml:para>
         <maml:description>
           <maml:para>Overrides whether binary files are signed for a JSON configuration.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Boolean</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -23153,9 +23218,9 @@ and Publish enables configured publish destinations.</maml:para>
         <maml:description>
           <maml:para>Overrides whether executable files are signed for a JSON configuration.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Boolean</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -23165,9 +23230,9 @@ and Publish enables configured publish destinations.</maml:para>
         <maml:description>
           <maml:para>Overrides whether internal files are signed for a JSON configuration.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Boolean</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -23705,13 +23770,7 @@ local development and CI pipelines.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -24042,13 +24101,7 @@ directory and its parents for standard PowerForge plugin config names.</maml:par
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -24446,13 +24499,7 @@ directory and its parents for standard PowerForge plugin config names.</maml:par
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -24551,9 +24598,9 @@ tool/app artefacts from one configuration file.</maml:para>
           <maml:description>
             <maml:para>App Store Connect processing poll interval in seconds.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -24563,9 +24610,9 @@ tool/app artefacts from one configuration file.</maml:para>
           <maml:description>
             <maml:para>Maximum App Store Connect processing wait in seconds.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -24867,7 +24914,7 @@ and parent directories for standard release config file names.</maml:para>
           <maml:description>
             <maml:para>Module pipeline gate used by the native module-release lane.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ConfigurationGateMode</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Documentation</command:parameterValue>
@@ -24875,7 +24922,7 @@ and parent directories for standard release config file names.</maml:para>
             <command:parameterValue required="false" variableLength="false">Publish</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>ConfigurationGateMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -24945,9 +24992,9 @@ and parent directories for standard release config file names.</maml:para>
           <maml:description>
             <maml:para>Maximum runtime in seconds for the native module-release lane.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -25201,9 +25248,14 @@ and parent directories for standard release config file names.</maml:para>
           <maml:description>
             <maml:para>Optional policy when signing fails.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishPolicyMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Warn</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Fail</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>DotNetPublishPolicyMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -25213,9 +25265,14 @@ and parent directories for standard release config file names.</maml:para>
           <maml:description>
             <maml:para>Optional policy when the configured signing tool is missing.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishPolicyMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Warn</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Fail</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>DotNetPublishPolicyMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -25549,9 +25606,9 @@ and parent directories for standard release config file names.</maml:para>
           <maml:description>
             <maml:para>Timeout in seconds for each wingetcreate invocation.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -25701,9 +25758,9 @@ and parent directories for standard release config file names.</maml:para>
           <maml:description>
             <maml:para>App Store Connect processing poll interval in seconds.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -25713,9 +25770,9 @@ and parent directories for standard release config file names.</maml:para>
           <maml:description>
             <maml:para>Maximum App Store Connect processing wait in seconds.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -26004,7 +26061,7 @@ and parent directories for standard release config file names.</maml:para>
           <maml:description>
             <maml:para>Module pipeline gate used by the native module-release lane.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ConfigurationGateMode</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Documentation</command:parameterValue>
@@ -26012,7 +26069,7 @@ and parent directories for standard release config file names.</maml:para>
             <command:parameterValue required="false" variableLength="false">Publish</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>ConfigurationGateMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -26082,9 +26139,9 @@ and parent directories for standard release config file names.</maml:para>
           <maml:description>
             <maml:para>Maximum runtime in seconds for the native module-release lane.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -26350,9 +26407,14 @@ and parent directories for standard release config file names.</maml:para>
           <maml:description>
             <maml:para>Optional policy when signing fails.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishPolicyMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Warn</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Fail</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>DotNetPublishPolicyMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -26362,9 +26424,14 @@ and parent directories for standard release config file names.</maml:para>
           <maml:description>
             <maml:para>Optional policy when the configured signing tool is missing.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishPolicyMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Warn</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Fail</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>DotNetPublishPolicyMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -26698,9 +26765,9 @@ and parent directories for standard release config file names.</maml:para>
           <maml:description>
             <maml:para>Timeout in seconds for each wingetcreate invocation.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -26850,9 +26917,9 @@ and parent directories for standard release config file names.</maml:para>
         <maml:description>
           <maml:para>App Store Connect processing poll interval in seconds.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -26862,9 +26929,9 @@ and parent directories for standard release config file names.</maml:para>
         <maml:description>
           <maml:para>Maximum App Store Connect processing wait in seconds.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -27166,7 +27233,7 @@ and parent directories for standard release config file names.</maml:para>
         <maml:description>
           <maml:para>Module pipeline gate used by the native module-release lane.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">ConfigurationGateMode</command:parameterValue>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Documentation</command:parameterValue>
@@ -27174,7 +27241,7 @@ and parent directories for standard release config file names.</maml:para>
           <command:parameterValue required="false" variableLength="false">Publish</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>ConfigurationGateMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -27244,9 +27311,9 @@ and parent directories for standard release config file names.</maml:para>
         <maml:description>
           <maml:para>Maximum runtime in seconds for the native module-release lane.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -27512,9 +27579,14 @@ and parent directories for standard release config file names.</maml:para>
         <maml:description>
           <maml:para>Optional policy when signing fails.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">DotNetPublishPolicyMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Warn</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Fail</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>DotNetPublishPolicyMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -27524,9 +27596,14 @@ and parent directories for standard release config file names.</maml:para>
         <maml:description>
           <maml:para>Optional policy when the configured signing tool is missing.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">DotNetPublishPolicyMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Warn</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Fail</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>DotNetPublishPolicyMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -27860,9 +27937,9 @@ and parent directories for standard release config file names.</maml:para>
         <maml:description>
           <maml:para>Timeout in seconds for each wingetcreate invocation.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -27962,8 +28039,12 @@ and parent directories for standard release config file names.</maml:para>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.PowerForgeReleaseResult&#xD;
-PowerForge.PowerForgeAppleReleaseReceipt</maml:name>
+          <maml:name>PowerForge.PowerForgeReleaseResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.PowerForgeAppleReleaseReceipt</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -28426,9 +28507,14 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           <maml:description>
             <maml:para>Optional policy when signing fails.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishPolicyMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Warn</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Fail</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>DotNetPublishPolicyMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -28438,9 +28524,14 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           <maml:description>
             <maml:para>Optional policy when the configured signing tool is missing.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishPolicyMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Warn</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Fail</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>DotNetPublishPolicyMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -28762,9 +28853,9 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           <maml:description>
             <maml:para>Timeout in seconds for each wingetcreate invocation.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -29053,9 +29144,14 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
         <maml:description>
           <maml:para>Optional policy when signing fails.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">DotNetPublishPolicyMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Warn</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Fail</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>DotNetPublishPolicyMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -29065,9 +29161,14 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
         <maml:description>
           <maml:para>Optional policy when the configured signing tool is missing.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">DotNetPublishPolicyMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Warn</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Fail</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Skip</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>DotNetPublishPolicyMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -29389,9 +29490,9 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
         <maml:description>
           <maml:para>Timeout in seconds for each wingetcreate invocation.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -31086,9 +31187,9 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           <maml:description>
             <maml:para>Optional offer end date.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">DateTime</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>DateTime</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -31175,9 +31276,9 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           <maml:description>
             <maml:para>Optional offer start date.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">DateTime</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>DateTime</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -31261,9 +31362,9 @@ because App Store Connect price points are territory-specific.</maml:para>
         <maml:description>
           <maml:para>Optional offer end date.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">DateTime</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>DateTime</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -31350,9 +31451,9 @@ because App Store Connect price points are territory-specific.</maml:para>
         <maml:description>
           <maml:para>Optional offer start date.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">DateTime</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>DateTime</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -31848,13 +31949,7 @@ because App Store Connect price points are territory-specific.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -32364,13 +32459,7 @@ Relative paths resolve from the pipeline project root.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -33097,13 +33186,7 @@ PSResourceGet and falls back to PowerShellGet when necessary.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -33464,9 +33547,15 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
           <maml:description>
             <maml:para>Controls optional type accelerator exposure for dependency types loaded in the module AssemblyLoadContext.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AssemblyTypeAcceleratorExportMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AllowList</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Assembly</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Enums</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>AssemblyTypeAcceleratorExportMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -33564,9 +33653,14 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
           <maml:description>
             <maml:para>Controls when the generated source bootstrapper loads local development binaries.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ModuleDevelopmentBinaryMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Environment</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>ModuleDevelopmentBinaryMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -33600,9 +33694,13 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
           <maml:description>
             <maml:para>Controls how the source PSM1 is maintained when development binary bootstrapping is enabled.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ModuleDevelopmentSourceBootstrapperMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">PreserveSingleFile</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">ReplaceSingleFile</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>ModuleDevelopmentSourceBootstrapperMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -33951,9 +34049,15 @@ This is opt-in and updates the source .csproj file when a project path can be re
           <maml:description>
             <maml:para>How to handle legacy flat module installs during install.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">LegacyFlatModuleHandling</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Warn</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Convert</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Delete</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Ignore</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>LegacyFlatModuleHandling</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -33975,9 +34079,13 @@ This is opt-in and updates the source .csproj file when a project path can be re
           <maml:description>
             <maml:para>Controls how the module is installed into user Module roots after build.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">InstallationStrategy</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Exact</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AutoRevision</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>InstallationStrategy</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -34298,9 +34406,15 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
         <maml:description>
           <maml:para>Controls optional type accelerator exposure for dependency types loaded in the module AssemblyLoadContext.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">AssemblyTypeAcceleratorExportMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AllowList</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Assembly</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Enums</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>AssemblyTypeAcceleratorExportMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -34398,9 +34512,14 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
         <maml:description>
           <maml:para>Controls when the generated source bootstrapper loads local development binaries.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">ModuleDevelopmentBinaryMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Environment</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>ModuleDevelopmentBinaryMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -34434,9 +34553,13 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
         <maml:description>
           <maml:para>Controls how the source PSM1 is maintained when development binary bootstrapping is enabled.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">ModuleDevelopmentSourceBootstrapperMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">PreserveSingleFile</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ReplaceSingleFile</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>ModuleDevelopmentSourceBootstrapperMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -34785,9 +34908,15 @@ This is opt-in and updates the source .csproj file when a project path can be re
         <maml:description>
           <maml:para>How to handle legacy flat module installs during install.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">LegacyFlatModuleHandling</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Warn</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Convert</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Delete</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Ignore</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>LegacyFlatModuleHandling</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -34809,9 +34938,13 @@ This is opt-in and updates the source .csproj file when a project path can be re
         <maml:description>
           <maml:para>Controls how the module is installed into user Module roots after build.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">InstallationStrategy</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Exact</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AutoRevision</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>InstallationStrategy</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -34837,13 +34970,7 @@ reporting hint and does not change the manifest or install anything by itself.</
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -34963,13 +35090,7 @@ This helps make build scripts deterministic and explicit about their dependencie
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -35128,9 +35249,14 @@ with Windows PowerShell 5.1 and/or PowerShell 7+.</maml:para>
           <maml:description>
             <maml:para>Severity for compatibility issues (overrides FailOnIncompatibility when specified).</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ValidationSeverity</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Warning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Error</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>ValidationSeverity</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -35251,9 +35377,14 @@ with Windows PowerShell 5.1 and/or PowerShell 7+.</maml:para>
         <maml:description>
           <maml:para>Severity for compatibility issues (overrides FailOnIncompatibility when specified).</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">ValidationSeverity</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Warning</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Error</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>ValidationSeverity</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -35266,13 +35397,7 @@ with Windows PowerShell 5.1 and/or PowerShell 7+.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -35980,13 +36105,7 @@ Example: Config/**.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -36302,13 +36421,7 @@ back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -37890,9 +38003,17 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
           <maml:description>
             <maml:para>Optional style override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishStyle</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>DotNetPublishStyle</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -37965,9 +38086,17 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
         <maml:description>
           <maml:para>Optional style override.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">DotNetPublishStyle</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>DotNetPublishStyle</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -40610,9 +40739,9 @@ New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNe
           <maml:description>
             <maml:para>Optional ReadyToRun toggle for non-AOT styles.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Boolean</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -40923,9 +41052,9 @@ New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNe
         <maml:description>
           <maml:para>Optional ReadyToRun toggle for non-AOT styles.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Boolean</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -41258,9 +41387,9 @@ execution order; the At value does.</maml:para>
           <maml:description>
             <maml:para>Action timeout in seconds. Defaults to five minutes.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -41397,9 +41526,9 @@ execution order; the At value does.</maml:para>
           <maml:description>
             <maml:para>Action timeout in seconds. Defaults to five minutes.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -41536,9 +41665,9 @@ execution order; the At value does.</maml:para>
           <maml:description>
             <maml:para>Action timeout in seconds. Defaults to five minutes.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -41699,9 +41828,9 @@ execution order; the At value does.</maml:para>
         <maml:description>
           <maml:para>Action timeout in seconds. Defaults to five minutes.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -42402,9 +42531,15 @@ and (optionally) auto-fix issues during a build.</maml:para>
           <maml:description>
             <maml:para>Project kind used to derive default include patterns.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ProjectKind</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">PowerShell</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">CSharp</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Mixed</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>ProjectKind</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -42480,9 +42615,14 @@ and (optionally) auto-fix issues during a build.</maml:para>
           <maml:description>
             <maml:para>Severity for consistency issues (overrides FailOnInconsistency when specified).</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ValidationSeverity</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Warning</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Error</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>ValidationSeverity</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -42663,9 +42803,15 @@ and (optionally) auto-fix issues during a build.</maml:para>
         <maml:description>
           <maml:para>Project kind used to derive default include patterns.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">ProjectKind</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">PowerShell</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">CSharp</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Mixed</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>ProjectKind</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -42741,9 +42887,14 @@ and (optionally) auto-fix issues during a build.</maml:para>
         <maml:description>
           <maml:para>Severity for consistency issues (overrides FailOnInconsistency when specified).</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">ValidationSeverity</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Warning</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Error</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>ValidationSeverity</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -42768,13 +42919,7 @@ and (optionally) auto-fix issues during a build.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -43647,13 +43792,7 @@ and (optionally) auto-fix issues during a build.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -43929,13 +44068,7 @@ This is primarily used by test and documentation steps that execute PowerShell c
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -44255,13 +44388,7 @@ This is primarily used by test and documentation steps that execute PowerShell c
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -44774,13 +44901,7 @@ Use this to define identity and metadata (version, GUID, author, tags, links) in
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -45062,13 +45183,7 @@ is merge-only.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -45439,9 +45554,15 @@ and only declare project-specific values.</maml:para>
           <maml:description>
             <maml:para>Controls type accelerator exposure for binary-module dependencies.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AssemblyTypeAcceleratorExportMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AllowList</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Assembly</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Enums</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>AssemblyTypeAcceleratorExportMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -45995,9 +46116,15 @@ and only declare project-specific values.</maml:para>
         <maml:description>
           <maml:para>Controls type accelerator exposure for binary-module dependencies.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">AssemblyTypeAcceleratorExportMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AllowList</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Assembly</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Enums</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>AssemblyTypeAcceleratorExportMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -46275,13 +46402,7 @@ and only declare project-specific values.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -46428,13 +46549,7 @@ want selected missing modules or commands to be ignored. -Force keeps the legacy
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -48152,13 +48267,7 @@ without hardcoding them into source files.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -50055,9 +50164,9 @@ module build should coordinate with that package lane.</maml:para>
           <maml:description>
             <maml:para>Optional ReadyToRun override.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Boolean</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -50276,9 +50385,9 @@ module build should coordinate with that package lane.</maml:para>
         <maml:description>
           <maml:para>Optional ReadyToRun override.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Boolean</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -50786,9 +50895,9 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <maml:description>
             <maml:para>Repository priority for PSResourceGet (lower is higher priority).</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -51155,9 +51264,9 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <maml:description>
             <maml:para>Repository priority for PSResourceGet (lower is higher priority).</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -51577,9 +51686,9 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <maml:description>
             <maml:para>Repository priority for PSResourceGet (lower is higher priority).</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -51898,9 +52007,9 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <maml:description>
             <maml:para>Repository priority for PSResourceGet (lower is higher priority).</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -52499,9 +52608,9 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <maml:description>
           <maml:para>Repository priority for PSResourceGet (lower is higher priority).</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -52668,13 +52777,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -52800,6 +52903,19 @@ Required by SynchronizeModuleVersion to identify the package coordinated with mo
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ResumeIncompleteRelease</maml:name>
+          <maml:description>
+            <maml:para>Explicitly resumes a compatible incomplete synchronized release checkpoint.&#xD;
+Without this switch, an older checkpoint is archived and the invocation starts a fresh release.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>StageRoot</maml:name>
           <maml:description>
             <maml:para>Staged release root where upload-ready assets should be copied.</maml:para>
@@ -52822,8 +52938,9 @@ At the same numeric version, a stable X-pattern candidate does not erase the con
 explicit prerelease versions retain normal semantic-version ordering.&#xD;
 PrimaryProject is required, and exactly one selected lane must run before the module and use&#xD;
 UseAsReleaseVersionSource. Package groups using AlignPackageVersions are raised together.&#xD;
-Publish runs persist a credential-free checkpoint so a partial release resumes the exact versions&#xD;
-and skips destinations that already completed.</maml:para>
+Publish runs persist a credential-free checkpoint for optional recovery. A normal invocation archives&#xD;
+an incomplete checkpoint and starts fresh; use ResumeIncompleteRelease to retain the exact versions&#xD;
+and skip destinations that already completed.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -52903,6 +53020,19 @@ Required by SynchronizeModuleVersion to identify the package coordinated with mo
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ResumeIncompleteRelease</maml:name>
+        <maml:description>
+          <maml:para>Explicitly resumes a compatible incomplete synchronized release checkpoint.&#xD;
+Without this switch, an older checkpoint is archived and the invocation starts a fresh release.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>StageRoot</maml:name>
         <maml:description>
           <maml:para>Staged release root where upload-ready assets should be copied.</maml:para>
@@ -52925,8 +53055,9 @@ At the same numeric version, a stable X-pattern candidate does not erase the con
 explicit prerelease versions retain normal semantic-version ordering.&#xD;
 PrimaryProject is required, and exactly one selected lane must run before the module and use&#xD;
 UseAsReleaseVersionSource. Package groups using AlignPackageVersions are raised together.&#xD;
-Publish runs persist a credential-free checkpoint so a partial release resumes the exact versions&#xD;
-and skips destinations that already completed.</maml:para>
+Publish runs persist a credential-free checkpoint for optional recovery. A normal invocation archives&#xD;
+an incomplete checkpoint and starts fresh; use ResumeIncompleteRelease to retain the exact versions&#xD;
+and skip destinations that already completed.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -53095,13 +53226,7 @@ Use this when you want builds to fail fast on test failures.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -54285,13 +54410,7 @@ Each check can be configured as Off/Warning/Error to control whether it is infor
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -54511,13 +54630,7 @@ Relative paths resolve from the pipeline project root.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -54857,8 +54970,12 @@ The generated config can be executed with Invoke-DotNetPublish -ConfigPath ....<
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.String&#xD;
-PowerForge.DotNetPublishConfigScaffoldResult</maml:name>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.DotNetPublishConfigScaffoldResult</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -55343,13 +55460,7 @@ PowerForge.DotNetPublishConfigScaffoldResult</maml:name>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -55545,13 +55656,7 @@ Invoke-ModuleBuild documentation generation into markdown pages under Docs\About
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -55861,8 +55966,12 @@ Build/powerforge.dotnetpublish.json.</maml:para>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.String&#xD;
-PowerForge.PowerForgeReleaseConfigScaffoldResult</maml:name>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.PowerForgeReleaseConfigScaffoldResult</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -56190,8 +56299,12 @@ PowerForge.PowerForgeReleaseConfigScaffoldResult</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.String&#xD;
-PowerForge.PowerForgeProjectConfigurationScaffoldResult</maml:name>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.PowerForgeProjectConfigurationScaffoldResult</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -58332,13 +58445,7 @@ creates a GitHub release, and uploads the specified ZIP asset.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -59316,13 +59423,7 @@ This makes repeated publishing runs idempotent when the package already exists.<
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -59721,13 +59822,7 @@ When running in CI, prefer using a certificate from the Windows certificate stor
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -59833,9 +59928,9 @@ When running in CI, prefer using a certificate from the Windows certificate stor
           <maml:description>
             <maml:para>Repository priority.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -59913,9 +60008,9 @@ When running in CI, prefer using a certificate from the Windows certificate stor
           <maml:description>
             <maml:para>Repository priority.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -60081,9 +60176,9 @@ When running in CI, prefer using a certificate from the Windows certificate stor
         <maml:description>
           <maml:para>Repository priority.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -60495,13 +60590,7 @@ Useful as a preprocessing step when producing merged/packed scripts.</maml:para>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -61209,13 +61298,7 @@ should be predictable and safe. Supports -WhatIf, retries and optional backups.<
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -62147,9 +62230,16 @@ through the operator's existing remoting/configuration system.</maml:para>
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String[]&#xD;
-PSPublishModule.ModuleStateInventoryResult</maml:name>
+          <maml:name>System.String[]</maml:name>
         </dev:type>
+      </command:inputType>
+      <command:inputType>
+        <dev:type>
+          <maml:name>PSPublishModule.ModuleStateInventoryResult</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>PowerShell-facing module-state inventory result.</maml:para>
+        </maml:description>
       </command:inputType>
     </command:inputTypes>
     <command:returnValues>
@@ -63505,16 +63595,24 @@ location when Path is omitted.</maml:para>
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String[]&#xD;
-PowerForge.ManagedModuleVersionInfo[]</maml:name>
+          <maml:name>System.String[]</maml:name>
+        </dev:type>
+      </command:inputType>
+      <command:inputType>
+        <dev:type>
+          <maml:name>PowerForge.ManagedModuleVersionInfo[]</maml:name>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.ManagedModuleInstallResult&#xD;
-PowerForge.ManagedModuleInstallPlan</maml:name>
+          <maml:name>PowerForge.ManagedModuleInstallResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ManagedModuleInstallPlan</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -64160,8 +64258,12 @@ PowerForge.ManagedModuleInstallPlan</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.ManagedScriptSaveResult&#xD;
-PowerForge.ManagedScriptSavePlan</maml:name>
+          <maml:name>PowerForge.ManagedScriptSaveResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ManagedScriptSavePlan</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -64499,13 +64601,7 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -65901,13 +65997,7 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -65984,13 +66074,7 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -66057,13 +66141,7 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -66100,9 +66178,9 @@ The default is false so normal publishing cannot mutate an older release.</maml:
           <maml:description>
             <maml:para>Delay between measured samples, in milliseconds.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -66112,9 +66190,9 @@ The default is false so normal publishing cannot mutate an older release.</maml:
           <maml:description>
             <maml:para>Measured iteration count.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -66124,9 +66202,13 @@ The default is false so normal publishing cannot mutate an older release.</maml:
           <maml:description>
             <maml:para>Managed-memory cleanup performed outside timed operations.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkMemoryCleanupMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BeforeIteration</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>PowerShellBenchmarkMemoryCleanupMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -66136,9 +66218,15 @@ The default is false so normal publishing cannot mutate an older release.</maml:
           <maml:description>
             <maml:para>Work-item ordering strategy.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkRunOrder</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Sequential</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Rotated</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Randomized</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">GroupedRotated</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>PowerShellBenchmarkRunOrder</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -66148,9 +66236,13 @@ The default is false so normal publishing cannot mutate an older release.</maml:
           <maml:description>
             <maml:para>Summary outlier policy.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkOutlierMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">ExcludeMinMax</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>PowerShellBenchmarkOutlierMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -66172,9 +66264,9 @@ The default is false so normal publishing cannot mutate an older release.</maml:
           <maml:description>
             <maml:para>Warmup iteration count.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -66187,9 +66279,9 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         <maml:description>
           <maml:para>Delay between measured samples, in milliseconds.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -66199,9 +66291,9 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         <maml:description>
           <maml:para>Measured iteration count.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -66211,9 +66303,13 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         <maml:description>
           <maml:para>Managed-memory cleanup performed outside timed operations.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkMemoryCleanupMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BeforeIteration</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>PowerShellBenchmarkMemoryCleanupMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -66223,9 +66319,15 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         <maml:description>
           <maml:para>Work-item ordering strategy.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkRunOrder</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Sequential</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Rotated</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Randomized</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">GroupedRotated</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>PowerShellBenchmarkRunOrder</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -66235,9 +66337,13 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         <maml:description>
           <maml:para>Summary outlier policy.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkOutlierMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ExcludeMinMax</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>PowerShellBenchmarkOutlierMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -66259,9 +66365,9 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         <maml:description>
           <maml:para>Warmup iteration count.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -66274,13 +66380,7 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -66289,7 +66389,7 @@ The default is false so normal publishing cannot mutate an older release.</maml:
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Set-BenchmarkPolicy -CooldownMilliseconds 'Value'</dev:code>
+        <dev:code>Set-BenchmarkPolicy -CooldownMilliseconds 1</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -66317,9 +66417,14 @@ The default is false so normal publishing cannot mutate an older release.</maml:
           <maml:description>
             <maml:para>Cleanup mode used by profile-owned temporary state.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkCleanupMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Always</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">KeepOnFailure</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">KeepAlways</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>PowerShellBenchmarkCleanupMode</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -66348,9 +66453,14 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         <maml:description>
           <maml:para>Cleanup mode used by profile-owned temporary state.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">PowerShellBenchmarkCleanupMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Always</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">KeepOnFailure</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">KeepAlways</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>PowerShellBenchmarkCleanupMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -66379,13 +66489,7 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -66452,13 +66556,7 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -66853,9 +66951,9 @@ module lifecycle commands. Secrets stay in credentials, environment variables, s
           <maml:description>
             <maml:para>Optional PSResourceGet repository priority.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Int32</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -67097,9 +67195,9 @@ module lifecycle commands. Secrets stay in credentials, environment variables, s
         <maml:description>
           <maml:para>Optional PSResourceGet repository priority.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -67396,13 +67494,7 @@ module lifecycle commands. Secrets stay in credentials, environment variables, s
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -67501,9 +67593,15 @@ C# projects (*.csproj)PowerShell module manifests (*.psd1)PowerShell build scrip
           <maml:description>
             <maml:para>The type of version increment: Major, Minor, Build, or Revision.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ProjectVersionIncrementKind</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Major</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Minor</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Build</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Revision</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>ProjectVersionIncrementKind</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -67576,9 +67674,15 @@ C# projects (*.csproj)PowerShell module manifests (*.psd1)PowerShell build scrip
         <maml:description>
           <maml:para>The type of version increment: Major, Minor, Build, or Revision.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">ProjectVersionIncrementKind</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Major</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Minor</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Build</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Revision</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>ProjectVersionIncrementKind</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -69324,18 +69428,16 @@ GitHub: PG_GITHUB_TOKEN or GITHUB_TOKEN; Azure DevOps: PG_AZDO_PAT or AZURE_DEVO
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String&#xD;
-System.Management.Automation.PSModuleInfo</maml:name>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:inputType>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.Management.Automation.PSModuleInfo</maml:name>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -69793,8 +69895,12 @@ the cmdlet resolves the next patch version. When an exact version is provided, i
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.String&#xD;
-PowerForge.ModuleVersionStepResult</maml:name>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ModuleVersionStepResult</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -71005,8 +71111,12 @@ PowerForge.ModuleVersionStepResult</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.AppStoreConnectGovernanceApplyResult&#xD;
-PowerForge.AppStoreConnectGovernancePlan</maml:name>
+          <maml:name>PowerForge.AppStoreConnectGovernanceApplyResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.AppStoreConnectGovernancePlan</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -71552,9 +71662,17 @@ PowerForge.AppStoreConnectGovernancePlan</maml:name>
           <maml:description>
             <maml:para>Platform filter.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ApplePlatform</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">iOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">iPadOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">macOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">tvOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">watchOS</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">visionOS</command:parameterValue>
+          </command:parameterValueGroup>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>ApplePlatform</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -71687,9 +71805,17 @@ PowerForge.AppStoreConnectGovernancePlan</maml:name>
         <maml:description>
           <maml:para>Platform filter.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">ApplePlatform</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">iOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">iPadOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">macOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">tvOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">watchOS</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">visionOS</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>ApplePlatform</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -71753,8 +71879,12 @@ PowerForge.AppStoreConnectGovernancePlan</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.Boolean&#xD;
-PowerForge.AppleAppReleaseDriftReport</maml:name>
+          <maml:name>System.Boolean</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.AppleAppReleaseDriftReport</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -71851,8 +71981,12 @@ PowerForge.AppleAppReleaseDriftReport</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.Boolean&#xD;
-PowerForge.AppStoreConnectGovernanceFinding</maml:name>
+          <maml:name>System.Boolean</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.AppStoreConnectGovernanceFinding</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -72590,8 +72724,12 @@ PowerForge.AppStoreConnectGovernanceFinding</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.Boolean&#xD;
-PowerForge.AppStoreConnectScreenshotSyncValidationResult</maml:name>
+          <maml:name>System.Boolean</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.AppStoreConnectScreenshotSyncValidationResult</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -72781,13 +72919,7 @@ PowerForge.AppStoreConnectScreenshotSyncValidationResult</maml:name>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>
@@ -73207,8 +73339,12 @@ generated wrapper.</maml:para>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.IsolatedModuleProfileValidationResult&#xD;
-System.Boolean</maml:name>
+          <maml:name>PowerForge.IsolatedModuleProfileValidationResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Boolean</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -73702,17 +73838,32 @@ across physical roots and selected dependents are removed before their selected 
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String[]&#xD;
-PSPublishModule.ModuleStateInstalledModuleResult[]&#xD;
-System.String</maml:name>
+          <maml:name>System.String[]</maml:name>
+        </dev:type>
+      </command:inputType>
+      <command:inputType>
+        <dev:type>
+          <maml:name>PSPublishModule.ModuleStateInstalledModuleResult[]</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>PowerShell-facing installed module inventory entry.</maml:para>
+        </maml:description>
+      </command:inputType>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.String</maml:name>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.ManagedModuleUninstallResult&#xD;
-PowerForge.ManagedModuleUninstallPlan</maml:name>
+          <maml:name>PowerForge.ManagedModuleUninstallResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ManagedModuleUninstallPlan</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -75337,8 +75488,12 @@ Hash-constrained pipeline input is buffered and validated as one package target 
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.ManagedModuleUpdateResult&#xD;
-PowerForge.ManagedModuleUpdatePlan</maml:name>
+          <maml:name>PowerForge.ManagedModuleUpdateResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ManagedModuleUpdatePlan</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -75440,9 +75595,9 @@ PowerForge.ManagedModuleUpdatePlan</maml:name>
           <maml:description>
             <maml:para>Override the catalog's prerelease refresh setting for this run.</maml:para>
           </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
           <dev:type>
-            <maml:name>Nullable`1</maml:name>
+            <maml:name>Boolean</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -75544,9 +75699,9 @@ PowerForge.ManagedModuleUpdatePlan</maml:name>
         <maml:description>
           <maml:para>Override the catalog's prerelease refresh setting for this run.</maml:para>
         </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
         <dev:type>
-          <maml:name>Nullable`1</maml:name>
+          <maml:name>Boolean</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -76081,13 +76236,7 @@ PowerForge.ManagedModuleUpdatePlan</maml:name>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
+    <command:returnValues />
     <maml:alertSet>
       <maml:alert>
         <maml:para></maml:para>

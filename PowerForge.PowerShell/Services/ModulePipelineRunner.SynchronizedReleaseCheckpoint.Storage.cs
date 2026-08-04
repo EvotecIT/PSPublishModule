@@ -82,7 +82,9 @@ public sealed partial class ModulePipelineRunner
     {
         state.PlannedSynchronizedOperationCount = ResolvePlannedSynchronizedPublishOperationKeys(plan).Length;
         var checkpointPath = ResolveSynchronizedReleaseCheckpointPath(plan);
-        if (state.PlannedSynchronizedOperationCount == 0 && !HasSynchronizedReleaseCheckpoint(checkpointPath))
+        if (state.PlannedSynchronizedOperationCount == 0 &&
+            !HasSynchronizedReleaseCheckpoint(checkpointPath) &&
+            !HasSynchronizedReleaseCheckpointArchiveTransaction(checkpointPath))
             return;
 
         var lockPath = checkpointPath + ".lock";

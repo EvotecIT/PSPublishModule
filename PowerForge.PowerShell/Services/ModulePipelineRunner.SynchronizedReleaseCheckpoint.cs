@@ -11,11 +11,26 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineRunState state)
     {
         var path = ResolveSynchronizedReleaseCheckpointPath(plan);
+        if (HasSynchronizedReleaseCheckpointArchiveTransaction(path))
+        {
+            ArchiveSynchronizedReleaseCheckpoint(
+                path,
+                "while completing an interrupted checkpoint archival transaction");
+        }
         var checkpointExists = HasSynchronizedReleaseCheckpoint(path);
+        var shouldUseCheckpoint = ShouldUseSynchronizedReleaseCheckpoint(plan, state);
+        var resumeIncompleteRelease = plan.Release?.Configuration?.ResumeIncompleteRelease == true;
+        if (checkpointExists && shouldUseCheckpoint && !resumeIncompleteRelease)
+        {
+            state.SynchronizedReleaseCheckpointPath = path;
+            ArchiveSynchronizedReleaseCheckpoint(
+                path,
+                "because this invocation starts a fresh release; configure ResumeIncompleteRelease only when the incomplete release should be continued");
+            return;
+        }
         var sourceMutatingGate = plan.GateMode is ConfigurationGateMode.Manifest or
             ConfigurationGateMode.Documentation or
             ConfigurationGateMode.Build;
-        var shouldUseCheckpoint = ShouldUseSynchronizedReleaseCheckpoint(plan, state);
         var inspectSourceMutatingGateCheckpoint = checkpointExists && sourceMutatingGate;
         if (!shouldUseCheckpoint && !inspectSourceMutatingGateCheckpoint)
         {
