@@ -227,8 +227,25 @@ public sealed class PowerForgeProjectCmdletTests
         Assert.Equal(ReleaseVersionSource.PackageBuild, segment.Configuration.VersionSource);
         Assert.Equal("HtmlTinkerX", segment.Configuration.PrimaryProject);
         Assert.True(segment.Configuration.SynchronizeModuleVersion);
+        Assert.False(segment.Configuration.ResumeIncompleteRelease);
         Assert.Equal(new[] { "PackageBuild", "Module" }, segment.Configuration.BuildOrder);
         Assert.Equal(new[] { "NuGet", "PowerShellGallery", "GitHub" }, segment.Configuration.PublishOrder);
+    }
+
+    [Fact]
+    public void NewConfigurationRelease_EnablesExplicitIncompleteReleaseResume()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationRelease")
+            .AddParameter("VersionSource", ReleaseVersionSource.PackageBuild)
+            .AddParameter("PrimaryProject", "HtmlTinkerX")
+            .AddParameter("ResumeIncompleteRelease");
+
+        var results = ps.Invoke();
+
+        Assert.False(ps.HadErrors);
+        var segment = Assert.IsType<ConfigurationReleaseSegment>(Assert.Single(results).BaseObject);
+        Assert.True(segment.Configuration.ResumeIncompleteRelease);
     }
 
     [Fact]

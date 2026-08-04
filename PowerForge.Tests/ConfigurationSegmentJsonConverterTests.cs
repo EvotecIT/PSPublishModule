@@ -308,7 +308,8 @@ public sealed class ConfigurationSegmentJsonConverterTests
                     "StageRoot": "Artifacts/Release",
                     "VersionSource": "PackageBuild",
                     "PrimaryProject": "HtmlTinkerX",
-                    "SynchronizeModuleVersion": true
+                    "SynchronizeModuleVersion": true,
+                    "ResumeIncompleteRelease": true
                   }
                 }
               ]
@@ -339,6 +340,7 @@ public sealed class ConfigurationSegmentJsonConverterTests
         Assert.Equal(ReleaseVersionSource.PackageBuild, release.Configuration.VersionSource);
         Assert.Equal("HtmlTinkerX", release.Configuration.PrimaryProject);
         Assert.True(release.Configuration.SynchronizeModuleVersion);
+        Assert.True(release.Configuration.ResumeIncompleteRelease);
     }
 
     [Fact]

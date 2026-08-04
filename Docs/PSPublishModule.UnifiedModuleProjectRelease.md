@@ -508,8 +508,10 @@ implementation for package build, module build, and GitHub publishing.
 - `Release.VersionSource`, `PrimaryProject`, lane-level `UseAsReleaseVersionSource`, and
   `SynchronizeModuleVersion` produce one module/package version decision.
 - Publish runs preflight the synchronized module version before the first remote package publish.
-- A credential-free checkpoint records exact project versions and completed destinations so retries do not
-  step versions again or repeat completed publishes.
+- A credential-free checkpoint records exact project versions and completed destinations for explicit recovery.
+  A normal new invocation archives any incomplete checkpoint and computes a fresh release; configure
+  `ResumeIncompleteRelease` only when the operator intentionally wants to continue that exact release and skip
+  destinations that already completed.
 
 ## Validation Contract
 

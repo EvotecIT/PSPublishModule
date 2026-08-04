@@ -1,11 +1,294 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 
 namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
+    private const string SynchronizedReleaseArchiveTransactionSuffix = ".archive.json";
+
+    private void ArchiveSynchronizedReleaseCheckpoint(string path, string reason)
+    {
+        var temporaryPath = path + ".tmp";
+        var payloadCachePath = ResolveSynchronizedReleasePayloadCachePath(path);
+        var checkpointDirectory = Path.GetDirectoryName(path) ?? throw new InvalidOperationException(
+            $"Coordinated release checkpoint path '{path}' has no parent directory.");
+        if (!Directory.Exists(checkpointDirectory) ||
+            (File.GetAttributes(checkpointDirectory) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"Coordinated release checkpoint directory '{checkpointDirectory}' is not a normal directory.");
+        }
+
+        var archiveRoot = Path.Combine(checkpointDirectory, "archive");
+        if (Directory.Exists(archiveRoot) &&
+            (File.GetAttributes(archiveRoot) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"Coordinated release checkpoint archive '{archiveRoot}' is not a normal directory.");
+        }
+
+        Directory.CreateDirectory(archiveRoot);
+        var transactionPath = path + SynchronizedReleaseArchiveTransactionSuffix;
+        DeleteStaleSynchronizedReleaseArchiveTransactionWrites(transactionPath);
+        var transaction = File.Exists(transactionPath)
+            ? ReadSynchronizedReleaseArchiveTransaction(transactionPath, archiveRoot)
+            : CreateSynchronizedReleaseArchiveTransaction(
+                path,
+                temporaryPath,
+                payloadCachePath,
+                transactionPath,
+                archiveRoot);
+        if (transaction is null)
+            return;
+
+        var pendingArchivePath = Path.Combine(archiveRoot, transaction.PendingDirectoryName);
+        var finalArchivePath = Path.Combine(archiveRoot, transaction.FinalDirectoryName);
+        if (Directory.Exists(finalArchivePath))
+        {
+            if (Directory.Exists(pendingArchivePath) ||
+                HasSynchronizedReleaseArchiveSource(path, temporaryPath, payloadCachePath, transaction))
+            {
+                throw new InvalidOperationException(
+                    $"Coordinated release checkpoint archive transaction '{transactionPath}' has conflicting source and destination state.");
+            }
+            RequireCompleteSynchronizedReleaseArchive(finalArchivePath, transaction);
+            File.Delete(transactionPath);
+            _logger.Warn($"Completed interrupted coordinated release checkpoint archival to '{finalArchivePath}' {reason}.");
+            return;
+        }
+
+        if (!Directory.Exists(pendingArchivePath))
+            Directory.CreateDirectory(pendingArchivePath);
+        RequireNormalSynchronizedReleaseCacheTree(pendingArchivePath);
+
+        MoveSynchronizedReleaseArchiveDirectory(
+            payloadCachePath,
+            Path.Combine(pendingArchivePath, "payload"),
+            transaction.PayloadKind == "directory");
+        MoveSynchronizedReleaseArchiveFile(
+            payloadCachePath,
+            Path.Combine(pendingArchivePath, "payload.invalid"),
+            transaction.PayloadKind == "file");
+        MoveSynchronizedReleaseArchiveFile(
+            temporaryPath,
+            Path.Combine(pendingArchivePath, "checkpoint.json.tmp"),
+            transaction.TemporaryCheckpointExists);
+        MoveSynchronizedReleaseArchiveFile(
+            path,
+            Path.Combine(pendingArchivePath, "checkpoint.json"),
+            transaction.PrimaryCheckpointExists);
+
+        RequireCompleteSynchronizedReleaseArchive(pendingArchivePath, transaction);
+        Directory.Move(pendingArchivePath, finalArchivePath);
+        File.Delete(transactionPath);
+        _logger.Warn($"Archived incomplete coordinated release checkpoint '{path}' to '{finalArchivePath}' {reason}.");
+    }
+
+    private static bool HasSynchronizedReleaseCheckpointArchiveTransaction(string path)
+        => File.Exists(path + SynchronizedReleaseArchiveTransactionSuffix);
+
+    private static void DeleteStaleSynchronizedReleaseArchiveTransactionWrites(string transactionPath)
+    {
+        var directory = Path.GetDirectoryName(transactionPath) ?? throw new InvalidOperationException(
+            $"Coordinated release checkpoint archive transaction '{transactionPath}' has no parent directory.");
+        var prefix = Path.GetFileName(transactionPath) + ".";
+        foreach (var candidate in Directory.EnumerateFiles(directory))
+        {
+            var name = Path.GetFileName(candidate);
+            if (!name.StartsWith(prefix, StringComparison.Ordinal) ||
+                !name.EndsWith(".tmp", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            RequireNormalSynchronizedReleaseCheckpointFile(candidate);
+            File.Delete(candidate);
+        }
+    }
+
+    private static SynchronizedReleaseArchiveTransaction? CreateSynchronizedReleaseArchiveTransaction(
+        string primaryPath,
+        string temporaryPath,
+        string payloadCachePath,
+        string transactionPath,
+        string archiveRoot)
+    {
+        var primaryExists = File.Exists(primaryPath);
+        var temporaryExists = File.Exists(temporaryPath);
+        if (!primaryExists && !temporaryExists)
+            return null;
+
+        if (primaryExists)
+            RequireNormalSynchronizedReleaseCheckpointFile(primaryPath);
+        if (temporaryExists)
+            RequireNormalSynchronizedReleaseCheckpointFile(temporaryPath);
+
+        var payloadKind = "none";
+        if (Directory.Exists(payloadCachePath))
+        {
+            RequireNormalSynchronizedReleaseCacheTree(payloadCachePath);
+            payloadKind = "directory";
+        }
+        else if (File.Exists(payloadCachePath))
+        {
+            RequireNormalSynchronizedReleaseCheckpointFile(payloadCachePath);
+            payloadKind = "file";
+        }
+
+        var identity = $"{Path.GetFileNameWithoutExtension(primaryPath)}-{DateTimeOffset.UtcNow:yyyyMMddTHHmmssfffffffZ}-{Guid.NewGuid():N}";
+        var transaction = new SynchronizedReleaseArchiveTransaction
+        {
+            PendingDirectoryName = ".pending-" + identity,
+            FinalDirectoryName = identity,
+            PrimaryCheckpointExists = primaryExists,
+            TemporaryCheckpointExists = temporaryExists,
+            PayloadKind = payloadKind
+        };
+        ValidateSynchronizedReleaseArchiveTransaction(transaction, archiveRoot);
+
+        var transactionWritePath = transactionPath + $".{Guid.NewGuid():N}.tmp";
+        try
+        {
+            using (var stream = new FileStream(transactionWritePath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                JsonSerializer.Serialize(stream, transaction);
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(transactionWritePath, transactionPath);
+        }
+        finally
+        {
+            if (File.Exists(transactionWritePath))
+                File.Delete(transactionWritePath);
+        }
+        return transaction;
+    }
+
+    private static SynchronizedReleaseArchiveTransaction ReadSynchronizedReleaseArchiveTransaction(
+        string transactionPath,
+        string archiveRoot)
+    {
+        RequireNormalSynchronizedReleaseCheckpointFile(transactionPath);
+        SynchronizedReleaseArchiveTransaction? transaction;
+        try
+        {
+            using var stream = new FileStream(transactionPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            transaction = JsonSerializer.Deserialize<SynchronizedReleaseArchiveTransaction>(stream);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException(
+                $"Coordinated release checkpoint archive transaction '{transactionPath}' is invalid.",
+                ex);
+        }
+
+        if (transaction is null)
+            throw new InvalidOperationException(
+                $"Coordinated release checkpoint archive transaction '{transactionPath}' is empty.");
+        ValidateSynchronizedReleaseArchiveTransaction(transaction, archiveRoot);
+        return transaction;
+    }
+
+    private static void ValidateSynchronizedReleaseArchiveTransaction(
+        SynchronizedReleaseArchiveTransaction transaction,
+        string archiveRoot)
+    {
+        if (!IsSafeSynchronizedReleaseArchiveDirectoryName(transaction.PendingDirectoryName, ".pending-") ||
+            !IsSafeSynchronizedReleaseArchiveDirectoryName(transaction.FinalDirectoryName, string.Empty) ||
+            !string.Equals(transaction.PendingDirectoryName, ".pending-" + transaction.FinalDirectoryName, StringComparison.Ordinal) ||
+            transaction.PayloadKind is not ("none" or "directory" or "file") ||
+            (!transaction.PrimaryCheckpointExists && !transaction.TemporaryCheckpointExists))
+        {
+            throw new InvalidOperationException("The coordinated release checkpoint archive transaction is invalid.");
+        }
+
+        _ = Path.GetFullPath(Path.Combine(archiveRoot, transaction.PendingDirectoryName));
+        _ = Path.GetFullPath(Path.Combine(archiveRoot, transaction.FinalDirectoryName));
+    }
+
+    private static bool IsSafeSynchronizedReleaseArchiveDirectoryName(string? value, string prefix)
+        => value is not null &&
+           !string.IsNullOrWhiteSpace(value) &&
+           value.StartsWith(prefix, StringComparison.Ordinal) &&
+           value.Length > prefix.Length &&
+           string.Equals(Path.GetFileName(value), value, StringComparison.Ordinal) &&
+           value.IndexOfAny(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }) < 0;
+
+    private static bool HasSynchronizedReleaseArchiveSource(
+        string primaryPath,
+        string temporaryPath,
+        string payloadCachePath,
+        SynchronizedReleaseArchiveTransaction transaction)
+        => transaction.PrimaryCheckpointExists && File.Exists(primaryPath) ||
+           transaction.TemporaryCheckpointExists && File.Exists(temporaryPath) ||
+           transaction.PayloadKind == "directory" && Directory.Exists(payloadCachePath) ||
+           transaction.PayloadKind == "file" && File.Exists(payloadCachePath);
+
+    private static void MoveSynchronizedReleaseArchiveFile(string source, string destination, bool expected)
+    {
+        if (!expected)
+            return;
+        if (File.Exists(source))
+        {
+            RequireNormalSynchronizedReleaseCheckpointFile(source);
+            if (File.Exists(destination) || Directory.Exists(destination))
+                throw new InvalidOperationException($"Coordinated release archive destination '{destination}' already exists.");
+            File.Move(source, destination);
+        }
+        else if (!File.Exists(destination))
+        {
+            throw new InvalidOperationException($"Coordinated release archive source '{source}' and destination '{destination}' are both missing.");
+        }
+    }
+
+    private static void MoveSynchronizedReleaseArchiveDirectory(string source, string destination, bool expected)
+    {
+        if (!expected)
+            return;
+        if (Directory.Exists(source))
+        {
+            RequireNormalSynchronizedReleaseCacheTree(source);
+            if (File.Exists(destination) || Directory.Exists(destination))
+                throw new InvalidOperationException($"Coordinated release archive destination '{destination}' already exists.");
+            Directory.Move(source, destination);
+        }
+        else if (!Directory.Exists(destination))
+        {
+            throw new InvalidOperationException($"Coordinated release archive source '{source}' and destination '{destination}' are both missing.");
+        }
+    }
+
+    private static void RequireCompleteSynchronizedReleaseArchive(
+        string archivePath,
+        SynchronizedReleaseArchiveTransaction transaction)
+    {
+        RequireNormalSynchronizedReleaseCacheTree(archivePath);
+        var expected = new List<string>();
+        if (transaction.PayloadKind == "directory") expected.Add("payload");
+        if (transaction.PayloadKind == "file") expected.Add("payload.invalid");
+        if (transaction.TemporaryCheckpointExists) expected.Add("checkpoint.json.tmp");
+        if (transaction.PrimaryCheckpointExists) expected.Add("checkpoint.json");
+        var actual = Directory.EnumerateFileSystemEntries(archivePath)
+            .Select(Path.GetFileName)
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+        expected.Sort(StringComparer.Ordinal);
+        if (!expected.SequenceEqual(actual, StringComparer.Ordinal))
+            throw new InvalidOperationException($"Coordinated release checkpoint archive '{archivePath}' is incomplete.");
+    }
+
+    private sealed class SynchronizedReleaseArchiveTransaction
+    {
+        public string PendingDirectoryName { get; set; } = string.Empty;
+        public string FinalDirectoryName { get; set; } = string.Empty;
+        public bool PrimaryCheckpointExists { get; set; }
+        public bool TemporaryCheckpointExists { get; set; }
+        public string PayloadKind { get; set; } = "none";
+    }
+
     private void DeleteResettableSynchronizedReleaseCheckpoint(string path, string reason)
     {
         var payloadCachePath = ResolveSynchronizedReleasePayloadCachePath(path);

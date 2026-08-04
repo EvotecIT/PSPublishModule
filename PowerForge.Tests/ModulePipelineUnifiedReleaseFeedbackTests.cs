@@ -602,6 +602,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                         VersionSource = ReleaseVersionSource.ProjectBuild,
                         PrimaryProject = moduleName,
                         SynchronizeModuleVersion = true,
+                        ResumeIncompleteRelease = true,
                         PublishOrder = new[] { "NuGet", "PowerShellGallery" }
                     }
                 }
@@ -653,6 +654,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                         VersionSource = ReleaseVersionSource.ProjectBuild,
                         PrimaryProject = moduleName,
                         SynchronizeModuleVersion = synchronizeModuleVersion,
+                        ResumeIncompleteRelease = true,
                         PublishOrder = new[] { "NuGet", "PowerShellGallery" }
                     }
                 }
@@ -666,7 +668,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             {
                 VersionSource = ReleaseVersionSource.ProjectBuild,
                 PrimaryProject = primaryProject,
-                SynchronizeModuleVersion = true
+                SynchronizeModuleVersion = true,
+                ResumeIncompleteRelease = true
             }
         };
 

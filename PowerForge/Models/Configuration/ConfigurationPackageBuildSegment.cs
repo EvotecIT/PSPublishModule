@@ -476,6 +476,12 @@ public sealed class ReleaseConfiguration
     /// </summary>
     public bool SynchronizeModuleVersion { get; set; }
 
+    /// <summary>
+    /// When true, a publish run explicitly resumes a compatible incomplete synchronized release checkpoint.
+    /// When false, which is the default, an existing checkpoint is archived and a fresh release is started.
+    /// </summary>
+    public bool ResumeIncompleteRelease { get; set; }
+
     /// <summary>Explicit release version used when <see cref="VersionSource"/> is <see cref="ReleaseVersionSource.Manual"/>.</summary>
     public string? Version { get; set; }
 

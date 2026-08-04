@@ -11,7 +11,7 @@ Creates repo-level release coordination settings for a module and package build.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationRelease [-StageRoot <string>] [-VersionSource <ReleaseVersionSource>] [-Version <string>] [-PrimaryProject <string>] [-SynchronizeModuleVersion] [-BuildOrder <string[]>] [-PublishOrder <string[]>] [<CommonParameters>]
+New-ConfigurationRelease [-StageRoot <string>] [-VersionSource <ReleaseVersionSource>] [-Version <string>] [-PrimaryProject <string>] [-SynchronizeModuleVersion] [-ResumeIncompleteRelease] [-BuildOrder <string[]>] [-PublishOrder <string[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -76,6 +76,23 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -ResumeIncompleteRelease
+Explicitly resumes a compatible incomplete synchronized release checkpoint.
+Without this switch, an older checkpoint is archived and the invocation starts a fresh release.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -StageRoot
 Staged release root where upload-ready assets should be copied.
 
@@ -101,8 +118,9 @@ At the same numeric version, a stable X-pattern candidate does not erase the con
 explicit prerelease versions retain normal semantic-version ordering.
 PrimaryProject is required, and exactly one selected lane must run before the module and use
 UseAsReleaseVersionSource. Package groups using AlignPackageVersions are raised together.
-Publish runs persist a credential-free checkpoint so a partial release resumes the exact versions
-and skips destinations that already completed.
+Publish runs persist a credential-free checkpoint for optional recovery. A normal invocation archives
+an incomplete checkpoint and starts fresh; use ResumeIncompleteRelease to retain the exact versions
+and skip destinations that already completed.
 
 ```yaml
 Type: SwitchParameter
