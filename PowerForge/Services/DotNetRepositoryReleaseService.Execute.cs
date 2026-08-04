@@ -538,7 +538,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         {
                             _logger.Info($"Creating {project.ProjectName} release zip...");
                             var zipWatch = Stopwatch.StartNew();
-                            if (!TryCreateReleaseZip(project, spec.Configuration, zipPath, out var zipError, out var zippedFiles, out var zippedBytes))
+                            if (!TryCreateReleaseZip(project, spec.Configuration, zipPath, _logger, out var zipError, out var zippedFiles, out var zippedBytes))
                             {
                                 zipWatch.Stop();
                                 project.ErrorMessage = zipError;
