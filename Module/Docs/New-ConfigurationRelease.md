@@ -94,7 +94,8 @@ Accept wildcard characters: False
 
 ### -SynchronizeModuleVersion
 Coordinates the module and selected primary package on one version.
-This is enabled automatically when VersionSource is ProjectBuild or PackageBuild and PrimaryProject is configured.
+This is enabled automatically when VersionSource is ProjectBuild or
+PackageBuild and PrimaryProject is configured.
 The next available module version becomes a floor for the primary package; a higher numeric package version still wins.
 At the same numeric version, a stable X-pattern candidate does not erase the configured module prerelease;
 explicit prerelease versions retain normal semantic-version ordering.
