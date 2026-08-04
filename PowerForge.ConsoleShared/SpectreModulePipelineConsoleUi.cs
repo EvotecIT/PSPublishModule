@@ -189,6 +189,7 @@ internal static class SpectreModulePipelineConsoleUi
             Title = item.Title,
             Kind = item.Kind,
             Target = item.Target,
+            CounterLabel = "Module",
             Position = item.Position,
             Total = item.Total
         };

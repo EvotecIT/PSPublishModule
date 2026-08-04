@@ -82,6 +82,29 @@ public sealed class SpectreBuildProgressColumnsTests
         Assert.EndsWith("PowerShellGallery", targetedLabel, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("Module", 17, 18, "Module 17/18")]
+    [InlineData("Tool", 1, 10, "Tool 01/10")]
+    [InlineData("Project", 1, 6, "Project 01/06")]
+    [InlineData("Asset", 20, 24, "Asset 20/24")]
+    public void Presentation_MakesEveryCounterScopeExplicit(
+        string scope,
+        int position,
+        int total,
+        string expected)
+    {
+        var presentation = new SpectreProgressPresentation(viewportWidth: 140, unicode: false);
+        var item = new SpectreProgressLedgerItem
+        {
+            Title = "Work item",
+            CounterLabel = scope,
+            Position = position,
+            Total = total
+        };
+
+        Assert.StartsWith(expected, presentation.BuildLabel(item, null), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Run_WritesCompletedProgressFrameAfterLiveDisplayCloses()
     {
@@ -144,6 +167,55 @@ public sealed class SpectreBuildProgressColumnsTests
         Assert.DoesNotContain("Task.04", output, StringComparison.Ordinal);
         AssertOrdered(output, "Task.05", "Task.06", "Task.07", "Task.08", "Task.09");
         Assert.DoesNotContain("Task.10", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ViewportState_DoesNotJumpBackBetweenAdjacentUploadRows()
+    {
+        var tasks = Enumerable.Range(1, 30)
+            .Select(index => new ProgressTask(
+                index,
+                index <= 18 ? $"Module {index:00}/18" : $"Asset {index - 18:00}/12",
+                maxValue: 1,
+                autoStart: false,
+                TimeProvider.System))
+            .ToArray();
+        var viewport = new SpectreProgressViewportState();
+
+        tasks[16].StartTask();
+        tasks[24].StartTask();
+        var uploadFrame = RenderViewport(viewport, tasks, maximumRows: 6);
+
+        tasks[24].Value = 1;
+        tasks[24].StopTask();
+        var betweenUploadsFrame = RenderViewport(viewport, tasks, maximumRows: 6);
+
+        tasks[25].StartTask();
+        var nextUploadFrame = RenderViewport(viewport, tasks, maximumRows: 6);
+
+        Assert.Contains("Asset 07/12", uploadFrame, StringComparison.Ordinal);
+        Assert.DoesNotContain("Module 17/18", betweenUploadsFrame, StringComparison.Ordinal);
+        Assert.Contains("Asset 07/12", betweenUploadsFrame, StringComparison.Ordinal);
+        Assert.Contains("Asset 08/12", nextUploadFrame, StringComparison.Ordinal);
+    }
+
+    private static string RenderViewport(
+        SpectreProgressViewportState viewport,
+        IReadOnlyList<ProgressTask> tasks,
+        int maximumRows)
+    {
+        var rows = new Rows(tasks.Select(task => (IRenderable)new Text(task.Description)));
+        var projected = viewport.Project(rows, tasks, maximumRows);
+        using var writer = new StringWriter();
+        var console = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Out = new TerminalConsoleOutput(writer),
+            Ansi = AnsiSupport.Yes,
+            ColorSystem = ColorSystemSupport.NoColors,
+            Interactive = InteractionSupport.Yes
+        });
+        console.Write(projected);
+        return writer.ToString();
     }
 
     private static void AssertOrdered(string output, params string[] values)

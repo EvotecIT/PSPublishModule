@@ -167,6 +167,7 @@ internal sealed class SpectreProgressLedger
                     entry.Item.Total,
                     entry.Item.Title,
                     entry.Item.Target,
+                    entry.Item.CounterLabel,
                     entry.State,
                     entry.Detail,
                     entry.Duration ?? entry.Item.Duration ?? TimeSpan.Zero))
@@ -209,7 +210,7 @@ internal sealed class SpectreProgressLedger
 
             var (icon, color) = GetStateVisual(snapshot.State, unicode);
             var ordinal = snapshot.Position > 0 && snapshot.Total > 0
-                ? $"{snapshot.Position:00}/{snapshot.Total:00}"
+                ? ProgressCounterFormatter.Format(snapshot.CounterLabel, snapshot.Position, snapshot.Total)
                 : "–";
             var result = string.Join(
                 " — ",
@@ -291,7 +292,7 @@ internal sealed class SpectreProgressLedger
         var unicode = ConsoleEncoding.ShouldRenderUnicode(AnsiConsole.Profile.Capabilities.Unicode);
         var (icon, color) = GetStateVisual(entry.State, unicode);
         var ordinal = entry.Item.Position > 0 && entry.Item.Total > 0
-            ? $"{entry.Item.Position:00}/{entry.Item.Total:00} "
+            ? ProgressCounterFormatter.Format(entry.Item.CounterLabel, entry.Item.Position, entry.Item.Total) + " "
             : string.Empty;
         var suffix = string.IsNullOrWhiteSpace(entry.Detail) ? string.Empty : $" — {entry.Detail}";
         return $"[{color}]{Markup.Escape($"  {icon} {ordinal}{entry.Item.Title}{suffix}")}[/]";
@@ -357,6 +358,7 @@ internal sealed class SpectreProgressLedgerItem
     internal string Title { get; set; } = string.Empty;
     internal string? Kind { get; set; }
     internal string? Target { get; set; }
+    internal string? CounterLabel { get; set; }
     internal int Position { get; set; }
     internal int Total { get; set; }
     internal double ProgressValue { get; set; }
@@ -381,6 +383,7 @@ internal sealed class SpectreProgressLedgerSnapshot
         int total,
         string title,
         string? target,
+        string? counterLabel,
         SpectreProgressLedgerState state,
         string? detail,
         TimeSpan duration)
@@ -390,6 +393,7 @@ internal sealed class SpectreProgressLedgerSnapshot
         Total = total;
         Title = title;
         Target = target;
+        CounterLabel = counterLabel;
         State = state;
         Detail = detail;
         Duration = duration;
@@ -400,6 +404,7 @@ internal sealed class SpectreProgressLedgerSnapshot
     internal int Total { get; }
     internal string Title { get; }
     internal string? Target { get; }
+    internal string? CounterLabel { get; }
     internal SpectreProgressLedgerState State { get; }
     internal string? Detail { get; }
     internal TimeSpan Duration { get; }

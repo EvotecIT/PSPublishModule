@@ -30,6 +30,13 @@ internal static class SpectrePowerForgeReleaseConsoleUi
         var phaseNames = phases.ToDictionary(
             phase => phase,
             phase => GetPhaseName(phase, spec, request));
+        var phaseCounters = phases
+            .Select((phase, index) => new
+            {
+                Phase = phase,
+                Counter = ProgressCounterFormatter.Format("Phase", index + 1, phases.Length)
+            })
+            .ToDictionary(entry => entry.Phase, entry => entry.Counter);
         WriteHeader(console, spec, request, phases, phaseNames);
         PowerForgeReleaseResult? result = null;
         Exception? failure = null;
@@ -43,11 +50,14 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             {
                 var tasks = phases.ToDictionary(
                     phase => phase,
-                    phase => context.AddTask($"{phaseNames[phase]} — pending", maxValue: 100, autoStart: false));
+                    phase => context.AddTask(
+                        $"{phaseCounters[phase]} — {phaseNames[phase]} — pending",
+                        maxValue: 100,
+                        autoStart: false));
                 foreach (var entry in tasks)
                     presentation.Register(entry.Value, entry.Key.ToString());
 
-                reporter = new Reporter(console, context, tasks, phaseNames, presentation);
+                reporter = new Reporter(console, context, tasks, phaseNames, phaseCounters, presentation);
                 try
                 {
                     result = run(reporter);
@@ -209,6 +219,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
         private readonly IAnsiConsole _console;
         private readonly IReadOnlyDictionary<PowerForgeReleaseProgressPhase, ProgressTask> _tasks;
         private readonly IReadOnlyDictionary<PowerForgeReleaseProgressPhase, string> _phaseNames;
+        private readonly IReadOnlyDictionary<PowerForgeReleaseProgressPhase, string> _phaseCounters;
         private readonly HashSet<PowerForgeReleaseProgressPhase> _failed = new();
         private readonly SpectreProgressLedger _ledger;
         private readonly SpectreProgressPresentation _presentation;
@@ -218,12 +229,14 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             ProgressContext context,
             IReadOnlyDictionary<PowerForgeReleaseProgressPhase, ProgressTask> tasks,
             IReadOnlyDictionary<PowerForgeReleaseProgressPhase, string> phaseNames,
+            IReadOnlyDictionary<PowerForgeReleaseProgressPhase, string> phaseCounters,
             SpectreProgressPresentation presentation)
         {
             _console = console;
             _context = context;
             _tasks = tasks;
             _phaseNames = phaseNames;
+            _phaseCounters = phaseCounters;
             _presentation = presentation;
             _ledger = new SpectreProgressLedger(context, presentation);
         }
@@ -329,7 +342,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
         {
             var prefix = string.IsNullOrWhiteSpace(status) ? string.Empty : status + " ";
             var suffix = string.IsNullOrWhiteSpace(detail) ? string.Empty : " — " + detail;
-            return prefix + _phaseNames[phase] + suffix;
+            return prefix + _phaseCounters[phase] + " — " + _phaseNames[phase] + suffix;
         }
 
         private void UpdatePhaseProgress(PowerForgeReleaseProgressPhase phase)
@@ -361,11 +374,23 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 Title = item.Title,
                 Kind = item.Kind,
                 Target = item.Target,
+                CounterLabel = GetCounterLabel(item.Phase),
                 Position = item.Position,
                 Total = item.Total,
                 ProgressValue = item.ProgressValue,
                 ProgressMaximum = item.ProgressMaximum,
                 Duration = item.Duration
+            };
+
+        private static string GetCounterLabel(PowerForgeReleaseProgressPhase phase)
+            => phase switch
+            {
+                PowerForgeReleaseProgressPhase.Versioning => "Version",
+                PowerForgeReleaseProgressPhase.Module => "Module",
+                PowerForgeReleaseProgressPhase.Packages => "Project",
+                PowerForgeReleaseProgressPhase.Tools => "Tool",
+                PowerForgeReleaseProgressPhase.GitHub => "Asset",
+                _ => "Item"
             };
     }
 }

@@ -22,14 +22,35 @@ public sealed class PowerForgeReleaseProgressAdaptersTests
             update =>
             {
                 Assert.Equal(PowerForgeReleaseProgressItemState.Started, update.State);
-                Assert.Contains("0/4", update.Detail, StringComparison.Ordinal);
+                Assert.Contains("Project 00/04", update.Detail, StringComparison.Ordinal);
             },
             update =>
             {
                 Assert.Equal(PowerForgeReleaseProgressItemState.Started, update.State);
-                Assert.Contains("2/4", update.Detail, StringComparison.Ordinal);
+                Assert.Contains("Project 02/04", update.Detail, StringComparison.Ordinal);
             },
-            update => Assert.Equal(PowerForgeReleaseProgressItemState.Completed, update.State));
+            update =>
+            {
+                Assert.Equal(PowerForgeReleaseProgressItemState.Completed, update.State);
+                Assert.Contains("Project 04/04", update.Detail, StringComparison.Ordinal);
+            });
+    }
+
+    [Fact]
+    public void ProjectBuildAdapter_PreservesLastCountWhenPhaseFails()
+    {
+        var release = new RecordingReleaseProgress();
+        var adapter = new ProjectBuildReleaseProgressAdapter(
+            release,
+            PowerForgeReleaseProgressPhase.Packages);
+
+        adapter.PhaseStarted(ProjectBuildProgressPhase.PackageBuild, 4, "Packing Alpha");
+        adapter.PhaseUpdated(ProjectBuildProgressPhase.PackageBuild, 2, 4, "Packing Beta");
+        adapter.PhaseFailed(ProjectBuildProgressPhase.PackageBuild, "Packing failed");
+
+        var failure = release.Updates[^1];
+        Assert.Equal(PowerForgeReleaseProgressItemState.Failed, failure.State);
+        Assert.Contains("Project 02/04", failure.Detail, StringComparison.Ordinal);
     }
 
     [Fact]

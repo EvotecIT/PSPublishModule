@@ -143,6 +143,7 @@ public sealed class ProjectBuildProgressLedgerTests
                     GroupOrder = 1,
                     Title = "Pack artefact",
                     Target = "Unpacked",
+                    CounterLabel = "Module",
                     Kind = ModulePipelineStepKind.Artefact.ToString(),
                     Position = 1,
                     Total = 2
@@ -154,7 +155,7 @@ public sealed class ProjectBuildProgressLedgerTests
             tasks => finalTaskDescriptions = tasks.Select(task => task.Description).ToArray());
 
         var description = Assert.Single(finalTaskDescriptions!);
-        Assert.StartsWith("01/02 Pack artefact", description, StringComparison.Ordinal);
+        Assert.StartsWith("Module 01/02 Pack artefact", description, StringComparison.Ordinal);
         Assert.Contains("packing", description, StringComparison.Ordinal);
         Assert.EndsWith("Unpacked", description, StringComparison.Ordinal);
         Assert.Contains("PK", writer.ToString(), StringComparison.Ordinal);
@@ -230,15 +231,39 @@ public sealed class ProjectBuildProgressLedgerTests
 
         Assert.True(result.Success);
         var output = writer.ToString();
-        var first = output.LastIndexOf("01/03 Stage to staging", StringComparison.Ordinal);
-        var second = output.LastIndexOf("02/03 Pack artefact", StringComparison.Ordinal);
-        var third = output.LastIndexOf("03/03 Publish", StringComparison.Ordinal);
+        var first = output.LastIndexOf("Module 01/03 Stage to staging", StringComparison.Ordinal);
+        var second = output.LastIndexOf("Module 02/03 Pack artefact", StringComparison.Ordinal);
+        var third = output.LastIndexOf("Module 03/03 Publish", StringComparison.Ordinal);
         Assert.True(first >= 0, output);
         Assert.True(second > first, output);
         Assert.True(third > second, output);
         Assert.Contains("Unpacked (Local)", output, StringComparison.Ordinal);
         Assert.Contains("PowerShellGallery", output, StringComparison.Ordinal);
+        Assert.Contains("Phase 01/01", output, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData(1, 9, "01/09")]
+    [InlineData(1, 24, "01/24")]
+    [InlineData(20, 24, "20/24")]
+    [InlineData(1, 100, "001/100")]
+    public void ProgressCounterFormatter_UsesOneStableWidthPerScope(
+        int position,
+        int total,
+        string expected)
+        => Assert.Equal(expected, ProgressCounterFormatter.Format(position, total));
+
+    [Theory]
+    [InlineData(ProjectBuildProgressPhase.Plan, "Step")]
+    [InlineData(ProjectBuildProgressPhase.Versioning, "Project")]
+    [InlineData(ProjectBuildProgressPhase.PackageBuild, "Project")]
+    [InlineData(ProjectBuildProgressPhase.PackageSigning, "Package")]
+    [InlineData(ProjectBuildProgressPhase.NuGetPublish, "Package")]
+    [InlineData(ProjectBuildProgressPhase.GitHubPublish, "Release")]
+    public void ProjectBuildCounterScope_MatchesTheCountedResource(
+        ProjectBuildProgressPhase phase,
+        string expected)
+        => Assert.Equal(expected, ProgressCounterFormatter.GetProjectBuildScope(phase));
 
     [Fact]
     public void StandaloneConsole_WritesDetailedLedgerAfterSuccess()
@@ -280,6 +305,45 @@ public sealed class ProjectBuildProgressLedgerTests
         Assert.Contains("Project build details", output, StringComparison.Ordinal);
         Assert.Contains("Sample.Project", output, StringComparison.Ordinal);
         Assert.Contains("00:02.000", output, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true, "Project 06/06")]
+    [InlineData(false, "Project 05/06")]
+    public void StandaloneConsole_PreservesExplicitCounterInTerminalPhaseState(
+        bool success,
+        string expectedCounter)
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer, height: 12);
+
+        var result = SpectreProjectBuildConsoleUi.RunInteractive(
+            console,
+            new ProjectBuildConsolePlan
+            {
+                ConfigPath = "project.build.json",
+                RootPath = "repository",
+                Build = true
+            },
+            progress =>
+            {
+                progress.PhaseStarted(ProjectBuildProgressPhase.PackageBuild, 6, "packing");
+                progress.PhaseUpdated(ProjectBuildProgressPhase.PackageBuild, 5, 6, "packing");
+                if (success) {
+                    progress.PhaseCompleted(ProjectBuildProgressPhase.PackageBuild, "complete");
+                }
+                else {
+                    progress.PhaseFailed(ProjectBuildProgressPhase.PackageBuild, "failed");
+                }
+
+                return new ProjectBuildWorkflowResult
+                {
+                    Result = new ProjectBuildResult { Success = success }
+                };
+            });
+
+        Assert.Equal(success, result.Result.Success);
+        Assert.Contains(expectedCounter, writer.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

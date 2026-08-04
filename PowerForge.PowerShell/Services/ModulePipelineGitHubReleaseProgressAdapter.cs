@@ -30,7 +30,7 @@ internal sealed class ModulePipelineGitHubReleaseProgressAdapter : IGitHubReleas
         var fileName = string.IsNullOrWhiteSpace(progress.FileName)
             ? Path.GetFileName(progress.FilePath)
             : progress.FileName;
-        var detail = $"{Math.Max(1, progress.Position)}/{Math.Max(1, progress.TotalAssets)} {fileName}";
+        var detail = $"{ProgressCounterFormatter.Format("Asset", progress.Position, progress.TotalAssets)} {fileName}";
         if (progress.TotalBytes > 0)
         {
             detail += $" — {DotNetRepositoryReleaseService.FormatBytes(Math.Max(0, progress.BytesTransferred))} / " +
