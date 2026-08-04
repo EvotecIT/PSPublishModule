@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 
 namespace PowerForge;
 
@@ -12,7 +11,7 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineRunState state)
     {
         var path = ResolveSynchronizedReleaseCheckpointPath(plan);
-        var checkpointExists = File.Exists(path);
+        var checkpointExists = HasSynchronizedReleaseCheckpoint(path);
         var sourceMutatingGate = plan.GateMode is ConfigurationGateMode.Manifest or
             ConfigurationGateMode.Documentation or
             ConfigurationGateMode.Build;
@@ -34,25 +33,8 @@ public sealed partial class ModulePipelineRunner
         if (!checkpointExists)
             return;
 
-        SynchronizedReleaseCheckpoint? checkpoint;
-        try
-        {
-            checkpoint = JsonSerializer.Deserialize<SynchronizedReleaseCheckpoint>(
-                File.ReadAllText(path),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException(
-                $"Coordinated release checkpoint '{path}' could not be read. Delete it only if the incomplete release should be abandoned. {ex.Message}",
-                ex);
-        }
-
-        if (checkpoint is null || checkpoint.SchemaVersion != 5)
-        {
-            throw new InvalidOperationException(
-                $"Coordinated release checkpoint '{path}' has an unsupported schema. Delete it only if the incomplete release should be abandoned.");
-        }
+        var checkpointRead = ReadSynchronizedReleaseCheckpoint(path);
+        var checkpoint = checkpointRead.Checkpoint;
 
         if (!shouldUseCheckpoint && !sourceMutatingGate)
         {
@@ -92,6 +74,13 @@ public sealed partial class ModulePipelineRunner
                 path,
                 "because release configuration changed before any publish operation or remote side effect started");
             return;
+        }
+
+        if (checkpointRead.TemporaryPath is not null)
+        {
+            PromoteSynchronizedReleaseCheckpointFile(checkpointRead.TemporaryPath, path);
+            _logger.Warn(
+                $"Recovered a newer durable coordinated release checkpoint from '{checkpointRead.TemporaryPath}'.");
         }
 
         state.SynchronizedReleaseCheckpoint = checkpoint;
@@ -469,6 +458,9 @@ public sealed partial class ModulePipelineRunner
 
         if (File.Exists(path))
             File.Delete(path);
+        var temporaryPath = path + ".tmp";
+        if (File.Exists(temporaryPath))
+            File.Delete(temporaryPath);
         var payloadCachePath = ResolveSynchronizedReleasePayloadCachePath(path!);
         if (Directory.Exists(payloadCachePath))
         {
