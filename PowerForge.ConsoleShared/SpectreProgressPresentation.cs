@@ -128,10 +128,20 @@ internal sealed class SpectreProgressPresentation
             return kind?.Trim().ToLowerInvariant() switch
             {
                 "module" => unicode ? "[cyan]🔨[/]" : "[cyan]BL[/]",
+                "plan" => unicode ? "[steelblue1]🧭[/]" : "[steelblue1]PL[/]",
                 "packages" => unicode ? "[magenta]📦[/]" : "[magenta]PK[/]",
-                "tools" => unicode ? "[deepskyblue1]🧰[/]" : "[deepskyblue1]TL[/]",
+                "packagesigning" or "msisign" => unicode ? "[gold3]🔏[/]" : "[gold3]SG[/]",
+                "nugetpublish" => unicode ? "[yellow]🚀[/]" : "[yellow]PB[/]",
+                "githubpublish" or "githubasset" => unicode ? "[yellow]🚀[/]" : "[yellow]GH[/]",
+                "tools" or "toolpublish" => unicode ? "[deepskyblue1]🧰[/]" : "[deepskyblue1]TL[/]",
                 "github" => unicode ? "[yellow]🚀[/]" : "[yellow]GH[/]",
                 "versioning" => unicode ? "[lightskyblue1]🏷[/]" : "[lightskyblue1]VR[/]",
+                "clean" => unicode ? "[grey]🧹[/]" : "[grey]CL[/]",
+                "restore" => unicode ? "[green]📥[/]" : "[green]RS[/]",
+                "servicelifecycle" or "commandhook" => unicode ? "[steelblue1]⚙[/]" : "[steelblue1]AC[/]",
+                "benchmarkextract" or "benchmarkgate" => unicode ? "[orange3]🧪[/]" : "[orange3]TS[/]",
+                "manifest" => unicode ? "[deepskyblue1]📝[/]" : "[deepskyblue1]DC[/]",
+                "msiprepare" or "msibuild" or "bundle" or "storepackage" => unicode ? "[magenta]📦[/]" : "[magenta]PK[/]",
                 _ => unicode ? "[grey]•[/]" : "[grey]PF[/]"
             };
         }
