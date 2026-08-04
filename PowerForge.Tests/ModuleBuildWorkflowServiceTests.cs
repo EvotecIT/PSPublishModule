@@ -201,6 +201,61 @@ public sealed class ModuleBuildWorkflowServiceTests
         Assert.True(install > publish, output);
     }
 
+    [Fact]
+    public void DirectModuleConsole_DescribesCoordinatedModuleAndNuGetReleaseTruthfully()
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer);
+        var plan = CreatePlan(
+            projectBuilds:
+            [
+                new ConfigurationProjectBuildSegment
+                {
+                    Configuration = new ProjectBuildConfigurationReference
+                    {
+                        Name = "SamplePackages",
+                        ConfigPath = "Build/project.build.json",
+                        BuildBeforeModule = true,
+                        PublishNuget = true
+                    }
+                }
+            ],
+            release: new ConfigurationReleaseSegment
+            {
+                Configuration = new ReleaseConfiguration
+                {
+                    BuildOrder = ["Packages", "Module"],
+                    PublishOrder = ["NuGet", "PowerShellGallery", "GitHub"]
+                }
+            });
+        var steps = ModulePipelineStep.Create(plan);
+
+        SpectreModulePipelineConsoleUi.RunInteractive(
+            console,
+            plan,
+            "powerforge.json",
+            progress =>
+            {
+                foreach (var step in steps)
+                {
+                    progress.StepStarting(step);
+                    progress.StepCompleted(step);
+                }
+
+                return CreateResult(plan);
+            });
+
+        var output = writer.ToString();
+        Assert.Contains("Coordinated release", output, StringComparison.Ordinal);
+        Assert.Contains("PowerShell module + 1 NuGet package lane", output, StringComparison.Ordinal);
+        Assert.Contains("Packages → Module", output, StringComparison.Ordinal);
+        Assert.Contains("NuGet → PowerShell Gallery → GitHub", output, StringComparison.Ordinal);
+        Assert.Contains("Build and publish NuGet packages (SamplePackages)", output, StringComparison.Ordinal);
+        Assert.Contains("Module artefacts", output, StringComparison.Ordinal);
+        Assert.Contains("Module publishes", output, StringComparison.Ordinal);
+        Assert.Contains("Coordinated steps", output, StringComparison.Ordinal);
+    }
+
     private static ModuleBuildPreparedContext CreatePreparedContext()
     {
         return new ModuleBuildPreparedContext
@@ -223,7 +278,9 @@ public sealed class ModuleBuildWorkflowServiceTests
     private static ModulePipelinePlan CreatePlan(
         ConfigurationArtefactSegment[]? artefacts = null,
         ConfigurationPublishSegment[]? publishes = null,
-        bool installEnabled = false)
+        bool installEnabled = false,
+        ConfigurationProjectBuildSegment[]? projectBuilds = null,
+        ConfigurationReleaseSegment? release = null)
     {
         return new ModulePipelinePlan(
             moduleName: "SampleModule",
@@ -258,6 +315,11 @@ public sealed class ModuleBuildWorkflowServiceTests
             commandModuleDependencies: new Dictionary<string, string[]>(),
             testsAfterMerge: Array.Empty<TestConfiguration>(),
             actions: Array.Empty<ConfigurationActionSegment>(),
+            appleApps: Array.Empty<ConfigurationAppleAppSegment>(),
+            xcodeProjectVersions: Array.Empty<ConfigurationXcodeProjectVersionSegment>(),
+            projectBuilds: projectBuilds ?? Array.Empty<ConfigurationProjectBuildSegment>(),
+            packageBuilds: Array.Empty<ConfigurationPackageBuildSegment>(),
+            release: release,
             mergeModule: false,
             mergeMissing: false,
             doNotAttemptToFixRelativePaths: false,

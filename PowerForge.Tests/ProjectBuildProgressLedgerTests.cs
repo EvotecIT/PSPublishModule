@@ -31,6 +31,7 @@ public sealed class ProjectBuildProgressLedgerTests
                         GroupTitle = "Build packages and archives",
                         GroupOrder = 1,
                         Title = $"Project.{index:00}",
+                        Kind = ModulePipelineStepKind.PackageBuild.ToString(),
                         Position = index,
                         Total = 85
                     })
@@ -68,12 +69,16 @@ public sealed class ProjectBuildProgressLedgerTests
         Assert.All(snapshots, snapshot => Assert.Equal(SpectreProgressLedgerState.Completed, snapshot.State));
         Assert.Equal(TimeSpan.FromSeconds(1), snapshots[0].Duration);
         Assert.Equal(TimeSpan.FromSeconds(85), snapshots[^1].Duration);
+        Assert.All(snapshots, snapshot => Assert.Equal(ModulePipelineStepKind.PackageBuild.ToString(), snapshot.Kind));
 
         SpectreProgressLedger.WriteLedger(console, snapshots, "Project build details");
         var output = writer.ToString();
         Assert.Contains("Project.01", output, StringComparison.Ordinal);
         Assert.Contains("Project.85", output, StringComparison.Ordinal);
         Assert.Contains("01:25.000", output, StringComparison.Ordinal);
+        Assert.True(
+            output.Contains("📦", StringComparison.Ordinal) || output.Contains("PK", StringComparison.Ordinal),
+            output);
     }
 
     [Fact]
@@ -240,6 +245,8 @@ public sealed class ProjectBuildProgressLedgerTests
         Assert.Contains("Unpacked (Local)", output, StringComparison.Ordinal);
         Assert.Contains("PowerShellGallery", output, StringComparison.Ordinal);
         Assert.Contains("Phase 01/01", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("✓ Phase", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("x Phase", output, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -264,6 +271,21 @@ public sealed class ProjectBuildProgressLedgerTests
         ProjectBuildProgressPhase phase,
         string expected)
         => Assert.Equal(expected, ProgressCounterFormatter.GetProjectBuildScope(phase));
+
+    [Theory]
+    [InlineData(nameof(ProjectBuildProgressPhase.PackageSigning), "SG")]
+    [InlineData(nameof(ProjectBuildProgressPhase.NuGetPublish), "PB")]
+    [InlineData(nameof(ProjectBuildProgressPhase.GitHubPublish), "GH")]
+    [InlineData("GitHubAsset", "GH")]
+    [InlineData("ToolPublish", "TL")]
+    [InlineData(nameof(DotNetPublishStepKind.MsiSign), "SG")]
+    [InlineData(nameof(DotNetPublishStepKind.Bundle), "PK")]
+    public void SharedKindIcons_DescribeRealReleaseAdapterKinds(string kind, string expected)
+    {
+        var rendered = SpectreProgressPresentation.GetKindIcon(kind, unicode: false);
+        Assert.Contains(expected, rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("PF", rendered, StringComparison.Ordinal);
+    }
 
     [Fact]
     public void StandaloneConsole_WritesDetailedLedgerAfterSuccess()

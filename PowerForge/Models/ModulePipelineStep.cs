@@ -112,7 +112,7 @@ public sealed class ModulePipelineStep
 
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeDependencies);
         AddActionSteps(steps, plan, ModulePipelineActionStage.AfterDependencies);
-        AddPackageBuildSteps(steps, plan);
+        AddPackageBuildSteps(steps, plan, beforeModule: true);
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeVersioning);
         if (plan.AppleApps is { Length: > 0 })
         {
@@ -333,6 +333,7 @@ public sealed class ModulePipelineStep
             }
         }
         AddActionSteps(steps, plan, ModulePipelineActionStage.AfterArtefacts);
+        AddPackageBuildSteps(steps, plan, beforeModule: false);
 
         // 8) Publishes
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforePublish);
@@ -403,18 +404,24 @@ public sealed class ModulePipelineStep
         }
     }
 
-    private static void AddPackageBuildSteps(List<ModulePipelineStep> steps, ModulePipelinePlan plan)
+    private static void AddPackageBuildSteps(
+        List<ModulePipelineStep> steps,
+        ModulePipelinePlan plan,
+        bool beforeModule)
     {
         if (plan.ProjectBuilds is { Length: > 0 })
         {
             for (var i = 0; i < plan.ProjectBuilds.Length; i++)
             {
                 var segment = plan.ProjectBuilds[i];
-                if (segment?.Configuration?.BuildBeforeModule != true)
+                if (segment?.Configuration is null ||
+                    ModulePipelinePackageBuildOrder.ShouldRunBeforeModule(
+                        plan.Release,
+                        segment.Configuration.BuildBeforeModule) != beforeModule)
                     continue;
 
                 var name = segment.Configuration.Name;
-                var label = "Build packages";
+                var label = GetPackageLaneAction(segment.Configuration.PublishNuget);
                 if (!string.IsNullOrWhiteSpace(name))
                     label += $" ({name})";
                 else if (!string.IsNullOrWhiteSpace(segment.Configuration.ConfigPath))
@@ -433,13 +440,17 @@ public sealed class ModulePipelineStep
             for (var i = 0; i < plan.PackageBuilds.Length; i++)
             {
                 var segment = plan.PackageBuilds[i];
-                if (segment?.Configuration?.BuildBeforeModule != true)
+                if (segment?.Configuration is null ||
+                    ModulePipelinePackageBuildOrder.ShouldRunBeforeModule(
+                        plan.Release,
+                        segment.Configuration.BuildBeforeModule) != beforeModule)
                     continue;
 
                 var name = segment.Configuration.Name;
+                var action = GetPackageLaneAction(segment.Configuration.PublishNuget);
                 var label = string.IsNullOrWhiteSpace(name)
-                    ? "Build packages (inline)"
-                    : $"Build packages ({name})";
+                    ? $"{action} (inline)"
+                    : $"{action} ({name})";
 
                 steps.Add(new ModulePipelineStep(
                     kind: ModulePipelineStepKind.PackageBuild,
@@ -449,6 +460,14 @@ public sealed class ModulePipelineStep
             }
         }
     }
+
+    private static string GetPackageLaneAction(bool? publishNuget)
+        => publishNuget switch
+        {
+            true => "Build and publish NuGet packages",
+            false => "Build NuGet packages",
+            _ => "Run NuGet package lane"
+        };
 
     private static void AddExternalAssetSteps(List<ModulePipelineStep> steps, ModulePipelinePlan plan)
     {

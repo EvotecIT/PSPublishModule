@@ -100,10 +100,16 @@ internal static class SpectreModulePipelineConsoleUi
 
         var unicode = ConsoleEncoding.ShouldRenderUnicode(console.Profile.Capabilities.Unicode);
         var versionText = BuildServices.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
+        var packageLaneCount = (plan.ProjectBuilds?.Length ?? 0) + (plan.PackageBuilds?.Length ?? 0);
+        var coordinatedRelease = packageLaneCount > 0 || plan.Release is not null;
 
         var title = unicode
-            ? $"🛠️ PowerForge • {plan.ModuleName} {versionText}"
-            : $"PowerForge • {plan.ModuleName} {versionText}";
+            ? coordinatedRelease
+                ? $"🛠️ PowerForge • Coordinated release • {plan.ModuleName} {versionText}"
+                : $"🛠️ PowerForge • {plan.ModuleName} {versionText}"
+            : coordinatedRelease
+                ? $"PowerForge • Coordinated release • {plan.ModuleName} {versionText}"
+                : $"PowerForge • {plan.ModuleName} {versionText}";
         console.Write(new Rule($"[yellow bold underline]{Esc(title)}[/]") { Justification = Justify.Left });
 
         var iconColWidth = unicode ? 2 : 3;
@@ -120,6 +126,22 @@ internal static class SpectreModulePipelineConsoleUi
         var cfgText = string.IsNullOrWhiteSpace(configLabel) ? "(discovered)" : configLabel;
         AddInfoRow(unicode ? "⚙️" : "CFG", "Config", Esc(cfgText));
         AddInfoRow(unicode ? "📁" : "DIR", "Project", Esc(plan.ProjectRoot));
+
+        if (coordinatedRelease)
+        {
+            var scope = packageLaneCount > 0
+                ? $"PowerShell module + {packageLaneCount} NuGet package {(packageLaneCount == 1 ? "lane" : "lanes")}"
+                : "PowerShell module";
+            AddInfoRow(unicode ? "🧭" : "SCP", "Scope", Esc(scope));
+
+            var buildOrder = plan.Release?.Configuration?.BuildOrder;
+            if (buildOrder is { Length: > 0 })
+                AddInfoRow(unicode ? "↕️" : "ORD", "Build order", Esc(FormatReleaseOrder(buildOrder)));
+
+            var publishOrder = plan.Release?.Configuration?.PublishOrder;
+            if (publishOrder is { Length: > 0 })
+                AddInfoRow(unicode ? "🚀" : "PUB", "Publish order", Esc(FormatReleaseOrder(publishOrder)));
+        }
 
         var stagingText = string.IsNullOrWhiteSpace(plan.BuildSpec.StagingPath) ? "(temp)" : plan.BuildSpec.StagingPath;
         AddInfoRow(unicode ? "🧪" : "TMP", "Staging", Esc(stagingText));
@@ -141,14 +163,27 @@ internal static class SpectreModulePipelineConsoleUi
             "Validation",
             validations.Count == 0 ? "[grey]Disabled[/]" : Esc(string.Join(", ", validations)));
 
-        AddInfoRow(unicode ? "📦" : "PKG", "Artefacts", Esc((plan.Artefacts?.Length ?? 0).ToString()));
-        AddInfoRow(unicode ? "🚀" : "PUB", "Publishes", Esc((plan.Publishes?.Length ?? 0).ToString()));
+        AddInfoRow(
+            unicode ? "📦" : "PKG",
+            coordinatedRelease ? "Module artefacts" : "Artefacts",
+            Esc((plan.Artefacts?.Length ?? 0).ToString()));
+        AddInfoRow(
+            unicode ? "🚀" : "PUB",
+            coordinatedRelease ? "Module publishes" : "Publishes",
+            Esc((plan.Publishes?.Length ?? 0).ToString()));
         AddInfoRow(unicode ? "📥" : "INS", "Install", plan.InstallEnabled ? Esc($"{plan.InstallStrategy}, keep {plan.InstallKeepVersions}") : "[grey]Disabled[/]");
 
-        AddInfoRow(unicode ? "🧭" : "STP", "Steps", Esc(steps.Length.ToString()));
+        AddInfoRow(unicode ? "🧭" : "STP", coordinatedRelease ? "Coordinated steps" : "Steps", Esc(steps.Length.ToString()));
         console.Write(info);
         console.WriteLine();
     }
+
+    private static string FormatReleaseOrder(IEnumerable<string> values)
+        => string.Join(
+            " → ",
+            values.Select(value => string.Equals(value, "PowerShellGallery", StringComparison.OrdinalIgnoreCase)
+                ? "PowerShell Gallery"
+                : value));
 
     private static string NormalizeIcon(string? icon)
     {

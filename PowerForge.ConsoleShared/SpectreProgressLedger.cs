@@ -166,6 +166,7 @@ internal sealed class SpectreProgressLedger
                     entry.Item.Position,
                     entry.Item.Total,
                     entry.Item.Title,
+                    entry.Item.Kind,
                     entry.Item.Target,
                     entry.Item.CounterLabel,
                     entry.State,
@@ -191,6 +192,7 @@ internal sealed class SpectreProgressLedger
             .Border(TableBorder.None)
             .HideHeaders()
             .AddColumn(new TableColumn("Status").NoWrap().Width(1))
+            .AddColumn(new TableColumn("Kind").NoWrap().Width(unicode ? 2 : 3))
             .AddColumn(new TableColumn("Item").NoWrap())
             .AddColumn(new TableColumn("Result"))
             .AddColumn(new TableColumn("Duration").RightAligned().NoWrap());
@@ -202,6 +204,7 @@ internal sealed class SpectreProgressLedger
             {
                 currentGroup = snapshot.GroupTitle;
                 table.AddRow(
+                    string.Empty,
                     string.Empty,
                     $"[grey bold]{Esc(currentGroup)}[/]",
                     string.Empty,
@@ -218,6 +221,7 @@ internal sealed class SpectreProgressLedger
                     .Where(value => !string.IsNullOrWhiteSpace(value)));
             table.AddRow(
                 $"[{color}]{icon}[/]",
+                SpectreProgressPresentation.GetKindIcon(snapshot.Kind, unicode),
                 $"[{color}]{Esc($"{ordinal} {snapshot.Title}")}[/]",
                 $"[{color}]{Esc(result)}[/]",
                 $"[deepskyblue1]{Esc(FormatDuration(snapshot.Duration))}[/]");
@@ -382,6 +386,7 @@ internal sealed class SpectreProgressLedgerSnapshot
         int position,
         int total,
         string title,
+        string? kind,
         string? target,
         string? counterLabel,
         SpectreProgressLedgerState state,
@@ -392,6 +397,7 @@ internal sealed class SpectreProgressLedgerSnapshot
         Position = position;
         Total = total;
         Title = title;
+        Kind = kind;
         Target = target;
         CounterLabel = counterLabel;
         State = state;
@@ -403,6 +409,7 @@ internal sealed class SpectreProgressLedgerSnapshot
     internal int Position { get; }
     internal int Total { get; }
     internal string Title { get; }
+    internal string? Kind { get; }
     internal string? Target { get; }
     internal string? CounterLabel { get; }
     internal SpectreProgressLedgerState State { get; }

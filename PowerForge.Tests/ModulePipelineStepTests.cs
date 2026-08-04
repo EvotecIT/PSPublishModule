@@ -318,6 +318,82 @@ public sealed class ModulePipelineStepTests
             Assert.True(idxInline < idxStage);
             Assert.Equal(ModulePipelineStepKind.PackageBuild, steps[idxProject].Kind);
             Assert.Equal(ModulePipelineStepKind.PackageBuild, steps[idxInline].Kind);
+            Assert.Equal("Run NuGet package lane (project.build.json)", steps[idxProject].Title);
+            Assert.Equal("Run NuGet package lane (Inline)", steps[idxInline].Title);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Create_PlacesEveryPackageLaneAtItsEffectiveReleasePosition(bool overrideBeforeModule)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var segments = new List<IConfigurationSegment>
+            {
+                new ConfigurationProjectBuildSegment
+                {
+                    Configuration = new ProjectBuildConfigurationReference
+                    {
+                        Name = "Referenced",
+                        ConfigPath = "Build/project.build.json",
+                        BuildBeforeModule = false
+                    }
+                },
+                new ConfigurationPackageBuildSegment
+                {
+                    Configuration = new PackageBuildConfiguration
+                    {
+                        Name = "Inline",
+                        BuildBeforeModule = false
+                    }
+                }
+            };
+            if (overrideBeforeModule)
+            {
+                segments.Add(new ConfigurationReleaseSegment
+                {
+                    Configuration = new ReleaseConfiguration
+                    {
+                        BuildOrder = ["Packages", "Module"]
+                    }
+                });
+            }
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = segments.ToArray()
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            var steps = ModulePipelineStep.Create(plan);
+            var packageSteps = steps.Where(step => step.Kind == ModulePipelineStepKind.PackageBuild).ToArray();
+            var stageIndex = Array.FindIndex(steps, step => step.Key == "build:stage");
+
+            Assert.Equal(2, packageSteps.Length);
+            Assert.Equal(2, packageSteps.Select(step => step.Key).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+            Assert.All(
+                packageSteps,
+                step => Assert.Equal(
+                    overrideBeforeModule,
+                    Array.IndexOf(steps, step) < stageIndex));
         }
         finally
         {

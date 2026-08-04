@@ -931,59 +931,7 @@ public sealed partial class ModulePipelineRunner
     private static bool ShouldRunPackageBuildBeforeModule(
         ConfigurationReleaseSegment? release,
         bool buildBeforeModule)
-        => ResolveReleaseBuildOrderOverride(release) ?? buildBeforeModule;
-
-    private static bool? ResolveReleaseBuildOrderOverride(ConfigurationReleaseSegment? release)
-    {
-        var order = release?.Configuration?.BuildOrder;
-        if (order is null || order.Length == 0)
-            return null;
-
-        int? packageIndex = null;
-        int? moduleIndex = null;
-        for (var index = 0; index < order.Length; index++)
-        {
-            if (string.IsNullOrWhiteSpace(order[index]))
-                continue;
-
-            if (TryParseReleaseBuildLane(order[index], out var lane))
-            {
-                if (lane == ReleaseBuildLane.PackageBuild && packageIndex is null)
-                    packageIndex = index;
-                if (lane == ReleaseBuildLane.Module && moduleIndex is null)
-                    moduleIndex = index;
-            }
-        }
-
-        if (packageIndex is null || moduleIndex is null)
-            return null;
-
-        return packageIndex.Value < moduleIndex.Value;
-    }
-
-    private static bool TryParseReleaseBuildLane(string value, out ReleaseBuildLane lane)
-    {
-        var normalized = value.Trim().Replace("-", string.Empty).Replace("_", string.Empty);
-        if (string.Equals(normalized, "PackageBuild", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(normalized, "PackageBuilds", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(normalized, "ProjectBuild", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(normalized, "ProjectBuilds", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(normalized, "Packages", StringComparison.OrdinalIgnoreCase))
-        {
-            lane = ReleaseBuildLane.PackageBuild;
-            return true;
-        }
-
-        if (string.Equals(normalized, "Module", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(normalized, "ModuleBuild", StringComparison.OrdinalIgnoreCase))
-        {
-            lane = ReleaseBuildLane.Module;
-            return true;
-        }
-
-        lane = default;
-        return false;
-    }
+        => ModulePipelinePackageBuildOrder.ShouldRunBeforeModule(release, buildBeforeModule);
 
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
@@ -1115,12 +1063,6 @@ public sealed partial class ModulePipelineRunner
     {
         NuGet,
         GitHub
-    }
-
-    private enum ReleaseBuildLane
-    {
-        PackageBuild,
-        Module
     }
 
     private readonly struct ProjectBuildEffectiveActions

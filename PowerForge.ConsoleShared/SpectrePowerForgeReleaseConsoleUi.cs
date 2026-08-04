@@ -254,7 +254,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
         {
             if (!_tasks.TryGetValue(phase, out var task)) return;
             if (!task.IsStarted) task.StartTask();
-            task.Description = Label(phase, detail, "✓");
+            task.Description = Label(phase, detail);
             task.Value = 100;
             task.StopTask();
             _presentation.MarkTerminal(task, SpectreProgressLedgerState.Completed);
@@ -265,7 +265,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             if (!_tasks.TryGetValue(phase, out var task)) return;
             _failed.Add(phase);
             if (!task.IsStarted) task.StartTask();
-            task.Description = Label(phase, detail, "x");
+            task.Description = Label(phase, detail);
             task.Value = 100;
             task.StopTask();
             _presentation.MarkTerminal(task, SpectreProgressLedgerState.Failed);
@@ -321,7 +321,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 }
 
                 entry.Value.StartTask();
-                entry.Value.Description = Label(entry.Key, success ? "not required" : "skipped after failure", "–");
+                entry.Value.Description = Label(entry.Key, success ? "not required" : "skipped after failure");
                 entry.Value.Value = 100;
                 entry.Value.StopTask();
                 _presentation.MarkTerminal(entry.Value, SpectreProgressLedgerState.Skipped);
@@ -338,11 +338,10 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 _ledger.GetSnapshots(),
                 "Unified release details");
 
-        private string Label(PowerForgeReleaseProgressPhase phase, string? detail, string? status = null)
+        private string Label(PowerForgeReleaseProgressPhase phase, string? detail)
         {
-            var prefix = string.IsNullOrWhiteSpace(status) ? string.Empty : status + " ";
             var suffix = string.IsNullOrWhiteSpace(detail) ? string.Empty : " — " + detail;
-            return prefix + _phaseCounters[phase] + " — " + _phaseNames[phase] + suffix;
+            return _phaseCounters[phase] + " — " + _phaseNames[phase] + suffix;
         }
 
         private void UpdatePhaseProgress(PowerForgeReleaseProgressPhase phase)
