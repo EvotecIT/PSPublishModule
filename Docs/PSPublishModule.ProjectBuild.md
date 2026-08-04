@@ -367,6 +367,7 @@ Staging and outputs
 - When a project defines `<PackageId>`, project-build uses that package identity for NuGet version lookup,
   planned `.nupkg` names, and release zip names. Otherwise it falls back to the csproj file name.
 - `CleanStaging`: if true, deletes the staging directory before a run. It does not clean project `bin`/`obj` directories; package correctness comes from the release rebuild and package-payload provenance check.
+- `CreateReleaseZip`: creates one framework-dependent archive containing the files recorded by the current MSBuild output manifest for every active target framework. Unrecorded stale files and separately generated publish/RID trees are excluded while declared content and dependency runtime assets remain included. Use tool targets when you also want self-contained per-platform archives.
 - `PlanOutputPath`: optional file path for a JSON plan output.
 - `IncludeSymbols`: when true, produces portable `.snupkg` files for every packable project. Plan output includes their expected paths, and build output discovery rejects stale symbol packages just as it does stale primary packages.
 

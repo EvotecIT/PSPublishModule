@@ -84,7 +84,10 @@ public sealed class DotNetRepositoryReleaseSpec
     /// <summary>Strategy used for packing selected projects.</summary>
     public DotNetRepositoryPackStrategy PackStrategy { get; set; } = DotNetRepositoryPackStrategy.PerProject;
 
-    /// <summary>When true, create a release zip from the build output.</summary>
+    /// <summary>
+    /// When true, creates one release ZIP containing files recorded by the current MSBuild
+    /// output manifest for every evaluated target framework.
+    /// </summary>
     public bool CreateReleaseZip { get; set; }
 
     /// <summary>Optional output path for release zips.</summary>
