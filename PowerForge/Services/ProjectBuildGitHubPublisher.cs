@@ -131,6 +131,10 @@ public sealed class ProjectBuildGitHubPublisher
         var timestampToken = nowLocal.ToString("yyyyMMddHHmmss");
         var utcTimestampToken = nowUtc.ToString("yyyyMMddHHmmss");
         var repoName = request.Repository.Trim();
+        var assetPaths = GetPlannedAssetPaths(request.Release);
+        var assetProgress = request.Progress is null
+            ? null
+            : new ProjectBuildGitHubProgressAdapter(request.Progress, assetPaths);
 
         if (perProject)
         {
@@ -145,7 +149,8 @@ public sealed class ProjectBuildGitHubPublisher
                 dateTimeToken,
                 utcDateTimeToken,
                 timestampToken,
-                utcTimestampToken);
+                utcTimestampToken,
+                assetProgress);
         }
         else
         {
@@ -160,7 +165,8 @@ public sealed class ProjectBuildGitHubPublisher
                 dateTimeToken,
                 utcDateTimeToken,
                 timestampToken,
-                utcTimestampToken);
+                utcTimestampToken,
+                assetProgress);
         }
 
         if (summary.ErrorMessage is null)
@@ -180,7 +186,8 @@ public sealed class ProjectBuildGitHubPublisher
         string dateTimeToken,
         string utcDateTimeToken,
         string timestampToken,
-        string utcTimestampToken)
+        string utcTimestampToken,
+        IGitHubReleaseProgressReporter? progress)
     {
         foreach (var project in request.Release.Projects)
         {
@@ -239,7 +246,8 @@ public sealed class ProjectBuildGitHubPublisher
                 releaseName,
                 new[] { project.ReleaseZipPath! },
                 reuseExistingReleaseOnConflict,
-                result);
+                result,
+                progress);
 
             summary.Results.Add(result);
             if (!result.Success)
@@ -263,7 +271,8 @@ public sealed class ProjectBuildGitHubPublisher
         string dateTimeToken,
         string utcDateTimeToken,
         string timestampToken,
-        string utcTimestampToken)
+        string utcTimestampToken,
+        IGitHubReleaseProgressReporter? progress)
     {
         var assets = request.Release.Projects
             .Where(project => project.IsPackable && !string.IsNullOrWhiteSpace(project.ReleaseZipPath) && File.Exists(project.ReleaseZipPath))
@@ -313,7 +322,8 @@ public sealed class ProjectBuildGitHubPublisher
             releaseName,
             assets,
             reuseExistingReleaseOnConflict,
-            publishResult);
+            publishResult,
+            progress);
 
         foreach (var project in request.Release.Projects.Where(project => project.IsPackable))
         {
@@ -340,7 +350,8 @@ public sealed class ProjectBuildGitHubPublisher
         string releaseName,
         IReadOnlyList<string> assets,
         bool reuseExistingReleaseOnConflict,
-        ProjectBuildGitHubResult result)
+        ProjectBuildGitHubResult result,
+        IGitHubReleaseProgressReporter? progress)
     {
         try
         {
@@ -354,7 +365,8 @@ public sealed class ProjectBuildGitHubPublisher
                 GenerateReleaseNotes = request.GenerateReleaseNotes,
                 IsPreRelease = request.IsPreRelease,
                 ReuseExistingReleaseOnConflict = reuseExistingReleaseOnConflict,
-                AssetFilePaths = assets
+                AssetFilePaths = assets,
+                Progress = progress
             });
 
             result.Success = publishResult.Succeeded;
@@ -371,6 +383,13 @@ public sealed class ProjectBuildGitHubPublisher
             result.ErrorMessage = ex.Message;
         }
     }
+
+    private static string[] GetPlannedAssetPaths(DotNetRepositoryReleaseResult release)
+        => release.Projects
+            .Where(static project => project.IsPackable && !string.IsNullOrWhiteSpace(project.ReleaseZipPath))
+            .Select(static project => project.ReleaseZipPath!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
     private void WriteGitHubPublishNotes(string? tag, GitHubReleasePublishResult result)
     {

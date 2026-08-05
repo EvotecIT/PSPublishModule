@@ -218,13 +218,13 @@ internal static class SpectreModulePipelineConsoleUi
         return new SpectreProgressLedgerItem
         {
             Key = item.Key,
-            GroupKey = PowerForgeReleaseProgressPhase.Module.ToString(),
-            GroupTitle = "Build PowerShell module",
-            GroupOrder = (int)PowerForgeReleaseProgressPhase.Module,
+            GroupKey = item.GroupKey ?? item.Phase.ToString(),
+            GroupTitle = item.GroupTitle ?? GetGroupTitle(item.Phase),
+            GroupOrder = ((int)item.Phase * 100) + (item.GroupOrder ?? 0),
             Title = item.Title,
             Kind = item.Kind,
             Target = item.Target,
-            CounterLabel = "Module",
+            CounterLabel = item.CounterLabel ?? GetCounterLabel(item),
             Position = item.Position,
             Total = item.Total
         };
@@ -237,7 +237,26 @@ internal static class SpectreModulePipelineConsoleUi
         return interactive ? ConsoleView.Standard : ConsoleView.Ansi;
     }
 
-    private sealed class SpectrePipelineProgressReporter : IModulePipelineProgressReporterV3
+    private static string GetGroupTitle(PowerForgeReleaseProgressPhase phase)
+        => phase == PowerForgeReleaseProgressPhase.Packages
+            ? "Build and publish NuGet packages"
+            : "Build PowerShell module";
+
+    private static string GetCounterLabel(PowerForgeReleaseProgressItem item)
+    {
+        if (item.Phase != PowerForgeReleaseProgressPhase.Packages)
+            return "Module";
+
+        return item.Kind switch
+        {
+            nameof(ProjectBuildProgressPhase.PackageSigning) => "Package",
+            nameof(ProjectBuildProgressPhase.NuGetPublish) => "Package",
+            "GitHubAsset" => "Asset",
+            _ => "Project"
+        };
+    }
+
+    private sealed class SpectrePipelineProgressReporter : IModulePipelineProgressReporterV4
     {
         private readonly SpectreProgressLedger _ledger;
         private readonly IReadOnlyDictionary<string, SpectreProgressLedgerItem> _items;
@@ -270,6 +289,39 @@ internal static class SpectreModulePipelineConsoleUi
             item.ProgressValue = Math.Max(0, value);
             item.ProgressMaximum = Math.Max(0, maximum);
             _ledger.Update(item, SpectreProgressLedgerState.Started, detail);
+        }
+
+        public void ItemsPlanned(
+            PowerForgeReleaseProgressPhase phase,
+            IReadOnlyList<PowerForgeReleaseProgressItem> items)
+        {
+            if (items is null || items.Count == 0)
+                return;
+
+            _ledger.Plan(items
+                .Where(static item => item is not null)
+                .Select(ToLedgerItem));
+        }
+
+        public void ItemUpdated(
+            PowerForgeReleaseProgressItem item,
+            PowerForgeReleaseProgressItemState state,
+            string? detail = null)
+        {
+            if (item is null)
+                return;
+
+            _ledger.Update(
+                ToLedgerItem(item),
+                state switch
+                {
+                    PowerForgeReleaseProgressItemState.Started => SpectreProgressLedgerState.Started,
+                    PowerForgeReleaseProgressItemState.Completed => SpectreProgressLedgerState.Completed,
+                    PowerForgeReleaseProgressItemState.Failed => SpectreProgressLedgerState.Failed,
+                    PowerForgeReleaseProgressItemState.Skipped => SpectreProgressLedgerState.Skipped,
+                    _ => SpectreProgressLedgerState.Planned
+                },
+                detail);
         }
 
         private void Update(

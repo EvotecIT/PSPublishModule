@@ -30,6 +30,18 @@ public sealed partial class ModulePipelinePackageBuildTests
                 packageBuildExecutor: (request, configuration, configPath) =>
                 {
                     calls.Add(new PackageBuildCall(request, configuration, configPath));
+                    var detailed = Assert.IsAssignableFrom<IProjectBuildProgressReporterV2>(request.Progress);
+                    var item = new ProjectBuildProgressItem
+                    {
+                        Phase = ProjectBuildProgressPhase.PackageBuild,
+                        Key = "sample",
+                        Title = configPath ?? request.ConfigPath,
+                        Kind = ProjectBuildProgressPhase.PackageBuild.ToString(),
+                        Position = 1,
+                        Total = 1
+                    };
+                    detailed.ItemsPlanned(ProjectBuildProgressPhase.PackageBuild, [item]);
+                    detailed.ItemUpdated(item, ProjectBuildProgressItemState.Completed, "1 package");
                     return new ProjectBuildHostExecutionResult
                     {
                         Success = true,
@@ -106,6 +118,17 @@ public sealed partial class ModulePipelinePackageBuildTests
             Assert.True(inlineConfiguration.UseGitHubPackages);
             Assert.Equal("EvotecIT", inlineConfiguration.GitHubPackagesOwner);
             Assert.False(inlineConfiguration.GitHubIncludeProjectNameInTag);
+            Assert.Equal(2, reporter.NestedPlanned.Count(item =>
+                item.Kind == ProjectBuildProgressPhase.PackageBuild.ToString()));
+            Assert.Equal(2, reporter.NestedPlanned
+                .Where(item => item.Kind == ProjectBuildProgressPhase.PackageBuild.ToString())
+                .Select(item => item.Key)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count());
+            Assert.All(reporter.NestedPlanned, item =>
+                Assert.Equal(PowerForgeReleaseProgressPhase.Packages, item.Phase));
+            Assert.Equal(2, reporter.NestedUpdates.Count(update =>
+                update.State == PowerForgeReleaseProgressItemState.Completed));
 
             var projectPackageIndex = reporter.StartedKeys.IndexOf("package:project:01");
             var inlinePackageIndex = reporter.StartedKeys.IndexOf("package:inline:01");
@@ -115,6 +138,26 @@ public sealed partial class ModulePipelinePackageBuildTests
             Assert.True(stageIndex >= 0);
             Assert.True(projectPackageIndex < stageIndex);
             Assert.True(inlinePackageIndex < stageIndex);
+
+            var parentStep = ModulePipelineStep.Create(plan)
+                .First(step => step.Kind == ModulePipelineStepKind.PackageBuild);
+            var throwingAdapter = new ModulePipelineNestedProgressAdapter(
+                new ThrowingNestedProgressReporter(),
+                parentStep);
+            var nestedItem = new PowerForgeReleaseProgressItem
+            {
+                Phase = PowerForgeReleaseProgressPhase.Packages,
+                Key = "project:sample",
+                Title = "Sample",
+                Position = 1,
+                Total = 1
+            };
+            var progressException = Record.Exception(() =>
+            {
+                throwingAdapter.ItemsPlanned(PowerForgeReleaseProgressPhase.Packages, [nestedItem]);
+                throwingAdapter.ItemUpdated(nestedItem, PowerForgeReleaseProgressItemState.Completed, "complete");
+            });
+            Assert.Null(progressException);
         }
         finally
         {
@@ -1603,10 +1646,12 @@ public sealed partial class ModulePipelinePackageBuildTests
         ProjectBuildConfiguration? Configuration,
         string? ConfigPath);
 
-    private sealed class RecordingProgressReporter : IModulePipelineProgressReporter
+    private sealed class RecordingProgressReporter : IModulePipelineProgressReporterV4
     {
         public List<string> StartedKeys { get; } = new();
         public List<string> FailedKeys { get; } = new();
+        public List<PowerForgeReleaseProgressItem> NestedPlanned { get; } = new();
+        public List<(PowerForgeReleaseProgressItem Item, PowerForgeReleaseProgressItemState State)> NestedUpdates { get; } = new();
 
         public void StepStarting(ModulePipelineStep step)
         {
@@ -1621,5 +1666,48 @@ public sealed partial class ModulePipelinePackageBuildTests
         {
             FailedKeys.Add(step.Key);
         }
+
+        public void StepSkipped(ModulePipelineStep step)
+        {
+        }
+
+        public void StepProgress(ModulePipelineStep step, double value, double maximum, string? detail = null)
+        {
+        }
+
+        public void ItemsPlanned(
+            PowerForgeReleaseProgressPhase phase,
+            IReadOnlyList<PowerForgeReleaseProgressItem> items)
+        {
+            NestedPlanned.AddRange(items);
+        }
+
+        public void ItemUpdated(
+            PowerForgeReleaseProgressItem item,
+            PowerForgeReleaseProgressItemState state,
+            string? detail = null)
+        {
+            NestedUpdates.Add((item, state));
+        }
+    }
+
+    private sealed class ThrowingNestedProgressReporter : IModulePipelineProgressReporterV4
+    {
+        public void StepStarting(ModulePipelineStep step) { }
+        public void StepCompleted(ModulePipelineStep step) { }
+        public void StepFailed(ModulePipelineStep step, Exception error) { }
+        public void StepSkipped(ModulePipelineStep step) { }
+        public void StepProgress(ModulePipelineStep step, double value, double maximum, string? detail = null) { }
+
+        public void ItemsPlanned(
+            PowerForgeReleaseProgressPhase phase,
+            IReadOnlyList<PowerForgeReleaseProgressItem> items)
+            => throw new InvalidOperationException("Progress host unavailable.");
+
+        public void ItemUpdated(
+            PowerForgeReleaseProgressItem item,
+            PowerForgeReleaseProgressItemState state,
+            string? detail = null)
+            => throw new InvalidOperationException("Progress host unavailable.");
     }
 }

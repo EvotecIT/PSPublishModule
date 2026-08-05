@@ -126,6 +126,16 @@ public sealed class ProjectBuildPublishHostService
     /// Publishes GitHub releases for the provided project release plan using shared PowerForge logic.
     /// </summary>
     public ProjectBuildGitHubPublishSummary PublishGitHub(ProjectBuildPublishHostConfiguration configuration, DotNetRepositoryReleaseResult release)
+        => PublishGitHub(configuration, release, progress: null);
+
+    /// <summary>
+    /// Publishes GitHub releases and reports durable per-asset progress when a detailed
+    /// project-build reporter is supplied.
+    /// </summary>
+    public ProjectBuildGitHubPublishSummary PublishGitHub(
+        ProjectBuildPublishHostConfiguration configuration,
+        DotNetRepositoryReleaseResult release,
+        IProjectBuildProgressReporter? progress)
     {
         FrameworkCompatibility.NotNull(configuration, nameof(configuration));
         FrameworkCompatibility.NotNull(release, nameof(release));
@@ -144,7 +154,8 @@ public sealed class ProjectBuildPublishHostService
             TagTemplate = configuration.GitHubTagTemplate,
             PrimaryProject = configuration.GitHubPrimaryProject,
             TagConflictPolicy = configuration.GitHubTagConflictPolicy,
-            PublishFailFast = configuration.PublishFailFast
+            PublishFailFast = configuration.PublishFailFast,
+            Progress = progress as IProjectBuildProgressReporterV2
         };
 
         return (_publishGitHub ?? (publishRequest => new ProjectBuildGitHubPublisher(_logger).Publish(publishRequest)))(request);

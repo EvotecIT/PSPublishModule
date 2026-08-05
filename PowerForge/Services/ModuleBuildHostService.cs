@@ -157,7 +157,10 @@ public sealed class ModuleBuildHostService
             return null;
 
         if (message.Items is { Length: > 0 })
-            progress.ItemsPlanned(PowerForgeReleaseProgressPhase.Module, message.Items);
+        {
+            foreach (var group in message.Items.GroupBy(item => item.Phase))
+                progress.ItemsPlanned(group.Key, group.ToArray());
+        }
 
         if (message.Item is not null && message.State.HasValue)
             progress.ItemUpdated(message.Item, message.State.Value, message.Detail);

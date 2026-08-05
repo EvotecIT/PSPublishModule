@@ -34,3 +34,21 @@ public interface IModulePipelineProgressReporterV3 : IModulePipelineProgressRepo
     /// <summary>Updates the current and maximum values for a running step.</summary>
     void StepProgress(ModulePipelineStep step, double value, double maximum, string? detail = null);
 }
+
+/// <summary>
+/// Optional extension for hosts that render durable work items produced by a nested
+/// project/package workflow inside a module pipeline step.
+/// </summary>
+public interface IModulePipelineProgressReporterV4 : IModulePipelineProgressReporterV3
+{
+    /// <summary>Registers nested work items in their owning release phase.</summary>
+    void ItemsPlanned(
+        PowerForgeReleaseProgressPhase phase,
+        IReadOnlyList<PowerForgeReleaseProgressItem> items);
+
+    /// <summary>Updates one nested work item.</summary>
+    void ItemUpdated(
+        PowerForgeReleaseProgressItem item,
+        PowerForgeReleaseProgressItemState state,
+        string? detail = null);
+}

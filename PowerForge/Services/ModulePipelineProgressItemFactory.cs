@@ -15,27 +15,47 @@ internal static class ModulePipelineProgressItemFactory
         if (plan is null) throw new ArgumentNullException(nameof(plan));
 
         var steps = ModulePipelineStep.Create(plan);
-        return steps
-            .Select((step, index) => CreateItem(step, plan, index + 1, steps.Length))
-            .ToArray();
+        var totals = steps
+            .GroupBy(GetPhase)
+            .ToDictionary(group => group.Key, group => group.Count());
+        var positions = new Dictionary<PowerForgeReleaseProgressPhase, int>();
+        return steps.Select(step =>
+        {
+            var phase = GetPhase(step);
+            positions.TryGetValue(phase, out var position);
+            position++;
+            positions[phase] = position;
+            return CreateItem(step, plan, phase, position, totals[phase]);
+        }).ToArray();
     }
 
     private static PowerForgeReleaseProgressItem CreateItem(
         ModulePipelineStep step,
         ModulePipelinePlan plan,
+        PowerForgeReleaseProgressPhase phase,
         int position,
         int total)
     {
         var presentation = ModulePipelineStepPresentation.Create(step, plan);
+        var packageLane = phase == PowerForgeReleaseProgressPhase.Packages;
         return new PowerForgeReleaseProgressItem
         {
-            Phase = PowerForgeReleaseProgressPhase.Module,
+            Phase = phase,
             Key = step.Key,
             Title = presentation.Title,
             Kind = presentation.Kind.ToString(),
             Target = presentation.Target,
+            GroupKey = packageLane ? "Packages:Lanes" : null,
+            GroupTitle = packageLane ? "Package workflows" : null,
+            GroupOrder = packageLane ? 0 : null,
+            CounterLabel = packageLane ? "Lane" : null,
             Position = position,
             Total = total
         };
     }
+
+    private static PowerForgeReleaseProgressPhase GetPhase(ModulePipelineStep step)
+        => step.Kind == ModulePipelineStepKind.PackageBuild
+            ? PowerForgeReleaseProgressPhase.Packages
+            : PowerForgeReleaseProgressPhase.Module;
 }

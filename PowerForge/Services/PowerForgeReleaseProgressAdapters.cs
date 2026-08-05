@@ -102,7 +102,11 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
             Phase = _releasePhase,
             Key = $"project:{phase}",
             Title = GetTitle(phase),
-            Kind = phase.ToString()
+            Kind = phase.ToString(),
+            GroupKey = GetGroupKey(phase),
+            GroupTitle = GetTitle(phase),
+            GroupOrder = GetGroupOrder(phase),
+            CounterLabel = GetCounterLabel(phase)
         };
         _items[phase] = item;
         _release.ItemsPlanned(_releasePhase, new[] { item });
@@ -124,6 +128,10 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
             Key = key,
             Title = item.Title,
             Kind = item.Kind,
+            GroupKey = GetGroupKey(item.Phase),
+            GroupTitle = GetTitle(item.Phase),
+            GroupOrder = GetGroupOrder(item.Phase),
+            CounterLabel = GetCounterLabel(item.Phase),
             Position = item.Position,
             Total = item.Total,
             Duration = item.Duration
@@ -142,6 +150,30 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
             ProjectBuildProgressPhase.NuGetPublish => "Publish NuGet packages",
             ProjectBuildProgressPhase.GitHubPublish => "Publish project GitHub release",
             _ => phase.ToString()
+        };
+
+    private string GetGroupKey(ProjectBuildProgressPhase phase)
+        => $"{_releasePhase}:{phase}";
+
+    private static int GetGroupOrder(ProjectBuildProgressPhase phase)
+        => phase switch
+        {
+            ProjectBuildProgressPhase.Plan => 10,
+            ProjectBuildProgressPhase.Versioning => 20,
+            ProjectBuildProgressPhase.PackageBuild => 30,
+            ProjectBuildProgressPhase.PackageSigning => 40,
+            ProjectBuildProgressPhase.NuGetPublish => 50,
+            ProjectBuildProgressPhase.GitHubPublish => 60,
+            _ => 90
+        };
+
+    private static string GetCounterLabel(ProjectBuildProgressPhase phase)
+        => phase switch
+        {
+            ProjectBuildProgressPhase.PackageSigning => "Package",
+            ProjectBuildProgressPhase.NuGetPublish => "Package",
+            ProjectBuildProgressPhase.GitHubPublish => "Asset",
+            _ => "Project"
         };
 
     private void RememberCount(

@@ -41,9 +41,10 @@ public sealed class ProjectBuildWorkflowServiceTests
             progress.Events);
     }
 
-    private sealed class RecordingProjectBuildProgress : IProjectBuildProgressReporter
+    private sealed class RecordingProjectBuildProgress : IProjectBuildProgressReporterV2
     {
         public List<string> Events { get; } = new();
+        public List<ProjectBuildProgressItem> Items { get; } = new();
 
         public void PhaseStarted(ProjectBuildProgressPhase phase, int totalItems, string? detail = null)
             => Events.Add($"start:{phase}:{totalItems}");
@@ -56,6 +57,12 @@ public sealed class ProjectBuildWorkflowServiceTests
 
         public void PhaseFailed(ProjectBuildProgressPhase phase, string? detail = null)
             => Events.Add($"fail:{phase}");
+
+        public void ItemsPlanned(ProjectBuildProgressPhase phase, IReadOnlyList<ProjectBuildProgressItem> items)
+            => Items.AddRange(items);
+
+        public void ItemUpdated(ProjectBuildProgressItem item, ProjectBuildProgressItemState state, string? detail = null)
+            => Events.Add($"item:{item.Phase}:{item.Title}:{state}");
     }
 
     [Fact]
@@ -103,6 +110,7 @@ public sealed class ProjectBuildWorkflowServiceTests
         var remotePublishAttempts = 0;
         var remoteAttemptRecordedBeforePublish = false;
         var logger = new RecordingLogger();
+        var progress = new RecordingProjectBuildProgress();
         var service = new ProjectBuildWorkflowService(
             logger,
             executeRelease: spec =>
@@ -141,6 +149,18 @@ public sealed class ProjectBuildWorkflowServiceTests
                 Assert.Equal("EvotecIT", request.Owner);
                 Assert.Equal("PSPublishModule", request.Repository);
                 Assert.Equal("token", request.Token);
+                var detailed = Assert.IsAssignableFrom<IProjectBuildProgressReporterV2>(request.Progress);
+                var asset = new ProjectBuildProgressItem
+                {
+                    Phase = ProjectBuildProgressPhase.GitHubPublish,
+                    Key = "github:1:ProjectA.1.2.3.zip",
+                    Title = "ProjectA.1.2.3.zip",
+                    Kind = "GitHubAsset",
+                    Position = 1,
+                    Total = 1
+                };
+                detailed.ItemsPlanned(ProjectBuildProgressPhase.GitHubPublish, [asset]);
+                detailed.ItemUpdated(asset, ProjectBuildProgressItemState.Completed, "uploaded");
                 return new ProjectBuildGitHubPublishSummary
                 {
                     Success = true,
@@ -177,7 +197,8 @@ public sealed class ProjectBuildWorkflowServiceTests
                 Spec = new DotNetRepositoryReleaseSpec { RootPath = Directory.GetCurrentDirectory(), PublishFailFast = true }
             },
             executeBuild: true,
-            remotePublishAttempted: () => remotePublishAttempts++);
+            remotePublishAttempted: () => remotePublishAttempts++,
+            progress: progress);
 
         Assert.Equal(2, callIndex);
         Assert.Equal(1, remotePublishAttempts);
@@ -186,6 +207,9 @@ public sealed class ProjectBuildWorkflowServiceTests
         Assert.Single(workflow.Result.GitHub);
         Assert.NotNull(workflow.GitHubPublishSummary);
         Assert.Equal("v1.2.3", workflow.GitHubPublishSummary!.SummaryTag);
+        var asset = Assert.Single(progress.Items, item => item.Kind == "GitHubAsset");
+        Assert.Equal("ProjectA.1.2.3.zip", asset.Title);
+        Assert.Contains("item:GitHubPublish:ProjectA.1.2.3.zip:Completed", progress.Events);
         Assert.Contains(logger.SuccessMessages, message => message.Contains("Project build plan prepared in", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(logger.SuccessMessages, message => message.Contains("Project build release execution completed in", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(logger.SuccessMessages, message => message.Contains("GitHub publish completed in", StringComparison.OrdinalIgnoreCase));

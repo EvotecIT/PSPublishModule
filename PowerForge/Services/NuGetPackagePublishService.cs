@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using System.Diagnostics;
 
 namespace PowerForge;
 
@@ -117,7 +118,8 @@ internal sealed class NuGetPackagePublishService
         bool skipDuplicate,
         bool publishFailFast = true,
         bool suppressCompanionSymbols = false,
-        Action? remotePublishAttempted = null)
+        Action? remotePublishAttempted = null,
+        IProjectBuildProgressReporter? progress = null)
     {
         if (packages is null)
             throw new ArgumentNullException(nameof(packages));
@@ -136,16 +138,59 @@ internal sealed class NuGetPackagePublishService
             return result;
         }
 
+        var detailedProgress = progress as IProjectBuildProgressReporterV2;
+        var progressItems = packagePaths
+            .Select((path, index) => new
+            {
+                Path = path,
+                Item = new ProjectBuildProgressItem
+                {
+                    Phase = ProjectBuildProgressPhase.NuGetPublish,
+                    Key = $"publish:{index + 1}:{Path.GetFileName(path)}",
+                    Title = Path.GetFileName(path),
+                    Kind = ProjectBuildProgressPhase.NuGetPublish.ToString(),
+                    Position = index + 1,
+                    Total = packagePaths.Length
+                }
+            })
+            .ToDictionary(entry => entry.Path, entry => entry.Item, StringComparer.OrdinalIgnoreCase);
+        detailedProgress?.ItemsPlanned(
+            ProjectBuildProgressPhase.NuGetPublish,
+            progressItems.Values.OrderBy(item => item.Position).ToArray());
+        progress?.PhaseStarted(
+            ProjectBuildProgressPhase.NuGetPublish,
+            packagePaths.Length,
+            "Publishing existing package artifacts");
+        var completed = 0;
+
         foreach (var package in packagePaths)
         {
+            var item = progressItems[package];
+            var watch = Stopwatch.StartNew();
+            detailedProgress?.ItemUpdated(item, ProjectBuildProgressItemState.Started, "publishing");
+            progress?.PhaseUpdated(
+                ProjectBuildProgressPhase.NuGetPublish,
+                completed,
+                packagePaths.Length,
+                Path.GetFileName(package));
             if (!File.Exists(package))
             {
+                watch.Stop();
                 result.Success = false;
                 result.FailedItems.Add(package);
                 if (string.IsNullOrWhiteSpace(result.ErrorMessage))
                     result.ErrorMessage = $"Package '{package}' not found.";
+                item.Duration = watch.Elapsed;
+                detailedProgress?.ItemUpdated(
+                    item,
+                    ProjectBuildProgressItemState.Failed,
+                    result.ErrorMessage);
+                completed++;
                 if (publishFailFast)
+                {
+                    progress?.PhaseFailed(ProjectBuildProgressPhase.NuGetPublish, result.ErrorMessage);
                     return result;
+                }
                 continue;
             }
 
@@ -158,6 +203,7 @@ internal sealed class NuGetPackagePublishService
                          primaryResult.Outcome == DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate),
                     out var primaryPackage))
             {
+                watch.Stop();
                 var blockedResult = DotNetRepositoryReleaseService.CreateBlockedCompanionResult(
                     package,
                     primaryPackage);
@@ -166,8 +212,17 @@ internal sealed class NuGetPackagePublishService
                 result.PackagePushResults[package] = blockedResult;
                 if (string.IsNullOrWhiteSpace(result.ErrorMessage))
                     result.ErrorMessage = blockedResult.Message;
+                item.Duration = watch.Elapsed;
+                detailedProgress?.ItemUpdated(
+                    item,
+                    ProjectBuildProgressItemState.Failed,
+                    blockedResult.Message);
+                completed++;
                 if (publishFailFast)
+                {
+                    progress?.PhaseFailed(ProjectBuildProgressPhase.NuGetPublish, blockedResult.Message);
                     return result;
+                }
                 continue;
             }
 
@@ -186,19 +241,27 @@ internal sealed class NuGetPackagePublishService
                     Message = "Push handler returned no result."
                 };
             result.PackagePushResults[package] = pushResult;
+            watch.Stop();
+            item.Duration = watch.Elapsed;
 
             switch (pushResult.Outcome)
             {
                 case DotNetRepositoryReleaseService.PackagePushOutcome.Published:
                     result.PublishedItems.Add(package);
+                    detailedProgress?.ItemUpdated(item, ProjectBuildProgressItemState.Completed, "published");
                     break;
                 case DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate:
                     result.PublishedItems.Add(package);
                     result.SkippedDuplicateItems.Add(package);
+                    detailedProgress?.ItemUpdated(item, ProjectBuildProgressItemState.Completed, "already existed");
                     break;
                 default:
                     result.Success = false;
                     result.FailedItems.Add(package);
+                    detailedProgress?.ItemUpdated(
+                        item,
+                        ProjectBuildProgressItemState.Failed,
+                        pushResult.Message);
                     _logger.Verbose($"dotnet nuget push failed for {package}.");
                     if (pushResult.Message is string message && message.Length > 0)
                     {
@@ -207,9 +270,28 @@ internal sealed class NuGetPackagePublishService
                             result.ErrorMessage = message;
                     }
                     if (publishFailFast)
+                    {
+                        progress?.PhaseFailed(
+                            ProjectBuildProgressPhase.NuGetPublish,
+                            result.ErrorMessage ?? $"Failed to publish {Path.GetFileName(package)}.");
                         return result;
+                    }
                     break;
             }
+            completed++;
+        }
+
+        if (result.Success)
+        {
+            progress?.PhaseCompleted(
+                ProjectBuildProgressPhase.NuGetPublish,
+                $"{completed} package(s) processed");
+        }
+        else
+        {
+            progress?.PhaseFailed(
+                ProjectBuildProgressPhase.NuGetPublish,
+                result.ErrorMessage ?? $"{result.FailedItems.Count} package(s) failed");
         }
 
         return result;

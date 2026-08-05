@@ -229,6 +229,21 @@ public sealed class ModuleBuildWorkflowServiceTests
                 }
             });
         var steps = ModulePipelineStep.Create(plan);
+        var transported = ModulePipelineProgressItemFactory.Create(plan);
+        var packageLane = Assert.Single(
+            transported,
+            item => item.Kind == ModulePipelineStepKind.PackageBuild.ToString());
+        Assert.Equal(PowerForgeReleaseProgressPhase.Packages, packageLane.Phase);
+        Assert.Equal(1, packageLane.Position);
+        Assert.Equal(1, packageLane.Total);
+        var moduleItems = transported
+            .Where(item => item.Phase == PowerForgeReleaseProgressPhase.Module)
+            .ToArray();
+        Assert.NotEmpty(moduleItems);
+        Assert.Equal(
+            Enumerable.Range(1, moduleItems.Length),
+            moduleItems.Select(item => item.Position));
+        Assert.All(moduleItems, item => Assert.Equal(moduleItems.Length, item.Total));
 
         SpectreModulePipelineConsoleUi.RunInteractive(
             console,
@@ -236,6 +251,32 @@ public sealed class ModuleBuildWorkflowServiceTests
             "powerforge.json",
             progress =>
             {
+                var detailed = Assert.IsAssignableFrom<IModulePipelineProgressReporterV4>(progress);
+                var packageItems = new[]
+                {
+                    new PowerForgeReleaseProgressItem
+                    {
+                        Phase = PowerForgeReleaseProgressPhase.Packages,
+                        Key = "package:publish:one",
+                        Title = "Sample.Core.1.0.0.nupkg",
+                        Kind = nameof(ProjectBuildProgressPhase.NuGetPublish),
+                        Position = 1,
+                        Total = 2
+                    },
+                    new PowerForgeReleaseProgressItem
+                    {
+                        Phase = PowerForgeReleaseProgressPhase.Packages,
+                        Key = "package:publish:two",
+                        Title = "Sample.Syntax.1.0.0.nupkg",
+                        Kind = nameof(ProjectBuildProgressPhase.NuGetPublish),
+                        Position = 2,
+                        Total = 2
+                    }
+                };
+                detailed.ItemsPlanned(PowerForgeReleaseProgressPhase.Packages, packageItems);
+                foreach (var item in packageItems)
+                    detailed.ItemUpdated(item, PowerForgeReleaseProgressItemState.Completed, "published");
+
                 foreach (var step in steps)
                 {
                     progress.StepStarting(step);
@@ -251,6 +292,9 @@ public sealed class ModuleBuildWorkflowServiceTests
         Assert.Contains("Packages → Module", output, StringComparison.Ordinal);
         Assert.Contains("NuGet → PowerShell Gallery → GitHub", output, StringComparison.Ordinal);
         Assert.Contains("Build and publish NuGet packages (SamplePackages)", output, StringComparison.Ordinal);
+        Assert.Contains("Package 01/02 Sample.Core.1.0.0.nupkg", output, StringComparison.Ordinal);
+        Assert.Contains("Package 02/02 Sample.Syntax.1.0.0.nupkg", output, StringComparison.Ordinal);
+        Assert.Contains("published", output, StringComparison.Ordinal);
         Assert.Contains("Module artefacts", output, StringComparison.Ordinal);
         Assert.Contains("Module publishes", output, StringComparison.Ordinal);
         Assert.Contains("Coordinated steps", output, StringComparison.Ordinal);

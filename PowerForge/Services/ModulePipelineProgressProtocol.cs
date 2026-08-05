@@ -56,7 +56,7 @@ internal static class ModulePipelineProgressProtocol
         Console.WriteLine(Prefix + payload);
     }
 
-    private sealed class ProtocolReporter : IModulePipelineProgressReporterV3
+    private sealed class ProtocolReporter : IModulePipelineProgressReporterV4
     {
         private readonly IReadOnlyDictionary<string, PowerForgeReleaseProgressItem> _items;
 
@@ -87,6 +87,35 @@ internal static class ModulePipelineProgressProtocol
             item.ProgressValue = Math.Max(0, value);
             item.ProgressMaximum = Math.Max(0, maximum);
             Update(step, PowerForgeReleaseProgressItemState.Started, detail);
+        }
+
+        public void ItemsPlanned(
+            PowerForgeReleaseProgressPhase phase,
+            IReadOnlyList<PowerForgeReleaseProgressItem> items)
+        {
+            if (items is null || items.Count == 0)
+                return;
+
+            Write(new ModulePipelineProgressProtocolMessage
+            {
+                Items = items.Where(static item => item is not null).ToArray()
+            });
+        }
+
+        public void ItemUpdated(
+            PowerForgeReleaseProgressItem item,
+            PowerForgeReleaseProgressItemState state,
+            string? detail = null)
+        {
+            if (item is null)
+                return;
+
+            Write(new ModulePipelineProgressProtocolMessage
+            {
+                Item = item,
+                State = state,
+                Detail = detail
+            });
         }
 
         private void Update(

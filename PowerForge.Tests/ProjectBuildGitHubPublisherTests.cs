@@ -8,11 +8,21 @@ public sealed class ProjectBuildGitHubPublisherTests
     public void Publish_per_project_builds_project_tags_and_collects_results()
     {
         var requests = new List<GitHubReleasePublishRequest>();
+        var progress = new RecordingProjectProgress();
         var publisher = new ProjectBuildGitHubPublisher(
             new NullLogger(),
             request =>
             {
                 requests.Add(request);
+                var assetPath = Assert.Single(request.AssetFilePaths!);
+                request.Progress?.Report(new GitHubReleaseAssetProgress
+                {
+                    FilePath = assetPath,
+                    FileName = Path.GetFileName(assetPath),
+                    Position = 1,
+                    TotalAssets = 1,
+                    State = GitHubReleaseAssetProgressState.Uploaded
+                });
                 return new GitHubReleasePublishResult
                 {
                     Succeeded = true,
@@ -26,8 +36,10 @@ public sealed class ProjectBuildGitHubPublisherTests
 
         try
         {
-            var assetA = Path.Combine(root.FullName, "ProjectA.1.2.3.zip");
-            var assetB = Path.Combine(root.FullName, "ProjectB.2.0.0.zip");
+            var projectAPath = Directory.CreateDirectory(Path.Combine(root.FullName, "ProjectA"));
+            var projectBPath = Directory.CreateDirectory(Path.Combine(root.FullName, "ProjectB"));
+            var assetA = Path.Combine(projectAPath.FullName, "Package.zip");
+            var assetB = Path.Combine(projectBPath.FullName, "Package.zip");
             File.WriteAllText(assetA, "a");
             File.WriteAllText(assetB, "b");
 
@@ -39,6 +51,7 @@ public sealed class ProjectBuildGitHubPublisherTests
                 ReleaseMode = "PerProject",
                 TagTemplate = "{Project}-v{Version}",
                 ReleaseName = "{Project} {Version}",
+                Progress = progress,
                 Release = new DotNetRepositoryReleaseResult
                 {
                     Success = true,
@@ -81,10 +94,36 @@ public sealed class ProjectBuildGitHubPublisherTests
                     Assert.Single(second.AssetFilePaths!);
                     Assert.Equal(assetB, second.AssetFilePaths![0]);
                 });
+            Assert.Collection(
+                progress.Items,
+                first =>
+                {
+                    Assert.Equal(1, first.Position);
+                    Assert.Equal(2, first.Total);
+                },
+                second =>
+                {
+                    Assert.Equal(2, second.Position);
+                    Assert.Equal(2, second.Total);
+                });
+            Assert.Equal(2, progress.Items.Select(static item => item.Key).Distinct(StringComparer.Ordinal).Count());
         }
         finally
         {
             try { root.Delete(recursive: true); } catch { }
         }
+    }
+
+    private sealed class RecordingProjectProgress : IProjectBuildProgressReporterV2
+    {
+        internal List<ProjectBuildProgressItem> Items { get; } = new();
+
+        public void PhaseStarted(ProjectBuildProgressPhase phase, int totalItems, string? detail = null) { }
+        public void PhaseUpdated(ProjectBuildProgressPhase phase, int completedItems, int totalItems, string? detail = null) { }
+        public void PhaseCompleted(ProjectBuildProgressPhase phase, string? detail = null) { }
+        public void PhaseFailed(ProjectBuildProgressPhase phase, string? detail = null) { }
+        public void ItemsPlanned(ProjectBuildProgressPhase phase, IReadOnlyList<ProjectBuildProgressItem> items)
+            => Items.AddRange(items);
+        public void ItemUpdated(ProjectBuildProgressItem item, ProjectBuildProgressItemState state, string? detail = null) { }
     }
 }
