@@ -18,7 +18,7 @@ public sealed class GitHubWebsiteRunWorkflowTests
     }
 
     [Fact]
-    public void WebsiteCiWorkflow_ShouldDisablePackagePermissionAndPipelineCredentials()
+    public void WebsiteCiWorkflow_ShouldSeparateUntrustedAndTrustedCredentialBoundaries()
     {
         var repoRoot = FindRepoRoot();
         var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-ci.yml");
@@ -26,8 +26,19 @@ public sealed class GitHubWebsiteRunWorkflowTests
         var workflowYaml = File.ReadAllText(workflowPath);
 
         Assert.NotNull(new YamlDotNet.Serialization.DeserializerBuilder().Build().Deserialize<object>(workflowYaml));
-        Assert.DoesNotContain("packages: read", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("website-ci-untrusted:", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("credential_mode: none", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("website-ci-trusted:", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("if: ${{ github.event_name != 'pull_request' && github.event_name != 'pull_request_target' }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("packages: read", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("credential_mode: standard", workflowYaml, StringComparison.Ordinal);
+
+        string untrustedJob = workflowYaml[
+            workflowYaml.IndexOf("  website-ci-untrusted:", StringComparison.Ordinal)..
+            workflowYaml.IndexOf("  website-ci-trusted:", StringComparison.Ordinal)];
+        Assert.DoesNotContain("packages: read", untrustedJob, StringComparison.Ordinal);
+        Assert.DoesNotContain("secrets:", untrustedJob, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -121,7 +132,7 @@ public sealed class GitHubWebsiteRunWorkflowTests
     }
 
     [Theory]
-    [InlineData("powerforge-website-ci.yml", 1)]
+    [InlineData("powerforge-website-ci.yml", 2)]
     [InlineData("powerforge-website-deploy.yml", 2)]
     [InlineData("powerforge-website-maintenance.yml", 1)]
     public void WebsiteWorkflows_ShouldForwardRequestedDotNetWorkloads(string workflowFileName, int expectedForwardCount)
