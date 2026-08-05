@@ -4,12 +4,15 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Xml.Linq;
 
 namespace PowerForge;
 
 public sealed partial class DotNetRepositoryReleaseService
 {
+    private static readonly TimeSpan FreshnessCleanupRetryWindow = TimeSpan.FromSeconds(5);
+
     /// <summary>
     /// Removes only primary project assemblies that could survive in an obsolete
     /// framework/RID output or intermediate directory. Removing the intermediate
@@ -32,6 +35,8 @@ public sealed partial class DotNetRepositoryReleaseService
 
         try
         {
+            var retriedFileCount = 0;
+            var retryWaitDuration = TimeSpan.Zero;
             var projectDirectory = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;
             var primaryFileNames = ResolvePrimaryAssemblyFileNamesForCleanup(project)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -86,7 +91,24 @@ public sealed partial class DotNetRepositoryReleaseService
                     if (!primaryFileNames.Contains(Path.GetFileName(path)))
                         continue;
 
-                    File.Delete(path);
+                    if (!TryDeleteFreshnessOutput(
+                            path,
+                            FreshnessCleanupRetryWindow,
+                            out var deleteAttempts,
+                            out var deleteDuration,
+                            out var deleteError))
+                    {
+                        throw new IOException(
+                            $"Primary output remained locked or unavailable after {deleteAttempts} delete attempt(s) over {FormatDuration(deleteDuration)}: '{path}'. " +
+                            "Close the process using this build output and retry.",
+                            deleteError);
+                    }
+
+                    if (deleteAttempts > 1)
+                    {
+                        retriedFileCount++;
+                        retryWaitDuration += deleteDuration;
+                    }
                     removedFileCount++;
                     if (intermediateRootSet.Any(root => IsPathWithinRoot(path, root)))
                         removedIntermediatePrimaryOutput = true;
@@ -95,6 +117,11 @@ public sealed partial class DotNetRepositoryReleaseService
 
             watch.Stop();
             duration = watch.Elapsed;
+            if (retriedFileCount > 0)
+            {
+                logger.Warn(
+                    $"{project.ProjectName}: freshness cleanup waited {FormatDuration(retryWaitDuration)} for {retriedFileCount} transiently locked primary output(s).");
+            }
             var message = $"{project.ProjectName}: freshness cleanup removed {removedFileCount} stale primary output(s) from {searchRoots.Length} scoped root(s) in {FormatDuration(duration)}.";
             if (removedFileCount > 0)
                 logger.Success(message);
@@ -109,6 +136,48 @@ public sealed partial class DotNetRepositoryReleaseService
             error = $"Freshness cleanup failed for {project.ProjectName} after removing {removedFileCount} file(s). {ex.Message}";
             logger.Error(error);
             return false;
+        }
+    }
+
+    internal static bool TryDeleteFreshnessOutput(
+        string path,
+        TimeSpan retryWindow,
+        out int attempts,
+        out TimeSpan duration,
+        out Exception? error)
+    {
+        var watch = Stopwatch.StartNew();
+        attempts = 0;
+        error = null;
+        var delayMilliseconds = 40;
+        var boundedRetryWindow = retryWindow < TimeSpan.Zero ? TimeSpan.Zero : retryWindow;
+
+        while (true)
+        {
+            attempts++;
+            try
+            {
+                File.Delete(path);
+                watch.Stop();
+                duration = watch.Elapsed;
+                error = null;
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                error = ex;
+                if (watch.Elapsed >= boundedRetryWindow)
+                {
+                    watch.Stop();
+                    duration = watch.Elapsed;
+                    return false;
+                }
+
+                var remaining = boundedRetryWindow - watch.Elapsed;
+                var delay = TimeSpan.FromMilliseconds(Math.Min(delayMilliseconds, Math.Max(1, remaining.TotalMilliseconds)));
+                Thread.Sleep(delay);
+                delayMilliseconds = Math.Min(delayMilliseconds * 2, 400);
+            }
         }
     }
 
