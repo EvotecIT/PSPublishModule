@@ -130,7 +130,13 @@ internal static class SpectrePowerForgeReleaseConsoleUi
         var runModule = !hasTargetAwareSelection &&
                         spec.Module is not null &&
                         (!request.PackagesOnly && !request.ToolsOnly || request.ModuleOnly);
-        var runPackages = spec.Packages is not null && !request.ModuleOnly && !request.ToolsOnly;
+        var moduleIncludesPackages = runModule &&
+                                     spec.Module?.IncludesPackages == true &&
+                                     !request.PlanOnly &&
+                                     !request.ValidateOnly;
+        var runPackages = (spec.Packages is not null || moduleIncludesPackages) &&
+                          !request.ModuleOnly &&
+                          !request.ToolsOnly;
         if (hasTargetAwareSelection)
             runPackages = false;
         var runTools = spec.Tools is not null && !request.ModuleOnly && !request.PackagesOnly;
@@ -283,7 +289,16 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 .Select(ToLedgerItem));
 
             if (_tasks.TryGetValue(phase, out var phaseTask))
+            {
+                if (!phaseTask.IsStarted)
+                {
+                    phaseTask.StartTask();
+                    _presentation.MarkStarted(phaseTask, phase.ToString());
+                    phaseTask.Value = 5;
+                }
+
                 phaseTask.Description = Label(phase, $"{CountItems(phase)} detailed step(s)");
+            }
         }
 
         public void ItemUpdated(
@@ -314,6 +329,14 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             foreach (var entry in _tasks)
             {
                 if (entry.Value.IsFinished || _failed.Contains(entry.Key)) continue;
+                if (success &&
+                    _ledger.GetItemCount(entry.Key.ToString()) > 0 &&
+                    _ledger.GetCompletionRatio(entry.Key.ToString()) >= 1d)
+                {
+                    PhaseCompleted(entry.Key, $"{CountItems(entry.Key)} detailed step(s) completed");
+                    continue;
+                }
+
                 if (entry.Value.IsStarted && !success)
                 {
                     PhaseFailed(entry.Key, "workflow stopped");
@@ -367,13 +390,13 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             => new()
             {
                 Key = $"{item.Phase}:{item.Key}",
-                GroupKey = item.Phase.ToString(),
-                GroupTitle = _phaseNames[item.Phase],
-                GroupOrder = (int)item.Phase,
+                GroupKey = item.GroupKey ?? item.Phase.ToString(),
+                GroupTitle = item.GroupTitle ?? _phaseNames[item.Phase],
+                GroupOrder = ((int)item.Phase * 100) + (item.GroupOrder ?? 0),
                 Title = item.Title,
                 Kind = item.Kind,
                 Target = item.Target,
-                CounterLabel = GetCounterLabel(item.Phase),
+                CounterLabel = item.CounterLabel ?? GetCounterLabel(item),
                 Position = item.Position,
                 Total = item.Total,
                 ProgressValue = item.ProgressValue,
@@ -381,8 +404,16 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 Duration = item.Duration
             };
 
-        private static string GetCounterLabel(PowerForgeReleaseProgressPhase phase)
-            => phase switch
+        private static string GetCounterLabel(PowerForgeReleaseProgressItem item)
+        {
+            if (item.Phase == PowerForgeReleaseProgressPhase.Packages &&
+                (string.Equals(item.Kind, ProjectBuildProgressPhase.PackageSigning.ToString(), StringComparison.Ordinal) ||
+                 string.Equals(item.Kind, ProjectBuildProgressPhase.NuGetPublish.ToString(), StringComparison.Ordinal)))
+            {
+                return "Package";
+            }
+
+            return item.Phase switch
             {
                 PowerForgeReleaseProgressPhase.Versioning => "Version",
                 PowerForgeReleaseProgressPhase.Module => "Module",
@@ -391,5 +422,6 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 PowerForgeReleaseProgressPhase.GitHub => "Asset",
                 _ => "Item"
             };
+        }
     }
 }

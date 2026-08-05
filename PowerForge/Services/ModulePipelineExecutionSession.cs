@@ -7,6 +7,7 @@ internal sealed class ModulePipelineExecutionSession
 {
     private readonly IModulePipelineProgressReporterV2? _reporterV2;
     private readonly IModulePipelineProgressReporterV3? _reporterV3;
+    private readonly IModulePipelineProgressReporterV4? _reporterV4;
     private readonly HashSet<string> _startedKeys;
     private readonly Dictionary<string, ModulePipelineStep> _stepsByKey;
     private readonly Dictionary<ConfigurationArtefactSegment, ModulePipelineStep> _artefactSteps;
@@ -24,6 +25,7 @@ internal sealed class ModulePipelineExecutionSession
         Reporter = reporter ?? NullModulePipelineProgressReporter.Instance;
         _reporterV2 = Reporter as IModulePipelineProgressReporterV2;
         _reporterV3 = Reporter as IModulePipelineProgressReporterV3;
+        _reporterV4 = Reporter as IModulePipelineProgressReporterV4;
         _startedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         _stepsByKey = Steps
             .Where(static step => !string.IsNullOrWhiteSpace(step.Key))
@@ -159,6 +161,17 @@ internal sealed class ModulePipelineExecutionSession
     {
         if (step is null || _reporterV3 is null) return;
         try { _reporterV3.StepProgress(step, value, maximum, detail); } catch { }
+    }
+
+    internal IProjectBuildProgressReporter? CreateProjectBuildProgressReporter(ModulePipelineStep? step)
+    {
+        if (step is null || _reporterV4 is null)
+            return null;
+
+        var nested = new ModulePipelineNestedProgressAdapter(_reporterV4, step);
+        return new ProjectBuildReleaseProgressAdapter(
+            nested,
+            PowerForgeReleaseProgressPhase.Packages);
     }
 
     internal void Fail(ModulePipelineStep? step, Exception error)

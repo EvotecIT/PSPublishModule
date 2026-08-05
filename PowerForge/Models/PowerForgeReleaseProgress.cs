@@ -61,6 +61,18 @@ public sealed class PowerForgeReleaseProgressItem
     /// <summary>Optional semantic destination or artifact target shown separately from the action title.</summary>
     public string? Target { get; set; }
 
+    /// <summary>Optional presentation group key used to keep nested workflow stages distinct.</summary>
+    public string? GroupKey { get; set; }
+
+    /// <summary>Optional presentation group title used for nested workflow history.</summary>
+    public string? GroupTitle { get; set; }
+
+    /// <summary>Optional order within the owning release phase.</summary>
+    public int? GroupOrder { get; set; }
+
+    /// <summary>Optional counter label such as Project, Package, or Asset.</summary>
+    public string? CounterLabel { get; set; }
+
     /// <summary>One-based position in the owning plan.</summary>
     public int Position { get; set; }
 

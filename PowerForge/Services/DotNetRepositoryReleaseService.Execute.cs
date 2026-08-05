@@ -259,10 +259,14 @@ public sealed partial class DotNetRepositoryReleaseService
 
             PrepareReleaseVersionFloor(packable, expectedGlobal, expectedMap, spec);
             var alignedVersions = ResolveAlignedPackageVersions(packable, expectedGlobal, expectedMap, spec);
+            var detailedProgress = progress as IProjectBuildProgressReporterV2;
+            var versionItems = CreateVersionProgressItems(packable, detailedProgress);
             progress?.PhaseStarted(ProjectBuildProgressPhase.Versioning, packable.Length, "Resolving project versions");
             var versionProgress = 0;
             foreach (var project in packable)
             {
+                var versionItem = versionItems[project];
+                detailedProgress?.ItemUpdated(versionItem, ProjectBuildProgressItemState.Started, "resolving version");
                 progress?.PhaseUpdated(ProjectBuildProgressPhase.Versioning, versionProgress, packable.Length, project.ProjectName);
                 var expectedVersion = ResolveExpectedVersion(
                     project.ProjectName,
@@ -301,6 +305,7 @@ public sealed partial class DotNetRepositoryReleaseService
                     project.ErrorMessage = $"Version resolution failed: {ex.Message}";
                     _logger.Warn($"{project.ProjectName}: {project.ErrorMessage}");
                     result.Success = false;
+                    detailedProgress?.ItemUpdated(versionItem, ProjectBuildProgressItemState.Failed, project.ErrorMessage);
                     versionProgress++;
                     progress?.PhaseUpdated(ProjectBuildProgressPhase.Versioning, versionProgress, packable.Length, project.ProjectName);
                     continue;
@@ -313,6 +318,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         : resolutionWarning;
                     _logger.Warn($"{project.ProjectName}: {project.ErrorMessage}");
                     result.Success = false;
+                    detailedProgress?.ItemUpdated(versionItem, ProjectBuildProgressItemState.Failed, project.ErrorMessage);
                     versionProgress++;
                     progress?.PhaseUpdated(ProjectBuildProgressPhase.Versioning, versionProgress, packable.Length, project.ProjectName);
                     continue;
@@ -342,6 +348,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 project.NewVersion = resolvedVersion;
                 if (spec.WhatIf || !shouldUpdateProjectVersion)
                 {
+                    detailedProgress?.ItemUpdated(versionItem, ProjectBuildProgressItemState.Completed, resolvedVersion);
                     versionProgress++;
                     progress?.PhaseUpdated(ProjectBuildProgressPhase.Versioning, versionProgress, packable.Length, project.ProjectName);
                     continue;
@@ -364,6 +371,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         _logger.Info($"{project.ProjectName}: version unchanged ({project.OldVersion}).");
                 }
 
+                detailedProgress?.ItemUpdated(versionItem, ProjectBuildProgressItemState.Completed, resolvedVersion);
                 versionProgress++;
                 progress?.PhaseUpdated(ProjectBuildProgressPhase.Versioning, versionProgress, packable.Length, project.ProjectName);
             }
@@ -375,7 +383,6 @@ public sealed partial class DotNetRepositoryReleaseService
             if (spec.Pack)
             {
                 progress?.PhaseStarted(ProjectBuildProgressPhase.PackageBuild, packable.Length, "Building and packing projects");
-                var detailedProgress = progress as IProjectBuildProgressReporterV2;
                 var packageProgressItems = CreatePackageProgressItems(packable, detailedProgress);
                 var packageWatches = new Dictionary<DotNetRepositoryProjectResult, Stopwatch>();
                 DotNetPackResult? batchPackResult = null;
@@ -588,182 +595,18 @@ public sealed partial class DotNetRepositoryReleaseService
                 else
                     progress?.PhaseCompleted(ProjectBuildProgressPhase.PackageBuild, $"{packable.Sum(project => project.Packages.Count)} package(s) produced");
 
-                if (!spec.WhatIf && signNuGetPackages && signingSha256 is not null)
+                if (!spec.WhatIf &&
+                    signNuGetPackages &&
+                    signingSha256 is not null &&
+                    ExecutePackageSigning(spec, result, packable, signingSha256, progress, detailedProgress))
                 {
-                    var packagesToSign = packable
-                        .Where(project => string.IsNullOrWhiteSpace(project.ErrorMessage))
-                        .SelectMany(project => project.Packages.Concat(project.SymbolPackages))
-                        .Where(package => !string.IsNullOrWhiteSpace(package))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToArray();
-
-                    if (packagesToSign.Length > 0)
-                    {
-                        progress?.PhaseStarted(ProjectBuildProgressPhase.PackageSigning, packagesToSign.Length, "Signing NuGet packages");
-                        _logger.Info($"Signing {packagesToSign.Length} NuGet package(s)...");
-                        var signingWatch = Stopwatch.StartNew();
-                        if (!_signPackages(packagesToSign, spec, signingSha256, out var signError))
-                        {
-                            signingWatch.Stop();
-                            result.ErrorMessage = signError;
-                            _logger.Warn(signError);
-                            result.Success = false;
-                            MarkPackageSigningFailure(packable, packagesToSign, signError);
-                            progress?.PhaseFailed(ProjectBuildProgressPhase.PackageSigning, signError);
-                            if (spec.PublishFailFast)
-                                return result;
-                        }
-                        else
-                        {
-                            signingWatch.Stop();
-                            _logger.Success($"Signed {packagesToSign.Length} NuGet package(s) in {FormatDuration(signingWatch.Elapsed)}.");
-                            progress?.PhaseCompleted(ProjectBuildProgressPhase.PackageSigning, $"{packagesToSign.Length} package(s) signed");
-                        }
-                    }
+                    return result;
                 }
             }
 
-            if (spec.Publish)
+            if (spec.Publish && ExecuteNuGetPublishing(spec, result, packable, root, progress, detailedProgress))
             {
-                var preflight = ValidatePublishPreflight(packable, spec);
-                if (!preflight.Success)
-                {
-                    result.Success = false;
-                    result.ErrorMessage = preflight.ErrorMessage;
-                    return result;
-                }
-
-                if (string.IsNullOrWhiteSpace(spec.PublishApiKey))
-                {
-                    result.Success = false;
-                    result.ErrorMessage = "PublishApiKey is required when Publish is enabled.";
-                    return result;
-                }
-
-                var source = string.IsNullOrWhiteSpace(spec.PublishSource)
-                    ? "https://api.nuget.org/v3/index.json"
-                    : spec.PublishSource!.Trim();
-                result.PublishSource = source;
-
-                var orderedProjects = SortProjectsForPublish(packable);
-                var publishSymbolsSeparately = spec.IncludeSymbols && IsLocalPublishSource(source);
-                var packages = GetPackagesForPublish(orderedProjects, publishSymbolsSeparately).ToArray();
-
-                var packageLookup = orderedProjects
-                    .SelectMany(p => (publishSymbolsSeparately
-                            ? p.Packages.Concat(p.SymbolPackages)
-                            : p.Packages)
-                        .Select(pkg => new { Package = pkg, Project = p }))
-                    .GroupBy(x => x.Package, StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(g => g.Key, g => g.First().Project, StringComparer.OrdinalIgnoreCase);
-
-                var publishWatch = Stopwatch.StartNew();
-                progress?.PhaseStarted(ProjectBuildProgressPhase.NuGetPublish, packages.Length, "Publishing package artifacts");
-                var publishProgress = 0;
-                foreach (var pkg in packages)
-                {
-                    progress?.PhaseUpdated(ProjectBuildProgressPhase.NuGetPublish, publishProgress, packages.Length, Path.GetFileName(pkg));
-                    packageLookup.TryGetValue(pkg, out var project);
-                    var publishedArtifacts = GetPublishedArtifacts(
-                        project,
-                        pkg,
-                        includeCompanionSymbols: !publishSymbolsSeparately);
-                    if (spec.WhatIf)
-                    {
-                        result.PublishedPackages.AddRange(publishedArtifacts);
-                        continue;
-                    }
-
-                    if (publishSymbolsSeparately &&
-                        !CanPublishSymbolPackage(
-                            pkg,
-                            (IEnumerable<string>?)project?.Packages ?? Array.Empty<string>(),
-                            primaryPackage =>
-                                result.PublishedPackages.Contains(primaryPackage, StringComparer.OrdinalIgnoreCase) ||
-                                result.SkippedDuplicatePackages.Contains(primaryPackage, StringComparer.OrdinalIgnoreCase),
-                            out var primaryPackage))
-                    {
-                        var blockedResult = CreateBlockedCompanionResult(pkg, primaryPackage);
-                        result.Success = false;
-                        result.FailedPackages.Add(pkg);
-                        _logger.Warn(blockedResult.Message!);
-                        if (project is not null && string.IsNullOrWhiteSpace(project.ErrorMessage))
-                            project.ErrorMessage = blockedResult.Message;
-                        if (spec.PublishFailFast)
-                        {
-                            result.ErrorMessage = blockedResult.Message;
-                            return result;
-                        }
-
-                        continue;
-                    }
-
-                    _logger.Info($"Publishing {Path.GetFileName(pkg)}...");
-                    var packagePublishWatch = Stopwatch.StartNew();
-                    spec.RemotePublishAttempted?.Invoke();
-                    var pushResult = PushPackage(
-                        pkg,
-                        spec.PublishApiKey!,
-                        source,
-                        spec.SkipDuplicate,
-                        suppressCompanionSymbols: !spec.IncludeSymbols || publishSymbolsSeparately,
-                        workingDirectory: root);
-                    packagePublishWatch.Stop();
-                    var artifactOutcomes = ClassifyPublishedArtifacts(
-                        publishedArtifacts,
-                        pushResult,
-                        spec.SkipDuplicate);
-                    foreach (var artifact in publishedArtifacts)
-                    {
-                        switch (artifactOutcomes[artifact])
-                        {
-                            case PackagePushOutcome.SkippedDuplicate:
-                                result.SkippedDuplicatePackages.Add(artifact);
-                                _logger.Info($"Skipped duplicate {Path.GetFileName(artifact)} in {FormatDuration(packagePublishWatch.Elapsed)}; package already exists in the feed.");
-                                break;
-                            case PackagePushOutcome.Published:
-                                result.PublishedPackages.Add(artifact);
-                                _logger.Success($"Published {Path.GetFileName(artifact)} in {FormatDuration(packagePublishWatch.Elapsed)}.");
-                                break;
-                            default:
-                                result.FailedPackages.Add(artifact);
-                                _logger.Warn($"NuGet push failed for {artifact} after {FormatDuration(packagePublishWatch.Elapsed)}: {pushResult.Message}");
-                                break;
-                        }
-                    }
-
-                    var failedArtifacts = publishedArtifacts
-                        .Where(artifact => artifactOutcomes[artifact] == PackagePushOutcome.Failed)
-                        .ToArray();
-                    if (failedArtifacts.Length > 0)
-                    {
-                        result.Success = false;
-                        var error = pushResult.Message;
-                        if (project is not null && string.IsNullOrWhiteSpace(project.ErrorMessage))
-                            project.ErrorMessage = $"Publish failed for {string.Join(", ", failedArtifacts.Select(Path.GetFileName))}: {error}";
-                        if (spec.PublishFailFast)
-                        {
-                            if (string.IsNullOrWhiteSpace(result.ErrorMessage))
-                                result.ErrorMessage = $"Publish failed for {string.Join(", ", failedArtifacts.Select(Path.GetFileName))}.";
-                            return result;
-                        }
-                    }
-                    publishProgress++;
-                }
-                publishWatch.Stop();
-                var publishSummary = spec.WhatIf
-                    ? $"NuGet publish plan prepared in {FormatDuration(publishWatch.Elapsed)} ({result.PublishedPackages.Count} package artifact(s) would be published)."
-                    : $"NuGet publish phase completed in {FormatDuration(publishWatch.Elapsed)} ({result.PublishedPackages.Count} published, {result.SkippedDuplicatePackages.Count} skipped duplicate, {result.FailedPackages.Count} failed).";
-                if (result.FailedPackages.Count == 0)
-                {
-                    _logger.Success(publishSummary);
-                    progress?.PhaseCompleted(ProjectBuildProgressPhase.NuGetPublish, publishSummary);
-                }
-                else
-                {
-                    _logger.Warn(publishSummary);
-                    progress?.PhaseFailed(ProjectBuildProgressPhase.NuGetPublish, publishSummary);
-                }
+                return result;
             }
 
             if (result.ResolvedVersionsByProject.Count > 0)

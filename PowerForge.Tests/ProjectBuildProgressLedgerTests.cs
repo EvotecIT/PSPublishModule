@@ -249,6 +249,126 @@ public sealed class ProjectBuildProgressLedgerTests
         Assert.DoesNotContain("x Phase", output, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void UnifiedReleaseConsole_CompletesModuleOwnedPackageLaneFromDetailedItems()
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer, height: 20);
+        var spec = new PowerForgeReleaseSpec
+        {
+            Module = new PowerForgeModuleReleaseOptions
+            {
+                ModuleName = "SampleProgress",
+                ModuleVersion = "1.0.0",
+                IncludesPackages = true
+            }
+        };
+        var request = new PowerForgeReleaseRequest
+        {
+            ConfigPath = "release.json"
+        };
+        var package = new PowerForgeReleaseProgressItem
+        {
+            Phase = PowerForgeReleaseProgressPhase.Packages,
+            Key = "module:package:Sample.Core.1.0.0.nupkg",
+            Title = "Sample.Core.1.0.0.nupkg",
+            Kind = ProjectBuildProgressPhase.NuGetPublish.ToString(),
+            Position = 1,
+            Total = 1
+        };
+
+        var result = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
+            console,
+            spec,
+            request,
+            progress =>
+            {
+                var detailed = Assert.IsAssignableFrom<IPowerForgeReleaseProgressReporterV2>(progress);
+                progress.PhaseStarted(PowerForgeReleaseProgressPhase.Module, 1);
+                progress.PhaseCompleted(PowerForgeReleaseProgressPhase.Module, "complete");
+                detailed.ItemsPlanned(PowerForgeReleaseProgressPhase.Packages, [package]);
+                detailed.ItemUpdated(package, PowerForgeReleaseProgressItemState.Started, "publishing");
+                detailed.ItemUpdated(package, PowerForgeReleaseProgressItemState.Completed, "published");
+                return new PowerForgeReleaseResult { Success = true };
+            });
+
+        Assert.True(result.Success);
+        var output = writer.ToString();
+        Assert.Contains("Package 01/01 Sample.Core.1.0.0.nupkg", output, StringComparison.Ordinal);
+        Assert.Contains("published", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("Build NuGet packages - not required", output, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void UnifiedReleaseConsole_KeepsNestedPackageStagesOrderedAndLocallyCounted()
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer, height: 24);
+        var spec = new PowerForgeReleaseSpec
+        {
+            Module = new PowerForgeModuleReleaseOptions
+            {
+                ModuleName = "SampleProgress",
+                ModuleVersion = "1.0.0",
+                IncludesPackages = true
+            }
+        };
+
+        var result = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
+            console,
+            spec,
+            new PowerForgeReleaseRequest { ConfigPath = "release.json" },
+            progress =>
+            {
+                var detailed = Assert.IsAssignableFrom<IPowerForgeReleaseProgressReporterV2>(progress);
+                var project = new ProjectBuildReleaseProgressAdapter(
+                    detailed,
+                    PowerForgeReleaseProgressPhase.Packages);
+                foreach (var phase in new[]
+                         {
+                             ProjectBuildProgressPhase.Versioning,
+                             ProjectBuildProgressPhase.PackageBuild,
+                             ProjectBuildProgressPhase.PackageSigning,
+                             ProjectBuildProgressPhase.NuGetPublish,
+                             ProjectBuildProgressPhase.GitHubPublish
+                         })
+                {
+                    var counter = phase is ProjectBuildProgressPhase.PackageSigning or ProjectBuildProgressPhase.NuGetPublish
+                        ? "Package"
+                        : phase == ProjectBuildProgressPhase.GitHubPublish ? "Asset" : "Project";
+                    var item = new ProjectBuildProgressItem
+                    {
+                        Phase = phase,
+                        Key = $"{phase}:one",
+                        Title = $"{phase} item",
+                        Kind = phase == ProjectBuildProgressPhase.GitHubPublish ? "GitHubAsset" : phase.ToString(),
+                        Position = 1,
+                        Total = 2
+                    };
+                    project.ItemsPlanned(phase, [item]);
+                    project.ItemUpdated(item, ProjectBuildProgressItemState.Completed, $"{counter} complete");
+                }
+
+                return new PowerForgeReleaseResult { Success = true };
+            });
+
+        Assert.True(result.Success);
+        var output = writer.ToString();
+        var version = output.LastIndexOf("Resolve project versions", StringComparison.Ordinal);
+        var build = output.LastIndexOf("Build packages and archives", StringComparison.Ordinal);
+        var sign = output.LastIndexOf("Sign NuGet packages", StringComparison.Ordinal);
+        var publish = output.LastIndexOf("Publish NuGet packages", StringComparison.Ordinal);
+        var github = output.LastIndexOf("Publish project GitHub release", StringComparison.Ordinal);
+        Assert.True(version >= 0, output);
+        Assert.True(build > version, output);
+        Assert.True(sign > build, output);
+        Assert.True(publish > sign, output);
+        Assert.True(github > publish, output);
+        Assert.Contains("Project 01/02 Versioning item", output, StringComparison.Ordinal);
+        Assert.Contains("Package 01/02 PackageSigning item", output, StringComparison.Ordinal);
+        Assert.Contains("Asset 01/02 GitHubPublish item", output, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(1, 9, "01/09")]
     [InlineData(1, 24, "01/24")]
@@ -439,15 +559,31 @@ public sealed class ProjectBuildProgressLedgerTests
                 progress);
 
             Assert.True(result.Success, result.ErrorMessage);
+            var versionItems = progress.Planned
+                .Where(item => item.Phase == ProjectBuildProgressPhase.Versioning)
+                .ToArray();
+            var packageItems = progress.Planned
+                .Where(item => item.Phase == ProjectBuildProgressPhase.PackageBuild)
+                .ToArray();
             Assert.Equal(
                 new[] { "Sample.First", "Sample.Second" },
-                progress.Planned.Select(item => item.Title).OrderBy(title => title, StringComparer.Ordinal));
-            Assert.Equal(new[] { 1, 2 }, progress.Planned.Select(item => item.Position).OrderBy(position => position));
-            Assert.All(progress.Planned, item => Assert.Equal(2, item.Total));
-            Assert.Equal(2, progress.Updates.Count(update => update.State == ProjectBuildProgressItemState.Started));
-            Assert.Equal(2, progress.Updates.Count(update => update.State == ProjectBuildProgressItemState.Completed));
+                packageItems.Select(item => item.Title).OrderBy(title => title, StringComparer.Ordinal));
+            Assert.Equal(new[] { 1, 2 }, packageItems.Select(item => item.Position).OrderBy(position => position));
+            Assert.All(packageItems, item => Assert.Equal(2, item.Total));
+            Assert.Equal(2, versionItems.Length);
+            Assert.All(versionItems, versionItem => Assert.Contains(progress.Updates, update =>
+                update.Item.Key == versionItem.Key &&
+                update.State == ProjectBuildProgressItemState.Completed));
+            Assert.Equal(2, progress.Updates.Count(update =>
+                update.Item.Phase == ProjectBuildProgressPhase.PackageBuild &&
+                update.State == ProjectBuildProgressItemState.Started));
+            Assert.Equal(2, progress.Updates.Count(update =>
+                update.Item.Phase == ProjectBuildProgressPhase.PackageBuild &&
+                update.State == ProjectBuildProgressItemState.Completed));
             Assert.All(
-                progress.Updates.Where(update => update.State == ProjectBuildProgressItemState.Completed),
+                progress.Updates.Where(update =>
+                    update.Item.Phase == ProjectBuildProgressPhase.PackageBuild &&
+                    update.State == ProjectBuildProgressItemState.Completed),
                 update =>
                 {
                     Assert.NotNull(update.Item.Duration);
@@ -461,6 +597,71 @@ public sealed class ProjectBuildProgressLedgerTests
         finally
         {
             try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Execute_ReportsEverySignedPackageAsDurableWork()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            WriteProject(root.FullName, "Sample.Signed");
+            var progress = new RecordingProjectBuildProgress();
+            DotNetRepositoryReleaseService.PackageSigningHandler signer = (
+                IReadOnlyList<string> packages,
+                DotNetRepositoryReleaseSpec spec,
+                string sha256,
+                out string error) =>
+            {
+                error = string.Empty;
+                return packages.Count > 0;
+            };
+            var service = new DotNetRepositoryReleaseService(
+                new NullLogger(),
+                signer,
+                (_, _) => "ABCDEF");
+
+            var result = service.Execute(
+                new DotNetRepositoryReleaseSpec
+                {
+                    RootPath = root.FullName,
+                    Configuration = "Release",
+                    OutputPath = Path.Combine(root.FullName, "packages"),
+                    Pack = true,
+                    Publish = false,
+                    UpdateVersions = false,
+                    CreateReleaseZip = false,
+                    CertificateThumbprint = "ABC123",
+                    SignAssemblies = false,
+                    SignPackages = true
+                },
+                signAssemblies: null,
+                validateAssemblySigning: null,
+                progress);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var signingItems = progress.Planned
+                .Where(item => item.Phase == ProjectBuildProgressPhase.PackageSigning)
+                .ToArray();
+            var signingItem = Assert.Single(signingItems);
+            Assert.EndsWith(".nupkg", signingItem.Title, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(progress.Updates, update =>
+                update.Item.Key == signingItem.Key &&
+                update.State == ProjectBuildProgressItemState.Started &&
+                update.Detail == "signing");
+            var completed = Assert.Single(progress.Updates, update =>
+                update.Item.Key == signingItem.Key &&
+                update.State == ProjectBuildProgressItemState.Completed);
+            Assert.Equal("signed", completed.Detail);
+            Assert.NotNull(completed.Item.Duration);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
         }
     }
 
@@ -494,12 +695,15 @@ public sealed class ProjectBuildProgressLedgerTests
                 progress);
 
             Assert.True(result.Success, result.ErrorMessage);
-            var firstTerminal = progress.Updates.FindIndex(update =>
+            var packageUpdates = progress.Updates
+                .Where(update => update.Item.Phase == ProjectBuildProgressPhase.PackageBuild)
+                .ToList();
+            var firstTerminal = packageUpdates.FindIndex(update =>
                 update.State is ProjectBuildProgressItemState.Completed or ProjectBuildProgressItemState.Failed);
-            Assert.Equal(2, progress.Updates.Take(firstTerminal).Count(update =>
+            Assert.Equal(2, packageUpdates.Take(firstTerminal).Count(update =>
                 update.State == ProjectBuildProgressItemState.Started &&
                 update.Detail == "building in MSBuild batch"));
-            Assert.Equal(2, progress.Updates.Take(firstTerminal).Count(update =>
+            Assert.Equal(2, packageUpdates.Take(firstTerminal).Count(update =>
                 update.State == ProjectBuildProgressItemState.Started &&
                 update.Detail == "MSBuild batch complete; awaiting package collection" &&
                 update.Item.Duration > TimeSpan.Zero));

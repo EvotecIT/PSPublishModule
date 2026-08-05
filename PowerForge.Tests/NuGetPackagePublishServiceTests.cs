@@ -5,6 +5,59 @@ namespace PowerForge.Tests;
 public sealed class NuGetPackagePublishServiceTests
 {
     [Fact]
+    public void ExecutePackages_ReportsEveryPublishedPackageAsDurableWork()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "pf-nuget-publish-progress-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var packages = new[]
+            {
+                Path.Combine(root.FullName, "Sample.Core.1.0.0.nupkg"),
+                Path.Combine(root.FullName, "Sample.Syntax.1.0.0.nupkg")
+            };
+            foreach (var package in packages)
+                File.WriteAllText(package, "package");
+
+            var progress = new RecordingProjectBuildProgress();
+            var service = new NuGetPackagePublishService(
+                new NullLogger(),
+                _ => new DotNetRepositoryReleaseService.PackagePushResult
+                {
+                    Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Published
+                });
+
+            var result = service.ExecutePackages(
+                packages,
+                "key",
+                "https://api.nuget.org/v3/index.json",
+                skipDuplicate: true,
+                progress: progress);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(
+                new[] { "Sample.Core.1.0.0.nupkg", "Sample.Syntax.1.0.0.nupkg" },
+                progress.Planned.Select(item => item.Title));
+            Assert.All(progress.Planned, item =>
+                Assert.Equal(ProjectBuildProgressPhase.NuGetPublish, item.Phase));
+            Assert.Equal(2, progress.Updates.Count(update =>
+                update.State == ProjectBuildProgressItemState.Started));
+            Assert.Equal(2, progress.Updates.Count(update =>
+                update.State == ProjectBuildProgressItemState.Completed &&
+                update.Detail == "published"));
+            Assert.All(
+                progress.Updates.Where(update => update.State == ProjectBuildProgressItemState.Completed),
+                update => Assert.NotNull(update.Item.Duration));
+            Assert.Contains(ProjectBuildProgressPhase.NuGetPublish, progress.CompletedPhases);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Execute_in_plan_mode_reports_packages_as_published()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-nuget-publish-" + Guid.NewGuid().ToString("N")));
@@ -433,5 +486,38 @@ public sealed class NuGetPackagePublishServiceTests
         {
             try { root.Delete(recursive: true); } catch { }
         }
+    }
+
+    private sealed class RecordingProjectBuildProgress : IProjectBuildProgressReporterV2
+    {
+        public List<ProjectBuildProgressItem> Planned { get; } = new();
+        public List<(ProjectBuildProgressItem Item, ProjectBuildProgressItemState State, string? Detail)> Updates { get; } = new();
+        public List<ProjectBuildProgressPhase> CompletedPhases { get; } = new();
+
+        public void PhaseStarted(ProjectBuildProgressPhase phase, int totalItems, string? detail = null)
+        {
+        }
+
+        public void PhaseUpdated(ProjectBuildProgressPhase phase, int completedItems, int totalItems, string? detail = null)
+        {
+        }
+
+        public void PhaseCompleted(ProjectBuildProgressPhase phase, string? detail = null)
+            => CompletedPhases.Add(phase);
+
+        public void PhaseFailed(ProjectBuildProgressPhase phase, string? detail = null)
+        {
+        }
+
+        public void ItemsPlanned(
+            ProjectBuildProgressPhase phase,
+            IReadOnlyList<ProjectBuildProgressItem> items)
+            => Planned.AddRange(items);
+
+        public void ItemUpdated(
+            ProjectBuildProgressItem item,
+            ProjectBuildProgressItemState state,
+            string? detail = null)
+            => Updates.Add((item, state, detail));
     }
 }

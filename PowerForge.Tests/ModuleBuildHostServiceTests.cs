@@ -532,6 +532,19 @@ public sealed class ModuleBuildHostServiceTests
             {
                 Items = new[] { item }
             });
+            var packageItem = new PowerForgeReleaseProgressItem
+            {
+                Phase = PowerForgeReleaseProgressPhase.Packages,
+                Key = "package:publish:one",
+                Title = "Sample.1.0.0.nupkg",
+                Kind = nameof(ProjectBuildProgressPhase.NuGetPublish),
+                Position = 1,
+                Total = 1
+            };
+            var packagePlanned = JsonSerializer.Serialize(new ModulePipelineProgressProtocolMessage
+            {
+                Items = new[] { packageItem }
+            });
             var completed = JsonSerializer.Serialize(new ModulePipelineProgressProtocolMessage
             {
                 Item = item,
@@ -540,6 +553,9 @@ public sealed class ModuleBuildHostServiceTests
             request.OutputLineReceived!(
                 "##powerforge-module-progress-v1##" +
                 Convert.ToBase64String(Encoding.UTF8.GetBytes(planned)));
+            request.OutputLineReceived!(
+                "##powerforge-module-progress-v1##" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(packagePlanned)));
             request.OutputLineReceived!(
                 "##powerforge-module-progress-v1##" +
                 Convert.ToBase64String(Encoding.UTF8.GetBytes(completed)));
@@ -561,9 +577,13 @@ public sealed class ModuleBuildHostServiceTests
         Assert.NotNull(captured);
         Assert.Equal("1", captured!.EnvironmentVariables![ModulePipelineProgressProtocol.EnvironmentVariable]);
         Assert.NotNull(captured.OutputLineReceived);
-        var plannedItem = Assert.Single(progress.Planned);
+        Assert.Equal(2, progress.Planned.Count);
+        var plannedItem = Assert.Single(progress.Planned, item => item.Phase == PowerForgeReleaseProgressPhase.Module);
         Assert.Equal("build:stage", plannedItem.Key);
         Assert.Equal("staging", plannedItem.Target);
+        Assert.Single(progress.Planned, item => item.Phase == PowerForgeReleaseProgressPhase.Packages);
+        Assert.Contains(PowerForgeReleaseProgressPhase.Module, progress.PlannedPhases);
+        Assert.Contains(PowerForgeReleaseProgressPhase.Packages, progress.PlannedPhases);
         var update = Assert.Single(progress.Updates);
         Assert.Equal(PowerForgeReleaseProgressItemState.Completed, update.State);
     }
@@ -618,6 +638,8 @@ public sealed class ModuleBuildHostServiceTests
     {
         public List<PowerForgeReleaseProgressItem> Planned { get; } = new();
 
+        public List<PowerForgeReleaseProgressPhase> PlannedPhases { get; } = new();
+
         public List<(PowerForgeReleaseProgressItem Item, PowerForgeReleaseProgressItemState State)> Updates { get; } = new();
 
         public void PhaseStarted(PowerForgeReleaseProgressPhase phase, int totalItems, string? detail = null) { }
@@ -629,7 +651,10 @@ public sealed class ModuleBuildHostServiceTests
         public void ItemsPlanned(
             PowerForgeReleaseProgressPhase phase,
             IReadOnlyList<PowerForgeReleaseProgressItem> items)
-            => Planned.AddRange(items);
+        {
+            PlannedPhases.Add(phase);
+            Planned.AddRange(items);
+        }
 
         public void ItemUpdated(
             PowerForgeReleaseProgressItem item,

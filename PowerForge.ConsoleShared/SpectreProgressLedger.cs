@@ -85,7 +85,7 @@ internal sealed class SpectreProgressLedger
         lock (_sync)
         {
             var entries = _entries.Values
-                .Where(entry => string.Equals(entry.Item.GroupKey, groupKey, StringComparison.OrdinalIgnoreCase))
+                .Where(entry => BelongsToGroup(entry.Item.GroupKey, groupKey))
                 .ToArray();
             if (entries.Length == 0)
                 return 0;
@@ -98,8 +98,7 @@ internal sealed class SpectreProgressLedger
     {
         lock (_sync)
         {
-            return _entries.Values.Count(entry =>
-                string.Equals(entry.Item.GroupKey, groupKey, StringComparison.OrdinalIgnoreCase));
+            return _entries.Values.Count(entry => BelongsToGroup(entry.Item.GroupKey, groupKey));
         }
     }
 
@@ -159,7 +158,7 @@ internal sealed class SpectreProgressLedger
         {
             return _entries.Values
                 .OrderBy(entry => entry.Item.GroupOrder)
-                .ThenBy(entry => entry.Item.Position <= 0 ? int.MaxValue : entry.Item.Position)
+                .ThenBy(entry => entry.Item.Position <= 0 ? int.MinValue : entry.Item.Position)
                 .ThenBy(entry => entry.Item.Title, StringComparer.OrdinalIgnoreCase)
                 .Select(entry => new SpectreProgressLedgerSnapshot(
                     entry.Item.GroupTitle,
@@ -175,6 +174,10 @@ internal sealed class SpectreProgressLedger
                 .ToArray();
         }
     }
+
+    private static bool BelongsToGroup(string candidate, string groupKey)
+        => string.Equals(candidate, groupKey, StringComparison.OrdinalIgnoreCase) ||
+           candidate.StartsWith(groupKey + ":", StringComparison.OrdinalIgnoreCase);
 
     internal static void WriteLedger(
         IAnsiConsole console,

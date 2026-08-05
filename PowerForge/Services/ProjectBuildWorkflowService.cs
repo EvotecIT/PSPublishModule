@@ -197,7 +197,8 @@ internal sealed class ProjectBuildWorkflowService
             TagName = config.GitHubTagName,
             TagTemplate = config.GitHubTagTemplate,
             PrimaryProject = config.GitHubPrimaryProject,
-            TagConflictPolicy = config.GitHubTagConflictPolicy
+            TagConflictPolicy = config.GitHubTagConflictPolicy,
+            Progress = progress as IProjectBuildProgressReporterV2
         });
         gitHubWatch.Stop();
         if (publishSummary.Success)

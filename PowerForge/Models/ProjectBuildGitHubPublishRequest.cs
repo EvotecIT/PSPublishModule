@@ -5,6 +5,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class ProjectBuildGitHubPublishRequest
 {
+    internal IProjectBuildProgressReporterV2? Progress { get; set; }
+
     /// <summary>Repository owner.</summary>
     public string Owner { get; set; } = string.Empty;
 

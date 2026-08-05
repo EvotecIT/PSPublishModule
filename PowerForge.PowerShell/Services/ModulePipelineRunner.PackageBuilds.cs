@@ -183,7 +183,8 @@ public sealed partial class ModulePipelineRunner
                 configPath,
                 destination,
                 remotePublishAttempted,
-                coordinatedReleaseCheckpointActive);
+                coordinatedReleaseCheckpointActive,
+                session.CreateProjectBuildProgressReporter(step));
             session.Done(step);
             return true;
         }
@@ -230,7 +231,8 @@ public sealed partial class ModulePipelineRunner
                 configPath,
                 destination,
                 remotePublishAttempted,
-                coordinatedReleaseCheckpointActive);
+                coordinatedReleaseCheckpointActive,
+                session.CreateProjectBuildProgressReporter(step));
             session.Done(step);
             return true;
         }
@@ -310,7 +312,8 @@ public sealed partial class ModulePipelineRunner
         string configPath,
         PackageBuildPublishDestination destination,
         Action remotePublishAttempted,
-        bool coordinatedReleaseCheckpointActive)
+        bool coordinatedReleaseCheckpointActive,
+        IProjectBuildProgressReporter? progress)
     {
         var release = existing.Result.Release
             ?? throw new InvalidOperationException($"Cannot reuse package build result for {destination}; the earlier package build did not include a release result.");
@@ -326,7 +329,8 @@ public sealed partial class ModulePipelineRunner
                     configuration,
                     configPath,
                     existing.RootPath,
-                    remotePublishAttempted);
+                    remotePublishAttempted,
+                    progress);
                 break;
             case PackageBuildPublishDestination.GitHub:
                 PublishExistingGitHubRelease(
@@ -335,7 +339,8 @@ public sealed partial class ModulePipelineRunner
                     configuration,
                     configPath,
                     remotePublishAttempted,
-                    coordinatedReleaseCheckpointActive);
+                    coordinatedReleaseCheckpointActive,
+                    progress);
                 break;
         }
     }
@@ -345,7 +350,8 @@ public sealed partial class ModulePipelineRunner
         ProjectBuildConfiguration configuration,
         string configPath,
         string repositoryRoot,
-        Action remotePublishAttempted)
+        Action remotePublishAttempted,
+        IProjectBuildProgressReporter? progress)
     {
         var configDirectory = Path.GetDirectoryName(configPath);
         if (string.IsNullOrWhiteSpace(configDirectory))
@@ -380,7 +386,8 @@ public sealed partial class ModulePipelineRunner
             configuration.SkipDuplicate ?? true,
             configuration.PublishFailFast ?? true,
             suppressCompanionSymbols: !(configuration.IncludeSymbols ?? false) || publishSymbolsSeparately,
-            remotePublishAttempted: remotePublishAttempted);
+            remotePublishAttempted: remotePublishAttempted,
+            progress: progress);
 
         ApplyPublishedNuGetArtifactOutcomes(
             release,
@@ -464,7 +471,8 @@ public sealed partial class ModulePipelineRunner
         ProjectBuildConfiguration configuration,
         string configPath,
         Action remotePublishAttempted,
-        bool coordinatedReleaseCheckpointActive)
+        bool coordinatedReleaseCheckpointActive,
+        IProjectBuildProgressReporter? progress)
     {
         var configDirectory = Path.GetDirectoryName(configPath);
         if (string.IsNullOrWhiteSpace(configDirectory))
@@ -503,7 +511,8 @@ public sealed partial class ModulePipelineRunner
                 GitHubTagConflictPolicy = NormalizeOptional(configuration.GitHubTagConflictPolicy),
                 PublishFailFast = configuration.PublishFailFast ?? true
             },
-            release);
+            release,
+            progress);
 
         existing.Result.GitHub.AddRange(summary.Results);
         existing.Result.Success = summary.Success;
@@ -531,6 +540,7 @@ public sealed partial class ModulePipelineRunner
                 state,
                 segment,
                 mode,
+                session.CreateProjectBuildProgressReporter(step),
                 useDuplicateTolerantNuGetRetry,
                 remotePublishAttempted,
                 coordinatedReleaseCheckpointActive);
@@ -581,6 +591,7 @@ public sealed partial class ModulePipelineRunner
                 state,
                 segment,
                 mode,
+                session.CreateProjectBuildProgressReporter(step),
                 useDuplicateTolerantNuGetRetry,
                 remotePublishAttempted,
                 coordinatedReleaseCheckpointActive);
@@ -657,6 +668,7 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineRunState state,
         ConfigurationProjectBuildSegment segment,
         PackageBuildExecutionMode mode,
+        IProjectBuildProgressReporter? progress,
         bool useDuplicateTolerantNuGetRetry = false,
         Action? remotePublishAttempted = null,
         bool coordinatedReleaseCheckpointActive = false)
@@ -708,7 +720,8 @@ public sealed partial class ModulePipelineRunner
                 ? null
                 : plan.Release?.Configuration?.PrimaryProject,
             RemotePublishAttempted = remotePublishAttempted,
-            CoordinatedReleaseCheckpointActive = coordinatedReleaseCheckpointActive
+            CoordinatedReleaseCheckpointActive = coordinatedReleaseCheckpointActive,
+            Progress = progress
         };
 
         _logger.Info($"Running package project build ({DescribePackageBuildMode(mode)}): {configPath}");
@@ -720,6 +733,7 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineRunState state,
         ConfigurationPackageBuildSegment segment,
         PackageBuildExecutionMode mode,
+        IProjectBuildProgressReporter? progress,
         bool useDuplicateTolerantNuGetRetry = false,
         Action? remotePublishAttempted = null,
         bool coordinatedReleaseCheckpointActive = false)
@@ -768,7 +782,8 @@ public sealed partial class ModulePipelineRunner
                 ? null
                 : plan.Release?.Configuration?.PrimaryProject,
             RemotePublishAttempted = remotePublishAttempted,
-            CoordinatedReleaseCheckpointActive = coordinatedReleaseCheckpointActive
+            CoordinatedReleaseCheckpointActive = coordinatedReleaseCheckpointActive,
+            Progress = progress
         };
 
         _logger.Info($"Running inline package build ({DescribePackageBuildMode(mode)}).");

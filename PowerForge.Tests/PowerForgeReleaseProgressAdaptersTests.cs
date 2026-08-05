@@ -3,6 +3,29 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeReleaseProgressAdaptersTests
 {
     [Fact]
+    public void ProjectBuildAdapter_DerivesNestedGroupsFromTheOwningReleasePhase()
+    {
+        var release = new RecordingReleaseProgress();
+        var adapter = new ProjectBuildReleaseProgressAdapter(
+            release,
+            PowerForgeReleaseProgressPhase.Versioning);
+        var item = new ProjectBuildProgressItem
+        {
+            Phase = ProjectBuildProgressPhase.Versioning,
+            Key = "ProjectA",
+            Title = "ProjectA",
+            Position = 1,
+            Total = 1
+        };
+
+        adapter.ItemsPlanned(ProjectBuildProgressPhase.Versioning, [item]);
+
+        var planned = Assert.Single(release.Planned);
+        Assert.Equal("Versioning:Versioning", planned.GroupKey);
+        Assert.StartsWith(PowerForgeReleaseProgressPhase.Versioning.ToString(), planned.GroupKey, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ProjectBuildAdapter_ForwardsExistingPhaseContractAsDetailedReleaseItems()
     {
         var release = new RecordingReleaseProgress();
@@ -174,6 +197,89 @@ public sealed class PowerForgeReleaseProgressAdaptersTests
                 Assert.Contains("/", update.Detail, StringComparison.Ordinal);
             },
             update => Assert.Equal(PowerForgeReleaseProgressItemState.Completed, update.State));
+    }
+
+    [Fact]
+    public void ProjectGitHubAdapter_ForwardsAssetsThroughThePackageLane()
+    {
+        var release = new RecordingReleaseProgress();
+        var project = new ProjectBuildReleaseProgressAdapter(
+            release,
+            PowerForgeReleaseProgressPhase.Packages);
+        var assetPath = Path.Combine(Path.GetTempPath(), "Sample.1.0.0.zip");
+        var adapter = new ProjectBuildGitHubProgressAdapter(project, [assetPath]);
+
+        adapter.Report(new GitHubReleaseAssetProgress
+        {
+            FilePath = assetPath,
+            FileName = "Sample.1.0.0.zip",
+            Position = 1,
+            TotalAssets = 1,
+            State = GitHubReleaseAssetProgressState.Uploading,
+            BytesTransferred = 512,
+            TotalBytes = 1024
+        });
+        adapter.Report(new GitHubReleaseAssetProgress
+        {
+            FilePath = assetPath,
+            FileName = "Sample.1.0.0.zip",
+            Position = 1,
+            TotalAssets = 1,
+            State = GitHubReleaseAssetProgressState.Uploaded,
+            BytesTransferred = 1024,
+            TotalBytes = 1024
+        });
+
+        var item = Assert.Single(release.Planned);
+        Assert.Equal(PowerForgeReleaseProgressPhase.Packages, item.Phase);
+        Assert.Equal("GitHubAsset", item.Kind);
+        Assert.Equal("Sample.1.0.0.zip", item.Title);
+        Assert.Collection(
+            release.Updates,
+            update =>
+            {
+                Assert.Equal(PowerForgeReleaseProgressItemState.Started, update.State);
+                Assert.Contains("512 B / 1 KB", update.Detail, StringComparison.Ordinal);
+            },
+            update => Assert.Equal(PowerForgeReleaseProgressItemState.Completed, update.State));
+    }
+
+    [Fact]
+    public void ProjectGitHubAdapter_UsesOneGlobalSequenceForSameNamedAssets()
+    {
+        var release = new RecordingReleaseProgress();
+        var project = new ProjectBuildReleaseProgressAdapter(
+            release,
+            PowerForgeReleaseProgressPhase.Packages);
+        var firstPath = Path.Combine(Path.GetTempPath(), "ProjectA", "Package.zip");
+        var secondPath = Path.Combine(Path.GetTempPath(), "ProjectB", "Package.zip");
+        var adapter = new ProjectBuildGitHubProgressAdapter(project, [firstPath, secondPath]);
+
+        foreach (var path in new[] { firstPath, secondPath })
+        {
+            adapter.Report(new GitHubReleaseAssetProgress
+            {
+                FilePath = path,
+                FileName = "Package.zip",
+                Position = 1,
+                TotalAssets = 1,
+                State = GitHubReleaseAssetProgressState.Uploaded
+            });
+        }
+
+        Assert.Collection(
+            release.Planned,
+            first =>
+            {
+                Assert.Equal(1, first.Position);
+                Assert.Equal(2, first.Total);
+            },
+            second =>
+            {
+                Assert.Equal(2, second.Position);
+                Assert.Equal(2, second.Total);
+            });
+        Assert.Equal(2, release.Planned.Select(static item => item.Key).Distinct(StringComparer.Ordinal).Count());
     }
 
     private sealed class RecordingReleaseProgress : IPowerForgeReleaseProgressReporterV2

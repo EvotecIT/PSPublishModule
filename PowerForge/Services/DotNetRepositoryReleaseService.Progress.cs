@@ -4,6 +4,68 @@ namespace PowerForge;
 
 public sealed partial class DotNetRepositoryReleaseService
 {
+    private static Dictionary<DotNetRepositoryProjectResult, ProjectBuildProgressItem> CreateVersionProgressItems(
+        IReadOnlyList<DotNetRepositoryProjectResult> projects,
+        IProjectBuildProgressReporterV2? progress)
+    {
+        var items = projects
+            .Select((project, index) => new
+            {
+                Project = project,
+                Item = new ProjectBuildProgressItem
+                {
+                    Phase = ProjectBuildProgressPhase.Versioning,
+                    Key = $"version:{project.ProjectName}",
+                    Title = project.ProjectName,
+                    Kind = nameof(ProjectBuildProgressPhase.Versioning),
+                    Position = index + 1,
+                    Total = projects.Count
+                }
+            })
+            .ToDictionary(entry => entry.Project, entry => entry.Item);
+        progress?.ItemsPlanned(
+            ProjectBuildProgressPhase.Versioning,
+            items.Values.OrderBy(item => item.Position).ToArray());
+        return items;
+    }
+
+    private static Dictionary<string, ProjectBuildProgressItem> CreateArtifactProgressItems(
+        IReadOnlyList<string> paths,
+        ProjectBuildProgressPhase phase,
+        IProjectBuildProgressReporterV2? progress)
+    {
+        var items = paths
+            .Select((path, index) => new
+            {
+                Path = path,
+                Item = new ProjectBuildProgressItem
+                {
+                    Phase = phase,
+                    Key = $"{phase}:{index + 1}:{Path.GetFileName(path)}",
+                    Title = Path.GetFileName(path),
+                    Kind = phase.ToString(),
+                    Position = index + 1,
+                    Total = paths.Count
+                }
+            })
+            .ToDictionary(entry => entry.Path, entry => entry.Item, StringComparer.OrdinalIgnoreCase);
+        progress?.ItemsPlanned(
+            phase,
+            items.Values.OrderBy(item => item.Position).ToArray());
+        return items;
+    }
+
+    private static void UpdateArtifactProgress(
+        IProjectBuildProgressReporterV2? progress,
+        ProjectBuildProgressItem item,
+        ProjectBuildProgressItemState state,
+        string? detail = null,
+        TimeSpan? duration = null)
+    {
+        item.Duration = duration;
+        progress?.ItemUpdated(item, state, detail);
+    }
+
     private static Dictionary<DotNetRepositoryProjectResult, ProjectBuildProgressItem> CreatePackageProgressItems(
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         IProjectBuildProgressReporterV2? progress)
