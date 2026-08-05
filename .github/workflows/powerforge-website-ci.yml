@@ -84,7 +84,6 @@ permissions:
   # The generated quality preset performs a read-only artifact cleanup preview.
   actions: read
   contents: read
-  packages: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -113,6 +112,7 @@ jobs:
       powerforge_tool_lock_path: ${{ inputs.powerforge_tool_lock_path }}
       powerforge_web_tag: ${{ inputs.powerforge_web_tag }}
       pipeline_mode: ci
+      credential_mode: none
       use_playwright_cache: true
       validate_pages_artifact: ${{ inputs.validate_pages_artifact }}
       pages_artifact_path: ${{ inputs.pages_artifact_path }}

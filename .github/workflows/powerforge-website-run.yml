@@ -93,6 +93,11 @@ on:
         required: false
         type: string
         default: "ci"
+      credential_mode:
+        description: Credential exposure policy for the caller-controlled website pipeline. Use none for untrusted pull requests.
+        required: false
+        type: string
+        default: "standard"
       use_playwright_cache:
         required: false
         type: boolean
@@ -157,10 +162,20 @@ jobs:
       BUN_INSTALL_CACHE_DIR: ${{ github.workspace }}/.cache/powerforge-runner/bun-install-cache
       NPM_CONFIG_CACHE: ${{ github.workspace }}/.cache/powerforge-runner/npm-cache
     steps:
+      - name: Validate credential mode
+        shell: pwsh
+        env:
+          POWERFORGE_CREDENTIAL_MODE: ${{ inputs.credential_mode }}
+        run: |
+          if ($env:POWERFORGE_CREDENTIAL_MODE -notin @('none', 'standard')) {
+            throw "Unsupported credential_mode '$env:POWERFORGE_CREDENTIAL_MODE'. Expected none or standard."
+          }
+
       - name: Checkout website
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ github.token }}
+          persist-credentials: ${{ inputs.credential_mode != 'none' }}
           # workflow_call can otherwise default to refs/pull/<n>/merge, which is not available in some repos.
           ref: ${{ inputs.source_ref || github.event.pull_request.head.sha || github.sha }}
 
@@ -212,6 +227,7 @@ jobs:
           ref: ${{ steps.workflow_source.outputs.ref }}
           path: ./.powerforge-runner
           token: ${{ github.token }}
+          persist-credentials: ${{ inputs.credential_mode != 'none' }}
           fetch-depth: 1
 
       - name: Setup .NET
@@ -277,14 +293,14 @@ jobs:
         shell: pwsh
         env:
           NUGET_PACKAGES: ${{ runner.temp }}/powerforge-website-nuget-packages
-          GITHUB_TOKEN: ${{ github.token }}
-          GITHUB_PACKAGES_TOKEN: ${{ secrets.repository_read_token || github.token }}
-          LICENSING_PACKAGES_TOKEN: ${{ secrets.repository_read_token || github.token }}
-          LICENSING_PACKAGES_USERNAME: ${{ github.repository_owner }}
-          INDEXNOW_KEY: ${{ secrets.indexnow_key }}
-          POWERFORGE_REPOSITORY_TOKEN: ${{ secrets.repository_read_token }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}
-          CLOUDFLARE_ZONE_ID: ${{ secrets.cloudflare_zone_id }}
+          GITHUB_TOKEN: ${{ inputs.credential_mode != 'none' && github.token || '' }}
+          GITHUB_PACKAGES_TOKEN: ${{ inputs.credential_mode != 'none' && (secrets.repository_read_token || github.token) || '' }}
+          LICENSING_PACKAGES_TOKEN: ${{ inputs.credential_mode != 'none' && (secrets.repository_read_token || github.token) || '' }}
+          LICENSING_PACKAGES_USERNAME: ${{ inputs.credential_mode != 'none' && github.repository_owner || '' }}
+          INDEXNOW_KEY: ${{ inputs.credential_mode != 'none' && secrets.indexnow_key || '' }}
+          POWERFORGE_REPOSITORY_TOKEN: ${{ inputs.credential_mode != 'none' && secrets.repository_read_token || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ inputs.credential_mode != 'none' && secrets.cloudflare_api_token || '' }}
+          CLOUDFLARE_ZONE_ID: ${{ inputs.credential_mode != 'none' && secrets.cloudflare_zone_id || '' }}
           POWERFORGE_RUNNER_RESULT_PATH: ${{ runner.temp }}/powerforge-website-runner-result.json
         run: |
           $runnerArgs = @(
