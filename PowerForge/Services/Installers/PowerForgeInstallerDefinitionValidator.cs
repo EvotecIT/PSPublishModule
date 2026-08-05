@@ -18,6 +18,14 @@ internal static class PowerForgeInstallerDefinitionValidator
         "^[A-Z_][A-Z0-9_]*$",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+    private static readonly Regex InstallerBackupFilePattern = new(
+        @"^(?:[A-Za-z0-9._ -]|\[ProductCode\]|\{serviceId\}|\{serviceName\})+$",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex InstallerBackupResolvedFilePattern = new(
+        "^[A-Za-z0-9._ -]+$",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     private static readonly string[] DialogReservedControlIds =
     {
         "Back",
@@ -275,7 +283,7 @@ internal static class PowerForgeInstallerDefinitionValidator
                 Require(service.ControlStop, $"service component '{service.Id}' ControlStop");
                 Require(service.ControlRemove, $"service component '{service.Id}' ControlRemove");
                 ValidateServiceCredentialProperties(service);
-                ValidateServiceScriptInstall(service);
+                ValidateServiceScriptInstall(definition.Product, service);
             }
             else if (component is PowerForgeInstallerRemoveFolderComponent removeFolder)
             {
@@ -299,7 +307,9 @@ internal static class PowerForgeInstallerDefinitionValidator
         }
     }
 
-    private static void ValidateServiceScriptInstall(PowerForgeInstallerServiceComponent service)
+    private static void ValidateServiceScriptInstall(
+        PowerForgeInstallerProduct product,
+        PowerForgeInstallerServiceComponent service)
     {
         var script = service.ScriptInstall;
         if (script is null)
@@ -323,13 +333,50 @@ internal static class PowerForgeInstallerDefinitionValidator
         }
 
         if (script.BackupExistingImagePath)
+        {
             Require(script.BackupPath, $"service component '{service.Id}' ScriptInstall.BackupPath");
+            if (product.MajorUpgradeSchedule is PowerForgeInstallerMajorUpgradeSchedule.AfterInstallValidate or
+                PowerForgeInstallerMajorUpgradeSchedule.AfterInstallInitialize)
+            {
+                throw new InvalidOperationException(
+                    $"Service component '{service.Id}' ScriptInstall.BackupExistingImagePath requires a major-upgrade schedule at or after AfterInstallExecute so the backup runs elevated inside the execute transaction.");
+            }
+
+            string backupPath = script.BackupPath.Trim();
+            const string protectedBackupRoot = "[WindowsFolder]Installer\\";
+            string backupFileName = backupPath.StartsWith(protectedBackupRoot, StringComparison.OrdinalIgnoreCase)
+                ? backupPath.Substring(protectedBackupRoot.Length)
+                : string.Empty;
+            if (string.IsNullOrWhiteSpace(backupFileName) ||
+                !InstallerBackupFilePattern.IsMatch(backupFileName) ||
+                backupFileName.IndexOf("[ProductCode]", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Service component '{service.Id}' ScriptInstall.BackupPath must be a direct child of '[WindowsFolder]Installer\\', include '[ProductCode]', and contain only safe filename literals plus '{{serviceId}}' or '{{serviceName}}'.");
+            }
+
+            string resolvedBackupFileName = ReplaceBackupFileToken(backupFileName, "[ProductCode]", "PRODUCTCODE");
+            resolvedBackupFileName = ReplaceBackupFileToken(resolvedBackupFileName, "{serviceId}", service.Id);
+            resolvedBackupFileName = ReplaceBackupFileToken(resolvedBackupFileName, "{serviceName}", service.ServiceName);
+            if (!InstallerBackupResolvedFilePattern.IsMatch(resolvedBackupFileName))
+            {
+                throw new InvalidOperationException(
+                    $"Service component '{service.Id}' ScriptInstall.BackupPath resolves to an unsafe file name. Service ids and names used in backup tokens may contain only letters, digits, spaces, '.', '_', and '-'.");
+            }
+        }
         if (script.StopDelaySeconds < 0)
         {
             throw new InvalidOperationException(
                 $"Service component '{service.Id}' ScriptInstall.StopDelaySeconds must be greater than or equal to 0.");
         }
     }
+
+    private static string ReplaceBackupFileToken(string value, string token, string replacement)
+        => Regex.Replace(
+            value,
+            Regex.Escape(token),
+            _ => replacement,
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static void ValidateServiceCredentialProperties(PowerForgeInstallerServiceComponent service)
     {

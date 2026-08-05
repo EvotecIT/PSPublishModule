@@ -50,11 +50,18 @@ if (-not [string]::IsNullOrWhiteSpace($arguments)) {
     $binaryPathName += ' ' + $arguments
 }
 
-if ($UpgradeMode -and $PreserveExistingServiceBinPath -and -not [string]::IsNullOrWhiteSpace($BackupPath) -and (Test-Path -LiteralPath $BackupPath)) {
-    $preservedBinaryPathName = (Get-Content -LiteralPath $BackupPath -Raw).Trim()
-    if (-not [string]::IsNullOrWhiteSpace($preservedBinaryPathName)) {
-        $binaryPathName = $preservedBinaryPathName
+$existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+if ($UpgradeMode -and $PreserveExistingServiceBinPath) {
+    if ([string]::IsNullOrWhiteSpace($BackupPath) -or -not (Test-Path -LiteralPath $BackupPath -PathType Leaf)) {
+        throw 'The existing service command line backup is required for this upgrade.'
     }
+
+    $preservedBinaryPathName = (Get-Content -LiteralPath $BackupPath -Raw).Trim()
+    if ([string]::IsNullOrWhiteSpace($preservedBinaryPathName)) {
+        throw 'The existing service command line backup is empty.'
+    }
+
+    $binaryPathName = $preservedBinaryPathName
 }
 
 if (-not [string]::IsNullOrWhiteSpace($ConfigPath)) {
@@ -70,15 +77,6 @@ if (-not [string]::IsNullOrWhiteSpace($ServiceName)) {
     $binaryPathName = Set-CommandLineOption -CommandLine $binaryPathName -Name '--service-name' -Value $ServiceName
 }
 
-$existing = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-if ($existing) {
-    if ($existing.Status -ne 'Stopped') {
-        Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
-    }
-    & sc.exe delete $serviceName | Out-Null
-    Start-Sleep -Seconds 1
-}
-
 $newServiceParams = @{
     Name           = $ServiceName
     BinaryPathName = $binaryPathName
@@ -87,9 +85,12 @@ $newServiceParams = @{
     StartupType    = 'Automatic'
 }
 
+$credential = $null
+$servicePassword = $Password
 if (-not [string]::IsNullOrWhiteSpace($Account) -and $Account -ne 'LocalSystem') {
     if ([string]::IsNullOrWhiteSpace($Password)) {
         $credential = Get-Credential -UserName $Account -Message 'Enter password for service account'
+        $servicePassword = $credential.GetNetworkCredential().Password
     } else {
         $securePassword = ConvertTo-SecureString -String $Password -AsPlainText -Force
         $credential = [pscredential]::new($Account, $securePassword)
@@ -97,7 +98,38 @@ if (-not [string]::IsNullOrWhiteSpace($Account) -and $Account -ne 'LocalSystem')
     $newServiceParams.Credential = $credential
 }
 
-New-Service @newServiceParams | Out-Null
+if ($existing) {
+    if ($existing.Status -ne 'Stopped') {
+        Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+    }
+
+    $service = Get-CimInstance -ClassName Win32_Service |
+        Where-Object Name -EQ $ServiceName |
+        Select-Object -First 1
+    if ($null -eq $service) {
+        throw "Unable to resolve existing service '$ServiceName' for an in-place update."
+    }
+
+    $changeArguments = @{
+        PathName    = $binaryPathName
+        DisplayName = $DisplayName
+        StartMode   = 'Automatic'
+        StartName   = $Account
+    }
+    if (-not [string]::IsNullOrWhiteSpace($servicePassword)) {
+        $changeArguments.StartPassword = $servicePassword
+    }
+
+    $changeResult = Invoke-CimMethod -InputObject $service -MethodName Change -Arguments $changeArguments
+    if ($null -eq $changeResult -or $changeResult.ReturnValue -ne 0) {
+        $returnValue = if ($null -eq $changeResult) { 'unknown' } else { $changeResult.ReturnValue }
+        throw "Failed to update existing service '$ServiceName' (Win32_Service.Change=$returnValue)."
+    }
+
+    Set-Service -Name $ServiceName -DisplayName $DisplayName -Description $Description -StartupType Automatic
+} else {
+    New-Service @newServiceParams | Out-Null
+}
 
 if ($Start) {
     Start-Service -Name $ServiceName

@@ -143,6 +143,7 @@ public sealed class PowerForgeInstallerAuthoringTests
     public void EmitSource_ModelsScriptServiceInstallWithImagePathPreservation()
     {
         var definition = CreateMonitoringInstaller();
+        definition.Product.MajorUpgradeSchedule = PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute;
         definition.Components.Add(new PowerForgeInstallerFileComponent
         {
             Id = "InstallServiceScriptComponent",
@@ -156,9 +157,9 @@ public sealed class PowerForgeInstallerAuthoringTests
         service.ScriptInstall = new PowerForgeInstallerServiceScriptInstall
         {
             Command = "\"powershell.exe\" -NoP -EP Bypass -File \"[INSTALLFOLDER]Install-Service.ps1\" -ConfigPath \"[ProgramDataMonitoring]TestimoX.Monitoring.json\" -ServiceName \"TestimoX.Monitoring\"",
-            UpgradeCommand = "\"powershell.exe\" -NoP -EP Bypass -File \"[INSTALLFOLDER]Install-Service.ps1\" -ConfigPath \"[ProgramDataMonitoring]TestimoX.Monitoring.json\" -ServiceName \"TestimoX.Monitoring\" -BackupPath \"[TempFolder]tmx-svc.txt\" -PreserveExistingServiceBinPath -UpgradeMode",
+            UpgradeCommand = "\"powershell.exe\" -NoP -EP Bypass -File \"[INSTALLFOLDER]Install-Service.ps1\" -ConfigPath \"[ProgramDataMonitoring]TestimoX.Monitoring.json\" -ServiceName \"TestimoX.Monitoring\" -BackupPath \"[WindowsFolder]Installer\\tmx-svc-[ProductCode].txt\" -PreserveExistingServiceBinPath -UpgradeMode",
             BackupExistingImagePath = true,
-            BackupPath = "[TempFolder]tmx-svc.txt",
+            BackupPath = "[WindowsFolder]Installer\\tmx-svc-[ProductCode].txt",
             StopServiceForUpgrade = true,
             StopDelaySeconds = 30
         };
@@ -184,15 +185,41 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Remove") == "uninstall"));
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "ServiceComponent.SetBackupCommand" &&
-            (string?)e.Attribute("Property") == "WixQuietExecCmdLine" &&
+            (string?)e.Attribute("Property") == "ServiceComponent.BackupImagePath" &&
             ((string?)e.Attribute("Value"))?.Contains("powershell.exe -nop -c", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("Name -eq 'TestimoX.Monitoring'", StringComparison.Ordinal) == true &&
-            ((string?)e.Attribute("Value"))?.Contains("$b='[TempFolder]tmx-svc.txt'", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("$b='[WindowsFolder]Installer\\tmx-svc-[ProductCode].txt'", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("gwmi win32_service", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("PathName", StringComparison.Ordinal) == true &&
-            ((string?)e.Attribute("Value"))?.Contains("WriteAllText", StringComparison.Ordinal) == true &&
-            ((string?)e.Attribute("Value"))?.Contains("WriteAllText($b", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("Out-File $b -NoN -NoC -ea Stop", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Length <= 255));
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "ServiceComponent.BackupImagePath" &&
+            (string?)e.Attribute("Execute") == "deferred" &&
+            (string?)e.Attribute("Impersonate") == "no" &&
+            (string?)e.Attribute("HideTarget") == "yes"));
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "ServiceComponent.SetRollbackCommand" &&
+            (string?)e.Attribute("Property") == "ServiceComponent.RollbackImagePath" &&
+            ((string?)e.Attribute("Value"))?.Contains("sc.exe config", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("sc.exe create", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("if(!$?){exit 1};rm $b", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("rm $b -ea 0", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Length <= 255));
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "ServiceComponent.RollbackImagePath" &&
+            (string?)e.Attribute("Execute") == "rollback" &&
+            (string?)e.Attribute("Impersonate") == "no" &&
+            (string?)e.Attribute("HideTarget") == "yes"));
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "ServiceComponent.SetCleanupCommand" &&
+            (string?)e.Attribute("Property") == "ServiceComponent.CleanupImagePath" &&
+            ((string?)e.Attribute("Value"))?.Contains("rm '[WindowsFolder]Installer\\tmx-svc-[ProductCode].txt'", StringComparison.Ordinal) == true));
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "ServiceComponent.CleanupImagePath" &&
+            (string?)e.Attribute("Execute") == "commit" &&
+            (string?)e.Attribute("Impersonate") == "no" &&
+            (string?)e.Attribute("HideTarget") == "yes"));
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "ServiceComponent.SetStopService" &&
             ((string?)e.Attribute("Value"))?.Contains("exit /b 0", StringComparison.Ordinal) == true));
@@ -212,6 +239,8 @@ public sealed class PowerForgeInstallerAuthoringTests
             .Select(e => (string?)e.Attribute("Action"))
             .ToArray();
         Assert.Contains("ServiceComponent.BackupImagePath", sequenceActions);
+        Assert.Contains("ServiceComponent.RollbackImagePath", sequenceActions);
+        Assert.Contains("ServiceComponent.CleanupImagePath", sequenceActions);
         Assert.Contains("ServiceComponent.SetStopService", sequenceActions);
         Assert.Contains("ServiceComponent.StopService", sequenceActions);
         Assert.Contains("ServiceComponent.SetInstallServiceUpgrade", sequenceActions);
@@ -227,13 +256,28 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Before") == "ServiceComponent.BackupImagePath"));
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
             (string?)e.Attribute("Action") == "ServiceComponent.BackupImagePath" &&
+            (string?)e.Attribute("Before") == "ServiceComponent.SetRollbackCommand"));
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "ServiceComponent.SetRollbackCommand" &&
+            (string?)e.Attribute("Before") == "ServiceComponent.RollbackImagePath"));
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "ServiceComponent.RollbackImagePath" &&
             (string?)e.Attribute("Before") == "ServiceComponent.SetStopService"));
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
             (string?)e.Attribute("Action") == "ServiceComponent.SetStopService" &&
             (string?)e.Attribute("Before") == "ServiceComponent.StopService"));
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
             (string?)e.Attribute("Action") == "ServiceComponent.StopService" &&
-            (string?)e.Attribute("Before") == "RemoveExistingProducts"));
+            (string?)e.Attribute("Before") == "InstallFiles"));
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "ServiceComponent.InstallService" &&
+            (string?)e.Attribute("Before") == "ServiceComponent.SetCleanupCommand"));
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "ServiceComponent.SetCleanupCommand" &&
+            (string?)e.Attribute("Before") == "ServiceComponent.CleanupImagePath"));
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "ServiceComponent.CleanupImagePath" &&
+            (string?)e.Attribute("Before") == "InstallFinalize"));
     }
 
     [Fact]
@@ -325,6 +369,7 @@ public sealed class PowerForgeInstallerAuthoringTests
     public void EmitSource_ScriptInstallCanOwnServiceUninstallWithoutServiceControl()
     {
         var definition = CreateMonitoringInstaller();
+        definition.Product.MajorUpgradeSchedule = PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute;
         var service = definition.Components.OfType<PowerForgeInstallerServiceComponent>().Single();
         service.ScriptInstall = new PowerForgeInstallerServiceScriptInstall
         {
@@ -516,11 +561,14 @@ public sealed class PowerForgeInstallerAuthoringTests
         AddScriptService(
             definition,
             "ServiceComponentWithVeryLongSharedPrefixForTenantAlpha",
-            "[TempFolder]alpha-service.txt");
+            "[WindowsFolder]Installer\\a-[ProductCode].txt");
         AddScriptService(
             definition,
             "ServiceComponentWithVeryLongSharedPrefixForTenantBeta",
-            "[TempFolder]beta-service.txt");
+            "[WindowsFolder]Installer\\b-[ProductCode].txt");
+        var services = definition.Components.OfType<PowerForgeInstallerServiceComponent>().ToArray();
+        services[0].ServiceName = "TenantAlpha";
+        services[1].ServiceName = "TenantBeta";
 
         var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
         var doc = XDocument.Parse(xml);
@@ -533,7 +581,8 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.Equal(actionIds.Length, actionIds.Distinct(StringComparer.Ordinal).Count());
 
         string[] quietExecSetterIds = doc.Descendants(Wix + "CustomAction")
-            .Where(e => (string?)e.Attribute("Property") == "WixQuietExecCmdLine")
+            .Where(e => ((string?)e.Attribute("Property"))?.EndsWith("BackupImagePath", StringComparison.Ordinal) == true ||
+                        (string?)e.Attribute("Property") == "WixQuietExecCmdLine")
             .Select(e => (string?)e.Attribute("Id"))
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id!)
@@ -586,21 +635,21 @@ public sealed class PowerForgeInstallerAuthoringTests
         var doc = XDocument.Parse(xml);
 
         string[] backupCommands = doc.Descendants(Wix + "CustomAction")
-            .Where(e => (string?)e.Attribute("Property") == "WixQuietExecCmdLine")
             .Select(e => (string?)e.Attribute("Value"))
             .Where(value => value?.Contains("gwmi win32_service", StringComparison.Ordinal) == true)
             .Select(value => value!)
             .ToArray();
         Assert.Contains(backupCommands, command =>
-            command.Contains("[TempFolder]powerforge-ServiceOne-service-binpath.txt", StringComparison.Ordinal));
+            command.Contains("[WindowsFolder]Installer\\[ProductCode]-ServiceOne.pfb", StringComparison.Ordinal));
         Assert.Contains(backupCommands, command =>
-            command.Contains("[TempFolder]powerforge-ServiceTwo-service-binpath.txt", StringComparison.Ordinal));
+            command.Contains("[WindowsFolder]Installer\\[ProductCode]-ServiceTwo.pfb", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void EmitSource_ScriptServiceBackupUsesEnvironmentForRuntimeExpandedPath()
+    public void EmitSource_ScriptServiceBackupUsesProtectedRuntimeExpandedPath()
     {
         var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Product.MajorUpgradeSchedule = PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute;
         definition.Components.Clear();
         definition.Components.Add(new PowerForgeInstallerServiceComponent
         {
@@ -613,7 +662,7 @@ public sealed class PowerForgeInstallerAuthoringTests
             {
                 Command = "\"powershell.exe\" -NoP -EP Bypass -File \"[INSTALLFOLDER]Install-Service.ps1\"",
                 BackupExistingImagePath = true,
-                BackupPath = "[TempFolder]O'Connor\\service.txt"
+                BackupPath = "[WindowsFolder]Installer\\OConnor-[ProductCode]-service.txt"
             }
         });
 
@@ -624,17 +673,73 @@ public sealed class PowerForgeInstallerAuthoringTests
             .Where(e => (string?)e.Attribute("Id") == "ServiceComponent.SetBackupCommand")
             .Select(e => (string?)e.Attribute("Value"))
             .Single(value => !string.IsNullOrWhiteSpace(value))!;
-        Assert.Contains("$b='[TempFolder]O''Connor\\service.txt'", command, StringComparison.Ordinal);
-        Assert.Contains("[IO.File]::WriteAllText($b", command, StringComparison.Ordinal);
-        Assert.Contains("[IO.File]::Delete($b)", command, StringComparison.Ordinal);
-        Assert.DoesNotContain("WriteAllText('[TempFolder]O''Connor", command, StringComparison.Ordinal);
+        Assert.Contains("$b='[WindowsFolder]Installer\\OConnor-[ProductCode]-service.txt'", command, StringComparison.Ordinal);
+        Assert.Contains("Out-File $b -NoN -NoC -ea Stop", command, StringComparison.Ordinal);
+        Assert.Contains("rm $b -ea 0", command, StringComparison.Ordinal);
         Assert.True(command.Length <= 255, $"Backup custom action target is {command.Length} characters.");
+    }
+
+    [Theory]
+    [InlineData(PowerForgeInstallerMajorUpgradeSchedule.AfterInstallValidate)]
+    [InlineData(PowerForgeInstallerMajorUpgradeSchedule.AfterInstallInitialize)]
+    public void EmitSource_RejectsImagePathBackupOutsideElevatedExecuteTransaction(
+        PowerForgeInstallerMajorUpgradeSchedule schedule)
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Product.MajorUpgradeSchedule = schedule;
+        definition.Components.Clear();
+        AddScriptService(definition, "ServiceComponent");
+        definition.Product.MajorUpgradeSchedule = schedule;
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+
+        Assert.Contains("requires a major-upgrade schedule at or after AfterInstallExecute", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("[TempFolder]service-[ProductCode].txt")]
+    [InlineData("[WindowsFolder]Temp\\service-[ProductCode].txt")]
+    [InlineData("[WindowsFolder]Installer\\service.txt")]
+    [InlineData("[WindowsFolder]Installer\\nested\\service-[ProductCode].txt")]
+    [InlineData("[WindowsFolder]Installer\\[EVIL]-[ProductCode].txt")]
+    public void EmitSource_RejectsUnprotectedOrPredictableImagePathBackup(string backupPath)
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Product.MajorUpgradeSchedule = PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute;
+        definition.Components.Clear();
+        AddScriptService(definition, "ServiceComponent", backupPath);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+
+        Assert.Contains("must be a direct child of '[WindowsFolder]Installer\\', include '[ProductCode]', and contain only safe filename literals", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmitSource_RejectsUnsafeServiceNameExpansionInImagePathBackup()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Product.MajorUpgradeSchedule = PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute;
+        definition.Components.Clear();
+        AddScriptService(
+            definition,
+            "ServiceComponent",
+            "[WindowsFolder]Installer\\[ProductCode]-{serviceName}.pfb");
+        var service = definition.Components.OfType<PowerForgeInstallerServiceComponent>().Single();
+        service.ServiceName = "Unsafe'Name";
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+
+        Assert.Contains("resolves to an unsafe file name", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void EmitSource_RejectsBackupCommandThatExceedsMsiTargetLimit()
     {
         var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Product.MajorUpgradeSchedule = PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute;
         definition.Components.Clear();
         definition.Components.Add(new PowerForgeInstallerServiceComponent
         {
@@ -648,7 +753,7 @@ public sealed class PowerForgeInstallerAuthoringTests
             {
                 Command = "powershell.exe -File install.ps1",
                 BackupExistingImagePath = true,
-                BackupPath = "[TempFolder]" + new string('B', 72) + ".txt"
+                BackupPath = "[WindowsFolder]Installer\\[ProductCode]-" + new string('B', 72) + ".txt"
             }
         });
 
@@ -696,6 +801,7 @@ public sealed class PowerForgeInstallerAuthoringTests
     public void EmitSource_GatesUpgradePrepActionsWithScriptInstallCondition()
     {
         var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Product.MajorUpgradeSchedule = PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute;
         definition.Components.Clear();
         definition.Components.Add(new PowerForgeInstallerServiceComponent
         {
@@ -721,11 +827,13 @@ public sealed class PowerForgeInstallerAuthoringTests
             .Where(e =>
                 string.Equals((string?)e.Attribute("Action"), "ConditionalService.SetBackupCommand", StringComparison.Ordinal) ||
                 string.Equals((string?)e.Attribute("Action"), "ConditionalService.BackupImagePath", StringComparison.Ordinal) ||
+                string.Equals((string?)e.Attribute("Action"), "ConditionalService.SetRollbackCommand", StringComparison.Ordinal) ||
+                string.Equals((string?)e.Attribute("Action"), "ConditionalService.RollbackImagePath", StringComparison.Ordinal) ||
                 string.Equals((string?)e.Attribute("Action"), "ConditionalService.SetStopService", StringComparison.Ordinal) ||
                 string.Equals((string?)e.Attribute("Action"), "ConditionalService.StopService", StringComparison.Ordinal))
             .ToArray();
 
-        Assert.Equal(4, upgradePrepRows.Length);
+        Assert.Equal(6, upgradePrepRows.Length);
         Assert.All(upgradePrepRows, row =>
         {
             var condition = (string?)row.Attribute("Condition");
@@ -735,8 +843,6 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Theory]
-    [InlineData(PowerForgeInstallerMajorUpgradeSchedule.AfterInstallValidate, "RemoveExistingProducts")]
-    [InlineData(PowerForgeInstallerMajorUpgradeSchedule.AfterInstallInitialize, "RemoveExistingProducts")]
     [InlineData(PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute, "InstallFiles")]
     [InlineData(PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecuteAgain, "InstallFiles")]
     [InlineData(PowerForgeInstallerMajorUpgradeSchedule.AfterInstallFinalize, "InstallFiles")]
@@ -756,7 +862,9 @@ public sealed class PowerForgeInstallerAuthoringTests
             .ToDictionary(row => (string)row.Attribute("Action")!, StringComparer.Ordinal);
 
         Assert.Equal("ServiceComponent.BackupImagePath", (string?)rows["ServiceComponent.SetBackupCommand"].Attribute("Before"));
-        Assert.Equal("ServiceComponent.SetStopService", (string?)rows["ServiceComponent.BackupImagePath"].Attribute("Before"));
+        Assert.Equal("ServiceComponent.SetRollbackCommand", (string?)rows["ServiceComponent.BackupImagePath"].Attribute("Before"));
+        Assert.Equal("ServiceComponent.RollbackImagePath", (string?)rows["ServiceComponent.SetRollbackCommand"].Attribute("Before"));
+        Assert.Equal("ServiceComponent.SetStopService", (string?)rows["ServiceComponent.RollbackImagePath"].Attribute("Before"));
         Assert.Equal("ServiceComponent.StopService", (string?)rows["ServiceComponent.SetStopService"].Attribute("Before"));
         Assert.Equal(expectedAnchor, (string?)rows["ServiceComponent.StopService"].Attribute("Before"));
     }
@@ -2386,6 +2494,7 @@ public sealed class PowerForgeInstallerAuthoringTests
         string componentId,
         string? backupPath = null)
     {
+        definition.Product.MajorUpgradeSchedule = PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute;
         definition.Components.Add(new PowerForgeInstallerServiceComponent
         {
             Id = componentId,
@@ -2397,7 +2506,7 @@ public sealed class PowerForgeInstallerAuthoringTests
             {
                 Command = "\"powershell.exe\" -NoP -EP Bypass -File \"[INSTALLFOLDER]Install-Service.ps1\"",
                 BackupExistingImagePath = true,
-                BackupPath = backupPath ?? "[TempFolder]powerforge-{serviceId}-service-binpath.txt",
+                BackupPath = backupPath ?? "[WindowsFolder]Installer\\[ProductCode]-{serviceId}.pfb",
                 StopServiceForUpgrade = true
             }
         });

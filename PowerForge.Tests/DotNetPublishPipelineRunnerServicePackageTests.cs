@@ -146,6 +146,12 @@ public sealed class DotNetPublishPipelineRunnerServicePackageTests
             Assert.Contains("[switch]$PreserveExistingServiceBinPath", installContent, StringComparison.Ordinal);
             Assert.Contains("Set-CommandLineOption", installContent, StringComparison.Ordinal);
             Assert.Contains("$preservedBinaryPathName", installContent, StringComparison.Ordinal);
+            Assert.Contains("[string]$BackupPath", installContent, StringComparison.Ordinal);
+            Assert.Contains("Get-Content -LiteralPath $BackupPath", installContent, StringComparison.Ordinal);
+            Assert.Contains("command line backup is required", installContent, StringComparison.Ordinal);
+            Assert.Contains("Get-CimInstance -ClassName Win32_Service", installContent, StringComparison.Ordinal);
+            Assert.Contains("Invoke-CimMethod -InputObject $service -MethodName Change", installContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("sc.exe delete", installContent, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("--config", installContent, StringComparison.Ordinal);
             Assert.DoesNotContain("{{", installContent, StringComparison.Ordinal);
 
