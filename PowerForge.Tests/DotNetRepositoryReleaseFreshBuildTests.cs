@@ -2,12 +2,106 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
 namespace PowerForge.Tests;
 
 public sealed class DotNetRepositoryReleaseFreshBuildTests
 {
+    [Fact]
+    public async Task FreshnessCleanup_RetriesTransientWindowsOutputLock()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        FileStream? lockStream = null;
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Locked"));
+            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.Locked.csproj");
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var outputPath = Path.Combine(projectDirectory.FullName, "bin", "Release", "net8.0", "Sample.Locked.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            File.WriteAllText(outputPath, "locked-output");
+            var heldStream = new FileStream(outputPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            lockStream = heldStream;
+
+            var releaseLock = Task.Run(async () =>
+            {
+                await Task.Delay(180);
+                heldStream.Dispose();
+                lockStream = null;
+            });
+
+            var success = DotNetRepositoryReleaseService.TryRemoveStalePrimaryPackageOutputs(
+                new DotNetRepositoryProjectResult
+                {
+                    ProjectName = "Sample.Locked",
+                    CsprojPath = projectPath
+                },
+                "Release",
+                new NullLogger(),
+                out var removedFileCount,
+                out _,
+                out var duration,
+                out var error);
+
+            await releaseLock;
+
+            Assert.True(success, error);
+            Assert.Equal(1, removedFileCount);
+            Assert.False(File.Exists(outputPath));
+            Assert.True(duration >= TimeSpan.FromMilliseconds(100));
+        }
+        finally
+        {
+            lockStream?.Dispose();
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void FreshnessCleanup_BoundsPersistentWindowsOutputLock()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var outputPath = Path.Combine(root.FullName, "PowerForge.Web.Cli.dll");
+            File.WriteAllText(outputPath, "locked-output");
+
+            using var lockStream = new FileStream(outputPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var success = DotNetRepositoryReleaseService.TryDeleteFreshnessOutput(
+                outputPath,
+                TimeSpan.FromMilliseconds(120),
+                out var attempts,
+                out var duration,
+                out var error);
+
+            Assert.False(success);
+            Assert.True(attempts > 1);
+            Assert.True(duration >= TimeSpan.FromMilliseconds(100));
+            Assert.True(duration < TimeSpan.FromSeconds(1));
+            Assert.IsAssignableFrom<IOException>(error);
+            Assert.True(File.Exists(outputPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void FreshnessCleanup_RemovesOnlyPrimaryAssembliesFromSelectedConfigurationOutputs()
     {
