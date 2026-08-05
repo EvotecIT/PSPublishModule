@@ -79,6 +79,14 @@ public sealed class NewConfigurationProjectBuildCommand : PSCmdlet
     [Parameter]
     public SwitchParameter SignPackages { get; set; }
 
+    /// <summary>Whether existing Authenticode assembly signatures may be replaced.</summary>
+    [Parameter]
+    public SwitchParameter OverwriteSignedAssemblies { get; set; }
+
+    /// <summary>Whether existing NuGet package signatures may be replaced.</summary>
+    [Parameter]
+    public SwitchParameter OverwriteSignedPackages { get; set; }
+
     /// <summary>Additional project-build JSON overrides for less common fields.</summary>
     [Parameter]
     public IDictionary? Options { get; set; }
@@ -105,6 +113,8 @@ public sealed class NewConfigurationProjectBuildCommand : PSCmdlet
                 SignAssemblies = BoundSwitch(nameof(SignAssemblies), SignAssemblies),
                 SignDependencyAssemblies = BoundSwitch(nameof(SignDependencyAssemblies), SignDependencyAssemblies),
                 SignPackages = BoundSwitch(nameof(SignPackages), SignPackages),
+                OverwriteSignedAssemblies = BoundSwitch(nameof(OverwriteSignedAssemblies), OverwriteSignedAssemblies),
+                OverwriteSignedPackages = BoundSwitch(nameof(OverwriteSignedPackages), OverwriteSignedPackages),
                 Options = PackageBuildConfiguration.ToObjectDictionary(Options)
             }
         });
@@ -268,6 +278,12 @@ public sealed class NewConfigurationPackageBuildCommand : PSCmdlet
     /// <summary>Whether generated NuGet packages should be signed.</summary>
     [Parameter] public SwitchParameter SignPackages { get; set; }
 
+    /// <summary>Whether existing Authenticode assembly signatures may be replaced.</summary>
+    [Parameter] public SwitchParameter OverwriteSignedAssemblies { get; set; }
+
+    /// <summary>Whether existing NuGet package signatures may be replaced.</summary>
+    [Parameter] public SwitchParameter OverwriteSignedPackages { get; set; }
+
     /// <summary>NuGet version lookup credential user name.</summary>
     [Parameter] public string? NugetCredentialUserName { get; set; }
 
@@ -377,6 +393,8 @@ public sealed class NewConfigurationPackageBuildCommand : PSCmdlet
                 SignAssemblies = BoundSwitch(nameof(SignAssemblies), SignAssemblies),
                 SignDependencyAssemblies = BoundSwitch(nameof(SignDependencyAssemblies), SignDependencyAssemblies),
                 SignPackages = BoundSwitch(nameof(SignPackages), SignPackages),
+                OverwriteSignedAssemblies = BoundSwitch(nameof(OverwriteSignedAssemblies), OverwriteSignedAssemblies),
+                OverwriteSignedPackages = BoundSwitch(nameof(OverwriteSignedPackages), OverwriteSignedPackages),
                 NugetCredentialUserName = Normalize(NugetCredentialUserName),
                 NugetCredentialSecret = NugetCredentialSecret,
                 NugetCredentialSecretFilePath = Normalize(NugetCredentialSecretFilePath),

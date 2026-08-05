@@ -179,6 +179,14 @@
       "type": "boolean",
       "description": "When true and CertificateThumbprint is configured, signs generated NuGet packages. Defaults to true when CertificateThumbprint is set."
     },
+    "OverwriteSignedAssemblies": {
+      "type": "boolean",
+      "description": "When true, explicitly replaces existing Authenticode assembly signatures. Defaults to false."
+    },
+    "OverwriteSignedPackages": {
+      "type": "boolean",
+      "description": "When true, explicitly replaces existing NuGet package signatures. Defaults to false."
+    },
     "PublishSource": {
       "type": [
         "string",

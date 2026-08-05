@@ -20,6 +20,12 @@ public sealed class DotNetReleaseBuildSpec
     /// <summary>Timestamp server URL used while signing.</summary>
     public string TimeStampServer { get; set; } = "http://timestamp.digicert.com";
 
+    /// <summary>Explicitly replaces existing Authenticode assembly signatures. Defaults to false.</summary>
+    public bool OverwriteSignedAssemblies { get; set; }
+
+    /// <summary>Explicitly replaces existing NuGet package signatures. Defaults to false.</summary>
+    public bool OverwriteSignedPackages { get; set; }
+
     /// <summary>When enabled, also packs all project dependencies that have their own .csproj files.</summary>
     public bool PackDependencies { get; set; }
 
@@ -29,4 +35,3 @@ public sealed class DotNetReleaseBuildSpec
     /// <summary>Patterns used to select which assemblies should be signed.</summary>
     public string[] AssemblyIncludePatterns { get; set; } = { "*.dll" };
 }
-

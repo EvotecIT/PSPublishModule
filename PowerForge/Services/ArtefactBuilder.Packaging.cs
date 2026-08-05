@@ -61,6 +61,16 @@ public sealed partial class ArtefactBuilder
         };
     }
 
+    internal static string[] ResolveModulePackageSourceFiles(
+        string stagingRoot,
+        InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
+        bool includeScriptFolders = true)
+    {
+        var include = ResolvePackagingInformation(information, delivery, includeScriptFolders);
+        return EnumerateModulePackageFiles(stagingRoot, include);
+    }
+
     private static string[] MergeDeliveryIncludeAll(string[] includeAll, DeliveryOptionsConfiguration? delivery)
     {
         if (delivery?.Enable != true)
@@ -99,66 +109,138 @@ public sealed partial class ArtefactBuilder
     private static void CopyModulePackage(string stagingRoot, string destinationModuleRoot, PackagingInformation include)
     {
         var src = Path.GetFullPath(stagingRoot);
-        if (!Directory.Exists(src)) throw new DirectoryNotFoundException($"Staging directory not found: {src}");
 
         if (Directory.Exists(destinationModuleRoot))
             Directory.Delete(destinationModuleRoot, recursive: true);
         Directory.CreateDirectory(destinationModuleRoot);
+        CreatePackageDirectoryStructure(src, destinationModuleRoot, include);
+
+        foreach (var file in EnumerateModulePackageFiles(src, include))
+        {
+            var relativePath = ComputeRelativePath(src, file);
+            var destinationPath = Path.Combine(destinationModuleRoot, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            File.Copy(file, destinationPath, overwrite: true);
+        }
+    }
+
+    private static void CreatePackageDirectoryStructure(
+        string stagingRoot,
+        string destinationModuleRoot,
+        PackagingInformation include)
+    {
+        foreach (var dirName in include.IncludeAll)
+        {
+            if (string.IsNullOrWhiteSpace(dirName)) continue;
+            var sourceDir = Path.Combine(stagingRoot, dirName);
+            if (!Directory.Exists(sourceDir)) continue;
+            CreateDirectoryTree(sourceDir, Path.Combine(destinationModuleRoot, dirName), Array.Empty<string>());
+        }
+
+        foreach (var dirName in include.IncludePS1)
+        {
+            if (string.IsNullOrWhiteSpace(dirName)) continue;
+            var sourceDir = Path.Combine(stagingRoot, dirName);
+            if (!Directory.Exists(sourceDir)) continue;
+            CreateDirectoryTree(
+                sourceDir,
+                Path.Combine(destinationModuleRoot, dirName),
+                include.ExcludeFromPackage ?? Array.Empty<string>());
+        }
+    }
+
+    private static void CreateDirectoryTree(
+        string sourceRoot,
+        string destinationRoot,
+        string[] excludedDirectoryPatterns)
+    {
+        Directory.CreateDirectory(destinationRoot);
+        var stack = new Stack<string>();
+        stack.Push(Path.GetFullPath(sourceRoot));
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+            foreach (var directory in Directory.EnumerateDirectories(current, "*", SearchOption.TopDirectoryOnly))
+            {
+                var name = Path.GetFileName(directory);
+                if (string.IsNullOrWhiteSpace(name) || WildcardAnyMatch(name, excludedDirectoryPatterns))
+                    continue;
+
+                var relativePath = ComputeRelativePath(sourceRoot, directory);
+                Directory.CreateDirectory(Path.Combine(destinationRoot, relativePath));
+                stack.Push(directory);
+            }
+        }
+    }
+
+    private static string[] EnumerateModulePackageFiles(string stagingRoot, PackagingInformation include)
+    {
+        var src = Path.GetFullPath(stagingRoot);
+        if (!Directory.Exists(src)) throw new DirectoryNotFoundException($"Staging directory not found: {src}");
 
         var excludes = include.ExcludeFromPackage ?? Array.Empty<string>();
+        var files = new List<string>();
+        var seen = new HashSet<string>(CreateCurrentFileSystemPathComparer());
 
-        bool IsExcludedName(string name)
-            => WildcardAnyMatch(name, excludes);
+        void AddFile(string file)
+        {
+            var fullPath = Path.GetFullPath(file);
+            if (seen.Add(fullPath))
+                files.Add(fullPath);
+        }
 
-        // 1) Root files
         foreach (var file in Directory.EnumerateFiles(src, "*", SearchOption.TopDirectoryOnly))
         {
             var name = Path.GetFileName(file);
-            if (string.IsNullOrWhiteSpace(name) || IsExcludedName(name)) continue;
+            if (string.IsNullOrWhiteSpace(name) || WildcardAnyMatch(name, excludes)) continue;
             if (!WildcardAnyMatch(name, include.IncludeRoot)) continue;
-            File.Copy(file, Path.Combine(destinationModuleRoot, name), overwrite: true);
+            AddFile(file);
         }
 
-        // 2) IncludeAll directories
         foreach (var dirName in include.IncludeAll)
         {
             if (string.IsNullOrWhiteSpace(dirName)) continue;
             var dir = Path.Combine(src, dirName);
             if (!Directory.Exists(dir)) continue;
 
-            CopyDirectoryFiltered(
+            AddDirectoryFiles(
                 dir,
-                Path.Combine(destinationModuleRoot, dirName),
                 include.ExcludeFromPackage ?? Array.Empty<string>(),
                 includeOnlyPs1: false,
-                excludeDirectories: false);
+                excludeDirectories: false,
+                AddFile);
         }
 
-        // 3) IncludePS1 directories
         foreach (var dirName in include.IncludePS1)
         {
             if (string.IsNullOrWhiteSpace(dirName)) continue;
             var dir = Path.Combine(src, dirName);
             if (!Directory.Exists(dir)) continue;
 
-            CopyDirectoryFiltered(
+            AddDirectoryFiles(
                 dir,
-                Path.Combine(destinationModuleRoot, dirName),
                 include.ExcludeFromPackage ?? Array.Empty<string>(),
                 includeOnlyPs1: true,
-                excludeDirectories: true);
+                excludeDirectories: true,
+                AddFile);
         }
+
+        return files.ToArray();
     }
 
-    private static void CopyDirectoryFiltered(
+    private static StringComparer CreateCurrentFileSystemPathComparer()
+        => Path.DirectorySeparatorChar == '\\'
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+
+    private static void AddDirectoryFiles(
         string sourceDir,
-        string destDir,
         string[] excludeNamePatterns,
         bool includeOnlyPs1,
-        bool excludeDirectories)
+        bool excludeDirectories,
+        Action<string> addFile)
     {
         var sourceFull = Path.GetFullPath(sourceDir);
-        Directory.CreateDirectory(destDir);
 
         var stack = new Stack<string>();
         stack.Push(sourceFull);
@@ -166,18 +248,13 @@ public sealed partial class ArtefactBuilder
         while (stack.Count > 0)
         {
             var current = stack.Pop();
-            var rel = ComputeRelativePath(sourceFull, current);
-            var targetDir = string.IsNullOrEmpty(rel) || rel == "." ? destDir : Path.Combine(destDir, rel);
-            Directory.CreateDirectory(targetDir);
 
             foreach (var file in Directory.EnumerateFiles(current, "*", SearchOption.TopDirectoryOnly))
             {
                 var name = Path.GetFileName(file);
                 if (string.IsNullOrWhiteSpace(name) || WildcardAnyMatch(name, excludeNamePatterns)) continue;
                 if (includeOnlyPs1 && !name.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase)) continue;
-
-                var destFile = Path.Combine(targetDir, name);
-                File.Copy(file, destFile, overwrite: true);
+                addFile(file);
             }
 
             foreach (var dir in Directory.EnumerateDirectories(current, "*", SearchOption.TopDirectoryOnly))

@@ -7,7 +7,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class ModulePipelineScriptExecutionSeamTests
+public sealed partial class ModulePipelineScriptExecutionSeamTests
 {
     [Fact]
     public void RunImportModules_UsesInjectedHostedOperations()
@@ -76,40 +76,6 @@ public sealed class ModulePipelineScriptExecutionSeamTests
         {
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
-    }
-
-    [Fact]
-    public void SignBuiltModuleOutput_UsesInjectedHostedOperations()
-    {
-        var hostedOperations = new FakeHostedOperations
-        {
-            NextSigningResult = new ModuleSigningResult
-            {
-                SignedNew = 2,
-                Attempted = 2
-            }
-        };
-
-        var runner = new ModulePipelineRunner(
-            new NullLogger(),
-            new ThrowingPowerShellRunner(),
-            new FakeMetadataProvider(),
-            hostedOperations);
-
-        var result = InvokeSignBuiltModuleOutput(
-            runner,
-            "TestModule",
-            Path.GetTempPath(),
-            new SigningOptionsConfiguration
-            {
-                CertificateThumbprint = "ABC123",
-                IncludeInternals = false
-            });
-
-        Assert.Same(hostedOperations.NextSigningResult, result);
-        Assert.Equal(1, hostedOperations.SignCalls);
-        Assert.Contains("*.ps1", hostedOperations.LastIncludePatterns, StringComparer.OrdinalIgnoreCase);
-        Assert.Contains("Modules", hostedOperations.LastExcludePatterns, StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -569,17 +535,6 @@ public sealed class ModulePipelineScriptExecutionSeamTests
         method!.Invoke(runner, new object?[] { plan, buildResult });
     }
 
-    private static ModuleSigningResult InvokeSignBuiltModuleOutput(
-        ModulePipelineRunner runner,
-        string moduleName,
-        string rootPath,
-        SigningOptionsConfiguration signing)
-    {
-        var method = typeof(ModulePipelineRunner).GetMethod("SignBuiltModuleOutput", BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.True(method is not null, "SignBuiltModuleOutput method signature may have changed.");
-        return (ModuleSigningResult)method!.Invoke(runner, new object?[] { moduleName, rootPath, signing })!;
-    }
-
     private sealed class FakeMetadataProvider : IModuleDependencyMetadataProvider
     {
         public IReadOnlyDictionary<string, InstalledModuleMetadata> GetLatestInstalledModules(IReadOnlyList<string> names)
@@ -610,6 +565,7 @@ public sealed class ModulePipelineScriptExecutionSeamTests
         public ImportModuleEntry[] LastImportModules { get; private set; } = Array.Empty<ImportModuleEntry>();
         public ModuleImportValidationTarget[] LastTargets { get; private set; } = Array.Empty<ModuleImportValidationTarget>();
         public int SignCalls { get; private set; }
+        public string[] LastPackageFilePaths { get; private set; } = Array.Empty<string>();
         public string[] LastIncludePatterns { get; private set; } = Array.Empty<string>();
         public string[] LastExcludePatterns { get; private set; } = Array.Empty<string>();
         public ModuleSigningResult NextSigningResult { get; set; } = new();
@@ -717,12 +673,14 @@ public sealed class ModulePipelineScriptExecutionSeamTests
         public ModuleSigningResult SignModuleOutput(
             string moduleName,
             string rootPath,
+            string[] packageFilePaths,
             string[] includePatterns,
             string[] excludeSubstrings,
             SigningOptionsConfiguration signing)
         {
             OperationOrder.Add("Sign");
             SignCalls++;
+            LastPackageFilePaths = packageFilePaths ?? Array.Empty<string>();
             LastIncludePatterns = includePatterns ?? Array.Empty<string>();
             LastExcludePatterns = excludeSubstrings ?? Array.Empty<string>();
             return NextSigningResult;

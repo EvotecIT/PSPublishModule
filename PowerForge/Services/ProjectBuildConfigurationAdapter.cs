@@ -43,6 +43,8 @@ internal static class ProjectBuildConfigurationAdapter
         Apply(target, reference.SignAssemblies, static (config, value) => config.SignAssemblies = value);
         Apply(target, reference.SignDependencyAssemblies, static (config, value) => config.SignDependencyAssemblies = value);
         Apply(target, reference.SignPackages, static (config, value) => config.SignPackages = value);
+        Apply(target, reference.OverwriteSignedAssemblies, static (config, value) => config.OverwriteSignedAssemblies = value);
+        Apply(target, reference.OverwriteSignedPackages, static (config, value) => config.OverwriteSignedPackages = value);
         return target;
     }
 

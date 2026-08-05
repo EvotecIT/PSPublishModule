@@ -13,7 +13,7 @@ public sealed class DotNetNuGetSignRequest
     /// <param name="certificateStoreLocation">Certificate store location.</param>
     /// <param name="timeStampServer">Timestamp server URL.</param>
     /// <param name="certificateStoreName">Certificate store name. Defaults to <c>My</c>.</param>
-    /// <param name="overwrite">When true, passes <c>--overwrite</c>.</param>
+    /// <param name="overwrite">When true, explicitly replaces existing package signatures. Defaults to false.</param>
     /// <param name="workingDirectory">Optional working directory override.</param>
     /// <param name="timeout">Optional timeout override.</param>
     public DotNetNuGetSignRequest(
@@ -22,7 +22,7 @@ public sealed class DotNetNuGetSignRequest
         string certificateStoreLocation,
         string timeStampServer,
         string certificateStoreName = "My",
-        bool overwrite = true,
+        bool overwrite = false,
         string? workingDirectory = null,
         TimeSpan? timeout = null)
         : this(
@@ -45,7 +45,7 @@ public sealed class DotNetNuGetSignRequest
     /// <param name="certificateStoreLocation">Certificate store location.</param>
     /// <param name="timeStampServer">Timestamp server URL.</param>
     /// <param name="certificateStoreName">Certificate store name. Defaults to <c>My</c>.</param>
-    /// <param name="overwrite">When true, passes <c>--overwrite</c>.</param>
+    /// <param name="overwrite">When true, explicitly replaces existing package signatures. Defaults to false.</param>
     /// <param name="workingDirectory">Optional working directory override.</param>
     /// <param name="timeout">Optional timeout override.</param>
     public DotNetNuGetSignRequest(
@@ -54,7 +54,7 @@ public sealed class DotNetNuGetSignRequest
         string certificateStoreLocation,
         string timeStampServer,
         string certificateStoreName = "My",
-        bool overwrite = true,
+        bool overwrite = false,
         string? workingDirectory = null,
         TimeSpan? timeout = null)
     {

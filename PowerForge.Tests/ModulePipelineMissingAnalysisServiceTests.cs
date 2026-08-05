@@ -256,6 +256,7 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
         public ModuleSigningResult SignModuleOutput(
             string moduleName,
             string rootPath,
+            string[] packageFilePaths,
             string[] includePatterns,
             string[] excludeSubstrings,
             SigningOptionsConfiguration signing)

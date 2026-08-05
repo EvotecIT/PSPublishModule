@@ -2049,6 +2049,7 @@ public sealed class ModulePipelineHostedOperationsTests
     public void SignModuleOutput_UsesInjectedPowerShellRunner()
     {
         var requests = new List<PowerShellRunRequest>();
+        string[] packageFiles = Array.Empty<string>();
         var summary = new ModuleSigningResult
         {
             TotalMatched = 1,
@@ -2062,6 +2063,7 @@ public sealed class ModulePipelineHostedOperationsTests
         var runner = new RecordingPowerShellRunner(request =>
         {
             requests.Add(request);
+            packageFiles = File.ReadAllLines(request.Arguments[1]);
             return new PowerShellRunResult(0, stdout, string.Empty, "pwsh");
         });
 
@@ -2069,6 +2071,7 @@ public sealed class ModulePipelineHostedOperationsTests
         var result = operations.SignModuleOutput(
             moduleName: "TestModule",
             rootPath: @"C:\Temp\TestModule",
+            packageFilePaths: new[] { @"C:\Temp\TestModule\TestModule.psm1" },
             includePatterns: new[] { "*.psm1" },
             excludeSubstrings: Array.Empty<string>(),
             signing: new SigningOptionsConfiguration());
@@ -2076,6 +2079,7 @@ public sealed class ModulePipelineHostedOperationsTests
         var request = Assert.Single(requests);
         Assert.Equal(PowerShellInvocationMode.File, request.InvocationMode);
         Assert.True(request.PreferPwsh);
+        Assert.Equal(new[] { @"C:\Temp\TestModule\TestModule.psm1" }, packageFiles);
         Assert.Equal(1, result.SignedNew);
     }
 
@@ -2096,6 +2100,33 @@ public sealed class ModulePipelineHostedOperationsTests
 
         Assert.Contains("[AllowEmptyCollection()]", script, StringComparison.Ordinal);
         Assert.Contains("Add-FailedFile -List $failedFiles", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SigningScript_ExclusionsMatchPackageRelativePathSegments()
+    {
+        var script = EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
+        var ast = System.Management.Automation.Language.Parser.ParseInput(script, out _, out var parseErrors);
+        Assert.Empty(parseErrors);
+        var function = ast.Find(
+            node => node is System.Management.Automation.Language.FunctionDefinitionAst definition &&
+                    definition.Name.Equals("Test-ExcludedPackagePath", StringComparison.Ordinal),
+            searchNestedScriptBlocks: true);
+        Assert.NotNull(function);
+
+        using var powerShell = System.Management.Automation.PowerShell.Create();
+        powerShell.AddScript(function!.Extent.Text + "\n" + """
+            Test-ExcludedPackagePath -relativePath 'PowerInfoblox.psm1' -exclusions @('Modules')
+            Test-ExcludedPackagePath -relativePath 'InternalModules/tool.exe' -exclusions @('Modules')
+            Test-ExcludedPackagePath -relativePath 'Modules/dependency.dll' -exclusions @('Modules')
+            Test-ExcludedPackagePath -relativePath 'InternalModules/tool.exe' -exclusions @('Internal')
+            Test-ExcludedPackagePath -relativePath 'Assets/tool.exe' -exclusions @('Assets')
+            """);
+
+        var results = powerShell.Invoke().Select(result => Assert.IsType<bool>(result.BaseObject)).ToArray();
+
+        Assert.Empty(powerShell.Streams.Error);
+        Assert.Equal(new[] { false, false, true, false, true }, results);
     }
 
     [Fact]
@@ -2755,6 +2786,7 @@ public sealed class ModulePipelineHostedOperationsTests
         public ModuleSigningResult SignModuleOutput(
             string moduleName,
             string rootPath,
+            string[] packageFilePaths,
             string[] includePatterns,
             string[] excludeSubstrings,
             SigningOptionsConfiguration signing)

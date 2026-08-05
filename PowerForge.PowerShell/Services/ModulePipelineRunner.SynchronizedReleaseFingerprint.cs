@@ -433,6 +433,8 @@ public sealed partial class ModulePipelineRunner
             configuration.SignAssemblies?.ToString(),
             configuration.SignDependencyAssemblies?.ToString(),
             configuration.SignPackages?.ToString(),
+            configuration.OverwriteSignedAssemblies?.ToString(),
+            configuration.OverwriteSignedPackages?.ToString(),
             configuration.GitHubUsername,
             configuration.GitHubRepositoryName,
             configuration.GitHubIsPreRelease.ToString(),

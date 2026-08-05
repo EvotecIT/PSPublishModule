@@ -106,7 +106,10 @@ public sealed partial class ModulePipelineRunner
     private ModuleSigningResult SignBuiltModuleOutput(
         string moduleName,
         string rootPath,
-        SigningOptionsConfiguration? signing)
+        SigningOptionsConfiguration? signing,
+        InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
+        bool includeScriptFolders)
     {
         if (string.IsNullOrWhiteSpace(rootPath))
             throw new ArgumentException("Root path is required.", nameof(rootPath));
@@ -136,9 +139,14 @@ public sealed partial class ModulePipelineRunner
                 "Configure CertificateThumbprint, CertificatePFXPath, or CertificatePFXBase64 before enabling delivery/module signing.");
         }
 
+        var packageFilePaths = ArtefactBuilder.ResolveModulePackageSourceFiles(
+            rootPath,
+            information,
+            delivery,
+            includeScriptFolders);
         var include = BuildSigningIncludePatterns(signing);
-        var exclude = BuildSigningExcludeSubstrings(signing);
-        return _hostedOperations.SignModuleOutput(moduleName, rootPath, include, exclude, signing);
+        var exclude = BuildSigningExcludeSubstrings(signing, delivery);
+        return _hostedOperations.SignModuleOutput(moduleName, rootPath, packageFilePaths, include, exclude, signing);
     }
 
     internal static string[] BuildSigningIncludePatterns(SigningOptionsConfiguration signing)

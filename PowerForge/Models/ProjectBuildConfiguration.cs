@@ -47,6 +47,8 @@ internal sealed class ProjectBuildConfiguration
     public bool? SignAssemblies { get; set; }
     public bool? SignDependencyAssemblies { get; set; }
     public bool? SignPackages { get; set; }
+    public bool? OverwriteSignedAssemblies { get; set; }
+    public bool? OverwriteSignedPackages { get; set; }
     public string? NugetCredentialUserName { get; set; }
     public string? NugetCredentialSecret { get; set; }
     public string? NugetCredentialSecretFilePath { get; set; }

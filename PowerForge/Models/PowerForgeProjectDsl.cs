@@ -172,6 +172,11 @@ public sealed class ConfigurationProjectSigning
     /// Optional key container name.
     /// </summary>
     public string? KeyContainer { get; set; }
+
+    /// <summary>
+    /// Explicitly replaces existing signatures instead of preserving already signed files.
+    /// </summary>
+    public bool OverwriteSigned { get; set; }
 }
 
 /// <summary>

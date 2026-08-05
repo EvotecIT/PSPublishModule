@@ -103,6 +103,36 @@ public sealed class ModulePublisherPackagingTests
         }
     }
 
+    [Fact]
+    public void PrepareModulePackageForRepositoryPublish_PreservesSelectedEmptyDirectories()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        string? publishPath = null;
+
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteStagingFixture(root.FullName, moduleName);
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Empty", "Nested"));
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Public", "Empty", "Nested"));
+
+            publishPath = ModulePublisher.PrepareModulePackageForRepositoryPublish(
+                stagingPath: root.FullName,
+                moduleName: moduleName,
+                information: null,
+                delivery: null,
+                includeScriptFolders: true);
+
+            Assert.True(Directory.Exists(Path.Combine(publishPath!, "Lib", "Empty", "Nested")));
+            Assert.True(Directory.Exists(Path.Combine(publishPath!, "Public", "Empty", "Nested")));
+        }
+        finally
+        {
+            ModulePublisher.CleanupTemporaryPublishPath(publishPath);
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     private static void WriteStagingFixture(string stagingRoot, string moduleName)
     {
         Directory.CreateDirectory(stagingRoot);

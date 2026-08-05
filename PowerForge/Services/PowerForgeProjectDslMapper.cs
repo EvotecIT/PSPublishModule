@@ -198,6 +198,7 @@ internal static class PowerForgeProjectDslMapper
         return new DotNetPublishSignOptions
         {
             Enabled = signing.Mode == ConfigurationProjectSigningMode.Enabled,
+            OverwriteSigned = signing.OverwriteSigned,
             ToolPath = NormalizeNullable(signing.ToolPath) ?? "signtool.exe",
             Thumbprint = NormalizeNullable(signing.Thumbprint),
             SubjectName = NormalizeNullable(signing.SubjectName),

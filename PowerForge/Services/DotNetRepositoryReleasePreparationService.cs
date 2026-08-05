@@ -64,6 +64,8 @@ internal sealed class DotNetRepositoryReleasePreparationService
                 SignAssemblies = ResolveSigningEnabled(request.SignAssemblies, request.CertificateThumbprint),
                 SignDependencyAssemblies = request.SignDependencyAssemblies ?? false,
                 SignPackages = ResolveSigningEnabled(request.SignPackages, request.CertificateThumbprint),
+                OverwriteSignedAssemblies = request.OverwriteSignedAssemblies,
+                OverwriteSignedPackages = request.OverwriteSignedPackages,
                 Pack = !request.SkipPack,
                 IncludeSymbols = request.IncludeSymbols,
                 Publish = request.Publish,
