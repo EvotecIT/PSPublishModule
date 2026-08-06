@@ -85,7 +85,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("--summary", script, StringComparison.Ordinal);
         Assert.Contains("--output', 'json", script, StringComparison.Ordinal);
         Assert.Contains("instead of '$action'", script, StringComparison.Ordinal);
-        Assert.Contains("marketing-version must use x.y.z", script, StringComparison.Ordinal);
+        Assert.Contains("marketing-version must use x.y.z or a three-part pattern", script, StringComparison.Ordinal);
         Assert.Contains("did not write its required receipt", script, StringComparison.Ordinal);
         Assert.DoesNotContain("$json | Write-Host", script, StringComparison.Ordinal);
         Assert.Contains("safeDiagnostics", script, StringComparison.Ordinal);
@@ -213,6 +213,10 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("GH_TOKEN: ${{ secrets.version_pr_token }}", workflow, StringComparison.Ordinal);
         Assert.Contains("version_pr_token must not be the repository GITHUB_TOKEN", workflow, StringComparison.Ordinal);
         Assert.Contains("expected-plan-sha256: ${{ steps.plan.outputs.plan-sha256 }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("Blank uses AppleApps.Automation.MarketingVersionPattern", workflow, StringComparison.Ordinal);
+        Assert.Contains("      version:\n        description:", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.Contains("        required: false\n        default: ''\n        type: string", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.Contains("steps.plan.outputs.marketing-version || inputs.version || 'configured'", workflow, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -18,7 +18,7 @@ inputs:
     required: false
     default: ""
   marketing-version:
-    description: Marketing version required by Version.
+    description: Optional exact marketing version or three-part X pattern override for Version. Blank uses AppleApps.Automation.MarketingVersionPattern.
     required: false
     default: ""
   source-commit:

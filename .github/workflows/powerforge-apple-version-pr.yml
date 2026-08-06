@@ -4,8 +4,9 @@ on:
   workflow_call:
     inputs:
       version:
-        description: New three-part Apple marketing version.
-        required: true
+        description: Optional exact Apple version or X-pattern override. Blank uses AppleApps.Automation.MarketingVersionPattern.
+        required: false
+        default: ''
         type: string
       default_branch:
         description: Branch used as the version PR base.
@@ -211,7 +212,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: powerforge-apple-version-${{ inputs.version }}-plan
+          name: powerforge-apple-version-${{ steps.plan.outputs.marketing-version || inputs.version || 'configured' }}-plan
           path: ${{ steps.plan.outputs.receipt-path }}
           if-no-files-found: error
           retention-days: 30
@@ -220,7 +221,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: powerforge-apple-version-${{ inputs.version }}-actual
+          name: powerforge-apple-version-${{ steps.version.outputs.marketing-version || steps.plan.outputs.marketing-version || inputs.version || 'configured' }}-actual
           path: ${{ steps.version.outputs.receipt-path }}
           if-no-files-found: error
           retention-days: 30

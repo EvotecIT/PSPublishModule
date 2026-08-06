@@ -372,6 +372,11 @@
             "PlanReceiptPath": { "type": "string" },
             "LockPath": { "type": "string" },
             "VersionSourcePath": { "type": [ "string", "null" ] },
+            "MarketingVersionPattern": {
+              "type": [ "string", "null" ],
+              "pattern": "^(?:[0-9]+\\.[xX]\\.[0-9]+|[0-9]+\\.[0-9]+\\.[xX])$",
+              "description": "Optional three-part Apple version train pattern such as 1.X.0. Version reuses a compatible unreleased TestFlight or editable App Store train and advances only after the train is occupied by a non-editable App Store version."
+            },
             "Resume": { "type": "boolean" },
             "WaitForProcessing": { "type": "boolean" },
             "ProcessingTimeoutSeconds": { "type": "integer", "minimum": 1 },

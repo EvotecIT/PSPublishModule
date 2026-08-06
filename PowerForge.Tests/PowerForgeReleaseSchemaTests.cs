@@ -48,6 +48,52 @@ public sealed class PowerForgeReleaseSchemaTests
         Assert.True(appleSchema.Evaluate(node, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
     }
 
+    [Theory]
+    [InlineData("1.X.0", true)]
+    [InlineData("1.6.X", true)]
+    [InlineData("1.6.0", false)]
+    [InlineData("1.X.X", false)]
+    public void Release_schema_accepts_only_supported_Apple_marketing_version_patterns(
+        string pattern,
+        bool expectedValid)
+    {
+        var schemaDocument = JsonNode.Parse(File.ReadAllText(GetSchemaPath("powerforge.release.schema.json")))!;
+        var automationSchema = JsonSchema.FromText(
+            schemaDocument["properties"]!["AppleApps"]!["properties"]!["Automation"]!.ToJsonString());
+        var node = JsonNode.Parse($$"""{ "MarketingVersionPattern": "{{pattern}}" }""")!;
+
+        var result = automationSchema.Evaluate(node, new EvaluationOptions { OutputFormat = OutputFormat.List });
+
+        Assert.Equal(expectedValid, result.IsValid);
+    }
+
+    [Fact]
+    public void Release_runtime_loads_Apple_marketing_version_pattern()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            File.WriteAllText(path, """
+                {
+                  "AppleApps": {
+                    "Automation": {
+                      "VersionSourcePath": "project.yml",
+                      "MarketingVersionPattern": "1.X.0"
+                    }
+                  }
+                }
+                """);
+
+            var automation = Assert.IsType<PowerForgeAppleReleaseAutomationOptions>(
+                PowerForgeReleaseService.LoadConfiguration(path).AppleApps?.Automation);
+            Assert.Equal("1.X.0", automation.MarketingVersionPattern);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void Release_schema_accepts_exact_verified_github_recovery_binding()
     {

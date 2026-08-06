@@ -261,16 +261,47 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException($"Apple version source build number '{current.BuildNumber}' is not a non-negative integer.");
 
         var storeApps = plan.Apps.Where(UsesAppStoreConnect).ToArray();
+        var requested = plan.RequestedMarketingVersion!.Trim();
+        var isPattern = requested.IndexOf("X", StringComparison.OrdinalIgnoreCase) >= 0;
         var highestRemote = 0L;
+        AppleReleaseMarketingVersionResolution? resolution = null;
         if (storeApps.Length > 0)
         {
             var credential = CreateAppStoreConnectCredential(plan);
-            highestRemote = storeApps
-                .Select(app => _getHighestAppleBuildNumber(credential, app.AppStoreConnectAppId!, app.Platform))
-                .DefaultIfEmpty(0)
-                .Max();
+            if (isPattern)
+            {
+                var inventories = storeApps
+                    .Select(app => _getAppleVersionInventory(credential, app.AppStoreConnectAppId!, app.Platform))
+                    .ToArray();
+                highestRemote = inventories
+                    .SelectMany(static inventory => inventory.Builds)
+                    .Select(static build => long.TryParse(build.Version, out var number) ? number : 0)
+                    .DefaultIfEmpty(0)
+                    .Max();
+                resolution = AppleReleaseMarketingVersionResolver.Resolve(
+                    requested,
+                    current.MarketingVersion,
+                    inventories.SelectMany(static inventory => inventory.AppStoreVersions),
+                    inventories.SelectMany(static inventory => inventory.Builds));
+            }
+            else
+            {
+                highestRemote = storeApps
+                    .Select(app => _getHighestAppleBuildNumber(credential, app.AppStoreConnectAppId!, app.Platform))
+                    .DefaultIfEmpty(0)
+                    .Max();
+            }
         }
-        var requestedVersion = plan.RequestedMarketingVersion!.Trim();
+        else if (isPattern)
+        {
+            resolution = AppleReleaseMarketingVersionResolver.Resolve(
+                requested,
+                current.MarketingVersion,
+                Array.Empty<AppStoreConnectVersionInfo>(),
+                Array.Empty<AppStoreConnectBuildInfo>());
+        }
+
+        var requestedVersion = resolution?.MarketingVersion ?? requested;
         var nextBuild = string.Equals(current.MarketingVersion, requestedVersion, StringComparison.OrdinalIgnoreCase) &&
                         currentBuild > highestRemote
             ? currentBuild
@@ -281,6 +312,10 @@ internal sealed partial class PowerForgeReleaseService
             nextBuild.ToString(System.Globalization.CultureInfo.InvariantCulture),
             highestRemote,
             whatIf);
+        receipt.RequestedMarketingVersion = requested;
+        receipt.MarketingVersionPattern = resolution?.Pattern;
+        receipt.HighestRemoteMarketingVersion = resolution?.HighestRemoteMarketingVersion;
+        receipt.ReusedUnreleasedMarketingVersion = resolution?.ReusedUnreleasedMarketingVersion == true;
         receipt.SourcePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, plan.VersionSourcePath!).Replace('\\', '/');
         return receipt;
     }
@@ -297,5 +332,22 @@ internal sealed partial class PowerForgeReleaseService
             .Select(static build => long.TryParse(build.Version, out var number) ? number : 0)
             .DefaultIfEmpty(0)
             .Max();
+    }
+
+    private static PowerForgeAppleRemoteVersionInventory GetAppleVersionInventory(
+        AppStoreConnectApiCredential credential,
+        string appId,
+        ApplePlatform platform)
+    {
+        using var client = new AppStoreConnectClient(credential);
+        return new PowerForgeAppleRemoteVersionInventory
+        {
+            AppStoreVersions = client.GetVersionsAsync(appId, platform: platform, limit: 200)
+                .GetAwaiter()
+                .GetResult(),
+            Builds = client.GetBuildsAsync(appId, limit: 200, platform: platform)
+                .GetAwaiter()
+                .GetResult()
+        };
     }
 }

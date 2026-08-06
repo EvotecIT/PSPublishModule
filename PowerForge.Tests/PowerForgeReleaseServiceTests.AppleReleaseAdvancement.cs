@@ -107,6 +107,119 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleVersion_UsesConfiguredPatternToAdvanceRepeatedTestFlightBuild()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.6.0", "16");
+            WriteXcodeGenVersionSource(root, "1.6.0", "16");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.VersionSourcePath = "project.yml";
+            spec.AppleApps.Automation.MarketingVersionPattern = "1.X.0";
+            spec.AppleApps.Apps = new[]
+            {
+                spec.AppleApps.Apps.Single(),
+                new AppleAppConfiguration
+                {
+                    Name = "CasaRay Mac",
+                    BundleId = "com.evotecit.casaray",
+                    Platform = ApplePlatform.macOS,
+                    ArchiveVariant = AppleArchiveVariant.MacCatalyst,
+                    ProjectPath = "CasaRay.xcodeproj",
+                    Scheme = "CasaRay",
+                    AppStoreConnectAppId = "6778025328"
+                }
+            };
+
+            var service = CreateAppleAutomationService(
+                _ => throw new InvalidOperationException("Version must not query release status."),
+                generateAppleProject: _ => true,
+                getHighestAppleBuildNumber: (_, _, _) => throw new InvalidOperationException("Pattern versioning must use the complete remote inventory."),
+                getAppleVersionInventory: (_, _, platform) => new PowerForgeAppleRemoteVersionInventory
+                {
+                    AppStoreVersions = new[]
+                    {
+                        new AppStoreConnectVersionInfo
+                        {
+                            VersionString = "1.5.0",
+                            AppStoreState = "READY_FOR_SALE"
+                        }
+                    },
+                    Builds = new[]
+                    {
+                        new AppStoreConnectBuildInfo
+                        {
+                            MarketingVersion = "1.6.0",
+                            Version = platform == ApplePlatform.iOS ? "16" : "15"
+                        }
+                    }
+                });
+
+            var result = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Version,
+                AppleActionConfirmed = true
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var versioning = Assert.IsType<PowerForgeAppleVersionReceipt>(result.AppleReceipt!.Versioning);
+            Assert.Equal("1.X.0", versioning.RequestedMarketingVersion);
+            Assert.Equal("1.X.0", versioning.MarketingVersionPattern);
+            Assert.Equal("1.6.0", versioning.MarketingVersion);
+            Assert.Equal("17", versioning.BuildNumber);
+            Assert.Equal("1.6.0", versioning.HighestRemoteMarketingVersion);
+            Assert.Equal(16, versioning.HighestRemoteBuildNumber);
+            Assert.True(versioning.ReusedUnreleasedMarketingVersion);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleVersion_ExplicitExactVersionOverridesConfiguredPattern()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.5.0", "13");
+            WriteXcodeGenVersionSource(root, "1.5.0", "13");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.VersionSourcePath = "project.yml";
+            spec.AppleApps.Automation.MarketingVersionPattern = "1.X.0";
+
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Version must not query release status."),
+                    generateAppleProject: _ => true,
+                    getHighestAppleBuildNumber: (_, _, _) => 13,
+                    getAppleVersionInventory: (_, _, _) => throw new InvalidOperationException("Exact override must not query pattern inventory."))
+                .Execute(spec, new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Version,
+                    AppleMarketingVersion = "2.0.0",
+                    AppleActionConfirmed = true
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("2.0.0", result.AppleReceipt!.Versioning!.MarketingVersion);
+            Assert.Equal("2.0.0", result.AppleReceipt.Versioning.RequestedMarketingVersion);
+            Assert.Null(result.AppleReceipt.Versioning.MarketingVersionPattern);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleVersion_RetryKeepsUnpublishedSelectedBuild()
     {
         var root = CreateSandbox();

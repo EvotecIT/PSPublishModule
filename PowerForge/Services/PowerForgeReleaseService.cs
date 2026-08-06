@@ -73,6 +73,7 @@ internal sealed partial class PowerForgeReleaseService
     private readonly Func<AppStoreConnectReleaseStateRequest, AppStoreConnectReleaseStateResult> _getAppleReleaseState;
     private readonly Func<AppStoreConnectApiCredential, string, AppStoreConnectBuildUploadInfo?> _getAppleBuildUpload;
     private readonly Func<AppStoreConnectApiCredential, string, ApplePlatform, long> _getHighestAppleBuildNumber;
+    private readonly Func<AppStoreConnectApiCredential, string, ApplePlatform, PowerForgeAppleRemoteVersionInventory> _getAppleVersionInventory;
     private readonly Func<AppStoreConnectApiCredential, string, AppStoreConnectAppInfo[]> _findAppleApps;
     private readonly Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan> _planAppleGovernance;
     private readonly Func<AppleNotarizationRequest, AppleNotarizationResult> _notarizeAppleArtifact;
@@ -175,6 +176,7 @@ internal sealed partial class PowerForgeReleaseService
         Func<GitHubReleasePublishRequest, CancellationToken, GitHubReleasePublishResult>? publishGitHubReleaseWithCancellation = null,
         Func<string, string, string, string, GitHubReleaseVersionOccupancy>? probeGitHubReleaseVersion = null,
         Func<AppStoreConnectApiCredential, string, ApplePlatform, long>? getHighestAppleBuildNumber = null,
+        Func<AppStoreConnectApiCredential, string, ApplePlatform, PowerForgeAppleRemoteVersionInventory>? getAppleVersionInventory = null,
         Func<AppStoreConnectApiCredential, string, AppStoreConnectAppInfo[]>? findAppleApps = null,
         Func<AppleNotarizationRequest, AppleNotarizationResult>? notarizeAppleArtifact = null,
         Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan>? planAppleGovernance = null,
@@ -219,6 +221,7 @@ internal sealed partial class PowerForgeReleaseService
         _getAppleReleaseState = getAppleReleaseState ?? GetAppleReleaseState;
         _getAppleBuildUpload = getAppleBuildUpload ?? GetAppleBuildUpload;
         _getHighestAppleBuildNumber = getHighestAppleBuildNumber ?? GetHighestAppleBuildNumber;
+        _getAppleVersionInventory = getAppleVersionInventory ?? GetAppleVersionInventory;
         _findAppleApps = findAppleApps ?? FindAppleApps;
         _planAppleGovernance = planAppleGovernance ?? PlanAppleGovernance;
         _notarizeAppleArtifact = notarizeAppleArtifact ?? (request =>
@@ -1469,6 +1472,9 @@ internal sealed partial class PowerForgeReleaseService
         automation.ProcessingTimeoutSeconds = request.AppleProcessingTimeoutSeconds ?? automation.ProcessingTimeoutSeconds;
         automation.PollIntervalSeconds = request.ApplePollIntervalSeconds ?? automation.PollIntervalSeconds;
         ValidateAppleAutomation(automation);
+        var requestedMarketingVersion = FirstNonEmpty(
+            request.AppleMarketingVersion,
+            automation.MarketingVersionPattern);
         if (directDistribution.TimeoutSeconds <= 0)
             throw new InvalidOperationException("AppleApps.DirectDistribution.TimeoutSeconds must be greater than zero.");
         var receiptPath = ResolveOutputPath(projectRoot, automation.ReceiptPath);
@@ -1548,8 +1554,11 @@ internal sealed partial class PowerForgeReleaseService
         var requiresAppStoreConnect = appStoreConnectAction && appStoreConnectApps.Length > 0;
         if (request.AppleAction == PowerForgeAppleReleaseAction.Version)
         {
-            if (string.IsNullOrWhiteSpace(request.AppleMarketingVersion))
-                throw new InvalidOperationException("Apple action 'Version' requires --apple-version.");
+            if (string.IsNullOrWhiteSpace(requestedMarketingVersion))
+            {
+                throw new InvalidOperationException(
+                    "Apple action 'Version' requires --apple-version or AppleApps.Automation.MarketingVersionPattern.");
+            }
             if (versionSourcePath is null)
                 throw new InvalidOperationException("Apple action 'Version' requires AppleApps.Automation.VersionSourcePath.");
             if (!File.Exists(versionSourcePath))
@@ -1663,7 +1672,7 @@ internal sealed partial class PowerForgeReleaseService
             PlanReceiptPath = planReceiptPath,
             LockPath = lockPath,
             VersionSourcePath = versionSourcePath,
-            RequestedMarketingVersion = request.AppleMarketingVersion?.Trim(),
+            RequestedMarketingVersion = requestedMarketingVersion,
             SourceCommit = appleSourceCommit.Length == 0 ? null : appleSourceCommit,
             Archive = options.Archive,
             Upload = options.Upload,
