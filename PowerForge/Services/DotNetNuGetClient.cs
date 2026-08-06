@@ -1,3 +1,5 @@
+using System.IO.Compression;
+
 namespace PowerForge;
 
 /// <summary>
@@ -108,11 +110,29 @@ public sealed class DotNetNuGetClient
         if (string.IsNullOrWhiteSpace(request.TimeStampServer))
             throw new ArgumentException("TimeStampServer is required.", nameof(request));
 
+        var packagePaths = request.Overwrite
+            ? request.PackagePaths
+            : request.PackagePaths
+                .Where(path => !HasNuGetSignature(path, request.WorkingDirectory))
+                .ToArray();
+        var skippedSignedPackages = request.PackagePaths.Length - packagePaths.Length;
+        if (packagePaths.Length == 0)
+        {
+            return new DotNetNuGetSignResult(
+                exitCode: 0,
+                stdOut: $"Preserved {skippedSignedPackages} already signed NuGet package(s).",
+                stdErr: string.Empty,
+                executable: _dotNetExecutable,
+                duration: TimeSpan.Zero,
+                timedOut: false,
+                errorMessage: null);
+        }
+
         var arguments = new List<string> {
             "nuget",
             "sign"
         };
-        arguments.AddRange(request.PackagePaths);
+        arguments.AddRange(packagePaths);
         arguments.AddRange(new[]
         {
             "--certificate-fingerprint",
@@ -136,9 +156,18 @@ public sealed class DotNetNuGetClient
                 request.Timeout ?? _defaultTimeout),
             cancellationToken).ConfigureAwait(false);
 
+        var preservationMessage = skippedSignedPackages > 0
+            ? $"Preserved {skippedSignedPackages} already signed NuGet package(s)."
+            : null;
+        var stdOut = string.IsNullOrWhiteSpace(preservationMessage)
+            ? processResult.StdOut
+            : string.IsNullOrWhiteSpace(processResult.StdOut)
+                ? preservationMessage!
+                : processResult.StdOut.TrimEnd() + Environment.NewLine + preservationMessage;
+
         return new DotNetNuGetSignResult(
             processResult.ExitCode,
-            processResult.StdOut,
+            stdOut,
             processResult.StdErr,
             processResult.Executable,
             processResult.Duration,
@@ -146,6 +175,31 @@ public sealed class DotNetNuGetClient
             processResult.ExitCode == 0 && !processResult.TimedOut
                 ? null
                 : FirstLine(processResult.StdErr) ?? FirstLine(processResult.StdOut) ?? $"dotnet nuget sign failed with exit code {processResult.ExitCode}.");
+    }
+
+    private static bool HasNuGetSignature(string packagePath, string? workingDirectory)
+    {
+        try
+        {
+            var baseDirectory = string.IsNullOrWhiteSpace(workingDirectory)
+                ? Environment.CurrentDirectory
+                : Path.GetFullPath(workingDirectory!);
+            var resolvedPath = Path.IsPathRooted(packagePath)
+                ? Path.GetFullPath(packagePath)
+                : Path.GetFullPath(Path.Combine(baseDirectory, packagePath));
+            if (!File.Exists(resolvedPath))
+                return false;
+
+            using var stream = File.Open(resolvedPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
+            return archive.Entries.Any(entry =>
+                string.Equals(entry.FullName, ".signature.p7s", StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            // Let dotnet nuget sign report missing or malformed package errors.
+            return false;
+        }
     }
 
     private static string BuildPushResponseFileContent(

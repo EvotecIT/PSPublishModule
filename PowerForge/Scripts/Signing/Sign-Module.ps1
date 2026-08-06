@@ -1,5 +1,6 @@
 ﻿param(
   [string]$RootPath,
+  [string]$PackageFileListPath,
   [string]$IncludeB64,
   [string]$ExcludeB64,
   [string]$Thumbprint,
@@ -16,6 +17,37 @@ function DecodeLines([string]$b64) {
   if ([string]::IsNullOrWhiteSpace($b64)) { return @() }
   $text = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b64))
   return $text -split "`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.Trim() }
+}
+
+function Test-ExcludedPackagePath([string]$relativePath, [string[]]$exclusions) {
+  if ([string]::IsNullOrWhiteSpace($relativePath) -or -not $exclusions -or $exclusions.Count -eq 0) {
+    return $false
+  }
+
+  $normalizedPath = $relativePath.Replace('\', '/').Trim('/')
+  $segments = @($normalizedPath -split '/' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+  foreach ($entry in $exclusions) {
+    if ([string]::IsNullOrWhiteSpace($entry)) { continue }
+    $normalizedExclusion = $entry.Trim().Trim('"').Replace('\', '/').Trim('/')
+    if ([string]::IsNullOrWhiteSpace($normalizedExclusion)) { continue }
+
+    if ($normalizedExclusion.Contains('/')) {
+      $wrappedPath = '/' + $normalizedPath + '/'
+      $wrappedExclusion = '/' + $normalizedExclusion + '/'
+      if ($wrappedPath.IndexOf($wrappedExclusion, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        return $true
+      }
+      continue
+    }
+
+    foreach ($segment in $segments) {
+      if ($segment.Equals($normalizedExclusion, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $true
+      }
+    }
+  }
+
+  return $false
 }
 
 function EmitError([string]$msg) {
@@ -105,9 +137,12 @@ try {
   if ([string]::IsNullOrWhiteSpace($RootPath)) { throw "RootPath is required." }
   if (-not (Test-Path -LiteralPath $RootPath)) { throw "RootPath not found: $RootPath" }
   $root = (Resolve-Path -LiteralPath $RootPath).Path
+  if ([string]::IsNullOrWhiteSpace($PackageFileListPath)) { throw "PackageFileListPath is required." }
+  if (-not (Test-Path -LiteralPath $PackageFileListPath -PathType Leaf)) { throw "Package file list not found: $PackageFileListPath" }
 
   $include = DecodeLines $IncludeB64
   $exclude = DecodeLines $ExcludeB64
+  $packageFiles = @(Get-Content -LiteralPath $PackageFileListPath -ErrorAction Stop | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
   $overwrite = -not [string]::IsNullOrWhiteSpace($OverwriteSigned) -and $OverwriteSigned -eq '1'
 
   if (-not $include -or $include.Count -eq 0) {
@@ -149,28 +184,54 @@ try {
 
   $thisTp = ($cert.Thumbprint -replace '\s','').ToUpperInvariant()
 
-  # Enumerate files (include patterns, then apply exclude substrings)
-  $files = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
-  foreach ($pat in $include) {
-    if ([string]::IsNullOrWhiteSpace($pat)) { continue }
-    Get-ChildItem -LiteralPath $root -Recurse -File -Filter $pat -ErrorAction SilentlyContinue |
-      ForEach-Object { [void]$files.Add($_.FullName) }
+  # Select signable files only from the final module package file set.
+  $pathComparison = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') {
+    [System.StringComparison]::OrdinalIgnoreCase
+  } else {
+    [System.StringComparison]::Ordinal
+  }
+  $pathComparer = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') {
+    [System.StringComparer]::OrdinalIgnoreCase
+  } else {
+    [System.StringComparer]::Ordinal
+  }
+  $files = New-Object 'System.Collections.Generic.HashSet[string]' ($pathComparer)
+  $rootPrefix = $root.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+  foreach ($candidate in $packageFiles) {
+    $candidatePath = if ([System.IO.Path]::IsPathRooted($candidate)) {
+      [System.IO.Path]::GetFullPath($candidate)
+    } else {
+      [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($root, $candidate))
+    }
+
+    if (-not $candidatePath.StartsWith($rootPrefix, $pathComparison)) {
+      throw "Packaged signing candidate is outside RootPath: $candidatePath"
+    }
+    if (-not [System.IO.File]::Exists($candidatePath)) {
+      throw "Packaged signing candidate was not found: $candidatePath"
+    }
+
+    $name = [System.IO.Path]::GetFileName($candidatePath)
+    foreach ($pat in $include) {
+      if ([string]::IsNullOrWhiteSpace($pat)) { continue }
+      if ($name -like $pat) {
+        [void]$files.Add($candidatePath)
+        break
+      }
+    }
   }
 
   $all = @($files)
   if ($exclude -and $exclude.Count -gt 0) {
     $all = $all | Where-Object {
       $p = [string]$_
-      foreach ($x in $exclude) {
-        if ([string]::IsNullOrWhiteSpace($x)) { continue }
-        if ($p.IndexOf($x, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { return $false }
-      }
-      return $true
+      $relativePath = $p.Substring($rootPrefix.Length)
+      return -not (Test-ExcludedPackagePath -relativePath $relativePath -exclusions $exclude)
     }
   }
 
   if (-not $all -or $all.Count -eq 0) {
-    throw "No files matched for signing under '$root'."
+    throw "No packaged files matched for signing under '$root'."
   }
 
   $ts = 'http://timestamp.digicert.com'

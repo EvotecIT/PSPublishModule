@@ -34,6 +34,8 @@ public sealed class DotNetRepositoryReleasePreparationServiceTests
                 TimeStampServer = "http://timestamp.test",
                 SignAssemblies = false,
                 SignPackages = false,
+                OverwriteSignedAssemblies = true,
+                OverwriteSignedPackages = true,
                 IncludeSymbols = true,
                 Publish = true,
                 PublishFailFast = true,
@@ -54,6 +56,8 @@ public sealed class DotNetRepositoryReleasePreparationServiceTests
             Assert.Equal(PowerForge.CertificateStoreLocation.LocalMachine, context.Spec.CertificateStore);
             Assert.False(context.Spec.SignAssemblies);
             Assert.False(context.Spec.SignPackages);
+            Assert.True(context.Spec.OverwriteSignedAssemblies);
+            Assert.True(context.Spec.OverwriteSignedPackages);
             Assert.True(context.Spec.IncludeSymbols);
             Assert.Equal("Debug", context.Spec.Configuration);
             Assert.True(context.Spec.Publish);

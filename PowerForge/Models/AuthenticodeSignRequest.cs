@@ -25,4 +25,7 @@ public sealed class AuthenticodeSignRequest
 
     /// <summary>Non-Windows include-chain argument for Set-OpenAuthenticodeSignature.</summary>
     public string NonWindowsIncludeChain { get; set; } = "WholeChain";
+
+    /// <summary>Explicitly replaces existing Authenticode signatures. Defaults to false.</summary>
+    public bool OverwriteSigned { get; set; }
 }

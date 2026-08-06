@@ -27,7 +27,8 @@ public sealed class PowerForgeProjectDslMapperTests
             {
                 Mode = ConfigurationProjectSigningMode.OnDemand,
                 Thumbprint = "ABC123",
-                Description = "IntelligenceX Chat"
+                Description = "IntelligenceX Chat",
+                OverwriteSigned = true
             },
             Output = new ConfigurationProjectOutput
             {
@@ -83,6 +84,7 @@ public sealed class PowerForgeProjectDslMapperTests
         Assert.NotNull(target.Publish.Sign);
         Assert.False(target.Publish.Sign!.Enabled);
         Assert.Equal("ABC123", target.Publish.Sign.Thumbprint);
+        Assert.True(target.Publish.Sign.OverwriteSigned);
 
         var bundle = spec.Tools.DotNetPublish.Bundles[0];
         Assert.Equal("ChatApp", bundle.PrepareFromTarget);
@@ -94,6 +96,7 @@ public sealed class PowerForgeProjectDslMapperTests
         Assert.Equal(bundle.Id, installer.PrepareFromBundleId);
         Assert.NotNull(installer.Sign);
         Assert.False(installer.Sign!.Enabled);
+        Assert.True(installer.Sign.OverwriteSigned);
 
         Assert.True(request.ToolsOnly);
         Assert.Equal("Release", request.Configuration);

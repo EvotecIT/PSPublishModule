@@ -65,6 +65,12 @@ public sealed class ProjectBuildConfigurationReference
     /// <summary>Whether generated NuGet packages should be signed, overriding the referenced JSON when set.</summary>
     public bool? SignPackages { get; set; }
 
+    /// <summary>Whether existing Authenticode assembly signatures may be replaced.</summary>
+    public bool? OverwriteSignedAssemblies { get; set; }
+
+    /// <summary>Whether existing NuGet package signatures may be replaced.</summary>
+    public bool? OverwriteSignedPackages { get; set; }
+
     /// <summary>Additional project-build JSON overrides for less common fields.</summary>
     public Dictionary<string, object?>? Options { get; set; }
 }
@@ -220,6 +226,12 @@ public sealed class PackageBuildConfiguration
 
     /// <summary>Whether generated NuGet packages should be signed.</summary>
     public bool? SignPackages { get; set; }
+
+    /// <summary>Whether existing Authenticode assembly signatures may be replaced.</summary>
+    public bool? OverwriteSignedAssemblies { get; set; }
+
+    /// <summary>Whether existing NuGet package signatures may be replaced.</summary>
+    public bool? OverwriteSignedPackages { get; set; }
 
     /// <summary>NuGet version lookup credential user name.</summary>
     public string? NugetCredentialUserName { get; set; }

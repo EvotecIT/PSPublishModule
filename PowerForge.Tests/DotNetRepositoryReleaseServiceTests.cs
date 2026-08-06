@@ -635,6 +635,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 CreateReleaseZip = false,
                 CertificateThumbprint = "ABC123",
                 SignAssemblies = true,
+                OverwriteSignedAssemblies = true,
                 SignPackages = false
             };
 
@@ -643,6 +644,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 request =>
                 {
                     Assert.Equal("ABC123", request.CertificateThumbprint);
+                    Assert.True(request.OverwriteSigned);
                     var filePaths = Assert.IsType<string[]>(request.FilePaths);
                     signedAssemblies += filePaths.Count(path => path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
                     Assert.Contains(filePaths, path => path.EndsWith(Path.Combine("Shared", "bin", "Release", "net8.0", "Shared.dll"), StringComparison.OrdinalIgnoreCase));
@@ -711,6 +713,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                     signingCalls++;
                     Assert.Equal(CertificateStoreLocation.CurrentUser, request.LocalStore);
                     Assert.Equal("ABC123", request.CertificateThumbprint);
+                    Assert.False(request.OverwriteSigned);
                     Assert.Contains("Sample.Package.dll", request.IncludePatterns);
                     Assert.Contains("Sample.Package.exe", request.IncludePatterns);
                     Assert.DoesNotContain("*.dll", request.IncludePatterns);

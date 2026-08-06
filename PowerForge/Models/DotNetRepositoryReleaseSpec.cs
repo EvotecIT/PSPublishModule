@@ -108,8 +108,14 @@ public sealed class DotNetRepositoryReleaseSpec
     /// <summary>When true, assembly signing also signs copied dependency assemblies from build outputs.</summary>
     public bool SignDependencyAssemblies { get; set; }
 
+    /// <summary>Explicitly replaces existing Authenticode assembly signatures. Defaults to false.</summary>
+    public bool OverwriteSignedAssemblies { get; set; }
+
     /// <summary>When true and a certificate is configured, signs generated NuGet packages.</summary>
     public bool SignPackages { get; set; } = true;
+
+    /// <summary>Explicitly replaces existing NuGet package signatures. Defaults to false.</summary>
+    public bool OverwriteSignedPackages { get; set; }
 
     /// <summary>When true, publishes packages with dotnet nuget push.</summary>
     public bool Publish { get; set; }

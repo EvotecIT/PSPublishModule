@@ -112,6 +112,8 @@ public sealed class PowerForgeProjectCmdletTests
             .AddParameter("ProvideLocalNuGetFeed")
             .AddParameter("Build")
             .AddParameter("IncludeSymbols")
+            .AddParameter("OverwriteSignedAssemblies")
+            .AddParameter("OverwriteSignedPackages")
             .AddParameter("PublishNuget", false)
             .AddParameter("PublishGitHub", false)
             .AddParameter("CreateReleaseZip", false)
@@ -129,6 +131,8 @@ public sealed class PowerForgeProjectCmdletTests
         Assert.True(segment.Configuration.Enabled);
         Assert.True(segment.Configuration.Build);
         Assert.True(segment.Configuration.IncludeSymbols);
+        Assert.True(segment.Configuration.OverwriteSignedAssemblies);
+        Assert.True(segment.Configuration.OverwriteSignedPackages);
         Assert.False(segment.Configuration.PublishNuget);
         Assert.False(segment.Configuration.PublishGitHub);
         Assert.False(segment.Configuration.CreateReleaseZip);
@@ -154,6 +158,8 @@ public sealed class PowerForgeProjectCmdletTests
             .AddParameter("AlignPackageVersions")
             .AddParameter("BuildBeforeModule")
             .AddParameter("IncludeSymbols")
+            .AddParameter("OverwriteSignedAssemblies")
+            .AddParameter("OverwriteSignedPackages")
             .AddParameter("PublishNuget", false)
             .AddParameter("UseGitHubPackages")
             .AddParameter("GitHubPackagesOwner", "EvotecIT")
@@ -168,6 +174,8 @@ public sealed class PowerForgeProjectCmdletTests
         Assert.True(segment.Configuration.AlignPackageVersions);
         Assert.True(segment.Configuration.BuildBeforeModule);
         Assert.True(segment.Configuration.IncludeSymbols);
+        Assert.True(segment.Configuration.OverwriteSignedAssemblies);
+        Assert.True(segment.Configuration.OverwriteSignedPackages);
         Assert.False(segment.Configuration.PublishNuget);
         Assert.True(segment.Configuration.UseGitHubPackages);
         Assert.Equal("EvotecIT", segment.Configuration.GitHubPackagesOwner);

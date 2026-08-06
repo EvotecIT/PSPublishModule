@@ -50,6 +50,8 @@ public sealed class LinkRedirectRule
     public string SourcePath { get; set; } = string.Empty;
     /// <summary>Optional exact query string match without a leading question mark.</summary>
     public string? SourceQuery { get; set; }
+    /// <summary>Optional query parameter name to match regardless of its value, ordering, or accompanying parameters.</summary>
+    public string? SourceQueryParameter { get; set; }
     /// <summary>Source matching strategy.</summary>
     public LinkRedirectMatchType MatchType { get; set; } = LinkRedirectMatchType.Exact;
     /// <summary>Absolute URL or root-relative path target; optional only for 410 Gone rules.</summary>

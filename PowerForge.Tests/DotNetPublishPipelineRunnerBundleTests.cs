@@ -161,6 +161,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
                 {
                     Enabled = true,
                     IncludeDlls = true,
+                    OverwriteSigned = true,
                     Thumbprint = "ABC123",
                     TimestampUrl = "http://timestamp.example"
                 }
@@ -177,7 +178,8 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
                         SignPatterns = new[] { " **/*.ps1 ", "**/*.dll" },
                         SignOverrides = new DotNetPublishSignPatch
                         {
-                            Description = "TierBridge Package"
+                            Description = "TierBridge Package",
+                            OverwriteSigned = false
                         }
                     }
                 }
@@ -191,6 +193,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             Assert.NotNull(postProcess.Sign);
             Assert.True(postProcess.Sign!.Enabled);
             Assert.True(postProcess.Sign.IncludeDlls);
+            Assert.False(postProcess.Sign.OverwriteSigned);
             Assert.Equal("ABC123", postProcess.Sign.Thumbprint);
             Assert.Equal("http://timestamp.example", postProcess.Sign.TimestampUrl);
             Assert.Equal("TierBridge Package", postProcess.Sign.Description);

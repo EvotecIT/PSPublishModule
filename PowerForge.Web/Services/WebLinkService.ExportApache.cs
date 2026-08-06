@@ -37,6 +37,7 @@ public static partial class WebLinkService
             .ThenBy(static rule => rule.SourceHost ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static rule => rule.SourcePath, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static rule => rule.SourceQuery ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static rule => rule.SourceQueryParameter ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         var ruleCount = 0;
@@ -108,7 +109,7 @@ public static partial class WebLinkService
                 return false;
 
             AppendHostCondition(lines, rule.SourceHost);
-            AppendQueryCondition(lines, rule.SourceQuery);
+            AppendQueryCondition(lines, rule.SourceQuery, rule.SourceQueryParameter);
             lines.Add($"RewriteRule {gonePattern} - [G,L]");
             lines.Add(string.Empty);
             return true;
@@ -122,9 +123,9 @@ public static partial class WebLinkService
             throw new InvalidOperationException($"Apache redirect target contains characters that must be URL-encoded before export: {rule.Id ?? rule.SourcePath}");
 
         AppendHostCondition(lines, rule.SourceHost);
-        AppendQueryCondition(lines, rule.SourceQuery);
+        AppendQueryCondition(lines, rule.SourceQuery, rule.SourceQueryParameter);
 
-        var hasSourceQuery = !string.IsNullOrWhiteSpace(rule.SourceQuery);
+        var hasSourceQuery = HasSourceQuerySelector(rule);
         var flags = new List<string>
         {
             $"R={ResolveStatus(rule.Status, defaultStatus: 301)}",
@@ -252,8 +253,21 @@ public static partial class WebLinkService
         lines.Add($"RewriteCond %{{HTTP_HOST}} ^{prefix}{Regex.Escape(trimmed)}$ [NC]");
     }
 
-    private static void AppendQueryCondition(List<string> lines, string? query)
+    private static void AppendQueryCondition(List<string> lines, string? query, string? queryParameter)
     {
+        if (!string.IsNullOrWhiteSpace(query) && !string.IsNullOrWhiteSpace(queryParameter))
+            throw new InvalidOperationException("Apache redirect sourceQuery and sourceQueryParameter are mutually exclusive.");
+
+        if (!string.IsNullOrWhiteSpace(queryParameter))
+        {
+            var parameter = queryParameter.Trim();
+            if (!SafeQueryParameterNameRegex.IsMatch(parameter))
+                throw new InvalidOperationException("Apache redirect sourceQueryParameter must be a URL-safe query parameter name.");
+
+            lines.Add($"RewriteCond %{{QUERY_STRING}} (^|&){Regex.Escape(parameter)}=[^&]*(&|$)");
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(query))
             return;
 

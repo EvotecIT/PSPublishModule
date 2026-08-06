@@ -240,13 +240,16 @@ internal sealed class PowerShellModulePipelineHostedOperations :
     public ModuleSigningResult SignModuleOutput(
         string moduleName,
         string rootPath,
+        string[] packageFilePaths,
         string[] includePatterns,
         string[] excludeSubstrings,
         SigningOptionsConfiguration signing)
     {
-        var args = new List<string>(8)
+        var packageFileListPath = WriteTemporaryLineFile(packageFilePaths);
+        var args = new List<string>(9)
         {
             rootPath,
+            packageFileListPath,
             EncodeLines(includePatterns),
             EncodeLines(excludeSubstrings),
             signing.CertificateThumbprint ?? string.Empty,
@@ -257,7 +260,15 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         };
 
         var script = EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
-        var result = RunScript(script, args, TimeSpan.FromMinutes(10), preferPwsh: true);
+        PowerShellRunResult result;
+        try
+        {
+            result = RunScript(script, args, TimeSpan.FromMinutes(10), preferPwsh: true);
+        }
+        finally
+        {
+            try { File.Delete(packageFileListPath); } catch { /* best effort */ }
+        }
         var summary = TryExtractSigningSummary(result.StdOut);
 
         if (result.ExitCode != 0 || (summary?.Failed ?? 0) > 0)
@@ -292,6 +303,20 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         }
 
         return summary;
+    }
+
+    private static string WriteTemporaryLineFile(IEnumerable<string> lines)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "PowerForge", "modulepipeline");
+        Directory.CreateDirectory(tempDir);
+        var path = Path.Combine(tempDir, $"modulepackage_{Guid.NewGuid():N}.txt");
+        File.WriteAllLines(
+            path,
+            (lines ?? Array.Empty<string>())
+                .Where(static line => !string.IsNullOrWhiteSpace(line))
+                .Distinct(StringComparer.OrdinalIgnoreCase),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        return path;
     }
 
     private static string EncodeImportModules(IEnumerable<ImportModuleEntry> modules)

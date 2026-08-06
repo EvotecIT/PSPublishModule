@@ -128,6 +128,8 @@ public sealed class ProjectBuildPreparationServiceTests
                 Configuration = "Debug",
                 PackStrategy = "MSBuild",
                 IncludeSymbols = true,
+                OverwriteSignedAssemblies = true,
+                OverwriteSignedPackages = true,
                 PublishNuget = true,
                 PublishGitHub = true
             };
@@ -148,6 +150,8 @@ public sealed class ProjectBuildPreparationServiceTests
             Assert.Equal("Debug", context.Spec.Configuration);
             Assert.Equal(DotNetRepositoryPackStrategy.MSBuild, context.Spec.PackStrategy);
             Assert.True(context.Spec.IncludeSymbols);
+            Assert.True(context.Spec.OverwriteSignedAssemblies);
+            Assert.True(context.Spec.OverwriteSignedPackages);
         }
         finally
         {

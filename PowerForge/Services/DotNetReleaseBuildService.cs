@@ -119,6 +119,7 @@ public sealed class DotNetReleaseBuildService
                     LocalStore = spec.LocalStore,
                     CertificateThumbprint = spec.CertificateThumbprint!.Trim(),
                     TimeStampServer = timeStampServer,
+                    OverwriteSigned = spec.OverwriteSignedAssemblies,
                     IncludePatterns = spec.AssemblyIncludePatterns ?? Array.Empty<string>()
                 });
             }
@@ -137,18 +138,25 @@ public sealed class DotNetReleaseBuildService
                 return result;
             }
 
+            var allPackages = new List<string>();
+            allPackages.AddRange(Directory.EnumerateFiles(releasePath, "*.nupkg", SearchOption.AllDirectories));
+
             if (spec.PackDependencies && dependencyProjects.Length > 0)
             {
                 _logger.Verbose($"DotNetReleaseBuild - Packing {dependencyProjects.Length} dependency projects");
+                var dependencyPackages = new List<string>();
                 foreach (var depProj in dependencyProjects)
                 {
                     var depName = Path.GetFileName(depProj) ?? depProj;
                     _logger.Verbose($"DotNetReleaseBuild - Packing dependency: {depName}");
+                    var depDir = Path.GetDirectoryName(depProj) ?? csprojDir;
+                    var depRelease = Path.Combine(depDir, "bin", configuration);
+                    var existingPackages = SnapshotPackages(depRelease);
 
                     var depExit = RunProcess(
                         fileName: "dotnet",
                         arguments: $"pack {Quote(depProj)} --configuration {Quote(configuration)} --no-restore --no-build",
-                        workingDirectory: Path.GetDirectoryName(depProj) ?? csprojDir,
+                        workingDirectory: depDir,
                         out var depStdErr,
                         out var depStdOut);
                     if (depExit != 0)
@@ -156,23 +164,13 @@ public sealed class DotNetReleaseBuildService
                         _logger.Warn($"DotNetReleaseBuild - Failed to pack dependency: {depName}");
                         if (!string.IsNullOrWhiteSpace(depStdErr)) _logger.Verbose(depStdErr.Trim());
                         if (!string.IsNullOrWhiteSpace(depStdOut)) _logger.Verbose(depStdOut.Trim());
+                        continue;
                     }
-                }
-            }
 
-            var allPackages = new List<string>();
-            allPackages.AddRange(Directory.EnumerateFiles(releasePath, "*.nupkg", SearchOption.AllDirectories));
-
-            if (spec.PackDependencies)
-            {
-                foreach (var depProj in dependencyProjects)
-                {
-                    var depDir = Path.GetDirectoryName(depProj);
-                    if (string.IsNullOrWhiteSpace(depDir)) continue;
-                    var depRelease = Path.Combine(depDir, "bin", configuration);
-                    if (!Directory.Exists(depRelease)) continue;
-                    allPackages.AddRange(Directory.EnumerateFiles(depRelease, "*.nupkg", SearchOption.AllDirectories));
+                    dependencyPackages.AddRange(EnumerateCreatedOrChangedPackages(depRelease, existingPackages));
                 }
+
+                allPackages.AddRange(dependencyPackages);
             }
 
             if (!string.IsNullOrWhiteSpace(spec.CertificateThumbprint) && allPackages.Count > 0)
@@ -189,22 +187,20 @@ public sealed class DotNetReleaseBuildService
 
                 _logger.Verbose($"DotNetReleaseBuild - Using certificate SHA256: {sha256}");
 
-                foreach (var pkgPath in allPackages)
-                {
-                    var pkgName = Path.GetFileName(pkgPath) ?? pkgPath;
-                    _logger.Verbose($"DotNetReleaseBuild - Signing package: {pkgName}");
-
-                    var signExit = RunProcess(
-                        fileName: "dotnet",
-                        arguments: $"nuget sign {Quote(pkgPath)} --certificate-fingerprint {Quote(sha256)} --certificate-store-location {spec.LocalStore} --certificate-store-name My --timestamper {Quote(timeStampServer)} --overwrite",
-                        workingDirectory: csprojDir,
-                        out _,
-                        out _);
-                    if (signExit != 0)
-                        _logger.Warn($"DotNetReleaseBuild - Failed to sign {pkgPath}");
-                    else
-                        _logger.Verbose($"DotNetReleaseBuild - Successfully signed {pkgPath}");
-                }
+                var signResult = new DotNetNuGetClient()
+                    .SignPackageAsync(new DotNetNuGetSignRequest(
+                        packagePaths: allPackages,
+                        certificateFingerprint: sha256,
+                        certificateStoreLocation: spec.LocalStore.ToString(),
+                        timeStampServer: timeStampServer,
+                        overwrite: spec.OverwriteSignedPackages,
+                        workingDirectory: csprojDir))
+                    .GetAwaiter()
+                    .GetResult();
+                if (!signResult.Succeeded)
+                    _logger.Warn($"DotNetReleaseBuild - Failed to sign NuGet packages. {signResult.ErrorMessage}");
+                else
+                    _logger.Verbose($"DotNetReleaseBuild - NuGet package signing completed. {signResult.StdOut}".Trim());
             }
 
             result.Success = true;
@@ -232,6 +228,41 @@ public sealed class DotNetReleaseBuildService
 
     private static string? GetFirstElementValue(XDocument doc, string localName)
         => doc.Descendants().FirstOrDefault(e => e.Name.LocalName.Equals(localName, StringComparison.OrdinalIgnoreCase))?.Value;
+
+    private static Dictionary<string, (long Length, DateTime LastWriteUtc)> SnapshotPackages(string directory)
+    {
+        var snapshot = new Dictionary<string, (long Length, DateTime LastWriteUtc)>(StringComparer.OrdinalIgnoreCase);
+        if (!Directory.Exists(directory))
+            return snapshot;
+
+        foreach (var path in Directory.EnumerateFiles(directory, "*.nupkg", SearchOption.AllDirectories))
+        {
+            var file = new FileInfo(path);
+            snapshot[Path.GetFullPath(path)] = (file.Length, file.LastWriteTimeUtc);
+        }
+
+        return snapshot;
+    }
+
+    private static IEnumerable<string> EnumerateCreatedOrChangedPackages(
+        string directory,
+        IReadOnlyDictionary<string, (long Length, DateTime LastWriteUtc)> before)
+    {
+        if (!Directory.Exists(directory))
+            yield break;
+
+        foreach (var path in Directory.EnumerateFiles(directory, "*.nupkg", SearchOption.AllDirectories))
+        {
+            var fullPath = Path.GetFullPath(path);
+            var file = new FileInfo(fullPath);
+            if (!before.TryGetValue(fullPath, out var previous) ||
+                previous.Length != file.Length ||
+                previous.LastWriteUtc != file.LastWriteTimeUtc)
+            {
+                yield return fullPath;
+            }
+        }
+    }
 
     private static IEnumerable<string> GetProjectReferences(XDocument doc, string csprojPath)
     {

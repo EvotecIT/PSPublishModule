@@ -637,6 +637,7 @@ public sealed class ModulePipelineManifestRefreshTests
         public ModuleSigningResult SignModuleOutput(
             string moduleName,
             string rootPath,
+            string[] packageFilePaths,
             string[] includePatterns,
             string[] excludeSubstrings,
             SigningOptionsConfiguration signing)

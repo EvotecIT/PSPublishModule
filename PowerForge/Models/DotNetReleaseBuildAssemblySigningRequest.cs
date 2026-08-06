@@ -22,4 +22,7 @@ public sealed class DotNetReleaseBuildAssemblySigningRequest
 
     /// <summary>Explicit files to sign. When set, signing services can use these instead of enumerating <see cref="ReleasePath"/>.</summary>
     public string[]? FilePaths { get; set; }
+
+    /// <summary>Explicitly replaces existing Authenticode signatures. Defaults to false.</summary>
+    public bool OverwriteSigned { get; set; }
 }

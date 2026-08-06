@@ -4,18 +4,18 @@
     "net10.0": {
       "coverlet.collector": {
         "type": "Direct",
-        "requested": "[6.0.4, )",
-        "resolved": "6.0.4",
-        "contentHash": "lkhqpF8Pu2Y7IiN7OntbsTtdbpR1syMsm2F3IgX6ootA4ffRqWL5jF7XipHuZQTdVuWG/gVAAcf8mjk8Tz0xPg=="
+        "requested": "[10.0.1, )",
+        "resolved": "10.0.1",
+        "contentHash": "27jXSV/0DbVqF5jDrAxuQFZ9oaz6gmG03p8ttxAFk+X0M4woFYj7MoWDLCna5EGLb0CE6OE7X6ZH3Wt5smTtaA=="
       },
       "Microsoft.NET.Test.Sdk": {
         "type": "Direct",
-        "requested": "[17.14.1, )",
-        "resolved": "17.14.1",
-        "contentHash": "HJKqKOE+vshXra2aEHpi2TlxYX7Z9VFYkr+E5rwEvHC8eIXiyO+K9kNm8vmNom3e2rA56WqxU+/N9NJlLGXsJQ==",
+        "requested": "[18.8.1, )",
+        "resolved": "18.8.1",
+        "contentHash": "dknJL3/9Y3t4XuCBqnc0PevPxgLsUMmVhjwup/b1HNovA8zWcj3XsfIf7c6p05363DWcqL7X/YhDL9B+Zymv1w==",
         "dependencies": {
-          "Microsoft.CodeCoverage": "17.14.1",
-          "Microsoft.TestPlatform.TestHost": "17.14.1"
+          "Microsoft.CodeCoverage": "18.8.1",
+          "Microsoft.TestPlatform.TestHost": "18.8.1"
         }
       },
       "xunit": {
@@ -31,9 +31,9 @@
       },
       "xunit.runner.visualstudio": {
         "type": "Direct",
-        "requested": "[3.1.4, )",
-        "resolved": "3.1.4",
-        "contentHash": "5mj99LvCqrq3CNi06xYdyIAXOEh+5b33F2nErCzI5zWiDdLHXiPXEWFSUAF8zlIv0ZWqjZNCwHTQeAPYbF3pCg=="
+        "requested": "[3.1.5, )",
+        "resolved": "3.1.5",
+        "contentHash": "tKi7dSTwP4m5m9eXPM2Ime4Kn7xNf4x4zT9sdLO/G4hZVnQCRiMTWoSZqI/pYTVeI27oPPqHBKYI/DjJ9GsYgA=="
       },
       "Acornima": {
         "type": "Transitive",
@@ -88,22 +88,22 @@
       },
       "HtmlForgeX": {
         "type": "Transitive",
-        "resolved": "0.53.0",
-        "contentHash": "9lkx+cSv8wW8/uY3QiWmPdsOyynvlqAp7R+aD92LLfnlfOYHhB/XCKnLYtBdXcn0qKRqc0z4FpLNUTyCANMOvw=="
+        "resolved": "0.54.0",
+        "contentHash": "C2nzEEvfEkC7jcwI1EEUh+sFduAMddwYYsNlkr4JVwfXaucLKG611NNSG1IpjdQ7Uv2yXh2m+1QppuyGy4x9vw=="
       },
       "HtmlForgeX.Markdown": {
         "type": "Transitive",
-        "resolved": "0.53.0",
-        "contentHash": "oAYqpJhly53PThJkCCaIezY1aqDEuccpbUvMbGe7x+sD+oJsUPjpGUgJ+hS63BYIxk9EyzJATkBi0w91EMo/bA==",
+        "resolved": "0.54.0",
+        "contentHash": "hk94NedERR+TtRfis8rkMRKujp6hMienG8gVSpSWCudY2EYu6m1j9zULRX6+6YJQGbQZ1kWGQcLnxs/GU9VmdQ==",
         "dependencies": {
-          "HtmlForgeX": "0.53.0",
-          "OfficeIMO.Markdown": "3.0.2"
+          "HtmlForgeX": "0.54.0",
+          "OfficeIMO.Markdown": "3.0.3"
         }
       },
       "HtmlTinkerX": {
         "type": "Transitive",
-        "resolved": "2.2.1",
-        "contentHash": "4YqBg37t7CVEf4hH9j2tM4LKsZex5j45x6A4PAVYPO9eQEZjK6uhPh+1S21ShAgd1CcvzQiOgbgWLplrnM0Omw==",
+        "resolved": "2.2.2",
+        "contentHash": "6vN8AQ6001fSOWYxaWpXQcxZtLvb3mtIaFS3dK6JOLBmLBRador9zqyiAazXwuvQTRMLHQyVfXS6CVzZgfkSQg==",
         "dependencies": {
           "AngleSharp": "1.5.2",
           "AngleSharp.Css": "1.0.0-beta.216",
@@ -157,16 +157,16 @@
       },
       "Magick.NET-Q8-AnyCPU": {
         "type": "Transitive",
-        "resolved": "14.15.0",
-        "contentHash": "GYcT4dC2Dxgq/FN/PwVY+PHJEuZc5ZfQm0bj0BmvmSRXPjPPJzdOV8tbcMyNUQtHcRnsp6E/mJ5Tf62I8in3bg==",
+        "resolved": "14.16.0",
+        "contentHash": "mV5igNia0VyUtRAmqUpI/ZBEL78+0A+JxPoOs7clwlZEvPCsvk+uF0hLl10zaFYmH5I8BaqVpI2+R+td1bbNrg==",
         "dependencies": {
-          "Magick.NET.Core": "14.15.0"
+          "Magick.NET.Core": "14.16.0"
         }
       },
       "Magick.NET.Core": {
         "type": "Transitive",
-        "resolved": "14.15.0",
-        "contentHash": "xgD1zqb4KQ1gMQcd3eIRp8hFMHBxzW9fOpLLDR7BWN0oCwZ0i6NW7rIUiCdsEi/NuZi1UlCLWBHh3v7Y2E3LIw=="
+        "resolved": "14.16.0",
+        "contentHash": "ddBX/Zb0sCsX4agqHdHeqUx+grfw8I7GFU+lgut3mtNl7roxbxemSQFGLIJXtzwPuAHxbaMtkXA+ijVl02EUhQ=="
       },
       "Markdig.Signed": {
         "type": "Transitive",
@@ -206,8 +206,8 @@
       },
       "Microsoft.CodeCoverage": {
         "type": "Transitive",
-        "resolved": "17.14.1",
-        "contentHash": "pmTrhfFIoplzFVbhVwUquT+77CbGH+h4/3mBpdmIlYtBi9nAB+kKI6dN3A/nV4DFi3wLLx/BlHIPK+MkbQ6Tpg=="
+        "resolved": "18.8.1",
+        "contentHash": "Eclse/ZZjr4lmWzZFNN9h/OluhKL+SK/QbUyKUewgX139aGeyMEO/DkMPwuFs2MixvanTnz6891rF8UHDg+W4Q=="
       },
       "Microsoft.Extensions.ObjectPool": {
         "type": "Transitive",
@@ -352,16 +352,15 @@
       },
       "Microsoft.TestPlatform.ObjectModel": {
         "type": "Transitive",
-        "resolved": "17.14.1",
-        "contentHash": "xTP1W6Mi6SWmuxd3a+jj9G9UoC850WGwZUps1Wah9r1ZxgXhdJfj1QqDLJkFjHDCvN42qDL2Ps5KjQYWUU0zcQ=="
+        "resolved": "18.8.1",
+        "contentHash": "qLbktNB1+b1XZLNJBTzaWVVJAd6PEzD7cgD406geMb6PcFZhp3EDNa1tctWx1+mtMU6MP/6ozVvFPC9vs2a9rw=="
       },
       "Microsoft.TestPlatform.TestHost": {
         "type": "Transitive",
-        "resolved": "17.14.1",
-        "contentHash": "d78LPzGKkJwsJXAQwsbJJ7LE7D1wB+rAyhHHAaODF+RDSQ0NgMjDFkSA1Djw18VrxO76GlKAjRUhl+H8NL8Z+Q==",
+        "resolved": "18.8.1",
+        "contentHash": "FaQHPDTUOcE+SFTjssNPfrub2lT9Zyon4J2W/KLHt/efLJACb1TCeWXyOgh0D/4Q1e4n+S3E6mOKud+9nLZlEA==",
         "dependencies": {
-          "Microsoft.TestPlatform.ObjectModel": "17.14.1",
-          "Newtonsoft.Json": "13.0.3"
+          "Microsoft.TestPlatform.ObjectModel": "18.8.1"
         }
       },
       "Microsoft.Win32.Registry.AccessControl": {
@@ -463,8 +462,8 @@
       },
       "OfficeIMO.Drawing": {
         "type": "Transitive",
-        "resolved": "3.0.2",
-        "contentHash": "QRk5Gqc7ID9knhroFpmzcY/qacHcJJLlErvW2ZDll7mIoSuY8z8NRHeY/JicSPjQDuM1Dgu7tLRMp+lT6gZR5Q=="
+        "resolved": "3.0.3",
+        "contentHash": "xpFbtcKgYZ27uWjQD8GAxWERdvOnpEG7VfOY5qk7TTk4AeyIIsqdqIt/PPlE+Ht4STpdSUvaH37PuyyuNpHgIg=="
       },
       "OfficeIMO.Email": {
         "type": "Transitive",
@@ -490,10 +489,10 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Transitive",
-        "resolved": "3.0.2",
-        "contentHash": "kjJpbvVmkOlIZiIXiBdOR3DgOWHl6gMxRBFM4FvaQzWGvolfYSVjqvjPf5jYwdTo/pIrX5ChnmzfvO7mXFFWHw==",
+        "resolved": "3.0.3",
+        "contentHash": "4VAWWPaUFiuzyVx2ZQ2b6/h97ZN5j8nltCmUtv1OWIdmGUfazZRQd/CEYM2e468zkOswGAZDHIU+QV31rQ2A0A==",
         "dependencies": {
-          "OfficeIMO.Drawing": "3.0.2"
+          "OfficeIMO.Drawing": "3.0.3"
         }
       },
       "OfficeIMO.Markdown.Html": {
@@ -593,28 +592,28 @@
       },
       "Scriban": {
         "type": "Transitive",
-        "resolved": "7.2.5",
-        "contentHash": "6HDyv0P6PVdx/prWM3Aw0QHAT/DCpkBxOovZ2iPIH4L4ZvJ13JNYJgyUI+xJ5K2agXreYTBe23AL5ZQNTqJQvA=="
+        "resolved": "7.2.6",
+        "contentHash": "k6DvaRY83jtigNudMoYlN5Zg42JEDDOCSeKrnpHiE5Gthkd9Fr+6VnYFnL3DqtkZTtPezJJdoX3ZfOTTFpQEMg=="
       },
       "Spectre.Console": {
         "type": "Transitive",
-        "resolved": "0.55.2",
-        "contentHash": "yc0g12YJpmZHofGJLTQX02/uqfzJ6XHRx6pe9rANNjleQptXMHPxD9KI2/DWkXiJWddc+4oizEdGox15c89hhw==",
+        "resolved": "0.57.2",
+        "contentHash": "wzsB+P9i6F9G+cFOJxRotCiQWNSzZVAMxi8YMiHlGXXU1JLMXGp7zSSqBMmROZS2bzpK5jk+Saa7Evp8HwqhKg==",
         "dependencies": {
-          "Spectre.Console.Ansi": "0.55.2"
+          "Spectre.Console.Ansi": "0.57.2"
         }
       },
       "Spectre.Console.Ansi": {
         "type": "Transitive",
-        "resolved": "0.55.2",
-        "contentHash": "tN3KEJQQZwLW9HJnG5YTSAxfBwxsmg1wVuGvhGG2rM+pbl+NGaHU8pDcNofPlOXlgpkbpBMxI5t9o9qPfy3sHQ=="
+        "resolved": "0.57.2",
+        "contentHash": "Y1+u73shwP+JYHmrkdN6bSt2kaGBEAafhi2nrecczbXdFRey+k7J/WF9YPfcB0rqivv2S8fmif6FSBq9m/AFvw=="
       },
       "Spectre.Console.Json": {
         "type": "Transitive",
-        "resolved": "0.55.2",
-        "contentHash": "8mhi5CQZJm/GPcjsD6ef8cpp80MXPvgYYL/znNvO0dUluBfiO89mCu0iTNCr24EjnTo9ZFn4YQTMlv+HYWu/bw==",
+        "resolved": "0.57.2",
+        "contentHash": "UJ/jXZDdak3yTKDl4jeY7k1I5EdM2M3TODVHcWPTxMni9rS9sj5mbyJEGi4wtF65gxKH7qMZKWBUw2YRHy4BwA==",
         "dependencies": {
-          "Spectre.Console": "0.55.2"
+          "Spectre.Console": "0.57.2"
         }
       },
       "System.CodeDom": {
@@ -715,8 +714,8 @@
       },
       "System.IO.Packaging": {
         "type": "Transitive",
-        "resolved": "10.0.7",
-        "contentHash": "qvYn5etKp2m3p05CCvw48OXf0mbD57g0gq/dCjQvq2ZgXYtjB3CV6rwzO7QprxMHnkZFhJ0StrB0thrVzpF49Q=="
+        "resolved": "10.0.10",
+        "contentHash": "SZT8XZ8Tktdnhaq5eWOJWN0VBczFZ7l6K5C5ykbaQFXZ0Uv8UBJwQcYUM1NVk5pKAmPlHnancMh33jF6IKnUrg=="
       },
       "System.IO.Ports": {
         "type": "Transitive",
@@ -775,8 +774,8 @@
       },
       "System.Reflection.MetadataLoadContext": {
         "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "SZxrQ4sQYnIcdwiO3G/lHZopbPYQ2lW0ioT4JezgccWUrKaKbHLJbAGZaDfkYjWcta1pWssAo3MOXLsR0ie4tQ=="
+        "resolved": "8.0.1",
+        "contentHash": "c/hiLzoMeYWnoTsdeRY2o0Vbadfedt0b4ZawQ+qDr1BIoYBQo3ASei0Pyiz00n9pHBlfWXiUVy90tOWBEgJ8/Q=="
       },
       "System.Runtime.Caching": {
         "type": "Transitive",
@@ -793,8 +792,8 @@
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
-        "resolved": "10.0.7",
-        "contentHash": "eqKW9wyPUhZi6pxy9Y0fQO/bdHROcwj0tYdmoGEPCPCtCJLFdVVAlzuuYYEnJI64HxhoXPYGhtx891g/jwN4rg=="
+        "resolved": "10.0.10",
+        "contentHash": "BKt0SQgq2lq3ESE68jkeLwv95ypANrPDtkTOIFGcnhg2aRUeUUBDrQlkVDZctrg1WenVcvn5P5XZnuYI7q6rFQ=="
       },
       "System.Security.Cryptography.Xml": {
         "type": "Transitive",
@@ -926,41 +925,41 @@
       },
       "YamlDotNet": {
         "type": "Transitive",
-        "resolved": "15.1.2",
-        "contentHash": "qeX0XhzOIcQEvnI5JxnPaIwcINwyY4Qy/LXhSfsdHkFrl9F41AT52UFfy2nIE7kgrhMg+cP7xuS+GtPJhmHmTA=="
+        "resolved": "18.1.0",
+        "contentHash": "5K+9KFg2TdTl7VXv88Qzi/0lqK6JFoNP3lRuImPYGRV7K/QYklDyTrj4+A+KAki1JsQi6qKY+hDyY7d6WRqjrw=="
       },
       "powerforge": {
         "type": "Project",
         "dependencies": {
           "NuGet.Configuration": "[7.6.0, )",
-          "System.IO.Packaging": "[10.0.7, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
+          "System.IO.Packaging": "[10.0.10, )",
+          "System.Reflection.MetadataLoadContext": "[8.0.1, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.10, )"
         }
       },
       "powerforge.powershell": {
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.1, )",
-          "PowerForge": "[3.0.78, )",
+          "PowerForge": "[3.0.99, )",
           "System.Security.Cryptography.Xml": "[10.0.10, )"
         }
       },
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
-          "HtmlTinkerX": "[2.2.1, )",
-          "Magick.NET-Q8-AnyCPU": "[14.15.0, )",
-          "OfficeIMO.Markdown": "[3.0.2, )",
-          "PowerForge": "[3.0.78, )",
-          "Scriban": "[7.2.5, )",
-          "YamlDotNet": "[15.1.2, )"
+          "HtmlTinkerX": "[2.2.2, )",
+          "Magick.NET-Q8-AnyCPU": "[14.16.0, )",
+          "OfficeIMO.Markdown": "[3.0.3, )",
+          "PowerForge": "[3.0.99, )",
+          "Scriban": "[7.2.6, )",
+          "YamlDotNet": "[18.1.0, )"
         }
       },
       "PowerForge.Web.Build": {
         "type": "Project",
         "dependencies": {
-          "PowerForge.Web": "[3.0.78, )"
+          "PowerForge.Web": "[3.0.99, )"
         }
       },
       "powerforgestudio.domain": {
@@ -969,16 +968,16 @@
       "pspublishmodule": {
         "type": "Project",
         "dependencies": {
-          "HtmlForgeX": "[0.53.0, )",
-          "HtmlForgeX.Markdown": "[0.53.0, )",
-          "OfficeIMO.Markdown": "[3.0.2, )",
-          "PowerForge": "[3.0.78, )",
-          "PowerForge.PowerShell": "[3.0.78, )",
-          "Spectre.Console": "[0.55.2, )",
-          "Spectre.Console.Json": "[0.55.2, )",
-          "System.IO.Packaging": "[10.0.7, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
+          "HtmlForgeX": "[0.54.0, )",
+          "HtmlForgeX.Markdown": "[0.54.0, )",
+          "OfficeIMO.Markdown": "[3.0.3, )",
+          "PowerForge": "[3.0.99, )",
+          "PowerForge.PowerShell": "[3.0.99, )",
+          "Spectre.Console": "[0.57.2, )",
+          "Spectre.Console.Json": "[0.57.2, )",
+          "System.IO.Packaging": "[10.0.10, )",
+          "System.Reflection.MetadataLoadContext": "[8.0.1, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.10, )"
         }
       }
     }

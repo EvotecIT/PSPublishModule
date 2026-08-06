@@ -56,6 +56,14 @@ public sealed class InvokeDotNetReleaseBuildCommand : PSCmdlet
     [Parameter]
     public string TimeStampServer { get; set; } = "http://timestamp.digicert.com";
 
+    /// <summary>Explicitly replaces existing Authenticode assembly signatures.</summary>
+    [Parameter]
+    public SwitchParameter OverwriteSignedAssemblies { get; set; }
+
+    /// <summary>Explicitly replaces existing NuGet package signatures.</summary>
+    [Parameter]
+    public SwitchParameter OverwriteSignedPackages { get; set; }
+
     /// <summary>When enabled, also packs all project dependencies that have their own .csproj files.</summary>
     [Parameter]
     public SwitchParameter PackDependencies { get; set; }
@@ -95,6 +103,8 @@ public sealed class InvokeDotNetReleaseBuildCommand : PSCmdlet
                 CertificateThumbprint = CertificateThumbprint,
                 LocalStore = mappedStore,
                 TimeStampServer = TimeStampServer,
+                OverwriteSignedAssemblies = OverwriteSignedAssemblies.IsPresent,
+                OverwriteSignedPackages = OverwriteSignedPackages.IsPresent,
                 PackDependencies = PackDependencies.IsPresent
             };
 

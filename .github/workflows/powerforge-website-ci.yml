@@ -84,7 +84,6 @@ permissions:
   # The generated quality preset performs a read-only artifact cleanup preview.
   actions: read
   contents: read
-  packages: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -94,7 +93,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  website-ci:
+  website-ci-untrusted:
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
     uses: ./.github/workflows/powerforge-website-run.yml
     with:
       website_root: ${{ inputs.website_root }}
@@ -113,6 +113,36 @@ jobs:
       powerforge_tool_lock_path: ${{ inputs.powerforge_tool_lock_path }}
       powerforge_web_tag: ${{ inputs.powerforge_web_tag }}
       pipeline_mode: ci
+      credential_mode: none
+      use_playwright_cache: true
+      validate_pages_artifact: ${{ inputs.validate_pages_artifact }}
+      pages_artifact_path: ${{ inputs.pages_artifact_path }}
+
+  website-ci-trusted:
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'pull_request_target' }}
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+    uses: ./.github/workflows/powerforge-website-run.yml
+    with:
+      website_root: ${{ inputs.website_root }}
+      pipeline_config: ${{ inputs.pipeline_config }}
+      engine_mode: ${{ inputs.engine_mode }}
+      runner_labels_json: ${{ inputs.runner_labels_json }}
+      timeout_minutes: ${{ inputs.timeout_minutes }}
+      dotnet_version: ${{ inputs.dotnet_version }}
+      dotnet_workloads: ${{ inputs.dotnet_workloads }}
+      report_artifact_name: ${{ inputs.report_artifact_name }}
+      powerforge_lock_path: ${{ inputs.powerforge_lock_path }}
+      powerforge_repository: ${{ inputs.powerforge_repository }}
+      powerforge_ref: ${{ inputs.powerforge_ref }}
+      powerforge_repository_override: ${{ inputs.powerforge_repository_override }}
+      powerforge_ref_override: ${{ inputs.powerforge_ref_override }}
+      powerforge_tool_lock_path: ${{ inputs.powerforge_tool_lock_path }}
+      powerforge_web_tag: ${{ inputs.powerforge_web_tag }}
+      pipeline_mode: ci
+      credential_mode: standard
       use_playwright_cache: true
       validate_pages_artifact: ${{ inputs.validate_pages_artifact }}
       pages_artifact_path: ${{ inputs.pages_artifact_path }}

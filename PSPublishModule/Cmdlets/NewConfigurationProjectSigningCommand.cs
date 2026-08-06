@@ -77,6 +77,12 @@ public sealed class NewConfigurationProjectSigningCommand : PSCmdlet
     public string? KeyContainer { get; set; }
 
     /// <summary>
+    /// Explicitly replaces existing signatures instead of preserving already signed files.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter OverwriteSigned { get; set; }
+
+    /// <summary>
     /// Emits a <see cref="ConfigurationProjectSigning"/> object.
     /// </summary>
     protected override void ProcessRecord()
@@ -93,7 +99,8 @@ public sealed class NewConfigurationProjectSigningCommand : PSCmdlet
             Description = NormalizeNullable(Description),
             Url = NormalizeNullable(Url),
             Csp = NormalizeNullable(Csp),
-            KeyContainer = NormalizeNullable(KeyContainer)
+            KeyContainer = NormalizeNullable(KeyContainer),
+            OverwriteSigned = OverwriteSigned.IsPresent
         });
     }
 

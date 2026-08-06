@@ -192,7 +192,7 @@ internal static class WebLinkCommandSupport
         var dataSet = WebLinkService.Load(new WebLinkLoadOptions { RedirectsPath = redirectJsonPath });
         var lines = new List<string>
         {
-            "enabled,id,source_host,source_path,source_query,target_url,status,match_type,group,source,notes"
+            "enabled,id,source_host,source_path,source_query,source_query_parameter,target_url,status,match_type,group,source,notes"
         };
 
         foreach (var redirect in dataSet.Redirects.OrderBy(static item => item.SourceHost ?? string.Empty, StringComparer.OrdinalIgnoreCase).ThenBy(static item => item.SourcePath, StringComparer.OrdinalIgnoreCase))
@@ -203,6 +203,7 @@ internal static class WebLinkCommandSupport
                 EscapeCsv(redirect.SourceHost),
                 EscapeCsv(redirect.SourcePath),
                 EscapeCsv(redirect.SourceQuery),
+                EscapeCsv(redirect.SourceQueryParameter),
                 EscapeCsv(redirect.TargetUrl),
                 EscapeCsv(redirect.Status.ToString(CultureInfo.InvariantCulture)),
                 EscapeCsv(redirect.MatchType.ToString().ToLowerInvariant()),

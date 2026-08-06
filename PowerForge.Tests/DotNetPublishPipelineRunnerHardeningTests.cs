@@ -9,7 +9,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class DotNetPublishPipelineRunnerHardeningTests
+public sealed partial class DotNetPublishPipelineRunnerHardeningTests
 {
     [Fact]
     public void BuildMsBuildPropertyArgs_EscapesListAndAssignmentSeparators()
@@ -353,142 +353,6 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
             var json = File.ReadAllText(manifestJson);
             Assert.DoesNotContain("\"Kind\": 2", json, StringComparison.Ordinal);
             Assert.DoesNotContain("\"Style\": 1", json, StringComparison.Ordinal);
-        }
-        finally
-        {
-            TryDelete(root);
-        }
-    }
-
-    [Fact]
-    public void TrySignOutput_WhenMissingToolAndPolicyFail_Throws()
-    {
-        var root = CreateTempRoot();
-        try
-        {
-            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
-            File.WriteAllText(Path.Combine(outputDir, "app.exe"), "dummy");
-
-            var sign = new DotNetPublishSignOptions
-            {
-                Enabled = true,
-                ToolPath = "definitely-not-a-real-signtool.exe",
-                OnMissingTool = DotNetPublishPolicyMode.Fail,
-                OnSignFailure = DotNetPublishPolicyMode.Fail
-            };
-
-            var runner = new DotNetPublishPipelineRunner(new NullLogger());
-            var method = GetTrySignOutputMethod();
-
-            var ex = Assert.Throws<TargetInvocationException>(() => method!.Invoke(runner, new object[] { outputDir, sign }));
-            Assert.IsType<InvalidOperationException>(ex.InnerException);
-            Assert.True(
-                ex.InnerException!.Message.Contains("Signing requested", StringComparison.OrdinalIgnoreCase)
-                || ex.InnerException!.Message.Contains("Signing failed", StringComparison.OrdinalIgnoreCase),
-                $"Unexpected message: {ex.InnerException!.Message}");
-        }
-        finally
-        {
-            TryDelete(root);
-        }
-    }
-
-    [Fact]
-    public void TrySignOutput_DefaultsToExecutablesOnly()
-    {
-        if (!DotNetPublishPipelineRunner.IsWindows())
-            return;
-
-        var root = CreateTempRoot();
-        try
-        {
-            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
-            File.WriteAllText(Path.Combine(outputDir, "app.exe"), "dummy");
-            File.WriteAllText(Path.Combine(outputDir, "lib.dll"), "dummy");
-
-            var logger = new CollectingLogger();
-            var sign = new DotNetPublishSignOptions
-            {
-                Enabled = true,
-                ToolPath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
-                OnMissingTool = DotNetPublishPolicyMode.Fail,
-                OnSignFailure = DotNetPublishPolicyMode.Skip
-            };
-
-            var runner = new DotNetPublishPipelineRunner(logger);
-            var method = GetTrySignOutputMethod();
-
-            _ = method!.Invoke(runner, new object[] { outputDir, sign });
-            Assert.Contains(logger.InfoMessages, message => message.Contains("Signing 1 file(s)", StringComparison.OrdinalIgnoreCase));
-        }
-        finally
-        {
-            TryDelete(root);
-        }
-    }
-
-    [Fact]
-    public void TrySignOutput_IncludeDllsSignsExecutablesAndLibraries()
-    {
-        if (!DotNetPublishPipelineRunner.IsWindows())
-            return;
-
-        var root = CreateTempRoot();
-        try
-        {
-            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
-            File.WriteAllText(Path.Combine(outputDir, "app.exe"), "dummy");
-            File.WriteAllText(Path.Combine(outputDir, "lib.dll"), "dummy");
-
-            var logger = new CollectingLogger();
-            var sign = new DotNetPublishSignOptions
-            {
-                Enabled = true,
-                IncludeDlls = true,
-                ToolPath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
-                OnMissingTool = DotNetPublishPolicyMode.Fail,
-                OnSignFailure = DotNetPublishPolicyMode.Skip
-            };
-
-            var runner = new DotNetPublishPipelineRunner(logger);
-            var method = GetTrySignOutputMethod();
-
-            _ = method!.Invoke(runner, new object[] { outputDir, sign });
-            Assert.Contains(logger.InfoMessages, message => message.Contains("Signing 2 file(s)", StringComparison.OrdinalIgnoreCase));
-        }
-        finally
-        {
-            TryDelete(root);
-        }
-    }
-
-    [Fact]
-    public void TrySignOutput_WhenDllOnlyAndIncludeDllsDisabled_HonorsFailurePolicy()
-    {
-        if (!DotNetPublishPipelineRunner.IsWindows())
-            return;
-
-        var root = CreateTempRoot();
-        try
-        {
-            var outputDir = Directory.CreateDirectory(Path.Combine(root, "out")).FullName;
-            File.WriteAllText(Path.Combine(outputDir, "lib.dll"), "dummy");
-
-            var sign = new DotNetPublishSignOptions
-            {
-                Enabled = true,
-                ToolPath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
-                OnMissingTool = DotNetPublishPolicyMode.Fail,
-                OnSignFailure = DotNetPublishPolicyMode.Fail
-            };
-
-            var runner = new DotNetPublishPipelineRunner(new NullLogger());
-            var method = GetTrySignOutputMethod();
-
-            var ex = Assert.Throws<TargetInvocationException>(() => method.Invoke(runner, new object[] { outputDir, sign }));
-            Assert.IsType<InvalidOperationException>(ex.InnerException);
-            Assert.Contains("no matching files were found", ex.InnerException!.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("IncludeDlls=true", ex.InnerException.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -1264,5 +1128,16 @@ public sealed class DotNetPublishPipelineRunnerHardeningTests
         public void Warn(string message) { }
         public void Error(string message) { }
         public void Verbose(string message) { }
+    }
+
+    private sealed class StubProcessRunner : IProcessRunner
+    {
+        private readonly Func<ProcessRunRequest, ProcessRunResult> _execute;
+
+        public StubProcessRunner(Func<ProcessRunRequest, ProcessRunResult> execute)
+            => _execute = execute;
+
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult(_execute(request));
     }
 }

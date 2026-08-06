@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using PowerForge;
 
 namespace PowerForge.Tests;
@@ -302,8 +303,7 @@ public sealed class DotNetNuGetClientTests
                 "--certificate-store-name",
                 "My",
                 "--timestamper",
-                "http://timestamp.digicert.com",
-                "--overwrite"
+                "http://timestamp.digicert.com"
             ],
             captured!.Arguments);
         Assert.True(result.Succeeded);
@@ -327,7 +327,8 @@ public sealed class DotNetNuGetClientTests
             },
             certificateFingerprint: "ABC123",
             certificateStoreLocation: "CurrentUser",
-            timeStampServer: "http://timestamp.digicert.com"));
+            timeStampServer: "http://timestamp.digicert.com",
+            overwrite: true));
 
         Assert.NotNull(captured);
         Assert.Equal(
@@ -348,6 +349,42 @@ public sealed class DotNetNuGetClientTests
             ],
             captured!.Arguments);
         Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task SignPackageAsync_DefaultPreservesAlreadySignedPackage()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var packagePath = Path.Combine(root.FullName, "Test.1.0.0.nupkg");
+            using (var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
+            {
+                archive.CreateEntry("Test.nuspec");
+                archive.CreateEntry(".signature.p7s");
+            }
+
+            var calls = 0;
+            var client = new DotNetNuGetClient(new StubProcessRunner(request =>
+            {
+                calls++;
+                return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+            }));
+
+            var result = await client.SignPackageAsync(new DotNetNuGetSignRequest(
+                packagePath,
+                certificateFingerprint: "ABC123",
+                certificateStoreLocation: "CurrentUser",
+                timeStampServer: "http://timestamp.digicert.com"));
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(0, calls);
+            Assert.Contains("Preserved 1 already signed", result.StdOut, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
     }
 
     private sealed class StubProcessRunner : IProcessRunner

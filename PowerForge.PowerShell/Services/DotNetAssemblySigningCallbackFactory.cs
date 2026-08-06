@@ -61,7 +61,8 @@ public static class DotNetAssemblySigningCallbackFactory
                 TimeStampServer = req.TimeStampServer,
                 HashAlgorithm = "SHA256",
                 WindowsIncludeChain = "All",
-                NonWindowsIncludeChain = "WholeChain"
+                NonWindowsIncludeChain = "WholeChain",
+                OverwriteSigned = req.OverwriteSigned
             });
         };
     }
