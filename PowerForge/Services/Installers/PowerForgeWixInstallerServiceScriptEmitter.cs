@@ -50,6 +50,10 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         var ids = BuildIds(service.Id);
         yield return ids.BackupImagePathId;
         yield return ids.SetBackupCommandId;
+        yield return ids.RollbackImagePathId;
+        yield return ids.SetRollbackCommandId;
+        yield return ids.CleanupImagePathId;
+        yield return ids.SetCleanupCommandId;
         yield return ids.SetStopServiceId;
         yield return ids.StopServiceId;
         yield return ids.InstallServiceId;
@@ -94,8 +98,21 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
 
         if (script.BackupExistingImagePath)
         {
-            actions.Add(CreateSetQuietExecCommand(ids.SetBackupCommandId, BuildBackupCommand(service, resolvedBackupPath)));
-            actions.Add(CreateQuietExecAction(ids.BackupImagePathId, execute: "immediate"));
+            actions.Add(CreateSetInstallCommand(
+                ids.SetBackupCommandId,
+                ids.BackupImagePathId,
+                BuildBackupCommand(service, resolvedBackupPath)));
+            actions.Add(CreateQuietExecAction(ids.BackupImagePathId, execute: "deferred", hideTarget: true));
+            actions.Add(CreateSetInstallCommand(
+                ids.SetRollbackCommandId,
+                ids.RollbackImagePathId,
+                BuildRollbackCommand(service, resolvedBackupPath)));
+            actions.Add(CreateQuietExecAction(ids.RollbackImagePathId, execute: "rollback", hideTarget: true));
+            actions.Add(CreateSetInstallCommand(
+                ids.SetCleanupCommandId,
+                ids.CleanupImagePathId,
+                BuildCleanupCommand(service, resolvedBackupPath)));
+            actions.Add(CreateQuietExecAction(ids.CleanupImagePathId, execute: "commit", hideTarget: true));
         }
 
         if (script.StopServiceForUpgrade)
@@ -141,6 +158,8 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         {
             upgradePreparationActions.Add(new UpgradePreparationAction(ids.SetBackupCommandId, upgradeCondition));
             upgradePreparationActions.Add(new UpgradePreparationAction(ids.BackupImagePathId, upgradeCondition));
+            upgradePreparationActions.Add(new UpgradePreparationAction(ids.SetRollbackCommandId, upgradeCondition));
+            upgradePreparationActions.Add(new UpgradePreparationAction(ids.RollbackImagePathId, upgradeCondition));
         }
 
         if (script.StopServiceForUpgrade)
@@ -180,8 +199,22 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         sequence.Add(new XElement(
             WixNamespace + "Custom",
             new XAttribute("Action", ids.InstallServiceId),
-            new XAttribute("Before", "InstallFinalize"),
+            new XAttribute("Before", script.BackupExistingImagePath ? ids.SetCleanupCommandId : "InstallFinalize"),
             new XAttribute("Condition", script.Condition)));
+
+        if (script.BackupExistingImagePath)
+        {
+            sequence.Add(new XElement(
+                WixNamespace + "Custom",
+                new XAttribute("Action", ids.SetCleanupCommandId),
+                new XAttribute("Before", ids.CleanupImagePathId),
+                new XAttribute("Condition", upgradeCondition)));
+            sequence.Add(new XElement(
+                WixNamespace + "Custom",
+                new XAttribute("Action", ids.CleanupImagePathId),
+                new XAttribute("Before", "InstallFinalize"),
+                new XAttribute("Condition", upgradeCondition)));
+        }
     }
 
     private static void AddUpgradePreparationSequenceRows(
@@ -234,7 +267,7 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             new XAttribute("DllEntry", "WixQuietExec"),
             new XAttribute("Execute", execute),
             new XAttribute("Return", "check"));
-        if (string.Equals(execute, "deferred", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(execute, "immediate", StringComparison.OrdinalIgnoreCase))
             element.Add(new XAttribute("Impersonate", "no"));
         if (hideTarget)
             element.Add(new XAttribute("HideTarget", "yes"));
@@ -272,16 +305,44 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         string serviceName = EscapePowerShellSingleQuoted(service.ServiceName);
         string backup = EscapePowerShellSingleQuoted(backupPath);
         string command = "$b='" + backup +
-                         "';$p=(gwmi win32_service|? Name -eq '" + serviceName +
-                         "').PathName;if($p){[IO.File]::WriteAllText($b,$p)}" +
-                         "else{[IO.File]::Delete($b)}";
+                         "';rm $b -ea 0;$p=(gwmi win32_service|? Name -eq '" + serviceName +
+                         "').PathName;if($p){$p|Out-File $b -NoN -NoC -ea Stop}";
+        return BuildPowerShellCommand(service, "backup", command);
+    }
+
+    private static string BuildRollbackCommand(
+        PowerForgeInstallerServiceComponent service,
+        string backupPath)
+    {
+        string serviceName = EscapePowerShellSingleQuoted(service.ServiceName);
+        string backup = EscapePowerShellSingleQuoted(backupPath);
+        string command = "$b='" + backup +
+                         "';$n='" + serviceName +
+                         "';$p=gc -Raw $b;&sc.exe config $n binPath= $p>$null;" +
+                         "if(!$?){&sc.exe create $n binPath= $p>$null};if(!$?){exit 1};rm $b -ea 0";
+        return BuildPowerShellCommand(service, "rollback", command);
+    }
+
+    private static string BuildCleanupCommand(
+        PowerForgeInstallerServiceComponent service,
+        string backupPath)
+    {
+        string backup = EscapePowerShellSingleQuoted(backupPath);
+        return BuildPowerShellCommand(service, "cleanup", "rm '" + backup + "' -ea 0");
+    }
+
+    private static string BuildPowerShellCommand(
+        PowerForgeInstallerServiceComponent service,
+        string purpose,
+        string command)
+    {
         string result = "powershell.exe -nop -c \"" +
                         EscapeCommandDoubleQuoted(command) +
                         "\"";
         if (result.Length > 255)
         {
             throw new InvalidOperationException(
-                $"Service '{service.ServiceName}' backup command is {result.Length} characters; " +
+                $"Service '{service.ServiceName}' {purpose} command is {result.Length} characters; " +
                 "WiX CustomAction.Target supports at most 255. Shorten ServiceName or ScriptInstall.BackupPath.");
         }
 
@@ -310,6 +371,10 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         return new ServiceScriptActionIds(
             BuildActionId(prefix, "BackupImagePath"),
             BuildActionId(prefix, "SetBackupCommand"),
+            BuildActionId(prefix, "RollbackImagePath"),
+            BuildActionId(prefix, "SetRollbackCommand"),
+            BuildActionId(prefix, "CleanupImagePath"),
+            BuildActionId(prefix, "SetCleanupCommand"),
             BuildActionId(prefix, "SetStopService"),
             BuildActionId(prefix, "StopService"),
             BuildActionId(prefix, "InstallService"),
@@ -376,6 +441,10 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         internal ServiceScriptActionIds(
             string backupImagePathId,
             string setBackupCommandId,
+            string rollbackImagePathId,
+            string setRollbackCommandId,
+            string cleanupImagePathId,
+            string setCleanupCommandId,
             string setStopServiceId,
             string stopServiceId,
             string installServiceId,
@@ -387,6 +456,10 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         {
             BackupImagePathId = backupImagePathId;
             SetBackupCommandId = setBackupCommandId;
+            RollbackImagePathId = rollbackImagePathId;
+            SetRollbackCommandId = setRollbackCommandId;
+            CleanupImagePathId = cleanupImagePathId;
+            SetCleanupCommandId = setCleanupCommandId;
             SetStopServiceId = setStopServiceId;
             StopServiceId = stopServiceId;
             InstallServiceId = installServiceId;
@@ -399,6 +472,10 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
 
         internal string BackupImagePathId { get; }
         internal string SetBackupCommandId { get; }
+        internal string RollbackImagePathId { get; }
+        internal string SetRollbackCommandId { get; }
+        internal string CleanupImagePathId { get; }
+        internal string SetCleanupCommandId { get; }
         internal string SetStopServiceId { get; }
         internal string StopServiceId { get; }
         internal string InstallServiceId { get; }

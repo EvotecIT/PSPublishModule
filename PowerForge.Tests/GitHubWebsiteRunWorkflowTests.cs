@@ -3,7 +3,6 @@ namespace PowerForge.Tests;
 public sealed class GitHubWebsiteRunWorkflowTests
 {
     [Theory]
-    [InlineData("powerforge-website-ci.yml")]
     [InlineData("powerforge-website-deploy.yml")]
     [InlineData("powerforge-website-maintenance.yml")]
     public void WebsiteWorkflows_ShouldAllowGitHubPackagesRestore(string workflowFileName)
@@ -16,6 +15,30 @@ public sealed class GitHubWebsiteRunWorkflowTests
         var workflowYaml = File.ReadAllText(workflowPath);
 
         Assert.Contains("packages: read", workflowYaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WebsiteCiWorkflow_ShouldSeparateUntrustedAndTrustedCredentialBoundaries()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-ci.yml");
+
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        Assert.NotNull(new YamlDotNet.Serialization.DeserializerBuilder().Build().Deserialize<object>(workflowYaml));
+        Assert.Contains("website-ci-untrusted:", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("credential_mode: none", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("website-ci-trusted:", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("if: ${{ github.event_name != 'pull_request' && github.event_name != 'pull_request_target' }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("packages: read", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("credential_mode: standard", workflowYaml, StringComparison.Ordinal);
+
+        string untrustedJob = workflowYaml[
+            workflowYaml.IndexOf("  website-ci-untrusted:", StringComparison.Ordinal)..
+            workflowYaml.IndexOf("  website-ci-trusted:", StringComparison.Ordinal)];
+        Assert.DoesNotContain("packages: read", untrustedJob, StringComparison.Ordinal);
+        Assert.DoesNotContain("secrets:", untrustedJob, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -45,7 +68,7 @@ public sealed class GitHubWebsiteRunWorkflowTests
     }
 
     [Fact]
-    public void WebsiteRunWorkflow_ShouldExposeGitHubPackagesCredentialsToConsumerRestore()
+    public void WebsiteRunWorkflow_ShouldExposeCredentialsOnlyInStandardMode()
     {
         var repoRoot = FindRepoRoot();
         var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-run.yml");
@@ -54,9 +77,41 @@ public sealed class GitHubWebsiteRunWorkflowTests
 
         var workflowYaml = File.ReadAllText(workflowPath);
 
-        Assert.Contains("GITHUB_PACKAGES_TOKEN: ${{ secrets.repository_read_token || github.token }}", workflowYaml, StringComparison.Ordinal);
-        Assert.Contains("LICENSING_PACKAGES_TOKEN: ${{ secrets.repository_read_token || github.token }}", workflowYaml, StringComparison.Ordinal);
-        Assert.Contains("LICENSING_PACKAGES_USERNAME: ${{ github.repository_owner }}", workflowYaml, StringComparison.Ordinal);
+        Assert.NotNull(new YamlDotNet.Serialization.DeserializerBuilder().Build().Deserialize<object>(workflowYaml));
+        Assert.Contains("credential_mode:", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("persist-credentials: ${{ inputs.credential_mode != 'none' }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Equal(
+            2,
+            workflowYaml.Split('\n').Count(static line =>
+                line.Trim().Equals(
+                    "persist-credentials: ${{ inputs.credential_mode != 'none' }}",
+                    StringComparison.Ordinal)));
+        Assert.Contains("GITHUB_TOKEN: ${{ inputs.credential_mode != 'none' && github.token || '' }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("GITHUB_PACKAGES_TOKEN: ${{ inputs.credential_mode != 'none' && (secrets.repository_read_token || github.token) || '' }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("LICENSING_PACKAGES_TOKEN: ${{ inputs.credential_mode != 'none' && (secrets.repository_read_token || github.token) || '' }}", workflowYaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("GITHUB_ENV", workflowYaml, StringComparison.Ordinal);
+
+        string pipelineStep = workflowYaml[
+            workflowYaml.IndexOf("      - name: Run website pipeline", StringComparison.Ordinal)..
+            workflowYaml.IndexOf("      - name: Resolve actual PowerForge engine provenance", StringComparison.Ordinal)];
+        Assert.All(
+            pipelineStep.Split('\n').Where(static line => line.Contains("TOKEN:", StringComparison.Ordinal)),
+            static line => Assert.Contains("inputs.credential_mode != 'none'", line, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void WebsiteRunWorkflow_ShouldValidateCredentialModeBeforeCheckout()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-run.yml");
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        int validationOffset = workflowYaml.IndexOf("      - name: Validate credential mode", StringComparison.Ordinal);
+        int checkoutOffset = workflowYaml.IndexOf("      - name: Checkout website", StringComparison.Ordinal);
+
+        Assert.True(validationOffset >= 0);
+        Assert.True(checkoutOffset > validationOffset);
+        Assert.Contains("-notin @('none', 'standard')", workflowYaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -77,7 +132,7 @@ public sealed class GitHubWebsiteRunWorkflowTests
     }
 
     [Theory]
-    [InlineData("powerforge-website-ci.yml", 1)]
+    [InlineData("powerforge-website-ci.yml", 2)]
     [InlineData("powerforge-website-deploy.yml", 2)]
     [InlineData("powerforge-website-maintenance.yml", 1)]
     public void WebsiteWorkflows_ShouldForwardRequestedDotNetWorkloads(string workflowFileName, int expectedForwardCount)

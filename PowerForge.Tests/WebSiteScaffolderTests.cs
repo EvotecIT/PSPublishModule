@@ -81,6 +81,10 @@ public class WebSiteScaffolderTests
             Assert.Contains("POWERFORGE_LOCK_PATH: ./.powerforge/engine-lock.json", workflow, StringComparison.Ordinal);
             Assert.Contains("actions: read", workflow, StringComparison.Ordinal);
             Assert.Contains("packages: read", workflow, StringComparison.Ordinal);
+            Assert.Contains("verify-site-untrusted:", workflow, StringComparison.Ordinal);
+            Assert.Contains("if: ${{ github.event_name == 'pull_request' }}", workflow, StringComparison.Ordinal);
+            Assert.Contains("verify-site-trusted:", workflow, StringComparison.Ordinal);
+            Assert.Contains("if: ${{ github.event_name != 'pull_request' }}", workflow, StringComparison.Ordinal);
             Assert.Contains("uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-ci.yml@main", workflow, StringComparison.Ordinal);
             Assert.Contains("website_root: .", workflow, StringComparison.Ordinal);
             Assert.Contains("pipeline_config: pipeline.json", workflow, StringComparison.Ordinal);
@@ -88,6 +92,11 @@ public class WebSiteScaffolderTests
             Assert.Contains("powerforge_repository_override: ${{ vars.POWERFORGE_REPOSITORY }}", workflow, StringComparison.Ordinal);
             Assert.Contains("powerforge_ref_override: ${{ vars.POWERFORGE_REF }}", workflow, StringComparison.Ordinal);
             Assert.Contains("secrets: inherit", workflow, StringComparison.Ordinal);
+            string untrustedJob = workflow[
+                workflow.IndexOf("  verify-site-untrusted:", StringComparison.Ordinal)..
+                workflow.IndexOf("  verify-site-trusted:", StringComparison.Ordinal)];
+            Assert.DoesNotContain("packages: read", untrustedJob, StringComparison.Ordinal);
+            Assert.DoesNotContain("secrets: inherit", untrustedJob, StringComparison.Ordinal);
             Assert.Contains("concurrency:", workflow, StringComparison.Ordinal);
 
             var maintenanceWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "website-maintenance.yml"));

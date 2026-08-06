@@ -1069,7 +1069,6 @@ on:
 permissions:
   actions: read
   contents: read
-  packages: read
 
 concurrency:
   group: website-ci-${{ github.ref }}
@@ -1079,7 +1078,25 @@ env:
   POWERFORGE_LOCK_PATH: ./.powerforge/engine-lock.json
 
 jobs:
-  verify-site:
+  verify-site-untrusted:
+    if: ${{ github.event_name == 'pull_request' }}
+    permissions:
+      actions: read
+      contents: read
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-ci.yml@main
+    with:
+      website_root: .
+      pipeline_config: pipeline.json
+      powerforge_lock_path: ./.powerforge/engine-lock.json
+      powerforge_repository_override: ${{ vars.POWERFORGE_REPOSITORY }}
+      powerforge_ref_override: ${{ vars.POWERFORGE_REF }}
+
+  verify-site-trusted:
+    if: ${{ github.event_name != 'pull_request' }}
+    permissions:
+      actions: read
+      contents: read
+      packages: read
     uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-ci.yml@main
     with:
       website_root: .
