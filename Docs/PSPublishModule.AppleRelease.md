@@ -234,6 +234,11 @@ in a non-editable App Store state, the next `Version` action advances `1.X.0` to
 `1.7.0`. Unknown or incompatible remote version strings fail closed instead of
 selecting a potentially colliding train.
 
+`Version` always evaluates the complete configured Apple target set and rejects
+`--target`. The checked-in version source and build identity are shared, so a
+platform-scoped version mutation could otherwise miss a collision on another
+configured platform.
+
 Use `--apple-version 2.X.0` to begin a deliberate new major line, or an exact
 version such as `--apple-version 2.0.0` for a one-off override. The explicit CLI
 value takes precedence over the configured pattern.
@@ -504,7 +509,10 @@ The reusable workflow boundary mirrors the human approval boundary:
 - `powerforge-apple-version-pr.yml` runs `Version`, stages only the configured
   version source, and opens a release-ready pull request. Its optional `version`
   input overrides the configured pattern with an exact version or another
-  three-part X-pattern. It never merges the pull request.
+  three-part X-pattern. Each candidate branch includes the resolved marketing
+  version and build number, so another TestFlight build in the same train does
+  not collide with an earlier version PR. The workflow never merges the pull
+  request.
 - `powerforge-apple-advance.yml` runs a plan and confirmed resumable `Advance` from
   an exact merged commit. It stops before every review and public-release action.
   Consumers that need source-only dependencies can pass `source_bootstrap_script`;

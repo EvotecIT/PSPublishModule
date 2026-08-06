@@ -43,14 +43,16 @@ internal static class AppleReleaseMarketingVersionResolver
         ValidatePattern(pattern, "Apple marketing version pattern");
 
         var local = ParseKnownVersion(localMarketingVersion, "local Apple version source");
-        var storeEvidence = (appStoreVersions ?? Array.Empty<AppStoreConnectVersionInfo>())
-            .Where(static value => !string.IsNullOrWhiteSpace(value.VersionString))
+        var storeVersions = (appStoreVersions ?? Array.Empty<AppStoreConnectVersionInfo>()).ToArray();
+        var testFlightBuilds = (builds ?? Array.Empty<AppStoreConnectBuildInfo>()).ToArray();
+        ValidateRemoteEvidence(storeVersions, testFlightBuilds);
+
+        var storeEvidence = storeVersions
             .Select(value => new StoreVersionEvidence(
                 ParseKnownVersion(value.VersionString!, "App Store Connect version"),
                 FirstNonEmpty(value.AppStoreState, value.AppVersionState)))
             .ToArray();
-        var testFlightVersions = (builds ?? Array.Empty<AppStoreConnectBuildInfo>())
-            .Where(static value => !string.IsNullOrWhiteSpace(value.MarketingVersion))
+        var testFlightVersions = testFlightBuilds
             .Select(value => ParseKnownVersion(value.MarketingVersion!, "TestFlight build marketing version"))
             .ToArray();
         var remoteVersions = storeEvidence.Select(static value => value.Version)
@@ -93,6 +95,23 @@ internal static class AppleReleaseMarketingVersionResolver
 
     private static bool IsReusableAppStoreVersion(string? state)
         => state is not null && ReusableAppStoreStates.Contains(state);
+
+    private static void ValidateRemoteEvidence(
+        IEnumerable<AppStoreConnectVersionInfo> storeVersions,
+        IEnumerable<AppStoreConnectBuildInfo> builds)
+    {
+        if (storeVersions.Any(static value => string.IsNullOrWhiteSpace(value.VersionString)))
+        {
+            throw new InvalidOperationException(
+                "App Store Connect returned a version without a marketing-version identity. Resolve the incomplete remote version before automatic selection.");
+        }
+
+        if (builds.Any(static value => string.IsNullOrWhiteSpace(value.MarketingVersion)))
+        {
+            throw new InvalidOperationException(
+                "App Store Connect returned a TestFlight build without a marketing-version identity. Resolve the incomplete remote build before automatic selection.");
+        }
+    }
 
     private static readonly HashSet<string> ReusableAppStoreStates = new(StringComparer.OrdinalIgnoreCase)
     {

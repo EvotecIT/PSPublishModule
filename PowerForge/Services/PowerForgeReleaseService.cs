@@ -1493,6 +1493,11 @@ internal sealed partial class PowerForgeReleaseService
         var configuredApps = (options.Apps ?? Array.Empty<AppleAppConfiguration>())
             .Where(app => app.Enabled)
             .ToArray();
+        if (request.AppleAction == PowerForgeAppleReleaseAction.Version && selectedTargets.Length > 0)
+        {
+            throw new InvalidOperationException(
+                "Apple action 'Version' cannot be restricted with --target because the checked-in version source and build identity are shared across every configured Apple platform.");
+        }
         if (selectedTargets.Length > 0)
         {
             var missing = selectedTargets

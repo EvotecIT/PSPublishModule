@@ -176,7 +176,7 @@ jobs:
             throw 'PowerForge Version did not produce a version-source change.'
           }
 
-          $branch = "release/apple-$($env:MARKETING_VERSION)"
+          $branch = "release/apple-$($env:MARKETING_VERSION)-build-$($env:BUILD_NUMBER)"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git switch -c $branch

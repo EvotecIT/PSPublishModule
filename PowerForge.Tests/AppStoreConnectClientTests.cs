@@ -203,6 +203,53 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task GetBuildsWithPreReleaseVersionAsync_RetainsEveryRemoteIdentityForInventory()
+    {
+        var handler = new RecordingHandler(
+            """
+            {
+              "data": [
+                {
+                  "id": "build-ios",
+                  "type": "builds",
+                  "attributes": { "version": "17", "processingState": "VALID" },
+                  "relationships": {
+                    "preReleaseVersion": {
+                      "data": { "id": "pre-ios", "type": "preReleaseVersions" }
+                    }
+                  }
+                },
+                {
+                  "id": "build-incomplete",
+                  "type": "builds",
+                  "attributes": { "version": "18", "processingState": "VALID" }
+                }
+              ],
+              "included": [
+                {
+                  "id": "pre-ios",
+                  "type": "preReleaseVersions",
+                  "attributes": { "version": "1.6.0", "platform": "IOS" }
+                }
+              ]
+            }
+            """);
+
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var builds = await client.GetBuildsWithPreReleaseVersionAsync("123");
+
+        Assert.Equal(2, builds.Length);
+        Assert.Equal("1.6.0", builds[0].MarketingVersion);
+        Assert.Equal("IOS", builds[0].Platform);
+        Assert.Null(builds[1].MarketingVersion);
+        Assert.Null(builds[1].Platform);
+        Assert.Contains("include=preReleaseVersion", handler.RequestUris[0].Query, StringComparison.Ordinal);
+        Assert.DoesNotContain("filter%5Bplatform%5D", handler.RequestUris[0].Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GetBuildUploadAsync_ParsesTerminalDeliveryErrors()
     {
         var handler = new RecordingHandler(

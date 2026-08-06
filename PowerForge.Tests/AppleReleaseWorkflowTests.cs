@@ -217,6 +217,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("      version:\n        description:", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.Contains("        required: false\n        default: ''\n        type: string", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.Contains("steps.plan.outputs.marketing-version || inputs.version || 'configured'", workflow, StringComparison.Ordinal);
+        Assert.Contains("release/apple-$($env:MARKETING_VERSION)-build-$($env:BUILD_NUMBER)", workflow, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -123,6 +123,28 @@ public sealed class AppleReleaseMarketingVersionResolverTests
         Assert.Contains("incompatible remote version", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Resolve_FailsClosedForAppStoreVersionWithoutIdentity()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() => Resolve(
+            pattern: "1.X.0",
+            local: "1.6.0",
+            store: new[] { StoreVersion(string.Empty, "READY_FOR_SALE") }));
+
+        Assert.Contains("incomplete remote version", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_FailsClosedForTestFlightBuildWithoutMarketingVersion()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() => Resolve(
+            pattern: "1.X.0",
+            local: "1.6.0",
+            builds: new[] { TestFlightBuild(string.Empty, "18") }));
+
+        Assert.Contains("incomplete remote build", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static AppleReleaseMarketingVersionResolution Resolve(
         string pattern,
         string local,
@@ -145,6 +167,7 @@ public sealed class AppleReleaseMarketingVersionResolverTests
         => new()
         {
             MarketingVersion = version,
-            Version = build
+            Version = build,
+            Platform = "IOS"
         };
 }
