@@ -11,7 +11,7 @@ Builds a .NET project in Release configuration and prepares release artefacts.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Invoke-DotNetReleaseBuild -ProjectPath <string[]> [-CertificateThumbprint <string>] [-LocalStore <CertificateStoreLocation>] [-TimeStampServer <string>] [-PackDependencies] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-DotNetReleaseBuild -ProjectPath <string[]> [-CertificateThumbprint <string>] [-LocalStore <CertificateStoreLocation>] [-TimeStampServer <string>] [-OverwriteSignedAssemblies] [-OverwriteSignedPackages] [-PackDependencies] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -73,6 +73,38 @@ Type: CertificateStoreLocation
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: CurrentUser, LocalMachine
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OverwriteSignedAssemblies
+Explicitly replaces existing Authenticode assembly signatures.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OverwriteSignedPackages
+Explicitly replaces existing NuGet package signatures.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
 
 Required: False
 Position: named

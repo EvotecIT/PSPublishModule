@@ -11,7 +11,7 @@ Creates signing defaults for a PowerShell-authored project build.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationProjectSigning [-Mode <ConfigurationProjectSigningMode>] [-ToolPath <string>] [-Thumbprint <string>] [-SubjectName <string>] [-OnMissingTool <DotNetPublishPolicyMode>] [-OnFailure <DotNetPublishPolicyMode>] [-TimestampUrl <string>] [-Description <string>] [-Url <string>] [-Csp <string>] [-KeyContainer <string>] [<CommonParameters>]
+New-ConfigurationProjectSigning [-Mode <ConfigurationProjectSigningMode>] [-ToolPath <string>] [-Thumbprint <string>] [-SubjectName <string>] [-OnMissingTool <DotNetPublishPolicyMode>] [-OnFailure <DotNetPublishPolicyMode>] [-TimestampUrl <string>] [-Description <string>] [-Url <string>] [-Csp <string>] [-KeyContainer <string>] [-OverwriteSigned] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -115,6 +115,22 @@ Type: DotNetPublishPolicyMode
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: Warn, Fail, Skip
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OverwriteSigned
+Explicitly replaces existing signatures instead of preserving already signed files.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
 
 Required: False
 Position: named

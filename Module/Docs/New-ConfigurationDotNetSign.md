@@ -11,7 +11,7 @@ Creates signing options for DotNet publish targets and installers.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDotNetSign [-Enabled] [-ToolPath <string>] [-OnMissingTool <DotNetPublishPolicyMode>] [-OnSignFailure <DotNetPublishPolicyMode>] [-Thumbprint <string>] [-SubjectName <string>] [-TimestampUrl <string>] [-Description <string>] [-Url <string>] [-Csp <string>] [-KeyContainer <string>] [<CommonParameters>]
+New-ConfigurationDotNetSign [-Enabled] [-IncludeDlls] [-OverwriteSigned] [-ToolPath <string>] [-OnMissingTool <DotNetPublishPolicyMode>] [-OnSignFailure <DotNetPublishPolicyMode>] [-Thumbprint <string>] [-SubjectName <string>] [-TimestampUrl <string>] [-Description <string>] [-Url <string>] [-Csp <string>] [-KeyContainer <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -75,6 +75,22 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -IncludeDlls
+Includes DLL files when signing publish or bundle outputs.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -KeyContainer
 Optional key container name.
 
@@ -115,6 +131,22 @@ Type: DotNetPublishPolicyMode
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: Warn, Fail, Skip
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OverwriteSigned
+Explicitly replaces existing signatures instead of preserving already signed files.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
 
 Required: False
 Position: named

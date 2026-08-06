@@ -11,7 +11,7 @@ References an existing project.build.json package build from the module-build DS
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationProjectBuild [-Name <string>] [-ConfigPath <string>] [-Enabled] [-BuildBeforeModule] [-UseAsReleaseVersionSource] [-ProvideLocalNuGetFeed] [-UpdateVersions] [-Build] [-IncludeSymbols] [-PublishNuget] [-PublishGitHub] [-CreateReleaseZip] [-SignAssemblies] [-SignDependencyAssemblies] [-SignPackages] [-Options <IDictionary>] [<CommonParameters>]
+New-ConfigurationProjectBuild [-Name <string>] [-ConfigPath <string>] [-Enabled] [-BuildBeforeModule] [-UseAsReleaseVersionSource] [-ProvideLocalNuGetFeed] [-UpdateVersions] [-Build] [-IncludeSymbols] [-PublishNuget] [-PublishGitHub] [-CreateReleaseZip] [-SignAssemblies] [-SignDependencyAssemblies] [-SignPackages] [-OverwriteSignedAssemblies] [-OverwriteSignedPackages] [-Options <IDictionary>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -145,6 +145,38 @@ Additional project-build JSON overrides for less common fields.
 
 ```yaml
 Type: IDictionary
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OverwriteSignedAssemblies
+Whether existing Authenticode assembly signatures may be replaced.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OverwriteSignedPackages
+Whether existing NuGet package signatures may be replaced.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

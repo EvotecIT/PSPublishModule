@@ -11,7 +11,7 @@ Creates inline .NET/NuGet package build configuration from the module-build DSL.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationPackageBuild [-Name <string>] [-Enabled] [-BuildBeforeModule] [-UseAsReleaseVersionSource] [-ProvideLocalNuGetFeed] [-RootPath <string>] [-ExpectedVersion <string>] [-ExpectedVersionMap <IDictionary>] [-VersionTracks <IDictionary>] [-ExpectedVersionMapAsInclude] [-ExpectedVersionMapUseWildcards] [-AlignPackageVersions] [-IncludeProjects <string[]>] [-ExcludeProjects <string[]>] [-ExcludeDirectories <string[]>] [-NugetSource <string[]>] [-IncludePrerelease] [-Configuration <string>] [-OutputPath <string>] [-ReleaseZipOutputPath <string>] [-StagingPath <string>] [-CleanStaging] [-PlanOnly] [-PlanOutputPath <string>] [-UpdateVersions] [-Build] [-PackStrategy <string>] [-IncludeSymbols] [-PublishNuget] [-PublishGitHub] [-CreateReleaseZip] [-UseGitHubPackages] [-GitHubPackagesOwner <string>] [-PublishSource <string>] [-PublishApiKey <string>] [-PublishApiKeyFilePath <string>] [-PublishApiKeyEnvName <string>] [-SkipDuplicate] [-PublishFailFast] [-CertificateThumbprint <string>] [-CertificateStore <string>] [-TimeStampServer <string>] [-SignAssemblies] [-SignDependencyAssemblies] [-SignPackages] [-NugetCredentialUserName <string>] [-NugetCredentialSecret <string>] [-NugetCredentialSecretFilePath <string>] [-NugetCredentialSecretEnvName <string>] [-GitHubAccessToken <string>] [-GitHubAccessTokenFilePath <string>] [-GitHubAccessTokenEnvName <string>] [-GitHubUsername <string>] [-GitHubRepositoryName <string>] [-GitHubIsPreRelease] [-GitHubIncludeProjectNameInTag] [-GitHubGenerateReleaseNotes] [-GitHubReleaseName <string>] [-GitHubTagName <string>] [-GitHubTagTemplate <string>] [-GitHubReleaseMode <string>] [-GitHubPrimaryProject <string>] [-GitHubTagConflictPolicy <string>] [-Options <IDictionary>] [<CommonParameters>]
+New-ConfigurationPackageBuild [-Name <string>] [-Enabled] [-BuildBeforeModule] [-UseAsReleaseVersionSource] [-ProvideLocalNuGetFeed] [-RootPath <string>] [-ExpectedVersion <string>] [-ExpectedVersionMap <IDictionary>] [-VersionTracks <IDictionary>] [-ExpectedVersionMapAsInclude] [-ExpectedVersionMapUseWildcards] [-AlignPackageVersions] [-IncludeProjects <string[]>] [-ExcludeProjects <string[]>] [-ExcludeDirectories <string[]>] [-NugetSource <string[]>] [-IncludePrerelease] [-Configuration <string>] [-OutputPath <string>] [-ReleaseZipOutputPath <string>] [-StagingPath <string>] [-CleanStaging] [-PlanOnly] [-PlanOutputPath <string>] [-UpdateVersions] [-Build] [-PackStrategy <string>] [-IncludeSymbols] [-PublishNuget] [-PublishGitHub] [-CreateReleaseZip] [-UseGitHubPackages] [-GitHubPackagesOwner <string>] [-PublishSource <string>] [-PublishApiKey <string>] [-PublishApiKeyFilePath <string>] [-PublishApiKeyEnvName <string>] [-SkipDuplicate] [-PublishFailFast] [-CertificateThumbprint <string>] [-CertificateStore <string>] [-TimeStampServer <string>] [-SignAssemblies] [-SignDependencyAssemblies] [-SignPackages] [-OverwriteSignedAssemblies] [-OverwriteSignedPackages] [-NugetCredentialUserName <string>] [-NugetCredentialSecret <string>] [-NugetCredentialSecretFilePath <string>] [-NugetCredentialSecretEnvName <string>] [-GitHubAccessToken <string>] [-GitHubAccessTokenFilePath <string>] [-GitHubAccessTokenEnvName <string>] [-GitHubUsername <string>] [-GitHubRepositoryName <string>] [-GitHubIsPreRelease] [-GitHubIncludeProjectNameInTag] [-GitHubGenerateReleaseNotes] [-GitHubReleaseName <string>] [-GitHubTagName <string>] [-GitHubTagTemplate <string>] [-GitHubReleaseMode <string>] [-GitHubPrimaryProject <string>] [-GitHubTagConflictPolicy <string>] [-Options <IDictionary>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -673,6 +673,38 @@ Package output path override.
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OverwriteSignedAssemblies
+Whether existing Authenticode assembly signatures may be replaced.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OverwriteSignedPackages
+Whether existing NuGet package signatures may be replaced.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
