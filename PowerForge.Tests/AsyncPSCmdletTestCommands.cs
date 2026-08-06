@@ -327,11 +327,15 @@ public sealed class TestAsyncCancellationWriteCommand : AsyncPSCmdlet
 {
     private static ManualResetEventSlim _started = new();
     private static ManualResetEventSlim _writeAttempted = new();
+    private static TaskCompletionSource<bool> _allowWrite = CreateAllowWriteSource();
 
     public static ManualResetEventSlim Started => _started;
     public static ManualResetEventSlim WriteAttempted => _writeAttempted;
 
     public static Exception? BackgroundWriteException { get; private set; }
+
+    public static void AllowWrite()
+        => _allowWrite.TrySetResult(true);
 
     public static void Reset()
     {
@@ -339,6 +343,7 @@ public sealed class TestAsyncCancellationWriteCommand : AsyncPSCmdlet
         _writeAttempted.Dispose();
         _started = new ManualResetEventSlim();
         _writeAttempted = new ManualResetEventSlim();
+        _allowWrite = CreateAllowWriteSource();
         BackgroundWriteException = null;
     }
 
@@ -351,6 +356,7 @@ public sealed class TestAsyncCancellationWriteCommand : AsyncPSCmdlet
         }
         catch (OperationCanceledException) when (CancelToken.IsCancellationRequested)
         {
+            await _allowWrite.Task;
             try
             {
                 WriteProgress(new ProgressRecord(1, "cancelled", "finishing"));
@@ -366,6 +372,9 @@ public sealed class TestAsyncCancellationWriteCommand : AsyncPSCmdlet
             }
         }
     }
+
+    private static TaskCompletionSource<bool> CreateAllowWriteSource()
+        => new(TaskCreationOptions.RunContinuationsAsynchronously);
 }
 
 [Cmdlet(VerbsDiagnostic.Test, "AsyncCapturedCancellationWrite")]
