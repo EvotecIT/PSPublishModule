@@ -152,6 +152,42 @@ public sealed class GitHubWebsiteRunWorkflowTests
     }
 
     [Fact]
+    public void WebsiteDeployWorkflow_ShouldRetryAStalledGitHubPagesDeployment()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-deploy.yml");
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        Assert.NotNull(new YamlDotNet.Serialization.DeserializerBuilder().Build().Deserialize<object>(workflowYaml));
+
+        string pagesDeployJob = workflowYaml[
+            workflowYaml.IndexOf("  deploy:", StringComparison.Ordinal)..
+            workflowYaml.IndexOf("  deploy-linux:", StringComparison.Ordinal)];
+        string initialDeployStep = pagesDeployJob[
+            pagesDeployJob.IndexOf("      - name: Deploy to GitHub Pages", StringComparison.Ordinal)..
+            pagesDeployJob.IndexOf("      - name: Retry GitHub Pages deployment", StringComparison.Ordinal)];
+        string retryDeployStep = pagesDeployJob[
+            pagesDeployJob.IndexOf("      - name: Retry GitHub Pages deployment", StringComparison.Ordinal)..];
+
+        Assert.Contains("timeout-minutes: ${{ inputs.timeout_minutes }}", pagesDeployJob, StringComparison.Ordinal);
+        Assert.Contains("continue-on-error: true", initialDeployStep, StringComparison.Ordinal);
+        Assert.DoesNotContain("continue-on-error:", retryDeployStep, StringComparison.Ordinal);
+        Assert.Equal(
+            1,
+            pagesDeployJob.Split('\n').Count(static line =>
+                line.Trim().Equals("continue-on-error: true", StringComparison.Ordinal)));
+        Assert.Contains("if: ${{ steps.deployment.outcome == 'failure' }}", pagesDeployJob, StringComparison.Ordinal);
+        Assert.Contains(
+            "url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}",
+            pagesDeployJob,
+            StringComparison.Ordinal);
+        Assert.Equal(
+            2,
+            pagesDeployJob.Split('\n').Count(static line =>
+                line.Contains("uses: actions/deploy-pages@", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void WebsiteRunWorkflow_ShouldResolveOptionalCallerSourceRefToExactProvenance()
     {
         var repoRoot = FindRepoRoot();
