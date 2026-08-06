@@ -31,6 +31,7 @@ on:
         type: string
         default: '["ubuntu-latest"]'
       timeout_minutes:
+        description: Maximum deployment or post-deployment job duration. GitHub Pages retries once within this budget because deploy-pages limits each attempt to 10 minutes.
         required: false
         type: number
         default: 40
@@ -256,15 +257,22 @@ jobs:
     if: ${{ inputs.deployment_target == 'github-pages' }}
     needs: build
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
     permissions:
       pages: write
       id-token: write
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+
+      - name: Retry GitHub Pages deployment
+        if: ${{ steps.deployment.outcome == 'failure' }}
+        id: deployment_retry
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
 
   deploy-linux:
