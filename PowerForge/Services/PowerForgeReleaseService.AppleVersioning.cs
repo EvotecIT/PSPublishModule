@@ -351,11 +351,9 @@ internal sealed partial class PowerForgeReleaseService
         var builds = client.GetBuildsWithPreReleaseVersionAsync(appId, limit: 200)
             .GetAwaiter()
             .GetResult();
-        if (builds.Any(static build => string.IsNullOrWhiteSpace(build.Platform)))
-        {
-            throw new InvalidOperationException(
-                $"App Store Connect returned a build without platform identity for app '{appId}'. Resolve the incomplete remote build before automatic version selection.");
-        }
+        AppleReleaseMarketingVersionResolver.ValidateRemoteEvidence(
+            Array.Empty<AppStoreConnectVersionInfo>(),
+            builds);
 
         return builds
             .Where(build => string.Equals(build.Platform, expectedPlatform, StringComparison.OrdinalIgnoreCase))

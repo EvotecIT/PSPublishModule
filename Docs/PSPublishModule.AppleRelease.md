@@ -232,7 +232,8 @@ local source, TestFlight, or an editable App Store draft. This lets repeated bet
 uploads stay on `1.6.0` while only the build number advances. Once that train is
 in a non-editable App Store state, the next `Version` action advances `1.X.0` to
 `1.7.0`. Unknown or incompatible remote version strings fail closed instead of
-selecting a potentially colliding train.
+selecting a potentially colliding train. Missing or unknown remote platform and
+build identities fail the same way for both patterned and exact version requests.
 
 `Version` always evaluates the complete configured Apple target set and rejects
 `--target`. The checked-in version source and build identity are shared, so a

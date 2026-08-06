@@ -145,6 +145,39 @@ public sealed class AppleReleaseMarketingVersionResolverTests
         Assert.Contains("incomplete remote build", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(null, "incomplete remote evidence")]
+    [InlineData("", "incomplete remote evidence")]
+    [InlineData("NEW_OS", "incompatible remote evidence")]
+    public void Resolve_FailsClosedForUnknownTestFlightPlatform(string? platform, string expectedMessage)
+    {
+        var build = TestFlightBuild("1.6.0", "18");
+        build.Platform = platform;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => Resolve(
+            pattern: "1.X.0",
+            local: "1.6.0",
+            builds: new[] { build }));
+
+        Assert.Contains(expectedMessage, exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(null, "incomplete remote evidence")]
+    [InlineData("NEW_OS", "incompatible remote evidence")]
+    public void Resolve_FailsClosedForUnknownAppStorePlatform(string? platform, string expectedMessage)
+    {
+        var version = StoreVersion("1.6.0", "READY_FOR_SALE");
+        version.Platform = platform;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => Resolve(
+            pattern: "1.X.0",
+            local: "1.6.0",
+            store: new[] { version }));
+
+        Assert.Contains(expectedMessage, exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static AppleReleaseMarketingVersionResolution Resolve(
         string pattern,
         string local,
@@ -160,7 +193,8 @@ public sealed class AppleReleaseMarketingVersionResolverTests
         => new()
         {
             VersionString = version,
-            AppStoreState = state
+            AppStoreState = state,
+            Platform = "IOS"
         };
 
     private static AppStoreConnectBuildInfo TestFlightBuild(string version, string build)

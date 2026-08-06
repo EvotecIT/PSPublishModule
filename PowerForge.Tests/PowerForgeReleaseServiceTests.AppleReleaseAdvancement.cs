@@ -145,7 +145,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                         new AppStoreConnectVersionInfo
                         {
                             VersionString = "1.5.0",
-                            AppStoreState = "READY_FOR_SALE"
+                            AppStoreState = "READY_FOR_SALE",
+                            Platform = platform == ApplePlatform.iOS ? "IOS" : "MAC_OS"
                         }
                     },
                     Builds = new[]

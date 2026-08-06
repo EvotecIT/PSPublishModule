@@ -96,22 +96,57 @@ internal static class AppleReleaseMarketingVersionResolver
     private static bool IsReusableAppStoreVersion(string? state)
         => state is not null && ReusableAppStoreStates.Contains(state);
 
-    private static void ValidateRemoteEvidence(
+    internal static void ValidateRemoteEvidence(
         IEnumerable<AppStoreConnectVersionInfo> storeVersions,
         IEnumerable<AppStoreConnectBuildInfo> builds)
     {
-        if (storeVersions.Any(static value => string.IsNullOrWhiteSpace(value.VersionString)))
+        var versions = storeVersions.ToArray();
+        var testFlightBuilds = builds.ToArray();
+        if (versions.Any(static value => string.IsNullOrWhiteSpace(value.VersionString)))
         {
             throw new InvalidOperationException(
                 "App Store Connect returned a version without a marketing-version identity. Resolve the incomplete remote version before automatic selection.");
         }
 
-        if (builds.Any(static value => string.IsNullOrWhiteSpace(value.MarketingVersion)))
+        if (testFlightBuilds.Any(static value => string.IsNullOrWhiteSpace(value.MarketingVersion)))
         {
             throw new InvalidOperationException(
                 "App Store Connect returned a TestFlight build without a marketing-version identity. Resolve the incomplete remote build before automatic selection.");
         }
+
+        ValidateRemotePlatforms(
+            versions.Select(static value => value.Platform),
+            "App Store version");
+        ValidateRemotePlatforms(
+            testFlightBuilds.Select(static value => value.Platform),
+            "TestFlight build");
     }
+
+    private static void ValidateRemotePlatforms(IEnumerable<string?> platforms, string source)
+    {
+        foreach (var platform in platforms)
+        {
+            if (string.IsNullOrWhiteSpace(platform))
+            {
+                throw new InvalidOperationException(
+                    $"App Store Connect returned a {source} without platform identity. Resolve the incomplete remote evidence before automatic selection.");
+            }
+
+            if (!SupportedRemotePlatforms.Contains(platform.Trim()))
+            {
+                throw new InvalidOperationException(
+                    $"App Store Connect returned unsupported {source} platform identity '{platform}'. Resolve the incompatible remote evidence before automatic selection.");
+            }
+        }
+    }
+
+    private static readonly HashSet<string> SupportedRemotePlatforms = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "IOS",
+        "MAC_OS",
+        "TV_OS",
+        "VISION_OS"
+    };
 
     private static readonly HashSet<string> ReusableAppStoreStates = new(StringComparer.OrdinalIgnoreCase)
     {
