@@ -363,7 +363,14 @@ public sealed partial class AsyncPSCmdletTests
             "The asynchronous cmdlet did not start in time.");
 
         powerShell.Stop();
-        Assert.Throws<PipelineStoppedException>(() => powerShell.EndInvoke(invocation));
+        try
+        {
+            Assert.Throws<PipelineStoppedException>(() => powerShell.EndInvoke(invocation));
+        }
+        finally
+        {
+            TestAsyncCancellationWriteCommand.AllowWrite();
+        }
         Assert.True(
             TestAsyncCancellationWriteCommand.WriteAttempted.Wait(TimeSpan.FromSeconds(5)),
             "The background hook did not observe the stop in time.");
