@@ -381,6 +381,7 @@ public sealed partial class GitHubReleasePublisher
                     releaseId,
                     fileName,
                     expectedAssetId,
+                    requiredState: null,
                     cancellationToken))
                 {
                     replacedExistingAssets.Add(fileName);

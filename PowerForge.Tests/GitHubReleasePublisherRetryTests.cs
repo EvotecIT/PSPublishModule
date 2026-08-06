@@ -51,6 +51,7 @@ public sealed class GitHubReleasePublisherRetryTests
             await Respond(firstUpload, "{\"message\":\"Bad Gateway\"}", 502);
 
             await Respond(await NextRequest(), "{\"message\":\"Service Unavailable\"}", 503);
+            await Respond(await NextRequest(), "[]");
 
             var secondUpload = await NextRequest();
             using (var stream = new MemoryStream())
@@ -135,6 +136,7 @@ public sealed class GitHubReleasePublisherRetryTests
                 422);
 
             var starterAsset = $$"""[{"id":88,"name":"{{assetName}}","state":"starter"}]""";
+            await Respond(await NextRequest(), "{\"message\":\"Service Unavailable\"}", 503);
             await Respond(await NextRequest(), starterAsset);
             await Respond(await NextRequest(), starterAsset);
             await Respond(await NextRequest(), string.Empty, 204);
@@ -167,12 +169,84 @@ public sealed class GitHubReleasePublisherRetryTests
                     "POST /uploads",
                     "GET /repos/EvotecIT/example/releases/42/assets",
                     "GET /repos/EvotecIT/example/releases/42/assets",
+                    "GET /repos/EvotecIT/example/releases/42/assets",
                     "DELETE /repos/EvotecIT/example/releases/assets/88",
                     "POST /uploads",
                     "GET /repos/EvotecIT/example/releases/42/assets",
                     "GET /repos/EvotecIT/example/releases/42/assets"
                 ],
                 requests);
+        }
+        finally
+        {
+            listener.Stop();
+            listener.Close();
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
+    public async Task PublishRelease_RefusesToDeleteStarterThatBecameUploaded()
+    {
+        var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(assetPath, "starter-state-race");
+        var assetName = Path.GetFileName(assetPath);
+        var requests = new List<string>();
+
+        async Task<HttpListenerContext> NextRequest()
+        {
+            var context = await listener.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            requests.Add($"{context.Request.HttpMethod} {context.Request.Url!.AbsolutePath}");
+            return context;
+        }
+
+        static async Task Respond(HttpListenerContext context, string json, int statusCode = 200)
+        {
+            await context.Request.InputStream.CopyToAsync(Stream.Null);
+            var responseBytes = Encoding.UTF8.GetBytes(json);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = responseBytes.Length;
+            await context.Response.OutputStream.WriteAsync(responseBytes);
+            context.Response.Close();
+        }
+
+        var server = Task.Run(async () =>
+        {
+            await Respond(
+                await NextRequest(),
+                $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}"}""",
+                201);
+            await Respond(
+                await NextRequest(),
+                "{\"message\":\"Validation Failed\",\"errors\":[{\"resource\":\"ReleaseAsset\",\"code\":\"already_exists\",\"field\":\"name\"}]}",
+                422);
+            await Respond(await NextRequest(), $$"""[{"id":88,"name":"{{assetName}}","state":"starter"}]""");
+            await Respond(await NextRequest(), $$"""[{"id":88,"name":"{{assetName}}","state":"uploaded"}]""");
+        });
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new GitHubReleasePublisher(new NullLogger()).PublishRelease(
+                    new GitHubReleasePublishRequest
+                    {
+                        Owner = "EvotecIT",
+                        Repository = "example",
+                        Token = "token",
+                        ApiBaseUrl = apiBaseUrl,
+                        TagName = "v1.2.3",
+                        AssetFilePaths = [assetPath]
+                    }));
+
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("changed from state 'starter' to 'uploaded'", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(requests, request => request.StartsWith("DELETE ", StringComparison.Ordinal));
         }
         finally
         {
@@ -222,6 +296,7 @@ public sealed class GitHubReleasePublisherRetryTests
                 422);
 
             var starterAsset = $$"""[{"id":88,"name":"{{assetName}}","state":"starter"}]""";
+            await Respond(await NextRequest(), "{\"message\":\"Service Unavailable\"}", 503);
             await Respond(await NextRequest(), starterAsset);
             await Respond(await NextRequest(), starterAsset);
             await Respond(await NextRequest(), string.Empty, 204);
