@@ -326,6 +326,8 @@ public static partial class WebLinkService
             if (redirect.MatchType == LinkRedirectMatchType.Regex && IsBroadRegex(redirect.SourcePath))
                 AddIssue(issues, LinkValidationSeverity.Warning, "PFLINK.REDIRECT.REGEX_BROAD", "Regex redirect looks very broad and should be reviewed.", "redirect", label);
 
+            ValidateSourceQuerySelector(redirect, issues, label);
+
             var key = BuildRedirectKey(redirect);
             if (seen.TryGetValue(key, out var existing))
             {
@@ -409,6 +411,7 @@ public static partial class WebLinkService
     private static void ValidateRedirectGraph(LinkRedirectRule[] redirects, List<LinkValidationIssue> issues)
     {
         var map = new Dictionary<string, RedirectGraphTarget>(StringComparer.OrdinalIgnoreCase);
+        var selectorMap = new Dictionary<string, RedirectGraphTarget>(StringComparer.OrdinalIgnoreCase);
         foreach (var redirect in redirects)
         {
             if (redirect.MatchType != LinkRedirectMatchType.Exact && redirect.MatchType != LinkRedirectMatchType.Query)
@@ -417,6 +420,14 @@ public static partial class WebLinkService
                 continue;
 
             var source = NormalizeSourcePath(redirect.SourcePath);
+            var sourceQueryParameter = NormalizeSourceQueryParameter(redirect.SourceQueryParameter);
+            if (!string.IsNullOrWhiteSpace(sourceQueryParameter))
+            {
+                if (!string.IsNullOrWhiteSpace(source) && !string.IsNullOrWhiteSpace(target.Path))
+                    selectorMap[BuildRedirectGraphSelectorKey(redirect.SourceHost, source, sourceQueryParameter)] = target;
+                continue;
+            }
+
             if (string.Equals(source, target.Path, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(NormalizeRedirectGraphQuery(redirect.SourceQuery), target.Query, StringComparison.Ordinal))
             {
@@ -456,11 +467,14 @@ public static partial class WebLinkService
             foreach (var traversalHost in BuildRedirectGraphTraversalHosts(host, graphHosts))
             {
                 var current = NormalizeSourcePath(redirect.SourcePath);
-                var currentQuery = redirect.SourceQuery;
+                var sourceQueryParameter = NormalizeSourceQueryParameter(redirect.SourceQueryParameter);
+                var currentQuery = string.IsNullOrWhiteSpace(sourceQueryParameter)
+                    ? redirect.SourceQuery
+                    : sourceQueryParameter + "=*";
                 var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var depth = 0;
                 var reported = false;
-                while (TryGetRedirectGraphTarget(map, traversalHost, current, currentQuery, out var next))
+                while (TryGetRedirectGraphTarget(map, selectorMap, traversalHost, current, currentQuery, out var next))
                 {
                     if (!visited.Add(BuildRedirectGraphKey(traversalHost, current, currentQuery)))
                     {
@@ -513,6 +527,7 @@ public static partial class WebLinkService
 
     private static bool TryGetRedirectGraphTarget(
         IReadOnlyDictionary<string, RedirectGraphTarget> map,
+        IReadOnlyDictionary<string, RedirectGraphTarget> selectorMap,
         string host,
         string path,
         string? query,
@@ -541,6 +556,18 @@ public static partial class WebLinkService
             {
                 return true;
             }
+        }
+
+        foreach (var queryParameter in EnumerateSourceQueryParameterNames(query))
+        {
+            if (!string.IsNullOrWhiteSpace(host) &&
+                selectorMap.TryGetValue(BuildRedirectGraphSelectorKey(host, path, queryParameter), out target!))
+            {
+                return true;
+            }
+
+            if (selectorMap.TryGetValue(BuildRedirectGraphSelectorKey(null, path, queryParameter), out target!))
+                return true;
         }
 
         target = default;
@@ -691,7 +718,7 @@ public static partial class WebLinkService
             RelatedId = related is null ? null : (string.IsNullOrWhiteSpace(related.Id) ? related.SourcePath : related.Id),
             SourceHost = redirect.SourceHost,
             SourcePath = redirect.SourcePath,
-            SourceQuery = redirect.SourceQuery,
+            SourceQuery = BuildSourceQueryDisplay(redirect),
             TargetUrl = redirect.TargetUrl,
             RelatedTargetUrl = related?.TargetUrl,
             NormalizedTargetUrl = normalizedTarget,
@@ -709,7 +736,8 @@ public static partial class WebLinkService
             NormalizeRedirectGraphHost(redirect.SourceHost),
             ((int)NormalizeRedirectKeyMatchType(redirect)).ToString(CultureInfo.InvariantCulture),
             BuildRedirectSourceKey(redirect),
-            BuildOrdinalKey(NormalizeRedirectGraphQuery(redirect.SourceQuery)));
+            BuildOrdinalKey(NormalizeRedirectGraphQuery(redirect.SourceQuery)),
+            BuildOrdinalKey(NormalizeSourceQueryParameter(redirect.SourceQueryParameter)));
 
     private static string BuildRedirectSourceKey(LinkRedirectRule redirect)
         => redirect.MatchType == LinkRedirectMatchType.Regex
@@ -717,12 +745,15 @@ public static partial class WebLinkService
             : NormalizeSourcePath(redirect.SourcePath);
 
     private static LinkRedirectMatchType NormalizeRedirectKeyMatchType(LinkRedirectRule redirect)
-        => redirect.MatchType == LinkRedirectMatchType.Exact && !string.IsNullOrWhiteSpace(redirect.SourceQuery)
+        => redirect.MatchType == LinkRedirectMatchType.Exact && HasSourceQuerySelector(redirect)
             ? LinkRedirectMatchType.Query
             : redirect.MatchType;
 
     private static string BuildRedirectGraphKey(string? host, string path, string? query)
         => string.Join("|", NormalizeRedirectGraphHost(host), NormalizeSourcePath(path), BuildOrdinalKey(NormalizeRedirectGraphQuery(query)));
+
+    private static string BuildRedirectGraphSelectorKey(string? host, string path, string queryParameter)
+        => string.Join("|", NormalizeRedirectGraphHost(host), NormalizeSourcePath(path), "selector", BuildOrdinalKey(NormalizeSourceQueryParameter(queryParameter)));
 
     private static string BuildOrdinalKey(string value)
         => Convert.ToHexString(Encoding.UTF8.GetBytes(value));
@@ -929,7 +960,8 @@ public static partial class WebLinkService
     {
         var host = string.IsNullOrWhiteSpace(redirect.SourceHost) ? "*" : redirect.SourceHost.Trim();
         var path = string.IsNullOrWhiteSpace(redirect.SourcePath) ? "/" : redirect.SourcePath.Trim();
-        var query = string.IsNullOrWhiteSpace(redirect.SourceQuery) ? string.Empty : "?" + redirect.SourceQuery.Trim().TrimStart('?');
+        var sourceQuery = BuildSourceQueryDisplay(redirect);
+        var query = string.IsNullOrWhiteSpace(sourceQuery) ? string.Empty : "?" + sourceQuery;
         return $"{host}{path}{query}";
     }
 
