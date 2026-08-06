@@ -775,8 +775,8 @@
       },
       "System.Reflection.MetadataLoadContext": {
         "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "SZxrQ4sQYnIcdwiO3G/lHZopbPYQ2lW0ioT4JezgccWUrKaKbHLJbAGZaDfkYjWcta1pWssAo3MOXLsR0ie4tQ=="
+        "resolved": "10.0.10",
+        "contentHash": "7f8JfUA85nD2yOrTX9fhuHPp8P01qqnbGTtRiMK6rwNhS1jNLqoCJfdzLMOIZY8b9sBoAX3eOH04k1fWeCgOYQ=="
       },
       "System.Runtime.Caching": {
         "type": "Transitive",
@@ -926,15 +926,15 @@
       },
       "YamlDotNet": {
         "type": "Transitive",
-        "resolved": "15.1.2",
-        "contentHash": "qeX0XhzOIcQEvnI5JxnPaIwcINwyY4Qy/LXhSfsdHkFrl9F41AT52UFfy2nIE7kgrhMg+cP7xuS+GtPJhmHmTA=="
+        "resolved": "18.1.0",
+        "contentHash": "5K+9KFg2TdTl7VXv88Qzi/0lqK6JFoNP3lRuImPYGRV7K/QYklDyTrj4+A+KAki1JsQi6qKY+hDyY7d6WRqjrw=="
       },
       "powerforge": {
         "type": "Project",
         "dependencies": {
           "NuGet.Configuration": "[7.6.0, )",
           "System.IO.Packaging": "[10.0.7, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
+          "System.Reflection.MetadataLoadContext": "[10.0.10, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
       },
@@ -942,7 +942,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.1, )",
-          "PowerForge": "[3.0.78, )",
+          "PowerForge": "[3.0.99, )",
           "System.Security.Cryptography.Xml": "[10.0.10, )"
         }
       },
@@ -952,15 +952,15 @@
           "HtmlTinkerX": "[2.2.1, )",
           "Magick.NET-Q8-AnyCPU": "[14.15.0, )",
           "OfficeIMO.Markdown": "[3.0.2, )",
-          "PowerForge": "[3.0.78, )",
+          "PowerForge": "[3.0.99, )",
           "Scriban": "[7.2.5, )",
-          "YamlDotNet": "[15.1.2, )"
+          "YamlDotNet": "[18.1.0, )"
         }
       },
       "PowerForge.Web.Build": {
         "type": "Project",
         "dependencies": {
-          "PowerForge.Web": "[3.0.78, )"
+          "PowerForge.Web": "[3.0.99, )"
         }
       },
       "powerforgestudio.domain": {
@@ -972,12 +972,12 @@
           "HtmlForgeX": "[0.53.0, )",
           "HtmlForgeX.Markdown": "[0.53.0, )",
           "OfficeIMO.Markdown": "[3.0.2, )",
-          "PowerForge": "[3.0.78, )",
-          "PowerForge.PowerShell": "[3.0.78, )",
+          "PowerForge": "[3.0.99, )",
+          "PowerForge.PowerShell": "[3.0.99, )",
           "Spectre.Console": "[0.55.2, )",
           "Spectre.Console.Json": "[0.55.2, )",
           "System.IO.Packaging": "[10.0.7, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
+          "System.Reflection.MetadataLoadContext": "[10.0.10, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
       }
