@@ -179,6 +179,9 @@ public sealed class DotNetPublishSignOptions
     /// <summary>Opts into signing *.dll files in addition to executables.</summary>
     public bool IncludeDlls { get; set; }
 
+    /// <summary>Explicitly replaces existing signatures instead of preserving already signed files.</summary>
+    public bool OverwriteSigned { get; set; }
+
     /// <summary>Optional path to signtool.exe (defaults to "signtool.exe").</summary>
     public string? ToolPath { get; set; } = "signtool.exe";
 
@@ -227,6 +230,9 @@ public sealed class DotNetPublishSignPatch
 
     /// <summary>Optional include-DLLs override. Set <c>false</c> to explicitly disable DLL signing even if the base profile enables it.</summary>
     public bool? IncludeDlls { get; set; }
+
+    /// <summary>Optional existing-signature overwrite override.</summary>
+    public bool? OverwriteSigned { get; set; }
 
     /// <summary>Optional path to signtool.exe override.</summary>
     public string? ToolPath { get; set; }

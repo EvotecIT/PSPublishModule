@@ -21,6 +21,18 @@ public sealed class NewConfigurationDotNetSignCommand : PSCmdlet
     public SwitchParameter Enabled { get; set; }
 
     /// <summary>
+    /// Includes DLL files when signing publish or bundle outputs.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter IncludeDlls { get; set; }
+
+    /// <summary>
+    /// Explicitly replaces existing signatures instead of preserving already signed files.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter OverwriteSigned { get; set; }
+
+    /// <summary>
     /// Optional path to signtool.exe.
     /// </summary>
     [Parameter]
@@ -88,6 +100,8 @@ public sealed class NewConfigurationDotNetSignCommand : PSCmdlet
         WriteObject(new DotNetPublishSignOptions
         {
             Enabled = Enabled.IsPresent,
+            IncludeDlls = IncludeDlls.IsPresent,
+            OverwriteSigned = OverwriteSigned.IsPresent,
             ToolPath = ToolPath,
             OnMissingTool = OnMissingTool,
             OnSignFailure = OnSignFailure,

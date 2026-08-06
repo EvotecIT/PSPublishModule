@@ -120,9 +120,17 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
     [Parameter]
     public SwitchParameter SignDependencyAssemblies { get; set; }
 
+    /// <summary>Explicitly replaces existing Authenticode assembly signatures.</summary>
+    [Parameter]
+    public SwitchParameter OverwriteSignedAssemblies { get; set; }
+
     /// <summary>Skip signing generated NuGet packages.</summary>
     [Parameter]
     public SwitchParameter SkipPackageSigning { get; set; }
+
+    /// <summary>Explicitly replaces existing NuGet package signatures.</summary>
+    [Parameter]
+    public SwitchParameter OverwriteSignedPackages { get; set; }
 
     /// <summary>Skip dotnet pack step.</summary>
     [Parameter]
@@ -209,6 +217,8 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             SignAssemblies = SkipAssemblySigning.IsPresent ? false : null,
             SignDependencyAssemblies = SignDependencyAssemblies.IsPresent,
             SignPackages = SkipPackageSigning.IsPresent ? false : null,
+            OverwriteSignedAssemblies = OverwriteSignedAssemblies.IsPresent,
+            OverwriteSignedPackages = OverwriteSignedPackages.IsPresent,
             SkipPack = SkipPack.IsPresent,
             IncludeSymbols = IncludeSymbols.IsPresent,
             Publish = Publish.IsPresent,

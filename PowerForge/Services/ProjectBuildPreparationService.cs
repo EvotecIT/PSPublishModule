@@ -117,6 +117,8 @@ internal sealed class ProjectBuildPreparationService
             SignAssemblies = ResolveSigningEnabled(config.SignAssemblies, config.CertificateThumbprint),
             SignDependencyAssemblies = config.SignDependencyAssemblies ?? false,
             SignPackages = ResolveSigningEnabled(config.SignPackages, config.CertificateThumbprint),
+            OverwriteSignedAssemblies = config.OverwriteSignedAssemblies ?? false,
+            OverwriteSignedPackages = config.OverwriteSignedPackages ?? false,
             Pack = context.Build || context.PublishNuget || context.PublishGitHub,
             CreateReleaseZip = context.CreateReleaseZip,
             Publish = context.PublishNuget,

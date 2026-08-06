@@ -91,6 +91,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
             }
 
+            if (!sign.OverwriteSigned && _hasAuthenticodeSignature(file))
+            {
+                if (_logger.IsVerbose)
+                    _logger.Verbose($"Preserving existing signature: {file}");
+                signed.Add(file);
+                continue;
+            }
+
+            var timeout = TimeSpan.FromSeconds(Math.Max(1, sign.TimeoutSeconds));
             var args = new List<string> { "sign", "/fd", "SHA256" };
             if (!string.IsNullOrWhiteSpace(sign.TimestampUrl))
                 args.AddRange(new[] { "/tr", sign.TimestampUrl!, "/td", "SHA256" });
@@ -112,13 +121,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 args.AddRange(new[] { "/kc", sign.KeyContainer! });
 
             args.Add(file);
-            var timeout = TimeSpan.FromSeconds(Math.Max(1, sign.TimeoutSeconds));
-            var res = RunProcessWithTimeout(
+            var res = RunSigningTool(
                 signToolPath,
                 runDir,
                 args,
-                timeout,
-                _cancellationToken.Value);
+                timeout);
             if (res.ExitCode != 0)
             {
                 var details = TailLines(res.StdErr, maxLines: 10, maxChars: 2000) ?? string.Empty;
@@ -136,6 +143,25 @@ public sealed partial class DotNetPublishPipelineRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private ProcessRunResult RunSigningTool(
+        string signToolPath,
+        string workingDirectory,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout)
+    {
+        var result = _processRunner.RunAsync(
+                new ProcessRunRequest(
+                    signToolPath,
+                    workingDirectory,
+                    arguments,
+                    timeout),
+                _cancellationToken.Value)
+            .GetAwaiter()
+            .GetResult();
+        _cancellationToken.Value.ThrowIfCancellationRequested();
+        return result;
     }
 
     private void HandlePolicy(DotNetPublishPolicyMode policy, string message)

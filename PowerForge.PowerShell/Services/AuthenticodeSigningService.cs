@@ -185,39 +185,45 @@ public sealed class AuthenticodeSigningService
 
     private IReadOnlyList<PSObject> SignWithWindowsAuthenticode(string[] files, AuthenticodeSignRequest request)
     {
-        var unsignedFiles = GetUnsignedFiles("Get-AuthenticodeSignature", files);
-        if (unsignedFiles.Length == 0)
+        var filesToSign = request.OverwriteSigned
+            ? files
+            : GetUnsignedFiles("Get-AuthenticodeSignature", files);
+        if (filesToSign.Length == 0)
             return Array.Empty<PSObject>();
 
-        foreach (var file in unsignedFiles)
+        foreach (var file in filesToSign)
             _logger.Verbose($"Signing file: {file}");
 
         return InvokeMany("Set-AuthenticodeSignature", ps =>
         {
-            ps.AddParameter("FilePath", unsignedFiles);
+            ps.AddParameter("FilePath", filesToSign);
             ps.AddParameter("Certificate", request.Certificate);
             ps.AddParameter("TimestampServer", request.TimeStampServer);
             ps.AddParameter("IncludeChain", request.WindowsIncludeChain);
             ps.AddParameter("HashAlgorithm", request.HashAlgorithm);
+            if (request.OverwriteSigned) ps.AddParameter("Force");
         });
     }
 
     private IReadOnlyList<PSObject> SignWithOpenAuthenticode(string[] files, AuthenticodeSignRequest request)
     {
-        var unsignedFiles = GetUnsignedFiles("Get-OpenAuthenticodeSignature", files);
-        if (unsignedFiles.Length == 0)
+        var filesToSign = request.OverwriteSigned
+            ? files
+            : GetUnsignedFiles("Get-OpenAuthenticodeSignature", files);
+        if (filesToSign.Length == 0)
             return Array.Empty<PSObject>();
 
-        foreach (var file in unsignedFiles)
+        foreach (var file in filesToSign)
             _logger.Verbose($"Signing file: {file}");
 
         return InvokeMany("Set-OpenAuthenticodeSignature", ps =>
         {
-            ps.AddParameter("FilePath", unsignedFiles);
+            ps.AddParameter("FilePath", filesToSign);
             ps.AddParameter("Certificate", request.Certificate);
             ps.AddParameter("TimeStampServer", request.TimeStampServer);
             ps.AddParameter("IncludeChain", request.NonWindowsIncludeChain);
             ps.AddParameter("HashAlgorithm", request.HashAlgorithm);
+            if (request.OverwriteSigned) ps.AddParameter("Force");
         });
     }
 

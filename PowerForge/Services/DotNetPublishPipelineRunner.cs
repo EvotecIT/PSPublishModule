@@ -12,6 +12,7 @@ public sealed partial class DotNetPublishPipelineRunner
 {
     private readonly ILogger _logger;
     private readonly IProcessRunner _processRunner;
+    private readonly Func<string, bool> _hasAuthenticodeSignature;
     private readonly AsyncLocal<CancellationToken> _cancellationToken = new();
 
     /// <summary>
@@ -22,10 +23,14 @@ public sealed partial class DotNetPublishPipelineRunner
     {
     }
 
-    internal DotNetPublishPipelineRunner(ILogger logger, IProcessRunner processRunner)
+    internal DotNetPublishPipelineRunner(
+        ILogger logger,
+        IProcessRunner processRunner,
+        Func<string, bool>? hasAuthenticodeSignature = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
+        _hasAuthenticodeSignature = hasAuthenticodeSignature ?? WindowsAuthenticodeSignatureInspector.HasSignature;
     }
 
 }

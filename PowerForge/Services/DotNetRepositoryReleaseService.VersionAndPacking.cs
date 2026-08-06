@@ -184,6 +184,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         LocalStore = spec.CertificateStore,
                         CertificateThumbprint = spec.CertificateThumbprint!.Trim(),
                         TimeStampServer = string.IsNullOrWhiteSpace(spec.TimeStampServer) ? "http://timestamp.digicert.com" : spec.TimeStampServer!.Trim(),
+                        OverwriteSigned = spec.OverwriteSignedAssemblies,
                         IncludePatterns = includePatterns,
                         FilePaths = signingPlan.Files
                     });

@@ -59,6 +59,7 @@ internal static class DotNetPublishSigningProfileResolver
         {
             Enabled = sign.Enabled,
             IncludeDlls = sign.IncludeDlls,
+            OverwriteSigned = sign.OverwriteSigned,
             ToolPath = sign.ToolPath,
             OnMissingTool = sign.OnMissingTool,
             OnSignFailure = sign.OnSignFailure,
@@ -80,6 +81,7 @@ internal static class DotNetPublishSigningProfileResolver
         {
             Enabled = signOverrides.Enabled,
             IncludeDlls = signOverrides.IncludeDlls,
+            OverwriteSigned = signOverrides.OverwriteSigned,
             ToolPath = signOverrides.ToolPath,
             OnMissingTool = signOverrides.OnMissingTool,
             OnSignFailure = signOverrides.OnSignFailure,
@@ -105,6 +107,8 @@ internal static class DotNetPublishSigningProfileResolver
             sign.Enabled = patch.Enabled.Value;
         if (patch.IncludeDlls.HasValue)
             sign.IncludeDlls = patch.IncludeDlls.Value;
+        if (patch.OverwriteSigned.HasValue)
+            sign.OverwriteSigned = patch.OverwriteSigned.Value;
         if (patch.OnMissingTool.HasValue)
             sign.OnMissingTool = patch.OnMissingTool.Value;
         if (patch.OnSignFailure.HasValue)

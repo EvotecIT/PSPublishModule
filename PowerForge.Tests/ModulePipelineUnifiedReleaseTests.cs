@@ -1496,6 +1496,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         public ModuleSigningResult SignModuleOutput(
             string moduleName,
             string rootPath,
+            string[] packageFilePaths,
             string[] includePatterns,
             string[] excludeSubstrings,
             SigningOptionsConfiguration signing)

@@ -28,7 +28,14 @@ public sealed partial class DotNetRepositoryReleaseService
             .ToArray();
         if (packagePaths.Length == 0) return true;
 
-        var exitCode = RunDotnetSign(packagePaths, sha256, store, timeStampServer, out var stdErr, out var stdOut);
+        var exitCode = RunDotnetSign(
+            packagePaths,
+            sha256,
+            store,
+            timeStampServer,
+            spec.OverwriteSignedPackages,
+            out var stdErr,
+            out var stdOut);
         if (exitCode == 0) return true;
 
         var msg = string.Join(Environment.NewLine, stdErr, stdOut).Trim();
@@ -41,6 +48,7 @@ public sealed partial class DotNetRepositoryReleaseService
         string sha256,
         string store,
         string timeStampServer,
+        bool overwriteSignedPackages,
         out string stdErr,
         out string stdOut)
     {
@@ -49,7 +57,8 @@ public sealed partial class DotNetRepositoryReleaseService
                 packagePaths: packagePaths,
                 certificateFingerprint: sha256,
                 certificateStoreLocation: store,
-                timeStampServer: timeStampServer))
+                timeStampServer: timeStampServer,
+                overwrite: overwriteSignedPackages))
             .GetAwaiter()
             .GetResult();
 
