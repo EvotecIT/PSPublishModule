@@ -381,6 +381,7 @@ public sealed partial class GitHubReleasePublisher
                     releaseId,
                     fileName,
                     expectedAssetId,
+                    requiredState: null,
                     cancellationToken))
                 {
                     replacedExistingAssets.Add(fileName);
@@ -426,6 +427,18 @@ public sealed partial class GitHubReleasePublisher
                     GitHubReleaseAssetProgressState.Uploading,
                     transferred,
                     total),
+                () => ReconcileReleaseAssetAfterUploadFailure(
+                    owner,
+                    repo,
+                    token,
+                    apiBaseUrl,
+                    releaseId,
+                    tagName,
+                    expectedReleaseBodyMarker,
+                    expectedTagCommitSha,
+                    requirePublishedStableRelease,
+                    fileName,
+                    cancellationToken),
                 cancellationToken);
             var respText = resp.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
 
@@ -709,6 +722,9 @@ public sealed partial class GitHubReleasePublisher
 
         [DataMember(Name = "name")]
         public string? Name { get; set; }
+
+        [DataMember(Name = "state")]
+        public string? State { get; set; }
     }
 
     [DataContract]
