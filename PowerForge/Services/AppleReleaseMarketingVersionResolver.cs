@@ -132,7 +132,7 @@ internal static class AppleReleaseMarketingVersionResolver
                     $"App Store Connect returned a {source} without platform identity. Resolve the incomplete remote evidence before automatic selection.");
             }
 
-            if (!SupportedRemotePlatforms.Contains(platform.Trim()))
+            if (!SupportedRemotePlatforms.Contains(platform!.Trim()))
             {
                 throw new InvalidOperationException(
                     $"App Store Connect returned unsupported {source} platform identity '{platform}'. Resolve the incompatible remote evidence before automatic selection.");
@@ -188,7 +188,18 @@ internal static class AppleReleaseMarketingVersionResolver
     private static string? FirstNonEmpty(params string?[] values)
         => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim();
 
-    private sealed record StoreVersionEvidence(Version Version, string? State);
+    private sealed class StoreVersionEvidence
+    {
+        internal StoreVersionEvidence(Version version, string? state)
+        {
+            Version = version;
+            State = state;
+        }
+
+        internal Version Version { get; }
+
+        internal string? State { get; }
+    }
 }
 
 internal sealed class AppleReleaseMarketingVersionResolution
