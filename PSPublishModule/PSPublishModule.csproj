@@ -24,22 +24,22 @@
 
   <ItemGroup>
     <PackageReference Include="PowerShellStandard.Library" Version="5.1.1" PrivateAssets="all" />
-    <PackageReference Include="System.Reflection.MetadataLoadContext" Version="8.0.0" />
-    <PackageReference Include="Spectre.Console" Version="0.55.2" />
-    <PackageReference Include="Spectre.Console.Json" Version="0.55.2" />
-    <PackageReference Include="HtmlForgeX" Version="0.53.0" />
-    <PackageReference Include="HtmlForgeX.Markdown" Version="0.53.0" />
-    <PackageReference Include="OfficeIMO.Markdown" Version="3.0.2" />
+    <PackageReference Include="System.Reflection.MetadataLoadContext" Version="8.0.1" />
+    <PackageReference Include="Spectre.Console" Version="0.57.2" />
+    <PackageReference Include="Spectre.Console.Json" Version="0.57.2" />
+    <PackageReference Include="HtmlForgeX" Version="0.54.0" />
+    <PackageReference Include="HtmlForgeX.Markdown" Version="0.54.0" />
+    <PackageReference Include="OfficeIMO.Markdown" Version="3.0.3" />
   </ItemGroup>
 
   <ItemGroup Condition=" '$(TargetFramework)' == 'net8.0' ">
-    <PackageReference Include="System.IO.Packaging" Version="10.0.7" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.7" />
+    <PackageReference Include="System.IO.Packaging" Version="10.0.10" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup Condition=" '$(TargetFramework)' == 'net10.0' ">
-    <PackageReference Include="System.IO.Packaging" Version="10.0.7" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.7" />
+    <PackageReference Include="System.IO.Packaging" Version="10.0.10" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
