@@ -426,7 +426,7 @@ public sealed partial class GitHubReleasePublisher
                     GitHubReleaseAssetProgressState.Uploading,
                     transferred,
                     total),
-                () => RemoveIncompleteAssetAfterInterruptedUpload(
+                () => ReconcileReleaseAssetAfterUploadFailure(
                     owner,
                     repo,
                     token,

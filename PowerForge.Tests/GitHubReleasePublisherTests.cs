@@ -235,6 +235,7 @@ public sealed class GitHubReleasePublisherTests
             await Respond(
                 """{"message":"Validation Failed","errors":[{"resource":"ReleaseAsset","code":"already_exists","field":"name"}]}""",
                 422);
+            await Respond($$"""[{"id":99,"name":"{{Path.GetFileName(assetPath)}}","state":"uploaded"}]""", 200);
         });
 
         try
@@ -291,6 +292,7 @@ public sealed class GitHubReleasePublisherTests
             await Respond(
                 """{"message":"Validation Failed","errors":[{"resource":"ReleaseAsset","code":"already_exists","field":"name"}]}""",
                 422);
+            await Respond($$"""[{"id":99,"name":"{{Path.GetFileName(assetPath)}}","state":"uploaded"}]""", 200);
         });
 
         try
@@ -624,6 +626,7 @@ public sealed class GitHubReleasePublisherTests
             await Respond(releaseJson);
             await Respond($"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
             await Respond("{\"message\":\"Validation Failed\",\"errors\":[{\"resource\":\"ReleaseAsset\",\"code\":\"already_exists\",\"field\":\"name\"}]}", 422);
+            await Respond($$"""[{"id":101,"name":"{{Path.GetFileName(assetPath)}}","state":"uploaded"}]""");
         });
 
         try
