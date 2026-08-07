@@ -32,19 +32,34 @@ runs:
       env:
         SOURCE_ROOT: ${{ inputs.source-root }}
         TOOL_RUNTIME: ${{ inputs.runtime }}
+        MSBUILDDISABLENODEREUSE: "1"
       run: |
         if ($env:TOOL_RUNTIME -notin @('osx-arm64', 'osx-x64')) { throw 'runtime must be osx-arm64 or osx-x64.' }
         $sourceRoot = [IO.Path]::GetFullPath($env:SOURCE_ROOT)
         $buildScript = Join-Path $sourceRoot 'Build/Build-Project.ps1'
         if (-not (Test-Path -LiteralPath $buildScript -PathType Leaf)) { throw "PowerForge build script was not found: $buildScript" }
-        & $buildScript `
-          -ToolsOnly `
-          -Target PowerForge `
-          -Runtimes $env:TOOL_RUNTIME `
-          -Frameworks net10.0 `
-          -Flavors SingleContained `
-          -Configuration Release
-        if ($LASTEXITCODE -ne 0) { throw "PowerForge source build failed with exit code $LASTEXITCODE." }
+        $buildArguments = @(
+          '-NoLogo',
+          '-NoProfile',
+          '-File', $buildScript,
+          '-ToolsOnly',
+          '-Target', 'PowerForge',
+          '-Runtimes', $env:TOOL_RUNTIME,
+          '-Frameworks', 'net10.0',
+          '-Flavors', 'SingleContained',
+          '-Configuration', 'Release'
+        )
+        $maximumAttempts = 2
+        for ($attempt = 1; $attempt -le $maximumAttempts; $attempt++) {
+          & pwsh @buildArguments
+          $buildExitCode = $LASTEXITCODE
+          if ($buildExitCode -eq 0) { break }
+          if ($attempt -eq $maximumAttempts) {
+            throw "PowerForge source build failed after $attempt attempts with exit code $buildExitCode."
+          }
+          Write-Warning "PowerForge source build failed on attempt $attempt of $maximumAttempts with exit code $buildExitCode; retrying in 5 seconds."
+          Start-Sleep -Seconds 5
+        }
         $toolPath = Join-Path $sourceRoot "Artifacts/PowerForge/$($env:TOOL_RUNTIME)/net10.0/SingleContained/PowerForge"
         if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) { throw "PowerForge executable was not produced: $toolPath" }
         if (-not $IsWindows) { & chmod +x $toolPath }

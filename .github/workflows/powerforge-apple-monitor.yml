@@ -84,14 +84,50 @@ jobs:
           POWERFORGE_REF: ${{ inputs.powerforge_ref }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $repository = gh api repos/EvotecIT/PSPublishModule | ConvertFrom-Json -Depth 20
-          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string] $repository.default_branch)) {
+
+          function Invoke-GitHubApiJson {
+            param(
+              [Parameter(Mandatory)]
+              [string] $Endpoint,
+
+              [Parameter(Mandatory)]
+              [string] $Operation
+            )
+
+            $maximumAttempts = 3
+            for ($attempt = 1; $attempt -le $maximumAttempts; $attempt++) {
+              $response = @(& gh api $Endpoint 2>&1)
+              $exitCode = $LASTEXITCODE
+              $responseText = ($response | Out-String).Trim()
+              if ($exitCode -eq 0) {
+                try {
+                  return $responseText | ConvertFrom-Json -Depth 20
+                } catch {
+                  throw "$Operation returned invalid JSON."
+                }
+              }
+
+              $transient = $responseText -match '(?i)(HTTP\s+(?:429|5\d\d)|temporar(?:y|ily)|timed?\s*out|connection\s+(?:reset|closed)|service\s+unavailable|bad\s+gateway|gateway\s+timeout)'
+              if (-not $transient -or $attempt -eq $maximumAttempts) {
+                throw "$Operation failed after $attempt attempt(s). $responseText"
+              }
+
+              $delaySeconds = [int] [Math]::Pow(2, $attempt - 1)
+              Write-Warning "$Operation hit a transient GitHub API failure on attempt $attempt of $maximumAttempts; retrying in $delaySeconds second(s)."
+              Start-Sleep -Seconds $delaySeconds
+            }
+          }
+
+          $repository = Invoke-GitHubApiJson `
+            -Endpoint 'repos/EvotecIT/PSPublishModule' `
+            -Operation 'Resolving the PSPublishModule default branch'
+          if ([string]::IsNullOrWhiteSpace([string] $repository.default_branch)) {
             throw 'Unable to resolve the PSPublishModule default branch.'
           }
-          $comparison = gh api "repos/EvotecIT/PSPublishModule/compare/$($env:POWERFORGE_REF)...$($repository.default_branch)" |
-            ConvertFrom-Json -Depth 20
-          if ($LASTEXITCODE -ne 0 -or
-              [string] $comparison.merge_base_commit.sha -ine $env:POWERFORGE_REF) {
+          $comparison = Invoke-GitHubApiJson `
+            -Endpoint "repos/EvotecIT/PSPublishModule/compare/$($env:POWERFORGE_REF)...$($repository.default_branch)" `
+            -Operation 'Verifying the merged PowerForge monitor source'
+          if ([string] $comparison.merge_base_commit.sha -ine $env:POWERFORGE_REF) {
             throw 'powerforge_ref must be a commit already merged into the PSPublishModule default branch.'
           }
 
@@ -162,19 +198,25 @@ jobs:
           } else {
             @($env:STRUCTURED_DIAGNOSTICS | ConvertFrom-Json -Depth 20)
           }
-          # Doctor warnings remain available in the compact receipt, but only an
-          # execution failure or an error-level diagnostic should create a red
-          # proactive incident. Warning-only runs are advisory and recover any
-          # earlier monitor incident instead of keeping required CI red forever.
-          $unhealthy = $env:DOCTOR_OUTCOME -ne 'success' -or
-            @($structured | Where-Object { $_.severity -eq 'error' }).Count -gt 0
-          $healthyOutput = (!$unhealthy).ToString().ToLowerInvariant()
+          # Keep workflow health separate from incident actionability. A skipped
+          # Doctor, failed tool build, or retryable remote error stays visible as a
+          # red run but must not create or overwrite an Apple release incident.
+          $errorDiagnostics = @($structured | Where-Object { $_.severity -eq 'error' })
+          $actionableErrors = @($errorDiagnostics | Where-Object { -not [bool] $_.retryable })
+          $doctorCompleted = $env:DOCTOR_OUTCOME -in @('success', 'failure')
+          $workflowHealthy = $env:DOCTOR_OUTCOME -eq 'success' -and $errorDiagnostics.Count -eq 0
+          $needsIncident = $doctorCompleted -and $actionableErrors.Count -gt 0
+          $healthyOutput = $workflowHealthy.ToString().ToLowerInvariant()
           "healthy=$healthyOutput" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          if (-not $unhealthy) {
+          if ($workflowHealthy) {
             foreach ($openIssue in $issues) {
               gh issue close $openIssue.number --comment "Apple Doctor recovered on $env:RUN_URL."
               if ($LASTEXITCODE -ne 0) { throw "Unable to close recovered Apple incident #$($openIssue.number)." }
             }
+            exit 0
+          }
+          if (-not $needsIncident) {
+            Write-Warning 'Apple Doctor did not complete cleanly, but no non-retryable Apple diagnostic requires an incident. The failed run remains the operational signal.'
             exit 0
           }
 
@@ -185,16 +227,15 @@ jobs:
           if ($receiptDiagnostics.Count -eq 0) {
             $receiptDiagnostics = @($structured)
           }
-          $errorDiagnostics = @($receiptDiagnostics | Where-Object { $_.severity -eq 'error' })
-          $specificErrors = @($errorDiagnostics | Where-Object { $_.code -ne 'APPLE_UNKNOWN' })
+          $receiptErrors = @($receiptDiagnostics | Where-Object { $_.severity -eq 'error' })
+          $actionableReceiptErrors = @($receiptErrors | Where-Object { -not [bool] $_.retryable })
+          $specificErrors = @($actionableReceiptErrors | Where-Object { $_.code -ne 'APPLE_UNKNOWN' })
           $incidentDiagnostics = if ($specificErrors.Count -gt 0) {
             $specificErrors
-          } elseif ($errorDiagnostics.Count -gt 0) {
-            $errorDiagnostics
+          } elseif ($actionableReceiptErrors.Count -gt 0) {
+            $actionableReceiptErrors
           } else {
-            # An execution failure can precede structured classification. Keep
-            # whatever diagnostics exist, then fall back to the linked run.
-            $receiptDiagnostics
+            $actionableErrors
           }
           $stateDiagnostics = @($incidentDiagnostics | ForEach-Object {
             [ordered]@{
@@ -275,4 +316,4 @@ jobs:
       - name: Fail when Apple Doctor found a problem
         if: steps.incident.outputs.healthy != 'true'
         shell: pwsh
-        run: throw 'Apple Doctor failed; the proactive incident contains the actionable receipt.'
+        run: throw 'Apple Doctor execution failed or returned error diagnostics. Retryable failures remain in the run; non-retryable Apple failures are tracked in the proactive incident.'
