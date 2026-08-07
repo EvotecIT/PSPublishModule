@@ -77,9 +77,18 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.DoesNotContain("[string] $DotNet =", script, StringComparison.Ordinal);
 
         var captureWorkflow = Read(root, ".github", "workflows", "powerforge-apple-screenshot-capture.yml");
-        Assert.Contains("marketing_version:\n        description: Exact x.y.z", captureWorkflow, StringComparison.Ordinal);
-        Assert.Contains("marketing_version must use x.y.z", captureWorkflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("marketing_version must be blank", captureWorkflow, StringComparison.Ordinal);
+        var screenshotWorkflow = Read(root, ".github", "workflows", "powerforge-apple-screenshots.yml");
+        var approvalWorkflow = Read(root, ".github", "workflows", "powerforge-apple-screenshot-approve.yml");
+        foreach (var workflow in new[] { captureWorkflow, screenshotWorkflow, approvalWorkflow })
+        {
+            Assert.Contains("marketing_version:\n        description: Exact x.y or x.y.z", workflow, StringComparison.Ordinal);
+            Assert.Contains("marketing_version must use x.y or x.y.z", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("marketing_version must be blank", workflow, StringComparison.Ordinal);
+        }
+        Assert.Contains("'^\\d+\\.\\d+(?:\\.\\d+)?$'", captureWorkflow, StringComparison.Ordinal);
+        Assert.Contains("'^\\d+\\.\\d+(?:\\.\\d+)?$'", screenshotWorkflow, StringComparison.Ordinal);
+        Assert.Contains("^[0-9]+\\.[0-9]+(\\.[0-9]+)?$", approvalWorkflow, StringComparison.Ordinal);
+        Assert.Contains("'^\\d+\\.\\d+(?:\\.\\d+)?$'", approvalWorkflow, StringComparison.Ordinal);
     }
 
     [Fact]

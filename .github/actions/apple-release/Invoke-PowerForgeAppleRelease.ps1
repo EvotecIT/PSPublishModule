@@ -264,13 +264,6 @@ $runnerLocalCredentials = if ([string]::IsNullOrWhiteSpace($env:INPUT_RUNNER_LOC
 if ($planOnly -and $confirm) {
     throw 'A plan-only run must not carry mutation confirmation.'
 }
-if ($action -eq 'Version' -and [string]::IsNullOrWhiteSpace($env:INPUT_MARKETING_VERSION)) {
-    throw 'Version requires marketing-version.'
-}
-if ($action -eq 'Version' -and $env:INPUT_MARKETING_VERSION -notmatch '^\d+\.\d+\.\d+$') {
-    throw 'Version marketing-version must use x.y.z.'
-}
-
 $configPath = (Resolve-Path -LiteralPath $env:INPUT_CONFIG_PATH -ErrorAction Stop).Path
 $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -Depth 100
 $projectRootSetting = [string] $config.AppleApps.ProjectRoot

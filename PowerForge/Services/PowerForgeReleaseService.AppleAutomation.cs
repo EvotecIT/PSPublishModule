@@ -204,6 +204,12 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException("AppleApps.Automation.MinimumFreeSpaceGB cannot be negative.");
         if (automation.ArtifactRetentionDays < 0)
             throw new InvalidOperationException("AppleApps.Automation.ArtifactRetentionDays cannot be negative.");
+        if (!string.IsNullOrWhiteSpace(automation.MarketingVersionPattern))
+        {
+            AppleReleaseMarketingVersionResolver.ValidatePattern(
+                automation.MarketingVersionPattern!,
+                "AppleApps.Automation.MarketingVersionPattern");
+        }
     }
 
     private static void EnsurePathWithinProjectRoot(string projectRoot, string path, string settingName)

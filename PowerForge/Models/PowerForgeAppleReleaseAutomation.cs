@@ -71,6 +71,15 @@ internal sealed class PowerForgeAppleReleaseAutomationOptions
     /// <summary>Optional checked-in XcodeGen project.yml used as the authoritative version source.</summary>
     public string? VersionSourcePath { get; set; }
 
+    /// <summary>
+    /// Optional PSPublishModule X-pattern that resolves to a two- or three-part
+    /// Apple marketing version, such as 1.X or X.0.0.
+    /// Version reuses the highest compatible unreleased train and advances the
+    /// pattern only when every known compatible train is already occupied by a
+    /// non-editable App Store version.
+    /// </summary>
+    public string? MarketingVersionPattern { get; set; }
+
     /// <summary>Reuse an exact remote build instead of uploading the same version/build again.</summary>
     public bool Resume { get; set; } = true;
 
@@ -166,6 +175,10 @@ internal sealed class PowerForgeAppleVersionReceipt
 {
     public string? SourcePath { get; set; }
 
+    public string? RequestedMarketingVersion { get; set; }
+
+    public string? MarketingVersionPattern { get; set; }
+
     public string MarketingVersion { get; set; } = string.Empty;
 
     public string BuildNumber { get; set; } = string.Empty;
@@ -176,7 +189,21 @@ internal sealed class PowerForgeAppleVersionReceipt
 
     public long HighestRemoteBuildNumber { get; set; }
 
+    public string? HighestRemoteMarketingVersion { get; set; }
+
+    public bool ReusedUnreleasedMarketingVersion { get; set; }
+
     public bool Changed { get; set; }
+}
+
+/// <summary>
+/// Remote App Store and TestFlight version evidence for one configured target.
+/// </summary>
+internal sealed class PowerForgeAppleRemoteVersionInventory
+{
+    public AppStoreConnectVersionInfo[] AppStoreVersions { get; set; } = Array.Empty<AppStoreConnectVersionInfo>();
+
+    public AppStoreConnectBuildInfo[] Builds { get; set; } = Array.Empty<AppStoreConnectBuildInfo>();
 }
 
 /// <summary>

@@ -261,16 +261,44 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException($"Apple version source build number '{current.BuildNumber}' is not a non-negative integer.");
 
         var storeApps = plan.Apps.Where(UsesAppStoreConnect).ToArray();
+        var requested = plan.RequestedMarketingVersion!.Trim();
+        var isPattern = requested.IndexOf("X", StringComparison.OrdinalIgnoreCase) >= 0;
         var highestRemote = 0L;
+        AppleReleaseMarketingVersionResolution? resolution = null;
         if (storeApps.Length > 0)
         {
             var credential = CreateAppStoreConnectCredential(plan);
-            highestRemote = storeApps
-                .Select(app => _getHighestAppleBuildNumber(credential, app.AppStoreConnectAppId!, app.Platform))
-                .DefaultIfEmpty(0)
-                .Max();
+            if (isPattern)
+            {
+                var inventories = storeApps
+                    .Select(app => _getAppleVersionInventory(credential, app.AppStoreConnectAppId!, app.Platform))
+                    .ToArray();
+                highestRemote = GetHighestRemoteBuildNumber(
+                    inventories.SelectMany(static inventory => inventory.Builds));
+                resolution = AppleReleaseMarketingVersionResolver.Resolve(
+                    requested,
+                    current.MarketingVersion,
+                    inventories.SelectMany(static inventory => inventory.AppStoreVersions),
+                    inventories.SelectMany(static inventory => inventory.Builds));
+            }
+            else
+            {
+                highestRemote = storeApps
+                    .Select(app => _getHighestAppleBuildNumber(credential, app.AppStoreConnectAppId!, app.Platform))
+                    .DefaultIfEmpty(0)
+                    .Max();
+            }
         }
-        var requestedVersion = plan.RequestedMarketingVersion!.Trim();
+        else if (isPattern)
+        {
+            resolution = AppleReleaseMarketingVersionResolver.Resolve(
+                requested,
+                current.MarketingVersion,
+                Array.Empty<AppStoreConnectVersionInfo>(),
+                Array.Empty<AppStoreConnectBuildInfo>());
+        }
+
+        var requestedVersion = resolution?.MarketingVersion ?? requested;
         var nextBuild = string.Equals(current.MarketingVersion, requestedVersion, StringComparison.OrdinalIgnoreCase) &&
                         currentBuild > highestRemote
             ? currentBuild
@@ -281,6 +309,10 @@ internal sealed partial class PowerForgeReleaseService
             nextBuild.ToString(System.Globalization.CultureInfo.InvariantCulture),
             highestRemote,
             whatIf);
+        receipt.RequestedMarketingVersion = requested;
+        receipt.MarketingVersionPattern = resolution?.Pattern;
+        receipt.HighestRemoteMarketingVersion = resolution?.HighestRemoteMarketingVersion;
+        receipt.ReusedUnreleasedMarketingVersion = resolution?.ReusedUnreleasedMarketingVersion == true;
         receipt.SourcePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, plan.VersionSourcePath!).Replace('\\', '/');
         return receipt;
     }
@@ -291,11 +323,63 @@ internal sealed partial class PowerForgeReleaseService
         ApplePlatform platform)
     {
         using var client = new AppStoreConnectClient(credential);
-        return client.GetBuildsAsync(appId, limit: 200, platform: platform)
+        return GetHighestRemoteBuildNumber(GetAppleBuildInventory(client, appId, platform));
+    }
+
+    private static PowerForgeAppleRemoteVersionInventory GetAppleVersionInventory(
+        AppStoreConnectApiCredential credential,
+        string appId,
+        ApplePlatform platform)
+    {
+        using var client = new AppStoreConnectClient(credential);
+        var builds = GetAppleBuildInventory(client, appId, platform);
+        return new PowerForgeAppleRemoteVersionInventory
+        {
+            AppStoreVersions = client.GetVersionsAsync(appId, platform: platform, limit: 200)
+                .GetAwaiter()
+                .GetResult(),
+            Builds = builds
+        };
+    }
+
+    private static AppStoreConnectBuildInfo[] GetAppleBuildInventory(
+        AppStoreConnectClient client,
+        string appId,
+        ApplePlatform platform)
+    {
+        var expectedPlatform = AppStoreConnectClient.ToAppStoreConnectPlatform(platform);
+        var builds = client.GetBuildsWithPreReleaseVersionAsync(appId, limit: 200)
             .GetAwaiter()
-            .GetResult()
-            .Select(static build => long.TryParse(build.Version, out var number) ? number : 0)
-            .DefaultIfEmpty(0)
-            .Max();
+            .GetResult();
+        AppleReleaseMarketingVersionResolver.ValidateRemoteEvidence(
+            Array.Empty<AppStoreConnectVersionInfo>(),
+            builds);
+
+        return builds
+            .Where(build => string.Equals(build.Platform, expectedPlatform, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+    }
+
+    private static long GetHighestRemoteBuildNumber(IEnumerable<AppStoreConnectBuildInfo> builds)
+    {
+        var highest = 0L;
+        foreach (var build in builds)
+        {
+            if (string.IsNullOrWhiteSpace(build.Version) ||
+                !long.TryParse(
+                    build.Version,
+                    System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var number) ||
+                number < 0)
+            {
+                throw new InvalidOperationException(
+                    $"App Store Connect build number '{build.Version ?? "<missing>"}' is not a non-negative integer. Resolve the incompatible remote build before automatic version selection.");
+            }
+
+            highest = Math.Max(highest, number);
+        }
+
+        return highest;
     }
 }

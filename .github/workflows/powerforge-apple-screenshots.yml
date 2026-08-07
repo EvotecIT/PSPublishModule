@@ -35,7 +35,7 @@ on:
         required: true
         type: string
       marketing_version:
-        description: Exact x.y.z marketing version represented by the captures.
+        description: Exact x.y or x.y.z marketing version represented by the captures.
         required: true
         type: string
       approval_environment:
@@ -105,7 +105,7 @@ jobs:
           }
           if ($env:CAPTURE_SHELL -notin @('bash', 'pwsh')) { throw 'capture_shell must be bash or pwsh.' }
           if ($env:TOOL_RUNTIME -notin @('osx-arm64', 'osx-x64')) { throw 'tool_runtime must be osx-arm64 or osx-x64.' }
-          if ($env:MARKETING_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'marketing_version must use x.y.z.' }
+          if ($env:MARKETING_VERSION -notmatch '^\d+\.\d+(?:\.\d+)?$') { throw 'marketing_version must use x.y or x.y.z.' }
 
       - name: Checkout exact screenshot source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

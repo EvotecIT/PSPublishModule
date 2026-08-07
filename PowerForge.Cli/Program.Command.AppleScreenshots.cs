@@ -6,7 +6,7 @@ internal static partial class Program
 {
     private const string AppleScreenshotsUsage =
         "Usage: powerforge apple-screenshots manifest --config <screenshots.json> " +
-        "[--capture-provenance <json> --expected-repository <owner/repo> --expected-workflow-ref <workflow-ref> | --version <x.y.z> --source-commit <sha>] " +
+        "[--capture-provenance <json> --expected-repository <owner/repo> --expected-workflow-ref <workflow-ref> | --version <x.y|x.y.z> --source-commit <sha>] " +
         "--approved-by <identity> --allowed-root <reviewed-capture-root> [--out <manifest.json>] " +
         "[--write-root <trusted-output-root>] " +
         "[--app-id <asc-app-id> | --release-config <powerforge.release.json> [--target <name-or-scheme>]] " +

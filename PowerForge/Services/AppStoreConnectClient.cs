@@ -202,6 +202,27 @@ public sealed partial class AppStoreConnectClient : IDisposable
     }
 
     /// <summary>
+    /// Lists every build for an app while retaining its related pre-release
+    /// version and platform identity for release-train inventory.
+    /// </summary>
+    internal Task<AppStoreConnectBuildInfo[]> GetBuildsWithPreReleaseVersionAsync(
+        string appId,
+        int limit = 200,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(appId))
+            throw new ArgumentException("App id is required.", nameof(appId));
+
+        var query = new Dictionary<string, string?>
+        {
+            ["filter[app]"] = appId.Trim(),
+            ["limit"] = ClampLimit(limit).ToString(CultureInfo.InvariantCulture),
+            ["include"] = "preReleaseVersion"
+        };
+        return GetBuildArrayAsync("builds" + BuildQuery(query), marketingVersion: null, platform: null, cancellationToken);
+    }
+
+    /// <summary>
     /// Lists subscription groups for an app.
     /// </summary>
     public Task<AppStoreConnectSubscriptionGroupInfo[]> GetSubscriptionGroupsAsync(
@@ -1009,7 +1030,7 @@ public sealed partial class AppStoreConnectClient : IDisposable
         return parts.Length == 0 ? string.Empty : "?" + string.Join("&", parts);
     }
 
-    private static string ToAppStoreConnectPlatform(ApplePlatform platform)
+    internal static string ToAppStoreConnectPlatform(ApplePlatform platform)
         => platform switch
         {
             ApplePlatform.iOS => "IOS",

@@ -3,10 +3,11 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Theory]
-    [InlineData("1.6")]
+    [InlineData("1")]
+    [InlineData("1.6.0.0")]
     [InlineData("1.6.0-beta")]
     [InlineData("1.6.0\nCURRENT_PROJECT_VERSION: 999")]
-    public void Execute_AppleVersion_RejectsNonThreePartMarketingVersion(string marketingVersion)
+    public void Execute_AppleVersion_RejectsInvalidMarketingVersion(string marketingVersion)
     {
         var root = CreateSandbox();
         try
@@ -30,7 +31,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     PlanOnly = true
                 }));
 
-            Assert.Contains("must use x.y.z", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("must use x.y or x.y.z", exception.Message, StringComparison.Ordinal);
             var source = new AppleReleaseVersionSourceService().Read(Path.Combine(root, "project.yml"));
             Assert.Equal("1.5.0", source.MarketingVersion);
             Assert.Equal("13", source.BuildNumber);
@@ -99,6 +100,205 @@ public sealed partial class PowerForgeReleaseServiceTests
                 Assert.Equal("1.6.0", target.Version);
                 Assert.Equal("16", target.Build);
             });
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleVersion_UsesConfiguredPatternToAdvanceRepeatedTestFlightBuild()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.6", "16");
+            WriteXcodeGenVersionSource(root, "1.6", "16");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.VersionSourcePath = "project.yml";
+            spec.AppleApps.Automation.MarketingVersionPattern = "1.X";
+            spec.AppleApps.Apps = new[]
+            {
+                spec.AppleApps.Apps.Single(),
+                new AppleAppConfiguration
+                {
+                    Name = "CasaRay Mac",
+                    BundleId = "com.evotecit.casaray",
+                    Platform = ApplePlatform.macOS,
+                    ArchiveVariant = AppleArchiveVariant.MacCatalyst,
+                    ProjectPath = "CasaRay.xcodeproj",
+                    Scheme = "CasaRay",
+                    AppStoreConnectAppId = "6778025328"
+                }
+            };
+
+            var service = CreateAppleAutomationService(
+                _ => throw new InvalidOperationException("Version must not query release status."),
+                generateAppleProject: _ => true,
+                getHighestAppleBuildNumber: (_, _, _) => throw new InvalidOperationException("Pattern versioning must use the complete remote inventory."),
+                getAppleVersionInventory: (_, _, platform) => new PowerForgeAppleRemoteVersionInventory
+                {
+                    AppStoreVersions = new[]
+                    {
+                        new AppStoreConnectVersionInfo
+                        {
+                            VersionString = "1.5.0",
+                            AppStoreState = "READY_FOR_SALE",
+                            Platform = platform == ApplePlatform.iOS ? "IOS" : "MAC_OS"
+                        }
+                    },
+                    Builds = new[]
+                    {
+                        new AppStoreConnectBuildInfo
+                        {
+                            MarketingVersion = "1.6",
+                            Version = platform == ApplePlatform.iOS ? "16" : "15",
+                            Platform = platform == ApplePlatform.iOS ? "IOS" : "MAC_OS"
+                        }
+                    }
+                });
+
+            var result = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Version,
+                AppleActionConfirmed = true
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var versioning = Assert.IsType<PowerForgeAppleVersionReceipt>(result.AppleReceipt!.Versioning);
+            Assert.Equal("1.X", versioning.RequestedMarketingVersion);
+            Assert.Equal("1.X", versioning.MarketingVersionPattern);
+            Assert.Equal("1.6", versioning.MarketingVersion);
+            Assert.Equal("17", versioning.BuildNumber);
+            Assert.Equal("1.6", versioning.HighestRemoteMarketingVersion);
+            Assert.Equal(16, versioning.HighestRemoteBuildNumber);
+            Assert.True(versioning.ReusedUnreleasedMarketingVersion);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleVersion_ExplicitExactVersionOverridesConfiguredPattern()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.5.0", "13");
+            WriteXcodeGenVersionSource(root, "1.5.0", "13");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.VersionSourcePath = "project.yml";
+            spec.AppleApps.Automation.MarketingVersionPattern = "1.X.0";
+
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Version must not query release status."),
+                    generateAppleProject: _ => true,
+                    getHighestAppleBuildNumber: (_, _, _) => 13,
+                    getAppleVersionInventory: (_, _, _) => throw new InvalidOperationException("Exact override must not query pattern inventory."))
+                .Execute(spec, new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Version,
+                    AppleMarketingVersion = "2.0.0",
+                    AppleActionConfirmed = true
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("2.0.0", result.AppleReceipt!.Versioning!.MarketingVersion);
+            Assert.Equal("2.0.0", result.AppleReceipt.Versioning.RequestedMarketingVersion);
+            Assert.Null(result.AppleReceipt.Versioning.MarketingVersionPattern);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleVersion_RejectsTargetSelectionForSharedVersionIdentity()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.5.0", "13");
+            WriteXcodeGenVersionSource(root, "1.5.0", "13");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.VersionSourcePath = "project.yml";
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                CreateAppleAutomationService(
+                        _ => throw new InvalidOperationException("Version target validation must run before remote access."))
+                    .Execute(spec, new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Version,
+                        AppleMarketingVersion = "1.6.0",
+                        Targets = new[] { "CasaRay iOS" },
+                        PlanOnly = true
+                    }));
+
+            Assert.Contains("cannot be restricted with --target", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("1.2.3")]
+    [InlineData("-1")]
+    public void Execute_AppleVersion_FailsClosedForIncompatibleRemoteBuildNumber(string? remoteBuild)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.6.0", "16");
+            WriteXcodeGenVersionSource(root, "1.6.0", "16");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.VersionSourcePath = "project.yml";
+            spec.AppleApps.Automation.MarketingVersionPattern = "1.X.0";
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                CreateAppleAutomationService(
+                        _ => throw new InvalidOperationException("Version must not query release status."),
+                        getAppleVersionInventory: (_, _, _) => new PowerForgeAppleRemoteVersionInventory
+                        {
+                            Builds = new[]
+                            {
+                                new AppStoreConnectBuildInfo
+                                {
+                                    MarketingVersion = "1.6.0",
+                                    Version = remoteBuild,
+                                    Platform = "IOS"
+                                }
+                            }
+                        })
+                    .Execute(spec, new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Version,
+                        PlanOnly = true
+                    }));
+
+            Assert.Contains("incompatible remote build", exception.Message, StringComparison.OrdinalIgnoreCase);
+            var source = new AppleReleaseVersionSourceService().Read(Path.Combine(root, "project.yml"));
+            Assert.Equal("1.6.0", source.MarketingVersion);
+            Assert.Equal("16", source.BuildNumber);
         }
         finally
         {
