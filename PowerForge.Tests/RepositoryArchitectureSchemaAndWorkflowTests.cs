@@ -43,9 +43,35 @@ public sealed class RepositoryArchitectureSchemaAndWorkflowTests
             """)!;
         var invalid = valid.DeepClone();
         invalid["inventedArchitectureBrain"] = true;
+        var missingRequiredCapabilityMembers = JsonNode.Parse("""
+            {
+              "schemaVersion": 1,
+              "capabilities": [
+                {
+                  "id": "projection"
+                }
+              ]
+            }
+            """)!;
+        var emptyCapability = JsonNode.Parse("""
+            {
+              "schemaVersion": 1,
+              "capabilities": [
+                {
+                  "id": "projection",
+                  "ownerProjects": [],
+                  "ownerPaths": [],
+                  "consumerProjects": [],
+                  "evidence": []
+                }
+              ]
+            }
+            """)!;
 
         Assert.True(schema.Evaluate(valid, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
         Assert.False(schema.Evaluate(invalid, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
+        Assert.False(schema.Evaluate(missingRequiredCapabilityMembers, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
+        Assert.False(schema.Evaluate(emptyCapability, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
     }
 
     [Fact]

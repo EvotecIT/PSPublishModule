@@ -88,7 +88,7 @@ Capabilities that declare evidence must configure `workspaceValidationConfig`. E
 
 ## Commands
 
-Verify static boundaries and all declared evidence:
+Verify static boundaries and plan all declared evidence without executing it:
 
 ```powershell
 powerforge architecture verify --config .powerforge/architecture.json

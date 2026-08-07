@@ -72,6 +72,7 @@ public sealed class PowerForgeCliRepositoryArchitectureTests
                 "-m",
                 "baseline");
             File.Delete(Path.Combine(repositoryRoot, "Core", "RemovedCapability.cs"));
+            var summaryPath = Path.Combine(repositoryRoot, "architecture-summary.md");
 
             var result = await RunCliAsync(
                 repositoryRoot,
@@ -81,6 +82,8 @@ public sealed class PowerForgeCliRepositoryArchitectureTests
                 "--config",
                 architecturePath,
                 "--working-tree",
+                "--summary-markdown",
+                summaryPath,
                 "--output",
                 "json");
 
@@ -96,6 +99,10 @@ public sealed class PowerForgeCliRepositoryArchitectureTests
                 architecture.GetProperty("changedFiles").EnumerateArray(),
                 item => item.GetString() == "Core/RemovedCapability.cs");
             Assert.Equal("core-contract", architecture.GetProperty("requiredValidationStepIds")[0].GetString());
+            Assert.Contains(
+                "Required evidence was planned but not run.",
+                File.ReadAllText(summaryPath),
+                StringComparison.Ordinal);
         }
         finally
         {

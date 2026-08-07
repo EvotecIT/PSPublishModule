@@ -53,7 +53,7 @@
         "id": { "type": "string", "minLength": 1 },
         "description": { "type": "string" },
         "ownerProjects": { "$ref": "#/$defs/stringArray" },
-        "ownerPaths": { "$ref": "#/$defs/stringArray" },
+        "ownerPaths": { "$ref": "#/$defs/stringArray", "minItems": 1 },
         "consumerProjects": { "$ref": "#/$defs/stringArray" },
         "ignoredUsageProjects": { "$ref": "#/$defs/stringArray" },
         "usagePatterns": { "$ref": "#/$defs/stringArray" },
@@ -64,6 +64,7 @@
         "requiredEvidenceKinds": { "$ref": "#/$defs/stringArray" },
         "evidence": {
           "type": "array",
+          "minItems": 1,
           "items": { "$ref": "#/$defs/evidence" }
         }
       }

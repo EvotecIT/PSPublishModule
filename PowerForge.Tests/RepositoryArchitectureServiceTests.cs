@@ -293,7 +293,7 @@ public sealed class RepositoryArchitectureServiceTests
     }
 
     [Fact]
-    public void Load_RejectsUnknownMembersAndMissingSchemaVersionFailsVerification()
+    public void Load_RejectsUnknownAndMissingRequiredMembers()
     {
         var root = CreateRepository();
         try
@@ -313,11 +313,23 @@ public sealed class RepositoryArchitectureServiceTests
                   "repositoryRoot": "."
                 }
                 """);
-            var service = new RepositoryArchitectureService();
-            var spec = service.Load(path);
-            var report = service.Verify(spec, path);
+            Assert.Throws<JsonException>(() => new RepositoryArchitectureService().Load(path));
 
-            Assert.False(report.Succeeded);
+            File.WriteAllText(path, """
+                {
+                  "schemaVersion": 1,
+                  "capabilities": [
+                    {
+                      "id": "projection"
+                    }
+                  ]
+                }
+                """);
+            Assert.Throws<JsonException>(() => new RepositoryArchitectureService().Load(path));
+
+            var report = new RepositoryArchitectureService().Verify(
+                new RepositoryArchitectureSpec { SchemaVersion = 2, RepositoryRoot = "." },
+                path);
             Assert.Contains(report.Issues, issue => issue.Code == "ARC001");
         }
         finally

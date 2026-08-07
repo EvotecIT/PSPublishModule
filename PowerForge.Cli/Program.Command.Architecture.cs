@@ -272,7 +272,12 @@ internal static partial class Program
         var builder = new StringBuilder();
         builder.AppendLine("## Repository architecture");
         builder.AppendLine();
-        builder.AppendLine(result.Succeeded ? "Architecture policy and required evidence passed." : "Architecture policy or required evidence failed.");
+        builder.AppendLine(
+            !result.Succeeded
+                ? "Architecture policy or required evidence failed."
+                : result.Validation is null
+                    ? "Architecture policy passed. Required evidence was planned but not run."
+                    : "Architecture policy and required evidence passed.");
         builder.AppendLine();
         builder.AppendLine($"- Projects: {report.Projects.Length}");
         builder.AppendLine($"- Capabilities: {report.Capabilities.Length}");

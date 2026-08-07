@@ -60,6 +60,14 @@ public sealed partial class RepositoryArchitectureService
             }
 
             var ownerPaths = capability.OwnerPaths ?? Array.Empty<string>();
+            if (ownerPaths.Length == 0)
+            {
+                AddError(
+                    issues,
+                    "ARC206",
+                    $"Capability '{capabilityId}' must declare at least one owner path.",
+                    capabilityId: capabilityId);
+            }
             foreach (var ownerPath in ownerPaths)
             {
                 if (!EnumerateMatchingPaths(repositoryRoot, ownerPath).Any())
@@ -106,6 +114,14 @@ public sealed partial class RepositoryArchitectureService
             }
 
             var evidence = capability.Evidence ?? Array.Empty<RepositoryArchitectureEvidence>();
+            if (evidence.Length == 0)
+            {
+                AddError(
+                    issues,
+                    "ARC229",
+                    $"Capability '{capabilityId}' must declare at least one evidence item.",
+                    capabilityId: capabilityId);
+            }
             VerifyEvidence(
                 capability,
                 capabilityId,
