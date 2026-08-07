@@ -8,7 +8,7 @@ public sealed partial class AppStoreConnectClient
 {
     internal static readonly TimeSpan DefaultOwnedClientTimeout = TimeSpan.FromMinutes(10);
 
-    private const int MaximumReadAttempts = 3;
+    private const int MaximumReadAttempts = 5;
 
     internal TimeSpan RequestTimeout => _httpClient.Timeout;
 
@@ -59,7 +59,7 @@ public sealed partial class AppStoreConnectClient
 
     private static TimeSpan? ResolveTransientReadDelay(RetryConditionHeaderValue? retryAfter, int attempt)
     {
-        var fallback = TimeSpan.FromSeconds(attempt);
+        var fallback = TimeSpan.FromSeconds(Math.Pow(2, attempt - 1));
         if (retryAfter is null)
             return fallback;
 

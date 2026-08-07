@@ -306,6 +306,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("may run only from the caller repository default branch", workflow, StringComparison.Ordinal);
         Assert.Contains("powerforge_ref must be a commit already merged", workflow, StringComparison.Ordinal);
         Assert.Contains("merge_base_commit.sha", workflow, StringComparison.Ordinal);
+        Assert.Contains("Invoke-GitHubApiJson", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("environment:", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("APP_STORE_CONNECT_", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("caller_app_store_connect_", workflow, StringComparison.Ordinal);
@@ -328,8 +329,9 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.DoesNotContain("Select-Object -First 10", workflow, StringComparison.Ordinal);
         Assert.Contains("$maxDiagnosticEntryLength = 4000", workflow, StringComparison.Ordinal);
         Assert.Contains("$maxRenderedDiagnosticCharacters = 48000", workflow, StringComparison.Ordinal);
-        Assert.Contains("$errorDiagnostics = @($receiptDiagnostics | Where-Object { $_.severity -eq 'error' })", workflow, StringComparison.Ordinal);
-        Assert.Contains("$specificErrors = @($errorDiagnostics | Where-Object { $_.code -ne 'APPLE_UNKNOWN' })", workflow, StringComparison.Ordinal);
+        Assert.Contains("$actionableErrors = @($errorDiagnostics | Where-Object { -not [bool] $_.retryable })", workflow, StringComparison.Ordinal);
+        Assert.Contains("$receiptErrors = @($receiptDiagnostics | Where-Object { $_.severity -eq 'error' })", workflow, StringComparison.Ordinal);
+        Assert.Contains("$specificErrors = @($actionableReceiptErrors | Where-Object { $_.code -ne 'APPLE_UNKNOWN' })", workflow, StringComparison.Ordinal);
         Assert.Contains("foreach ($diagnostic in $incidentDiagnostics)", workflow, StringComparison.Ordinal);
         Assert.Contains("$omittedDiagnosticCount additional diagnostics omitted", workflow, StringComparison.Ordinal);
         Assert.Contains("Diagnostic state: ``$stateHash``", workflow, StringComparison.Ordinal);
@@ -518,7 +520,7 @@ public sealed partial class AppleReleaseWorkflowTests
 
         Assert.Contains("actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7", action, StringComparison.Ordinal);
         Assert.Contains("Build/Build-Project.ps1", action, StringComparison.Ordinal);
-        Assert.Contains("-Target PowerForge", action, StringComparison.Ordinal);
+        Assert.Contains("'-Target', 'PowerForge'", action, StringComparison.Ordinal);
         Assert.Contains("runtime must be osx-arm64 or osx-x64", action, StringComparison.Ordinal);
         Assert.Contains("tool-path=$toolPath", action, StringComparison.Ordinal);
     }

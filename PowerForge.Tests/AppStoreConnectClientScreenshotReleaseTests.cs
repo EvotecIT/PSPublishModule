@@ -126,7 +126,9 @@ public sealed partial class AppStoreConnectClientTests
         var handler = new SequenceHandler(
             new SequenceResponse(HttpStatusCode.InternalServerError, """{ "errors": [{ "code": "UNEXPECTED_ERROR" }] }"""),
             new SequenceResponse(HttpStatusCode.BadGateway, """{ "errors": [{ "code": "UPSTREAM_ERROR" }] }"""),
-            new SequenceResponse(HttpStatusCode.ServiceUnavailable, """{ "errors": [{ "code": "UNAVAILABLE" }] }"""));
+            new SequenceResponse(HttpStatusCode.ServiceUnavailable, """{ "errors": [{ "code": "UNAVAILABLE" }] }"""),
+            new SequenceResponse(HttpStatusCode.InternalServerError, """{ "errors": [{ "code": "UNEXPECTED_ERROR" }] }"""),
+            new SequenceResponse(HttpStatusCode.GatewayTimeout, """{ "errors": [{ "code": "TIMEOUT" }] }"""));
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);
         var delays = new List<TimeSpan>();
@@ -139,9 +141,17 @@ public sealed partial class AppStoreConnectClientTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => client.GetVersionsAsync("app-1", "1.4.0", ApplePlatform.iOS));
 
-        Assert.Contains("503 Service Unavailable", exception.Message, StringComparison.Ordinal);
-        Assert.Equal(3, handler.RequestUris.Count);
-        Assert.Equal(new[] { TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2) }, delays);
+        Assert.Contains("504 Gateway Timeout", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(5, handler.RequestUris.Count);
+        Assert.Equal(
+            new[]
+            {
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(2),
+                TimeSpan.FromSeconds(4),
+                TimeSpan.FromSeconds(8)
+            },
+            delays);
     }
 
     [Fact]
