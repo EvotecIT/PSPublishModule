@@ -36,7 +36,7 @@ public sealed partial class RepositoryArchitectureService
                     .Where(element => element.Name.LocalName == "ProjectReference")
                     .Select(element => (string?)element.Attribute("Include"))
                     .Where(include => !string.IsNullOrWhiteSpace(include))
-                    .Select(include => Path.GetFullPath(Path.Combine(projectDirectory, include!)))
+                    .Select(include => Path.GetFullPath(Path.Combine(projectDirectory, ToPlatformPath(include))))
                     .Select(path =>
                     {
                         EnsureInsideRoot(repositoryRoot, path, path);

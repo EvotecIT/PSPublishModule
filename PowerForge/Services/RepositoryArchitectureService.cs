@@ -18,7 +18,7 @@ public sealed partial class RepositoryArchitectureService
         if (string.IsNullOrWhiteSpace(configPath))
             throw new ArgumentException("Architecture config path is required.", nameof(configPath));
 
-        var fullPath = Path.GetFullPath(configPath);
+        var fullPath = Path.GetFullPath(ToPlatformPath(configPath));
         if (!File.Exists(fullPath))
             throw new FileNotFoundException("Architecture config was not found.", fullPath);
 
@@ -81,7 +81,7 @@ public sealed partial class RepositoryArchitectureService
         {
             Succeeded = issues.All(issue => issue.Severity != RepositoryArchitectureIssueSeverity.Error),
             RepositoryRoot = repositoryRoot,
-            ConfigPath = string.IsNullOrWhiteSpace(configPath) ? null : Path.GetFullPath(configPath),
+            ConfigPath = string.IsNullOrWhiteSpace(configPath) ? null : Path.GetFullPath(ToPlatformPath(configPath)),
             ChangedFiles = normalizedChangedFiles,
             Projects = projectReports,
             Capabilities = capabilityReports,
@@ -112,10 +112,10 @@ public sealed partial class RepositoryArchitectureService
     {
         var configDirectory = string.IsNullOrWhiteSpace(configPath)
             ? Directory.GetCurrentDirectory()
-            : Path.GetDirectoryName(Path.GetFullPath(configPath!)) ?? Directory.GetCurrentDirectory();
+            : Path.GetDirectoryName(Path.GetFullPath(ToPlatformPath(configPath))) ?? Directory.GetCurrentDirectory();
         var candidate = string.IsNullOrWhiteSpace(spec.RepositoryRoot)
             ? configDirectory
-            : Path.Combine(configDirectory, spec.RepositoryRoot!);
+            : Path.Combine(configDirectory, ToPlatformPath(spec.RepositoryRoot));
         var root = Path.GetFullPath(candidate);
 
         if (!Directory.Exists(root))

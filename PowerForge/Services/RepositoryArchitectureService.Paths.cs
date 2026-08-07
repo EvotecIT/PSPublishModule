@@ -17,9 +17,10 @@ public sealed partial class RepositoryArchitectureService
 
             try
             {
-                var candidate = Path.IsPathRooted(path)
-                    ? Path.GetFullPath(path)
-                    : Path.GetFullPath(Path.Combine(repositoryRoot, path));
+                var platformPath = ToPlatformPath(path);
+                var candidate = Path.IsPathRooted(platformPath)
+                    ? Path.GetFullPath(platformPath)
+                    : Path.GetFullPath(Path.Combine(repositoryRoot, platformPath));
                 EnsureInsideRoot(repositoryRoot, candidate, path);
                 normalized.Add(ToRelativePath(repositoryRoot, candidate));
             }
@@ -34,7 +35,7 @@ public sealed partial class RepositoryArchitectureService
 
     private static string ResolveRepositoryPath(string repositoryRoot, string relativePath)
     {
-        var fullPath = Path.GetFullPath(Path.Combine(repositoryRoot, relativePath));
+        var fullPath = Path.GetFullPath(Path.Combine(repositoryRoot, ToPlatformPath(relativePath)));
         EnsureInsideRoot(repositoryRoot, fullPath, relativePath);
         return fullPath;
     }
@@ -43,10 +44,13 @@ public sealed partial class RepositoryArchitectureService
     {
         var rootWithSeparator = EnsureTrailingSeparator(Path.GetFullPath(repositoryRoot));
         var candidate = Path.GetFullPath(fullPath);
-        if (!candidate.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase)
+        var comparison = Path.DirectorySeparatorChar == '\\'
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (!candidate.StartsWith(rootWithSeparator, comparison)
             && !string.Equals(candidate.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
                 repositoryRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                StringComparison.OrdinalIgnoreCase))
+                comparison))
         {
             throw new InvalidOperationException($"Architecture path escapes the repository root: {suppliedPath}");
         }
@@ -73,6 +77,12 @@ public sealed partial class RepositoryArchitectureService
             normalized = normalized.Substring(2);
         return normalized.TrimStart('/');
     }
+
+    private static string ToPlatformPath(string? path)
+        => (path ?? string.Empty)
+            .Trim()
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
 
     private static string[] NormalizeDistinct(IEnumerable<string>? paths)
         => (paths ?? Array.Empty<string>())

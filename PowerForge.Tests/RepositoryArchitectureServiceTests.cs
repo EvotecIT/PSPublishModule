@@ -199,6 +199,50 @@ public sealed class RepositoryArchitectureServiceTests
     }
 
     [Fact]
+    public void Verify_NormalizesWindowsStyleRepositoryPathsOnEveryPlatform()
+    {
+        var root = CreateRepository();
+        try
+        {
+            WriteProject(root, "Owner/Owner.csproj");
+            WriteProject(root, "Consumer/Consumer.csproj", "..\\Owner\\Owner.csproj");
+            WriteFile(root, "Owner/Projection.cs", "public static class Projection { public static void ProjectRows() { } }");
+            WriteFile(root, "Consumer/Use.cs", "public static class Use { public static void Run() => Projection.ProjectRows(); }");
+            WriteFile(root, "Evidence.Tests/ProjectionTests.cs", "public sealed class ProjectionTests { }");
+            WriteWorkspaceValidation(root, "core-contract", "consumer-artifact", "native-aot");
+
+            var spec = CreateSpec();
+            spec.RepositoryRoot = "..\\";
+            spec.WorkspaceValidationConfig = ".powerforge\\workspace.validation.json";
+            spec.ProjectRules[0].Project = "Consumer\\Consumer.csproj";
+            spec.ProjectRules[0].AllowedProjectReferences = ["Owner\\Owner.csproj"];
+            spec.Capabilities[0].OwnerProjects = ["Owner\\Owner.csproj"];
+            spec.Capabilities[0].OwnerPaths = ["Owner\\Projection*.cs"];
+            spec.Capabilities[0].ConsumerProjects = ["Consumer\\Consumer.csproj"];
+            foreach (var evidence in spec.Capabilities[0].Evidence)
+            {
+                evidence.Path = evidence.Path!.Replace('/', '\\');
+                evidence.CoversProjects = evidence.CoversProjects
+                    .Select(path => path.Replace('/', '\\'))
+                    .ToArray();
+            }
+
+            var report = new RepositoryArchitectureService().Verify(
+                spec,
+                Path.Combine(root, ".powerforge", "architecture.json"),
+                ["Owner\\Projection.cs"]);
+
+            Assert.True(report.Succeeded, string.Join(Environment.NewLine, report.Issues.Select(issue => issue.Message)));
+            Assert.Equal(["Owner/Owner.csproj"], report.Projects.Single(project => project.Path == "Consumer/Consumer.csproj").ProjectReferences);
+            Assert.Equal(["Owner/Projection.cs"], report.ChangedFiles);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Verify_AcceptsActiveBaseIdForMatrixEvidence()
     {
         var root = CreateRepository();
