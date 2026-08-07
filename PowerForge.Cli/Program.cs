@@ -88,6 +88,8 @@ internal static partial class Program
             return CommandRun(filteredArgs, cli, logger);
         case "workspace":
             return CommandWorkspace(filteredArgs, cli, logger);
+        case "architecture":
+            return CommandArchitecture(filteredArgs, cli, logger);
         case "github":
             return CommandGitHub(filteredArgs, cli, logger);
         case "homeassistant":

@@ -40,7 +40,14 @@ public sealed class WorkspaceValidationService
         var profile = ResolveProfile(spec, request.ProfileName);
         var activeFeatures = ResolveFeatures(spec, profile, request);
         var variables = BuildVariables(spec, projectRoot, profile, request);
-        var steps = ExpandSteps(spec, projectRoot, profile, activeFeatures, variables);
+        var steps = ExpandSteps(
+            spec,
+            projectRoot,
+            profile,
+            activeFeatures,
+            variables,
+            request.IncludedStepIds,
+            request.RestrictToIncludedStepIds);
 
         return new WorkspaceValidationPlan
         {
@@ -77,6 +84,16 @@ public sealed class WorkspaceValidationService
 
             if (string.IsNullOrWhiteSpace(step.Executable))
                 errors.Add($"Workspace validation step '{step.Id}' resolved to an empty executable.");
+        }
+
+        foreach (var requestedStepId in request.IncludedStepIds ?? Array.Empty<string>())
+        {
+            if (!plan.Steps.Any(step =>
+                    string.Equals(step.Id, requestedStepId, StringComparison.OrdinalIgnoreCase)
+                    || step.Id.StartsWith(requestedStepId + ":", StringComparison.OrdinalIgnoreCase)))
+            {
+                errors.Add($"Requested workspace validation step '{requestedStepId}' is not active in profile '{plan.ProfileName}'.");
+            }
         }
 
         return errors.ToArray();
@@ -338,11 +355,16 @@ public sealed class WorkspaceValidationService
         string projectRoot,
         WorkspaceValidationProfile profile,
         HashSet<string> activeFeatures,
-        Dictionary<string, string?> variables)
+        Dictionary<string, string?> variables,
+        IReadOnlyCollection<string>? includedStepIds,
+        bool restrictToIncludedStepIds)
     {
         var prepared = new List<WorkspaceValidationPreparedStep>();
+        var included = new HashSet<string>(includedStepIds ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         foreach (var step in spec.Steps ?? Array.Empty<WorkspaceValidationStep>())
         {
+            if (restrictToIncludedStepIds && !included.Contains(step.Id))
+                continue;
             if (!IsStepIncluded(step, profile, activeFeatures))
                 continue;
 

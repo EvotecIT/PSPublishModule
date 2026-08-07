@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "projectRoot": "..",
+  "profiles": [
+    {
+      "name": "architecture",
+      "description": "Focused repository architecture engine, CLI, schema, and reusable-workflow contracts."
+    }
+  ],
+  "steps": [
+    {
+      "id": "repository-architecture-contracts",
+      "name": "Repository architecture contracts",
+      "kind": "DotNet",
+      "profiles": [
+        "architecture"
+      ],
+      "arguments": [
+        "test",
+        "PowerForge.Tests/PowerForge.Tests.csproj",
+        "--configuration",
+        "{configuration}",
+        "--framework",
+        "net10.0",
+        "--filter",
+        "FullyQualifiedName~RepositoryArchitecture|FullyQualifiedName~WorkspaceValidationServiceTests"
+      ],
+      "failureContext": "The shared repository architecture contract failed.",
+      "failureHint": "Fix the PowerForge owner, CLI surface, policy schema, or workflow contract instead of adding a second repository-local analyzer."
+    }
+  ]
+}

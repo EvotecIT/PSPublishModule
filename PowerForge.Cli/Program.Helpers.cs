@@ -52,6 +52,7 @@ internal static partial class Program
       powerforge run [--config <run.profiles.json>] [--list] [--target <Name>] [--configuration <Release|Debug>] [--framework <tfm>] [--no-build] [--no-restore]
                      [--allow-root <path[,path...]>] [--include-private-tool-packs] [--testimox-root <path>] [--extra-arg <value>] [--output json]
       powerforge workspace validate [--config <workspace.validation.json>] [--list] [--profile <name>] [--configuration <Release|Debug>] [--enable-feature <name[,name...]>] [--disable-feature <name[,name...]>]
+      powerforge architecture verify [--config <architecture.json>] [--base <git-ref>] [--head <git-ref>] [--working-tree] [--run-evidence] [--output json]
                                    [--testimox-root <path>] [--variable <name=value>] [--plan] [--validate] [--output json]
       powerforge normalize <files...>   Normalize encodings and line endings [--output json]
       powerforge format <files...>      Format scripts via PSScriptAnalyzer (out-of-proc) [--output json]

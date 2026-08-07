@@ -1,0 +1,109 @@
+name: Verify repository architecture
+description: Build pinned PowerForge source and verify one caller repository architecture policy.
+
+inputs:
+  source-root:
+    description: Absolute path to the exact PSPublishModule checkout.
+    required: true
+  repository-root:
+    description: Absolute path to the caller repository checkout.
+    required: true
+  config-path:
+    description: Architecture config path relative to the caller repository.
+    required: false
+    default: .powerforge/architecture.json
+  base-ref:
+    description: Optional Git base ref for impact selection.
+    required: false
+    default: ""
+  head-ref:
+    description: Optional Git head ref for impact selection.
+    required: false
+    default: ""
+  working-tree:
+    description: Include tracked and untracked working-tree changes.
+    required: false
+    default: "false"
+  run-evidence:
+    description: Run required workspace validation evidence.
+    required: false
+    default: "true"
+  report-json:
+    description: JSON report path relative to the caller repository.
+    required: false
+    default: .powerforge/_reports/architecture.json
+  summary-markdown:
+    description: Markdown summary path relative to the caller repository.
+    required: false
+    default: .powerforge/_reports/architecture.md
+
+outputs:
+  report-json:
+    description: Absolute JSON report path.
+    value: ${{ steps.verify.outputs.report-json }}
+  summary-markdown:
+    description: Absolute Markdown summary path.
+    value: ${{ steps.verify.outputs.summary-markdown }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup .NET 10
+      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Verify architecture and evidence
+      id: verify
+      shell: pwsh
+      env:
+        POWERFORGE_SOURCE_ROOT: ${{ inputs.source-root }}
+        CALLER_REPOSITORY_ROOT: ${{ inputs.repository-root }}
+        ARCHITECTURE_CONFIG_PATH: ${{ inputs.config-path }}
+        ARCHITECTURE_BASE_REF: ${{ inputs.base-ref }}
+        ARCHITECTURE_HEAD_REF: ${{ inputs.head-ref }}
+        ARCHITECTURE_WORKING_TREE: ${{ inputs.working-tree }}
+        ARCHITECTURE_RUN_EVIDENCE: ${{ inputs.run-evidence }}
+        ARCHITECTURE_REPORT_JSON: ${{ inputs.report-json }}
+        ARCHITECTURE_SUMMARY_MARKDOWN: ${{ inputs.summary-markdown }}
+        MSBUILDDISABLENODEREUSE: "1"
+      run: |
+        $sourceRoot = [IO.Path]::GetFullPath($env:POWERFORGE_SOURCE_ROOT)
+        $repositoryRoot = [IO.Path]::GetFullPath($env:CALLER_REPOSITORY_ROOT)
+        $cliProject = Join-Path $sourceRoot 'PowerForge.Cli/PowerForge.Cli.csproj'
+        if (-not (Test-Path -LiteralPath $cliProject -PathType Leaf)) { throw "PowerForge CLI project was not found: $cliProject" }
+        if (-not (Test-Path -LiteralPath $repositoryRoot -PathType Container)) { throw "Caller repository root was not found: $repositoryRoot" }
+
+        $configPath = [IO.Path]::GetFullPath((Join-Path $repositoryRoot $env:ARCHITECTURE_CONFIG_PATH))
+        $reportPath = [IO.Path]::GetFullPath((Join-Path $repositoryRoot $env:ARCHITECTURE_REPORT_JSON))
+        $summaryPath = [IO.Path]::GetFullPath((Join-Path $repositoryRoot $env:ARCHITECTURE_SUMMARY_MARKDOWN))
+        $arguments = @(
+          'run',
+          '--project', $cliProject,
+          '--configuration', 'Release',
+          '--framework', 'net10.0',
+          '--',
+          'architecture', 'verify',
+          '--config', $configPath,
+          '--report-json', $reportPath,
+          '--summary-markdown', $summaryPath
+        )
+        if (-not [string]::IsNullOrWhiteSpace($env:ARCHITECTURE_BASE_REF)) { $arguments += @('--base', $env:ARCHITECTURE_BASE_REF) }
+        if (-not [string]::IsNullOrWhiteSpace($env:ARCHITECTURE_HEAD_REF)) { $arguments += @('--head', $env:ARCHITECTURE_HEAD_REF) }
+        if ($env:ARCHITECTURE_WORKING_TREE -eq 'true') { $arguments += '--working-tree' }
+        if ($env:ARCHITECTURE_RUN_EVIDENCE -eq 'true') { $arguments += '--run-evidence' }
+
+        "report-json=$reportPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "summary-markdown=$summaryPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+        Push-Location $repositoryRoot
+        try {
+          & dotnet @arguments
+          if ($LASTEXITCODE -ne 0) { throw "PowerForge architecture verification failed with exit code $LASTEXITCODE." }
+        } finally {
+          Pop-Location
+        }
+
+        if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
+          Get-Content -LiteralPath $summaryPath -Raw | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+        }

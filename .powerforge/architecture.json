@@ -1,0 +1,88 @@
+{
+  "$schema": "../Schemas/powerforge.repository-architecture.schema.json",
+  "schemaVersion": 1,
+  "repositoryRoot": "..",
+  "workspaceValidationConfig": ".powerforge/workspace.validation.json",
+  "workspaceValidationProfile": "architecture",
+  "globalImpactPaths": [
+    "Directory.Build.*",
+    "Directory.Packages.props"
+  ],
+  "projectRules": [
+    {
+      "id": "powerforge-cli-layer",
+      "project": "PowerForge.Cli/PowerForge.Cli.csproj",
+      "allowedProjectReferences": [
+        "PowerForge.PowerShell/PowerForge.PowerShell.csproj",
+        "PowerForge/PowerForge.csproj"
+      ],
+      "requiredProjectReferences": [
+        "PowerForge.PowerShell/PowerForge.PowerShell.csproj",
+        "PowerForge/PowerForge.csproj"
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "repository-architecture-policy",
+      "description": "PowerForge owns repository graph, ownership, impact, and evidence selection; the CLI and reusable workflow remain thin surfaces.",
+      "ownerProjects": [
+        "PowerForge/PowerForge.csproj"
+      ],
+      "ownerPaths": [
+        "PowerForge/Models/RepositoryArchitecture/*.cs",
+        "PowerForge/Services/RepositoryArchitectureService*.cs",
+        "Schemas/powerforge.repository-architecture.schema.json",
+        ".github/actions/repository-architecture/action.yml",
+        ".github/workflows/powerforge-repository-architecture.yml",
+        ".github/workflows/repository-architecture.yml"
+      ],
+      "consumerProjects": [
+        "PowerForge.Cli/PowerForge.Cli.csproj"
+      ],
+      "usagePatterns": [
+        "RepositoryArchitectureService"
+      ],
+      "usagePathExcludes": [
+        "**/bin/**",
+        "**/obj/**",
+        "**/.powerforge/**"
+      ],
+      "requiredEvidenceKinds": [
+        "contract",
+        "integration",
+        "workflow"
+      ],
+      "evidence": [
+        {
+          "id": "architecture-contracts",
+          "kind": "contract",
+          "stepId": "repository-architecture-contracts",
+          "path": "PowerForge.Tests/RepositoryArchitectureServiceTests.cs",
+          "coversProjects": [
+            "PowerForge/PowerForge.csproj"
+          ]
+        },
+        {
+          "id": "architecture-cli",
+          "kind": "integration",
+          "stepId": "repository-architecture-contracts",
+          "path": "PowerForge.Tests/PowerForgeCliRepositoryArchitectureTests.cs",
+          "coversProjects": [
+            "PowerForge.Cli/PowerForge.Cli.csproj"
+          ]
+        },
+        {
+          "id": "architecture-workflow",
+          "kind": "workflow",
+          "stepId": "repository-architecture-contracts",
+          "path": "PowerForge.Tests/RepositoryArchitectureSchemaAndWorkflowTests.cs",
+          "coversProjects": [
+            "PowerForge/PowerForge.csproj",
+            "PowerForge.Cli/PowerForge.Cli.csproj"
+          ]
+        }
+      ]
+    }
+  ]
+}

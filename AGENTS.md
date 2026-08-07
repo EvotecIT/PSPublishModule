@@ -104,6 +104,7 @@ need per-user global skill installs.
 - Prefer stable theme helpers over ad-hoc rendering:
   - Scriban: use `pf.nav_links` / `pf.nav_actions` / `pf.menu_tree` (avoid `navigation.menus[0]`).
 - Commit frequently. Avoid "big bang" diffs that mix unrelated changes.
+- When a repository contains `.powerforge/architecture.json`, run `powerforge architecture verify` before implementation to discover owners and impacted consumers, then run it against the completed diff with required evidence. Keep policy declarative; improve the shared PowerForge engine instead of adding repository-local graph or impact scripts.
 
 ## Module Layering
 

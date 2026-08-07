@@ -78,6 +78,116 @@ public sealed class WorkspaceValidationServiceTests
     }
 
     [Fact]
+    public void Plan_IncludedStepIds_SelectsOneSharedValidationBrain()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var spec = new WorkspaceValidationSpec
+            {
+                ProjectRoot = root,
+                Steps =
+                [
+                    new WorkspaceValidationStep { Id = "owner-contract", Arguments = ["test", "Owner.Tests"] },
+                    new WorkspaceValidationStep { Id = "consumer-artifact", Arguments = ["test", "Consumer.Tests"] },
+                    new WorkspaceValidationStep { Id = "native-aot", Arguments = ["run", "AotSmoke"] }
+                ]
+            };
+            var request = new WorkspaceValidationRequest
+            {
+                IncludedStepIds = ["consumer-artifact"],
+                RestrictToIncludedStepIds = true
+            };
+            var service = new WorkspaceValidationService();
+
+            var plan = service.Plan(spec, Path.Combine(root, "workspace.validation.json"), request);
+            var errors = service.Validate(spec, Path.Combine(root, "workspace.validation.json"), request);
+
+            Assert.Empty(errors);
+            var step = Assert.Single(plan.Steps);
+            Assert.Equal("consumer-artifact", step.Id);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_RestrictedEmptyStepSelectionRunsNoUnrelatedEvidence()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var spec = new WorkspaceValidationSpec
+            {
+                ProjectRoot = root,
+                Steps =
+                [
+                    new WorkspaceValidationStep { Id = "owner-contract", Arguments = ["test", "Owner.Tests"] },
+                    new WorkspaceValidationStep { Id = "consumer-artifact", Arguments = ["test", "Consumer.Tests"] }
+                ]
+            };
+            var request = new WorkspaceValidationRequest
+            {
+                IncludedStepIds = [],
+                RestrictToIncludedStepIds = true
+            };
+
+            var plan = new WorkspaceValidationService().Plan(
+                spec,
+                Path.Combine(root, "workspace.validation.json"),
+                request);
+
+            Assert.Empty(plan.Steps);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Validate_IncludedStepIds_RejectsUnknownOrInactiveEvidenceStep()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var spec = new WorkspaceValidationSpec
+            {
+                ProjectRoot = root,
+                Profiles = [new WorkspaceValidationProfile { Name = "architecture" }],
+                Steps =
+                [
+                    new WorkspaceValidationStep
+                    {
+                        Id = "other-profile-step",
+                        Profiles = ["other"],
+                        Arguments = ["--info"]
+                    }
+                ]
+            };
+            var errors = new WorkspaceValidationService().Validate(
+                spec,
+                Path.Combine(root, "workspace.validation.json"),
+                new WorkspaceValidationRequest
+                {
+                    ProfileName = "architecture",
+                    IncludedStepIds = ["missing-step", "other-profile-step"],
+                    RestrictToIncludedStepIds = true
+                });
+
+            Assert.Equal(2, errors.Length);
+            Assert.Contains(errors, error => error.Contains("missing-step", StringComparison.Ordinal));
+            Assert.Contains(errors, error => error.Contains("other-profile-step", StringComparison.Ordinal));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public async Task RunAsync_MissingOptionalRequiredPath_SkipsStep()
     {
         var root = CreateTempRoot();
