@@ -285,6 +285,7 @@
         "RequiredEmbeddedBundleIds": { "type": "array", "items": { "type": "string" } },
         "ProjectPath": { "type": "string", "minLength": 1 },
         "Scheme": { "type": ["string", "null"] },
+        "ProductName": { "type": ["string", "null"] },
         "AppStoreConnectAppId": { "type": ["string", "null"] },
         "MarketingVersion": { "type": ["string", "null"] },
         "UseResolvedVersion": { "type": "boolean" },

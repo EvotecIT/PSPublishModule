@@ -76,6 +76,8 @@ internal static partial class Program
             return CommandRelease(filteredArgs, cli, logger);
         case "apple-release":
             return CommandAppleRelease(filteredArgs, cli, logger);
+        case "apple-deploy":
+            return CommandAppleDeploy(filteredArgs, cli, logger);
         case "apple-screenshots":
             return CommandAppleScreenshots(filteredArgs, cli, logger);
         case "apple-governance":

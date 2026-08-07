@@ -363,6 +363,41 @@
         "UploadSymbols": { "type": "boolean" },
         "GenerateAppStoreInformation": { "type": "boolean" },
         "SigningStyle": { "type": [ "string", "null" ] },
+        "LocalDeployment": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "DefaultPlatform": {
+              "type": "string",
+              "enum": [ "iOS", "iPadOS", "macOS", "tvOS", "watchOS", "visionOS" ]
+            },
+            "DefaultDevice": { "type": [ "string", "null" ] },
+            "Configuration": { "type": "string", "minLength": 1 },
+            "InstallRoot": { "type": "string", "minLength": 1 },
+            "Launch": { "type": "boolean" },
+            "UseBuildMirror": { "type": "boolean" },
+            "DefaultProfile": { "type": [ "string", "null" ] },
+            "Profiles": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [ "Name" ],
+                "properties": {
+                  "Name": { "type": "string", "minLength": 1 },
+                  "Environment": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" }
+                  },
+                  "Arguments": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
         "Automation": {
           "type": "object",
           "additionalProperties": false,

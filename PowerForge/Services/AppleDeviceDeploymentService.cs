@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Text.Json;
 
 namespace PowerForge;
 
@@ -94,7 +95,7 @@ public sealed class AppleDeviceDeploymentService
             request.Timeout,
             cancellationToken).ConfigureAwait(false);
 
-        var destination = ResolveDestination(request.Destination, deviceIdentifier, request.Platform);
+        var destination = ResolveDestination(request.Destination, deviceIdentifier, request.Platform, request.ArchiveVariant);
         var derivedDataPath = ResolveDerivedDataPath(request);
         var appPath = ResolveAppPath(request, derivedDataPath);
         var buildProjectPath = projectPath;
@@ -151,9 +152,13 @@ public sealed class AppleDeviceDeploymentService
                 request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout),
             cancellationToken).ConfigureAwait(false);
 
+        var resolvedAppPath = result.Succeeded
+            ? ResolveBuiltAppPath(request, derivedDataPath, appPath)
+            : appPath;
+
         return new AppleAppBuildResult
         {
-            AppPath = appPath,
+            AppPath = resolvedAppPath,
             Destination = destination,
             DerivedDataPath = derivedDataPath,
             BuildMirrorPath = mirrorPath,
@@ -233,11 +238,25 @@ public sealed class AppleDeviceDeploymentService
         if (string.IsNullOrWhiteSpace(deviceIdentifier))
             throw new ArgumentException("DeviceIdentifier or Device is required.", nameof(request));
 
+        var arguments = new List<string>
+        {
+            "devicectl", "device", "process", "launch", "--device", deviceIdentifier!
+        };
+        if (request.EnvironmentVariables.Count > 0)
+        {
+            arguments.Add("--environment-variables");
+            arguments.Add(JsonSerializer.Serialize(request.EnvironmentVariables));
+        }
+        if (request.TerminateExisting)
+            arguments.Add("--terminate-existing");
+        arguments.Add(request.BundleIdentifier.Trim());
+        arguments.AddRange(request.Arguments);
+
         var result = await _processRunner.RunAsync(
             new ProcessRunRequest(
                 NormalizeExecutable(request.XcrunExecutable, "xcrun"),
                 Directory.GetCurrentDirectory(),
-                new[] { "devicectl", "device", "process", "launch", "--device", deviceIdentifier!, request.BundleIdentifier.Trim() },
+                arguments,
                 request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(2) : request.Timeout),
             cancellationToken).ConfigureAwait(false);
 
@@ -265,7 +284,8 @@ public sealed class AppleDeviceDeploymentService
         var build = await BuildAsync(request, cancellationToken).ConfigureAwait(false);
         var deployment = new AppleAppDeviceDeploymentResult
         {
-            Build = build
+            Build = build,
+            LaunchRequested = request.Launch
         };
 
         if (!build.Succeeded)
@@ -297,6 +317,9 @@ public sealed class AppleDeviceDeploymentService
             Device = request.Device,
             BundleIdentifier = bundleIdentifier!,
             XcrunExecutable = request.XcrunExecutable,
+            EnvironmentVariables = new Dictionary<string, string>(request.LaunchEnvironment, StringComparer.Ordinal),
+            Arguments = request.LaunchArguments,
+            TerminateExisting = request.TerminateExisting,
             Timeout = request.Timeout
         }, cancellationToken).ConfigureAwait(false);
 
@@ -407,14 +430,18 @@ public sealed class AppleDeviceDeploymentService
         return new MirrorResult(sourceRoot, mirrorPath, result);
     }
 
-    private static string ResolveDestination(string? destination, string? deviceIdentifier, ApplePlatform platform)
+    private static string ResolveDestination(
+        string? destination,
+        string? deviceIdentifier,
+        ApplePlatform platform,
+        AppleArchiveVariant archiveVariant)
     {
         if (!string.IsNullOrWhiteSpace(destination))
             return destination!.Trim();
         if (!string.IsNullOrWhiteSpace(deviceIdentifier))
             return $"id={deviceIdentifier!.Trim()}";
 
-        return AppleAppArchiveService.GetGenericDestination(platform);
+        return AppleAppArchiveService.GetGenericDestination(platform, archiveVariant);
     }
 
     private static string ResolveDerivedDataPath(AppleAppBuildRequest request)
@@ -436,11 +463,30 @@ public sealed class AppleDeviceDeploymentService
         return Path.Combine(derivedDataPath, "Build", "Products", GetProductDirectory(request), $"{productName}.app");
     }
 
+    private static string ResolveBuiltAppPath(AppleAppBuildRequest request, string derivedDataPath, string expectedAppPath)
+    {
+        if (!string.IsNullOrWhiteSpace(request.AppPath) ||
+            !string.IsNullOrWhiteSpace(request.ProductName) ||
+            Directory.Exists(expectedAppPath))
+        {
+            return expectedAppPath;
+        }
+
+        var productDirectory = Path.Combine(derivedDataPath, "Build", "Products", GetProductDirectory(request));
+        if (!Directory.Exists(productDirectory))
+            return expectedAppPath;
+
+        var candidates = Directory.EnumerateDirectories(productDirectory, "*.app", SearchOption.TopDirectoryOnly).ToArray();
+        return candidates.Length == 1 ? candidates[0] : expectedAppPath;
+    }
+
     private static string GetProductDirectory(AppleAppBuildRequest request)
     {
         var configuration = string.IsNullOrWhiteSpace(request.Configuration) ? "Debug" : request.Configuration.Trim();
         return request.Platform == ApplePlatform.macOS
-            ? configuration
+            ? request.ArchiveVariant == AppleArchiveVariant.MacCatalyst
+                ? $"{configuration}-maccatalyst"
+                : configuration
             : $"{configuration}-{GetSdkProductSuffix(request.Platform)}";
     }
 

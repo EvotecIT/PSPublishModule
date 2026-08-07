@@ -12,10 +12,66 @@ The helpers live in shared `PowerForge` services first and are exposed through t
 PowerShell cmdlets, so the same release logic can be reused by scripts, tests, CLI,
 and future project release pipelines.
 
-## Local Device Deployment
+## Local Deployment
 
-For developer-device smoke testing, use the local deployment cmdlets. They wrap
-`xcodebuild build` and `xcrun devicectl` with structured arguments and typed results:
+Use the config-driven CLI for the everyday developer loop. It reads the same targets,
+schemes, bundle identifiers, project paths, and Mac Catalyst variants as the release
+flow, defaults to Debug, and keeps stable DerivedData per repo/platform/scheme so
+repeated builds reuse Xcode's cache:
+
+```text
+powerforge apple-deploy --platform iOS --profile Plus
+powerforge apple-deploy --platform iOS --profile Free
+powerforge apple-deploy --platform macOS --profile Plus
+```
+
+The iOS/iPadOS/watchOS device path runs `xcodebuild build`, installs with
+`xcrun devicectl`, and launches the selected profile. The macOS path builds the
+native or Mac Catalyst product, atomically replaces the app in `/Applications`,
+and launches the installed copy. Use `--plan` for a no-build selection check,
+`--no-launch` to install only, or `--install-root ~/Applications` when a per-user
+location is preferred.
+
+Set a target's optional `ProductName` when its built `.app` name differs from its
+scheme; PowerForge also discovers the sole app product when that is unambiguous.
+Concurrent runs for the same build cache or install destination fail fast instead
+of corrupting DerivedData. If a locked device accepts installation but rejects
+launch, the receipt keeps `installSucceeded: true`, sets `deviceLocked: true`, and
+returns failure because the selected profile was not applied to a running app.
+
+Declare app-specific launch profiles once in `powerforge.release.json`:
+
+```json
+{
+  "AppleApps": {
+    "LocalDeployment": {
+      "DefaultPlatform": "iOS",
+      "DefaultDevice": "EvoPhone",
+      "Configuration": "Debug",
+      "InstallRoot": "/Applications",
+      "DefaultProfile": "Plus",
+      "Profiles": [
+        {
+          "Name": "Free",
+          "Environment": { "MYAPP_ENABLE_SANDBOX_PURCHASES": "1" }
+        },
+        {
+          "Name": "Plus",
+          "Environment": { "MYAPP_ENABLE_SANDBOX_PURCHASES": "0" }
+        }
+      ]
+    }
+  }
+}
+```
+
+Free/Plus should normally be two launch profiles over one app binary, not separate
+build products. Embedded companions such as Watch apps inherit the containing app's
+product and entitlement contract. Store/TestFlight behavior remains the signed
+release path below.
+
+For lower-level device scripts, the PowerShell cmdlets wrap `xcodebuild build` and
+`xcrun devicectl` with structured arguments and typed results:
 
 ```powershell
 Get-AppleDevice

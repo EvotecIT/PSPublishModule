@@ -67,6 +67,9 @@ public class AppleAppBuildRequest
     /// <summary>Apple platform used to resolve the product directory.</summary>
     public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
 
+    /// <summary>Build variant used to distinguish native macOS from Mac Catalyst products.</summary>
+    public AppleArchiveVariant ArchiveVariant { get; set; } = AppleArchiveVariant.Default;
+
     /// <summary>Explicit xcodebuild destination.</summary>
     public string? Destination { get; set; }
 
@@ -196,6 +199,15 @@ public sealed class AppleAppLaunchRequest
     /// <summary>xcrun executable name or path.</summary>
     public string XcrunExecutable { get; set; } = "xcrun";
 
+    /// <summary>Environment variables supplied to the launched app.</summary>
+    public Dictionary<string, string> EnvironmentVariables { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>Arguments supplied to the launched app.</summary>
+    public string[] Arguments { get; set; } = Array.Empty<string>();
+
+    /// <summary>Terminate an existing app process before launching so the requested profile is applied.</summary>
+    public bool TerminateExisting { get; set; }
+
     /// <summary>Maximum launch runtime.</summary>
     public TimeSpan Timeout { get; set; } = TimeSpan.FromMinutes(2);
 }
@@ -231,6 +243,15 @@ public sealed class AppleAppDeviceDeploymentRequest : AppleAppBuildRequest
 
     /// <summary>Launch the app after a successful install.</summary>
     public bool Launch { get; set; }
+
+    /// <summary>Environment variables supplied when launching the installed app.</summary>
+    public Dictionary<string, string> LaunchEnvironment { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>Arguments supplied when launching the installed app.</summary>
+    public string[] LaunchArguments { get; set; } = Array.Empty<string>();
+
+    /// <summary>Terminate an existing app process before launch.</summary>
+    public bool TerminateExisting { get; set; }
 }
 
 /// <summary>
@@ -238,6 +259,9 @@ public sealed class AppleAppDeviceDeploymentRequest : AppleAppBuildRequest
 /// </summary>
 public sealed class AppleAppDeviceDeploymentResult
 {
+    /// <summary>True when the caller requested a launch after installation.</summary>
+    public bool LaunchRequested { get; set; }
+
     /// <summary>Build result.</summary>
     public AppleAppBuildResult Build { get; set; } = new();
 
@@ -249,4 +273,9 @@ public sealed class AppleAppDeviceDeploymentResult
 
     /// <summary>True when build and install succeeded, and launch either succeeded or was blocked only because the device was locked.</summary>
     public bool Succeeded => Build.Succeeded && (Install?.Succeeded ?? false) && (Launch is null || Launch.Succeeded || Launch.DeviceLocked);
+
+    /// <summary>True when build, install, and every explicitly requested launch stage completed successfully.</summary>
+    public bool RequestedStagesSucceeded => Build.Succeeded &&
+                                            (Install?.Succeeded ?? false) &&
+                                            (!LaunchRequested || (Launch?.Succeeded ?? false));
 }
