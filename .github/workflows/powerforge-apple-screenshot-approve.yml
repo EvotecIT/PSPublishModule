@@ -36,7 +36,7 @@ on:
         required: true
         type: string
       marketing_version:
-        description: Exact x.y.z marketing version represented by the captures.
+        description: Exact x.y or x.y.z marketing version represented by the captures.
         required: true
         type: string
       allowed_dispatchers_json:
@@ -122,8 +122,8 @@ jobs:
             echo 'capture_workflow_path must identify one repository workflow under .github/workflows.' >&2
             exit 1
           }
-          [[ "$EXPECTED_MARKETING_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-            echo 'marketing_version must use x.y.z.' >&2
+          [[ "$EXPECTED_MARKETING_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || {
+            echo 'marketing_version must use x.y or x.y.z.' >&2
             exit 1
           }
           run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${CAPTURE_RUN_ID}")"
@@ -238,7 +238,7 @@ jobs:
             if ($entry.Value -notmatch '^[0-9A-Fa-f]{40}$') { throw "$($entry.Key) must be an exact 40-character commit SHA." }
           }
           if ($env:CAPTURE_RUN_ID -notmatch '^\d+$') { throw 'capture_run_id must be a numeric GitHub Actions run id.' }
-          if ($env:MARKETING_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'marketing_version must use x.y.z.' }
+          if ($env:MARKETING_VERSION -notmatch '^\d+\.\d+(?:\.\d+)?$') { throw 'marketing_version must use x.y or x.y.z.' }
           $dispatchers = @($env:DISPATCHERS_JSON | ConvertFrom-Json -Depth 5)
           if ($dispatchers.Count -eq 0 -or $env:DISPATCHER -notin $dispatchers) {
             throw "GitHub triggering actor '$($env:DISPATCHER)' is not an authorized screenshot publication dispatcher."

@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace PowerForge;
 
 /// <summary>
@@ -8,29 +6,21 @@ namespace PowerForge;
 /// </summary>
 internal static class AppleReleaseMarketingVersionResolver
 {
-    private static readonly Regex Pattern = new(
-        @"^\d+\.(?:\d+|X)\.(?:\d+|X)$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-
     internal static void ValidatePattern(string pattern, string settingName)
     {
         if (string.IsNullOrWhiteSpace(pattern))
             throw new InvalidOperationException($"{settingName} is required.");
 
-        var value = pattern.Trim();
-        if (!Pattern.IsMatch(value) || value.Count(static character => character is 'X' or 'x') != 1)
-        {
-            throw new InvalidOperationException(
-                $"{settingName} must be a three-part Apple version pattern with exactly one X placeholder, for example 1.X.0 or 1.6.X.");
-        }
-
         try
         {
-            _ = VersionPatternStepper.Step(value, currentVersion: null);
+            var candidate = VersionPatternStepper.Step(pattern.Trim(), currentVersion: null);
+            _ = ParseKnownVersion(candidate, $"resolved Apple version for {settingName}");
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
-            throw new InvalidOperationException($"{settingName} is invalid: {exception.Message}", exception);
+            throw new InvalidOperationException(
+                $"{settingName} must follow the shared PSPublishModule X-pattern semantics and resolve to an Apple marketing version with two or three numeric parts: {exception.Message}",
+                exception);
         }
     }
 
@@ -61,34 +51,35 @@ internal static class AppleReleaseMarketingVersionResolver
 
         var occupiedVersions = storeEvidence
             .Where(static value => !IsReusableAppStoreVersion(value.State))
-            .Select(static value => value.Version)
+            .Select(static value => value.Version.Numeric)
             .Distinct()
             .ToArray();
         var highestOccupied = Highest(occupiedVersions);
 
-        var reusableCandidates = new[] { local }
+        var reusableCandidates = storeEvidence
+            .Where(static value => IsReusableAppStoreVersion(value.State))
+            .Select(static value => value.Version)
             .Concat(testFlightVersions)
-            .Concat(storeEvidence
-                .Where(static value => IsReusableAppStoreVersion(value.State))
-                .Select(static value => value.Version))
-            .Where(version => VersionPatternStepper.CanRepresent(pattern, version.ToString(3)))
-            .Where(version => !occupiedVersions.Contains(version))
-            .Where(version => highestOccupied is null || version.CompareTo(highestOccupied) > 0)
-            .Distinct()
-            .OrderByDescending(static version => version)
+            .Concat(new[] { local })
+            .Where(version => VersionPatternStepper.CanRepresent(pattern, version.Identity))
+            .Where(version => !occupiedVersions.Contains(version.Numeric))
+            .Where(version => highestOccupied is null || version.Numeric.CompareTo(highestOccupied) > 0)
+            .GroupBy(static version => version.Numeric)
+            .Select(static group => group.First())
+            .OrderByDescending(static version => version.Numeric)
             .ToArray();
 
         var reusable = reusableCandidates.FirstOrDefault();
-        var highestKnown = Highest(new[] { local }.Concat(remoteVersions));
-        var resolved = reusable ?? ParseResolvedPatternVersion(
+        var highestKnown = Highest(new[] { local.Numeric }.Concat(remoteVersions.Select(static value => value.Numeric)));
+        var resolved = reusable?.Identity ?? ParseResolvedPatternVersion(
             VersionPatternStepper.Step(pattern.Trim(), highestKnown),
             pattern);
 
         return new AppleReleaseMarketingVersionResolution
         {
             Pattern = pattern.Trim(),
-            MarketingVersion = resolved.ToString(3),
-            HighestRemoteMarketingVersion = Highest(remoteVersions)?.ToString(3),
+            MarketingVersion = resolved,
+            HighestRemoteMarketingVersion = HighestIdentity(remoteVersions),
             ReusedUnreleasedMarketingVersion = reusable is not null
         };
     }
@@ -158,7 +149,7 @@ internal static class AppleReleaseMarketingVersionResolver
         "INVALID_BINARY"
     };
 
-    private static Version ParseKnownVersion(string value, string source)
+    private static KnownVersion ParseKnownVersion(string value, string source)
     {
         var normalized = value.Trim();
         var parts = normalized.Split('.');
@@ -169,36 +160,53 @@ internal static class AppleReleaseMarketingVersionResolver
                 $"{source} '{value}' is not a numeric Apple marketing version with two or three parts. Resolve the incompatible remote version before automatic selection.");
         }
 
-        return parts.Length == 2
+        var numeric = parts.Length == 2
             ? new Version(int.Parse(parts[0]), int.Parse(parts[1]), 0)
             : new Version(int.Parse(parts[0]), int.Parse(parts[1]), int.Parse(parts[2]));
+        return new KnownVersion(numeric, normalized);
     }
 
-    private static Version ParseResolvedPatternVersion(string value, string pattern)
+    private static string ParseResolvedPatternVersion(string value, string pattern)
     {
         var resolved = ParseKnownVersion(value, $"resolved Apple version for pattern '{pattern}'");
-        if (!VersionPatternStepper.CanRepresent(pattern, resolved.ToString(3)))
-            throw new InvalidOperationException($"Apple version pattern '{pattern}' resolved to incompatible version '{resolved}'.");
-        return resolved;
+        if (!VersionPatternStepper.CanRepresent(pattern, resolved.Identity))
+            throw new InvalidOperationException($"Apple version pattern '{pattern}' resolved to incompatible version '{resolved.Identity}'.");
+        return resolved.Identity;
     }
 
     private static Version? Highest(IEnumerable<Version> versions)
         => versions.OrderByDescending(static version => version).FirstOrDefault();
+
+    private static string? HighestIdentity(IEnumerable<KnownVersion> versions)
+        => versions.OrderByDescending(static version => version.Numeric).FirstOrDefault()?.Identity;
 
     private static string? FirstNonEmpty(params string?[] values)
         => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim();
 
     private sealed class StoreVersionEvidence
     {
-        internal StoreVersionEvidence(Version version, string? state)
+        internal StoreVersionEvidence(KnownVersion version, string? state)
         {
             Version = version;
             State = state;
         }
 
-        internal Version Version { get; }
+        internal KnownVersion Version { get; }
 
         internal string? State { get; }
+    }
+
+    private sealed class KnownVersion
+    {
+        internal KnownVersion(Version numeric, string identity)
+        {
+            Numeric = numeric;
+            Identity = identity;
+        }
+
+        internal Version Numeric { get; }
+
+        internal string Identity { get; }
     }
 }
 

@@ -51,8 +51,12 @@ public sealed class PowerForgeReleaseSchemaTests
     [Theory]
     [InlineData("1.X.0", true)]
     [InlineData("1.6.X", true)]
+    [InlineData("1.X", true)]
+    [InlineData("X.0.0", true)]
     [InlineData("1.6.0", false)]
     [InlineData("1.X.X", false)]
+    [InlineData("X.X.X", false)]
+    [InlineData("1.2.3.X", false)]
     public void Release_schema_accepts_only_supported_Apple_marketing_version_patterns(
         string pattern,
         bool expectedValid)
@@ -78,7 +82,7 @@ public sealed class PowerForgeReleaseSchemaTests
                   "AppleApps": {
                     "Automation": {
                       "VersionSourcePath": "project.yml",
-                      "MarketingVersionPattern": "1.X.0"
+                      "MarketingVersionPattern": "1.X"
                     }
                   }
                 }
@@ -86,7 +90,7 @@ public sealed class PowerForgeReleaseSchemaTests
 
             var automation = Assert.IsType<PowerForgeAppleReleaseAutomationOptions>(
                 PowerForgeReleaseService.LoadConfiguration(path).AppleApps?.Automation);
-            Assert.Equal("1.X.0", automation.MarketingVersionPattern);
+            Assert.Equal("1.X", automation.MarketingVersionPattern);
         }
         finally
         {

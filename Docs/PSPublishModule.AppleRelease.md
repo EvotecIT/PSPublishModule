@@ -141,7 +141,7 @@ submitting a version.
       "PlanReceiptPath": "build/powerforge/apple/release-plan.json",
       "LockPath": "build/powerforge/apple/release.lock",
       "VersionSourcePath": "project.yml",
-      "MarketingVersionPattern": "1.X.0",
+      "MarketingVersionPattern": "1.X",
       "Resume": true,
       "WaitForProcessing": true,
       "ProcessingTimeoutSeconds": 1800,
@@ -216,8 +216,9 @@ powerforge apple-release Upload --config powerforge.release.json --plan
 powerforge apple-release Upload --config powerforge.release.json --summary --output json
 ```
 
-For a routine release, configure a three-part train such as
-`MarketingVersionPattern: 1.X.0` and let PowerForge choose both the compatible
+For a routine release, use the same X-pattern semantics as the rest of
+PSPublishModule. For example, configure `MarketingVersionPattern: 1.X` and let
+PowerForge choose both the compatible
 marketing version and the next remote-safe build number:
 
 ```text
@@ -229,9 +230,9 @@ powerforge apple-release Advance --config powerforge.release.json --confirm-appl
 
 Pattern resolution keeps the highest compatible train that exists only in the
 local source, TestFlight, or an editable App Store draft. This lets repeated beta
-uploads stay on `1.6.0` while only the build number advances. Once that train is
-in a non-editable App Store state, the next `Version` action advances `1.X.0` to
-`1.7.0`. Unknown or incompatible remote version strings fail closed instead of
+uploads stay on `1.6` while only the build number advances. Once that train is
+in a non-editable App Store state, the next `Version` action advances `1.X` to
+`1.7`. Unknown or incompatible remote version strings fail closed instead of
 selecting a potentially colliding train. Missing or unknown remote platform and
 build identities fail the same way for both patterned and exact version requests.
 
@@ -240,9 +241,12 @@ build identities fail the same way for both patterned and exact version requests
 platform-scoped version mutation could otherwise miss a collision on another
 configured platform.
 
-Use `--apple-version 2.X.0` to begin a deliberate new major line, or an exact
-version such as `--apple-version 2.0.0` for a one-off override. The explicit CLI
-value takes precedence over the configured pattern.
+Use `--apple-version X.0.0` to advance from a `1.x` line to `2.0.0`, or an exact
+version such as `--apple-version 2.0.0` for a one-off override. Patterns use one
+`X` placeholder, exactly as PSPublishModule does; a pattern such as `X.X.X` is
+therefore invalid. Apple marketing versions are limited to pattern results with
+two or three numeric parts. The explicit CLI value takes precedence over the
+configured pattern.
 
 `Advance` is intentionally safe to resume. It acquires the configured operation lock,
 uses a separate plan receipt, checks the exact version/build remotely, and stops before
@@ -510,7 +514,7 @@ The reusable workflow boundary mirrors the human approval boundary:
 - `powerforge-apple-version-pr.yml` runs `Version`, stages only the configured
   version source, and opens a release-ready pull request. Its optional `version`
   input overrides the configured pattern with an exact version or another
-  three-part X-pattern. Each candidate branch includes the resolved marketing
+  compatible PSPublishModule X-pattern. Each candidate branch includes the resolved marketing
   version and build number, so another TestFlight build in the same train does
   not collide with an earlier version PR. The workflow never merges the pull
   request.
@@ -657,7 +661,7 @@ height inventory exactly. Explicit `--version`, `--source-commit`, or
 capture-metadata options may still be supplied for recovery, but they must match
 the provenance document exactly.
 
-The capture workflow therefore requires the exact three-part marketing version;
+The capture workflow therefore requires the exact two- or three-part marketing version;
 blank or branch-relative capture evidence cannot be approved. The pinned helper
 also requires the retained provenance for every local `Screenshots` action, for
 an `Advance` action configured to synchronize screenshots, and for final review

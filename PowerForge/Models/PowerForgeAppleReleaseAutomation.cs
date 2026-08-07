@@ -72,7 +72,8 @@ internal sealed class PowerForgeAppleReleaseAutomationOptions
     public string? VersionSourcePath { get; set; }
 
     /// <summary>
-    /// Optional three-part Apple marketing-version pattern, such as 1.X.0.
+    /// Optional PSPublishModule X-pattern that resolves to a two- or three-part
+    /// Apple marketing version, such as 1.X or X.0.0.
     /// Version reuses the highest compatible unreleased train and advances the
     /// pattern only when every known compatible train is already occupied by a
     /// non-editable App Store version.

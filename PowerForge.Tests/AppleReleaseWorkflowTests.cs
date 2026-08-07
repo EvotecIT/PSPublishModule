@@ -85,7 +85,8 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("--summary", script, StringComparison.Ordinal);
         Assert.Contains("--output', 'json", script, StringComparison.Ordinal);
         Assert.Contains("instead of '$action'", script, StringComparison.Ordinal);
-        Assert.Contains("marketing-version must use x.y.z or a three-part pattern", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("three-part pattern", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("INPUT_MARKETING_VERSION -notmatch", script, StringComparison.Ordinal);
         Assert.Contains("did not write its required receipt", script, StringComparison.Ordinal);
         Assert.DoesNotContain("$json | Write-Host", script, StringComparison.Ordinal);
         Assert.Contains("safeDiagnostics", script, StringComparison.Ordinal);

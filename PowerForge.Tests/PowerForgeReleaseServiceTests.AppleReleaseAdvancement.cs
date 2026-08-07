@@ -3,10 +3,11 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Theory]
-    [InlineData("1.6")]
+    [InlineData("1")]
+    [InlineData("1.6.0.0")]
     [InlineData("1.6.0-beta")]
     [InlineData("1.6.0\nCURRENT_PROJECT_VERSION: 999")]
-    public void Execute_AppleVersion_RejectsNonThreePartMarketingVersion(string marketingVersion)
+    public void Execute_AppleVersion_RejectsInvalidMarketingVersion(string marketingVersion)
     {
         var root = CreateSandbox();
         try
@@ -30,7 +31,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     PlanOnly = true
                 }));
 
-            Assert.Contains("must use x.y.z", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("must use x.y or x.y.z", exception.Message, StringComparison.Ordinal);
             var source = new AppleReleaseVersionSourceService().Read(Path.Combine(root, "project.yml"));
             Assert.Equal("1.5.0", source.MarketingVersion);
             Assert.Equal("13", source.BuildNumber);
@@ -112,13 +113,13 @@ public sealed partial class PowerForgeReleaseServiceTests
         var root = CreateSandbox();
         try
         {
-            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.6.0", "16");
-            WriteXcodeGenVersionSource(root, "1.6.0", "16");
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.6", "16");
+            WriteXcodeGenVersionSource(root, "1.6", "16");
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
             File.WriteAllText(keyPath, "private-key");
             var spec = CreateAppleAutomationSpec(root, keyPath);
             spec.AppleApps!.Automation.VersionSourcePath = "project.yml";
-            spec.AppleApps.Automation.MarketingVersionPattern = "1.X.0";
+            spec.AppleApps.Automation.MarketingVersionPattern = "1.X";
             spec.AppleApps.Apps = new[]
             {
                 spec.AppleApps.Apps.Single(),
@@ -153,7 +154,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         new AppStoreConnectBuildInfo
                         {
-                            MarketingVersion = "1.6.0",
+                            MarketingVersion = "1.6",
                             Version = platform == ApplePlatform.iOS ? "16" : "15",
                             Platform = platform == ApplePlatform.iOS ? "IOS" : "MAC_OS"
                         }
@@ -169,11 +170,11 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.True(result.Success, result.ErrorMessage);
             var versioning = Assert.IsType<PowerForgeAppleVersionReceipt>(result.AppleReceipt!.Versioning);
-            Assert.Equal("1.X.0", versioning.RequestedMarketingVersion);
-            Assert.Equal("1.X.0", versioning.MarketingVersionPattern);
-            Assert.Equal("1.6.0", versioning.MarketingVersion);
+            Assert.Equal("1.X", versioning.RequestedMarketingVersion);
+            Assert.Equal("1.X", versioning.MarketingVersionPattern);
+            Assert.Equal("1.6", versioning.MarketingVersion);
             Assert.Equal("17", versioning.BuildNumber);
-            Assert.Equal("1.6.0", versioning.HighestRemoteMarketingVersion);
+            Assert.Equal("1.6", versioning.HighestRemoteMarketingVersion);
             Assert.Equal(16, versioning.HighestRemoteBuildNumber);
             Assert.True(versioning.ReusedUnreleasedMarketingVersion);
         }

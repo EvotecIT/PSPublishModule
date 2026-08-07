@@ -88,6 +88,55 @@ public sealed class AppleReleaseMarketingVersionResolverTests
     }
 
     [Fact]
+    public void Resolve_SharedTwoPartPatternAdvancesMinorAndPreservesItsShape()
+    {
+        var result = Resolve(
+            pattern: "1.X",
+            local: "1.5.0",
+            store: new[] { StoreVersion("1.5.0", "READY_FOR_SALE") });
+
+        Assert.Equal("1.6", result.MarketingVersion);
+    }
+
+    [Fact]
+    public void Resolve_SharedMajorPatternAdvancesToTheNextMajorTrain()
+    {
+        var result = Resolve(
+            pattern: "X.0.0",
+            local: "1.5.0",
+            store: new[] { StoreVersion("1.5.0", "READY_FOR_SALE") });
+
+        Assert.Equal("2.0.0", result.MarketingVersion);
+    }
+
+    [Fact]
+    public void Resolve_PreservesExistingTwoPartRemoteTrainIdentity()
+    {
+        var result = Resolve(
+            pattern: "1.X",
+            local: "1.5.0",
+            store: new[] { StoreVersion("1.5.0", "READY_FOR_SALE") },
+            builds: new[] { TestFlightBuild("1.6", "18") });
+
+        Assert.Equal("1.6", result.MarketingVersion);
+        Assert.Equal("1.6", result.HighestRemoteMarketingVersion);
+        Assert.True(result.ReusedUnreleasedMarketingVersion);
+    }
+
+    [Fact]
+    public void Resolve_PrefersRemoteTrainIdentityWhenLocalFormattingDiffers()
+    {
+        var result = Resolve(
+            pattern: "1.X",
+            local: "1.6.0",
+            store: new[] { StoreVersion("1.5.0", "READY_FOR_SALE") },
+            builds: new[] { TestFlightBuild("1.6", "18") });
+
+        Assert.Equal("1.6", result.MarketingVersion);
+        Assert.True(result.ReusedUnreleasedMarketingVersion);
+    }
+
+    [Fact]
     public void Resolve_RejectsPatternThatWouldMoveBehindExistingMajorLine()
     {
         var exception = Assert.Throws<InvalidOperationException>(() => Resolve(
@@ -99,17 +148,17 @@ public sealed class AppleReleaseMarketingVersionResolverTests
     }
 
     [Theory]
-    [InlineData("1.X")]
-    [InlineData("X.0.0")]
     [InlineData("1.X.X")]
+    [InlineData("X.X.X")]
     [InlineData("1.*.0")]
     [InlineData("1.2.3")]
+    [InlineData("1.2.3.X")]
     public void ValidatePattern_RejectsIncompatiblePatterns(string pattern)
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>
             AppleReleaseMarketingVersionResolver.ValidatePattern(pattern, "VersionPattern"));
 
-        Assert.Contains("three-part Apple version pattern", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("shared PSPublishModule X-pattern semantics", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
