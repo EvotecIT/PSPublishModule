@@ -46,6 +46,11 @@ public sealed class RepositoryArchitectureServiceTests
             Assert.True(report.Succeeded);
             Assert.False(Assert.Single(report.Capabilities).Impacted);
             Assert.Empty(report.RequiredValidationStepIds);
+
+            report = service.Verify(spec, configPath, ["Evidence.Tests/ProjectionTests.cs"]);
+            Assert.True(report.Succeeded);
+            Assert.True(Assert.Single(report.Capabilities).Impacted);
+            Assert.Equal(["consumer-artifact", "core-contract", "native-aot"], report.RequiredValidationStepIds);
         }
         finally
         {
@@ -67,6 +72,7 @@ public sealed class RepositoryArchitectureServiceTests
 
             var spec = new RepositoryArchitectureSpec
             {
+                SchemaVersion = 1,
                 RepositoryRoot = "..",
                 WorkspaceValidationConfig = ".powerforge/workspace.validation.json",
                 ProjectRules =
@@ -180,11 +186,79 @@ public sealed class RepositoryArchitectureServiceTests
             WriteProject(root, "Consumer/Consumer.csproj", "../../Outside/Outside.csproj");
 
             var report = new RepositoryArchitectureService().Verify(
-                new RepositoryArchitectureSpec { RepositoryRoot = ".." },
+                new RepositoryArchitectureSpec { SchemaVersion = 1, RepositoryRoot = ".." },
                 Path.Combine(root, ".powerforge", "architecture.json"));
 
             Assert.False(report.Succeeded);
             Assert.Contains(report.Issues, issue => issue.Code == "ARC010" && issue.Message.Contains("escapes the repository root", StringComparison.Ordinal));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Verify_AcceptsActiveBaseIdForMatrixEvidence()
+    {
+        var root = CreateRepository();
+        try
+        {
+            WriteProject(root, "Owner/Owner.csproj");
+            WriteFile(root, "Owner/Projection.cs", "public static class Projection { }");
+            var workspace = new WorkspaceValidationSpec
+            {
+                ProjectRoot = "..",
+                Profiles = [new WorkspaceValidationProfile { Name = "architecture" }],
+                Steps =
+                [
+                    new WorkspaceValidationStep
+                    {
+                        Id = "owner-matrix",
+                        Profiles = ["architecture"],
+                        Items = ["contract", "artifact"],
+                        Frameworks = ["net8.0", "net10.0"],
+                        Arguments = ["test", "{item}", "--framework", "{framework}"]
+                    }
+                ]
+            };
+            File.WriteAllText(
+                Path.Combine(root, ".powerforge", "workspace.validation.json"),
+                JsonSerializer.Serialize(workspace));
+            var spec = new RepositoryArchitectureSpec
+            {
+                SchemaVersion = 1,
+                RepositoryRoot = "..",
+                WorkspaceValidationConfig = ".powerforge/workspace.validation.json",
+                Capabilities =
+                [
+                    new RepositoryArchitectureCapability
+                    {
+                        Id = "projection",
+                        OwnerProjects = ["Owner/Owner.csproj"],
+                        OwnerPaths = ["Owner/Projection.cs"],
+                        RequiredEvidenceKinds = ["contract"],
+                        Evidence =
+                        [
+                            new RepositoryArchitectureEvidence
+                            {
+                                Id = "owner",
+                                Kind = "contract",
+                                StepId = "owner-matrix",
+                                Path = "Owner/Projection.cs",
+                                CoversProjects = ["Owner/Owner.csproj"]
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            var report = new RepositoryArchitectureService().Verify(
+                spec,
+                Path.Combine(root, ".powerforge", "architecture.json"));
+
+            Assert.True(report.Succeeded, string.Join(Environment.NewLine, report.Issues.Select(issue => issue.Message)));
+            Assert.Equal(["owner-matrix"], report.RequiredValidationStepIds);
         }
         finally
         {
@@ -218,9 +292,44 @@ public sealed class RepositoryArchitectureServiceTests
         }
     }
 
+    [Fact]
+    public void Load_RejectsUnknownMembersAndMissingSchemaVersionFailsVerification()
+    {
+        var root = CreateRepository();
+        try
+        {
+            var path = Path.Combine(root, "architecture.json");
+            File.WriteAllText(path, """
+                {
+                  "schemaVersion": 1,
+                  "capabilties": []
+                }
+                """);
+
+            Assert.Throws<JsonException>(() => new RepositoryArchitectureService().Load(path));
+
+            File.WriteAllText(path, """
+                {
+                  "repositoryRoot": "."
+                }
+                """);
+            var service = new RepositoryArchitectureService();
+            var spec = service.Load(path);
+            var report = service.Verify(spec, path);
+
+            Assert.False(report.Succeeded);
+            Assert.Contains(report.Issues, issue => issue.Code == "ARC001");
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static RepositoryArchitectureSpec CreateSpec()
         => new()
         {
+            SchemaVersion = 1,
             RepositoryRoot = "..",
             WorkspaceValidationConfig = ".powerforge/workspace.validation.json",
             WorkspaceValidationProfile = "architecture",

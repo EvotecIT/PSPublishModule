@@ -22,11 +22,6 @@ on:
         required: false
         default: ""
         type: string
-      run_evidence:
-        description: Run impact-selected workspace validation evidence.
-        required: false
-        default: true
-        type: boolean
       report_artifact_name:
         description: Uploaded architecture report artifact name.
         required: false
@@ -96,7 +91,6 @@ jobs:
           config-path: ${{ inputs.config_path }}
           base-ref: ${{ steps.refs.outputs.base-ref }}
           head-ref: ${{ steps.refs.outputs.head-ref }}
-          run-evidence: ${{ inputs.run_evidence && 'true' || 'false' }}
 
       - name: Upload architecture reports
         if: always()

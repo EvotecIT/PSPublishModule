@@ -101,7 +101,8 @@ public sealed partial class RepositoryArchitectureService
         {
             PropertyNameCaseInsensitive = true,
             ReadCommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true
+            AllowTrailingCommas = true,
+            UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
         };
         options.Converters.Add(new JsonStringEnumConverter());
         return options;
@@ -163,7 +164,10 @@ public sealed partial class RepositoryArchitectureService
                     : spec.WorkspaceValidationProfile
             };
             var plan = new WorkspaceValidationService().Plan(workspaceSpec, workspaceConfigPath, request);
-            return plan.Steps
+            return (workspaceSpec.Steps ?? Array.Empty<WorkspaceValidationStep>())
+                .Where(step => plan.Steps.Any(prepared =>
+                    string.Equals(prepared.Id, step.Id, StringComparison.OrdinalIgnoreCase)
+                    || prepared.Id.StartsWith(step.Id + ":", StringComparison.OrdinalIgnoreCase)))
                 .Select(step => step.Id)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();

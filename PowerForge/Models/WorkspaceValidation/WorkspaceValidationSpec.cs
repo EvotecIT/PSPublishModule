@@ -54,6 +54,7 @@ public sealed class WorkspaceValidationRequest
     public Dictionary<string, string?> Variables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string[] IncludedStepIds { get; set; } = Array.Empty<string>();
     public bool RestrictToIncludedStepIds { get; set; }
+    public bool FailOnSkippedSteps { get; set; }
     public bool CaptureOutput { get; set; }
     public bool CaptureError { get; set; }
 }

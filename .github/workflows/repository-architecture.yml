@@ -47,7 +47,6 @@ jobs:
           config-path: .powerforge/architecture.json
           base-ref: ${{ steps.refs.outputs.base-ref }}
           head-ref: ${{ steps.refs.outputs.head-ref }}
-          run-evidence: "true"
 
       - name: Upload architecture reports
         if: always()

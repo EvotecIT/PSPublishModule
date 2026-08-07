@@ -148,6 +148,49 @@ public sealed class WorkspaceValidationServiceTests
     }
 
     [Fact]
+    public void Plan_IncludedBaseStepRunsTheCompleteMatrix()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var spec = new WorkspaceValidationSpec
+            {
+                ProjectRoot = root,
+                Profiles = [new WorkspaceValidationProfile { Name = "architecture" }],
+                Steps =
+                [
+                    new WorkspaceValidationStep
+                    {
+                        Id = "matrix",
+                        Profiles = ["architecture"],
+                        Items = ["owner", "consumer"],
+                        Frameworks = ["net8.0", "net10.0"],
+                        Arguments = ["test", "{item}", "--framework", "{framework}"]
+                    }
+                ]
+            };
+            var request = new WorkspaceValidationRequest
+            {
+                ProfileName = "architecture",
+                IncludedStepIds = ["matrix"],
+                RestrictToIncludedStepIds = true
+            };
+            var service = new WorkspaceValidationService();
+
+            var plan = service.Plan(spec, Path.Combine(root, "workspace.validation.json"), request);
+            var errors = service.Validate(spec, Path.Combine(root, "workspace.validation.json"), request);
+
+            Assert.Empty(errors);
+            Assert.Equal(4, plan.Steps.Length);
+            Assert.All(plan.Steps, step => Assert.StartsWith("matrix:", step.Id, StringComparison.Ordinal));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Validate_IncludedStepIds_RejectsUnknownOrInactiveEvidenceStep()
     {
         var root = CreateTempRoot();
@@ -234,6 +277,43 @@ public sealed class WorkspaceValidationServiceTests
             Assert.Equal("dotnet", requests[0].FileName);
             Assert.Equal(3, result.Steps.Length);
             Assert.Equal(2, result.Steps.Count(s => s.Skipped));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_RequiredArchitectureEvidenceFailsWhenOptionalStepWouldSkip()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var spec = new WorkspaceValidationSpec
+            {
+                ProjectRoot = root,
+                Steps =
+                [
+                    new WorkspaceValidationStep
+                    {
+                        Id = "artifact",
+                        Arguments = ["--info"],
+                        RequiredPath = "missing-artifact",
+                        ContinueOnMissingRequiredPath = true
+                    }
+                ]
+            };
+            var result = await new WorkspaceValidationService().RunAsync(
+                spec,
+                Path.Combine(root, "workspace.validation.json"),
+                new WorkspaceValidationRequest { FailOnSkippedSteps = true });
+
+            Assert.False(result.Succeeded);
+            var step = Assert.Single(result.Steps);
+            Assert.True(step.Skipped);
+            Assert.False(step.Succeeded);
+            Assert.Contains("was skipped", result.ErrorMessage, StringComparison.Ordinal);
         }
         finally
         {

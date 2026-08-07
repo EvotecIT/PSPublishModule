@@ -12,7 +12,9 @@ The repository owns a small `.powerforge/architecture.json` policy. PowerForge o
 - Contract, artifact, package, compatibility, or runtime evidence covering every owner and consumer.
 - Impact-specific execution of registered workspace validation steps.
 
-This is not a semantic clone detector. It cannot prove that differently named code does not reimplement an algorithm. Keep reusable implementation in the owner API, make lower-level bypasses inaccessible where practical, and use review to sweep the defect class when a duplicate path is discovered. The policy makes known boundaries and sibling surfaces executable instead of leaving them in PR prose.
+This is not a semantic clone detector or an evaluated MSBuild graph. Project and package edges come from literal `ProjectReference` and `PackageReference` declarations in repository-local project files. Imports, conditions, properties, item transforms, linked files, and references injected by props or targets are outside that inspection. Source consumer discovery is a lexical substring scan of configured repository paths; it ignores test projects and cannot recognize differently named copies or usages outside a discovered project directory.
+
+Keep reusable implementation in the owner API, make lower-level bypasses inaccessible where practical, list shared props/targets in `globalImpactPaths`, and use review to sweep the defect class when a duplicate or imported path is discovered. The policy makes known boundaries and sibling surfaces executable instead of leaving them in PR prose.
 
 ## Configuration
 
@@ -82,7 +84,7 @@ This is not a semantic clone detector. It cannot prove that differently named co
 
 An omitted `allowedProjectReferences` or `allowedPackageReferences` leaves that reference family unrestricted. An explicitly empty array requires no direct references of that family. `requiredProjectReferences` and `requiredPackageReferences` protect edges that must remain present. Forbidden references are checked in addition to allowlists and required edges.
 
-Capabilities that declare evidence must configure `workspaceValidationConfig`. Evidence `stepId` values must exist in the selected PowerForge workspace validation profile. `coversProjects` must collectively include every owner and declared consumer. `requiredEvidenceKinds` lets the repository require proof categories such as `contract`, `artifact`, `package`, `compatibility`, or `nativeAot` without teaching PowerForge product-specific commands.
+Capabilities that declare evidence must configure `workspaceValidationConfig`. Evidence `stepId` values must name an active base step in the selected PowerForge workspace validation profile. When that step expands through `items` or `frameworks`, selecting the base ID runs the complete matrix. `coversProjects` must collectively include every owner and declared consumer. `requiredEvidenceKinds` lets the repository require proof categories such as `contract`, `artifact`, `package`, `compatibility`, or `nativeAot` without teaching PowerForge product-specific commands. A changed evidence file or directory also marks the capability as impacted, and architecture execution fails when selected evidence is skipped because its required path is absent.
 
 ## Commands
 
@@ -108,7 +110,7 @@ Include local tracked and untracked work:
 powerforge architecture verify --working-tree --run-evidence
 ```
 
-Use `--report-json` and `--summary-markdown` for CI artifacts. The reusable `powerforge-repository-architecture.yml` workflow runs the same command from an immutable PowerForge source ref.
+Use `--report-json` and `--summary-markdown` for CI artifacts. The reusable `powerforge-repository-architecture.yml` enforcement workflow runs the same command and all selected evidence from an immutable PowerForge source ref. For a static audit without executing evidence, invoke the CLI directly and omit `--run-evidence`; the reusable enforcement workflow intentionally has no evidence-disable switch.
 
 ## Agent and reviewer contract
 

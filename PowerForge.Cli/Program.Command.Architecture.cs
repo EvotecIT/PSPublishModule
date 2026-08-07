@@ -59,6 +59,7 @@ internal static partial class Program
                         : spec.WorkspaceValidationProfile,
                     IncludedStepIds = report.RequiredValidationStepIds,
                     RestrictToIncludedStepIds = true,
+                    FailOnSkippedSteps = true,
                     CaptureOutput = outputJson,
                     CaptureError = outputJson
                 };

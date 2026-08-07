@@ -24,10 +24,6 @@ inputs:
     description: Include tracked and untracked working-tree changes.
     required: false
     default: "false"
-  run-evidence:
-    description: Run required workspace validation evidence.
-    required: false
-    default: "true"
   report-json:
     description: JSON report path relative to the caller repository.
     required: false
@@ -63,7 +59,6 @@ runs:
         ARCHITECTURE_BASE_REF: ${{ inputs.base-ref }}
         ARCHITECTURE_HEAD_REF: ${{ inputs.head-ref }}
         ARCHITECTURE_WORKING_TREE: ${{ inputs.working-tree }}
-        ARCHITECTURE_RUN_EVIDENCE: ${{ inputs.run-evidence }}
         ARCHITECTURE_REPORT_JSON: ${{ inputs.report-json }}
         ARCHITECTURE_SUMMARY_MARKDOWN: ${{ inputs.summary-markdown }}
         MSBUILDDISABLENODEREUSE: "1"
@@ -85,14 +80,13 @@ runs:
           '--',
           'architecture', 'verify',
           '--config', $configPath,
+          '--run-evidence',
           '--report-json', $reportPath,
           '--summary-markdown', $summaryPath
         )
         if (-not [string]::IsNullOrWhiteSpace($env:ARCHITECTURE_BASE_REF)) { $arguments += @('--base', $env:ARCHITECTURE_BASE_REF) }
         if (-not [string]::IsNullOrWhiteSpace($env:ARCHITECTURE_HEAD_REF)) { $arguments += @('--head', $env:ARCHITECTURE_HEAD_REF) }
         if ($env:ARCHITECTURE_WORKING_TREE -eq 'true') { $arguments += '--working-tree' }
-        if ($env:ARCHITECTURE_RUN_EVIDENCE -eq 'true') { $arguments += '--run-evidence' }
-
         "report-json=$reportPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         "summary-markdown=$summaryPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 

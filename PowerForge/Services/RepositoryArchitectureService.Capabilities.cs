@@ -120,6 +120,7 @@ public sealed partial class RepositoryArchitectureService
 
             var impacted = hasGlobalImpact
                            || changedFiles.Any(path => MatchesAny(path, ownerPaths))
+                           || changedFiles.Any(path => EvidenceContainsPath(path, evidence))
                            || changedFiles.Any(path => IsInsideAnyProject(path, ownerProjects.Concat(declaredConsumers), projectLookup));
 
             results.Add(new RepositoryArchitectureCapabilityResult
@@ -271,6 +272,9 @@ public sealed partial class RepositoryArchitectureService
             if (!evidenceIds.Add(item.Id))
                 AddError(issues, "ARC221", $"Capability '{capabilityId}' has duplicate evidence id '{item.Id}'.", capabilityId: capabilityId);
 
+            if (string.IsNullOrWhiteSpace(item.Kind))
+                AddError(issues, "ARC228", $"Evidence '{item.Id}' has an empty kind.", item.Path, capabilityId);
+
             if (!string.IsNullOrWhiteSpace(item.Path))
             {
                 try
@@ -349,6 +353,23 @@ public sealed partial class RepositoryArchitectureService
         {
             if (projectLookup.TryGetValue(NormalizePath(projectPath), out var project)
                 && IsPathInside(changedPath, project.DirectoryPath))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool EvidenceContainsPath(
+        string changedPath,
+        IEnumerable<RepositoryArchitectureEvidence> evidence)
+    {
+        foreach (var item in evidence)
+        {
+            if (string.IsNullOrWhiteSpace(item.Path))
+                continue;
+
+            var evidencePath = NormalizePath(item.Path);
+            if (IsPathInside(changedPath, evidencePath))
                 return true;
         }
 

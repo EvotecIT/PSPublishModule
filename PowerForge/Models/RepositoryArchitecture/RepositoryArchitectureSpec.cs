@@ -1,9 +1,13 @@
+using System.Text.Json.Serialization;
+
 #pragma warning disable 1591
 namespace PowerForge;
 
 public sealed class RepositoryArchitectureSpec
 {
-    public int SchemaVersion { get; set; } = 1;
+    [JsonPropertyName("$schema")]
+    public string? Schema { get; set; }
+    public int SchemaVersion { get; set; }
     public string? RepositoryRoot { get; set; }
     public string? WorkspaceValidationConfig { get; set; }
     public string WorkspaceValidationProfile { get; set; } = "architecture";

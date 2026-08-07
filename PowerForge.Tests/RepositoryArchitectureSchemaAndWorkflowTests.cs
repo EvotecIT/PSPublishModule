@@ -65,9 +65,12 @@ public sealed class RepositoryArchitectureSchemaAndWorkflowTests
         Assert.Contains("required: true", workflow, StringComparison.Ordinal);
         Assert.Contains("^[0-9a-fA-F]{40}$", workflow, StringComparison.Ordinal);
         Assert.Contains("uses: ./.powerforge/runtime/.github/actions/repository-architecture", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("run_evidence", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("ProjectReference", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("PackageReference", workflow, StringComparison.Ordinal);
         Assert.Contains("'architecture', 'verify'", action, StringComparison.Ordinal);
+        Assert.Contains("'--run-evidence'", action, StringComparison.Ordinal);
+        Assert.DoesNotContain("ARCHITECTURE_RUN_EVIDENCE", action, StringComparison.Ordinal);
         Assert.DoesNotContain("allowedProjectReferences", action, StringComparison.Ordinal);
         Assert.DoesNotContain("usagePatterns", action, StringComparison.Ordinal);
     }

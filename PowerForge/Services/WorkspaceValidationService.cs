@@ -119,13 +119,24 @@ public sealed class WorkspaceValidationService
             {
                 if (step.ContinueOnMissingRequiredPath)
                 {
-                    results.Add(new WorkspaceValidationStepResult
+                    var skipped = new WorkspaceValidationStepResult
                     {
                         Step = step,
                         Skipped = true,
-                        Succeeded = true,
+                        Succeeded = !request.FailOnSkippedSteps,
                         SkipReason = $"Required path not found: {step.RequiredPath}"
-                    });
+                    };
+                    results.Add(skipped);
+                    if (request.FailOnSkippedSteps)
+                    {
+                        return new WorkspaceValidationResult
+                        {
+                            Plan = plan,
+                            Succeeded = false,
+                            ErrorMessage = $"Required workspace validation step '{step.Name}' was skipped. {skipped.SkipReason}",
+                            Steps = results.ToArray()
+                        };
+                    }
                     continue;
                 }
 
