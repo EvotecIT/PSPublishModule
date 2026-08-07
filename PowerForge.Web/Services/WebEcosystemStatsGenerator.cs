@@ -8,7 +8,7 @@ using System.Xml.Linq;
 namespace PowerForge.Web;
 
 /// <summary>Generates ecosystem statistics from GitHub, NuGet, and PowerShell Gallery.</summary>
-public static class WebEcosystemStatsGenerator
+public static partial class WebEcosystemStatsGenerator
 {
     private const string GitHubApiBase = "https://api.github.com";
     private const string NuGetSearchApiBase = "https://api-v2v3search-0.nuget.org/query";
@@ -150,6 +150,8 @@ public static class WebEcosystemStatsGenerator
             }
         }
 
+        PopulateGitHubOpenIssueCounts(http, options, organization, repositories, warnings);
+
         repositories = repositories
             .OrderByDescending(repository => repository.Stars)
             .ThenBy(repository => repository.Name, StringComparer.OrdinalIgnoreCase)
@@ -185,7 +187,9 @@ public static class WebEcosystemStatsGenerator
             Stars = ReadInt32(element, "stargazers_count"),
             Forks = ReadInt32(element, "forks_count"),
             Watchers = ReadInt32(element, "watchers_count"),
-            OpenIssues = ReadInt32(element, "open_issues_count"),
+            // GitHub's repository-level open_issues_count includes pull requests.
+            // PopulateGitHubOpenIssueCounts replaces this with the issue-only count.
+            OpenIssues = 0,
             PushedAt = ReadDateTimeOffset(element, "pushed_at")
         };
     }
