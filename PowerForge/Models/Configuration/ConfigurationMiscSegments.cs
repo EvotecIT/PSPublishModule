@@ -233,6 +233,9 @@ public sealed class AppleAppConfiguration
     /// <summary>Xcode scheme name for future archive/export automation.</summary>
     public string? Scheme { get; set; }
 
+    /// <summary>Optional built .app product name when it differs from Scheme.</summary>
+    public string? ProductName { get; set; }
+
     /// <summary>Optional App Store Connect app id for future remote metadata checks.</summary>
     public string? AppStoreConnectAppId { get; set; }
 

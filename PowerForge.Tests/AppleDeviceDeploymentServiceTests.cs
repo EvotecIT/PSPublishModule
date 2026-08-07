@@ -109,6 +109,37 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
     }
 
     [Fact]
+    public async Task BuildAsync_discovers_single_app_when_product_name_differs_from_scheme()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var derived = Path.Combine(root.FullName, "DerivedData");
+            var actualApp = Directory.CreateDirectory(Path.Combine(derived, "Build", "Products", "Debug-maccatalyst", "Tactra.app"));
+            var service = new AppleDeviceDeploymentService(new CapturingProcessRunner(_ => Success("ok")));
+
+            var result = await service.BuildAsync(new AppleAppBuildRequest
+            {
+                ProjectPath = project.FullName,
+                Scheme = "TactraMac",
+                Platform = ApplePlatform.macOS,
+                ArchiveVariant = AppleArchiveVariant.MacCatalyst,
+                DerivedDataPath = derived,
+                XcodeBuildExecutable = "xcodebuild-test"
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(actualApp.FullName, result.AppPath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task BuildAsync_uses_plain_configuration_directory_for_macos_app_path()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -132,6 +163,38 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
 
             Assert.True(result.Succeeded);
             Assert.Equal(Path.Combine(derived, "Build", "Products", "Debug", "Tactra.app"), result.AppPath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_uses_maccatalyst_destination_and_product_directory()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var derived = Path.Combine(root.FullName, "DerivedData");
+            var runner = new CapturingProcessRunner(_ => Success("ok"));
+            var service = new AppleDeviceDeploymentService(runner);
+
+            var result = await service.BuildAsync(new AppleAppBuildRequest
+            {
+                ProjectPath = project.FullName,
+                Scheme = "CasaRay",
+                Platform = ApplePlatform.macOS,
+                ArchiveVariant = AppleArchiveVariant.MacCatalyst,
+                DerivedDataPath = derived,
+                XcodeBuildExecutable = "xcodebuild-test"
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.Equal("generic/platform=macOS,variant=Mac Catalyst", result.Destination);
+            Assert.Equal(Path.Combine(derived, "Build", "Products", "Debug-maccatalyst", "CasaRay.app"), result.AppPath);
         }
         finally
         {
@@ -305,7 +368,53 @@ App installed:
     }
 
     [Fact]
-    public async Task DeployAsync_treats_locked_device_launch_as_successful_deployment()
+    public async Task DeployAsync_passes_profile_environment_and_restarts_existing_app()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.app"));
+            var runner = new CapturingProcessRunner(request => request.Arguments.Contains("install")
+                ? Success("App installed:\n• bundleID: com.evotecit.casaray\n")
+                : Success("ok"));
+            var service = new AppleDeviceDeploymentService(runner);
+
+            var result = await service.DeployAsync(new AppleAppDeviceDeploymentRequest
+            {
+                ProjectPath = project.FullName,
+                Scheme = "CasaRay",
+                AppPath = app.FullName,
+                DeviceIdentifier = "device-1",
+                BundleIdentifier = "com.evotecit.casaray",
+                Launch = true,
+                LaunchEnvironment = new Dictionary<string, string>
+                {
+                    ["CASARAY_ENABLE_SANDBOX_PURCHASES"] = "1"
+                },
+                LaunchArguments = new[] { "--sample" },
+                TerminateExisting = true,
+                XcodeBuildExecutable = "xcodebuild-test",
+                XcrunExecutable = "xcrun-test"
+            });
+
+            Assert.True(result.Succeeded);
+            var launch = runner.Requests[2].Arguments;
+            Assert.Equal("--environment-variables", launch[6]);
+            Assert.Equal("{\"CASARAY_ENABLE_SANDBOX_PURCHASES\":\"1\"}", launch[7]);
+            Assert.Equal("--terminate-existing", launch[8]);
+            Assert.Equal("com.evotecit.casaray", launch[9]);
+            Assert.Equal("--sample", launch[10]);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task DeployAsync_preserves_install_success_but_marks_locked_launch_incomplete()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -349,6 +458,7 @@ App installed:
             });
 
             Assert.True(result.Succeeded);
+            Assert.False(result.RequestedStagesSucceeded);
             Assert.NotNull(result.Install);
             Assert.True(result.Install.Succeeded);
             Assert.NotNull(result.Launch);

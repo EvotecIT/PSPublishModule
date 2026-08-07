@@ -48,6 +48,50 @@ public sealed class PowerForgeReleaseSchemaTests
         Assert.True(appleSchema.Evaluate(node, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
     }
 
+    [Fact]
+    public void Release_schema_and_runtime_accept_local_Apple_deployment_profiles()
+    {
+        var schemaDocument = JsonNode.Parse(File.ReadAllText(GetSchemaPath("powerforge.release.schema.json")))!;
+        var localSchema = JsonSchema.FromText(
+            schemaDocument["properties"]!["AppleApps"]!["properties"]!["LocalDeployment"]!.ToJsonString());
+        var json = """
+            {
+              "DefaultPlatform": "iOS",
+              "DefaultDevice": "EvoPhone",
+              "Configuration": "Debug",
+              "InstallRoot": "/Applications",
+              "DefaultProfile": "Plus",
+              "Profiles": [
+                {
+                  "Name": "Free",
+                  "Environment": { "CASARAY_ENABLE_SANDBOX_PURCHASES": "1" }
+                },
+                {
+                  "Name": "Plus",
+                  "Environment": { "CASARAY_ENABLE_SANDBOX_PURCHASES": "0" }
+                }
+              ]
+            }
+            """;
+
+        Assert.True(localSchema.Evaluate(JsonNode.Parse(json)!, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
+
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            File.WriteAllText(path, $$"""{ "AppleApps": { "LocalDeployment": {{json}} } }""");
+            var local = PowerForgeReleaseService.LoadConfiguration(path).AppleApps!.LocalDeployment;
+            Assert.Equal(ApplePlatform.iOS, local.DefaultPlatform);
+            Assert.Equal("EvoPhone", local.DefaultDevice);
+            Assert.Equal("Plus", local.DefaultProfile);
+            Assert.Equal("1", Assert.Single(local.Profiles, profile => profile.Name == "Free").Environment["CASARAY_ENABLE_SANDBOX_PURCHASES"]);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Theory]
     [InlineData("1.X.0", true)]
     [InlineData("1.6.X", true)]

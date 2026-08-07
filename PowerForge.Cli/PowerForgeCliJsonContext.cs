@@ -94,6 +94,7 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(AppStoreConnectReviewDetailsCopyPlan))]
 [JsonSerializable(typeof(AppStoreConnectReviewDetailsCopyResult))]
 [JsonSerializable(typeof(AppleReleaseCliPlanSummary))]
+[JsonSerializable(typeof(AppleLocalDeploymentCliResult))]
 [JsonSerializable(typeof(PowerForgeWingetManifestArtifact))]
 [JsonSerializable(typeof(PowerForgeWingetSubmissionPlan))]
 [JsonSerializable(typeof(PowerForgeWingetSubmissionResult))]

@@ -36,7 +36,8 @@ internal static partial class Program
       powerforge apple-release <Status|Doctor|Version|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|Advance|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>
                         [--config <release.json>] [--plan] [--validate] [--confirm-apple-action] [--apple-expected-plan-sha256 <sha256>] [--apple-resume|--no-apple-resume]
                         [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>]
-                        [--target <Name[,Name...]>] [--summary] [--output json]
+                                [--target <Name[,Name...]>] [--summary] [--output json]
+      powerforge apple-deploy [--config <powerforge.release.json>] [--platform <iOS|iPadOS|watchOS|macOS|tvOS|visionOS>] [--target <name-or-scheme>] [--device <name>|--device-id <id>] [--profile <name>] [--configuration <Debug|Release>] [--install-root </Applications>] [--build-mirror|--no-build-mirror] [--launch|--no-launch] [--plan] [--output json]
       powerforge apple-screenshots manifest --config <screenshots.json> [--capture-provenance <json> --expected-repository <owner/repo> --expected-workflow-ref <workflow-ref> | --version <x.y|x.y.z> --source-commit <sha>] --approved-by <reviewer-or-boundary> --allowed-root <reviewed-capture-root>
                         [--app-id <asc-app-id> | --release-config <release.json> [--target <name-or-scheme>]]
                         [--out <manifest.json>] [--xcode-version <value>] [--runtime <value>] [--device <value>]

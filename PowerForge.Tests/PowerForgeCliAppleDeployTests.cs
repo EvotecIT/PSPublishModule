@@ -1,0 +1,134 @@
+using System.Diagnostics;
+using System.Text.Json;
+
+namespace PowerForge.Tests;
+
+public sealed class PowerForgeCliAppleDeployTests
+{
+    [Fact]
+    public async Task AppleDeploy_plan_uses_configured_target_profile_and_platform_defaults()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = Path.Combine(Path.GetTempPath(), "PowerForgeCliAppleDeploy-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(tempRoot, "Sample.xcodeproj"));
+            var configPath = Path.Combine(tempRoot, "powerforge.release.json");
+            File.WriteAllText(configPath, """
+            {
+              "SchemaVersion": 1,
+              "AppleApps": {
+                "ProjectRoot": ".",
+                "LocalDeployment": {
+                  "DefaultPlatform": "iOS",
+                  "DefaultDevice": "EvoPhone",
+                  "Configuration": "Debug",
+                  "InstallRoot": "/Applications",
+                  "DefaultProfile": "Plus",
+                  "Profiles": [
+                    {
+                      "Name": "Free",
+                      "Environment": { "SAMPLE_SANDBOX": "1" }
+                    },
+                    {
+                      "Name": "Plus",
+                      "Environment": { "SAMPLE_SANDBOX": "0" }
+                    }
+                  ]
+                },
+                "Apps": [
+                  {
+                    "Name": "Sample iOS",
+                    "BundleId": "com.example.sample",
+                    "Platform": "iOS",
+                    "ProjectPath": "Sample.xcodeproj",
+                    "Scheme": "Sample"
+                  },
+                  {
+                    "Name": "Sample Mac",
+                    "BundleId": "com.example.sample",
+                    "Platform": "macOS",
+                    "ArchiveVariant": "MacCatalyst",
+                    "ProjectPath": "Sample.xcodeproj",
+                    "Scheme": "Sample"
+                  },
+                  {
+                    "Name": "Sample CarPlay capability",
+                    "BundleId": "com.example.sample",
+                    "Platform": "iOS",
+                    "ProductRole": "Capability",
+                    "ProjectPath": "Sample.xcodeproj",
+                    "Scheme": "Sample"
+                  }
+                ]
+              }
+            }
+            """);
+
+            var ios = await RunCliAsync(repoRoot, $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --plan --output json");
+            Assert.Equal(0, ios.ExitCode);
+            using (var document = JsonDocument.Parse(ios.StdOut))
+            {
+                var result = document.RootElement.GetProperty("result");
+                Assert.Equal("Sample iOS", result.GetProperty("target").GetString());
+                Assert.Equal("iOS", result.GetProperty("platform").GetString());
+                Assert.Equal("Plus", result.GetProperty("profile").GetString());
+                Assert.Equal("EvoPhone", result.GetProperty("device").GetString());
+                Assert.Equal("Debug", result.GetProperty("configuration").GetString());
+            }
+
+            var mac = await RunCliAsync(repoRoot, $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --platform macOS --profile Free --plan --output json");
+            Assert.Equal(0, mac.ExitCode);
+            using var macDocument = JsonDocument.Parse(mac.StdOut);
+            var macResult = macDocument.RootElement.GetProperty("result");
+            Assert.Equal("Sample Mac", macResult.GetProperty("target").GetString());
+            Assert.Equal("MacCatalyst", macResult.GetProperty("archiveVariant").GetString());
+            Assert.Equal("Free", macResult.GetProperty("profile").GetString());
+            Assert.Equal("/Applications", macResult.GetProperty("installRoot").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(string workingDirectory, string arguments)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = arguments,
+                WorkingDirectory = workingDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+        process.Start();
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        return (process.ExitCode, await stdout, await stderr);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "PowerForge.Cli", "PowerForge.Cli.csproj")))
+                return current.FullName;
+            current = current.Parent;
+        }
+        throw new DirectoryNotFoundException("Unable to locate repository root.");
+    }
+
+    private static string GetCliPath(string repoRoot)
+        => Path.Combine(repoRoot, "PowerForge.Cli", "bin", "Release", "net10.0", "PowerForge.Cli.dll");
+
+}

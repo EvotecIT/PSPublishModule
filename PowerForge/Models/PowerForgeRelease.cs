@@ -383,6 +383,8 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public string? SigningStyle { get; set; }
 
+    public PowerForgeAppleLocalDeploymentOptions LocalDeployment { get; set; } = new();
+
     public PowerForgeAppleReleaseAutomationOptions Automation { get; set; } = new();
 
     public PowerForgeAppleDirectDistributionOptions DirectDistribution { get; set; } = new();
@@ -457,6 +459,34 @@ internal sealed class PowerForgeAppleReleaseOptions
     public bool AllowNonPendingDeveloperRelease { get; set; }
 
     public AppleAppConfiguration[] Apps { get; set; } = Array.Empty<AppleAppConfiguration>();
+}
+
+internal sealed class PowerForgeAppleLocalDeploymentOptions
+{
+    public ApplePlatform DefaultPlatform { get; set; } = ApplePlatform.iOS;
+
+    public string? DefaultDevice { get; set; }
+
+    public string Configuration { get; set; } = "Debug";
+
+    public string InstallRoot { get; set; } = "/Applications";
+
+    public bool Launch { get; set; } = true;
+
+    public bool UseBuildMirror { get; set; }
+
+    public string? DefaultProfile { get; set; }
+
+    public PowerForgeAppleLocalDeploymentProfile[] Profiles { get; set; } = Array.Empty<PowerForgeAppleLocalDeploymentProfile>();
+}
+
+internal sealed class PowerForgeAppleLocalDeploymentProfile
+{
+    public string Name { get; set; } = string.Empty;
+
+    public Dictionary<string, string> Environment { get; set; } = new(StringComparer.Ordinal);
+
+    public string[] Arguments { get; set; } = Array.Empty<string>();
 }
 
 internal sealed class PowerForgeAppleReleasePlan
