@@ -32,6 +32,62 @@ function Assert-ConsumerRepositoryContent {
     }
 }
 
+function Register-AppleAutomationEvidence {
+    param([Parameter(Mandatory)][string] $SourceCommit)
+    if ($ArgumentList[0] -ne 'apple-release') { return }
+
+    $releaseConfigPath = Resolve-OptionPath -Value (Get-OptionValue -Option '--config')
+    $release = Get-Content -LiteralPath $releaseConfigPath -Raw | ConvertFrom-Json
+    $apple = $release.AppleApps
+    $projectRootValue = if ([string]::IsNullOrWhiteSpace([string]$apple.ProjectRoot)) { '.' } else { [string]$apple.ProjectRoot }
+    $projectRoot = Resolve-PathFromBase -BasePath (Split-Path -Parent $releaseConfigPath) -Value $projectRootValue
+    $automation = $apple.Automation
+
+    $lockValue = if ([string]::IsNullOrWhiteSpace([string]$automation.LockPath)) {
+        'build/powerforge/apple/release.lock'
+    } else { [string]$automation.LockPath }
+    $lockPath = Resolve-PathFromBase -BasePath $projectRoot -Value $lockValue
+    if (Test-Path -LiteralPath $lockPath) {
+        Add-AllowedConsumerEvidencePath -Path $lockPath -Name 'Apple release operation lock'
+    }
+
+    $receiptValue = if ([string]::IsNullOrWhiteSpace([string]$automation.ReceiptPath)) {
+        'build/powerforge/apple/release-receipt.json'
+    } else { [string]$automation.ReceiptPath }
+    $receiptPath = Resolve-PathFromBase -BasePath $projectRoot -Value $receiptValue
+    if (Test-Path -LiteralPath $receiptPath) {
+        $directTargets = @($apple.Apps | Where-Object { $_.Enabled -ne $false -and [string]$_.DistributionRoute -eq 'DirectNotarized' })
+        if ($directTargets.Count -eq 0) {
+            $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+            if (-not ([string]$receipt.sourceCommit).Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Apple release receipt source commit does not match the exact consumer HEAD '$SourceCommit'."
+            }
+            Add-AllowedConsumerEvidencePath -Path $receiptPath -Name 'Apple release receipt'
+        }
+    }
+
+    $expectedPlanSha256 = Get-OptionValue -Option '--apple-expected-plan-sha256'
+    if ([string]::IsNullOrWhiteSpace($expectedPlanSha256)) { return }
+    if ($expectedPlanSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
+        throw '--apple-expected-plan-sha256 must contain exactly 64 hexadecimal characters.'
+    }
+
+    $planValue = if ([string]::IsNullOrWhiteSpace([string]$automation.PlanReceiptPath)) {
+        'build/powerforge/apple/release-plan.json'
+    } else { [string]$automation.PlanReceiptPath }
+    $planPath = Resolve-PathFromBase -BasePath $projectRoot -Value $planValue
+    if (-not (Test-Path -LiteralPath $planPath -PathType Leaf)) { return }
+    $plan = Get-Content -LiteralPath $planPath -Raw | ConvertFrom-Json
+    $requestedAction = if ($ArgumentList.Count -gt 1) { [string]$ArgumentList[1] } else { '' }
+    if ($plan.planOnly -ne $true -or
+        -not ([string]$plan.action).Equals($requestedAction, [StringComparison]::OrdinalIgnoreCase) -or
+        -not ([string]$plan.sourceCommit).Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase) -or
+        -not ([string]$plan.planSha256).Equals($expectedPlanSha256, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Apple release plan receipt does not match the approved action, source commit, and plan SHA-256.'
+    }
+    Add-AllowedConsumerEvidencePath -Path $planPath -Name 'Apple release plan receipt'
+}
+
 function Assert-TrackedSourceLinks {
     $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
     $rootPrefix = $consumer.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
@@ -94,17 +150,32 @@ function Register-StandaloneScreenshotEvidence {
         Add-AllowedConsumerEvidencePath -Path $path -Name 'Reviewed screenshot evidence'
     }
 
-    $configPath = Resolve-OptionPath -Value (Get-OptionValue -Option '--config')
-    $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
-    $configuredOutput = [string]$config.Quality.ApprovalManifestPath
-    $outputValue = Get-OptionValue -Option '--out'
-    if ([string]::IsNullOrWhiteSpace($outputValue)) {
-        $outputValue = if ([string]::IsNullOrWhiteSpace($configuredOutput)) {
-            [IO.Path]::GetFileNameWithoutExtension($configPath) + '.approval.json'
-        } else { $configuredOutput }
+    $operation = if ($ArgumentList.Count -gt 1) { [string]$ArgumentList[1] } else { '' }
+    $configPaths = if ($operation -eq 'manifests') {
+        $releaseConfigPath = Resolve-OptionPath -Value (Get-OptionValue -Option '--release-config')
+        $release = Get-Content -LiteralPath $releaseConfigPath -Raw | ConvertFrom-Json
+        $apple = $release.AppleApps
+        $projectRootValue = if ([string]::IsNullOrWhiteSpace([string]$apple.ProjectRoot)) { '.' } else { [string]$apple.ProjectRoot }
+        $projectRoot = Resolve-PathFromBase -BasePath (Split-Path -Parent $releaseConfigPath) -Value $projectRootValue
+        @(@([string]$apple.ScreenshotConfigPath) + @($apple.ScreenshotConfigPaths) |
+            Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+            ForEach-Object { Resolve-PathFromBase -BasePath $projectRoot -Value ([string]$_) } |
+            Sort-Object -Unique)
+    } else {
+        @(Resolve-OptionPath -Value (Get-OptionValue -Option '--config'))
     }
-    $outputPath = Resolve-PathFromBase -BasePath (Split-Path -Parent $configPath) -Value $outputValue
-    Add-AllowedConsumerEvidencePath -Path $outputPath -Name 'Screenshot approval manifest output'
+    foreach ($configPath in $configPaths) {
+        $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+        $configuredOutput = [string]$config.Quality.ApprovalManifestPath
+        $outputValue = Get-OptionValue -Option '--out'
+        if ([string]::IsNullOrWhiteSpace($outputValue)) {
+            $outputValue = if ([string]::IsNullOrWhiteSpace($configuredOutput)) {
+                [IO.Path]::GetFileNameWithoutExtension($configPath) + '.approval.json'
+            } else { $configuredOutput }
+        }
+        $outputPath = Resolve-PathFromBase -BasePath (Split-Path -Parent $configPath) -Value $outputValue
+        Add-AllowedConsumerEvidencePath -Path $outputPath -Name 'Screenshot approval manifest output'
+    }
 }
 
 function Get-ScreenshotInventoryKey {

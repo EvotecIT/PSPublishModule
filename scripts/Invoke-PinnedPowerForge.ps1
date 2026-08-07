@@ -201,9 +201,15 @@ function Assert-SafeArguments {
         throw 'UploadExisting is forbidden at the pinned local operator boundary because existing archive bytes lack reviewed provenance.'
     }
     $config = Get-OptionValue -Option '--config'
-    if (($command -eq 'apple-release' -or $command -eq 'apple-screenshots' -or $command -eq 'apple-review-details' -or
-        ($command -eq 'apple-governance' -and $operation -ne 'snapshot')) -and -not $config) {
+    $requiresConfig = $command -eq 'apple-release' -or
+        ($command -eq 'apple-screenshots' -and $operation -ne 'manifests') -or
+        $command -eq 'apple-review-details' -or
+        ($command -eq 'apple-governance' -and $operation -ne 'snapshot')
+    if ($requiresConfig -and -not $config) {
         throw "$command requires an explicit --config at the pinned local operator boundary."
+    }
+    if ($command -eq 'apple-screenshots' -and $operation -eq 'manifests' -and -not (Get-OptionValue -Option '--release-config')) {
+        throw 'apple-screenshots manifests requires an explicit --release-config at the pinned local operator boundary.'
     }
     $script:validatedReleaseConfigPaths = @()
     foreach ($option in @('--config', '--release-config')) {
@@ -592,6 +598,7 @@ try {
     }
     Register-StandaloneScreenshotEvidence
     Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead
+    Register-AppleAutomationEvidence -SourceCommit $consumerHead
     Assert-ConsumerRepositoryContent
     Assert-TrackedSourceLinks
     $tar = Resolve-FixedTool -Name tar

@@ -273,12 +273,14 @@ public sealed class PowerForgeCliAppleReleaseTests
             var screenshotDirectory = Directory.CreateDirectory(Path.Combine(tempRoot, "screenshots"));
             File.WriteAllBytes(Path.Combine(screenshotDirectory.FullName, "01-home.png"),
                 Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII="));
+            File.WriteAllBytes(Path.Combine(screenshotDirectory.FullName, "02-unselected-mac.png"),
+                Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII="));
             var configPath = Path.Combine(tempRoot, "screenshots.json");
             File.WriteAllText(configPath,
-                """{ "AppId": "1234567890", "Platform": "iOS", "Locale": "en-US", "ScreenshotSets": [ { "ScreenshotDisplayType": "APP_IPHONE_67", "Path": "screenshots", "AllowedDimensions": [ "1x1" ] } ], "Quality": { "Enabled": true, "MinimumFileBytes": 1, "MinimumKilobytesPerMegapixel": 0 } }""");
+                """{ "AppId": "1234567890", "Platform": "iOS", "Locale": "en-US", "ScreenshotSets": [ { "ScreenshotDisplayType": "APP_IPHONE_67", "Path": "screenshots", "Filter": "01-*.png", "AllowedDimensions": [ "1x1" ] } ], "Quality": { "Enabled": true, "MinimumFileBytes": 1, "MinimumKilobytesPerMegapixel": 0 } }""");
             var provenancePath = Path.Combine(tempRoot, "powerforge-apple-screenshot-provenance.json");
             File.WriteAllText(provenancePath,
-                $$"""{ "schemaVersion": 2, "repository": "EvotecIT/Sample", "captureRunId": "123", "sourceCommit": "{{ApprovedSourceCommit}}", "marketingVersion": "1.5.0", "workflowRef": "EvotecIT/Sample/.github/workflows/apple-screenshots.yml@refs/heads/main", "xcodeVersion": "Xcode 26", "runtime": "macOS 26 arm64", "device": "Mac", "theme": "all", "scenario": "app-store", "screenshots": [ { "path": "01-home.png", "sha256": "d268b9b4a10c5990e181efed7c66f7369e43f3382bdef6c6ea9858098e0fab95", "width": 1, "height": 1 } ] }""");
+                $$"""{ "schemaVersion": 2, "repository": "EvotecIT/Sample", "captureRunId": "123", "sourceCommit": "{{ApprovedSourceCommit}}", "marketingVersion": "1.5.0", "workflowRef": "EvotecIT/Sample/.github/workflows/apple-screenshots.yml@refs/heads/main", "xcodeVersion": "Xcode 26", "runtime": "macOS 26 arm64", "device": "Mac", "theme": "all", "scenario": "app-store", "screenshots": [ { "path": "01-home.png", "sha256": "d268b9b4a10c5990e181efed7c66f7369e43f3382bdef6c6ea9858098e0fab95", "width": 1, "height": 1 }, { "path": "02-unselected-mac.png", "sha256": "d268b9b4a10c5990e181efed7c66f7369e43f3382bdef6c6ea9858098e0fab95", "width": 1, "height": 1 } ] }""");
             var manifestPath = Path.Combine(tempRoot, "approval.json");
 
             var result = await RunCliAsync(repoRoot,
@@ -306,7 +308,7 @@ public sealed class PowerForgeCliAppleReleaseTests
             var byteMismatch = await RunCliAsync(repoRoot,
                 $"\"{GetCliPath(repoRoot)}\" apple-screenshots manifest --config \"{configPath}\" --capture-provenance \"{provenancePath}\" --expected-repository EvotecIT/Sample --expected-workflow-ref EvotecIT/Sample/.github/workflows/apple-screenshots.yml@refs/heads/main --approved-by release-owner --allowed-root \"{screenshotDirectory.FullName}\" --out \"{manifestPath}\" --output json");
             Assert.Equal(1, byteMismatch.ExitCode);
-            Assert.Contains("do not exactly match", byteMismatch.StdOut + byteMismatch.StdErr, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("byte-for-byte subset", byteMismatch.StdOut + byteMismatch.StdErr, StringComparison.OrdinalIgnoreCase);
 
             File.WriteAllText(provenancePath,
                 $$"""{ "schemaVersion": 2, "repository": "EvotecIT/Sample", "captureRunId": "123", "sourceCommit": "{{ApprovedSourceCommit}}", "marketingVersion": "1.5.0", "workflowRef": "EvotecIT/Sample/.github/workflows/apple-screenshots.yml@refs/heads/main", "xcodeVersion": "Xcode 26", "runtime": "macOS 26 arm64", "device": "Mac", "theme": "all", "scenario": "app-store", "screenshots": [ { "path": "/01-home.png", "sha256": "d268b9b4a10c5990e181efed7c66f7369e43f3382bdef6c6ea9858098e0fab95", "width": 1, "height": 1 } ] }""");
@@ -314,6 +316,45 @@ public sealed class PowerForgeCliAppleReleaseTests
                 $"\"{GetCliPath(repoRoot)}\" apple-screenshots manifest --config \"{configPath}\" --capture-provenance \"{provenancePath}\" --expected-repository EvotecIT/Sample --expected-workflow-ref EvotecIT/Sample/.github/workflows/apple-screenshots.yml@refs/heads/main --approved-by release-owner --allowed-root \"{screenshotDirectory.FullName}\" --out \"{manifestPath}\" --output json");
             Assert.Equal(1, unsafePath.ExitCode);
             Assert.Contains("unsafe screenshot path", unsafePath.StdOut + unsafePath.StdErr, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AppleScreenshots_ManifestsApprovesEveryConfiguredPlatformSubsetInOneCommand()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = CreateTempDirectory();
+        try
+        {
+            var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII=");
+            Directory.CreateDirectory(Path.Combine(tempRoot, "ios"));
+            Directory.CreateDirectory(Path.Combine(tempRoot, "mac"));
+            File.WriteAllBytes(Path.Combine(tempRoot, "ios", "01-home.png"), png);
+            File.WriteAllBytes(Path.Combine(tempRoot, "mac", "01-home.png"), png);
+            File.WriteAllText(Path.Combine(tempRoot, "ios.json"),
+                """{ "AppId": "123", "Platform": "iOS", "ScreenshotSets": [ { "ScreenshotDisplayType": "APP_IPHONE_67", "Path": "ios", "AllowedDimensions": [ "1x1" ] } ], "Quality": { "Enabled": true, "MinimumFileBytes": 1, "MinimumKilobytesPerMegapixel": 0, "ApprovalManifestPath": "ios.approval.json" } }""");
+            File.WriteAllText(Path.Combine(tempRoot, "mac.json"),
+                """{ "AppId": "123", "Platform": "macOS", "ScreenshotSets": [ { "ScreenshotDisplayType": "APP_DESKTOP", "Path": "mac", "AllowedDimensions": [ "1x1" ] } ], "Quality": { "Enabled": true, "MinimumFileBytes": 1, "MinimumKilobytesPerMegapixel": 0, "ApprovalManifestPath": "mac.approval.json" } }""");
+            var releaseConfigPath = Path.Combine(tempRoot, "powerforge.release.json");
+            File.WriteAllText(releaseConfigPath,
+                """{ "AppleApps": { "ProjectRoot": ".", "ScreenshotConfigPaths": [ "ios.json", "mac.json" ], "Apps": [ { "Name": "Phone", "Platform": "iOS", "ProjectPath": "Sample.xcodeproj", "AppStoreConnectAppId": "123" }, { "Name": "Mac", "Platform": "macOS", "ProjectPath": "Sample.xcodeproj", "AppStoreConnectAppId": "123" } ] } }""");
+            var provenancePath = Path.Combine(tempRoot, "powerforge-apple-screenshot-provenance.json");
+            File.WriteAllText(provenancePath,
+                $$"""{ "schemaVersion": 2, "repository": "EvotecIT/Sample", "captureRunId": "123", "sourceCommit": "{{ApprovedSourceCommit}}", "marketingVersion": "1.5.0", "workflowRef": "EvotecIT/Sample/.github/workflows/apple-screenshots.yml@refs/heads/main", "xcodeVersion": "Xcode 26", "runtime": "iOS and macOS 26", "device": "Phone and Mac", "theme": "all", "scenario": "app-store", "screenshots": [ { "path": "ios/01-home.png", "sha256": "d268b9b4a10c5990e181efed7c66f7369e43f3382bdef6c6ea9858098e0fab95", "width": 1, "height": 1 }, { "path": "mac/01-home.png", "sha256": "d268b9b4a10c5990e181efed7c66f7369e43f3382bdef6c6ea9858098e0fab95", "width": 1, "height": 1 } ] }""");
+
+            var result = await RunCliAsync(repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-screenshots manifests --release-config \"{releaseConfigPath}\" --capture-provenance \"{provenancePath}\" --expected-repository EvotecIT/Sample --expected-workflow-ref EvotecIT/Sample/.github/workflows/apple-screenshots.yml@refs/heads/main --approved-by release-owner --allowed-root \"{tempRoot}\" --output json");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.True(File.Exists(Path.Combine(tempRoot, "ios.approval.json")));
+            Assert.True(File.Exists(Path.Combine(tempRoot, "mac.approval.json")));
+            using var output = JsonDocument.Parse(result.StdOut);
+            Assert.Equal(2, output.RootElement.GetProperty("result").GetProperty("manifestCount").GetInt32());
+            Assert.Equal(2, output.RootElement.GetProperty("result").GetProperty("screenshotCount").GetInt32());
         }
         finally
         {

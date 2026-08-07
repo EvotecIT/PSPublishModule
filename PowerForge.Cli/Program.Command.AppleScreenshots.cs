@@ -5,7 +5,7 @@ using PowerForge.Cli;
 internal static partial class Program
 {
     private const string AppleScreenshotsUsage =
-        "Usage: powerforge apple-screenshots manifest --config <screenshots.json> " +
+        "Usage: powerforge apple-screenshots <manifest --config <screenshots.json> | manifests --release-config <powerforge.release.json>> " +
         "[--capture-provenance <json> --expected-repository <owner/repo> --expected-workflow-ref <workflow-ref> | --version <x.y|x.y.z> --source-commit <sha>] " +
         "--approved-by <identity> --allowed-root <reviewed-capture-root> [--out <manifest.json>] " +
         "[--write-root <trusted-output-root>] " +
@@ -25,77 +25,43 @@ internal static partial class Program
 
         try
         {
-            if (!argv[0].Equals("manifest", StringComparison.OrdinalIgnoreCase))
-                throw new ArgumentException("Apple screenshot command must be 'manifest'.");
-            var configPath = Path.GetFullPath(RequiredOption(argv, "--config"));
-            var baseDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
-            var spec = CliJson.DeserializeOrThrow(
-                File.ReadAllText(configPath),
-                CliJson.Context.AppStoreConnectScreenshotSyncSpec,
-                configPath);
-            var appId = ResolveScreenshotApprovalAppId(argv, spec);
-            var allowedRoot = Path.GetFullPath(RequiredOption(argv, "--allowed-root"));
-            var provenance = ResolveScreenshotCaptureProvenance(argv);
-            var manifest = new AppStoreConnectScreenshotApprovalService().Create(
-                new AppStoreConnectScreenshotApprovalRequest
-                {
-                    Spec = spec,
-                    AppId = appId,
-                    BaseDirectory = baseDirectory,
-                    AllowedRoot = allowedRoot,
-                    VersionString = ResolveProvenanceBoundOption(argv, "--version", provenance?.MarketingVersion)!,
-                    SourceCommit = ResolveProvenanceBoundOption(argv, "--source-commit", provenance?.SourceCommit)!,
-                    CaptureRunId = provenance?.CaptureRunId,
-                    CaptureRepository = provenance?.Repository,
-                    CaptureWorkflowRef = provenance?.WorkflowRef,
-                    ApprovedBy = RequiredOption(argv, "--approved-by"),
-                    InitiatedBy = TryGetOptionValue(argv, "--initiated-by"),
-                    ApprovalEvidence = TryGetOptionValue(argv, "--approval-evidence"),
-                    XcodeVersion = ResolveProvenanceBoundOption(argv, "--xcode-version", provenance?.XcodeVersion, required: false),
-                    Runtime = ResolveProvenanceBoundOption(argv, "--runtime", provenance?.Runtime, required: false),
-                    Device = ResolveProvenanceBoundOption(argv, "--device", provenance?.Device, required: false),
-                    Theme = ResolveProvenanceBoundOption(argv, "--theme", provenance?.Theme, required: false),
-                    Scenario = ResolveProvenanceBoundOption(argv, "--scenario", provenance?.Scenario, required: false)
-                });
-            if (provenance is not null)
-                ValidateScreenshotCaptureInventory(provenance, manifest, baseDirectory, allowedRoot);
-            var configuredOutput = spec.Quality?.ApprovalManifestPath;
-            var outputPath = ResolvePathFromBase(
-                baseDirectory,
-                TryGetOptionValue(argv, "--out") ??
-                configuredOutput ??
-                Path.GetFileNameWithoutExtension(configPath) + ".approval.json");
-            var writeRoot = TryGetOptionValue(argv, "--write-root");
-            if (!string.IsNullOrWhiteSpace(writeRoot))
-                EnsureTrustedScreenshotManifestPath(outputPath, Path.GetFullPath(writeRoot));
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-            if (!string.IsNullOrWhiteSpace(writeRoot))
-                EnsureTrustedScreenshotManifestPath(outputPath, Path.GetFullPath(writeRoot));
-            File.WriteAllText(
-                outputPath,
-                JsonSerializer.Serialize(manifest, CliJson.Context.AppStoreConnectScreenshotApprovalManifest) + Environment.NewLine);
+            var operation = argv[0];
+            var configPaths = ResolveScreenshotManifestConfigPaths(operation, argv);
+            if (configPaths.Length > 1 && !string.IsNullOrWhiteSpace(TryGetOptionValue(argv, "--out")))
+                throw new ArgumentException("--out is valid only when generating one screenshot approval manifest.");
+            var outputs = configPaths
+                .Select(configPath => CreateScreenshotApprovalManifest(configPath, argv))
+                .ToArray();
 
             if (outputJson)
             {
                 WriteJson(new CliJsonEnvelope
                 {
                     SchemaVersion = OutputSchemaVersion,
-                    Command = "apple-screenshots.manifest",
+                    Command = operation.Equals("manifests", StringComparison.OrdinalIgnoreCase)
+                        ? "apple-screenshots.manifests"
+                        : "apple-screenshots.manifest",
                     Success = true,
                     ExitCode = 0,
                     Result = JsonSerializer.SerializeToElement(new
                     {
-                        outputPath,
-                        screenshotCount = manifest.Screenshots.Length,
-                        manifest.VersionString,
-                        manifest.SourceCommit,
-                        manifest.ApprovedBy
+                        manifestCount = outputs.Length,
+                        screenshotCount = outputs.Sum(static output => output.Manifest.Screenshots.Length),
+                        manifests = outputs.Select(static output => new
+                        {
+                            output.OutputPath,
+                            screenshotCount = output.Manifest.Screenshots.Length,
+                            output.Manifest.VersionString,
+                            output.Manifest.SourceCommit,
+                            output.Manifest.ApprovedBy
+                        }).ToArray()
                     })
                 });
             }
             else
             {
-                logger.Success($"Approved {manifest.Screenshots.Length} screenshot(s): {outputPath}");
+                foreach (var output in outputs)
+                    logger.Success($"Approved {output.Manifest.Screenshots.Length} screenshot(s): {output.OutputPath}");
             }
             return 0;
         }
@@ -103,6 +69,82 @@ internal static partial class Program
         {
             return WriteReleaseError(outputJson, "apple-screenshots.manifest", 1, exception.Message, logger);
         }
+    }
+
+    private static ScreenshotManifestOutput CreateScreenshotApprovalManifest(string configPath, string[] argv)
+    {
+        var baseDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
+        var spec = CliJson.DeserializeOrThrow(
+            File.ReadAllText(configPath),
+            CliJson.Context.AppStoreConnectScreenshotSyncSpec,
+            configPath);
+        var appId = ResolveScreenshotApprovalAppId(argv, spec);
+        var allowedRoot = Path.GetFullPath(RequiredOption(argv, "--allowed-root"));
+        var provenance = ResolveScreenshotCaptureProvenance(argv);
+        var manifest = new AppStoreConnectScreenshotApprovalService().Create(
+            new AppStoreConnectScreenshotApprovalRequest
+            {
+                Spec = spec,
+                AppId = appId,
+                BaseDirectory = baseDirectory,
+                AllowedRoot = allowedRoot,
+                VersionString = ResolveProvenanceBoundOption(argv, "--version", provenance?.MarketingVersion)!,
+                SourceCommit = ResolveProvenanceBoundOption(argv, "--source-commit", provenance?.SourceCommit)!,
+                CaptureRunId = provenance?.CaptureRunId,
+                CaptureRepository = provenance?.Repository,
+                CaptureWorkflowRef = provenance?.WorkflowRef,
+                ApprovedBy = RequiredOption(argv, "--approved-by"),
+                InitiatedBy = TryGetOptionValue(argv, "--initiated-by"),
+                ApprovalEvidence = TryGetOptionValue(argv, "--approval-evidence"),
+                XcodeVersion = ResolveProvenanceBoundOption(argv, "--xcode-version", provenance?.XcodeVersion, required: false),
+                Runtime = ResolveProvenanceBoundOption(argv, "--runtime", provenance?.Runtime, required: false),
+                Device = ResolveProvenanceBoundOption(argv, "--device", provenance?.Device, required: false),
+                Theme = ResolveProvenanceBoundOption(argv, "--theme", provenance?.Theme, required: false),
+                Scenario = ResolveProvenanceBoundOption(argv, "--scenario", provenance?.Scenario, required: false)
+            });
+        if (provenance is not null)
+            ValidateScreenshotCaptureInventory(provenance, manifest, baseDirectory, allowedRoot);
+        var configuredOutput = spec.Quality?.ApprovalManifestPath;
+        var outputPath = ResolvePathFromBase(
+            baseDirectory,
+            TryGetOptionValue(argv, "--out") ??
+            configuredOutput ??
+            Path.GetFileNameWithoutExtension(configPath) + ".approval.json");
+        var writeRoot = TryGetOptionValue(argv, "--write-root");
+        if (!string.IsNullOrWhiteSpace(writeRoot))
+            EnsureTrustedScreenshotManifestPath(outputPath, Path.GetFullPath(writeRoot));
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        if (!string.IsNullOrWhiteSpace(writeRoot))
+            EnsureTrustedScreenshotManifestPath(outputPath, Path.GetFullPath(writeRoot));
+        File.WriteAllText(
+            outputPath,
+            JsonSerializer.Serialize(manifest, CliJson.Context.AppStoreConnectScreenshotApprovalManifest) + Environment.NewLine);
+        return new ScreenshotManifestOutput(outputPath, manifest);
+    }
+
+    private static string[] ResolveScreenshotManifestConfigPaths(string operation, string[] argv)
+    {
+        if (operation.Equals("manifest", StringComparison.OrdinalIgnoreCase))
+            return new[] { Path.GetFullPath(RequiredOption(argv, "--config")) };
+        if (!operation.Equals("manifests", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Apple screenshot command must be 'manifest' or 'manifests'.");
+
+        var releaseConfigValue = RequiredOption(argv, "--release-config");
+        var (releaseSpec, releaseConfigPath) = LoadPowerForgeReleaseSpecWithPath(releaseConfigValue);
+        var apple = releaseSpec.AppleApps ?? throw new InvalidOperationException("Release configuration does not contain AppleApps.");
+        var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
+        var projectRoot = ResolvePathFromBase(
+            releaseDirectory,
+            string.IsNullOrWhiteSpace(apple.ProjectRoot) ? "." : apple.ProjectRoot);
+        var configured = new[] { apple.ScreenshotConfigPath }
+            .Concat(apple.ScreenshotConfigPaths ?? Array.Empty<string>())
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => ResolvePathFromBase(projectRoot, value!))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (configured.Length == 0)
+            throw new InvalidOperationException("AppleApps must configure ScreenshotConfigPath or ScreenshotConfigPaths.");
+        return configured;
     }
 
     private static ScreenshotCaptureProvenance? ResolveScreenshotCaptureProvenance(string[] argv)
@@ -184,9 +226,8 @@ internal static partial class Program
         string baseDirectory,
         string allowedRoot)
     {
-        var expected = provenance.Screenshots
-            .OrderBy(static item => item.Path, StringComparer.Ordinal)
-            .ToArray();
+        var retained = provenance.Screenshots
+            .ToHashSet();
         var actual = manifest.Screenshots.Select(item =>
         {
             var fullPath = Path.GetFullPath(Path.Combine(baseDirectory, item.File));
@@ -194,10 +235,10 @@ internal static partial class Program
             if (Path.IsPathRooted(relative) || relative.Equals("..", StringComparison.Ordinal) || relative.StartsWith("../", StringComparison.Ordinal))
                 throw new InvalidOperationException($"Approved screenshot '{item.File}' escapes the capture inventory root.");
             return new ScreenshotCaptureInventoryEntry(relative, item.Sha256.ToLowerInvariant(), item.Width, item.Height);
-        }).OrderBy(static item => item.Path, StringComparer.Ordinal).ToArray();
+        }).ToArray();
 
-        if (expected.Length != actual.Length || !expected.SequenceEqual(actual))
-            throw new InvalidOperationException("Selected screenshots do not exactly match the retained capture provenance byte inventory.");
+        if (actual.Distinct().Count() != actual.Length || actual.Any(item => !retained.Contains(item)))
+            throw new InvalidOperationException("Selected screenshots are not an exact byte-for-byte subset of the retained capture provenance inventory.");
     }
 
     private static string? ResolveProvenanceBoundOption(
@@ -233,6 +274,10 @@ internal static partial class Program
         ScreenshotCaptureInventoryEntry[] Screenshots);
 
     private sealed record ScreenshotCaptureInventoryEntry(string Path, string Sha256, int Width, int Height);
+
+    private sealed record ScreenshotManifestOutput(
+        string OutputPath,
+        AppStoreConnectScreenshotApprovalManifest Manifest);
 
     private static string? ResolveScreenshotApprovalAppId(
         string[] argv,

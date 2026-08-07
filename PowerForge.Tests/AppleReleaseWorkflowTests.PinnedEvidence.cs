@@ -183,4 +183,69 @@ public sealed partial class AppleReleaseWorkflowTests
             if (Directory.Exists(parent)) Directory.Delete(parent, recursive: true);
         }
     }
+
+    [Fact]
+    public void ApprovedApplePlanAndBoundAutomationOutputsDoNotRequireASecondCheckout()
+    {
+        var root = FindRepoRoot();
+        var parent = Path.Combine(root, ".test-temp", $"powerforge-plan-evidence-{Guid.NewGuid():N}");
+        var sandbox = Path.Combine(parent, "consumer");
+        const string commit = "0123456789abcdef0123456789abcdef01234567";
+        const string planSha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        try
+        {
+            var output = Path.Combine(sandbox, "build", "powerforge", "apple");
+            Directory.CreateDirectory(output);
+            File.WriteAllText(Path.Combine(sandbox, "powerforge.release.json"),
+                """{ "AppleApps": { "ProjectRoot": ".", "Automation": { "ReceiptPath": "build/powerforge/apple/release-receipt.json", "PlanReceiptPath": "build/powerforge/apple/release-plan.json", "LockPath": "build/powerforge/apple/release.lock" }, "Apps": [ { "Enabled": true, "DistributionRoute": "AppStore", "ProjectPath": "Sample.xcodeproj" } ] } }""");
+            File.WriteAllText(Path.Combine(sandbox, ".gitignore"), "build/\n");
+            File.WriteAllText(Path.Combine(output, "release-receipt.json"), JsonSerializer.Serialize(new { sourceCommit = commit }));
+            File.WriteAllText(Path.Combine(output, "release-plan.json"), JsonSerializer.Serialize(new
+            {
+                planOnly = true,
+                action = "Advance",
+                sourceCommit = commit,
+                planSha256
+            }));
+            File.WriteAllText(Path.Combine(output, "release.lock"), "stale generated lock state");
+            Run("git", sandbox, "init", "--quiet").EnsureSuccess();
+            Run("git", sandbox, "add", "powerforge.release.json", ".gitignore").EnsureSuccess();
+            CommitTrackedReleaseSandbox(sandbox, "Tracked release configuration");
+
+            var harness = Path.Combine(parent, "plan-evidence-harness.ps1");
+            File.WriteAllText(harness,
+                $$"""
+                param([string] $Consumer, [string] $Support)
+                $ErrorActionPreference = 'Stop'
+                $script:gitPath = '/usr/bin/git'
+                $script:allowedConsumerEvidencePaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+                $consumer = [IO.Path]::GetFullPath($Consumer)
+                $ArgumentList = @('apple-release','Advance','--config','powerforge.release.json','--apple-expected-plan-sha256','{{planSha256}}')
+                function Invoke-GitText { param([string]$Root,[string[]]$Arguments); $o=@(& $script:gitPath -c core.quotePath=false -C $Root @Arguments 2>&1); if($LASTEXITCODE -ne 0){throw 'git failed'}; return ($o -join [Environment]::NewLine).Trim() }
+                function Get-OptionValue { param([string]$Option); $i=[Array]::IndexOf($ArgumentList,$Option); if($i -ge 0 -and $i+1 -lt $ArgumentList.Count){return $ArgumentList[$i+1]}; return $null }
+                function Resolve-OptionPath { param([string]$Value); if([IO.Path]::IsPathRooted($Value)){return [IO.Path]::GetFullPath($Value)}; return [IO.Path]::GetFullPath((Join-Path $consumer $Value)) }
+                function Resolve-PathFromBase { param([string]$BasePath,[string]$Value); if([IO.Path]::IsPathRooted($Value)){return [IO.Path]::GetFullPath($Value)}; return [IO.Path]::GetFullPath((Join-Path $BasePath $Value)) }
+                function Assert-UnlinkedPath { param([string]$Path,[string]$Name,[switch]$AllowMissingLeaf) }
+                . $Support
+                Register-AppleAutomationEvidence -SourceCommit '{{commit}}'
+                Assert-ConsumerRepositoryContent
+                Set-Content -LiteralPath (Join-Path $consumer 'build/powerforge/apple/injected.bin') -Value 'not reviewed'
+                try { Assert-ConsumerRepositoryContent; throw 'Unreviewed file was accepted.' }
+                catch { if ($_.Exception.Message -notlike '*non-reviewed content*') { throw }; 'PASS' }
+                """);
+
+            var result = Run(
+                "pwsh",
+                parent,
+                "-NoLogo", "-NoProfile", "-File", harness,
+                "-Consumer", sandbox,
+                "-Support", Path.Combine(root, "scripts", "Invoke-PinnedPowerForge.Evidence.ps1"));
+            result.EnsureSuccess();
+            Assert.Contains("PASS", result.StandardOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(parent)) Directory.Delete(parent, recursive: true);
+        }
+    }
 }

@@ -580,7 +580,9 @@ internal sealed partial class PowerForgeReleaseService
             resultByName.TryGetValue(app.Name, out var result);
             var state = result?.RemoteState;
             var platform = state?.Platforms.SingleOrDefault(value => value.Platform == app.Platform);
-            var build = platform?.MatchedBuild ?? platform?.SelectedBuild;
+            var preparedVersion = result?.Distribution?.Version;
+            var receiptVersion = platform?.Version ?? preparedVersion;
+            var build = platform?.MatchedBuild ?? platform?.SelectedBuild ?? result?.Distribution?.Build;
             var review = platform?.ReviewSubmissions.FirstOrDefault(static value => value.IsSubmitted == true) ??
                          platform?.ReviewSubmissions.FirstOrDefault();
             (string? MarketingVersion, string? BuildNumber) values = (null, null);
@@ -636,8 +638,14 @@ internal sealed partial class PowerForgeReleaseService
                 .GroupBy(static diagnostic => diagnostic.Code, StringComparer.OrdinalIgnoreCase)
                 .Select(static group => group.First())
                 .ToArray();
+            var observedNextActions = (platform?.NextActions ?? Array.Empty<string>())
+                .Where(action => preparedVersion is null ||
+                                 !action.Equals("Create App Store distribution version.", StringComparison.OrdinalIgnoreCase))
+                .Where(action => result?.Distribution?.Build is null || !plan.SelectBuildForDistribution ||
+                                 !action.StartsWith("Select ", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
             var nextActions = BuildAppleReceiptNextActions(
-                    platform?.NextActions,
+                    observedNextActions,
                     betaGroupsConfigured,
                     app.TestFlightPolicy,
                     app.AppStoreConnectAppIdDiscovered)
@@ -662,9 +670,10 @@ internal sealed partial class PowerForgeReleaseService
                 BuildId = build?.Id,
                 BuildProcessingState = build?.ProcessingState,
                 BuildUploadId = result?.Upload?.BuildUploadId,
-                DistributionVersionId = platform?.Version?.Id,
-                DistributionState = platform?.Version?.AppStoreState ?? platform?.Version?.AppVersionState,
-                BuildSelected = platform?.MatchedBuildSelected,
+                DistributionVersionId = receiptVersion?.Id,
+                DistributionState = receiptVersion?.AppStoreState ?? receiptVersion?.AppVersionState,
+                BuildSelected = platform?.MatchedBuildSelected ??
+                                (result?.Distribution?.Build is not null && plan.SelectBuildForDistribution ? true : null),
                 TestFlightInternalState = platform?.BetaDetail?.InternalBuildState,
                 TestFlightExternalState = platform?.BetaDetail?.ExternalBuildState,
                 TestFlightReviewState = platform?.BetaReviewSubmission?.BetaReviewState,
