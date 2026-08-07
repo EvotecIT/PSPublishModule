@@ -654,8 +654,6 @@ internal static partial class WebPipelineRunner
             assemblyPath ??= Directory.GetFiles(dotNetRoot, "*.dll", SearchOption.AllDirectories)
                 .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
                 .FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(assemblyPath))
-                continue;
 
             var hasPlaceholder = TryDetectPlaceholderContent(xmlPath, placeholderMarkers, out var placeholderPath);
             candidate = new ProjectApiInputCandidate
@@ -663,7 +661,7 @@ internal static partial class WebPipelineRunner
                 Type = "CSharp",
                 RootPath = dotNetRoot,
                 XmlPath = Path.GetFullPath(xmlPath),
-                AssemblyPath = Path.GetFullPath(assemblyPath),
+                AssemblyPath = string.IsNullOrWhiteSpace(assemblyPath) ? null : Path.GetFullPath(assemblyPath),
                 HasPlaceholderContent = hasPlaceholder,
                 PlaceholderPath = placeholderPath
             };

@@ -185,7 +185,7 @@ public class WebPipelineRunnerProjectApiDocsTests
     }
 
     [Fact]
-    public void RunPipeline_ProjectApiDocs_GeneratesProjectScopedDotNetApi()
+    public void RunPipeline_ProjectApiDocs_GeneratesProjectScopedDotNetApiFromXmlOnly()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-dotnet-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -210,15 +210,13 @@ public class WebPipelineRunnerProjectApiDocsTests
 
             var dotNetRoot = Path.Combine(root, "data", "project-api", "beta", "dotnet");
             Directory.CreateDirectory(dotNetRoot);
-            var assemblyPath = typeof(WebPipelineRunnerProjectApiDocsTests).Assembly.Location;
-            File.Copy(assemblyPath, Path.Combine(dotNetRoot, "PowerForge.Tests.dll"));
-            File.WriteAllText(Path.Combine(dotNetRoot, "PowerForge.Tests.xml"),
-                $"""
+            File.WriteAllText(Path.Combine(dotNetRoot, "Beta.xml"),
+                """
                 <doc>
-                  <assembly><name>PowerForge.Tests</name></assembly>
+                  <assembly><name>Beta</name></assembly>
                   <members>
-                    <member name="T:{typeof(WebPipelineRunnerProjectApiDocsTests).FullName}">
-                      <summary>Project API docs test type.</summary>
+                    <member name="T:Beta.Widget">
+                      <summary>Creates a project widget.</summary>
                     </member>
                   </members>
                 </doc>
@@ -250,6 +248,8 @@ public class WebPipelineRunnerProjectApiDocsTests
             Assert.True(File.Exists(indexPath));
             var html = File.ReadAllText(indexPath);
             Assert.Contains("Beta API Reference", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Widget", html, StringComparison.Ordinal);
+            Assert.Contains("Creates a project widget", html, StringComparison.Ordinal);
 
             var summary = File.ReadAllText(Path.Combine(root, "summary.json"));
             Assert.Contains("\"generated\": 1", summary, StringComparison.OrdinalIgnoreCase);
