@@ -132,7 +132,11 @@ public static partial class WebApiDocsGenerator
         if (files.Count == 0)
         {
             if (options.Type == ApiDocsType.CSharp)
+            {
                 AddFreshnessCandidate(files, options.XmlPath);
+                foreach (var xmlPath in options.XmlPaths)
+                    AddFreshnessCandidate(files, xmlPath);
+            }
             else
                 AddFreshnessCandidate(files, options.HelpPath);
         }

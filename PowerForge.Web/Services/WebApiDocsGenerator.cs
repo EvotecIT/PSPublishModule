@@ -18,6 +18,8 @@ public sealed class WebApiDocsOptions
     public ApiDocsType Type { get; set; } = ApiDocsType.CSharp;
     /// <summary>Path to the XML documentation file.</summary>
     public string XmlPath { get; set; } = string.Empty;
+    /// <summary>Optional additional XML documentation files that belong to the same project API.</summary>
+    public IReadOnlyList<string> XmlPaths { get; set; } = Array.Empty<string>();
     /// <summary>Path to PowerShell help XML or folder.</summary>
     public string? HelpPath { get; set; }
     /// <summary>Optional path to a PowerShell module manifest used for detached website artifacts.</summary>
@@ -382,16 +384,17 @@ public static partial class WebApiDocsGenerator
     public static WebApiDocsResult Generate(WebApiDocsOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
-        if (options.Type == ApiDocsType.CSharp && string.IsNullOrWhiteSpace(options.XmlPath))
-            throw new ArgumentException("XmlPath is required for CSharp API docs.", nameof(options));
+        var xmlPaths = options.Type == ApiDocsType.CSharp
+            ? ResolveCSharpXmlPaths(options)
+            : Array.Empty<string>();
+        if (options.Type == ApiDocsType.CSharp && xmlPaths.Length == 0)
+            throw new ArgumentException("XmlPath or XmlPaths is required for CSharp API docs.", nameof(options));
         if (options.Type == ApiDocsType.PowerShell && string.IsNullOrWhiteSpace(options.HelpPath))
             throw new ArgumentException("HelpPath is required for PowerShell API docs.", nameof(options));
         if (string.IsNullOrWhiteSpace(options.OutputPath))
             throw new ArgumentException("OutputPath is required.", nameof(options));
 
-        var xmlPath = options.Type == ApiDocsType.CSharp
-            ? Path.GetFullPath(options.XmlPath)
-            : string.Empty;
+        var xmlPath = xmlPaths.FirstOrDefault() ?? string.Empty;
         var helpPath = options.Type == ApiDocsType.PowerShell && !string.IsNullOrWhiteSpace(options.HelpPath)
             ? Path.GetFullPath(options.HelpPath)
             : string.Empty;
@@ -400,8 +403,11 @@ public static partial class WebApiDocsGenerator
         var previousTypeSlugs = ReadExistingApiTypeSlugs(outputPath);
 
         var warnings = new List<string>();
-        if (options.Type == ApiDocsType.CSharp && !File.Exists(xmlPath))
-            warnings.Add($"XML docs not found: {xmlPath}");
+        if (options.Type == ApiDocsType.CSharp)
+        {
+            foreach (var missingXmlPath in xmlPaths.Where(static path => !File.Exists(path)))
+                warnings.Add($"XML docs not found: {missingXmlPath}");
+        }
         if (options.Type == ApiDocsType.PowerShell && !File.Exists(helpPath) && !Directory.Exists(helpPath))
             warnings.Add($"PowerShell help not found: {helpPath}");
 
@@ -422,7 +428,7 @@ public static partial class WebApiDocsGenerator
 
         var apiDoc = options.Type == ApiDocsType.PowerShell
             ? ParsePowerShellHelp(helpPath, warnings, options)
-            : ParseXml(xmlPath, assembly, options);
+            : ParseXmlDocuments(xmlPaths, assembly, options);
         var usedReflectionFallback = false;
         if (options.Type == ApiDocsType.CSharp && assembly is not null && options.IncludeUndocumentedTypes)
         {

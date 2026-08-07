@@ -221,6 +221,17 @@ public class WebPipelineRunnerProjectApiDocsTests
                   </members>
                 </doc>
                 """);
+            File.WriteAllText(Path.Combine(dotNetRoot, "Beta.Interactivity.xml"),
+                """
+                <doc>
+                  <assembly><name>Beta.Interactivity</name></assembly>
+                  <members>
+                    <member name="T:Beta.Interactivity.Explorer">
+                      <summary>Explores an interactive project scene.</summary>
+                    </member>
+                  </members>
+                </doc>
+                """);
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
@@ -250,6 +261,8 @@ public class WebPipelineRunnerProjectApiDocsTests
             Assert.Contains("Beta API Reference", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Widget", html, StringComparison.Ordinal);
             Assert.Contains("Creates a project widget", html, StringComparison.Ordinal);
+            Assert.Contains("Explorer", html, StringComparison.Ordinal);
+            Assert.Contains("Explores an interactive project scene", html, StringComparison.Ordinal);
 
             var summary = File.ReadAllText(Path.Combine(root, "summary.json"));
             Assert.Contains("\"generated\": 1", summary, StringComparison.OrdinalIgnoreCase);
