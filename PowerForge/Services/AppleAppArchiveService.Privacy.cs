@@ -35,22 +35,29 @@ public sealed partial class AppleAppArchiveService
         string? selectedInfoPlist = null;
         foreach (var appPath in appPaths)
         {
-            var infoPlist = Path.Combine(appPath, "Info.plist");
-            if (!File.Exists(infoPlist))
-                continue;
-            if (string.IsNullOrWhiteSpace(expectedBundleId))
+            var infoPlists = new[]
             {
-                if (appPaths.Length == 1)
-                    selectedInfoPlist = infoPlist;
-                continue;
-            }
+                Path.Combine(appPath, "Info.plist"),
+                Path.Combine(appPath, "Contents", "Info.plist")
+            }.Where(File.Exists);
+            foreach (var infoPlist in infoPlists)
+            {
+                if (string.IsNullOrWhiteSpace(expectedBundleId))
+                {
+                    if (appPaths.Length == 1)
+                        selectedInfoPlist = infoPlist;
+                    break;
+                }
 
-            var archivedBundleId = await ReadPlistStringAsync(infoPlist, "CFBundleIdentifier", cancellationToken).ConfigureAwait(false);
-            if (string.Equals(archivedBundleId, expectedBundleId, StringComparison.Ordinal))
-            {
-                selectedInfoPlist = infoPlist;
-                break;
+                var archivedBundleId = await ReadPlistStringAsync(infoPlist, "CFBundleIdentifier", cancellationToken).ConfigureAwait(false);
+                if (string.Equals(archivedBundleId, expectedBundleId, StringComparison.Ordinal))
+                {
+                    selectedInfoPlist = infoPlist;
+                    break;
+                }
             }
+            if (selectedInfoPlist is not null)
+                break;
         }
 
         if (selectedInfoPlist is null)

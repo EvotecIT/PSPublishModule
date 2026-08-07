@@ -458,15 +458,20 @@ public sealed class AppleAppArchiveServiceTests
         }
     }
 
-    [Fact]
-    public async Task UploadArchiveAsync_validates_required_privacy_purpose_strings_in_final_archive()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UploadArchiveAsync_validates_required_privacy_purpose_strings_in_final_archive(bool macBundleLayout)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
         {
             var archive = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcarchive"));
             var app = Directory.CreateDirectory(Path.Combine(archive.FullName, "Products", "Applications", "CasaRay.app"));
-            File.WriteAllText(Path.Combine(app.FullName, "Info.plist"), "fixture");
+            var bundleRoot = macBundleLayout
+                ? Directory.CreateDirectory(Path.Combine(app.FullName, "Contents")).FullName
+                : app.FullName;
+            File.WriteAllText(Path.Combine(bundleRoot, "Info.plist"), "fixture");
             var runner = new PrivacyProcessRunner(new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["CFBundleIdentifier"] = "com.evotecit.casaray",

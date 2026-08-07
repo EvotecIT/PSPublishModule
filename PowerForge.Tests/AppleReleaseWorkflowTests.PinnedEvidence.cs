@@ -229,6 +229,14 @@ public sealed partial class AppleReleaseWorkflowTests
                 . $Support
                 Register-AppleAutomationEvidence -SourceCommit '{{commit}}'
                 Assert-ConsumerRepositoryContent
+                foreach ($nextArguments in @(
+                    @('apple-release','Status','--config','powerforge.release.json'),
+                    @('apple-release','SubmitAppReview','--config','powerforge.release.json','--plan'))) {
+                    $script:allowedConsumerEvidencePaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+                    $ArgumentList = $nextArguments
+                    Register-AppleAutomationEvidence -SourceCommit '{{commit}}'
+                    Assert-ConsumerRepositoryContent
+                }
                 Set-Content -LiteralPath (Join-Path $consumer 'build/powerforge/apple/injected.bin') -Value 'not reviewed'
                 try { Assert-ConsumerRepositoryContent; throw 'Unreviewed file was accepted.' }
                 catch { if ($_.Exception.Message -notlike '*non-reviewed content*') { throw }; 'PASS' }

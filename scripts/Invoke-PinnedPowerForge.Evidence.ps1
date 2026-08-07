@@ -67,8 +67,7 @@ function Register-AppleAutomationEvidence {
     }
 
     $expectedPlanSha256 = Get-OptionValue -Option '--apple-expected-plan-sha256'
-    if ([string]::IsNullOrWhiteSpace($expectedPlanSha256)) { return }
-    if ($expectedPlanSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
+    if (-not [string]::IsNullOrWhiteSpace($expectedPlanSha256) -and $expectedPlanSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
         throw '--apple-expected-plan-sha256 must contain exactly 64 hexadecimal characters.'
     }
 
@@ -78,12 +77,17 @@ function Register-AppleAutomationEvidence {
     $planPath = Resolve-PathFromBase -BasePath $projectRoot -Value $planValue
     if (-not (Test-Path -LiteralPath $planPath -PathType Leaf)) { return }
     $plan = Get-Content -LiteralPath $planPath -Raw | ConvertFrom-Json
-    $requestedAction = if ($ArgumentList.Count -gt 1) { [string]$ArgumentList[1] } else { '' }
     if ($plan.planOnly -ne $true -or
-        -not ([string]$plan.action).Equals($requestedAction, [StringComparison]::OrdinalIgnoreCase) -or
         -not ([string]$plan.sourceCommit).Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase) -or
-        -not ([string]$plan.planSha256).Equals($expectedPlanSha256, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Apple release plan receipt does not match the approved action, source commit, and plan SHA-256.'
+        ([string]$plan.planSha256) -notmatch '^[0-9A-Fa-f]{64}$') {
+        throw 'Apple release plan receipt is not bounded to the exact consumer source commit.'
+    }
+    if (-not [string]::IsNullOrWhiteSpace($expectedPlanSha256)) {
+        $requestedAction = if ($ArgumentList.Count -gt 1) { [string]$ArgumentList[1] } else { '' }
+        if (-not ([string]$plan.action).Equals($requestedAction, [StringComparison]::OrdinalIgnoreCase) -or
+            -not ([string]$plan.planSha256).Equals($expectedPlanSha256, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Apple release plan receipt does not match the approved action and plan SHA-256.'
+        }
     }
     Add-AllowedConsumerEvidencePath -Path $planPath -Name 'Apple release plan receipt'
 }
