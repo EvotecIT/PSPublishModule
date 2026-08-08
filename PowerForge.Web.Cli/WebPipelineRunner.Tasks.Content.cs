@@ -34,6 +34,11 @@ internal static partial class WebPipelineRunner
 
         var typeText = GetString(step, "type");
         var xml = ResolvePath(baseDir, GetString(step, "xml"));
+        var xmls = (GetArrayOfStrings(step, "xmls") ?? GetArrayOfStrings(step, "xmlPaths") ?? Array.Empty<string>())
+            .Select(path => ResolvePath(baseDir, path))
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Cast<string>()
+            .ToArray();
         var help = ResolvePath(baseDir, GetString(step, "help") ?? GetString(step, "helpPath") ?? GetString(step, "help-path"));
         var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
         var assembly = ResolvePath(baseDir, GetString(step, "assembly"));
@@ -314,6 +319,7 @@ internal static partial class WebPipelineRunner
             {
                 Type = apiType,
                 XmlPath = xml ?? string.Empty,
+                XmlPaths = xmls,
                 HelpPath = help,
                 PowerShellModuleManifestPath = powerShellManifestPath,
                 PowerShellCommandMetadataPath = powerShellCommandMetadataPath,
