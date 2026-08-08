@@ -80,6 +80,12 @@ public sealed class AppleAppArchiveUploadRequest
     /// <summary>Path to the .xcarchive to upload.</summary>
     public string ArchivePath { get; set; } = string.Empty;
 
+    /// <summary>Expected primary app bundle identifier used to select the archived product.</summary>
+    public string? BundleId { get; set; }
+
+    /// <summary>Privacy purpose-string keys that must contain non-empty values in the final archived app.</summary>
+    public string[] RequiredPrivacyUsageDescriptionKeys { get; set; } = Array.Empty<string>();
+
     /// <summary>Temporary export path used by xcodebuild.</summary>
     public string? ExportPath { get; set; }
 

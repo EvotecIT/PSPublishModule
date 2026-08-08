@@ -55,6 +55,11 @@ public sealed class NewConfigurationAppleAppCommand : PSCmdlet
     [Parameter]
     public string? AppStoreConnectAppId { get; set; }
 
+    /// <summary>Privacy purpose-string keys that must contain non-empty values in the final archived app before upload.</summary>
+    [Parameter]
+    [ValidateNotNull]
+    public string[] RequiredPrivacyUsageDescriptionKeys { get; set; } = System.Array.Empty<string>();
+
     /// <summary>The value to assign to all <c>MARKETING_VERSION</c> entries.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "ExplicitVersion")]
     [ValidateNotNullOrEmpty]
@@ -96,6 +101,7 @@ public sealed class NewConfigurationAppleAppCommand : PSCmdlet
                 ProjectPath = ProjectPath,
                 Scheme = Scheme,
                 AppStoreConnectAppId = AppStoreConnectAppId,
+                RequiredPrivacyUsageDescriptionKeys = RequiredPrivacyUsageDescriptionKeys,
                 MarketingVersion = MarketingVersion,
                 UseResolvedVersion = UseResolvedVersion.IsPresent,
                 BuildNumber = BuildNumber,

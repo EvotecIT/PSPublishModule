@@ -458,6 +458,77 @@ public sealed class AppleAppArchiveServiceTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UploadArchiveAsync_validates_required_privacy_purpose_strings_in_final_archive(bool macBundleLayout)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var archive = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcarchive"));
+            var app = Directory.CreateDirectory(Path.Combine(archive.FullName, "Products", "Applications", "CasaRay.app"));
+            var bundleRoot = macBundleLayout
+                ? Directory.CreateDirectory(Path.Combine(app.FullName, "Contents")).FullName
+                : app.FullName;
+            File.WriteAllText(Path.Combine(bundleRoot, "Info.plist"), "fixture");
+            var runner = new PrivacyProcessRunner(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["CFBundleIdentifier"] = "com.evotecit.casaray",
+                ["NSCameraUsageDescription"] = "CasaRay does not capture from this device's camera."
+            });
+
+            var result = await new AppleAppArchiveService(runner).UploadArchiveAsync(new AppleAppArchiveUploadRequest
+            {
+                ArchivePath = archive.FullName,
+                ExportPath = Path.Combine(root.FullName, "export"),
+                BundleId = "com.evotecit.casaray",
+                RequiredPrivacyUsageDescriptionKeys = ["NSCameraUsageDescription"]
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(3, runner.Requests.Count);
+            Assert.EndsWith("xcodebuild", runner.Requests[^1].FileName, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task UploadArchiveAsync_blocks_upload_when_required_privacy_purpose_string_is_missing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var archive = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcarchive"));
+            var app = Directory.CreateDirectory(Path.Combine(archive.FullName, "Products", "Applications", "CasaRay.app"));
+            File.WriteAllText(Path.Combine(app.FullName, "Info.plist"), "fixture");
+            var runner = new PrivacyProcessRunner(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["CFBundleIdentifier"] = "com.evotecit.casaray"
+            });
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleAppArchiveService(runner).UploadArchiveAsync(new AppleAppArchiveUploadRequest
+                {
+                    ArchivePath = archive.FullName,
+                    ExportPath = Path.Combine(root.FullName, "export"),
+                    BundleId = "com.evotecit.casaray",
+                    RequiredPrivacyUsageDescriptionKeys = ["NSCameraUsageDescription"]
+                }));
+
+            Assert.Contains("NSCameraUsageDescription", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("blocked before App Store Connect delivery", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(runner.Requests, request => request.FileName.EndsWith("xcodebuild", StringComparison.Ordinal));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private sealed class CapturingProcessRunner : IProcessRunner
     {
         private readonly ProcessRunResult _result;
@@ -473,6 +544,43 @@ public sealed class AppleAppArchiveServiceTests
         {
             Requests.Add(request);
             return Task.FromResult(_result);
+        }
+    }
+
+    private sealed class PrivacyProcessRunner : IProcessRunner
+    {
+        private readonly IReadOnlyDictionary<string, string> _plistValues;
+
+        public PrivacyProcessRunner(IReadOnlyDictionary<string, string> plistValues)
+        {
+            _plistValues = plistValues;
+        }
+
+        public List<ProcessRunRequest> Requests { get; } = new();
+
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            if (request.FileName.EndsWith("plutil", StringComparison.Ordinal))
+            {
+                var key = request.Arguments[1];
+                var found = _plistValues.TryGetValue(key, out var value);
+                return Task.FromResult(new ProcessRunResult(
+                    found ? 0 : 1,
+                    found ? value! : string.Empty,
+                    found ? string.Empty : $"Missing {key}",
+                    request.FileName,
+                    TimeSpan.FromMilliseconds(1),
+                    false));
+            }
+
+            return Task.FromResult(new ProcessRunResult(
+                0,
+                "ok",
+                string.Empty,
+                request.FileName,
+                TimeSpan.FromMilliseconds(1),
+                false));
         }
     }
 }

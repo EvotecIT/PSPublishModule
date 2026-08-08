@@ -622,6 +622,8 @@ internal sealed class PowerForgeAppleAppReleaseTargetPlan
 
     public string[] RequiredEmbeddedBundleIds { get; set; } = Array.Empty<string>();
 
+    public string[] RequiredPrivacyUsageDescriptionKeys { get; set; } = Array.Empty<string>();
+
     public string? AppStoreConnectAppId { get; set; }
 
     public bool AppStoreConnectAppIdDiscovered { get; set; }

@@ -789,6 +789,64 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void Execute_ApplePrepareReceiptUsesCompletedPreparationWhenRemoteReadbackIsStale()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var service = CreateAppleAutomationService(
+                request => new AppStoreConnectReleaseStateResult
+                {
+                    AppId = request.AppId,
+                    VersionString = request.VersionString,
+                    BuildNumber = request.BuildNumber,
+                    Platforms =
+                    [
+                        new AppStoreConnectPlatformReleaseState
+                        {
+                            Platform = request.Platforms.Single(),
+                            MatchedBuild = new AppStoreConnectBuildInfo
+                            {
+                                Id = "build-id",
+                                Version = request.BuildNumber,
+                                ProcessingState = "VALID",
+                                MarketingVersion = request.VersionString
+                            },
+                            NextActions =
+                            [
+                                "Create App Store distribution version.",
+                                "Select the requested build on the App Store version."
+                            ]
+                        }
+                    ]
+                },
+                prepareAppleDistribution: CreateSuccessfulPreparation);
+
+            var result = service.Execute(
+                CreateAppleAutomationSpec(root, keyPath),
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Prepare
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var target = Assert.Single(result.AppleReceipt!.Targets);
+            Assert.Equal("version-id", target.DistributionVersionId);
+            Assert.True(target.BuildSelected);
+            Assert.DoesNotContain(target.NextActions, action => action.Contains("Create App Store distribution version", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(target.NextActions, action => action.StartsWith("Select ", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static PowerForgeReleaseSpec CreateAppleAutomationSpec(string root, string keyPath)
         => new()
         {

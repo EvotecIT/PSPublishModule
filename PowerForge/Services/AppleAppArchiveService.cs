@@ -7,7 +7,7 @@ namespace PowerForge;
 /// <summary>
 /// Creates and uploads Apple app archives through xcodebuild.
 /// </summary>
-public sealed class AppleAppArchiveService
+public sealed partial class AppleAppArchiveService
 {
     private readonly IProcessRunner _processRunner;
 
@@ -107,6 +107,8 @@ public sealed class AppleAppArchiveService
         var archivePath = Path.GetFullPath(request.ArchivePath);
         if (!Directory.Exists(archivePath))
             throw new DirectoryNotFoundException($"Archive path was not found: {archivePath}");
+
+        await ValidatePrivacyUsageDescriptionsAsync(request, archivePath, cancellationToken).ConfigureAwait(false);
 
         var exportPath = ResolveExportPath(request);
         var plistPath = ResolveExportOptionsPlistPath(request);

@@ -1810,6 +1810,7 @@ internal sealed partial class PowerForgeReleaseService
             Capabilities = NormalizeStrings(app.Capabilities),
             TestFlightPolicy = app.TestFlightPolicy,
             RequiredEmbeddedBundleIds = NormalizeStrings(app.RequiredEmbeddedBundleIds),
+            RequiredPrivacyUsageDescriptionKeys = NormalizeStrings(app.RequiredPrivacyUsageDescriptionKeys),
             AppStoreConnectAppId = string.IsNullOrWhiteSpace(app.AppStoreConnectAppId) ? null : app.AppStoreConnectAppId!.Trim(),
             ProjectPath = projectPath,
             IsWorkspace = isWorkspace,
@@ -2097,6 +2098,8 @@ internal sealed partial class PowerForgeReleaseService
                 var upload = _uploadAppleApp(new AppleAppArchiveUploadRequest
                 {
                     ArchivePath = app.ArchivePath,
+                    BundleId = app.BundleId,
+                    RequiredPrivacyUsageDescriptionKeys = app.RequiredPrivacyUsageDescriptionKeys,
                     ExportPath = app.ExportPath,
                     TeamId = app.TeamId,
                     XcodeBuildExecutable = plan.XcodeBuildExecutable,
