@@ -109,6 +109,7 @@ internal static partial class WebPipelineRunner
         var artifactTokenEnv = GetString(step, "artifactTokenEnv") ?? GetString(step, "artifact-token-env") ?? "GITHUB_TOKEN";
         if (string.IsNullOrWhiteSpace(artifactToken) && !string.IsNullOrWhiteSpace(artifactTokenEnv))
             artifactToken = Environment.GetEnvironmentVariable(artifactTokenEnv);
+        var powerShellGalleryPackageBaseUrl = ResolvePowerShellGalleryPackageBaseUrl(step);
         var projectsContentRoot = ResolvePath(baseDir,
             GetString(step, "projectsContentRoot") ??
             GetString(step, "projects-content-root"));
@@ -260,6 +261,7 @@ internal static partial class WebPipelineRunner
                 artifactWorkRoot,
                 artifactTimeoutSeconds,
                 artifactToken,
+                powerShellGalleryPackageBaseUrl,
                 artifactCache,
                 artifactStats);
         }
@@ -1205,6 +1207,8 @@ internal static partial class WebPipelineRunner
             string? artifactDocs = null;
             string? artifactApi = null;
             string? artifactExamples = null;
+            string? powerShellGalleryPackageId = null;
+            string? powerShellGalleryPackageVersion = null;
 
             if (projectElement.TryGetProperty("surfaces", out var surfacesElement) &&
                 surfacesElement.ValueKind == JsonValueKind.Object)
@@ -1233,6 +1237,15 @@ internal static partial class WebPipelineRunner
                 artifactExamples = GetString(artifactsElement, "examples");
             }
 
+            if (projectElement.TryGetProperty("metrics", out var metricsElement) &&
+                metricsElement.ValueKind == JsonValueKind.Object &&
+                metricsElement.TryGetProperty("powerShellGallery", out var galleryElement) &&
+                galleryElement.ValueKind == JsonValueKind.Object)
+            {
+                powerShellGalleryPackageId = GetString(galleryElement, "id");
+                powerShellGalleryPackageVersion = GetString(galleryElement, "version");
+            }
+
             var normalizedContentMode = NormalizeCatalogContentMode(contentMode, mode);
             if (normalizedContentMode.Equals("external", StringComparison.OrdinalIgnoreCase))
             {
@@ -1250,7 +1263,10 @@ internal static partial class WebPipelineRunner
                 if (hasApiDotNetSurface && !IsLocalSurfaceLink(apiDotNetLink) && !IsZipArtifactSource(artifactApi))
                     hasApiDotNetSurface = false;
 
-                if (hasApiPowerShellSurface && !IsLocalSurfaceLink(apiPowerShellLink) && !IsZipArtifactSource(artifactApi))
+                if (hasApiPowerShellSurface &&
+                    !IsLocalSurfaceLink(apiPowerShellLink) &&
+                    !IsZipArtifactSource(artifactApi) &&
+                    !HasPowerShellGalleryPackage(powerShellGalleryPackageId, powerShellGalleryPackageVersion))
                     hasApiPowerShellSurface = false;
 
                 if (hasExamplesSurface && !IsLocalSurfaceLink(examplesLink) && !IsZipArtifactSource(artifactExamples))
@@ -1273,7 +1289,9 @@ internal static partial class WebPipelineRunner
                 GitHubRepoUrl = sourceLink,
                 ArtifactDocs = artifactDocs,
                 ArtifactApi = artifactApi,
-                ArtifactExamples = artifactExamples
+                ArtifactExamples = artifactExamples,
+                PowerShellGalleryPackageId = powerShellGalleryPackageId,
+                PowerShellGalleryPackageVersion = powerShellGalleryPackageVersion
             });
         }
 
@@ -1332,6 +1350,7 @@ internal static partial class WebPipelineRunner
         string artifactWorkRoot,
         int timeoutSeconds,
         string? artifactToken,
+        string powerShellGalleryPackageBaseUrl,
         Dictionary<string, string> artifactCache,
         ProjectArtifactHydrationStats stats)
     {
@@ -1355,6 +1374,7 @@ internal static partial class WebPipelineRunner
                     artifactWorkRoot,
                     timeoutSeconds,
                     artifactToken,
+                    powerShellGalleryPackageBaseUrl,
                     artifactCache,
                     stats);
             }
@@ -1370,6 +1390,7 @@ internal static partial class WebPipelineRunner
                     artifactWorkRoot,
                     timeoutSeconds,
                     artifactToken,
+                    powerShellGalleryPackageBaseUrl,
                     artifactCache,
                     stats);
             }
@@ -1385,6 +1406,7 @@ internal static partial class WebPipelineRunner
                     artifactWorkRoot,
                     timeoutSeconds,
                     artifactToken,
+                    powerShellGalleryPackageBaseUrl,
                     artifactCache,
                     stats);
             }
@@ -1400,18 +1422,29 @@ internal static partial class WebPipelineRunner
         string artifactWorkRoot,
         int timeoutSeconds,
         string? artifactToken,
+        string powerShellGalleryPackageBaseUrl,
         Dictionary<string, string> artifactCache,
         ProjectArtifactHydrationStats stats)
     {
-        var artifactSource = TryGetProjectArtifactSource(project, surface);
-        if (!IsZipArtifactSource(artifactSource))
+        var artifactSource = TryGetProjectArtifactSource(
+            project,
+            surface,
+            powerShellGalleryPackageBaseUrl,
+            out var isPowerShellGalleryPackage);
+        if (!IsZipArtifactSource(artifactSource) && !isPowerShellGalleryPackage)
             return;
+
+        if (isPowerShellGalleryPackage &&
+            Directory.Exists(ResolveExistingProjectSourcePath(sourcesRoot, slug, sourceCandidates)))
+        {
+            return;
+        }
 
         if (!TryExtractArtifactZip(
                 artifactSource!,
                 artifactWorkRoot,
                 timeoutSeconds,
-                artifactToken,
+                isPowerShellGalleryPackage ? null : artifactToken,
                 artifactCache,
                 stats,
                 out var extractedRoot))
@@ -1440,8 +1473,13 @@ internal static partial class WebPipelineRunner
             stats.ExamplesHydrated++;
     }
 
-    private static string? TryGetProjectArtifactSource(ProjectDocsCatalogItem project, ProjectDocsSurfaceType surface)
+    private static string? TryGetProjectArtifactSource(
+        ProjectDocsCatalogItem project,
+        ProjectDocsSurfaceType surface,
+        string powerShellGalleryPackageBaseUrl,
+        out bool isPowerShellGalleryPackage)
     {
+        isPowerShellGalleryPackage = false;
         string? directArtifact = surface switch
         {
             ProjectDocsSurfaceType.Docs => project.ArtifactDocs,
@@ -1453,13 +1491,26 @@ internal static partial class WebPipelineRunner
         if (IsZipArtifactSource(directArtifact))
             return directArtifact;
 
-        return surface switch
+        var linkedArtifact = surface switch
         {
             ProjectDocsSurfaceType.Docs => project.DocsLink,
             ProjectDocsSurfaceType.Api => !string.IsNullOrWhiteSpace(project.ApiPowerShellLink) ? project.ApiPowerShellLink : project.ApiDotNetLink,
             ProjectDocsSurfaceType.Examples => project.ExamplesLink,
             _ => null
         };
+
+        if (IsZipArtifactSource(linkedArtifact))
+            return linkedArtifact;
+
+        if (surface == ProjectDocsSurfaceType.Api &&
+            project.HasApiPowerShellSurface &&
+            TryBuildPowerShellGalleryPackageUrl(project, powerShellGalleryPackageBaseUrl, out var packageUrl))
+        {
+            isPowerShellGalleryPackage = true;
+            return packageUrl;
+        }
+
+        return linkedArtifact;
     }
 
     private static bool IsZipArtifactSource(string? source)
@@ -1772,6 +1823,8 @@ internal static partial class WebPipelineRunner
         public string? ArtifactDocs { get; init; }
         public string? ArtifactApi { get; init; }
         public string? ArtifactExamples { get; init; }
+        public string? PowerShellGalleryPackageId { get; init; }
+        public string? PowerShellGalleryPackageVersion { get; init; }
     }
 
     private enum ProjectDocsSurfaceType
