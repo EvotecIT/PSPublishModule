@@ -64,6 +64,22 @@ public sealed class WebSearchIntelligenceTests
         Assert.Contains("multiple rows", exception.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(double.NaN, 9d)]
+    [InlineData(double.PositiveInfinity, 9d)]
+    [InlineData(0.01d, double.NaN)]
+    [InlineData(0.01d, double.NegativeInfinity)]
+    public void Normalize_RejectsNonFiniteMetrics(double clickThroughRate, double averagePosition)
+    {
+        var batch = CreateBatch();
+        batch.Observations[0].ClickThroughRate = clickThroughRate;
+        batch.Observations[0].AveragePosition = averagePosition;
+
+        var exception = Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(batch));
+
+        Assert.Contains("finite", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void ObservationSchema_AcceptsDocumentedContractAndRejectsMissingDimensions()
     {
@@ -85,6 +101,21 @@ public sealed class WebSearchIntelligenceTests
         Assert.False(schema.Evaluate(invalid, new EvaluationOptions()).IsValid);
         Assert.False(schema.Evaluate(unknown, new EvaluationOptions()).IsValid);
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<WebSearchObservationBatch>(unknown.ToJsonString(), WebCliJson.Options));
+    }
+
+    [Fact]
+    public void ObservationJson_RequiresExplicitCollectionOffset()
+    {
+        var offsetless = JsonNode.Parse(JsonSerializer.Serialize(CreateBatch()))!.AsObject();
+        offsetless["collectedAtUtc"] = "2026-08-02T08:00:00";
+
+        var exception = Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize<WebSearchObservationBatch>(offsetless.ToJsonString(), WebCliJson.Options));
+
+        Assert.Contains("explicit", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(JsonSerializer.Deserialize<WebSearchObservationBatch>(
+            JsonSerializer.Serialize(CreateBatch()),
+            WebCliJson.Options));
     }
 
     [Fact]
@@ -147,6 +178,54 @@ public sealed class WebSearchIntelligenceTests
         Assert.Equal(
             report.Opportunities.Select(opportunity => opportunity.OpportunityId),
             repeated.Opportunities.Select(opportunity => opportunity.OpportunityId));
+    }
+
+    [Fact]
+    public void Analyze_RejectsNonFiniteThresholds()
+    {
+        var observations = WebSearchObservationNormalizer.Normalize(CreateBatch()).Observations;
+        var generatedAt = new DateTimeOffset(2026, 8, 4, 12, 0, 0, TimeSpan.Zero);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => WebSearchOpportunityAnalyzer.Analyze(
+            observations,
+            new WebSearchOpportunityOptions { SiteId = "officeimo", MinimumClickThroughRate = double.NaN },
+            generatedAt));
+        Assert.Throws<ArgumentOutOfRangeException>(() => WebSearchOpportunityAnalyzer.Analyze(
+            observations,
+            new WebSearchOpportunityOptions { SiteId = "officeimo", WeakPageMinimumPosition = double.NaN },
+            generatedAt));
+        Assert.Throws<ArgumentOutOfRangeException>(() => WebSearchOpportunityAnalyzer.Analyze(
+            observations,
+            new WebSearchOpportunityOptions { SiteId = "officeimo", WeakPageMaximumPosition = double.PositiveInfinity },
+            generatedAt));
+        Assert.Throws<ArgumentOutOfRangeException>(() => WebSearchOpportunityAnalyzer.Analyze(
+            observations,
+            new WebSearchOpportunityOptions { SiteId = "officeimo", CtrMaximumPosition = double.NegativeInfinity },
+            generatedAt));
+    }
+
+    [Fact]
+    public void Analyze_ExcludesZeroImpressionRowsFromPositionEvidence()
+    {
+        var unpositionedBatch = CreateBatch();
+        unpositionedBatch.Observations[0].AveragePosition = null;
+        var zeroImpressionBatch = CreateBatch();
+        zeroImpressionBatch.CollectedAtUtc = zeroImpressionBatch.CollectedAtUtc.AddDays(1);
+        zeroImpressionBatch.Observations[0].Date = zeroImpressionBatch.Observations[0].Date.AddDays(1);
+        zeroImpressionBatch.Observations[0].Clicks = 0;
+        zeroImpressionBatch.Observations[0].Impressions = 0;
+        zeroImpressionBatch.Observations[0].ClickThroughRate = null;
+        zeroImpressionBatch.Observations[0].AveragePosition = 9d;
+        var observations = WebSearchObservationNormalizer.Normalize(unpositionedBatch).Observations
+            .Concat(WebSearchObservationNormalizer.Normalize(zeroImpressionBatch).Observations);
+
+        var report = WebSearchOpportunityAnalyzer.Analyze(
+            observations,
+            new WebSearchOpportunityOptions { SiteId = "officeimo" },
+            new DateTimeOffset(2026, 8, 5, 12, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal(2, report.ObservationCount);
+        Assert.Empty(report.Opportunities);
     }
 
     [Fact]
@@ -386,6 +465,38 @@ public sealed class WebSearchIntelligenceTests
                 outputSchemaVersion: 1);
 
             Assert.Equal(2, exitCode);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Cli_OpportunityList_RejectsNonFiniteRate()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var inputPath = Path.Combine(root, "observations.json");
+            var databasePath = Path.Combine(root, "search.db");
+            File.WriteAllText(inputPath, JsonSerializer.Serialize(CreateBatch()));
+            var importExitCode = WebCliCommandHandlers.HandleSubCommand(
+                "observe",
+                new[] { "import", "--input", inputPath, "--database", databasePath },
+                outputJson: true,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: 1);
+
+            var reportExitCode = WebCliCommandHandlers.HandleSubCommand(
+                "opportunity",
+                new[] { "list", "--database", databasePath, "--site", "officeimo", "--min-ctr", "NaN" },
+                outputJson: true,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: 1);
+
+            Assert.Equal(0, importExitCode);
+            Assert.Equal(2, reportExitCode);
         }
         finally
         {

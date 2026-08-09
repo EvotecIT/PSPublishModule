@@ -85,10 +85,16 @@ public static class WebSearchObservationNormalizer
             throw new ArgumentException($"Search observation at index {index} cannot contain negative clicks or impressions.", nameof(observation));
         if (observation.Clicks > observation.Impressions)
             throw new ArgumentException($"Search observation at index {index} has more clicks than impressions.", nameof(observation));
-        if (observation.ClickThroughRate is < 0d or > 1d)
-            throw new ArgumentException($"Search observation at index {index} has CTR outside the zero-to-one range.", nameof(observation));
-        if (observation.AveragePosition is < 0d)
-            throw new ArgumentException($"Search observation at index {index} has a negative average position.", nameof(observation));
+        if (observation.ClickThroughRate is double clickThroughRate &&
+            (!double.IsFinite(clickThroughRate) || clickThroughRate is < 0d or > 1d))
+        {
+            throw new ArgumentException($"Search observation at index {index} has CTR that is not finite or outside the zero-to-one range.", nameof(observation));
+        }
+        if (observation.AveragePosition is double averagePosition &&
+            (!double.IsFinite(averagePosition) || averagePosition < 0d))
+        {
+            throw new ArgumentException($"Search observation at index {index} has an average position that is not finite or is negative.", nameof(observation));
+        }
 
         var page = NormalizePage(observation.Page, index);
         var query = NormalizeOptional(observation.Query);

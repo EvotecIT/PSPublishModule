@@ -27,6 +27,7 @@ public sealed class WebSearchObservationBatch
 
     /// <summary>Time at which the provider collection or export completed.</summary>
     [JsonPropertyName("collectedAtUtc"), JsonRequired]
+    [JsonConverter(typeof(WebSearchRequiredOffsetDateTimeConverter))]
     public DateTimeOffset CollectedAtUtc { get; set; }
 
     /// <summary>Acquisition method such as <c>api</c>, <c>csv-import</c>, or <c>fixture</c>.</summary>

@@ -174,8 +174,13 @@ internal static partial class WebCliCommandHandlers
     {
         if (string.IsNullOrWhiteSpace(value))
             return fallback;
-        if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) || parsed <= 0d || parsed > 1d)
+        if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ||
+            !double.IsFinite(parsed) ||
+            parsed <= 0d ||
+            parsed > 1d)
+        {
             throw new ArgumentException($"{optionName} must be greater than zero and at most one.", optionName);
+        }
         return parsed;
     }
 }

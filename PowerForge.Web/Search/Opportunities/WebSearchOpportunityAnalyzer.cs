@@ -163,12 +163,10 @@ public static class WebSearchOpportunityAnalyzer
         var clicks = rows.Sum(observation => observation.Clicks);
         var positionedRows = rows.Where(observation => observation.AveragePosition.HasValue).ToArray();
         var positionedImpressions = positionedRows.Sum(observation => observation.Impressions);
-        double? position = positionedRows.Length == 0
-            ? null
-            : positionedImpressions > 0
-                ? positionedRows.Sum(observation => observation.AveragePosition!.Value * observation.Impressions) /
-                  positionedImpressions
-                : positionedRows.Average(observation => observation.AveragePosition!.Value);
+        double? position = positionedImpressions > 0
+            ? positionedRows.Sum(observation => observation.AveragePosition!.Value * observation.Impressions) /
+              positionedImpressions
+            : null;
 
         return new ObservationAggregate(
             clicks,
@@ -207,12 +205,21 @@ public static class WebSearchOpportunityAnalyzer
     {
         if (options.MinimumImpressions < 1)
             throw new ArgumentOutOfRangeException(nameof(options.MinimumImpressions), "Minimum impressions must be positive.");
-        if (options.WeakPageMinimumPosition < 0d || options.WeakPageMaximumPosition < options.WeakPageMinimumPosition)
+        if (!double.IsFinite(options.WeakPageMinimumPosition) ||
+            !double.IsFinite(options.WeakPageMaximumPosition) ||
+            options.WeakPageMinimumPosition < 0d ||
+            options.WeakPageMaximumPosition < options.WeakPageMinimumPosition)
+        {
             throw new ArgumentOutOfRangeException(nameof(options.WeakPageMaximumPosition), "Weak-page position range is invalid.");
-        if (options.CtrMaximumPosition < 0d)
-            throw new ArgumentOutOfRangeException(nameof(options.CtrMaximumPosition), "CTR maximum position cannot be negative.");
-        if (options.MinimumClickThroughRate <= 0d || options.MinimumClickThroughRate > 1d)
+        }
+        if (!double.IsFinite(options.CtrMaximumPosition) || options.CtrMaximumPosition < 0d)
+            throw new ArgumentOutOfRangeException(nameof(options.CtrMaximumPosition), "CTR maximum position must be finite and non-negative.");
+        if (!double.IsFinite(options.MinimumClickThroughRate) ||
+            options.MinimumClickThroughRate <= 0d ||
+            options.MinimumClickThroughRate > 1d)
+        {
             throw new ArgumentOutOfRangeException(nameof(options.MinimumClickThroughRate), "Minimum CTR must be greater than zero and at most one.");
+        }
         if (options.FromDate.HasValue && options.ThroughDate.HasValue && options.FromDate > options.ThroughDate)
             throw new ArgumentException("Search opportunity from date cannot be after through date.", nameof(options));
     }
