@@ -149,6 +149,106 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void ApprovedAppleMutationConfig_CapturesOnlyInputsUsedByTheAction()
+    {
+        var plan = new PowerForgeAppleReleasePlan
+        {
+            ProjectRoot = CreateSandbox(),
+            Action = PowerForgeAppleReleaseAction.Archive,
+            MetadataConfigPath = "missing-metadata.json",
+            AppInfoConfigPath = "missing-app-info.json",
+            GovernanceConfigPath = "missing-governance.json",
+            ScreenshotConfigPath = "missing-screenshots.json",
+            VersionSourcePath = "missing-version-source.xcconfig"
+        };
+        try
+        {
+            PowerForgeReleaseService.CaptureApprovedMutationInputContents(plan);
+
+            Assert.Empty(plan.ApprovedMutationInputContents);
+        }
+        finally
+        {
+            TryDelete(plan.ProjectRoot);
+        }
+    }
+
+    [Fact]
+    public void ApprovedAppleMutationConfig_PreservesPlatformPathIdentityAndRemovesUtf8Bom()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var metadataPath = Path.Combine(root, "Metadata.json");
+            var payload = System.Text.Encoding.UTF8.GetBytes("{ \"value\": \"approved\" }");
+            File.WriteAllBytes(metadataPath, System.Text.Encoding.UTF8.GetPreamble().Concat(payload).ToArray());
+            var approvedHash = Convert.ToHexString(
+                    System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(metadataPath)))
+                .ToLowerInvariant();
+            var plan = new PowerForgeAppleReleasePlan
+            {
+                ProjectRoot = root,
+                SyncMetadata = true,
+                MetadataConfigPath = metadataPath,
+                ApprovedMutationInputFilesSha256 = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["Metadata.json"] = approvedHash
+                }
+            };
+
+            PowerForgeReleaseService.CaptureApprovedMutationInputContents(plan);
+
+            Assert.Equal("{ \"value\": \"approved\" }", PowerForgeReleaseService.ReadApprovedMutationInputText(plan, metadataPath));
+            Assert.Equal(
+                Path.DirectorySeparatorChar == '\\',
+                plan.ApprovedMutationInputContents.ContainsKey(Path.Combine(root, "metadata.json")));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_ApplePlan_BindsDirectNotarizationControls()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var app = Assert.Single(spec.AppleApps!.Apps);
+            app.Platform = ApplePlatform.macOS;
+            app.DistributionRoute = AppleDistributionRoute.DirectNotarized;
+            var service = CreateAppleAutomationService(
+                _ => throw new InvalidOperationException("Direct-distribution planning must not query App Store Connect."));
+            var approved = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Upload,
+                PlanOnly = true
+            });
+            spec.AppleApps.DirectDistribution.Staple = false;
+            spec.AppleApps.DirectDistribution.Assess = false;
+            var changed = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Upload,
+                PlanOnly = true
+            });
+
+            Assert.NotEqual(approved.AppleReceipt!.MutationInputsSha256, changed.AppleReceipt!.MutationInputsSha256);
+            Assert.NotEqual(approved.AppleReceipt.PlanSha256, changed.AppleReceipt.PlanSha256);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void AppleArchiveUploadSnapshot_RejectsEscapingSymbolicLinks()
     {
         if (OperatingSystem.IsWindows())

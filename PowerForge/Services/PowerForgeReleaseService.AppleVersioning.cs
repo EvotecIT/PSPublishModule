@@ -30,18 +30,35 @@ internal sealed partial class PowerForgeReleaseService
     internal static void CaptureApprovedMutationInputContents(PowerForgeAppleReleasePlan plan)
     {
         var paths = new List<string>();
-        if (!string.IsNullOrWhiteSpace(plan.ScreenshotConfigPath)) paths.Add(plan.ScreenshotConfigPath!);
-        paths.AddRange(plan.ScreenshotConfigPaths);
-        if (!string.IsNullOrWhiteSpace(plan.MetadataConfigPath)) paths.Add(plan.MetadataConfigPath!);
-        paths.AddRange(plan.MetadataConfigPaths);
-        if (!string.IsNullOrWhiteSpace(plan.AppInfoConfigPath)) paths.Add(plan.AppInfoConfigPath!);
-        paths.AddRange(plan.AppInfoConfigPaths);
-        if (!string.IsNullOrWhiteSpace(plan.GovernanceConfigPath)) paths.Add(plan.GovernanceConfigPath!);
-        paths.AddRange(plan.GovernanceConfigPaths);
-        if (!string.IsNullOrWhiteSpace(plan.VersionSourcePath)) paths.Add(plan.VersionSourcePath!);
+        if (plan.SyncScreenshots || plan.CheckReleaseReadiness ||
+            (plan.SubmitForReview && !plan.SkipReviewReadinessCheck))
+        {
+            if (!string.IsNullOrWhiteSpace(plan.ScreenshotConfigPath)) paths.Add(plan.ScreenshotConfigPath!);
+            paths.AddRange(plan.ScreenshotConfigPaths);
+        }
+        if (plan.SyncMetadata)
+        {
+            if (!string.IsNullOrWhiteSpace(plan.MetadataConfigPath)) paths.Add(plan.MetadataConfigPath!);
+            paths.AddRange(plan.MetadataConfigPaths);
+        }
+        if (plan.SyncAppInfo)
+        {
+            if (!string.IsNullOrWhiteSpace(plan.AppInfoConfigPath)) paths.Add(plan.AppInfoConfigPath!);
+            paths.AddRange(plan.AppInfoConfigPaths);
+        }
+        if (plan.CheckGovernance)
+        {
+            if (!string.IsNullOrWhiteSpace(plan.GovernanceConfigPath)) paths.Add(plan.GovernanceConfigPath!);
+            paths.AddRange(plan.GovernanceConfigPaths);
+        }
+        if (plan.Action == PowerForgeAppleReleaseAction.Version && !string.IsNullOrWhiteSpace(plan.VersionSourcePath))
+            paths.Add(plan.VersionSourcePath!);
 
-        var captured = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in paths.Where(static value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase))
+        var pathComparer = Path.DirectorySeparatorChar == '\\'
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var captured = new Dictionary<string, string>(pathComparer);
+        foreach (var path in paths.Where(static value => !string.IsNullOrWhiteSpace(value)).Distinct(pathComparer))
         {
             var fullPath = Path.GetFullPath(path);
             var bytes = File.ReadAllBytes(fullPath);
@@ -54,7 +71,9 @@ internal sealed partial class PowerForgeReleaseService
                 throw new InvalidOperationException(
                     $"Approved Apple mutation input changed before execution: {relative}");
             }
-            captured[fullPath] = System.Text.Encoding.UTF8.GetString(bytes);
+            using var stream = new MemoryStream(bytes, writable: false);
+            using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            captured[fullPath] = reader.ReadToEnd();
         }
         plan.ApprovedMutationInputContents = captured;
     }
@@ -325,6 +344,17 @@ internal sealed partial class PowerForgeReleaseService
             plan.Configuration,
             plan.Archive,
             plan.Upload,
+            DirectDistribution = new
+            {
+                plan.DirectDistribution.ExportMethod,
+                plan.DirectDistribution.XcrunExecutable,
+                plan.DirectDistribution.DittoExecutable,
+                plan.DirectDistribution.SpctlExecutable,
+                plan.DirectDistribution.KeychainProfile,
+                plan.DirectDistribution.TimeoutSeconds,
+                plan.DirectDistribution.Staple,
+                plan.DirectDistribution.Assess
+            },
             Automation = new
             {
                 plan.Automation.WriteReceipt,
