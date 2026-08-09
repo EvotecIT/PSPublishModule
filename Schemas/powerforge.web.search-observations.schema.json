@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.evotec.xyz/powerforge/web/search-observations/v1.json",
+  "title": "PowerForge.Web Search Observation Batch",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "provider",
+    "siteId",
+    "collectedAtUtc",
+    "sourceKind",
+    "status",
+    "observations"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1
+    },
+    "runId": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1
+    },
+    "siteId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "collectedAtUtc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sourceKind": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": ["complete", "partial"]
+    },
+    "configurationHash": {
+      "type": ["string", "null"]
+    },
+    "evidenceReference": {
+      "type": ["string", "null"]
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/observation"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": { "pattern": "^complete$" }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "observations": { "minItems": 1 }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["date", "clicks", "impressions"],
+      "anyOf": [
+        {
+          "required": ["page"],
+          "properties": {
+            "page": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https?://"
+            }
+          }
+        },
+        {
+          "required": ["query"],
+          "properties": {
+            "query": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ],
+      "properties": {
+        "observationKey": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "siteId": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "page": {
+          "type": ["string", "null"],
+          "format": "uri",
+          "pattern": "^https?://"
+        },
+        "query": {
+          "type": ["string", "null"]
+        },
+        "country": {
+          "type": ["string", "null"]
+        },
+        "device": {
+          "type": ["string", "null"]
+        },
+        "searchType": {
+          "type": ["string", "null"]
+        },
+        "clicks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "impressions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "clickThroughRate": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "averagePosition": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "evidenceReference": {
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}
