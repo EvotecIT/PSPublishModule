@@ -358,6 +358,15 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
 
         var manifest = File.ReadAllText(manifestPath);
+        if (Regex.IsMatch(
+                manifest,
+                "\\.unsafeFlags\\s*\\(",
+                RegexOptions.CultureInvariant))
+        {
+            throw new InvalidOperationException(
+                $"Local Swift package '{packageRoot}' uses unsafeFlags, whose compiler and linker inputs cannot be proven at the exact source commit. " +
+                "Replace unsafe flags with tracked package settings before creating an Apple checkpoint.");
+        }
         var externalDependencies = Regex.Matches(
                 manifest,
                 "\\.package\\s*\\((?<body>.*?)\\)",

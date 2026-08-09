@@ -663,6 +663,48 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_unsafe_flags_in_local_swift_package()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("UnsafeFlagsPackageInputRepo");
+        var project = scope.CreateDirectory(Path.Combine("UnsafeFlagsPackageInputRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            """
+            000000000000000000000001 = {
+                isa = XCLocalSwiftPackageReference;
+                relativePath = Packages/Shared;
+            };
+            """);
+        var package = scope.CreateDirectory(Path.Combine("UnsafeFlagsPackageInputRepo", "Packages", "Shared"));
+        File.WriteAllText(
+            Path.Combine(package, "Package.swift"),
+            """
+            // swift-tools-version: 6.0
+            import PackageDescription
+            let package = Package(
+                name: "Shared",
+                targets: [
+                    .target(
+                        name: "Shared",
+                        cSettings: [.unsafeFlags(["-include", "/tmp/injected.h"])]
+                    )
+                ]
+            )
+            """);
+        var sources = scope.CreateDirectory(Path.Combine("UnsafeFlagsPackageInputRepo", "Packages", "Shared", "Sources", "Shared"));
+        File.WriteAllText(Path.Combine(sources, "shared.c"), "int shared(void) { return 1; }");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("unsafeFlags", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("cannot be proven", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ResolveExactAppleSourceCommit_accepts_tracked_project_lock_for_local_package_dependency()
     {
         using var scope = new TemporaryDirectoryScope();

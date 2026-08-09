@@ -276,6 +276,24 @@ internal sealed partial class PowerForgeReleaseService
         {
             plan.Archive,
             plan.Upload,
+            Automation = new
+            {
+                plan.Automation.WriteReceipt,
+                plan.Automation.ReceiptPath,
+                plan.Automation.ReceiptHistoryPath,
+                plan.Automation.PlanReceiptPath,
+                plan.Automation.LockPath,
+                plan.Automation.VersionSourcePath,
+                plan.Automation.MarketingVersionPattern,
+                plan.Automation.Resume,
+                plan.Automation.WaitForProcessing,
+                plan.Automation.ProcessingTimeoutSeconds,
+                plan.Automation.PollIntervalSeconds,
+                plan.Automation.MinimumFreeSpaceGB,
+                plan.Automation.CleanupBeforeArchive,
+                plan.Automation.CleanupAfterProcessing,
+                plan.Automation.ArtifactRetentionDays
+            },
             plan.PrepareDistribution,
             plan.SelectBuildForDistribution,
             plan.AllowUnprocessedDistributionBuild,

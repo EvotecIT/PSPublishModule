@@ -528,10 +528,7 @@ internal sealed partial class PowerForgeReleaseService
                 earlyAppleReleaseVersion,
                 request.SkipBuild,
                 selectedAppleTargets,
-                allowUnresolvedResolvedVersion: true,
-                validateReusableArchives:
-                    (!request.PlanOnly && !request.ValidateOnly) ||
-                    request.CheckpointAppleApps);
+                allowUnresolvedResolvedVersion: true);
         }
 
         if (runPackages && result.Packages is null)
@@ -576,10 +573,7 @@ internal sealed partial class PowerForgeReleaseService
                 appleConfigurationOverride,
                 appleReleaseVersion,
                 request.SkipBuild,
-                selectedAppleTargets,
-                validateReusableArchives:
-                    (!request.PlanOnly && !request.ValidateOnly) ||
-                    request.CheckpointAppleApps);
+                selectedAppleTargets);
             result.AppleAppPlan = applePlan;
             if (request.PlanOnly)
                 result.AppleReceipt = CreateApplePlanReceipt(applePlan);
@@ -1437,8 +1431,7 @@ internal sealed partial class PowerForgeReleaseService
         string? sharedReleaseVersion,
         bool skipBuild,
         string[]? selectedTargetNames,
-        bool allowUnresolvedResolvedVersion = false,
-        bool validateReusableArchives = true)
+        bool allowUnresolvedResolvedVersion = false)
     {
         if (skipBuild && options.Archive)
             throw new InvalidOperationException("PowerForge release SkipBuild is not supported when AppleApps.Archive is enabled. Set AppleApps.Archive=false to reuse an existing Apple archive explicitly.");
@@ -1689,14 +1682,34 @@ internal sealed partial class PowerForgeReleaseService
                 "Apple app version updates require AppleApps.Archive=true for the configured legacy workflow. " +
                 "Use an explicit Apple action such as Status or Prepare to select a configured release identity without mutating the project.");
         }
+        var validateReusableArchives =
+            (!request.PlanOnly && !request.ValidateOnly) || request.CheckpointAppleApps;
         if (validateReusableArchives &&
             request.AppleAction == PowerForgeAppleReleaseAction.Configured &&
             !options.Archive &&
             options.Upload)
         {
-            var missingArchive = apps.FirstOrDefault(app => !Directory.Exists(app.ArchivePath));
+            var recoveryPlan = new PowerForgeAppleReleasePlan
+            {
+                ProjectRoot = projectRoot,
+                Action = request.AppleAction,
+                Automation = automation,
+                ReceiptPath = receiptPath,
+                ReceiptHistoryPath = receiptHistoryPath,
+                PlanReceiptPath = planReceiptPath,
+                LockPath = lockPath,
+                SourceCommit = appleSourceCommit.Length == 0 ? null : appleSourceCommit,
+                Apps = apps
+            };
+            var missingArchive = apps.FirstOrDefault(app =>
+                !Directory.Exists(app.ArchivePath) &&
+                (!automation.Resume || !HasPotentialVerifiedAppleUploadAttestation(recoveryPlan, app)));
             if (missingArchive is not null)
-                throw new FileNotFoundException($"Apple app archive was not found for upload-only release: {missingArchive.ArchivePath}", missingArchive.ArchivePath);
+            {
+                throw new FileNotFoundException(
+                    $"Apple app archive was not found for upload-only release and no exact upload attestation can resume it: {missingArchive.ArchivePath}",
+                    missingArchive.ArchivePath);
+            }
         }
         if (!request.PlanOnly &&
             !request.ValidateOnly &&
@@ -1765,7 +1778,7 @@ internal sealed partial class PowerForgeReleaseService
                 DiscoverAppStoreConnectAppId(app, credential, request.AppleAction);
         }
 
-        return new PowerForgeAppleReleasePlan
+        var plan = new PowerForgeAppleReleasePlan
         {
             ProjectRoot = projectRoot,
             Configuration = configuration,
@@ -1824,6 +1837,7 @@ internal sealed partial class PowerForgeReleaseService
             AppStoreConnectApiIssuerId = appStoreConnectApiIssuerId,
             Apps = apps
         };
+        return plan;
     }
 
     private static PowerForgeAppleAppReleaseTargetPlan PrepareAppleAppPlan(

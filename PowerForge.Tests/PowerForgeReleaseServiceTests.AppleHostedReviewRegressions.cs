@@ -3,6 +3,170 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void Execute_ApplePlan_BindsEffectiveAutomationPolicy()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var service = CreateAppleAutomationService(
+                _ => throw new InvalidOperationException("Upload planning without adoption must not query App Store Connect."));
+
+            var resumable = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Upload,
+                    AppleResume = true,
+                    PlanOnly = true
+                });
+            var nonResumable = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Upload,
+                    AppleResume = false,
+                    PlanOnly = true
+                });
+
+            Assert.NotEqual(resumable.AppleReceipt!.MutationInputsSha256, nonResumable.AppleReceipt!.MutationInputsSha256);
+            Assert.NotEqual(resumable.AppleReceipt.PlanSha256, nonResumable.AppleReceipt.PlanSha256);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_ConfiguredAppleUploadOnly_ResumesAfterAttestedArchiveWasRemoved()
+    {
+        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.MinimumFreeSpaceGB = 0;
+            spec.AppleApps.Automation.CleanupBeforeArchive = false;
+            var stateCalls = 0;
+            var seeded = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, ++stateCalls == 1 ? null : "VALID"),
+                    archiveAppleApp: request =>
+                    {
+                        var archive = Directory.CreateDirectory(request.ArchivePath!);
+                        File.WriteAllText(Path.Combine(archive.FullName, "payload"), "attested archive");
+                        return CreateSuccessfulArchive(request);
+                    },
+                    uploadAppleApp: CreateSuccessfulUpload)
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Upload,
+                        AppleSourceCommit = sourceCommit
+                    });
+            Assert.True(seeded.Success, seeded.ErrorMessage);
+            var archivePath = Assert.Single(seeded.AppleAppPlan!.Apps).ArchivePath;
+            Directory.Delete(archivePath, recursive: true);
+            spec.AppleApps.Archive = false;
+            spec.AppleApps.Upload = true;
+
+            var resumed = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, "VALID"),
+                    archiveAppleApp: _ => throw new InvalidOperationException("Verified configured recovery must skip archive."),
+                    uploadAppleApp: _ => throw new InvalidOperationException("Verified configured recovery must skip upload."))
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Configured,
+                        AppleSourceCommit = sourceCommit
+                    });
+
+            Assert.True(resumed.Success, resumed.ErrorMessage);
+            Assert.True(Assert.Single(resumed.AppleApps).ResumedExistingBuild);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleUploadExisting_RejectsAttestationForDifferentCheckpointArchive()
+    {
+        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.MinimumFreeSpaceGB = 0;
+            spec.AppleApps.Automation.CleanupBeforeArchive = false;
+            var stateCalls = 0;
+            var seeded = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, ++stateCalls == 1 ? null : "VALID"),
+                    archiveAppleApp: request =>
+                    {
+                        var archive = Directory.CreateDirectory(request.ArchivePath!);
+                        File.WriteAllText(Path.Combine(archive.FullName, "payload"), "first archive");
+                        return CreateSuccessfulArchive(request);
+                    },
+                    uploadAppleApp: CreateSuccessfulUpload)
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Upload,
+                        AppleSourceCommit = sourceCommit
+                    });
+            Assert.True(seeded.Success, seeded.ErrorMessage);
+            var archivePath = Assert.Single(seeded.AppleAppPlan!.Apps).ArchivePath;
+            File.WriteAllText(Path.Combine(archivePath, "payload"), "second checkpoint archive");
+            var expectedArchiveSha256 = AppleNotarizationService.ComputeArtifactSha256(archivePath);
+            spec.AppleApps.Archive = false;
+            spec.AppleApps.Upload = true;
+
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, "VALID"),
+                    uploadAppleApp: _ => throw new InvalidOperationException("A mismatched remote build must not be uploaded or resumed."))
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.UploadExisting,
+                        AppleSourceCommit = sourceCommit,
+                        AppleExpectedArchiveSha256ByTarget = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["CasaRay iOS"] = expectedArchiveSha256
+                        }
+                    });
+
+            Assert.False(result.Success);
+            Assert.False(Assert.Single(result.AppleApps).ResumedExistingBuild);
+            Assert.Contains("no immutable local upload receipt", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_ConfiguredRemoteMutation_RefreshesAuthoritativeFinalState()
     {
         var root = CreateSandbox();

@@ -164,26 +164,13 @@ internal sealed partial class PowerForgeReleaseService
         var receipts = _appleReceiptStore.ReadAll(plan);
         foreach (var receipt in receipts)
         {
-            if (receipt.PlanOnly ||
-                string.IsNullOrWhiteSpace(receipt.ReceiptSha256) ||
-                !string.Equals(receipt.SourceCommit, plan.SourceCommit, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var target = receipt.Targets.SingleOrDefault(candidate =>
-                candidate.Name.Equals(app.Name, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(candidate.BundleId, app.BundleId, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(candidate.AppId, app.AppStoreConnectAppId, StringComparison.OrdinalIgnoreCase) &&
-                candidate.Platform == app.Platform &&
-                candidate.DistributionRoute == app.DistributionRoute &&
-                string.Equals(candidate.Version, state.VersionString, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(candidate.Build, state.BuildNumber, StringComparison.OrdinalIgnoreCase) &&
-                !candidate.AdoptedExistingBuild &&
-                candidate.UploadPerformed &&
-                IsSha256(candidate.ArchiveSha256) &&
-                !string.IsNullOrWhiteSpace(candidate.ArchivePath) &&
-                IsVerifiedUploadCheckpoint(receipts, receipt, candidate));
+            var target = FindMatchingAppleUploadAttestationTarget(
+                receipts,
+                receipt,
+                plan,
+                app,
+                state.VersionString,
+                state.BuildNumber);
             if (target is null)
                 continue;
 
@@ -222,6 +209,59 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         return null;
+    }
+
+    private bool HasPotentialVerifiedAppleUploadAttestation(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app)
+    {
+        if (string.IsNullOrWhiteSpace(plan.SourceCommit))
+        {
+            return false;
+        }
+
+        var receipts = _appleReceiptStore.ReadAll(plan);
+        return receipts.Any(receipt => FindMatchingAppleUploadAttestationTarget(
+            receipts,
+            receipt,
+            plan,
+            app,
+            app.MarketingVersion,
+            app.BuildNumber) is not null);
+    }
+
+    private static PowerForgeAppleReleaseTargetReceipt? FindMatchingAppleUploadAttestationTarget(
+        IReadOnlyCollection<PowerForgeAppleReleaseReceipt> receipts,
+        PowerForgeAppleReleaseReceipt receipt,
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        string? version,
+        string? build)
+    {
+        if (receipt.PlanOnly ||
+            string.IsNullOrWhiteSpace(receipt.ReceiptSha256) ||
+            !string.Equals(receipt.SourceCommit, plan.SourceCommit, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return receipt.Targets.SingleOrDefault(candidate =>
+            candidate.Name.Equals(app.Name, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(candidate.BundleId, app.BundleId, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(candidate.AppId, app.AppStoreConnectAppId, StringComparison.OrdinalIgnoreCase) &&
+            candidate.Platform == app.Platform &&
+            candidate.DistributionRoute == app.DistributionRoute &&
+            (string.IsNullOrWhiteSpace(version) ||
+             string.Equals(candidate.Version, version, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(build) ||
+             string.Equals(candidate.Build, build, StringComparison.OrdinalIgnoreCase)) &&
+            !candidate.AdoptedExistingBuild &&
+            candidate.UploadPerformed &&
+            IsSha256(candidate.ArchiveSha256) &&
+            (string.IsNullOrWhiteSpace(app.ExpectedArchiveSha256) ||
+             string.Equals(candidate.ArchiveSha256, app.ExpectedArchiveSha256, StringComparison.OrdinalIgnoreCase)) &&
+            !string.IsNullOrWhiteSpace(candidate.ArchivePath) &&
+            IsVerifiedUploadCheckpoint(receipts, receipt, candidate));
     }
 
     private static bool IsVerifiedUploadCheckpoint(
