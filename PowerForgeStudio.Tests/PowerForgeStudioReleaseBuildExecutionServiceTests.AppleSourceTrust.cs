@@ -201,6 +201,80 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_external_source_tree_build_input()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ExternalTreeBuildInputRepo");
+        var project = scope.CreateDirectory(Path.Combine("ExternalTreeBuildInputRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            """
+            000000000000000000000000 = {
+                isa = PBXBuildFile;
+                fileRef = 000000000000000000000001;
+            };
+            000000000000000000000001 = {
+                isa = PBXFileReference;
+                path = ../../../../tmp/Injected.swift;
+                sourceTree = DEVELOPER_DIR;
+            };
+            """);
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("external source tree", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Injected.swift", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_accepts_owned_built_product_reference()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("OwnedBuiltProductRepo");
+        var project = scope.CreateDirectory(Path.Combine("OwnedBuiltProductRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            """
+            000000000000000000000000 = { isa = PBXBuildFile; fileRef = 000000000000000000000001; };
+            000000000000000000000001 = { isa = PBXFileReference; path = SampleExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+            000000000000000000000002 = { isa = PBXNativeTarget; productReference = 000000000000000000000001; };
+            """);
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var sourceCommit = CommitRepository(repositoryRoot);
+
+        var actual = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(sourceCommit, actual);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_accepts_sdk_framework_build_input()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("SdkFrameworkInputRepo");
+        var project = scope.CreateDirectory(Path.Combine("SdkFrameworkInputRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            """
+            000000000000000000000000 = { isa = PBXBuildFile; fileRef = 000000000000000000000001; };
+            000000000000000000000001 = {
+                isa = PBXFileReference;
+                path = System/Library/Frameworks/Foundation.framework;
+                sourceTree = SDKROOT;
+            };
+            """);
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var sourceCommit = CommitRepository(repositoryRoot);
+
+        var actual = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(sourceCommit, actual);
+    }
+
+    [Fact]
     public void ResolveExactAppleSourceCommit_recursively_validates_referenced_subprojects()
     {
         using var scope = new TemporaryDirectoryScope();
@@ -555,6 +629,37 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains("inside", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("OTHER_CFLAGS", "-fplugin=/tmp/injected.dylib")]
+    [InlineData("OTHER_LDFLAGS", "-Wl,-force_load,/tmp/libInjected.a")]
+    [InlineData("OTHER_SWIFT_FLAGS", "-Xcc -fplugin=/tmp/injected.dylib")]
+    public void ResolveExactAppleSourceCommit_rejects_paths_hidden_in_compiler_option_tokens(
+        string setting,
+        string value)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("FlagOptionPathRepo");
+        var project = scope.CreateDirectory(Path.Combine("FlagOptionPathRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            $$"""
+            000000000000000000000001 = {
+                isa = XCBuildConfiguration;
+                buildSettings = {
+                    {{setting}} = "{{value}}";
+                };
+            };
+            """);
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains(setting, exception.Message, StringComparison.Ordinal);
+        Assert.Contains("/tmp", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ResolveExactAppleSourceCommit_rejects_ignored_local_swift_package_source()
     {
@@ -849,6 +954,31 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 
         Assert.Contains("systemLibrary", exception.Message, StringComparison.Ordinal);
         Assert.Contains("pkg-config", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("targets: [.plugin(name: \"Generator\", capability: .buildTool())]")]
+    [InlineData("targets: [.target(name: \"App\", plugins: [.plugin(name: \"Generator\")])]")]
+    public void ResolveExactAppleSourceCommit_rejects_local_swift_build_tool_plugins(string targets)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("BuildToolPluginPackageRepo");
+        var project = scope.CreateDirectory(Path.Combine("BuildToolPluginPackageRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCLocalSwiftPackageReference; relativePath = Packages/Shared; };");
+        var package = scope.CreateDirectory(Path.Combine("BuildToolPluginPackageRepo", "Packages", "Shared"));
+        File.WriteAllText(
+            Path.Combine(package, "Package.swift"),
+            $"// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"Shared\", {targets})");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("plugin", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("runtime inputs", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

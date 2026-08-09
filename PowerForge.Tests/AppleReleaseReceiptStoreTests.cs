@@ -106,6 +106,31 @@ public sealed class AppleReleaseReceiptStoreTests
     }
 
     [Fact]
+    public void WriteAttempt_PublishesImmutableHistoryWithoutExposingTemporaryEntries()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var plan = CreatePlan(root);
+            var checkedAt = DateTimeOffset.Parse("2026-08-09T20:00:00Z");
+            var store = new AppleReleaseReceiptStore(() => checkedAt);
+            var receipt = CreateReceipt(PowerForgeAppleReleaseAction.Upload, success: true);
+            receipt.AttemptId = "0123456789abcdef0123456789abcdef";
+
+            store.WriteAttempt(plan, receipt);
+
+            var historyPath = Assert.Single(Directory.GetFiles(plan.ReceiptHistoryPath, "*.json"));
+            Assert.Equal(receipt.ReceiptSha256, Assert.Single(store.ReadAll(plan)).ReceiptSha256);
+            Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(plan.ReceiptHistoryPath)!, "*.receipt.tmp"));
+            Assert.True(new FileInfo(historyPath).Length > 0);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void ComputeReceiptSha256Json_IsStableForFuturePropertiesAndPropertyOrder()
     {
         const string receipt =

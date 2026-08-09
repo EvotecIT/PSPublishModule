@@ -594,6 +594,9 @@ internal sealed partial class PowerForgeReleaseService
                     ? null
                     : CreatePortableDirectArtifactPath(plan, app, result!.Notarization!.ArtifactPath),
                 DirectArtifactSha256 = result?.Notarization?.ArtifactSha256,
+                DirectExecutionSha256 = result?.Notarization is null
+                    ? null
+                    : ComputeDirectExecutionSha256(plan, app),
                 NotarizationSubmissionId = result?.Notarization?.SubmissionId,
                 NotarizationStatus = result?.Notarization?.Status,
                 Stapled = result?.Notarization?.Staple?.Succeeded,

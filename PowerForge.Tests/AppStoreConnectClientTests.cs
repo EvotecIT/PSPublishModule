@@ -958,6 +958,7 @@ public sealed partial class AppStoreConnectClientTests
             var folder = Directory.CreateDirectory(Path.Combine(root.FullName, "iphone-6-5"));
             var screenshotPath = Path.Combine(folder.FullName, "01-home.png");
             await File.WriteAllBytesAsync(screenshotPath, new byte[] { 9, 8, 7 });
+            UnixFileMode? snapshotRootMode = null;
 
             var handler = new SequenceHandler(
                 new SequenceResponse(HttpStatusCode.OK,
@@ -1041,7 +1042,18 @@ public sealed partial class AppStoreConnectClientTests
             handler.OnRequest = count =>
             {
                 if (count == 1)
+                {
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        var snapshotBase = Path.Combine(Path.GetTempPath(), "PowerForge", "appstore-screenshot-snapshot");
+                        var snapshotFile = Directory.EnumerateFiles(snapshotBase, "01-home.png", SearchOption.AllDirectories)
+                            .Where(path => File.ReadAllBytes(path).SequenceEqual(new byte[] { 9, 8, 7 }))
+                            .OrderByDescending(File.GetLastWriteTimeUtc)
+                            .First();
+                        snapshotRootMode = File.GetUnixFileMode(Directory.GetParent(Path.GetDirectoryName(snapshotFile)!)!.FullName);
+                    }
                     File.WriteAllBytes(screenshotPath, new byte[] { 6, 6, 6 });
+                }
             };
             using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
             using var client = new AppStoreConnectClient(CreateCredential(), http);
@@ -1078,6 +1090,12 @@ public sealed partial class AppStoreConnectClientTests
             Assert.Contains("appStoreVersions/version-1/appStoreVersionLocalizations", handler.RequestUris[1].ToString(), StringComparison.Ordinal);
             Assert.Contains("appStoreVersionLocalizations/loc-1/appScreenshotSets", handler.RequestUris[2].ToString(), StringComparison.Ordinal);
             Assert.Equal("https://api.appstoreconnect.apple.com/v1/appScreenshotSets", handler.RequestUris[3].ToString());
+            if (!OperatingSystem.IsWindows())
+            {
+                Assert.Equal(
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute,
+                    snapshotRootMode);
+            }
         }
         finally
         {

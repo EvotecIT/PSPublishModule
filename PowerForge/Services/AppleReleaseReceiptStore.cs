@@ -107,9 +107,7 @@ internal sealed class AppleReleaseReceiptStore
         receipt.ReceiptSha256 = ComputeReceiptSha256(receipt);
 
         var payload = Serialize(receipt);
-        using (var stream = new FileStream(historyPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-        using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
-            writer.Write(payload);
+        WriteImmutableHistoryEntry(historyDirectory, historyPath, payload);
 
         WriteLatest(plan.ProjectRoot, plan.ReceiptPath, payload, "AppleApps.Automation.ReceiptPath");
     }
@@ -374,9 +372,31 @@ internal sealed class AppleReleaseReceiptStore
             "yyyyMMdd'T'HHmmss.fffffff'Z'",
             System.Globalization.CultureInfo.InvariantCulture);
         var legacyPath = Path.Combine(historyDirectory, $"{timestamp}-legacy-{Guid.NewGuid():N}.json");
-        using var source = new FileStream(plan.ReceiptPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        using var destination = new FileStream(legacyPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-        source.CopyTo(destination);
+        WriteImmutableHistoryEntry(historyDirectory, legacyPath, File.ReadAllBytes(plan.ReceiptPath));
+    }
+
+    private static void WriteImmutableHistoryEntry(string historyDirectory, string destinationPath, string payload)
+        => WriteImmutableHistoryEntry(
+            historyDirectory,
+            destinationPath,
+            new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(payload));
+
+    private static void WriteImmutableHistoryEntry(string historyDirectory, string destinationPath, byte[] payload)
+    {
+        var parent = Path.GetDirectoryName(historyDirectory) ?? historyDirectory;
+        var temporaryPath = Path.Combine(
+            parent,
+            $".{Path.GetFileName(historyDirectory)}.{Guid.NewGuid():N}.receipt.tmp");
+        try
+        {
+            WriteDurableBytes(temporaryPath, payload);
+            File.Move(temporaryPath, destinationPath);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
+        }
     }
 
     private static void WriteLatest(string projectRoot, string path, string payload, string settingName)
@@ -394,7 +414,7 @@ internal sealed class AppleReleaseReceiptStore
             $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
-            File.WriteAllText(temporaryPath, payload, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            WriteDurableText(temporaryPath, payload);
             if (File.Exists(path))
                 File.Replace(temporaryPath, path, destinationBackupFileName: null, ignoreMetadataErrors: true);
             else
@@ -405,6 +425,24 @@ internal sealed class AppleReleaseReceiptStore
             if (File.Exists(temporaryPath))
                 File.Delete(temporaryPath);
         }
+    }
+
+    private static void WriteDurableText(string path, string payload)
+        => WriteDurableBytes(
+            path,
+            new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(payload));
+
+    private static void WriteDurableBytes(string path, byte[] bytes)
+    {
+        using var stream = new FileStream(
+            path,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 16 * 1024,
+            options: FileOptions.WriteThrough);
+        stream.Write(bytes, 0, bytes.Length);
+        stream.Flush(flushToDisk: true);
     }
 
     private static string Serialize(PowerForgeAppleReleaseReceipt receipt)

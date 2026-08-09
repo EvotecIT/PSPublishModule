@@ -337,6 +337,9 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public string? DirectArtifactSha256 { get; set; }
 
+    /// <summary>SHA-256 binding the effective archive, export, signing, and notarization controls that produced the direct artifact.</summary>
+    public string? DirectExecutionSha256 { get; set; }
+
     public string? NotarizationSubmissionId { get; set; }
 
     public string? NotarizationStatus { get; set; }

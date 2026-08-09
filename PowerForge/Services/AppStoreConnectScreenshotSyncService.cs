@@ -228,6 +228,10 @@ public sealed class AppStoreConnectScreenshotSyncService
                 comparer);
         var root = Path.Combine(Path.GetTempPath(), "PowerForge", "appstore-screenshot-snapshot", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
+#if NET8_0_OR_GREATER
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+#endif
         try
         {
             var mappings = new Dictionary<string, string>(comparer);

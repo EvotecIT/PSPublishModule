@@ -414,6 +414,11 @@ internal sealed partial class PowerForgeReleaseService
            target.DistributionRoute == AppleDistributionRoute.DirectNotarized &&
            string.Equals(target.Version, app.MarketingVersion, StringComparison.OrdinalIgnoreCase) &&
            string.Equals(target.Build, app.BuildNumber, StringComparison.OrdinalIgnoreCase) &&
+           IsSha256(target.DirectExecutionSha256) &&
+           string.Equals(
+               target.DirectExecutionSha256,
+               ComputeDirectExecutionSha256(plan, app),
+               StringComparison.OrdinalIgnoreCase) &&
            (!IsSha256(app.ExpectedArchiveSha256) ||
             string.Equals(target.ArchiveSha256, app.ExpectedArchiveSha256, StringComparison.OrdinalIgnoreCase));
 

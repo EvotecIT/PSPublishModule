@@ -28,12 +28,19 @@ public sealed partial class PowerForgeReleaseServiceTests
             ArchiveSha256 = new string('a', 64)
         };
 
-        var plan = new PowerForgeAppleReleasePlan { ProjectRoot = Directory.GetCurrentDirectory() };
+        var plan = new PowerForgeAppleReleasePlan
+        {
+            ProjectRoot = Directory.GetCurrentDirectory(),
+            SourceCommit = "0123456789abcdef0123456789abcdef01234567"
+        };
         app.ProjectPath = Path.Combine(plan.ProjectRoot, "EasyControlXAgent.xcodeproj");
+        app.ArchivePath = Path.Combine(plan.ProjectRoot, "EasyControlXAgent.xcarchive");
+        app.ExportPath = Path.Combine(plan.ProjectRoot, "export");
         receipt.ProjectPath = "EasyControlXAgent.xcodeproj";
         receipt.Scheme = app.Scheme;
         receipt.Configuration = app.Configuration;
         receipt.Destination = app.Destination;
+        receipt.DirectExecutionSha256 = PowerForgeReleaseService.ComputeDirectExecutionSha256(plan, app);
         Assert.False(PowerForgeReleaseService.IsMatchingDirectReceiptTarget(plan, receipt, app));
         receipt.ArchiveSha256 = app.ExpectedArchiveSha256;
         Assert.True(PowerForgeReleaseService.IsMatchingDirectReceiptTarget(plan, receipt, app));
@@ -42,13 +49,19 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void DirectNotarizationResume_UsesPlatformCorrectProjectPathIdentity()
     {
-        var plan = new PowerForgeAppleReleasePlan { ProjectRoot = Directory.GetCurrentDirectory() };
+        var plan = new PowerForgeAppleReleasePlan
+        {
+            ProjectRoot = Directory.GetCurrentDirectory(),
+            SourceCommit = "0123456789abcdef0123456789abcdef01234567"
+        };
         var app = new PowerForgeAppleAppReleaseTargetPlan
         {
             Name = "CasaRay",
             BundleId = "com.evotecit.casaray",
             Platform = ApplePlatform.macOS,
             ProjectPath = Path.Combine(plan.ProjectRoot, "CasaRay.xcodeproj"),
+            ArchivePath = Path.Combine(plan.ProjectRoot, "CasaRay.xcarchive"),
+            ExportPath = Path.Combine(plan.ProjectRoot, "export"),
             DistributionRoute = AppleDistributionRoute.DirectNotarized,
             MarketingVersion = "1.0.0",
             BuildNumber = "1"
@@ -66,10 +79,78 @@ public sealed partial class PowerForgeReleaseServiceTests
             Version = app.MarketingVersion,
             Build = app.BuildNumber
         };
+        receipt.DirectExecutionSha256 = PowerForgeReleaseService.ComputeDirectExecutionSha256(plan, app);
 
         var matches = PowerForgeReleaseService.IsMatchingDirectReceiptTarget(plan, receipt, app);
 
         Assert.Equal(Path.DirectorySeparatorChar == '\\', matches);
+    }
+
+    [Theory]
+    [InlineData("team")]
+    [InlineData("signing")]
+    [InlineData("export")]
+    [InlineData("staple")]
+    public void DirectNotarizationResume_RejectsChangedExecutionPolicy(string changedControl)
+    {
+        var root = Directory.GetCurrentDirectory();
+        var plan = new PowerForgeAppleReleasePlan
+        {
+            ProjectRoot = root,
+            SourceCommit = "0123456789abcdef0123456789abcdef01234567",
+            SigningStyle = "automatic",
+            DirectDistribution = new PowerForgeAppleDirectDistributionOptions
+            {
+                ExportMethod = "developer-id",
+                Staple = true,
+                Assess = true
+            }
+        };
+        var app = new PowerForgeAppleAppReleaseTargetPlan
+        {
+            Name = "CasaRay",
+            BundleId = "com.evotecit.casaray",
+            Platform = ApplePlatform.macOS,
+            DistributionRoute = AppleDistributionRoute.DirectNotarized,
+            ProjectPath = Path.Combine(root, "CasaRay.xcodeproj"),
+            ArchivePath = Path.Combine(root, "CasaRay.xcarchive"),
+            ExportPath = Path.Combine(root, "export"),
+            TeamId = "TEAMONE",
+            MarketingVersion = "1.0.0",
+            BuildNumber = "1"
+        };
+        var receipt = new PowerForgeAppleReleaseTargetReceipt
+        {
+            Name = app.Name,
+            BundleId = app.BundleId,
+            Platform = app.Platform,
+            DistributionRoute = app.DistributionRoute,
+            ProjectPath = "CasaRay.xcodeproj",
+            Scheme = app.Scheme,
+            Configuration = app.Configuration,
+            Destination = app.Destination,
+            Version = app.MarketingVersion,
+            Build = app.BuildNumber,
+            DirectExecutionSha256 = PowerForgeReleaseService.ComputeDirectExecutionSha256(plan, app)
+        };
+
+        switch (changedControl)
+        {
+            case "team":
+                app.TeamId = "TEAMTWO";
+                break;
+            case "signing":
+                plan.SigningStyle = "manual";
+                break;
+            case "export":
+                plan.DirectDistribution.ExportMethod = "release-testing";
+                break;
+            case "staple":
+                plan.DirectDistribution.Staple = false;
+                break;
+        }
+
+        Assert.False(PowerForgeReleaseService.IsMatchingDirectReceiptTarget(plan, receipt, app));
     }
 
     [Fact]

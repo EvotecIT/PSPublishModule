@@ -65,6 +65,7 @@ internal sealed partial class PowerForgeReleaseService
         target.ArchiveSha256 = result.ArchiveSha256 ?? app.ExpectedArchiveSha256;
         target.DirectArtifactPath = CreatePortableDirectArtifactPath(plan, app, result.Notarization.ArtifactPath);
         target.DirectArtifactSha256 = result.Notarization.ArtifactSha256;
+        target.DirectExecutionSha256 = ComputeDirectExecutionSha256(plan, app);
         target.NotarizationSubmissionId = result.Notarization.SubmissionId;
         target.NotarizationStatus = result.Notarization.Status;
         target.Stapled = result.Notarization.Staple?.Succeeded;
@@ -99,6 +100,7 @@ internal sealed partial class PowerForgeReleaseService
         target.ArchiveSha256 = app.ExpectedArchiveSha256;
         target.DirectArtifactPath = CreatePortableDirectArtifactPath(plan, app, checkpoint.ArtifactPath);
         target.DirectArtifactSha256 = checkpoint.ArtifactSha256;
+        target.DirectExecutionSha256 = ComputeDirectExecutionSha256(plan, app);
         target.NotarizationSubmissionId = checkpoint.SubmissionId;
         target.NotarizationStatus = checkpoint.Status;
         target.ErrorMessage = $"Apple notarization accepted for '{app.Name}', but local post-processing is incomplete.";
@@ -126,6 +128,7 @@ internal sealed partial class PowerForgeReleaseService
         target.ArchiveSha256 = app.ExpectedArchiveSha256;
         target.DirectArtifactPath = CreatePortableDirectArtifactPath(plan, app, checkpoint.ArtifactPath);
         target.DirectArtifactSha256 = checkpoint.ArtifactSha256;
+        target.DirectExecutionSha256 = ComputeDirectExecutionSha256(plan, app);
         target.NotarizationSubmissionId = checkpoint.SubmissionId;
         target.NotarizationStatus = checkpoint.Status;
         target.Stapled = true;
@@ -165,6 +168,58 @@ internal sealed partial class PowerForgeReleaseService
             Version = app.MarketingVersion,
             Build = app.BuildNumber
         };
+
+    internal static string ComputeDirectExecutionSha256(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app)
+    {
+        if (plan is null)
+            throw new ArgumentNullException(nameof(plan));
+        if (app is null)
+            throw new ArgumentNullException(nameof(app));
+
+        return ComputeStableSha256(new
+        {
+            plan.SourceCommit,
+            ReleaseConfiguration = plan.Configuration,
+            plan.XcodeBuildExecutable,
+            plan.AllowProvisioningUpdates,
+            plan.ManageAppVersionAndBuildNumber,
+            plan.UploadSymbols,
+            plan.GenerateAppStoreInformation,
+            plan.SigningStyle,
+            app.Name,
+            app.BundleId,
+            app.Platform,
+            app.ArchiveVariant,
+            app.DistributionRoute,
+            TargetConfiguration = app.Configuration,
+            ProjectPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/'),
+            app.IsWorkspace,
+            app.Scheme,
+            app.Destination,
+            ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/'),
+            ExportPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ExportPath).Replace('\\', '/'),
+            app.TeamId,
+            app.MarketingVersion,
+            app.BuildNumber,
+            RequiredEmbeddedBundleIds = app.RequiredEmbeddedBundleIds.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+            RequiredPrivacyUsageDescriptionKeys = app.RequiredPrivacyUsageDescriptionKeys.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+            DirectDistribution = new
+            {
+                plan.DirectDistribution.ExportMethod,
+                plan.DirectDistribution.XcrunExecutable,
+                plan.DirectDistribution.DittoExecutable,
+                plan.DirectDistribution.SpctlExecutable,
+                plan.DirectDistribution.KeychainProfile,
+                plan.DirectDistribution.TimeoutSeconds,
+                plan.DirectDistribution.Staple,
+                plan.DirectDistribution.Assess
+            },
+            plan.AppStoreConnectApiKeyId,
+            plan.AppStoreConnectApiIssuerId
+        });
+    }
 
     private static string CreatePortableDirectArtifactPath(
         PowerForgeAppleReleasePlan plan,

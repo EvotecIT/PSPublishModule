@@ -906,7 +906,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         return new AppleNotarizationResult
                         {
                             ArtifactPath = request.ArtifactPath,
-                            ArtifactSha256 = "new-artifact-sha",
+                            ArtifactSha256 = AppleNotarizationService.ComputeArtifactSha256(request.ArtifactPath),
                             SubmissionPath = request.ArtifactPath + ".zip",
                             SubmissionId = "new-submission",
                             Status = "Accepted",
@@ -933,9 +933,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(retainedTarget.GatekeeperAccepted);
             Assert.Contains("gatekeeperAssessment", retainedTarget.SkippedSteps);
 
-            // Disabled post-notarization checks are complete by policy even though
-            // their receipt flags remain null. A mixed-target retry must still reuse
-            // the retained artifact instead of submitting it again.
+            // Changing post-notarization policy creates a different approved execution.
+            // The prior accepted artifact must not be reused under the new controls.
             spec.AppleApps.DirectDistribution.Staple = false;
             spec.AppleApps.DirectDistribution.Assess = false;
             var disabledChecksReceipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(nextRelease.AppleReceipt);
@@ -964,11 +963,11 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
 
             Assert.True(disabledChecksRetry.Success);
-            Assert.Equal(0, archiveCalls);
-            Assert.Equal(0, exportCalls);
-            Assert.Null(nextReleaseRequest);
+            Assert.Equal(1, archiveCalls);
+            Assert.Equal(1, exportCalls);
+            Assert.NotNull(nextReleaseRequest);
             var disabledChecksTarget = Assert.Single(disabledChecksRetry.AppleReceipt!.Targets);
-            Assert.True(disabledChecksTarget.ResumedAcceptedNotarization);
+            Assert.False(disabledChecksTarget.ResumedAcceptedNotarization);
             Assert.Null(disabledChecksTarget.Stapled);
             Assert.Null(disabledChecksTarget.StapleValidated);
             Assert.Null(disabledChecksTarget.GatekeeperAccepted);

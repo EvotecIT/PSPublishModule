@@ -169,6 +169,9 @@ internal sealed partial class PowerForgeReleaseService
                 ? null
                 : FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/'),
             ArchiveSha256 = app.ExpectedArchiveSha256,
+            DirectExecutionSha256 = app.DistributionRoute == AppleDistributionRoute.DirectNotarized
+                ? ComputeDirectExecutionSha256(plan, app)
+                : null,
             SkippedSteps = new[] { "plan-only" }
         };
         if (!RequiresObservedApplePlanState(plan, app))

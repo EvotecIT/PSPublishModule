@@ -71,7 +71,7 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private static IEnumerable<string> ExtractBuildFlagInputPaths(string value, string key)
     {
-        var tokens = SplitBuildSettingPaths(value);
+        var tokens = ExpandForwardedBuildFlagTokens(SplitBuildSettingPaths(value), key);
         var consumeNext = false;
         for (var index = 0; index < tokens.Length; index++)
         {
@@ -89,13 +89,27 @@ internal sealed partial class AppleReleaseSourceTrustService
                 token.Equals("-include", StringComparison.Ordinal) ||
                 token.Equals("-force_load", StringComparison.Ordinal) ||
                 token.Equals("-filelist", StringComparison.Ordinal) ||
-                token.Equals("-ivfsoverlay", StringComparison.Ordinal))
+                token.Equals("-ivfsoverlay", StringComparison.Ordinal) ||
+                token.Equals("-vfsoverlay", StringComparison.Ordinal) ||
+                token.Equals("-fplugin", StringComparison.Ordinal) ||
+                token.Equals("-fpass-plugin", StringComparison.Ordinal) ||
+                token.Equals("-load", StringComparison.Ordinal) ||
+                token.Equals("-plugin", StringComparison.Ordinal) ||
+                token.Equals("-plugin-path", StringComparison.Ordinal) ||
+                token.Equals("-module-map-file", StringComparison.Ordinal) ||
+                token.Equals("-isysroot", StringComparison.Ordinal) ||
+                token.Equals("-sdk", StringComparison.Ordinal))
             {
                 consumeNext = true;
                 continue;
             }
 
-            var prefixes = new[] { "-I", "-F", "-L", "-fmodule-map-file=" };
+            var prefixes = new[]
+            {
+                "-I", "-F", "-L", "-fmodule-map-file=", "-fplugin=", "-fpass-plugin=",
+                "-ivfsoverlay=", "-vfsoverlay=", "-plugin-path=", "-module-map-file=",
+                "-isysroot=", "-sdk="
+            };
             var prefix = prefixes.FirstOrDefault(candidate =>
                 token.StartsWith(candidate, StringComparison.Ordinal) && token.Length > candidate.Length);
             if (prefix is not null)
@@ -104,9 +118,25 @@ internal sealed partial class AppleReleaseSourceTrustService
                 continue;
             }
 
+            if (token.StartsWith("-D", StringComparison.Ordinal) ||
+                token.StartsWith("-U", StringComparison.Ordinal) ||
+                token.StartsWith("-Werror=", StringComparison.Ordinal) ||
+                token.StartsWith("-Wno-", StringComparison.Ordinal) ||
+                token.Contains("@executable_path", StringComparison.Ordinal) ||
+                token.Contains("@loader_path", StringComparison.Ordinal) ||
+                token.Contains("@rpath", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (token.StartsWith("-", StringComparison.Ordinal) && IsPathLikeBuildFlagToken(token))
+            {
+                throw new InvalidOperationException(
+                    $"Path-bearing option in Xcode build setting {key} cannot be classified safely: {token}");
+            }
+
             if (!token.StartsWith("-", StringComparison.Ordinal) &&
-                (Path.IsPathRooted(token) || token.Contains('/') || token.Contains('\\') ||
-                 token.Contains("$(", StringComparison.Ordinal) || token.Contains("${", StringComparison.Ordinal)))
+                IsPathLikeBuildFlagToken(token))
             {
                 throw new InvalidOperationException(
                     $"Path-like token in Xcode build setting {key} cannot be classified safely: {token}");
@@ -115,6 +145,50 @@ internal sealed partial class AppleReleaseSourceTrustService
         if (consumeNext)
             throw new InvalidOperationException($"Xcode build setting {key} ends with a path-consuming flag and no input.");
     }
+
+    private static string[] ExpandForwardedBuildFlagTokens(string[] tokens, string key)
+    {
+        var expanded = new List<string>(tokens.Length);
+        for (var index = 0; index < tokens.Length; index++)
+        {
+            var token = tokens[index];
+            if (token.Equals("-Xcc", StringComparison.Ordinal) ||
+                token.Equals("-Xlinker", StringComparison.Ordinal) ||
+                token.Equals("-Xfrontend", StringComparison.Ordinal) ||
+                token.Equals("-Xswiftc", StringComparison.Ordinal))
+            {
+                if (++index >= tokens.Length)
+                    throw new InvalidOperationException($"Xcode build setting {key} ends with forwarding option '{token}' and no argument.");
+                expanded.Add(tokens[index]);
+                continue;
+            }
+
+            if (token.StartsWith("-Wl,", StringComparison.Ordinal))
+            {
+                expanded.AddRange(token.Substring(4).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries));
+                continue;
+            }
+
+            foreach (var wrapper in new[] { "-Xcc=", "-Xlinker=", "-Xfrontend=", "-Xswiftc=" })
+            {
+                if (!token.StartsWith(wrapper, StringComparison.Ordinal))
+                    continue;
+                expanded.Add(token.Substring(wrapper.Length));
+                token = string.Empty;
+                break;
+            }
+            if (!string.IsNullOrEmpty(token))
+                expanded.Add(token);
+        }
+        return expanded.ToArray();
+    }
+
+    private static bool IsPathLikeBuildFlagToken(string token)
+        => Path.IsPathRooted(token) ||
+           token.Contains('/') ||
+           token.Contains('\\') ||
+           token.Contains("$(", StringComparison.Ordinal) ||
+           token.Contains("${", StringComparison.Ordinal);
 
     private static bool IsToolchainOrBuildProductPath(string value)
     {

@@ -234,6 +234,12 @@ internal sealed partial class AppleReleaseSourceTrustService
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .Select(static value => value!.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)[0])
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var nativeTargetProductReferences = objects.Values
+            .Where(static value => value.Isa.Equals("PBXNativeTarget", StringComparison.OrdinalIgnoreCase))
+            .Select(value => ReadPbxScalar(value.Body, "productReference"))
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value!.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)[0])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var cache = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var item in objects.Values)
@@ -287,7 +293,10 @@ internal sealed partial class AppleReleaseSourceTrustService
 
             var candidate = ResolvePbxObjectPath(projectDirectory, item.Id, objects, parents, cache, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             if (candidate is null)
+            {
+                ValidateExternalXcodeBuildInput(item, metadataPath, buildFileReferences, nativeTargetProductReferences);
                 continue;
+            }
             ValidateResolvedProjectInput(
                 repositoryRoot,
                 candidate,
@@ -425,6 +434,12 @@ internal sealed partial class AppleReleaseSourceTrustService
                 $"Local Swift package '{packageRoot}' declares a systemLibrary target, whose pkg-config and host library inputs cannot be proven at the exact source commit. " +
                 "Replace the system library dependency with tracked package sources before creating an Apple checkpoint.");
         }
+        if (ContainsSwiftIdentifier(manifestSyntax, "plugin"))
+        {
+            throw new InvalidOperationException(
+                $"Local Swift package '{packageRoot}' declares or invokes a SwiftPM plugin, whose executable runtime inputs cannot be proven at the exact source commit. " +
+                "Replace build-tool plugins with tracked deterministic build inputs before creating an Apple checkpoint.");
+        }
         var externalDependencies = Regex.Matches(
                 manifestWithoutComments,
                 "\\.package\\s*\\((?<body>.*?)\\)",
@@ -498,6 +513,55 @@ internal sealed partial class AppleReleaseSourceTrustService
             syntax,
             $"(?<![A-Za-z0-9_]){Regex.Escape(identifier)}(?![A-Za-z0-9_])",
             RegexOptions.CultureInvariant);
+
+    private static void ValidateExternalXcodeBuildInput(
+        PbxObject item,
+        string metadataPath,
+        ISet<string> buildFileReferences,
+        ISet<string> nativeTargetProductReferences)
+    {
+        if (!buildFileReferences.Contains(item.Id))
+            return;
+
+        var sourceTree = item.SourceTree ?? string.Empty;
+        var path = item.Path?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(path) ||
+            Path.IsPathRooted(path) ||
+            path.Contains("$(", StringComparison.Ordinal) ||
+            path.Contains("${", StringComparison.Ordinal) ||
+            path.Split('/', '\\').Any(static segment => segment == ".."))
+        {
+            throw new InvalidOperationException(
+                $"Xcode build input '{path}' uses external source tree '{sourceTree}' and cannot be proven at the exact source commit: {metadataPath}");
+        }
+
+        if (sourceTree.Equals("BUILT_PRODUCTS_DIR", StringComparison.OrdinalIgnoreCase))
+        {
+            if (nativeTargetProductReferences.Contains(item.Id))
+                return;
+            throw new InvalidOperationException(
+                $"Xcode build input '{path}' uses BUILT_PRODUCTS_DIR without a validated PBXNativeTarget product owner: {metadataPath}");
+        }
+
+        var normalized = path.Replace('\\', '/');
+        var extension = Path.GetExtension(normalized);
+        var approvedSystemArtifact = extension.Equals(".framework", StringComparison.OrdinalIgnoreCase) ||
+                                     extension.Equals(".tbd", StringComparison.OrdinalIgnoreCase) ||
+                                     extension.Equals(".dylib", StringComparison.OrdinalIgnoreCase) ||
+                                     extension.Equals(".a", StringComparison.OrdinalIgnoreCase);
+        var approvedRoot = sourceTree.Equals("SDKROOT", StringComparison.OrdinalIgnoreCase)
+            ? normalized.StartsWith("System/Library/", StringComparison.Ordinal) ||
+              normalized.StartsWith("usr/lib/", StringComparison.Ordinal)
+            : sourceTree.Equals("DEVELOPER_DIR", StringComparison.OrdinalIgnoreCase) &&
+              (normalized.StartsWith("Platforms/", StringComparison.Ordinal) ||
+               normalized.StartsWith("Toolchains/", StringComparison.Ordinal) ||
+               normalized.StartsWith("Library/", StringComparison.Ordinal));
+        if (approvedSystemArtifact && approvedRoot)
+            return;
+
+        throw new InvalidOperationException(
+            $"Xcode build input '{path}' from external source tree '{sourceTree}' is not a validated SDK, toolchain, or owned target product: {metadataPath}");
+    }
 
     private static string RemoveSwiftComments(string source)
     {
