@@ -26,7 +26,7 @@ public sealed class WebSearchSiteProviderConfiguration
     [JsonPropertyName("id"), JsonRequired]
     public string Id { get; set; } = string.Empty;
 
-    /// <summary>Canonical public base URL for the site.</summary>
+    /// <summary>Canonical public HTTP(S) base URL for the site without user info, query or fragment.</summary>
     [JsonPropertyName("baseUrl"), JsonRequired]
     public string BaseUrl { get; set; } = string.Empty;
 

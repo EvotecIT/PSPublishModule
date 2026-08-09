@@ -220,13 +220,16 @@ public static partial class WebSearchProviderDoctor
         }
 
         if (!string.Equals(site?.BaseUrl, site?.BaseUrl?.Trim(), StringComparison.Ordinal) ||
-            !TryGetHttpUrl(site?.BaseUrl, out _))
+            !TryGetHttpUrl(site?.BaseUrl, out var siteUri) ||
+            siteUri is null ||
+            !string.IsNullOrEmpty(siteUri.Query) ||
+            !string.IsNullOrEmpty(siteUri.Fragment))
         {
             AddCheck(
                 checks,
                 "site.base-url-invalid",
                 WebSearchProviderCheckSeverity.Error,
-                "Site baseUrl must be an absolute HTTP(S) URL.",
+                "Site baseUrl must be an absolute HTTP(S) URL without user info, query or fragment.",
                 siteId);
         }
 

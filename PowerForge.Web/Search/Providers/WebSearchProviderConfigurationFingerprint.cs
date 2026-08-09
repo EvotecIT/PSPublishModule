@@ -67,11 +67,29 @@ internal static class WebSearchProviderConfigurationFingerprint
             return Normalize(value);
         try
         {
-            return new UriBuilder(uri) { Host = uri.IdnHost }.Uri.AbsoluteUri;
+            return new UriBuilder(uri) { Host = NormalizeDnsHost(uri.IdnHost) }.Uri.AbsoluteUri;
         }
         catch (UriFormatException)
         {
             return uri.AbsoluteUri;
+        }
+    }
+
+    /// <summary>Normalizes equivalent Unicode, punycode, and DNS root-dot host spellings.</summary>
+    /// <param name="host">DNS host or domain name.</param>
+    /// <returns>Lowercase ASCII host without the optional terminal DNS root dot.</returns>
+    internal static string NormalizeDnsHost(string? host)
+    {
+        var normalized = host?.Trim() ?? string.Empty;
+        if (normalized.EndsWith(".", StringComparison.Ordinal))
+            normalized = normalized[..^1];
+        try
+        {
+            return new System.Globalization.IdnMapping().GetAscii(normalized).ToLowerInvariant();
+        }
+        catch (ArgumentException)
+        {
+            return normalized.ToLowerInvariant();
         }
     }
 }
@@ -133,15 +151,6 @@ internal static class WebSearchProviderSecretPolicy
         .Select(char.ToLowerInvariant)
         .ToArray());
 
-    private static string NormalizeDomain(string domain)
-    {
-        try
-        {
-            return new System.Globalization.IdnMapping().GetAscii(domain).ToLowerInvariant();
-        }
-        catch (ArgumentException)
-        {
-            return domain.ToLowerInvariant();
-        }
-    }
+    private static string NormalizeDomain(string domain) =>
+        WebSearchProviderConfigurationFingerprint.NormalizeDnsHost(domain);
 }

@@ -240,6 +240,28 @@ public sealed class WebSearchProviderDoctorTests
     }
 
     [Fact]
+    public void ConfigurationFingerprint_NormalizesTrailingDnsRootDotsAcrossSitesAndProviderUrls()
+    {
+        var dottedGoogle = CreateGoogleConfiguration();
+        dottedGoogle.Sites[0].BaseUrl = "https://officeimo.com./";
+        dottedGoogle.Sites[0].Providers[0].Settings["property"] = "sc-domain:officeimo.com.";
+        var dotlessGoogle = CreateGoogleConfiguration();
+
+        var dottedBing = CreateBingConfiguration("https://officeimo.com./");
+        var dotlessBing = CreateBingConfiguration("https://officeimo.com/");
+
+        Assert.All(
+            new[] { dottedGoogle, dotlessGoogle, dottedBing, dotlessBing },
+            configuration => Assert.True(WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value").Success));
+        Assert.Equal(
+            WebSearchProviderConfigurationFingerprint.Compute(dottedGoogle),
+            WebSearchProviderConfigurationFingerprint.Compute(dotlessGoogle));
+        Assert.Equal(
+            WebSearchProviderConfigurationFingerprint.Compute(dottedBing),
+            WebSearchProviderConfigurationFingerprint.Compute(dotlessBing));
+    }
+
+    [Fact]
     public void Doctor_RejectsUnsupportedCapabilitiesDuplicateIdentitiesAndSecretSettings()
     {
         var configuration = CreateGoogleConfiguration();
@@ -405,6 +427,23 @@ public sealed class WebSearchProviderDoctorTests
         Assert.Contains(result.Checks, check => check.Code == "site.id-noncanonical");
         Assert.Contains(result.Checks, check => check.Code == "provider.kind-invalid");
         Assert.Contains(result.Checks, check => check.Code == "provider.credential-environment-invalid");
+    }
+
+    [Theory]
+    [InlineData("https://officeimo.com/?preview_token=secret", "preview_token")]
+    [InlineData("https://officeimo.com/#preview-secret", "preview-secret")]
+    public void Doctor_RejectsSiteBaseUrlsWithQueryOrFragment(string baseUrl, string sensitiveValue)
+    {
+        var configuration = CreateGoogleConfiguration();
+        configuration.Sites[0].BaseUrl = baseUrl;
+
+        var result = WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value");
+        var serialized = JsonSerializer.Serialize(result, WebCliJson.Options);
+
+        Assert.False(result.Success);
+        Assert.Null(result.ConfigurationHash);
+        Assert.Contains(result.Checks, check => check.Code == "site.base-url-invalid");
+        Assert.DoesNotContain(sensitiveValue, serialized, StringComparison.Ordinal);
     }
 
     [Theory]

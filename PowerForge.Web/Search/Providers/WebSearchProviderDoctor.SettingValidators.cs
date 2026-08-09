@@ -130,22 +130,16 @@ public static partial class WebSearchProviderDoctor
 
     private static bool DomainPropertyCoversSite(string domain, Uri siteUri)
     {
-        try
-        {
-            var host = siteUri.IdnHost;
-            var normalizedDomain = new System.Globalization.IdnMapping().GetAscii(domain);
-            return host.Equals(normalizedDomain, StringComparison.OrdinalIgnoreCase) ||
-                   host.EndsWith("." + normalizedDomain, StringComparison.OrdinalIgnoreCase);
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
+        var host = WebSearchProviderConfigurationFingerprint.NormalizeDnsHost(siteUri.IdnHost);
+        var normalizedDomain = WebSearchProviderConfigurationFingerprint.NormalizeDnsHost(domain);
+        return host.Equals(normalizedDomain, StringComparison.Ordinal) ||
+               host.EndsWith("." + normalizedDomain, StringComparison.Ordinal);
     }
 
     private static bool UrlPrefixCoversSite(Uri propertyUri, Uri siteUri) =>
         propertyUri.Scheme.Equals(siteUri.Scheme, StringComparison.OrdinalIgnoreCase) &&
-        propertyUri.IdnHost.Equals(siteUri.IdnHost, StringComparison.OrdinalIgnoreCase) &&
+        WebSearchProviderConfigurationFingerprint.NormalizeDnsHost(propertyUri.IdnHost)
+            .Equals(WebSearchProviderConfigurationFingerprint.NormalizeDnsHost(siteUri.IdnHost), StringComparison.Ordinal) &&
         propertyUri.Port == siteUri.Port &&
         string.IsNullOrEmpty(propertyUri.Query) &&
         string.IsNullOrEmpty(propertyUri.Fragment) &&
