@@ -212,6 +212,34 @@ public sealed class WebSearchProviderDoctorTests
     }
 
     [Fact]
+    public void ConfigurationFingerprint_NormalizesIdnHostsAcrossSitesAndProviderUrls()
+    {
+        const string unicodeHost = "bücher.example";
+        const string asciiHost = "xn--bcher-kva.example";
+        var unicodeSite = CreateGoogleConfiguration();
+        unicodeSite.Sites[0].BaseUrl = $"https://{unicodeHost}/";
+        unicodeSite.Sites[0].Providers[0].Settings["property"] = $"sc-domain:{asciiHost}";
+        var asciiSite = CreateGoogleConfiguration();
+        asciiSite.Sites[0].BaseUrl = $"https://{asciiHost}/";
+        asciiSite.Sites[0].Providers[0].Settings["property"] = $"sc-domain:{asciiHost}";
+
+        var unicodeBing = CreateBingConfiguration($"https://{unicodeHost}/");
+        unicodeBing.Sites[0].BaseUrl = $"https://{asciiHost}/";
+        var asciiBing = CreateBingConfiguration($"https://{asciiHost}/");
+        asciiBing.Sites[0].BaseUrl = $"https://{asciiHost}/";
+
+        Assert.All(
+            new[] { unicodeSite, asciiSite, unicodeBing, asciiBing },
+            configuration => Assert.True(WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value").Success));
+        Assert.Equal(
+            WebSearchProviderConfigurationFingerprint.Compute(unicodeSite),
+            WebSearchProviderConfigurationFingerprint.Compute(asciiSite));
+        Assert.Equal(
+            WebSearchProviderConfigurationFingerprint.Compute(unicodeBing),
+            WebSearchProviderConfigurationFingerprint.Compute(asciiBing));
+    }
+
+    [Fact]
     public void Doctor_RejectsUnsupportedCapabilitiesDuplicateIdentitiesAndSecretSettings()
     {
         var configuration = CreateGoogleConfiguration();

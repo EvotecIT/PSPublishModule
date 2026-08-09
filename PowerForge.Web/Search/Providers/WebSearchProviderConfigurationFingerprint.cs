@@ -61,11 +61,18 @@ internal static class WebSearchProviderConfigurationFingerprint
 
     private static string Normalize(string? value) => value?.Trim().ToLowerInvariant() ?? string.Empty;
 
-    private static string NormalizeUrl(string? value)
+    internal static string NormalizeUrl(string? value)
     {
         if (!Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri))
             return Normalize(value);
-        return uri.AbsoluteUri;
+        try
+        {
+            return new UriBuilder(uri) { Host = uri.IdnHost }.Uri.AbsoluteUri;
+        }
+        catch (UriFormatException)
+        {
+            return uri.AbsoluteUri;
+        }
     }
 }
 
@@ -110,8 +117,8 @@ internal static class WebSearchProviderSecretPolicy
         if ((normalizedKind == "google-search-console" && name == "property") ||
             (normalizedKind == "bing-webmaster" && name == "siteUrl"))
         {
-            return Uri.TryCreate(trimmedValue, UriKind.Absolute, out var uri)
-                ? uri.AbsoluteUri
+            return Uri.TryCreate(trimmedValue, UriKind.Absolute, out _)
+                ? WebSearchProviderConfigurationFingerprint.NormalizeUrl(trimmedValue)
                 : trimmedValue;
         }
 
