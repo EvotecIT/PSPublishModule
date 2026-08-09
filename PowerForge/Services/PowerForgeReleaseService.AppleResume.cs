@@ -264,6 +264,11 @@ internal sealed partial class PowerForgeReleaseService
             !candidate.AdoptedExistingBuild &&
             candidate.UploadPerformed &&
             IsSha256(candidate.ArchiveSha256) &&
+            IsSha256(candidate.UploadExecutionSha256) &&
+            string.Equals(
+                candidate.UploadExecutionSha256,
+                ComputeAppleUploadExecutionSha256(plan, app),
+                StringComparison.OrdinalIgnoreCase) &&
             (string.IsNullOrWhiteSpace(app.ExpectedArchiveSha256) ||
              string.Equals(candidate.ArchiveSha256, app.ExpectedArchiveSha256, StringComparison.OrdinalIgnoreCase)) &&
             !string.IsNullOrWhiteSpace(candidate.ArchivePath) &&
@@ -303,7 +308,8 @@ internal sealed partial class PowerForgeReleaseService
             string.Equals(candidate.Destination, target.Destination, StringComparison.Ordinal) &&
             candidate.DistributionRoute == target.DistributionRoute &&
             AppleReleasePathsEqual(candidate.ArchivePath, target.ArchivePath) &&
-            string.Equals(candidate.ArchiveSha256, target.ArchiveSha256, StringComparison.OrdinalIgnoreCase));
+            string.Equals(candidate.ArchiveSha256, target.ArchiveSha256, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(candidate.UploadExecutionSha256, target.UploadExecutionSha256, StringComparison.OrdinalIgnoreCase));
     }
 
     private bool TryResumeDirectAppleNotarization(

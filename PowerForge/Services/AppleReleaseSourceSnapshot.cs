@@ -59,6 +59,10 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
                 repositoryRoot,
                 new[] { "worktree", "add", "--detach", snapshotRoot, sourceCommit },
                 "create the exact-source Apple build snapshot");
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(snapshotRoot, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+#endif
             var snapshotProjectRoot = Path.GetFullPath(Path.Combine(snapshotRoot, projectPrefix));
             var snapshot = new AppleReleaseSourceSnapshot(
                 repositoryRoot,
@@ -100,6 +104,10 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
             throw new FileNotFoundException($"Apple snapshot project input was not found: {mapped}", mapped);
         return mapped;
     }
+
+    /// <summary>Begins monitoring the detached source tree for transient changes during xcodebuild.</summary>
+    internal AppleReleaseSourceMutationMonitor MonitorChanges()
+        => new(RootPath);
 
     private string MapRepositoryPath(string sourcePath)
     {

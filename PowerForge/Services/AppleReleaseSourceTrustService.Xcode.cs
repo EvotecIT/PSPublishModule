@@ -455,6 +455,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                 $"Local Swift package '{packageRoot}' declares or invokes a SwiftPM plugin, whose executable runtime inputs cannot be proven at the exact source commit. " +
                 "Replace build-tool plugins with tracked deterministic build inputs before creating an Apple checkpoint.");
         }
+        ValidateDirectSwiftPackageDependencyFactories(packageRoot, manifestSyntax);
         var externalDependencies = Regex.Matches(
                 manifestWithoutComments,
                 "\\.\\s*(?:package|`package`)\\s*\\((?<body>.*?)\\)",
@@ -520,6 +521,25 @@ internal sealed partial class AppleReleaseSourceTrustService
                 EnsureTrackedDirectoryTree(repositoryRoot, explicitPath, "Swift package manifest input");
             else
                 throw new FileNotFoundException($"Swift package manifest input was not found: {explicitPath}", explicitPath);
+        }
+    }
+
+    private static void ValidateDirectSwiftPackageDependencyFactories(string packageRoot, string manifestSyntax)
+    {
+        foreach (Match reference in Regex.Matches(
+                     manifestSyntax,
+                     "\\.\\s*(?:package\\b|`package`)",
+                     RegexOptions.CultureInvariant))
+        {
+            var next = reference.Index + reference.Length;
+            while (next < manifestSyntax.Length && char.IsWhiteSpace(manifestSyntax[next]))
+                next++;
+            if (next < manifestSyntax.Length && manifestSyntax[next] == '(')
+                continue;
+
+            throw new InvalidOperationException(
+                $"Local Swift package '{packageRoot}' references a package dependency factory indirectly, so its external source cannot be proven. " +
+                "Invoke each package dependency factory directly with a literal URL or registry identity and commit its Package.resolved lock.");
         }
     }
 
@@ -678,10 +698,12 @@ internal sealed partial class AppleReleaseSourceTrustService
         if (string.IsNullOrWhiteSpace(repositoryUrl))
             throw new InvalidOperationException("Remote Swift package reference is missing repositoryURL.");
 
-        var exactRevision = Regex.IsMatch(
-            item.Body,
-            "(?s)requirement\\s*=\\s*\\{.*?kind\\s*=\\s*revision\\s*;.*?revision\\s*=\\s*[\"']?[A-Fa-f0-9]{40}[\"']?\\s*;",
-            RegexOptions.CultureInvariant);
+        var requirement = ReadPbxDictionary(item.Body, "requirement");
+        var kind = requirement is null ? null : ReadPbxScalar(requirement, "kind");
+        var revision = requirement is null ? null : ReadPbxScalar(requirement, "revision");
+        var exactRevision = string.Equals(kind, "revision", StringComparison.OrdinalIgnoreCase) &&
+                            revision?.Length == 40 &&
+                            revision.All(Uri.IsHexDigit);
         var locks = FindTrackedPackageLocks(repositoryRoot, packageLockRoots, repositoryUrl!);
         if (locks.Length == 0 && !exactRevision)
         {

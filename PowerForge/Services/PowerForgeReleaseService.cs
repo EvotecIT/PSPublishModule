@@ -1686,46 +1686,6 @@ internal sealed partial class PowerForgeReleaseService
                 "Apple app version updates require AppleApps.Archive=true for the configured legacy workflow. " +
                 "Use an explicit Apple action such as Status or Prepare to select a configured release identity without mutating the project.");
         }
-        var validateReusableArchives =
-            (!request.PlanOnly && !request.ValidateOnly) || request.CheckpointAppleApps;
-        if (validateReusableArchives &&
-            request.AppleAction == PowerForgeAppleReleaseAction.Configured &&
-            !options.Archive &&
-            options.Upload)
-        {
-            var recoveryPlan = new PowerForgeAppleReleasePlan
-            {
-                ProjectRoot = projectRoot,
-                Action = request.AppleAction,
-                Automation = automation,
-                ReceiptPath = receiptPath,
-                ReceiptHistoryPath = receiptHistoryPath,
-                PlanReceiptPath = planReceiptPath,
-                LockPath = lockPath,
-                SourceCommit = appleSourceCommit.Length == 0 ? null : appleSourceCommit,
-                Apps = apps
-            };
-            var missingArchive = apps.FirstOrDefault(app =>
-                !Directory.Exists(app.ArchivePath) &&
-                (!automation.Resume || !HasPotentialVerifiedAppleUploadAttestation(recoveryPlan, app)));
-            if (missingArchive is not null)
-            {
-                throw new FileNotFoundException(
-                    $"Apple app archive was not found for upload-only release and no exact upload attestation can resume it: {missingArchive.ArchivePath}",
-                    missingArchive.ArchivePath);
-            }
-        }
-        if (!request.PlanOnly &&
-            !request.ValidateOnly &&
-            !request.CheckpointAppleApps &&
-            options.Upload &&
-            automation.WaitForProcessing &&
-            apps.Any(app => UsesAppStoreConnect(app) && string.IsNullOrWhiteSpace(app.AppStoreConnectAppId)))
-        {
-            throw new InvalidOperationException(
-                "Apple upload processing waits require AppStoreConnectAppId for every App Store Connect target. " +
-                "Configure the app id or explicitly disable WaitForProcessing for an upload-only handoff.");
-        }
         var explicitAppStoreConnectApiConfiguredCount =
             (string.IsNullOrWhiteSpace(options.AppStoreConnectApiKeyPath) ? 0 : 1) +
             (string.IsNullOrWhiteSpace(options.AppStoreConnectApiKeyId) ? 0 : 1) +
@@ -1845,6 +1805,34 @@ internal sealed partial class PowerForgeReleaseService
             AppStoreConnectApiIssuerId = appStoreConnectApiIssuerId,
             Apps = apps
         };
+        var validateReusableArchives =
+            (!request.PlanOnly && !request.ValidateOnly) || request.CheckpointAppleApps;
+        if (validateReusableArchives &&
+            request.AppleAction == PowerForgeAppleReleaseAction.Configured &&
+            !options.Archive &&
+            options.Upload)
+        {
+            var missingArchive = apps.FirstOrDefault(app =>
+                !Directory.Exists(app.ArchivePath) &&
+                (!automation.Resume || !HasPotentialVerifiedAppleUploadAttestation(plan, app)));
+            if (missingArchive is not null)
+            {
+                throw new FileNotFoundException(
+                    $"Apple app archive was not found for upload-only release and no exact upload attestation can resume it: {missingArchive.ArchivePath}",
+                    missingArchive.ArchivePath);
+            }
+        }
+        if (!request.PlanOnly &&
+            !request.ValidateOnly &&
+            !request.CheckpointAppleApps &&
+            options.Upload &&
+            automation.WaitForProcessing &&
+            apps.Any(app => UsesAppStoreConnect(app) && string.IsNullOrWhiteSpace(app.AppStoreConnectAppId)))
+        {
+            throw new InvalidOperationException(
+                "Apple upload processing waits require AppStoreConnectAppId for every App Store Connect target. " +
+                "Configure the app id or explicitly disable WaitForProcessing for an upload-only handoff.");
+        }
         return plan;
     }
 
@@ -2162,6 +2150,10 @@ internal sealed partial class PowerForgeReleaseService
             try
             {
                 var resumedUpload = resumedByApp[app];
+                using var archiveBuildSnapshot = plan.Archive && !resumedUpload
+                    ? AppleArchiveBuildSnapshot.Create(app.ArchivePath)
+                    : null;
+                var approvedArchiveInputPath = app.ArchivePath;
 
                 if (plan.Archive && !resumedUpload)
                 {
@@ -2188,32 +2180,46 @@ internal sealed partial class PowerForgeReleaseService
                 if (plan.Archive && !resumedUpload)
                 {
                     var directArchive = app.DistributionRoute == AppleDistributionRoute.DirectNotarized;
+                    using var sourceMutationMonitor = sourceSnapshot?.MonitorChanges();
                     var archive = _archiveAppleApp(new AppleAppArchiveRequest
-                {
-                    ProjectPath = sourceSnapshot?.MapPath(app.ProjectPath) ?? app.ProjectPath,
-                    IsWorkspace = app.IsWorkspace,
-                    Scheme = app.Scheme,
-                    Configuration = app.Configuration,
-                    Platform = app.Platform,
-                    ArchiveVariant = app.ArchiveVariant,
-                    Destination = app.Destination,
-                    ArchivePath = app.ArchivePath,
-                    XcodeBuildExecutable = plan.XcodeBuildExecutable,
-                    AllowProvisioningUpdates = plan.AllowProvisioningUpdates,
-                    AppStoreConnectApiKeyPath = directArchive ? null : plan.AppStoreConnectApiKeyPath,
-                    AppStoreConnectApiKeyId = directArchive ? null : plan.AppStoreConnectApiKeyId,
-                    AppStoreConnectApiIssuerId = directArchive ? null : plan.AppStoreConnectApiIssuerId
-                });
-                result.Archive = archive;
-                sourceSnapshot?.ValidateUnchanged();
-                if (!archive.Succeeded)
-                {
-                    result.Success = false;
-                    result.ErrorMessage = $"xcodebuild archive failed for '{app.Name}' with exit code {archive.ProcessResult.ExitCode}.";
-                    return CompleteAppleExecutionFailure(plan, resultsByApp, app);
+                    {
+                        ProjectPath = sourceSnapshot?.MapPath(app.ProjectPath) ?? app.ProjectPath,
+                        IsWorkspace = app.IsWorkspace,
+                        Scheme = app.Scheme,
+                        Configuration = app.Configuration,
+                        Platform = app.Platform,
+                        ArchiveVariant = app.ArchiveVariant,
+                        Destination = app.Destination,
+                        ArchivePath = archiveBuildSnapshot?.ArchivePath ?? app.ArchivePath,
+                        XcodeBuildExecutable = plan.XcodeBuildExecutable,
+                        AllowProvisioningUpdates = plan.AllowProvisioningUpdates,
+                        AppStoreConnectApiKeyPath = directArchive ? null : plan.AppStoreConnectApiKeyPath,
+                        AppStoreConnectApiKeyId = directArchive ? null : plan.AppStoreConnectApiKeyId,
+                        AppStoreConnectApiIssuerId = directArchive ? null : plan.AppStoreConnectApiIssuerId
+                    });
+                    result.Archive = archive;
+                    sourceMutationMonitor?.ValidateNoChanges();
+                    sourceSnapshot?.ValidateUnchanged();
+                    if (!archive.Succeeded)
+                    {
+                        result.Success = false;
+                        result.ErrorMessage = $"xcodebuild archive failed for '{app.Name}' with exit code {archive.ProcessResult.ExitCode}.";
+                        return CompleteAppleExecutionFailure(plan, resultsByApp, app);
+                    }
+
+                    var publishedArchiveSha256 = archiveBuildSnapshot?.Publish(app.ArchivePath);
+                    if (!string.IsNullOrWhiteSpace(publishedArchiveSha256))
+                    {
+                        approvedArchiveInputPath = archiveBuildSnapshot!.ArchivePath;
+                        result.ArchiveSha256 = publishedArchiveSha256;
+                        app.ExpectedArchiveSha256 = publishedArchiveSha256;
+                        archive.ArchivePath = app.ArchivePath;
+                    }
+                    else
+                    {
+                        CaptureAppleArchiveSha256(result, app);
+                    }
                 }
-                CaptureAppleArchiveSha256(result, app);
-            }
 
             if (plan.Upload && result.Success && !resumedUpload)
             {
@@ -2222,7 +2228,7 @@ internal sealed partial class PowerForgeReleaseService
                 var direct = app.DistributionRoute == AppleDistributionRoute.DirectNotarized;
                 using var uploadSnapshot = string.IsNullOrWhiteSpace(approvedArchiveSha256)
                     ? null
-                    : AppleArchiveUploadSnapshot.Create(app.ArchivePath, approvedArchiveSha256!);
+                    : AppleArchiveUploadSnapshot.Create(approvedArchiveInputPath, approvedArchiveSha256!);
                 using var directExportSnapshot = direct ? AppleDirectExportSnapshot.Create() : null;
                 var upload = _uploadAppleApp(new AppleAppArchiveUploadRequest
                 {
@@ -2245,7 +2251,6 @@ internal sealed partial class PowerForgeReleaseService
                 });
                 upload.ArchivePath = app.ArchivePath;
                 result.Upload = upload;
-                CaptureAppleArchiveSha256(result, app, approvedArchiveSha256);
                 if (!upload.Succeeded)
                 {
                     result.Success = false;
@@ -2253,6 +2258,8 @@ internal sealed partial class PowerForgeReleaseService
                     return CompleteAppleExecutionFailure(plan, resultsByApp, app);
                 }
 
+                if (!direct)
+                    WriteAppleUploadAttestation(plan, app, result);
                 VerifyAppleArchiveUnchangedAfterUpload(app, result);
 
                 if (direct)
@@ -2278,7 +2285,6 @@ internal sealed partial class PowerForgeReleaseService
                 }
                 else
                 {
-                    WriteAppleUploadAttestation(plan, app, result);
                     if (IsUploadExecution(plan) &&
                         plan.Automation.WaitForProcessing &&
                         UsesAppStoreConnect(app))

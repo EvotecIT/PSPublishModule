@@ -214,7 +214,8 @@ internal sealed partial class AppleReleaseSourceTrustService
     private static Dictionary<string, PbxObject> ParsePbxObjects(string text)
     {
         var objects = new Dictionary<string, PbxObject>(StringComparer.OrdinalIgnoreCase);
-        var objectDictionary = ReadPbxDictionary(text, "objects") ?? text;
+        var syntax = RemovePbxComments(text);
+        var objectDictionary = ReadPbxDictionary(syntax, "objects") ?? syntax;
         for (var index = 0; index < objectDictionary.Length; index++)
         {
             index = SkipPbxTrivia(objectDictionary, index);
@@ -256,6 +257,68 @@ internal sealed partial class AppleReleaseSourceTrustService
             index = closingBrace;
         }
         return objects;
+    }
+
+    /// <summary>
+    /// Removes OpenStep comments while retaining string contents and character positions closely enough
+    /// for the PBX scanners to parse only syntax that Xcode itself observes.
+    /// </summary>
+    private static string RemovePbxComments(string text)
+    {
+        var result = text.ToCharArray();
+        var inString = false;
+        var escaped = false;
+        for (var index = 0; index < result.Length; index++)
+        {
+            var current = result[index];
+            var next = index + 1 < result.Length ? result[index + 1] : '\0';
+            if (inString)
+            {
+                if (escaped)
+                    escaped = false;
+                else if (current == '\\')
+                    escaped = true;
+                else if (current == '"')
+                    inString = false;
+                continue;
+            }
+            if (current == '"')
+            {
+                inString = true;
+                continue;
+            }
+            if (current == '/' && next == '*')
+            {
+                result[index] = result[index + 1] = ' ';
+                index += 2;
+                while (index < result.Length)
+                {
+                    if (index + 1 < result.Length && result[index] == '*' && result[index + 1] == '/')
+                    {
+                        result[index] = result[index + 1] = ' ';
+                        index++;
+                        break;
+                    }
+                    if (result[index] != '\r' && result[index] != '\n')
+                        result[index] = ' ';
+                    index++;
+                }
+                if (index >= result.Length)
+                    throw new InvalidOperationException("Xcode project contains an unterminated PBX comment.");
+                continue;
+            }
+            if (current == '/' && next == '/')
+            {
+                result[index] = result[index + 1] = ' ';
+                index += 2;
+                while (index < result.Length && result[index] != '\r' && result[index] != '\n')
+                {
+                    result[index] = ' ';
+                    index++;
+                }
+            }
+        }
+        return new string(result);
     }
 
     private static bool IsHexCharacter(char value)

@@ -41,6 +41,7 @@ internal sealed partial class PowerForgeReleaseService
         target.ArchiveSha256 = result.ArchiveSha256;
         target.BuildUploadId = result.Upload.BuildUploadId;
         target.UploadAttestationAttemptId = attemptId;
+        target.UploadExecutionSha256 = ComputeAppleUploadExecutionSha256(plan, app);
         _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
         {
             AttemptId = attemptId,
@@ -222,6 +223,48 @@ internal sealed partial class PowerForgeReleaseService
             },
             plan.AppStoreConnectApiKeyId,
             plan.AppStoreConnectApiIssuerId
+        });
+    }
+
+    /// <summary>Computes the exact execution-policy identity required to reuse an App Store upload.</summary>
+    internal static string ComputeAppleUploadExecutionSha256(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app)
+    {
+        if (plan is null)
+            throw new ArgumentNullException(nameof(plan));
+        if (app is null)
+            throw new ArgumentNullException(nameof(app));
+
+        return ComputeStableSha256(new
+        {
+            plan.SourceCommit,
+            ReleaseConfiguration = plan.Configuration,
+            plan.XcodeBuildExecutable,
+            plan.AllowProvisioningUpdates,
+            plan.ManageAppVersionAndBuildNumber,
+            plan.UploadSymbols,
+            plan.GenerateAppStoreInformation,
+            plan.SigningStyle,
+            app.Name,
+            app.BundleId,
+            app.Platform,
+            app.ArchiveVariant,
+            app.DistributionRoute,
+            TargetConfiguration = app.Configuration,
+            ProjectPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/'),
+            app.IsWorkspace,
+            app.Scheme,
+            app.Destination,
+            ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/'),
+            ExportPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ExportPath).Replace('\\', '/'),
+            app.TeamId,
+            app.GenerateProjectIfMissing,
+            app.RegenerateProject,
+            app.XcodeGenExecutable,
+            app.ProjectGenerationTimeoutSeconds,
+            RequiredEmbeddedBundleIds = app.RequiredEmbeddedBundleIds.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+            RequiredPrivacyUsageDescriptionKeys = app.RequiredPrivacyUsageDescriptionKeys.OrderBy(static value => value, StringComparer.Ordinal).ToArray()
         });
     }
 

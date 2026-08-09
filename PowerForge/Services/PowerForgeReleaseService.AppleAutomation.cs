@@ -590,6 +590,9 @@ internal sealed partial class PowerForgeReleaseService
                 UploadAttestationAttemptId = result?.Upload?.Succeeded == true
                     ? result.UploadAttestationAttemptId
                     : result?.ResumedUploadAttestationAttemptId,
+                UploadExecutionSha256 = result?.Upload?.Succeeded == true || result?.ResumedUploadAttestation is not null
+                    ? ComputeAppleUploadExecutionSha256(plan, app)
+                    : null,
                 DirectArtifactPath = string.IsNullOrWhiteSpace(result?.Notarization?.ArtifactPath)
                     ? null
                     : CreatePortableDirectArtifactPath(plan, app, result!.Notarization!.ArtifactPath),

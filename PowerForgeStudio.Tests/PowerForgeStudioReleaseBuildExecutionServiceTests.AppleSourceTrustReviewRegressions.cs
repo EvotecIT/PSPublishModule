@@ -5,6 +5,24 @@ namespace PowerForgeStudio.Tests;
 public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 {
     [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_commented_decoy_isa_before_shell_phase()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("CommentedPbxIsaRepo");
+        var project = scope.CreateDirectory(Path.Combine("CommentedPbxIsaRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { /* isa = PBXGroup; */ isa = PBXShellScriptBuildPhase; shellScript = \"date > generated.txt\"; };");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("shell-script", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ResolveExactAppleSourceCommit_rejects_same_line_shell_phase_object()
     {
         using var scope = new TemporaryDirectoryScope();
@@ -117,5 +135,64 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 
         Assert.Contains("Shared.git", exception.Message, StringComparison.Ordinal);
         Assert.Contains("Package.resolved", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_indirect_swift_package_dependency_factory()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("IndirectPackageDependencyRepo");
+        var project = scope.CreateDirectory(Path.Combine("IndirectPackageDependencyRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCLocalSwiftPackageReference; relativePath = Packages/Shared; };");
+        var package = scope.CreateDirectory(Path.Combine("IndirectPackageDependencyRepo", "Packages", "Shared"));
+        File.WriteAllText(
+            Path.Combine(package, "Package.swift"),
+            """
+            // swift-tools-version: 6.0
+            import PackageDescription
+            let factory: (String, Package.Dependency.Requirement) -> Package.Dependency = Package.Dependency.package
+            let dependency = factory("https://example.invalid/Shared.git", .branch("main"))
+            let package = Package(
+                name: "Shared",
+                dependencies: [dependency],
+                targets: [.target(name: "Shared")])
+            """);
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("indirectly", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_ignores_commented_fake_remote_package_revision()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("CommentedPackageRevisionRepo");
+        var project = scope.CreateDirectory(Path.Combine("CommentedPackageRevisionRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            """
+            000000000000000000000001 = {
+                isa = XCRemoteSwiftPackageReference;
+                repositoryURL = "https://example.invalid/Shared.git";
+                requirement = {
+                    /* kind = revision; revision = 0123456789abcdef0123456789abcdef01234567; */
+                    kind = branch;
+                    branch = main;
+                };
+            };
+            """);
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("exact 40-character revision", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -333,6 +333,9 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
     /// <summary>Attempt id that originally attested the uploaded archive.</summary>
     public string? UploadAttestationAttemptId { get; set; }
 
+    /// <summary>SHA-256 binding the effective archive, signing, export, and App Store upload controls.</summary>
+    public string? UploadExecutionSha256 { get; set; }
+
     public string? DirectArtifactPath { get; set; }
 
     public string? DirectArtifactSha256 { get; set; }
