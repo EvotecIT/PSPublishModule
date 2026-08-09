@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using PowerForge.Web;
@@ -147,7 +148,7 @@ internal static partial class WebCliCommandHandlers
                 foreach (var opportunity in report.Opportunities)
                 {
                     logger.Info(
-                        $"[{opportunity.RuleId}] score {opportunity.Score:F2} {opportunity.Page} :: {opportunity.Query ?? "(all queries)"}");
+                        $"[{opportunity.RuleId}] score {opportunity.Score:F2} {EscapeSearchConsoleText(opportunity.Page, "(no page)")} :: {EscapeSearchConsoleText(opportunity.Query, "(all queries)")}");
                 }
             }
 
@@ -240,5 +241,31 @@ internal static partial class WebCliCommandHandlers
         }
 
         return null;
+    }
+
+    internal static string EscapeSearchConsoleText(string? value, string fallback)
+    {
+        if (string.IsNullOrEmpty(value))
+            return fallback;
+
+        StringBuilder? escaped = null;
+        var segmentStart = 0;
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (!char.IsControl(character) && character is not '\u2028' and not '\u2029')
+                continue;
+
+            escaped ??= new StringBuilder(value.Length + 8);
+            escaped.Append(value, segmentStart, index - segmentStart);
+            escaped.Append("\\u");
+            escaped.Append(((int)character).ToString("X4", CultureInfo.InvariantCulture));
+            segmentStart = index + 1;
+        }
+
+        if (escaped is null)
+            return value;
+        escaped.Append(value, segmentStart, value.Length - segmentStart);
+        return escaped.ToString();
     }
 }

@@ -254,6 +254,17 @@ internal sealed class SqliteWebSearchObservationStore
         }
         if (version == 0)
         {
+            var existingObject = await client.QueryAsListAsync(
+                _databasePath,
+                "SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name LIMIT 1;",
+                static record => record.GetString(0),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (existingObject.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Refusing to initialize search storage in nonempty schema-version-zero database '{_databasePath}'. Existing object: {existingObject[0]}.");
+            }
+
             await client.ExecuteNonQueryAsync(
                 _databasePath,
                 CreateSchemaSql,

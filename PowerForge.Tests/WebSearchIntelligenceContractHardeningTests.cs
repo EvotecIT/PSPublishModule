@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DBAClientX;
 using PowerForge.Web;
 using PowerForge.Web.Cli;
 
@@ -125,5 +126,44 @@ public sealed partial class WebSearchIntelligenceTests
             outputSchemaVersion: 1);
 
         Assert.Equal(2, exitCode);
+    }
+
+    [Fact]
+    public void Cli_HumanOutputEscapesProviderControlCharacters()
+    {
+        var escaped = WebCliCommandHandlers.EscapeSearchConsoleText(
+            "line one\nline two\u001b[31m\u2028end",
+            "fallback");
+
+        Assert.Equal("line one\\u000Aline two\\u001B[31m\\u2028end", escaped);
+        Assert.Equal("fallback", WebCliCommandHandlers.EscapeSearchConsoleText(null, "fallback"));
+    }
+
+    [Fact]
+    public async Task SqliteStore_RefusesToClaimUnrelatedVersionZeroDatabase()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var databasePath = Path.Combine(root, "unrelated.db");
+            await using var client = new SQLite();
+            await client.ExecuteNonQueryAsync(databasePath, "CREATE TABLE unrelated_data (id INTEGER PRIMARY KEY);");
+            var store = new SqliteWebSearchObservationStore(databasePath);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                store.ImportAsync(WebSearchObservationNormalizer.Normalize(CreateBatch())));
+
+            Assert.Contains("nonempty schema-version-zero", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, Convert.ToInt32(await client.ExecuteScalarAsync(databasePath, "PRAGMA user_version;")));
+            var searchObjects = await client.QueryAsListAsync(
+                databasePath,
+                "SELECT name FROM sqlite_master WHERE name LIKE 'search_%';",
+                static record => record.GetString(0));
+            Assert.Empty(searchObjects);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
     }
 }

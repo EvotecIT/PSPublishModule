@@ -82,7 +82,7 @@
             "page": {
               "type": "string",
               "format": "uri",
-              "pattern": "^https?://"
+              "pattern": "^[hH][tT][tT][pP][sS]?://"
             }
           }
         },
@@ -113,7 +113,7 @@
         "page": {
           "type": ["string", "null"],
           "format": "uri",
-          "pattern": "^https?://"
+          "pattern": "^[hH][tT][tT][pP][sS]?://"
         },
         "query": {
           "type": ["string", "null"]

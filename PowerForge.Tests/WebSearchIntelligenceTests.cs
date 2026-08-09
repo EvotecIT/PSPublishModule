@@ -96,8 +96,11 @@ public sealed partial class WebSearchIntelligenceTests
         invalid["observations"]![0]!["query"] = null;
         var unknown = JsonNode.Parse(serialized)!;
         unknown["observations"]![0]!["impression"] = 240;
+        var uppercaseScheme = JsonNode.Parse(serialized)!;
+        uppercaseScheme["observations"]![0]!["page"] = "HTTPS://officeimo.com/convert/";
 
         Assert.True(schema.Evaluate(valid, new EvaluationOptions()).IsValid);
+        Assert.True(schema.Evaluate(uppercaseScheme, new EvaluationOptions()).IsValid);
         Assert.False(schema.Evaluate(invalid, new EvaluationOptions()).IsValid);
         Assert.False(schema.Evaluate(unknown, new EvaluationOptions()).IsValid);
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<WebSearchObservationBatch>(unknown.ToJsonString(), WebCliJson.Options));
