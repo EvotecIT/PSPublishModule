@@ -177,6 +177,19 @@ public sealed partial class WebSearchIntelligenceTests
     }
 
     [Fact]
+    public void ObservationSchema_IsStructuralWhileNormalizerEnforcesCrossFieldMetrics()
+    {
+        var batch = CreateBatch();
+        batch.Observations[0].Clicks = 101;
+        batch.Observations[0].Impressions = 100;
+        var document = JsonNode.Parse(JsonSerializer.Serialize(batch))!;
+
+        Assert.True(LoadObservationSchema().Evaluate(document, new EvaluationOptions()).IsValid);
+        var exception = Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(batch));
+        Assert.Contains("more clicks than impressions", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task SqliteStore_ScopesExternalRunIdentifiersByProviderAndSite()
     {
         var root = CreateTemporaryDirectory();

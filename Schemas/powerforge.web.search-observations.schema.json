@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.evotec.xyz/powerforge/web/search-observations/v1.json",
   "title": "PowerForge.Web Search Observation Batch",
+  "description": "Portable structural schema for Search observation exchange. Cross-field semantic invariants are enforced by WebSearchObservationNormalizer during import.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -76,6 +77,13 @@
   "$defs": {
     "observation": {
       "type": "object",
+      "$comment": "Draft 2020-12 cannot compare sibling numeric values. Import additionally enforces clicks <= impressions through WebSearchObservationNormalizer.",
+      "x-powerforge-semanticConstraints": [
+        {
+          "expression": "clicks <= impressions",
+          "enforcedBy": "PowerForge.Web.WebSearchObservationNormalizer"
+        }
+      ],
       "additionalProperties": false,
       "required": ["date", "clicks", "impressions"],
       "anyOf": [

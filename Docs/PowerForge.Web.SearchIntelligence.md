@@ -45,7 +45,7 @@ The JSON contract is versioned by `schemaVersion`. Provider and site identifiers
 }
 ```
 
-The complete schema is in `Schemas/powerforge.web.search-observations.schema.json`. A runnable input is available at `Examples/PowerForge.Web/Search/observations.json`.
+The complete portable structural schema is in `Schemas/powerforge.web.search-observations.schema.json`. A runnable input is available at `Examples/PowerForge.Web/Search/observations.json`. JSON Schema Draft 2020-12 cannot compare sibling numeric fields, so semantic cross-field invariants such as `clicks <= impressions` are declared in schema annotations and enforced by `WebSearchObservationNormalizer` during import. Schema validation is therefore a structural preflight, while the normalizer is the authoritative semantic gate.
 
 An observation must contain a page or query dimension. Page values must be absolute HTTP(S) URLs. `collectedAtUtc` must include `Z` or an explicit numeric offset so run identity never depends on the collector machine's time zone. Clicks, impressions, CTR and position are validated before anything reaches storage, including rejection of non-finite numeric values and canonicalization of signed zero. A run cannot contain multiple rows for the same provider, site, date and dimension set because those rows would be ambiguous revisions. A `partial` batch may be empty so a collector can preserve an honest partial-run record; a `complete` batch must contain observations.
 
