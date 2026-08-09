@@ -103,7 +103,7 @@ public sealed class ConfigurationModuleSkipSegment : IConfigurationSegment
 /// </summary>
 public sealed class ModuleSkipConfiguration
 {
-    /// <summary>Ignore module name(s) during missing-command validation.</summary>
+    /// <summary>Ignore module name(s) during missing-command validation and transitive dependency resolution.</summary>
     public string[]? IgnoreModuleName { get; set; }
 
     /// <summary>Ignore command/function name(s) during missing-command validation.</summary>

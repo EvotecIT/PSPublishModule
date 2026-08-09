@@ -58,7 +58,10 @@ public sealed partial class ModulePipelineRunner
                 .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
                 .Select(static module => module.ModuleName.Trim()),
             StringComparer.OrdinalIgnoreCase);
-        var dependentRequiredModules = dependentModules ?? ResolveDependentRequiredModules(requiredModules, approved);
+        var dependentRequiredModules = dependentModules ?? ResolveDependentRequiredModules(
+            requiredModules,
+            approved,
+            plan.ModuleSkip?.IgnoreModuleName ?? Array.Empty<string>());
         var dependent = new HashSet<string>(dependentRequiredModules, StringComparer.OrdinalIgnoreCase);
         var ignoreModules = new HashSet<string>(plan.ModuleSkip?.IgnoreModuleName ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         var ignoreFunctions = new HashSet<string>(plan.ModuleSkip?.IgnoreFunctionName ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
@@ -398,10 +401,14 @@ public sealed partial class ModulePipelineRunner
             : $"{module.ModuleName} ({string.Join(", ", parts)})";
     }
 
-    private string[] ResolveDependentRequiredModules(IEnumerable<string> requiredModules, IReadOnlyCollection<string> approvedModules)
+    private string[] ResolveDependentRequiredModules(
+        IEnumerable<string> requiredModules,
+        IReadOnlyCollection<string> approvedModules,
+        IReadOnlyCollection<string> ignoredModules)
     {
         var deps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var ignored = new HashSet<string>(ignoredModules ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
 
         foreach (var module in requiredModules ?? Array.Empty<string>())
         {
@@ -410,13 +417,17 @@ public sealed partial class ModulePipelineRunner
             if (approvedModules is not null && approvedModules.Contains(module))
                 continue;
 
-            CollectModuleDependencies(module, visited, deps);
+            CollectModuleDependencies(module, ignored, visited, deps);
         }
 
         return deps.ToArray();
     }
 
-    private void CollectModuleDependencies(string moduleName, HashSet<string> visited, HashSet<string> output)
+    private void CollectModuleDependencies(
+        string moduleName,
+        IReadOnlyCollection<string> ignoredModules,
+        HashSet<string> visited,
+        HashSet<string> output)
     {
         if (string.IsNullOrWhiteSpace(moduleName))
             return;
@@ -430,8 +441,10 @@ public sealed partial class ModulePipelineRunner
             if (string.IsNullOrWhiteSpace(depName))
                 continue;
             var normalizedDepName = depName!.Trim();
+            if (ignoredModules.Contains(normalizedDepName))
+                continue;
             if (output.Add(normalizedDepName))
-                CollectModuleDependencies(normalizedDepName, visited, output);
+                CollectModuleDependencies(normalizedDepName, ignoredModules, visited, output);
         }
     }
 

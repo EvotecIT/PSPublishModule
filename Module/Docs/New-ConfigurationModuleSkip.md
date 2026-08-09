@@ -84,7 +84,7 @@ Accept wildcard characters: False
 ```
 
 ### -IgnoreModuleName
-Ignore module name(s) during missing-command validation.
+Ignore module name(s) during missing-command validation and transitive dependency resolution.
 
 ```yaml
 Type: String[]
