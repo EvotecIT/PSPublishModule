@@ -404,7 +404,10 @@ internal sealed partial class PowerForgeReleaseService
            string.Equals(target.BundleId, app.BundleId, StringComparison.OrdinalIgnoreCase) &&
            target.Platform == app.Platform &&
            string.Equals(target.Configuration, app.Configuration, StringComparison.OrdinalIgnoreCase) &&
-           string.Equals(target.ProjectPath, FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/'), StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(
+               target.ProjectPath,
+               FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/'),
+               Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) &&
            target.IsWorkspace == app.IsWorkspace &&
            string.Equals(target.Scheme, app.Scheme, StringComparison.Ordinal) &&
            target.ArchiveVariant == app.ArchiveVariant &&

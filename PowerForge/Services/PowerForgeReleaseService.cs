@@ -1656,10 +1656,9 @@ internal sealed partial class PowerForgeReleaseService
         if (options.SyncScreenshots && screenshotConfigPath is null && screenshotConfigPaths.Length == 0)
             throw new InvalidOperationException("AppleApps SyncScreenshots requires ScreenshotConfigPath or ScreenshotConfigPaths.");
         var appleSourceCommit = request.AppleSourceCommit?.Trim() ?? string.Empty;
-        if (appleSourceCommit.Length > 0 &&
-            (appleSourceCommit.Length != 40 || !appleSourceCommit.All(Uri.IsHexDigit)))
+        if (appleSourceCommit.Length > 0 && !GitObjectId.IsFull(appleSourceCommit))
         {
-            throw new InvalidOperationException("Apple source commit must be an exact 40-character Git commit SHA.");
+            throw new InvalidOperationException("Apple source commit must be a full SHA-1 or SHA-256 Git commit object id.");
         }
         if (request.AppleAdoptExistingBuild &&
             !IsUploadAction(request.AppleAction) &&
@@ -2224,12 +2223,13 @@ internal sealed partial class PowerForgeReleaseService
                 using var uploadSnapshot = string.IsNullOrWhiteSpace(approvedArchiveSha256)
                     ? null
                     : AppleArchiveUploadSnapshot.Create(app.ArchivePath, approvedArchiveSha256!);
+                using var directExportSnapshot = direct ? AppleDirectExportSnapshot.Create() : null;
                 var upload = _uploadAppleApp(new AppleAppArchiveUploadRequest
                 {
                     ArchivePath = uploadSnapshot?.ArchivePath ?? app.ArchivePath,
                     BundleId = app.BundleId,
                     RequiredPrivacyUsageDescriptionKeys = app.RequiredPrivacyUsageDescriptionKeys,
-                    ExportPath = app.ExportPath,
+                    ExportPath = directExportSnapshot?.ExportPath ?? app.ExportPath,
                     TeamId = app.TeamId,
                     XcodeBuildExecutable = plan.XcodeBuildExecutable,
                     SigningStyle = plan.SigningStyle,
@@ -2257,7 +2257,21 @@ internal sealed partial class PowerForgeReleaseService
 
                 if (direct)
                 {
-                    result.Notarization = NotarizeDirectAppleExport(plan, app);
+                    var published = directExportSnapshot!.Publish(app.ExportPath);
+                    upload.ExportPath = published.ExportPath;
+                    upload.ExportOptionsPlistPath = MapDirectExportOutputPath(
+                        directExportSnapshot.ExportPath,
+                        published.ExportPath,
+                        upload.ExportOptionsPlistPath) ?? upload.ExportOptionsPlistPath;
+                    upload.DistributionLogPath = MapDirectExportOutputPath(
+                        directExportSnapshot.ExportPath,
+                        published.ExportPath,
+                        upload.DistributionLogPath);
+                    result.Notarization = NotarizeDirectAppleExport(
+                        plan,
+                        app,
+                        published.ArtifactPath,
+                        expectedArtifactSha256: published.ArtifactSha256);
                     WriteAppleNotarizationAttestation(plan, app, result);
                     if (!result.Notarization.Succeeded)
                         throw CreateAppleNotarizationFailure(app, result.Notarization);

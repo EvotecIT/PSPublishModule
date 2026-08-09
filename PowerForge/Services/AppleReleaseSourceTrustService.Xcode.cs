@@ -411,8 +411,10 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
 
         var manifest = File.ReadAllText(manifestPath);
+        var manifestWithoutComments = RemoveSwiftComments(manifest);
+        var manifestSyntax = MaskSwiftStringLiterals(manifestWithoutComments);
         if (Regex.IsMatch(
-                manifest,
+                manifestSyntax,
                 "\\.unsafeFlags\\s*\\(",
                 RegexOptions.CultureInvariant))
         {
@@ -420,8 +422,17 @@ internal sealed partial class AppleReleaseSourceTrustService
                 $"Local Swift package '{packageRoot}' uses unsafeFlags, whose compiler and linker inputs cannot be proven at the exact source commit. " +
                 "Replace unsafe flags with tracked package settings before creating an Apple checkpoint.");
         }
+        if (Regex.IsMatch(
+                manifestSyntax,
+                "\\.systemLibrary\\s*\\(",
+                RegexOptions.CultureInvariant))
+        {
+            throw new InvalidOperationException(
+                $"Local Swift package '{packageRoot}' declares a systemLibrary target, whose pkg-config and host library inputs cannot be proven at the exact source commit. " +
+                "Replace the system library dependency with tracked package sources before creating an Apple checkpoint.");
+        }
         var externalDependencies = Regex.Matches(
-                manifest,
+                manifestWithoutComments,
                 "\\.package\\s*\\((?<body>.*?)\\)",
                 RegexOptions.Singleline | RegexOptions.CultureInvariant)
             .Cast<Match>()
@@ -461,7 +472,6 @@ internal sealed partial class AppleReleaseSourceTrustService
             foreach (var packageLock in locks)
                 EnsureTrackedFile(repositoryRoot, packageLock, "Xcode local Swift package resolution lock");
         }
-        var manifestWithoutComments = RemoveSwiftComments(manifest);
         var pathArguments = Regex.Matches(
             manifestWithoutComments,
             "\\bpath\\s*:",
@@ -535,6 +545,46 @@ internal sealed partial class AppleReleaseSourceTrustService
                     if (result[index] != '\r' && result[index] != '\n')
                         result[index] = ' ';
                 }
+            }
+        }
+        return new string(result);
+    }
+
+    private static string MaskSwiftStringLiterals(string source)
+    {
+        var result = source.ToCharArray();
+        for (var index = 0; index < result.Length; index++)
+        {
+            if (result[index] != '"')
+                continue;
+
+            var multiline = index + 2 < result.Length && result[index + 1] == '"' && result[index + 2] == '"';
+            var delimiterLength = multiline ? 3 : 1;
+            for (var offset = 0; offset < delimiterLength; offset++)
+                result[index + offset] = ' ';
+            index += delimiterLength;
+            var escaped = false;
+            while (index < result.Length)
+            {
+                if (!multiline && !escaped && result[index] == '"')
+                {
+                    result[index] = ' ';
+                    break;
+                }
+                if (multiline && index + 2 < result.Length &&
+                    result[index] == '"' && result[index + 1] == '"' && result[index + 2] == '"')
+                {
+                    result[index] = result[index + 1] = result[index + 2] = ' ';
+                    index += 2;
+                    break;
+                }
+                if (!multiline && !escaped && result[index] == '\\')
+                    escaped = true;
+                else
+                    escaped = false;
+                if (result[index] != '\r' && result[index] != '\n')
+                    result[index] = ' ';
+                index++;
             }
         }
         return new string(result);

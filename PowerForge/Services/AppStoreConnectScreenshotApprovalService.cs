@@ -12,11 +12,9 @@ public sealed class AppStoreConnectScreenshotApprovalService
             throw new ArgumentException("Spec is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(request.VersionString))
             throw new ArgumentException("VersionString is required.", nameof(request));
-        if (string.IsNullOrWhiteSpace(request.SourceCommit) ||
-            request.SourceCommit.Trim().Length != 40 ||
-            !request.SourceCommit.Trim().All(Uri.IsHexDigit))
+        if (!GitObjectId.IsFull(request.SourceCommit?.Trim()))
         {
-            throw new ArgumentException("SourceCommit must be an exact 40-character Git commit SHA.", nameof(request));
+            throw new ArgumentException("SourceCommit must be a full SHA-1 or SHA-256 Git commit object id.", nameof(request));
         }
         if (string.IsNullOrWhiteSpace(request.ApprovedBy))
             throw new ArgumentException("ApprovedBy is required.", nameof(request));
@@ -62,7 +60,7 @@ public sealed class AppStoreConnectScreenshotApprovalService
             AppId = appId,
             Platform = request.Spec.Platform,
             VersionString = request.VersionString.Trim(),
-            SourceCommit = request.SourceCommit.Trim(),
+            SourceCommit = request.SourceCommit!.Trim(),
             CaptureRunId = Normalize(request.CaptureRunId),
             CaptureRepository = Normalize(request.CaptureRepository),
             CaptureWorkflowRef = Normalize(request.CaptureWorkflowRef),

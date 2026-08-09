@@ -109,12 +109,14 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     PlanOnly = true,
-                    AppleAction = PowerForgeAppleReleaseAction.Status
+                    AppleAction = PowerForgeAppleReleaseAction.Status,
+                    AppleSourceCommit = new string('a', 64)
                 });
 
             Assert.True(result.Success, result.ErrorMessage);
             var plan = Assert.IsType<PowerForgeAppleReleasePlan>(result.AppleAppPlan);
             Assert.Equal(PowerForgeAppleReleaseAction.Status, plan.Action);
+            Assert.Equal(new string('a', 64), plan.SourceCommit);
             Assert.False(plan.Archive);
             Assert.False(plan.Upload);
             Assert.False(plan.PrepareDistribution);

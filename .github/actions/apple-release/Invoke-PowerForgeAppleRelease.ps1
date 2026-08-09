@@ -386,8 +386,8 @@ if (-not [string]::IsNullOrWhiteSpace($env:INPUT_MARKETING_VERSION)) {
     $arguments += @('--apple-version', $env:INPUT_MARKETING_VERSION)
 }
 if (-not [string]::IsNullOrWhiteSpace($env:INPUT_SOURCE_COMMIT)) {
-    if ($env:INPUT_SOURCE_COMMIT -notmatch '^[0-9A-Fa-f]{40}$') {
-        throw 'source-commit must be an exact 40-character commit SHA.'
+    if ($env:INPUT_SOURCE_COMMIT -notmatch '^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$') {
+        throw 'source-commit must be a full SHA-1 or SHA-256 Git commit object id.'
     }
     $arguments += @('--apple-source-commit', $env:INPUT_SOURCE_COMMIT)
 }

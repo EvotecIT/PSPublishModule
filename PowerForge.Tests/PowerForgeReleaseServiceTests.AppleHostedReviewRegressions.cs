@@ -966,4 +966,81 @@ public sealed partial class PowerForgeReleaseServiceTests
             TryDelete(root);
         }
     }
+
+    [Fact]
+    public void Execute_DirectExport_UsesPrivateInputAndPublishesVerifiedArtifactBeforeNotarization()
+    {
+        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "EasyControlXAgent.xcodeproj", "1.0.0", "4");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.TeamId = "8ZPGZ79T7J";
+            var app = Assert.Single(spec.AppleApps.Apps);
+            app.Name = "EasyControlX Agent";
+            app.ProjectPath = "EasyControlXAgent.xcodeproj";
+            app.Scheme = "EasyControlXAgent";
+            app.Platform = ApplePlatform.macOS;
+            app.DistributionRoute = AppleDistributionRoute.DirectNotarized;
+            app.AppStoreConnectAppId = null;
+            string? privateExport = null;
+            AppleNotarizationRequest? notarizationRequest = null;
+
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Direct distribution must not query App Store release state."),
+                    archiveAppleApp: CreateSuccessfulArchive,
+                    uploadAppleApp: request =>
+                    {
+                        privateExport = request.ExportPath;
+                        Assert.Contains("apple-direct-exports", request.ExportPath!, StringComparison.Ordinal);
+                        var package = Path.Combine(request.ExportPath!, "EasyControlX Agent.pkg");
+                        File.WriteAllText(package, "approved developer-id export");
+                        return CreateSuccessfulUpload(request);
+                    },
+                    notarizeAppleArtifact: request =>
+                    {
+                        notarizationRequest = request;
+                        var hash = AppleNotarizationService.ComputeArtifactSha256(request.ArtifactPath);
+                        return new AppleNotarizationResult
+                        {
+                            ArtifactPath = request.ArtifactPath,
+                            ArtifactSha256 = hash,
+                            SubmissionPath = request.ArtifactPath,
+                            SubmissionId = "private-export-submission",
+                            Status = "Accepted",
+                            Submission = new ProcessRunResult(0, "accepted", string.Empty, "xcrun", TimeSpan.Zero, false),
+                            Staple = new ProcessRunResult(0, "stapled", string.Empty, "xcrun", TimeSpan.Zero, false),
+                            StapleValidation = new ProcessRunResult(0, "valid", string.Empty, "xcrun", TimeSpan.Zero, false),
+                            Assessment = new ProcessRunResult(0, "accepted", string.Empty, "spctl", TimeSpan.Zero, false)
+                        };
+                    })
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Upload,
+                        AppleSourceCommit = sourceCommit
+                    });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.NotNull(privateExport);
+            Assert.False(Directory.Exists(privateExport));
+            Assert.NotNull(notarizationRequest);
+            var publicExport = result.AppleAppPlan!.Apps.Single().ExportPath;
+            Assert.StartsWith(Path.GetFullPath(publicExport) + Path.DirectorySeparatorChar, notarizationRequest!.ArtifactPath, StringComparison.Ordinal);
+            Assert.Equal("approved developer-id export", File.ReadAllText(notarizationRequest.ArtifactPath));
+            Assert.Equal(
+                AppleNotarizationService.ComputeArtifactSha256(notarizationRequest.ArtifactPath),
+                notarizationRequest.ExpectedArtifactSha256);
+            Assert.Equal(Path.GetFullPath(publicExport), result.AppleApps.Single().Upload!.ExportPath);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
 }

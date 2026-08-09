@@ -767,6 +767,63 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
+    public void ResolveExactAppleSourceCommit_ignores_disallowed_manifest_tokens_in_comments_and_strings()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("CommentedPackageSyntaxRepo");
+        var project = scope.CreateDirectory(Path.Combine("CommentedPackageSyntaxRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCLocalSwiftPackageReference; relativePath = Packages/Shared; };");
+        var package = scope.CreateDirectory(Path.Combine("CommentedPackageSyntaxRepo", "Packages", "Shared"));
+        File.WriteAllText(
+            Path.Combine(package, "Package.swift"),
+            """
+            // swift-tools-version: 6.0
+            import PackageDescription
+            // Documentation example: .unsafeFlags(["-I/tmp"]) and .systemLibrary(name: "Host")
+            let documentation = ".unsafeFlags( and .systemLibrary( are rejected when used as syntax"
+            let package = Package(name: "Shared")
+            """);
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var sourceCommit = CommitRepository(repositoryRoot);
+
+        var resolved = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(sourceCommit, resolved);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_local_system_library_package()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("SystemLibraryPackageRepo");
+        var project = scope.CreateDirectory(Path.Combine("SystemLibraryPackageRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCLocalSwiftPackageReference; relativePath = Packages/Shared; };");
+        var package = scope.CreateDirectory(Path.Combine("SystemLibraryPackageRepo", "Packages", "Shared"));
+        File.WriteAllText(
+            Path.Combine(package, "Package.swift"),
+            """
+            // swift-tools-version: 6.0
+            import PackageDescription
+            let package = Package(
+                name: "Shared",
+                targets: [.systemLibrary(name: "CLib", pkgConfig: "libfoo")]
+            )
+            """);
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("systemLibrary", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("pkg-config", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ResolveExactAppleSourceCommit_rejects_computed_local_package_path()
     {
         using var scope = new TemporaryDirectoryScope();
@@ -1002,6 +1059,23 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("replacement refs", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_accepts_sha256_repository_head()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("Sha256AppleSourceRepo");
+        RunGit(repositoryRoot, "init", "--quiet", "--object-format=sha256");
+        var project = scope.CreateDirectory(Path.Combine("Sha256AppleSourceRepo", "Sample.xcodeproj"));
+        File.WriteAllText(Path.Combine(project, "project.pbxproj"), "// SHA-256 project");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var sourceCommit = CommitRepository(repositoryRoot);
+
+        var resolved = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(64, sourceCommit.Length);
+        Assert.Equal(sourceCommit, resolved);
     }
 
     private static string WriteAppleReleaseConfig(

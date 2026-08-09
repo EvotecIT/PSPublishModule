@@ -100,7 +100,7 @@ public sealed class AppleNotarizationService
         }
         var submissionPath = resumed
             ? artifactPath
-            : PreserveSubmissionPath(request, artifactPath, submittedPath);
+            : ResolveRetainedSubmissionPath(request, artifactPath);
 
         if (!resumed &&
             submission.Succeeded &&
@@ -133,6 +133,9 @@ public sealed class AppleNotarizationService
                     ex);
             }
         }
+
+        if (!resumed)
+            PreserveSubmissionPath(artifactPath, submittedPath, submissionPath);
 
         ProcessRunResult? staple = null;
         ProcessRunResult? validation = null;
@@ -232,22 +235,30 @@ public sealed class AppleNotarizationService
         return submissionPath;
     }
 
-    private static string PreserveSubmissionPath(
+    private static string ResolveRetainedSubmissionPath(
         AppleNotarizationRequest request,
-        string originalArtifactPath,
-        string submittedPath)
+        string originalArtifactPath)
     {
         if (!Path.GetExtension(originalArtifactPath).Equals(".app", StringComparison.OrdinalIgnoreCase))
             return originalArtifactPath;
 
-        var retainedPath = string.IsNullOrWhiteSpace(request.SubmissionPath)
+        return string.IsNullOrWhiteSpace(request.SubmissionPath)
             ? Path.Combine(
                 Path.GetDirectoryName(originalArtifactPath)!,
                 Path.GetFileNameWithoutExtension(originalArtifactPath) + ".notarization.zip")
             : Path.GetFullPath(request.SubmissionPath!);
+    }
+
+    private static void PreserveSubmissionPath(
+        string originalArtifactPath,
+        string submittedPath,
+        string retainedPath)
+    {
+        if (!Path.GetExtension(originalArtifactPath).Equals(".app", StringComparison.OrdinalIgnoreCase))
+            return;
+
         Directory.CreateDirectory(Path.GetDirectoryName(retainedPath)!);
         File.Copy(submittedPath, retainedPath, overwrite: true);
-        return retainedPath;
     }
 
     private static string[] BuildAuthenticationArguments(AppleNotarizationRequest request)

@@ -418,7 +418,7 @@ function Assert-AuthoritativeCaptureProvenance {
     $workflowPattern = '^' + [regex]::Escape($ExpectedConsumerRepository) + '/(?<path>\.github/workflows/[A-Za-z0-9._/-]+\.ya?ml)@refs/heads/' + [regex]::Escape($requiredBranch) + '$'
     $workflowMatch = [regex]::Match($workflowRef, $workflowPattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
     if (-not $repository.Equals($ExpectedConsumerRepository, [StringComparison]::OrdinalIgnoreCase) -or
-        $runId -notmatch '^\d+$' -or $sourceCommit -notmatch '^[0-9a-f]{40}$' -or -not $workflowMatch.Success) {
+        $runId -notmatch '^\d+$' -or $sourceCommit -notmatch '^(?:[0-9a-f]{40}|[0-9a-f]{64})$' -or -not $workflowMatch.Success) {
         throw 'Capture provenance repository, run id, source commit, or workflow identity is invalid.'
     }
     if ($sourceCommit -ne $SourceCommit.ToLowerInvariant()) {

@@ -500,12 +500,7 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private string ComputeRawGitBlobId(string repositoryRoot, string filePath)
     {
-        var root = Path.GetFullPath(repositoryRoot);
-        if (!_gitObjectFormats.TryGetValue(root, out var objectFormat))
-        {
-            objectFormat = RunGit(root, "rev-parse", "--show-object-format").StdOut.Trim();
-            _gitObjectFormats[root] = objectFormat;
-        }
+        var objectFormat = ReadGitObjectFormat(repositoryRoot);
         using System.Security.Cryptography.HashAlgorithm hash = objectFormat.Equals("sha256", StringComparison.OrdinalIgnoreCase)
             ? System.Security.Cryptography.SHA256.Create()
             : objectFormat.Equals("sha1", StringComparison.OrdinalIgnoreCase)
@@ -525,12 +520,7 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private string ComputeRawGitBlobId(string repositoryRoot, byte[] content)
     {
-        var root = Path.GetFullPath(repositoryRoot);
-        if (!_gitObjectFormats.TryGetValue(root, out var objectFormat))
-        {
-            objectFormat = RunGit(root, "rev-parse", "--show-object-format").StdOut.Trim();
-            _gitObjectFormats[root] = objectFormat;
-        }
+        var objectFormat = ReadGitObjectFormat(repositoryRoot);
         using System.Security.Cryptography.HashAlgorithm hash = objectFormat.Equals("sha256", StringComparison.OrdinalIgnoreCase)
             ? System.Security.Cryptography.SHA256.Create()
             : objectFormat.Equals("sha1", StringComparison.OrdinalIgnoreCase)
@@ -633,9 +623,20 @@ internal sealed partial class AppleReleaseSourceTrustService
     private string ReadExactHead(string repositoryRoot)
     {
         var sourceCommit = _git.GetHeadSha(repositoryRoot).Trim();
-        if (sourceCommit.Length != 40 || !sourceCommit.All(Uri.IsHexDigit))
-            throw new InvalidOperationException("Apple release checkpoints require an exact 40-character repository HEAD.");
+        var objectFormat = ReadGitObjectFormat(repositoryRoot);
+        if (!GitObjectId.IsFullForObjectFormat(sourceCommit, objectFormat))
+            throw new InvalidOperationException($"Apple release checkpoints require an exact repository HEAD for Git object format '{objectFormat}'.");
         return sourceCommit.ToLowerInvariant();
+    }
+
+    private string ReadGitObjectFormat(string repositoryRoot)
+    {
+        var root = Path.GetFullPath(repositoryRoot);
+        if (_gitObjectFormats.TryGetValue(root, out var objectFormat))
+            return objectFormat;
+        objectFormat = RunGit(root, "rev-parse", "--show-object-format").StdOut.Trim();
+        _gitObjectFormats[root] = objectFormat;
+        return objectFormat;
     }
 
     private ProcessRunResult RunGit(string repositoryRoot, params string[] arguments)

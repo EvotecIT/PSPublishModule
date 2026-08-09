@@ -40,6 +40,39 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void DirectNotarizationResume_UsesPlatformCorrectProjectPathIdentity()
+    {
+        var plan = new PowerForgeAppleReleasePlan { ProjectRoot = Directory.GetCurrentDirectory() };
+        var app = new PowerForgeAppleAppReleaseTargetPlan
+        {
+            Name = "CasaRay",
+            BundleId = "com.evotecit.casaray",
+            Platform = ApplePlatform.macOS,
+            ProjectPath = Path.Combine(plan.ProjectRoot, "CasaRay.xcodeproj"),
+            DistributionRoute = AppleDistributionRoute.DirectNotarized,
+            MarketingVersion = "1.0.0",
+            BuildNumber = "1"
+        };
+        var receipt = new PowerForgeAppleReleaseTargetReceipt
+        {
+            Name = app.Name,
+            BundleId = app.BundleId,
+            Platform = app.Platform,
+            ProjectPath = "casaray.xcodeproj",
+            Scheme = app.Scheme,
+            Configuration = app.Configuration,
+            Destination = app.Destination,
+            DistributionRoute = app.DistributionRoute,
+            Version = app.MarketingVersion,
+            Build = app.BuildNumber
+        };
+
+        var matches = PowerForgeReleaseService.IsMatchingDirectReceiptTarget(plan, receipt, app);
+
+        Assert.Equal(Path.DirectorySeparatorChar == '\\', matches);
+    }
+
+    [Fact]
     public void Execute_AppleDirectNotarizationResume_FollowsRelativeReceiptAfterCheckoutRelocation()
     {
         const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";

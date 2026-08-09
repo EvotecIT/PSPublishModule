@@ -25,7 +25,7 @@ public sealed class AppStoreConnectScreenshotApprovalTests
                     BaseDirectory = root.FullName,
                     AllowedRoot = screenshotFolder.FullName,
                     VersionString = "1.5.0",
-                    SourceCommit = ApprovedSourceCommit,
+                    SourceCommit = new string('a', 64),
                     ApprovedBy = "release-owner",
                     InitiatedBy = "workflow-initiator",
                     ApprovalEvidence = "https://github.example/actions/runs/123",
@@ -44,6 +44,7 @@ public sealed class AppStoreConnectScreenshotApprovalTests
             Assert.Equal("release-owner", manifest.ApprovedBy);
             Assert.Equal("workflow-initiator", manifest.InitiatedBy);
             Assert.Equal("https://github.example/actions/runs/123", manifest.ApprovalEvidence);
+            Assert.Equal(new string('a', 64), manifest.SourceCommit);
             Assert.Equal(2, manifest.SchemaVersion);
             Assert.Equal("6778025328", manifest.AppId);
             Assert.Equal(ApplePlatform.iOS, manifest.Platform);

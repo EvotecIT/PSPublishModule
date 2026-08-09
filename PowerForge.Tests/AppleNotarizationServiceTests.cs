@@ -135,6 +135,39 @@ public sealed class AppleNotarizationServiceTests
     }
 
     [Fact]
+    public async Task NotarizeAsync_PersistsAcceptedCheckpointBeforeRetainingAppSubmission()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "EasyControlX Agent.app"));
+            var invalidRetainedPath = Directory.CreateDirectory(Path.Combine(root.FullName, "submission-is-a-directory")).FullName;
+            var checkpointed = false;
+
+            var retentionFailure = await Record.ExceptionAsync(() =>
+                new AppleNotarizationService(new NotaryProcessRunner()).NotarizeAsync(new AppleNotarizationRequest
+                {
+                    ArtifactPath = app.FullName,
+                    SubmissionPath = invalidRetainedPath,
+                    KeychainProfile = "powerforge-notary",
+                    AcceptedCheckpoint = checkpoint =>
+                    {
+                        checkpointed = true;
+                        Assert.Equal("submission-1", checkpoint.SubmissionId);
+                        Assert.Equal(invalidRetainedPath, checkpoint.SubmissionPath);
+                    }
+                }));
+
+            Assert.NotNull(retentionFailure);
+            Assert.True(checkpointed);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task NotarizeAsync_DiskImageUsesOpenAssessmentWithPrimarySignatureContext()
     {
         var artifact = Path.GetTempFileName() + ".dmg";

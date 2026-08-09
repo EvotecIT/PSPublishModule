@@ -106,17 +106,14 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
             messages.Add("Screenshot approval manifest ApprovedAt is required.");
         if (string.IsNullOrWhiteSpace(manifest.ApprovedBy))
             messages.Add("Screenshot approval manifest ApprovedBy is required.");
-        if (string.IsNullOrWhiteSpace(manifest.SourceCommit) ||
-            manifest.SourceCommit.Trim().Length != 40 ||
-            !manifest.SourceCommit.Trim().All(Uri.IsHexDigit))
+        if (!GitObjectId.IsFull(manifest.SourceCommit?.Trim()))
         {
-            messages.Add("Screenshot approval manifest SourceCommit must be an exact 40-character Git commit SHA.");
+            messages.Add("Screenshot approval manifest SourceCommit must be a full SHA-1 or SHA-256 Git commit object id.");
         }
         var normalizedExpectedSourceCommit = expectedSourceCommit?.Trim() ?? string.Empty;
-        if (normalizedExpectedSourceCommit.Length != 40 ||
-            !normalizedExpectedSourceCommit.All(Uri.IsHexDigit))
+        if (!GitObjectId.IsFull(normalizedExpectedSourceCommit))
         {
-            messages.Add("ExpectedSourceCommit must be an exact 40-character Git commit SHA when an approval manifest is required.");
+            messages.Add("ExpectedSourceCommit must be a full SHA-1 or SHA-256 Git commit object id when an approval manifest is required.");
         }
         else if (!string.Equals(manifest.SourceCommit, normalizedExpectedSourceCommit, StringComparison.OrdinalIgnoreCase))
         {

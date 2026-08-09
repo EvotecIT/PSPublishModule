@@ -226,8 +226,8 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         var git = new HomeAssistantReleaseGitService();
         git.EnsureClean(repositoryRoot);
         var sourceCommit = git.GetHeadSha(repositoryRoot).Trim();
-        if (sourceCommit.Length != 40 || !sourceCommit.All(Uri.IsHexDigit))
-            throw new InvalidOperationException("Apple release checkpoints require an exact 40-character repository HEAD.");
+        if (!GitObjectId.IsFull(sourceCommit))
+            throw new InvalidOperationException("Apple release checkpoints require a full SHA-1 or SHA-256 repository HEAD.");
         return sourceCommit.ToLowerInvariant();
     }
 

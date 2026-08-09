@@ -32,7 +32,7 @@ function Register-AppleReceiptEvidenceFile {
             ([string]$receipt.attemptId) -notmatch '^[0-9A-Fa-f]{32}$' -or
             ([string]$receipt.receiptSha256) -notmatch '^[0-9A-Fa-f]{64}$' -or
             (-not [string]::IsNullOrWhiteSpace($receiptSource) -and
-             $receiptSource -notmatch '^[0-9A-Fa-f]{40}$')) {
+             $receiptSource -notmatch '^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$')) {
             throw "Apple release evidence does not satisfy the immutable receipt contract: $Path"
         }
     } elseif (-not $HistoryEntry -and
@@ -45,8 +45,8 @@ function Register-AppleReceiptEvidenceFile {
 function Get-ForwardedArgumentList {
     param([Parameter(Mandatory)][string] $SourceCommit)
     if ($ArgumentList[0] -ne 'apple-release') { return @($ArgumentList) }
-    if ($SourceCommit -notmatch '^[0-9A-Fa-f]{40}$') {
-        throw 'Verified consumer source commit must be an exact 40-character Git commit SHA.'
+    if ($SourceCommit -notmatch '^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$') {
+        throw 'Verified consumer source commit must be a full SHA-1 or SHA-256 Git commit object id.'
     }
 
     $withoutLocalEvidence = [Collections.Generic.List[string]]::new()
@@ -79,8 +79,8 @@ function Get-ForwardedArgumentList {
         if ($sourceCommitFound) { throw '--apple-source-commit must be specified at most once.' }
         $sourceCommitFound = $true
         if ([string]::IsNullOrWhiteSpace($configuredSourceCommit) -or
-            $configuredSourceCommit -notmatch '^[0-9A-Fa-f]{40}$') {
-            throw '--apple-source-commit must contain an exact 40-character Git commit SHA.'
+            $configuredSourceCommit -notmatch '^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$') {
+            throw '--apple-source-commit must contain a full SHA-1 or SHA-256 Git commit object id.'
         }
         if (-not $configuredSourceCommit.Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase)) {
             throw "--apple-source-commit must match the exact consumer HEAD '$SourceCommit'."
