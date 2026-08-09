@@ -75,9 +75,9 @@ internal static partial class Program
       powerforge github caches prune [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--key <pattern[,pattern...]>]
                                      [--exclude <pattern[,pattern...]>] [--keep <N>] [--max-age-days <N>] [--max-delete <N>] [--dry-run|--apply]
                                      [--fail-on-delete-error] [--output json]
-      powerforge github runner cleanup [--runner-temp <path>] [--work-root <path>] [--runner-root <path>] [--diag-root <path>] [--tool-cache <path>]
-                                      [--min-free-gb <N>] [--aggressive-threshold-gb <N>] [--dry-run|--apply] [--aggressive] [--allow-sudo]
-                                      [--skip-diagnostics] [--skip-runner-temp] [--skip-actions-cache] [--skip-tool-cache] [--skip-dotnet-cache]
+      powerforge github runner cleanup [--runner-temp <path>] [--work-root <path>] [--runner-root <path>] [--diag-root <path>] [--tool-cache <path>] [--dotnet-root <path>]
+                                      [--min-free-gb <N>] [--aggressive-threshold-gb <N>] [--dotnet-sdk-retain <N>] [--dry-run|--apply] [--aggressive] [--allow-sudo]
+                                      [--prune-dotnet-sdks] [--skip-diagnostics] [--skip-runner-temp] [--skip-actions-cache] [--skip-tool-cache] [--skip-dotnet-cache] [--skip-dotnet-sdk-prune]
                                       [--skip-docker] [--no-docker-volumes] [--output json]
       powerforge homeassistant release prepare --repo <owner/name> --pr-number <N> [--repository-root <path>] [--merge-sha <sha>] [--workflow-run-id <N>] [--apply]
       powerforge homeassistant release build --repository-root <path> --release-version <X.Y.Z> --release-commit <sha>

@@ -33,6 +33,11 @@ public sealed class RunnerHousekeepingSpec
     public string? ToolCachePath { get; set; }
 
     /// <summary>
+    /// Optional explicit .NET installation root. When omitted, <c>DOTNET_ROOT</c> is used.
+    /// </summary>
+    public string? DotNetRootPath { get; set; }
+
+    /// <summary>
     /// Minimum free disk size, in GiB, required after cleanup. Set to <c>null</c> to disable the threshold.
     /// </summary>
     public int? MinFreeGb { get; set; } = 20;
@@ -63,6 +68,12 @@ public sealed class RunnerHousekeepingSpec
     /// Retention window for runner tool cache directories.
     /// </summary>
     public int ToolCacheRetentionDays { get; set; } = 30;
+
+    /// <summary>
+    /// Number of newest stable SDKs retained for each installed major/minor line.
+    /// Package-manager-owned, active, prerelease, and unparseable SDK directories are always preserved.
+    /// </summary>
+    public int DotNetSdkVersionsToKeepPerMajorMinor { get; set; } = 1;
 
     /// <summary>
     /// When true, only plans deletions and external commands without executing them.
@@ -104,6 +115,12 @@ public sealed class RunnerHousekeepingSpec
     /// When true, <c>dotnet nuget locals all --clear</c> is executed during aggressive cleanup.
     /// </summary>
     public bool ClearDotNetCaches { get; set; } = true;
+
+    /// <summary>
+    /// When true on Debian-family Linux runners, superseded unowned stable SDK directories under
+    /// <c>DOTNET_ROOT/sdk</c> are pruned during aggressive cleanup.
+    /// </summary>
+    public bool PruneDotNetSdks { get; set; }
 
     /// <summary>
     /// When true, <c>docker system prune</c> is executed during aggressive cleanup.
@@ -206,6 +223,11 @@ public sealed class RunnerHousekeepingResult
     /// Optional tool cache path used by the cleanup run.
     /// </summary>
     public string? ToolCachePath { get; set; }
+
+    /// <summary>
+    /// Optional .NET installation root used by the cleanup run.
+    /// </summary>
+    public string? DotNetRootPath { get; set; }
 
     /// <summary>
     /// Free disk before cleanup, in bytes.

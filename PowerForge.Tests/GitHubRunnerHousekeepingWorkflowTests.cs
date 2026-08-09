@@ -72,6 +72,9 @@ public sealed class GitHubRunnerHousekeepingWorkflowTests
         Assert.Equal(20, runner.GetProperty("MinFreeGb").GetInt32());
         Assert.True(runner.GetProperty("CleanWorkspaces").GetBoolean());
         Assert.Equal(0, runner.GetProperty("WorkspacesRetentionDays").GetInt32());
+        Assert.True(runner.GetProperty("PruneDotNetSdks").GetBoolean());
+        Assert.Equal(1, runner.GetProperty("DotNetSdkVersionsToKeepPerMajorMinor").GetInt32());
+        Assert.Equal("/usr/share/dotnet", runner.GetProperty("DotNetRootPath").GetString());
     }
 
     private static string FindRepoRoot()

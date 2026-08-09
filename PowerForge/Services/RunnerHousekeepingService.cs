@@ -11,7 +11,7 @@ namespace PowerForge;
 /// <summary>
 /// Reclaims disk space on GitHub-hosted or self-hosted runners using conservative defaults.
 /// </summary>
-public sealed class RunnerHousekeepingService
+public sealed partial class RunnerHousekeepingService
 {
     // Known runner-owned work directories should survive repository workspace cleanup.
     // _PipelineMapping is kept for hosts that also run Azure Pipelines-style agents.
@@ -123,6 +123,18 @@ public sealed class RunnerHousekeepingService
                     dryRun: normalized.DryRun));
             }
 
+            if (normalized.PruneDotNetSdks)
+            {
+                steps.Add(PruneDotNetSdks(
+                    dotNetRootPath: normalized.DotNetRootPath,
+                    activeSdkProbePath: ResolveActiveSdkProbePath(
+                        Environment.GetEnvironmentVariable("GITHUB_WORKSPACE"),
+                        Environment.CurrentDirectory),
+                    versionsToKeepPerMajorMinor: normalized.DotNetSdkVersionsToKeepPerMajorMinor,
+                    dryRun: normalized.DryRun,
+                    allowSudo: normalized.AllowSudo));
+            }
+
             if (normalized.PruneDocker)
             {
                 var args = normalized.IncludeDockerVolumes
@@ -159,6 +171,7 @@ public sealed class RunnerHousekeepingService
             RunnerTempPath = normalized.RunnerTempPath,
             DiagnosticsRootPath = normalized.DiagnosticsRootPath,
             ToolCachePath = normalized.ToolCachePath,
+            DotNetRootPath = normalized.DotNetRootPath,
             FreeBytesBefore = freeBefore,
             FreeBytesAfter = freeAfter,
             RequiredFreeBytes = normalized.RequiredFreeBytes,
@@ -198,7 +211,7 @@ public sealed class RunnerHousekeepingService
         if (!freeRequirementMet)
             return true;
 
-        return step.Id is not ("diag" or "runner-temp" or "workspaces" or "actions-cache" or "tool-cache");
+        return step.Id is not ("diag" or "runner-temp" or "workspaces" or "actions-cache" or "tool-cache" or "dotnet-sdk-prune");
     }
 
     private sealed class NormalizedSpec
@@ -209,6 +222,7 @@ public sealed class RunnerHousekeepingService
         public string? DiagnosticsRootPath { get; set; }
         public string? ActionsRootPath { get; set; }
         public string? ToolCachePath { get; set; }
+        public string? DotNetRootPath { get; set; }
         public string FreeSpaceProbePath { get; set; } = string.Empty;
         public long? RequiredFreeBytes { get; set; }
         public long? AggressiveThresholdBytes { get; set; }
@@ -216,6 +230,7 @@ public sealed class RunnerHousekeepingService
         public int ActionsRetentionDays { get; set; }
         public int WorkspacesRetentionDays { get; set; }
         public int ToolCacheRetentionDays { get; set; }
+        public int DotNetSdkVersionsToKeepPerMajorMinor { get; set; }
         public bool DryRun { get; set; }
         public bool Aggressive { get; set; }
         public bool CleanDiagnostics { get; set; }
@@ -224,6 +239,7 @@ public sealed class RunnerHousekeepingService
         public bool CleanWorkspaces { get; set; }
         public bool CleanToolCache { get; set; }
         public bool ClearDotNetCaches { get; set; }
+        public bool PruneDotNetSdks { get; set; }
         public bool PruneDocker { get; set; }
         public bool IncludeDockerVolumes { get; set; }
         public bool AllowSudo { get; set; }
@@ -256,6 +272,8 @@ public sealed class RunnerHousekeepingService
             DiagnosticsRootPath = diagnosticsRoot,
             ActionsRootPath = actionsRoot,
             ToolCachePath = toolCache,
+            DotNetRootPath = ResolvePathOrNull(spec.DotNetRootPath)
+                             ?? ResolvePathOrNull(Environment.GetEnvironmentVariable("DOTNET_ROOT")),
             FreeSpaceProbePath = Directory.Exists(runnerRoot) ? runnerRoot : workRoot,
             RequiredFreeBytes = requiredFreeBytes,
             AggressiveThresholdBytes = aggressiveThresholdBytes,
@@ -263,6 +281,7 @@ public sealed class RunnerHousekeepingService
             ActionsRetentionDays = Math.Max(0, spec.ActionsRetentionDays),
             WorkspacesRetentionDays = Math.Max(0, spec.WorkspacesRetentionDays),
             ToolCacheRetentionDays = Math.Max(0, spec.ToolCacheRetentionDays),
+            DotNetSdkVersionsToKeepPerMajorMinor = Math.Max(1, spec.DotNetSdkVersionsToKeepPerMajorMinor),
             DryRun = spec.DryRun,
             Aggressive = spec.Aggressive,
             CleanDiagnostics = spec.CleanDiagnostics,
@@ -271,6 +290,7 @@ public sealed class RunnerHousekeepingService
             CleanWorkspaces = spec.CleanWorkspaces,
             CleanToolCache = spec.CleanToolCache,
             ClearDotNetCaches = spec.ClearDotNetCaches,
+            PruneDotNetSdks = spec.PruneDotNetSdks,
             PruneDocker = spec.PruneDocker,
             IncludeDockerVolumes = spec.IncludeDockerVolumes,
             AllowSudo = spec.AllowSudo

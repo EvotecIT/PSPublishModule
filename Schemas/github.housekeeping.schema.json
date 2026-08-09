@@ -118,6 +118,12 @@
             "null"
           ]
         },
+        "DotNetRootPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "MinFreeGb": {
           "type": [
             "integer",
@@ -136,6 +142,7 @@
         "ActionsRetentionDays": { "type": "integer", "minimum": 0 },
         "WorkspacesRetentionDays": { "type": "integer", "minimum": 0 },
         "ToolCacheRetentionDays": { "type": "integer", "minimum": 0 },
+        "DotNetSdkVersionsToKeepPerMajorMinor": { "type": "integer", "minimum": 1 },
         "Aggressive": { "type": "boolean" },
         "CleanDiagnostics": { "type": "boolean" },
         "CleanRunnerTemp": { "type": "boolean" },
@@ -143,6 +150,10 @@
         "CleanWorkspaces": { "type": "boolean" },
         "CleanToolCache": { "type": "boolean" },
         "ClearDotNetCaches": { "type": "boolean" },
+        "PruneDotNetSdks": {
+          "type": "boolean",
+          "description": "Prunes superseded unowned stable SDKs during aggressive cleanup on Debian-family Linux runners."
+        },
         "PruneDocker": { "type": "boolean" },
         "IncludeDockerVolumes": { "type": "boolean" },
         "AllowSudo": { "type": "boolean" }

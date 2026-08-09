@@ -473,6 +473,7 @@ internal static partial class Program
         spec.Runner.RunnerRootPath = ResolvePathFromBaseNullable(baseDir, spec.Runner.RunnerRootPath);
         spec.Runner.DiagnosticsRootPath = ResolvePathFromBaseNullable(baseDir, spec.Runner.DiagnosticsRootPath);
         spec.Runner.ToolCachePath = ResolvePathFromBaseNullable(baseDir, spec.Runner.ToolCachePath);
+        spec.Runner.DotNetRootPath = ResolvePathFromBaseNullable(baseDir, spec.Runner.DotNetRootPath);
     }
 
     static (string[] Names, string? Version, bool Prerelease, string[] Repositories)? ParseFindArgs(string[] argv)
