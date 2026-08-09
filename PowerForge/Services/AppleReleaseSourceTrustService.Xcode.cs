@@ -408,10 +408,22 @@ internal sealed partial class AppleReleaseSourceTrustService
             foreach (var packageLock in locks)
                 EnsureTrackedFile(repositoryRoot, packageLock, "Xcode local Swift package resolution lock");
         }
-        foreach (Match match in Regex.Matches(
-                     manifest,
-                     "\\bpath\\s*:\\s*\"(?<path>[^\"]+)\"",
-                     RegexOptions.CultureInvariant))
+        var manifestWithoutComments = RemoveSwiftComments(manifest);
+        var pathArguments = Regex.Matches(
+            manifestWithoutComments,
+            "\\bpath\\s*:",
+            RegexOptions.CultureInvariant);
+        var literalPathArguments = Regex.Matches(
+            manifestWithoutComments,
+            "\\bpath\\s*:\\s*\"(?<path>[^\"\\\\\\r\\n]+)\"\\s*(?=[,)])",
+            RegexOptions.CultureInvariant);
+        if (pathArguments.Count != literalPathArguments.Count)
+        {
+            throw new InvalidOperationException(
+                $"Local Swift package '{packageRoot}' uses a computed, interpolated, or escaped path argument that cannot be bound to exact source. " +
+                "Use a simple literal path inside the tracked repository.");
+        }
+        foreach (Match match in literalPathArguments)
         {
             var explicitPath = ResolvePbxPath(packageRoot, match.Groups["path"].Value, "Swift package manifest input");
             EnsurePathWithinRepository(repositoryRoot, explicitPath, "Swift package manifest input");
@@ -422,6 +434,57 @@ internal sealed partial class AppleReleaseSourceTrustService
             else
                 throw new FileNotFoundException($"Swift package manifest input was not found: {explicitPath}", explicitPath);
         }
+    }
+
+    private static string RemoveSwiftComments(string source)
+    {
+        var result = source.ToCharArray();
+        var inString = false;
+        var escaped = false;
+        for (var index = 0; index < result.Length; index++)
+        {
+            var current = result[index];
+            if (inString)
+            {
+                if (escaped)
+                    escaped = false;
+                else if (current == '\\')
+                    escaped = true;
+                else if (current == '"')
+                    inString = false;
+                continue;
+            }
+            if (current == '"')
+            {
+                inString = true;
+                continue;
+            }
+            if (current != '/' || index + 1 >= result.Length)
+                continue;
+            if (result[index + 1] == '/')
+            {
+                while (index < result.Length && result[index] != '\r' && result[index] != '\n')
+                    result[index++] = ' ';
+                index--;
+            }
+            else if (result[index + 1] == '*')
+            {
+                result[index++] = ' ';
+                result[index] = ' ';
+                while (++index < result.Length)
+                {
+                    if (result[index] == '*' && index + 1 < result.Length && result[index + 1] == '/')
+                    {
+                        result[index] = ' ';
+                        result[++index] = ' ';
+                        break;
+                    }
+                    if (result[index] != '\r' && result[index] != '\n')
+                        result[index] = ' ';
+                }
+            }
+        }
+        return new string(result);
     }
 
     private void ValidateRemotePackageReference(
@@ -667,6 +730,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             .Where(static entry => entry.Length > 2 && entry[1] == ' ')
             .Select(entry => Path.GetFullPath(Path.Combine(repositoryRoot, entry.Substring(2))))
             .ToHashSet(GetPathComparer());
+        var headBlobs = ReadHeadTreeBlobIds(repositoryRoot, relativeRoot);
         foreach (var entry in Directory.EnumerateFileSystemEntries(path, "*", SearchOption.AllDirectories))
         {
             if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0)
@@ -676,6 +740,17 @@ internal sealed partial class AppleReleaseSourceTrustService
                 throw new InvalidOperationException(
                     $"{name} must be tracked at the exact source commit: " +
                     FrameworkCompatibility.GetRelativePath(repositoryRoot, entry).Replace('\\', '/'));
+            }
+            if (File.Exists(entry))
+            {
+                var fullPath = Path.GetFullPath(entry);
+                if (!headBlobs.TryGetValue(fullPath, out var expectedBlob) ||
+                    !expectedBlob.Equals(ComputeRawGitBlobId(repositoryRoot, fullPath), StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"{name} differs from the exact source commit: " +
+                        FrameworkCompatibility.GetRelativePath(repositoryRoot, entry).Replace('\\', '/'));
+                }
             }
         }
     }

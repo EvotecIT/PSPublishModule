@@ -21,6 +21,8 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private readonly HomeAssistantReleaseGitService _git;
     private readonly GitClient _gitClient;
+    private readonly Dictionary<string, string> _gitObjectFormats = new(
+        Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     internal AppleReleaseSourceTrustService(
         HomeAssistantReleaseGitService? git = null,
@@ -475,9 +477,57 @@ internal sealed partial class AppleReleaseSourceTrustService
             throw new InvalidOperationException(
                 $"{name} uses a skip-worktree or assume-unchanged Git index flag and cannot be attested to the exact source commit: {relative}");
         }
-        var unchanged = RunGitAllowFailure(repositoryRoot, "diff", "--quiet", "HEAD", "--", relative);
-        if (unchanged.ExitCode != 0)
+        var headBlob = RunGitAllowFailure(repositoryRoot, "rev-parse", "--verify", $"HEAD:{relative}");
+        if (!headBlob.Succeeded || string.IsNullOrWhiteSpace(headBlob.StdOut))
+            throw new InvalidOperationException($"{name} is not present in the exact source commit: {relative}");
+        var worktreeBlob = ComputeRawGitBlobId(repositoryRoot, candidate);
+        if (!headBlob.StdOut.Trim().Equals(worktreeBlob, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"{name} differs from the exact source commit: {relative}");
+    }
+
+    private string ComputeRawGitBlobId(string repositoryRoot, string filePath)
+    {
+        var root = Path.GetFullPath(repositoryRoot);
+        if (!_gitObjectFormats.TryGetValue(root, out var objectFormat))
+        {
+            objectFormat = RunGit(root, "rev-parse", "--show-object-format").StdOut.Trim();
+            _gitObjectFormats[root] = objectFormat;
+        }
+        using System.Security.Cryptography.HashAlgorithm hash = objectFormat.Equals("sha256", StringComparison.OrdinalIgnoreCase)
+            ? System.Security.Cryptography.SHA256.Create()
+            : objectFormat.Equals("sha1", StringComparison.OrdinalIgnoreCase)
+                ? System.Security.Cryptography.SHA1.Create()
+                : throw new InvalidOperationException($"Unsupported Git object format '{objectFormat}'.");
+        var length = new FileInfo(filePath).Length;
+        var prefix = System.Text.Encoding.ASCII.GetBytes($"blob {length}\0");
+        hash.TransformBlock(prefix, 0, prefix.Length, prefix, 0);
+        using var stream = File.OpenRead(filePath);
+        var buffer = new byte[81920];
+        int read;
+        while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+            hash.TransformBlock(buffer, 0, read, buffer, 0);
+        hash.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+        return BitConverter.ToString(hash.Hash!).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private Dictionary<string, string> ReadHeadTreeBlobIds(string repositoryRoot, string relativeRoot)
+    {
+        var comparer = GetPathComparer();
+        var result = new Dictionary<string, string>(comparer);
+        var entries = RunGit(repositoryRoot, "ls-tree", "-r", "-z", "HEAD", "--", relativeRoot)
+            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var entry in entries)
+        {
+            var tab = entry.IndexOf('\t');
+            if (tab < 0)
+                continue;
+            var header = entry.Substring(0, tab).Split(' ');
+            if (header.Length != 3 || !header[1].Equals("blob", StringComparison.Ordinal))
+                continue;
+            var fullPath = Path.GetFullPath(Path.Combine(repositoryRoot, entry.Substring(tab + 1)));
+            result[fullPath] = header[2];
+        }
+        return result;
     }
 
     private static bool HasHiddenGitIndexState(string? entry)

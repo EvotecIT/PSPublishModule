@@ -61,7 +61,7 @@ internal sealed partial class PowerForgeReleaseService
             return;
 
         var target = CreateAppleCheckpointTarget(app);
-        target.DirectArtifactPath = result.Notarization.ArtifactPath;
+        target.DirectArtifactPath = CreatePortableDirectArtifactPath(plan, app, result.Notarization.ArtifactPath);
         target.DirectArtifactSha256 = result.Notarization.ArtifactSha256;
         target.NotarizationSubmissionId = result.Notarization.SubmissionId;
         target.NotarizationStatus = result.Notarization.Status;
@@ -93,7 +93,7 @@ internal sealed partial class PowerForgeReleaseService
             return;
 
         var target = CreateAppleCheckpointTarget(app);
-        target.DirectArtifactPath = checkpoint.ArtifactPath;
+        target.DirectArtifactPath = CreatePortableDirectArtifactPath(plan, app, checkpoint.ArtifactPath);
         target.DirectArtifactSha256 = checkpoint.ArtifactSha256;
         target.NotarizationSubmissionId = checkpoint.SubmissionId;
         target.NotarizationStatus = checkpoint.Status;
@@ -118,7 +118,7 @@ internal sealed partial class PowerForgeReleaseService
             return;
 
         var target = CreateAppleCheckpointTarget(app);
-        target.DirectArtifactPath = checkpoint.ArtifactPath;
+        target.DirectArtifactPath = CreatePortableDirectArtifactPath(plan, app, checkpoint.ArtifactPath);
         target.DirectArtifactSha256 = checkpoint.ArtifactSha256;
         target.NotarizationSubmissionId = checkpoint.SubmissionId;
         target.NotarizationStatus = checkpoint.Status;
@@ -152,6 +152,15 @@ internal sealed partial class PowerForgeReleaseService
             Version = app.MarketingVersion,
             Build = app.BuildNumber
         };
+
+    private static string CreatePortableDirectArtifactPath(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        string artifactPath)
+    {
+        var validated = ValidateDirectRecoveryArtifactPath(plan, app, artifactPath);
+        return FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, validated).Replace('\\', '/');
+    }
 
     private static bool HasAppleExecutionMutation(PowerForgeAppleReleasePlan plan)
         => plan.Action == PowerForgeAppleReleaseAction.Version ||

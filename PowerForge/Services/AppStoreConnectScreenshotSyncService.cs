@@ -64,9 +64,11 @@ public sealed class AppStoreConnectScreenshotSyncService
                 $"Screenshot preflight failed: {string.Join(" ", messages)}");
         }
 
-        var preflightedSets = spec.ScreenshotSets
+        var sourceSets = spec.ScreenshotSets
             .Select(setSpec => PreflightScreenshotSet(request.BaseDirectory, setSpec))
             .ToArray();
+        using var screenshotSnapshot = CreateScreenshotSnapshot(sourceSets, request.ExpectedFileSha256);
+        var preflightedSets = screenshotSnapshot.Sets;
 
         var version = !string.IsNullOrWhiteSpace(spec.VersionId)
             ? new AppStoreConnectVersionInfo
@@ -154,7 +156,11 @@ public sealed class AppStoreConnectScreenshotSyncService
 
             var uploaded = new List<AppStoreConnectScreenshotUploadResult>();
             foreach (var file in filesToUpload)
-                uploaded.Add(await _client.UploadScreenshotAsync(set.Id, file, cancellationToken).ConfigureAwait(false));
+            {
+                var upload = await _client.UploadScreenshotAsync(set.Id, file, cancellationToken).ConfigureAwait(false);
+                upload.FilePath = screenshotSnapshot.GetSourcePath(file);
+                uploaded.Add(upload);
+            }
 
             results.Add(new AppStoreConnectScreenshotSetSyncResult
             {
@@ -179,6 +185,70 @@ public sealed class AppStoreConnectScreenshotSyncService
         using var stream = File.OpenRead(filePath);
         using var md5 = System.Security.Cryptography.MD5.Create();
         return BitConverter.ToString(md5.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static ScreenshotSnapshot CreateScreenshotSnapshot(
+        IReadOnlyCollection<PreflightedScreenshotSet> sourceSets,
+        IReadOnlyDictionary<string, string>? expectedFileSha256)
+    {
+        var comparer = Path.DirectorySeparatorChar == '\\'
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var expected = expectedFileSha256 is null
+            ? null
+            : expectedFileSha256.ToDictionary(
+                static value => value.Key,
+                static value => value.Value,
+                comparer);
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge", "appstore-screenshot-snapshot", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mappings = new Dictionary<string, string>(comparer);
+            var sets = sourceSets.Select((set, setIndex) =>
+            {
+                var setRoot = Path.Combine(root, setIndex.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                Directory.CreateDirectory(setRoot);
+                var files = set.Files.Select(sourcePath =>
+                {
+                    var source = Path.GetFullPath(sourcePath);
+                    string? expectedSha256 = null;
+                    if (expected is not null && !expected.TryGetValue(source, out expectedSha256))
+                    {
+                        throw new InvalidOperationException(
+                            $"Screenshot '{source}' was not part of the approved Apple release plan. Review a new exact plan before upload.");
+                    }
+
+                    var snapshotPath = Path.Combine(setRoot, Path.GetFileName(source));
+                    File.Copy(source, snapshotPath, overwrite: false);
+                    if (expected is not null)
+                    {
+                        var actualSha256 = ComputeSha256(snapshotPath);
+                        if (!actualSha256.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+                        {
+                            throw new InvalidOperationException(
+                                $"Screenshot '{source}' changed after Apple plan approval. Review the exact replacement bytes before upload.");
+                        }
+                    }
+                    mappings[snapshotPath] = source;
+                    return snapshotPath;
+                }).ToArray();
+                return new PreflightedScreenshotSet(set.ScreenshotDisplayType, set.Folder, files);
+            }).ToArray();
+            return new ScreenshotSnapshot(root, sets, mappings);
+        }
+        catch
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
+            throw;
+        }
+    }
+
+    private static string ComputeSha256(string filePath)
+    {
+        using var stream = File.OpenRead(filePath);
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
     }
 
     private static string[] FindMissingFiles(
@@ -270,5 +340,30 @@ public sealed class AppStoreConnectScreenshotSyncService
         public AppStoreConnectScreenshotSetInfo? ScreenshotSet { get; }
 
         public AppStoreConnectScreenshotInfo[] ExistingScreenshots { get; }
+    }
+
+    private sealed class ScreenshotSnapshot : IDisposable
+    {
+        private readonly string _root;
+        private readonly IReadOnlyDictionary<string, string> _sourcePaths;
+
+        public ScreenshotSnapshot(
+            string root,
+            PreflightedScreenshotSet[] sets,
+            IReadOnlyDictionary<string, string> sourcePaths)
+        {
+            _root = root;
+            Sets = sets;
+            _sourcePaths = sourcePaths;
+        }
+
+        public PreflightedScreenshotSet[] Sets { get; }
+
+        public string GetSourcePath(string snapshotPath) => _sourcePaths[snapshotPath];
+
+        public void Dispose()
+        {
+            try { Directory.Delete(_root, recursive: true); } catch { /* best effort */ }
+        }
     }
 }

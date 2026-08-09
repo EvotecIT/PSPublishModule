@@ -981,7 +981,9 @@ public sealed partial class PowerForgeReleaseServiceTests
             retainedReceipt.ReceiptSha256 = null;
             retainedReceipt.PreviousReceiptSha256 = null;
             new AppleReleaseReceiptStore().WriteAttempt(disabledChecksRetry.AppleAppPlan!, retainedReceipt);
-            File.WriteAllText(Path.Combine(retainedTarget.DirectArtifactPath!, "changed-after-release.txt"), "changed");
+            File.WriteAllText(
+                Path.Combine(root, retainedTarget.DirectArtifactPath!, "changed-after-release.txt"),
+                "changed");
             var changedArtifact = nextReleaseService.Execute(
                 spec,
                 new PowerForgeReleaseRequest

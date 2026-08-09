@@ -484,7 +484,9 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("Accepted", target.NotarizationStatus);
             Assert.False(accepted.Success);
 
-            var protectedArtifact = Assert.IsType<string>(target.DirectArtifactPath);
+            var storedArtifact = Assert.IsType<string>(target.DirectArtifactPath);
+            Assert.False(Path.IsPathRooted(storedArtifact));
+            var protectedArtifact = Path.Combine(root, storedArtifact);
             var cleanupCandidate = Directory.GetParent(protectedArtifact)!.FullName;
             Directory.SetLastWriteTimeUtc(cleanupCandidate, DateTime.UtcNow.AddDays(-30));
             spec.AppleApps.Automation.ArtifactRetentionDays = 0;
@@ -579,8 +581,9 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(target.Stapled);
             Assert.True(target.StapleValidated);
             Assert.Equal("accepted-and-stapled", target.NotarizationSubmissionId);
+            Assert.False(Path.IsPathRooted(target.DirectArtifactPath));
             Assert.Equal(
-                AppleNotarizationService.ComputeArtifactSha256(target.DirectArtifactPath!),
+                AppleNotarizationService.ComputeArtifactSha256(Path.Combine(root, target.DirectArtifactPath!)),
                 target.DirectArtifactSha256);
         }
         finally

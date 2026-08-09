@@ -2284,6 +2284,14 @@ internal sealed partial class PowerForgeReleaseService
                     AppInfoMetadataSpecs = appInfoMetadataSpecs,
                     ReplaceScreenshots = plan.ReplaceScreenshots,
                     ExpectedSourceCommit = plan.SourceCommit,
+                    ExpectedScreenshotFileSha256 = plan.ApprovedMutationInputFilesSha256.Count == 0
+                        ? null
+                        : plan.ApprovedMutationInputFilesSha256.ToDictionary(
+                            value => Path.GetFullPath(Path.Combine(plan.ProjectRoot, value.Key)),
+                            static value => value.Value,
+                            Path.DirectorySeparatorChar == '\\'
+                                ? StringComparer.OrdinalIgnoreCase
+                                : StringComparer.Ordinal),
                     CheckReadiness = plan.CheckReleaseReadiness,
                     ReadinessRequest = plan.CheckReleaseReadiness && matchingScreenshotSpec is not null
                         ? new AppStoreConnectReleaseReadinessRequest

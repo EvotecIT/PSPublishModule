@@ -319,6 +319,7 @@ internal sealed partial class PowerForgeReleaseService
             plan.AllowNonPendingDeveloperRelease,
             Files = files.OrderBy(static value => value.Key, StringComparer.Ordinal).ToArray()
         };
+        plan.ApprovedMutationInputFilesSha256 = new Dictionary<string, string>(files, StringComparer.Ordinal);
         return (files, ComputeStableSha256(options));
     }
 

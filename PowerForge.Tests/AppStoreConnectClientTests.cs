@@ -1029,6 +1029,11 @@ public sealed partial class AppStoreConnectClientTests
                     }
                     """));
 
+            handler.OnRequest = count =>
+            {
+                if (count == 1)
+                    File.WriteAllBytes(screenshotPath, new byte[] { 6, 6, 6 });
+            };
             using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
             using var client = new AppStoreConnectClient(CreateCredential(), http);
             var service = new AppStoreConnectScreenshotSyncService(client);
@@ -1064,6 +1069,58 @@ public sealed partial class AppStoreConnectClientTests
             Assert.Contains("appStoreVersions/version-1/appStoreVersionLocalizations", handler.RequestUris[1].ToString(), StringComparison.Ordinal);
             Assert.Contains("appStoreVersionLocalizations/loc-1/appScreenshotSets", handler.RequestUris[2].ToString(), StringComparison.Ordinal);
             Assert.Equal("https://api.appstoreconnect.apple.com/v1/appScreenshotSets", handler.RequestUris[3].ToString());
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task ScreenshotSyncService_RejectsBytesChangedAfterApprovedPlanBeforeRemoteMutation()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root.FullName, "iphone-6-5"));
+            var screenshotPath = Path.Combine(folder.FullName, "01-home.png");
+            await File.WriteAllBytesAsync(screenshotPath, new byte[] { 1, 2, 3 });
+            string approvedSha256;
+            using (var stream = File.OpenRead(screenshotPath))
+            using (var sha256 = System.Security.Cryptography.SHA256.Create())
+                approvedSha256 = BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+            await File.WriteAllBytesAsync(screenshotPath, new byte[] { 9, 8, 7 });
+
+            var handler = new SequenceHandler();
+            using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+            using var client = new AppStoreConnectClient(CreateCredential(), http);
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppStoreConnectScreenshotSyncService(client).SyncAsync(new AppStoreConnectScreenshotSyncRequest
+                {
+                    BaseDirectory = root.FullName,
+                    ExpectedFileSha256 = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        [screenshotPath] = approvedSha256
+                    },
+                    Spec = new AppStoreConnectScreenshotSyncSpec
+                    {
+                        AppId = "app-1",
+                        VersionString = "1.0.0",
+                        Platform = ApplePlatform.iOS,
+                        Locale = "en-US",
+                        ScreenshotSets =
+                        [
+                            new AppStoreConnectScreenshotSetSyncSpec
+                            {
+                                ScreenshotDisplayType = "APP_IPHONE_65",
+                                Path = "iphone-6-5"
+                            }
+                        ]
+                    }
+                }));
+
+            Assert.Contains("changed after Apple plan approval", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(handler.RequestUris);
         }
         finally
         {
@@ -2423,11 +2480,14 @@ public sealed partial class AppStoreConnectClientTests
 
         public List<byte[]> RequestBodyBytes { get; } = new();
 
+        public Action<int>? OnRequest { get; set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (_responses.Count == 0)
                 throw new InvalidOperationException("No response was configured for request.");
 
+            OnRequest?.Invoke(RequestUris.Count + 1);
             Methods.Add(request.Method);
             RequestUris.Add(request.RequestUri!);
             if (request.Content is not null)

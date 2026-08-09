@@ -705,6 +705,90 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_computed_local_package_path()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ComputedPackagePathRepo");
+        var project = scope.CreateDirectory(Path.Combine("ComputedPackagePathRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCLocalSwiftPackageReference; relativePath = Packages/Shared; };");
+        var package = scope.CreateDirectory(Path.Combine("ComputedPackagePathRepo", "Packages", "Shared"));
+        File.WriteAllText(
+            Path.Combine(package, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\nlet custom = \"Generated\"\nlet package = Package(name: \"Shared\", targets: [.target(name: \"Shared\", path: custom)])");
+        var generated = scope.CreateDirectory(Path.Combine("ComputedPackagePathRepo", "Packages", "Shared", "Generated"));
+        File.WriteAllText(Path.Combine(generated, "Injected.swift"), "struct Injected {}");
+        File.WriteAllText(Path.Combine(repositoryRoot, ".gitignore"), "Packages/Shared/Generated/\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("computed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_clean_smudge_filtered_worktree_bytes()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("FilteredAppleInputRepo");
+        var project = scope.CreateDirectory(Path.Combine("FilteredAppleInputRepo", "Sample.xcodeproj"));
+        var projectFile = Path.Combine(project, "project.pbxproj");
+        File.WriteAllText(projectFile, "// committed project");
+        File.WriteAllText(Path.Combine(repositoryRoot, ".gitattributes"), "*.pbxproj filter=attested\n");
+        RunGit(repositoryRoot, "init", "--quiet");
+        RunGit(repositoryRoot, "config", "filter.attested.clean", "sed 's/worktree/committed/g'");
+        RunGit(repositoryRoot, "config", "filter.attested.smudge", "sed 's/committed/worktree/g'");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+        File.Delete(projectFile);
+        RunGit(repositoryRoot, "checkout", "--", "Sample.xcodeproj/project.pbxproj");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("differs from the exact source commit", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("project.pbxproj", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_filtered_bytes_in_synchronized_tree()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("FilteredSynchronizedTreeRepo");
+        var project = scope.CreateDirectory(Path.Combine("FilteredSynchronizedTreeRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            """
+            000000000000000000000001 = {
+                isa = PBXFileSystemSynchronizedRootGroup;
+                path = Sources;
+                sourceTree = SOURCE_ROOT;
+            };
+            """);
+        var sources = scope.CreateDirectory(Path.Combine("FilteredSynchronizedTreeRepo", "Sources"));
+        var sourceFile = Path.Combine(sources, "Filtered.swift");
+        File.WriteAllText(sourceFile, "struct committed {}");
+        File.WriteAllText(Path.Combine(repositoryRoot, ".gitattributes"), "Sources/*.swift filter=attested\n");
+        RunGit(repositoryRoot, "init", "--quiet");
+        RunGit(repositoryRoot, "config", "filter.attested.clean", "sed 's/worktree/committed/g'");
+        RunGit(repositoryRoot, "config", "filter.attested.smudge", "sed 's/committed/worktree/g'");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+        File.Delete(sourceFile);
+        RunGit(repositoryRoot, "checkout", "--", "Sources/Filtered.swift");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("differs from the exact source commit", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Filtered.swift", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ResolveExactAppleSourceCommit_accepts_tracked_project_lock_for_local_package_dependency()
     {
         using var scope = new TemporaryDirectoryScope();

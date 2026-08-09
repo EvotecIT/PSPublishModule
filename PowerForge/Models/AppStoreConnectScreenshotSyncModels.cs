@@ -243,6 +243,9 @@ public sealed class AppStoreConnectScreenshotSyncRequest
 
     /// <summary>Exact source commit whose reviewed screenshots may be uploaded.</summary>
     public string? ExpectedSourceCommit { get; set; }
+
+    /// <summary>Approved SHA-256 values keyed by absolute source path for release-orchestrated uploads.</summary>
+    internal IReadOnlyDictionary<string, string>? ExpectedFileSha256 { get; set; }
 }
 
 /// <summary>

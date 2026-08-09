@@ -584,7 +584,9 @@ internal sealed partial class PowerForgeReleaseService
                 UploadAttestationAttemptId = result?.Upload?.Succeeded == true
                     ? result.UploadAttestationAttemptId
                     : result?.ResumedUploadAttestationAttemptId,
-                DirectArtifactPath = result?.Notarization?.ArtifactPath,
+                DirectArtifactPath = string.IsNullOrWhiteSpace(result?.Notarization?.ArtifactPath)
+                    ? null
+                    : CreatePortableDirectArtifactPath(plan, app, result!.Notarization!.ArtifactPath),
                 DirectArtifactSha256 = result?.Notarization?.ArtifactSha256,
                 NotarizationSubmissionId = result?.Notarization?.SubmissionId,
                 NotarizationStatus = result?.Notarization?.Status,

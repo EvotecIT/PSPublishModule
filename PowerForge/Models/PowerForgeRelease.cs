@@ -533,6 +533,8 @@ internal sealed class PowerForgeAppleReleasePlan
 
     public string[] ScreenshotConfigPaths { get; set; } = Array.Empty<string>();
 
+    public Dictionary<string, string> ApprovedMutationInputFilesSha256 { get; set; } = new(StringComparer.Ordinal);
+
     public string? MetadataConfigPath { get; set; }
 
     public string[] MetadataConfigPaths { get; set; } = Array.Empty<string>();
