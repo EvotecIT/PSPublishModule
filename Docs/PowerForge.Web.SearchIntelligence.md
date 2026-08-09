@@ -17,7 +17,7 @@ The current release supports imported Search Analytics-style data. It does not y
 
 ## Import contract
 
-The JSON contract is versioned by `schemaVersion`. Provider and site identifiers are normalized to lowercase. Every collection run and row receives a deterministic SHA-256 identity from its evidence. Re-importing the same run is safe: the SQLite store ignores identities it already contains and rejects a caller-supplied run ID if it points at different normalized evidence.
+The JSON contract is versioned by `schemaVersion`. Provider and site identifiers are normalized to lowercase. When `runId` is omitted, the collection run receives a deterministic SHA-256 identity from its normalized evidence; each row then receives a deterministic identity scoped to that run. A caller may instead supply a stable run ID from an external collection system. Re-importing the same normalized run ID is safe: the SQLite store ignores identities it already contains and rejects that ID if it points at different normalized evidence.
 
 ```json
 {
@@ -60,7 +60,7 @@ powerforge-web observe import `
 
 Use `--provider` or `--site` only when an export format cannot carry those fields. Overrides still pass through the same normalization and validation.
 
-The import result reports input, inserted and duplicate counts plus the database schema version. The stored run keeps the normalized manifest and a non-secret evidence reference. Providers may revise recent daily metrics, so later collection runs remain immutable revisions while reports select only the latest snapshot for each provider/site/date/dimension. Raw provider payloads should remain in a separately governed evidence location; do not put access tokens or private account data in the import file.
+The import result reports input, inserted and duplicate counts plus the database schema version. The stored run keeps the normalized manifest and a non-secret evidence reference. Providers may revise recent daily metrics, so later collection runs remain immutable revisions while reports select only the latest snapshot for each provider/site/date/dimension. A provider/site pair may have only one run at a given `collectedAtUtc`; collectors must use the actual completion time so competing revisions never rely on arbitrary ID ordering. Raw provider payloads should remain in a separately governed evidence location; do not put access tokens or private account data in the import file.
 
 ## List opportunities
 

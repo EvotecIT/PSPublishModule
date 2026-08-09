@@ -72,8 +72,7 @@ public sealed class WebSearchIntelligenceTests
             "Schemas",
             "powerforge.web.search-observations.schema.json"));
         var schema = JsonSchema.FromText(File.ReadAllText(schemaPath));
-        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-        var serialized = JsonSerializer.Serialize(CreateBatch(), options);
+        var serialized = JsonSerializer.Serialize(CreateBatch());
         var valid = JsonNode.Parse(serialized)!;
         var invalid = JsonNode.Parse(serialized)!;
         invalid["observations"]![0]!["page"] = null;
@@ -85,6 +84,29 @@ public sealed class WebSearchIntelligenceTests
         Assert.False(schema.Evaluate(invalid, new EvaluationOptions()).IsValid);
         Assert.False(schema.Evaluate(unknown, new EvaluationOptions()).IsValid);
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<WebSearchObservationBatch>(unknown.ToJsonString(), WebCliJson.Options));
+    }
+
+    [Fact]
+    public void IdentityFraming_DistinguishesControlCharactersAcrossDimensions()
+    {
+        var firstBatch = CreateBatch();
+        firstBatch.Observations[0].Query = "a\u001fb";
+        firstBatch.Observations[0].Country = "c";
+        var secondBatch = CreateBatch();
+        secondBatch.Observations[0].Query = "a";
+        secondBatch.Observations[0].Country = "b\u001fc";
+
+        var first = WebSearchObservationNormalizer.Normalize(firstBatch);
+        var second = WebSearchObservationNormalizer.Normalize(secondBatch);
+        var report = WebSearchOpportunityAnalyzer.Analyze(
+            first.Observations.Concat(second.Observations),
+            new WebSearchOpportunityOptions { SiteId = "officeimo" },
+            new DateTimeOffset(2026, 8, 4, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.NotEqual(first.RunId, second.RunId);
+        Assert.NotEqual(first.Observations[0].ObservationKey, second.Observations[0].ObservationKey);
+        Assert.Equal(4, report.Opportunities.Length);
+        Assert.Equal(4, report.Opportunities.Select(opportunity => opportunity.OpportunityId).Distinct().Count());
     }
 
     [Fact]
@@ -223,6 +245,33 @@ public sealed class WebSearchIntelligenceTests
     }
 
     [Fact]
+    public async Task SqliteStore_RejectsCompetingRevisionsAtTheSameCollectionTime()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var databasePath = Path.Combine(root, "search.db");
+            var first = WebSearchObservationNormalizer.Normalize(CreateBatch());
+            var competingInput = CreateBatch();
+            competingInput.Observations[0].Clicks = 4;
+            competingInput.Observations[0].Impressions = 120;
+            var competing = WebSearchObservationNormalizer.Normalize(competingInput);
+            var store = new SqliteWebSearchObservationStore(databasePath);
+            await store.ImportAsync(first);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => store.ImportAsync(competing));
+
+            Assert.Contains("collection time", exception.Message, StringComparison.Ordinal);
+            var current = Assert.Single(await store.QueryAsync(new WebSearchObservationQuery { SiteId = "officeimo" }));
+            Assert.Equal(first.Observations[0].ObservationKey, current.ObservationKey);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Cli_ImportsAndReportsThroughStableCommandSurface()
     {
         var root = CreateTemporaryDirectory();
@@ -269,6 +318,40 @@ public sealed class WebSearchIntelligenceTests
                 outputSchemaVersion: 1);
 
             Assert.Equal(2, exitCode);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("schemaVersion", false)]
+    [InlineData("clicks", true)]
+    [InlineData("impressions", true)]
+    public void Cli_ObserveImport_RejectsMissingRequiredContractMembers(string propertyName, bool observationProperty)
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var inputPath = Path.Combine(root, "observations.json");
+            var databasePath = Path.Combine(root, "search.db");
+            var document = JsonNode.Parse(JsonSerializer.Serialize(CreateBatch()))!.AsObject();
+            var target = observationProperty
+                ? document["observations"]![0]!.AsObject()
+                : document;
+            Assert.True(target.Remove(propertyName));
+            File.WriteAllText(inputPath, document.ToJsonString());
+
+            var exitCode = WebCliCommandHandlers.HandleSubCommand(
+                "observe",
+                new[] { "import", "--input", inputPath, "--database", databasePath },
+                outputJson: true,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: 1);
+
+            Assert.Equal(2, exitCode);
+            Assert.False(File.Exists(databasePath));
         }
         finally
         {

@@ -1,6 +1,4 @@
 using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace PowerForge.Web;
 
@@ -192,8 +190,7 @@ public static class WebSearchOpportunityAnalyzer
 
     private static string ComputeOpportunityId(string ruleId, ObservationGroupKey key, DateOnly fromDate, DateOnly throughDate)
     {
-        var value = string.Join('\u001f', new[]
-        {
+        return WebSearchIdentityHasher.Compute(
             ruleId,
             key.Provider,
             key.SiteId,
@@ -203,9 +200,7 @@ public static class WebSearchOpportunityAnalyzer
             key.Device ?? string.Empty,
             key.SearchType ?? string.Empty,
             fromDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            throughDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
-        });
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+            throughDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
     }
 
     private static void ValidateOptions(WebSearchOpportunityOptions options)

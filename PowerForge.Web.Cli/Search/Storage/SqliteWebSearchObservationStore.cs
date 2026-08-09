@@ -44,6 +44,8 @@ internal sealed class SqliteWebSearchObservationStore
             ON search_observations(site_id, observation_date);
         CREATE INDEX IF NOT EXISTS ix_search_observations_provider_site_date
             ON search_observations(provider, site_id, observation_date);
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_search_observation_runs_provider_site_collected
+            ON search_observation_runs(provider, site_id, collected_at_utc);
         PRAGMA user_version = 1;
         """;
 
@@ -92,6 +94,11 @@ internal sealed class SqliteWebSearchObservationStore
                         static record => record.GetString(0),
                         new Dictionary<string, object?> { ["@run_id"] = normalizedBatch.RunId },
                         cancellationToken: token).ConfigureAwait(false);
+                    if (existingManifest.Count == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Search collection time '{normalizedBatch.CollectedAtUtc:O}' is already assigned to another run for provider '{normalizedBatch.Provider}' and site '{normalizedBatch.SiteId}'.");
+                    }
                     if (existingManifest.Count != 1 ||
                         !string.Equals(existingManifest[0], normalizedManifestJson, StringComparison.Ordinal))
                     {

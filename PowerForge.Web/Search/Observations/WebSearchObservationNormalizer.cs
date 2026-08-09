@@ -1,6 +1,4 @@
 using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace PowerForge.Web;
 
@@ -155,11 +153,11 @@ public static class WebSearchObservationNormalizer
 
     private static string? NormalizeOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static string ComputeObservationKey(string runId, WebSearchObservation observation) => ComputeHash(
+    private static string ComputeObservationKey(string runId, WebSearchObservation observation) => WebSearchIdentityHasher.Compute(
         runId,
         ComputeObservationContentFingerprint(observation));
 
-    private static string ComputeObservationContentFingerprint(WebSearchObservation observation) => ComputeHash(
+    private static string ComputeObservationContentFingerprint(WebSearchObservation observation) => WebSearchIdentityHasher.Compute(
         observation.Provider,
         observation.SiteId,
         observation.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
@@ -174,7 +172,7 @@ public static class WebSearchObservationNormalizer
         observation.AveragePosition?.ToString("R", CultureInfo.InvariantCulture),
         observation.EvidenceReference);
 
-    private static string ComputeObservationDimensionFingerprint(WebSearchObservation observation) => ComputeHash(
+    private static string ComputeObservationDimensionFingerprint(WebSearchObservation observation) => WebSearchIdentityHasher.Compute(
         observation.Provider,
         observation.SiteId,
         observation.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
@@ -184,7 +182,7 @@ public static class WebSearchObservationNormalizer
         observation.Device,
         observation.SearchType);
 
-    private static string ComputeRunId(WebSearchObservationBatch batch) => ComputeHash(
+    private static string ComputeRunId(WebSearchObservationBatch batch) => WebSearchIdentityHasher.Compute(
         batch.Provider,
         batch.SiteId,
         batch.CollectedAtUtc.ToString("O", CultureInfo.InvariantCulture),
@@ -193,10 +191,4 @@ public static class WebSearchObservationNormalizer
         batch.ConfigurationHash,
         batch.EvidenceReference,
         string.Join("|", batch.Observations.Select(ComputeObservationContentFingerprint)));
-
-    private static string ComputeHash(params string?[] values)
-    {
-        var material = string.Join('\u001f', values.Select(value => value ?? string.Empty));
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(material))).ToLowerInvariant();
-    }
 }
