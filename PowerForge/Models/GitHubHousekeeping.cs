@@ -176,6 +176,11 @@ public sealed class GitHubHousekeepingRunnerSpec
     public string? ToolCachePath { get; set; }
 
     /// <summary>
+    /// Optional explicit .NET installation root. When omitted, <c>DOTNET_ROOT</c> is used.
+    /// </summary>
+    public string? DotNetRootPath { get; set; }
+
+    /// <summary>
     /// Minimum free disk required after cleanup, in GiB.
     /// </summary>
     public int? MinFreeGb { get; set; } = 20;
@@ -205,6 +210,11 @@ public sealed class GitHubHousekeepingRunnerSpec
     /// Retention window for tool cache directories.
     /// </summary>
     public int ToolCacheRetentionDays { get; set; } = 30;
+
+    /// <summary>
+    /// Number of newest stable SDKs retained for each installed major/minor line.
+    /// </summary>
+    public int DotNetSdkVersionsToKeepPerMajorMinor { get; set; } = 1;
 
     /// <summary>
     /// Forces aggressive cleanup.
@@ -241,6 +251,11 @@ public sealed class GitHubHousekeepingRunnerSpec
     /// Enables <c>dotnet nuget locals all --clear</c>.
     /// </summary>
     public bool ClearDotNetCaches { get; set; } = true;
+
+    /// <summary>
+    /// Enables conservative pruning of superseded unowned stable SDK directories on Linux.
+    /// </summary>
+    public bool PruneDotNetSdks { get; set; }
 
     /// <summary>
     /// Enables Docker prune.

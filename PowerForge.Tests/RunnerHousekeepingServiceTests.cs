@@ -477,10 +477,93 @@ public sealed class RunnerHousekeepingServiceTests
             Command = "dotnet nuget locals all --clear",
             ExitCode = 1
         };
+        var sdkDirectoryFailure = new RunnerHousekeepingStepResult
+        {
+            Id = "dotnet-sdk-prune",
+            Success = false,
+            Message = "Deleted 2 item(s); failed 1 item(s)."
+        };
 
         Assert.False(RunnerHousekeepingService.IsRunnerStepFailureFatal(lockedWorkspaceFailure, freeRequirementMet: true));
         Assert.True(RunnerHousekeepingService.IsRunnerStepFailureFatal(lockedWorkspaceFailure, freeRequirementMet: false));
+        Assert.False(RunnerHousekeepingService.IsRunnerStepFailureFatal(sdkDirectoryFailure, freeRequirementMet: true));
+        Assert.True(RunnerHousekeepingService.IsRunnerStepFailureFatal(sdkDirectoryFailure, freeRequirementMet: false));
         Assert.True(RunnerHousekeepingService.IsRunnerStepFailureFatal(commandFailure, freeRequirementMet: true));
+    }
+
+    [Fact]
+    public void SelectDotNetSdkDirectoriesToPrune_PreservesActiveLatestPackageOwnedAndUnknownSdks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.RunnerHousekeepingSdkSelection");
+        var directories = new[]
+        {
+            Path.Combine(root, "8.0.411"),
+            Path.Combine(root, "8.0.420"),
+            Path.Combine(root, "8.0.423"),
+            Path.Combine(root, "9.0.203"),
+            Path.Combine(root, "9.0.315"),
+            Path.Combine(root, "9.0.316"),
+            Path.Combine(root, "10.0.101"),
+            Path.Combine(root, "10.0.201"),
+            Path.Combine(root, "10.0.302"),
+            Path.Combine(root, "10.0.303-preview.1"),
+            Path.Combine(root, "10.0"),
+            Path.Combine(root, "10.0.302.1"),
+            Path.Combine(root, "010.0.302"),
+            Path.Combine(root, "metadata")
+        };
+
+        var result = RunnerHousekeepingService.SelectDotNetSdkDirectoriesToPrune(
+            directories,
+            activeVersion: "10.0.201",
+            protectedDirectories: new[] { Path.Combine(root, "8.0.411"), Path.Combine(root, "9.0.203") },
+            versionsToKeepPerMajorMinor: 1);
+
+        Assert.Equal(
+            new[]
+            {
+                Path.GetFullPath(Path.Combine(root, "8.0.420")),
+                Path.GetFullPath(Path.Combine(root, "9.0.315")),
+                Path.GetFullPath(Path.Combine(root, "10.0.101"))
+            },
+            result);
+    }
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, false)]
+    [InlineData(2, true)]
+    [InlineData(127, true)]
+    public void IsPackageOwnershipProbeFailureFatal_FailsClosedOnUnexpectedErrors(int exitCode, bool expected)
+    {
+        Assert.Equal(expected, RunnerHousekeepingService.IsPackageOwnershipProbeFailureFatal(exitCode));
+    }
+
+    [Theory]
+    [InlineData("8.0.423", true)]
+    [InlineData("8.0", false)]
+    [InlineData("8.0.423.1", false)]
+    [InlineData("08.0.423", false)]
+    [InlineData("8.0.424-preview.1", false)]
+    [InlineData("metadata", false)]
+    public void TryParseStableSdkVersion_RequiresCanonicalThreePartVersion(string value, bool expected)
+    {
+        Assert.Equal(expected, RunnerHousekeepingService.TryParseStableSdkVersion(value, out _));
+    }
+
+    [Fact]
+    public void ResolveActiveSdkProbePath_PrefersValidatedGitHubWorkspace()
+    {
+        var root = CreateSandbox();
+        var workspace = Directory.CreateDirectory(Path.Combine(root, "workspace")).FullName;
+        var outputDirectory = Directory.CreateDirectory(Path.Combine(root, "bin", "Release")).FullName;
+
+        Assert.Equal(
+            Path.GetFullPath(workspace),
+            RunnerHousekeepingService.ResolveActiveSdkProbePath(workspace, outputDirectory));
+        Assert.Equal(
+            Path.GetFullPath(outputDirectory),
+            RunnerHousekeepingService.ResolveActiveSdkProbePath(Path.Combine(root, "missing"), outputDirectory));
     }
 
     private static string CreateSandbox()
