@@ -825,6 +825,43 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleAdoptionPlan_BindsTheObservedRemoteBuild()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var processingState = (string?)null;
+            var service = CreateAppleAutomationService(request => CreateReleaseState(request, processingState));
+            var request = new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.UploadExisting,
+                AppleAdoptExistingBuild = true,
+                AppleActionConfirmed = true,
+                PlanOnly = true
+            };
+
+            var withoutBuild = service.Execute(CreateAppleAutomationSpec(root, keyPath), request);
+            processingState = "VALID";
+            var withBuild = service.Execute(CreateAppleAutomationSpec(root, keyPath), request);
+
+            var absentTarget = Assert.Single(withoutBuild.AppleReceipt!.Targets);
+            var presentTarget = Assert.Single(withBuild.AppleReceipt!.Targets);
+            Assert.Null(absentTarget.BuildId);
+            Assert.Equal("build-id", presentTarget.BuildId);
+            Assert.Equal("VALID", presentTarget.BuildProcessingState);
+            Assert.NotEqual(withoutBuild.AppleReceipt.PlanSha256, withBuild.AppleReceipt.PlanSha256);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleStatus_PreservesBetaReviewActionWhenGroupIsConfigured()
     {
         var root = CreateSandbox();

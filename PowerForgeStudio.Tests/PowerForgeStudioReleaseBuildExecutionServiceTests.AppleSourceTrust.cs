@@ -548,6 +548,28 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains("Ignored Apple build input", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("--skip-worktree")]
+    [InlineData("--assume-unchanged")]
+    public void ResolveExactAppleSourceCommit_rejects_hidden_index_state_on_xcode_input(string indexFlag)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("HiddenIndexAppleInputRepo");
+        var project = scope.CreateDirectory(Path.Combine("HiddenIndexAppleInputRepo", "Sample.xcodeproj"));
+        var projectFile = Path.Combine(project, "project.pbxproj");
+        File.WriteAllText(projectFile, "// committed project");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+        RunGit(repositoryRoot, "update-index", indexFlag, "Sample.xcodeproj/project.pbxproj");
+        File.WriteAllText(projectFile, "// hidden replacement project");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("skip-worktree or assume-unchanged", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("project.pbxproj", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ResolveExactAppleSourceCommit_rejects_unlocked_remote_swift_package()
     {
@@ -571,6 +593,36 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 
         Assert.Contains("Package.resolved", exception.Message, StringComparison.Ordinal);
         Assert.Contains("exact", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_lock_for_substring_package_identity()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("SubstringPackageLockRepo");
+        var project = scope.CreateDirectory(Path.Combine("SubstringPackageLockRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            """
+            000000000000000000000001 = {
+                isa = XCRemoteSwiftPackageReference;
+                repositoryURL = "https://example.invalid/foo.git";
+                requirement = { kind = upToNextMajorVersion; minimumVersion = 1.0.0; };
+            };
+            """);
+        var lockDirectory = scope.CreateDirectory(Path.Combine(
+            "SubstringPackageLockRepo", "Sample.xcodeproj", "project.xcworkspace", "xcshareddata", "swiftpm"));
+        File.WriteAllText(
+            Path.Combine(lockDirectory, "Package.resolved"),
+            """{ "pins": [ { "identity": "foo-tools", "location": "https://example.invalid/foo-tools.git", "state": { "revision": "0123456789abcdef0123456789abcdef01234567" } } ] }""");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("https://example.invalid/foo.git", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Package.resolved", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

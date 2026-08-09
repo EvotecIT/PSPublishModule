@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Text.Json;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -442,20 +443,98 @@ internal sealed partial class AppleReleaseSourceTrustService
         IReadOnlyCollection<string> searchRoots,
         string dependencyIdentity)
     {
-        var shortIdentity = Path.GetFileNameWithoutExtension(dependencyIdentity.TrimEnd('/'));
         return RunGit(repositoryRoot, "ls-files", "-z")
             .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
             .Where(static path => Path.GetFileName(path).Equals("Package.resolved", StringComparison.OrdinalIgnoreCase))
             .Select(path => Path.GetFullPath(Path.Combine(repositoryRoot, path)))
             .Where(path => searchRoots.Any(root => IsPathAtOrWithin(path, root)))
-            .Where(path =>
-            {
-                var text = File.ReadAllText(path);
-                return text.Contains(dependencyIdentity, StringComparison.OrdinalIgnoreCase) ||
-                       (!string.IsNullOrWhiteSpace(shortIdentity) &&
-                        text.Contains(shortIdentity, StringComparison.OrdinalIgnoreCase));
-            })
+            .Where(path => PackageLockBindsDependency(path, dependencyIdentity))
             .ToArray();
+    }
+
+    private static bool PackageLockBindsDependency(string path, string dependencyIdentity)
+    {
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(File.ReadAllText(path));
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidOperationException($"Swift package resolution lock is not valid JSON: {path}", exception);
+        }
+
+        using (document)
+        {
+            var root = document.RootElement;
+            JsonElement pins;
+            if (root.TryGetProperty("pins", out pins) ||
+                (root.TryGetProperty("object", out var legacyObject) &&
+                 legacyObject.TryGetProperty("pins", out pins)))
+            {
+                if (pins.ValueKind != JsonValueKind.Array)
+                    return false;
+                foreach (var pin in pins.EnumerateArray())
+                {
+                    if (!PackagePinMatchesIdentity(pin, dependencyIdentity) ||
+                        !pin.TryGetProperty("state", out var state))
+                    {
+                        continue;
+                    }
+
+                    var revision = ReadJsonString(state, "revision");
+                    if (!string.IsNullOrWhiteSpace(revision) &&
+                        revision!.Length == 40 &&
+                        revision.All(Uri.IsHexDigit))
+                    {
+                        return true;
+                    }
+
+                    if (!LooksLikeRepositoryLocation(dependencyIdentity) &&
+                        !string.IsNullOrWhiteSpace(ReadJsonString(state, "version")))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool PackagePinMatchesIdentity(JsonElement pin, string dependencyIdentity)
+    {
+        var location = ReadJsonString(pin, "location") ?? ReadJsonString(pin, "repositoryURL");
+        if (LooksLikeRepositoryLocation(dependencyIdentity))
+        {
+            return !string.IsNullOrWhiteSpace(location) &&
+                   NormalizePackageLocation(location!).Equals(
+                       NormalizePackageLocation(dependencyIdentity),
+                       StringComparison.OrdinalIgnoreCase);
+        }
+
+        var identity = ReadJsonString(pin, "identity") ?? ReadJsonString(pin, "package") ?? location;
+        return !string.IsNullOrWhiteSpace(identity) &&
+               identity!.Trim().Equals(dependencyIdentity.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ReadJsonString(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+
+    private static bool LooksLikeRepositoryLocation(string value)
+        => value.Contains("://", StringComparison.Ordinal) ||
+           value.StartsWith("git@", StringComparison.OrdinalIgnoreCase) ||
+           value.IndexOf('/') >= 0 ||
+           value.EndsWith(".git", StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizePackageLocation(string value)
+    {
+        var normalized = value.Trim().TrimEnd('/');
+        return normalized.EndsWith(".git", StringComparison.OrdinalIgnoreCase)
+            ? normalized.Substring(0, normalized.Length - 4)
+            : normalized;
     }
 
     private static string[] ResolvePackageLockSearchRoots(
@@ -567,9 +646,17 @@ internal sealed partial class AppleReleaseSourceTrustService
     {
         EnsureDirectoryWithinRepository(repositoryRoot, path, name);
         var relativeRoot = FrameworkCompatibility.GetRelativePath(repositoryRoot, path).Replace('\\', '/');
-        var tracked = RunGit(repositoryRoot, "ls-files", "-z", "--", relativeRoot)
-            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(entry => Path.GetFullPath(Path.Combine(repositoryRoot, entry)))
+        var indexEntries = RunGit(repositoryRoot, "ls-files", "-v", "-z", "--", relativeRoot)
+            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+        var hiddenEntry = indexEntries.FirstOrDefault(HasHiddenGitIndexState);
+        if (hiddenEntry is not null)
+        {
+            throw new InvalidOperationException(
+                $"{name} contains a skip-worktree or assume-unchanged Git index entry and cannot be attested: {hiddenEntry.Substring(2)}");
+        }
+        var tracked = indexEntries
+            .Where(static entry => entry.Length > 2 && entry[1] == ' ')
+            .Select(entry => Path.GetFullPath(Path.Combine(repositoryRoot, entry.Substring(2))))
             .ToHashSet(GetPathComparer());
         foreach (var entry in Directory.EnumerateFileSystemEntries(path, "*", SearchOption.AllDirectories))
         {

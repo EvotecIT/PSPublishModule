@@ -172,7 +172,8 @@ internal sealed partial class PowerForgeReleaseService
             return true;
         }
 
-        return plan.SubmitTestFlightBetaReview ||
+        return plan.AdoptExistingBuild ||
+               plan.SubmitTestFlightBetaReview ||
                plan.SubmitForReview ||
                plan.ReleaseApprovedVersion;
     }

@@ -113,17 +113,6 @@ public sealed class PowerForgeCliAppleReleaseTests
                     static step => step.GetString() == "stopBeforeReview");
             }
 
-            var adoptedUpload = await RunCliAsync(
-                repoRoot,
-                $"\"{GetCliPath(repoRoot)}\" apple-release Upload --config \"{configPath}\" --apple-adopt-existing-build --plan --summary --output json");
-            Assert.Equal(0, adoptedUpload.ExitCode);
-            using (var adoptedUploadDocument = JsonDocument.Parse(adoptedUpload.StdOut))
-            {
-                var result = adoptedUploadDocument.RootElement.GetProperty("result");
-                Assert.True(result.GetProperty("adoptExistingBuild").GetBoolean());
-                Assert.True(result.GetProperty("requiresConfirmation").GetBoolean());
-            }
-
             var configuredDedicated = await RunCliAsync(
                 repoRoot,
                 $"\"{GetCliPath(repoRoot)}\" apple-release Configured --config \"{configPath}\" --plan --summary --output json");

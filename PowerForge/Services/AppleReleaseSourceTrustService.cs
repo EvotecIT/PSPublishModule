@@ -464,13 +464,27 @@ internal sealed partial class AppleReleaseSourceTrustService
         EnsureNoLinkedTraversal(repositoryRoot, candidate, name);
 
         var relative = FrameworkCompatibility.GetRelativePath(repositoryRoot, candidate).Replace('\\', '/');
-        var tracked = RunGitAllowFailure(repositoryRoot, "ls-files", "--error-unmatch", "--", relative);
+        var tracked = RunGitAllowFailure(repositoryRoot, "ls-files", "-v", "--error-unmatch", "--", relative);
         if (!tracked.Succeeded)
             throw new InvalidOperationException($"{name} must be tracked at the exact source commit: {relative}");
+        var indexEntry = tracked.StdOut
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault();
+        if (HasHiddenGitIndexState(indexEntry))
+        {
+            throw new InvalidOperationException(
+                $"{name} uses a skip-worktree or assume-unchanged Git index flag and cannot be attested to the exact source commit: {relative}");
+        }
         var unchanged = RunGitAllowFailure(repositoryRoot, "diff", "--quiet", "HEAD", "--", relative);
         if (unchanged.ExitCode != 0)
             throw new InvalidOperationException($"{name} differs from the exact source commit: {relative}");
     }
+
+    private static bool HasHiddenGitIndexState(string? entry)
+        => !string.IsNullOrWhiteSpace(entry) &&
+           entry!.Length > 2 &&
+           entry[1] == ' ' &&
+           (entry[0] == 'S' || char.IsLower(entry[0]));
 
     private static void EnsureDirectoryWithinRepository(string repositoryRoot, string path, string name)
     {
