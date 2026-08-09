@@ -18,13 +18,19 @@ internal static partial class WebCliCommandHandlers
         var missingValueOption = FindSearchOptionWithoutValue(args, "--config", "--output");
         if (missingValueOption is not null)
             return FailSearch($"{missingValueOption} requires a value.", outputJson, logger, "web.provider.doctor");
-        var unexpectedArgument = FindUnexpectedProviderArgument(args, "--config", "--output");
+        var duplicateOption = FindDuplicateProviderOption(args, "--config", "--output");
+        if (duplicateOption is not null)
+            return FailSearch($"Provider doctor accepts {duplicateOption} only once.", outputJson, logger, "web.provider.doctor");
+        var unexpectedArgument = FindUnexpectedProviderArgument(args);
         if (unexpectedArgument is not null)
             return FailSearch($"Provider doctor does not recognize argument '{unexpectedArgument}'.", outputJson, logger, "web.provider.doctor");
 
         var configPath = TryGetOptionValue(args, "--config");
         if (string.IsNullOrWhiteSpace(configPath))
             return FailSearch("Provider doctor requires --config.", outputJson, logger, "web.provider.doctor");
+        var outputFormat = TryGetOptionValue(args, "--output");
+        if (!string.IsNullOrWhiteSpace(outputFormat) && !outputFormat.Equals("json", StringComparison.OrdinalIgnoreCase))
+            return FailSearch("Provider doctor supports only '--output json'.", outputJson, logger, "web.provider.doctor");
 
         try
         {
@@ -89,12 +95,36 @@ internal static partial class WebCliCommandHandlers
         return string.Empty;
     }
 
-    private static string? FindUnexpectedProviderArgument(string[] args, params string[] optionNames)
+    private static string? FindUnexpectedProviderArgument(string[] args)
     {
-        for (var index = 0; index < args.Length; index += 2)
+        for (var index = 0; index < args.Length; index++)
         {
-            if (!optionNames.Contains(args[index], StringComparer.OrdinalIgnoreCase))
-                return args[index];
+            var argument = args[index];
+            if (argument.Equals("--json", StringComparison.OrdinalIgnoreCase) ||
+                argument.Equals("--output-json", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (argument.Equals("--config", StringComparison.OrdinalIgnoreCase) ||
+                argument.Equals("--output", StringComparison.OrdinalIgnoreCase))
+            {
+                index++;
+                continue;
+            }
+
+            return argument;
+        }
+
+        return null;
+    }
+
+    private static string? FindDuplicateProviderOption(string[] args, params string[] optionNames)
+    {
+        foreach (var optionName in optionNames)
+        {
+            if (args.Count(argument => argument.Equals(optionName, StringComparison.OrdinalIgnoreCase)) > 1)
+                return optionName;
         }
 
         return null;

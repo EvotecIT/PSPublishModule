@@ -28,6 +28,7 @@ public static class WebSearchProviderConfigurationLoader
                 ReadCommentHandling = JsonCommentHandling.Skip
             }
             : new JsonSerializerOptions(options);
+        serializerOptions.PropertyNameCaseInsensitive = false;
         var configuration = JsonSerializer.Deserialize<WebSearchProviderConfiguration>(
             File.ReadAllText(fullPath),
             serializerOptions);

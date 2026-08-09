@@ -70,6 +70,45 @@ public sealed class WebSearchProviderDoctorTests
     }
 
     [Fact]
+    public void Doctor_NeverMarksProvidersReadyWhenAConfigurationWideErrorExists()
+    {
+        var configuration = CreateGoogleConfiguration();
+        configuration.SchemaVersion = 2;
+
+        var result = WebSearchProviderDoctor.Inspect(
+            configuration,
+            _ => "credential-value",
+            new HashSet<string>(["google-search-console"], StringComparer.OrdinalIgnoreCase));
+
+        Assert.False(result.Success);
+        Assert.False(Assert.Single(result.Providers).ConfigurationReady);
+        Assert.False(Assert.Single(result.Providers).CollectionReady);
+    }
+
+    [Fact]
+    public void Doctor_MarksEveryOccurrenceOfADuplicateProviderIdentityNotReady()
+    {
+        var configuration = CreateGoogleConfiguration();
+        configuration.Sites[0].Providers =
+        [
+            configuration.Sites[0].Providers[0],
+            CreateGoogleConfiguration().Sites[0].Providers[0]
+        ];
+
+        var result = WebSearchProviderDoctor.Inspect(
+            configuration,
+            _ => "credential-value",
+            new HashSet<string>(["google-search-console"], StringComparer.OrdinalIgnoreCase));
+
+        Assert.False(result.Success);
+        Assert.All(result.Providers, provider =>
+        {
+            Assert.False(provider.ConfigurationReady);
+            Assert.False(provider.CollectionReady);
+        });
+    }
+
+    [Fact]
     public void ConfigurationFingerprint_IsStableAcrossFleetOrderingAndChangesWithIntent()
     {
         var first = CreateGoogleConfiguration();
@@ -91,6 +130,19 @@ public sealed class WebSearchProviderDoctorTests
         Assert.NotEqual(
             WebSearchProviderConfigurationFingerprint.Compute(first),
             WebSearchProviderConfigurationFingerprint.Compute(changed));
+    }
+
+    [Fact]
+    public void ConfigurationFingerprint_RedactsForbiddenSecretSettingValues()
+    {
+        var first = CreateGoogleConfiguration();
+        first.Sites[0].Providers[0].Settings["password"] = "first-candidate";
+        var second = CreateGoogleConfiguration();
+        second.Sites[0].Providers[0].Settings["password"] = "second-candidate";
+
+        Assert.Equal(
+            WebSearchProviderConfigurationFingerprint.Compute(first),
+            WebSearchProviderConfigurationFingerprint.Compute(second));
     }
 
     [Fact]
@@ -134,6 +186,60 @@ public sealed class WebSearchProviderDoctorTests
     }
 
     [Fact]
+    public void Loader_RejectsSchemaPropertyCasingThatThePublishedSchemaRejects()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var configPath = Path.Combine(root, "providers.json");
+            var document = JsonNode.Parse(JsonSerializer.Serialize(CreateGoogleConfiguration()))!.AsObject();
+            document["SchemaVersion"] = document["schemaVersion"]!.DeepClone();
+            document.Remove("schemaVersion");
+            File.WriteAllText(configPath, document.ToJsonString());
+
+            Assert.Throws<JsonException>(() =>
+                WebSearchProviderConfigurationLoader.LoadWithPath(configPath, WebCliJson.Options));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Doctor_RejectsNoncanonicalIdentityAndEnvironmentValues()
+    {
+        var configuration = CreateGoogleConfiguration();
+        configuration.Sites[0].Id = " officeimo ";
+        configuration.Sites[0].Providers[0].Kind = " GOOGLE-SEARCH-CONSOLE ";
+        configuration.Sites[0].Providers[0].Credential!.EnvironmentVariable = " POWERFORGE_TEST_GSC ";
+
+        var result = WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Checks, check => check.Code == "site.id-noncanonical");
+        Assert.Contains(result.Checks, check => check.Code == "provider.kind-invalid");
+        Assert.Contains(result.Checks, check => check.Code == "provider.credential-environment-invalid");
+    }
+
+    [Theory]
+    [InlineData("sc-domain:")]
+    [InlineData("sc-domain:https://officeimo.com")]
+    [InlineData("sc-domain:bad value")]
+    [InlineData("SC-DOMAIN:officeimo.com")]
+    public void Doctor_RejectsMalformedSearchConsoleDomainProperties(string property)
+    {
+        var configuration = CreateGoogleConfiguration();
+        configuration.Sites[0].Providers[0].Settings["property"] = property;
+
+        var result = WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Checks, check => check.Code == "provider.gsc-property-invalid");
+        Assert.False(Assert.Single(result.Providers).ConfigurationReady);
+    }
+
+    [Fact]
     public void Cli_ProviderDoctor_UsesTheSharedConfigurationContract()
     {
         var examplePath = RepositoryPath("Examples", "PowerForge.Web", "Search", "providers.json");
@@ -174,6 +280,53 @@ public sealed class WebSearchProviderDoctorTests
             outputSchemaVersion: 1);
 
         Assert.Equal(2, exitCode);
+    }
+
+    [Fact]
+    public void Cli_ProviderDoctor_RejectsUnsupportedOutputFormats()
+    {
+        var examplePath = RepositoryPath("Examples", "PowerForge.Web", "Search", "providers.json");
+
+        var exitCode = WebCliCommandHandlers.HandleSubCommand(
+            "provider",
+            ["doctor", "--config", examplePath, "--output", "yaml"],
+            outputJson: false,
+            logger: new WebConsoleLogger(),
+            outputSchemaVersion: 1);
+
+        Assert.Equal(2, exitCode);
+    }
+
+    [Fact]
+    public void Cli_ProviderDoctor_RejectsRepeatedValueOptions()
+    {
+        var examplePath = RepositoryPath("Examples", "PowerForge.Web", "Search", "providers.json");
+
+        var exitCode = WebCliCommandHandlers.HandleSubCommand(
+            "provider",
+            ["doctor", "--config", examplePath, "--output", "json", "--output", "yaml"],
+            outputJson: true,
+            logger: new WebConsoleLogger(),
+            outputSchemaVersion: 1);
+
+        Assert.Equal(2, exitCode);
+    }
+
+    [Theory]
+    [InlineData("--json")]
+    [InlineData("--output-json")]
+    public void Cli_ProviderDoctor_AcceptsGlobalJsonAliases(string alias)
+    {
+        var examplePath = RepositoryPath("Examples", "PowerForge.Web", "Search", "providers.json");
+
+        var exitCode = WebCliCommandHandlers.HandleSubCommand(
+            "provider",
+            ["doctor", "--config", examplePath, alias],
+            outputJson: true,
+            logger: new WebConsoleLogger(),
+            outputSchemaVersion: 1);
+
+        Assert.Equal(0, exitCode);
     }
 
     private static WebSearchProviderConfiguration CreateGoogleConfiguration() => new()

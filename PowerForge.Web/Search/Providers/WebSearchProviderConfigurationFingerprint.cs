@@ -46,7 +46,9 @@ public static class WebSearchProviderConfigurationFingerprint
                 {
                     values.Add("setting");
                     values.Add(Normalize(setting.Key));
-                    values.Add(setting.Value?.Trim());
+                    values.Add(WebSearchProviderSecretPolicy.IsSecretSettingName(setting.Key)
+                        ? "[redacted-secret-setting]"
+                        : setting.Value?.Trim());
                 }
             }
         }
@@ -62,4 +64,16 @@ public static class WebSearchProviderConfigurationFingerprint
             return Normalize(value);
         return uri.AbsoluteUri;
     }
+}
+
+internal static class WebSearchProviderSecretPolicy
+{
+    private static readonly string[] SecretSettingTokens =
+    [
+        "credential", "password", "private", "secret", "token", "api-key", "apikey"
+    ];
+
+    internal static bool IsSecretSettingName(string? name) =>
+        !string.IsNullOrWhiteSpace(name) &&
+        SecretSettingTokens.Any(token => name.Contains(token, StringComparison.OrdinalIgnoreCase));
 }

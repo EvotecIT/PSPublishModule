@@ -20,11 +20,6 @@ public static class WebSearchProviderDoctor
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(1));
 
-    private static readonly string[] SecretSettingTokens =
-    [
-        "credential", "password", "private", "secret", "token", "api-key", "apikey"
-    ];
-
     private static readonly IReadOnlyDictionary<string, ProviderDescriptor> ProviderCatalog =
         new Dictionary<string, ProviderDescriptor>(StringComparer.OrdinalIgnoreCase)
         {
@@ -103,15 +98,12 @@ public static class WebSearchProviderDoctor
         foreach (var site in sites)
         {
             var siteId = NormalizeDisplay(site?.Id);
-            var siteErrorCountBefore = checks.Count(check => check.Severity == WebSearchProviderCheckSeverity.Error);
             ValidateSite(site, siteId, siteIds, checks);
-            var siteReady = checks.Count(check => check.Severity == WebSearchProviderCheckSeverity.Error) == siteErrorCountBefore;
             var providers = site?.Providers ?? Array.Empty<WebSearchProviderRegistration>();
             var providerIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var provider in providers)
             {
-                var errorCountBefore = checks.Count(check => check.Severity == WebSearchProviderCheckSeverity.Error);
                 var providerId = NormalizeDisplay(provider?.Id);
                 var kind = NormalizeDisplay(provider?.Kind).ToLowerInvariant();
                 var requestedCapabilities = NormalizeValues(provider?.Capabilities);
@@ -137,8 +129,6 @@ public static class WebSearchProviderDoctor
                 }
 
                 var collectorAvailable = descriptor is not null && availableCollectorKinds.Contains(kind);
-                var errorCountAfter = checks.Count(check => check.Severity == WebSearchProviderCheckSeverity.Error);
-                var configurationReady = siteReady && errorCountAfter == errorCountBefore;
                 if (provider?.Enabled == true && descriptor is not null && !collectorAvailable)
                 {
                     AddCheck(
@@ -157,7 +147,7 @@ public static class WebSearchProviderDoctor
                     ProviderId = providerId,
                     Kind = kind,
                     Enabled = provider?.Enabled == true,
-                    ConfigurationReady = configurationReady,
+                    ConfigurationReady = false,
                     CollectorAvailable = collectorAvailable,
                     RequestedCapabilities = requestedCapabilities,
                     SupportedCapabilities = descriptor?.Capabilities ?? Array.Empty<string>()
@@ -171,6 +161,13 @@ public static class WebSearchProviderDoctor
             .ThenBy(check => check.ProviderId, StringComparer.Ordinal)
             .ThenBy(check => check.Code, StringComparer.Ordinal)
             .ToArray();
+        foreach (var state in states)
+        {
+            state.ConfigurationReady = !orderedChecks.Any(check =>
+                check.Severity == WebSearchProviderCheckSeverity.Error &&
+                (check.SiteId is null || string.Equals(check.SiteId, state.SiteId, StringComparison.OrdinalIgnoreCase)) &&
+                (check.ProviderId is null || string.Equals(check.ProviderId, state.ProviderId, StringComparison.OrdinalIgnoreCase)));
+        }
         return new WebSearchProviderDoctorResult
         {
             Success = orderedChecks.All(check => check.Severity != WebSearchProviderCheckSeverity.Error),
@@ -193,6 +190,15 @@ public static class WebSearchProviderDoctor
         HashSet<string> siteIds,
         List<WebSearchProviderCheck> checks)
     {
+        if (!string.Equals(site?.Id, siteId, StringComparison.Ordinal))
+        {
+            AddCheck(
+                checks,
+                "site.id-noncanonical",
+                WebSearchProviderCheckSeverity.Error,
+                "Site id cannot contain surrounding whitespace.",
+                siteId);
+        }
         if (!IsIdentifier(siteId))
         {
             AddCheck(
@@ -212,7 +218,8 @@ public static class WebSearchProviderDoctor
                 siteId);
         }
 
-        if (!TryGetHttpUrl(site?.BaseUrl, out _))
+        if (!string.Equals(site?.BaseUrl, site?.BaseUrl?.Trim(), StringComparison.Ordinal) ||
+            !TryGetHttpUrl(site?.BaseUrl, out _))
         {
             AddCheck(
                 checks,
@@ -241,6 +248,16 @@ public static class WebSearchProviderDoctor
         HashSet<string> providerIds,
         List<WebSearchProviderCheck> checks)
     {
+        if (!string.Equals(provider?.Id, providerId, StringComparison.Ordinal))
+        {
+            AddCheck(
+                checks,
+                "provider.id-noncanonical",
+                WebSearchProviderCheckSeverity.Error,
+                "Provider id cannot contain surrounding whitespace.",
+                siteId,
+                providerId);
+        }
         if (!IsIdentifier(providerId))
         {
             AddCheck(
@@ -262,7 +279,7 @@ public static class WebSearchProviderDoctor
                 providerId);
         }
 
-        if (!IsIdentifier(kind))
+        if (!string.Equals(provider?.Kind, kind, StringComparison.Ordinal) || !IsIdentifier(kind))
         {
             AddCheck(
                 checks,
@@ -371,7 +388,7 @@ public static class WebSearchProviderDoctor
                     siteId,
                     providerId);
             }
-            if (SecretSettingTokens.Any(token => key.Contains(token, StringComparison.OrdinalIgnoreCase)))
+            if (WebSearchProviderSecretPolicy.IsSecretSettingName(key))
             {
                 AddCheck(
                     checks,
@@ -401,6 +418,16 @@ public static class WebSearchProviderDoctor
                     "provider.setting-empty",
                     WebSearchProviderCheckSeverity.Error,
                     $"Setting '{SafeLabel(key)}' cannot be blank.",
+                    siteId,
+                    providerId);
+            }
+            else if (!string.Equals(setting.Value, setting.Value.Trim(), StringComparison.Ordinal))
+            {
+                AddCheck(
+                    checks,
+                    "provider.setting-noncanonical",
+                    WebSearchProviderCheckSeverity.Error,
+                    $"Setting '{SafeLabel(key)}' cannot contain surrounding whitespace.",
                     siteId,
                     providerId);
             }
@@ -483,7 +510,8 @@ public static class WebSearchProviderDoctor
         }
 
         var variableName = NormalizeDisplay(credential.EnvironmentVariable);
-        if (!EnvironmentVariableRegex.IsMatch(variableName))
+        if (!string.Equals(credential.EnvironmentVariable, variableName, StringComparison.Ordinal) ||
+            !EnvironmentVariableRegex.IsMatch(variableName))
         {
             AddCheck(
                 checks,
@@ -527,7 +555,29 @@ public static class WebSearchProviderDoctor
         if (!settings.TryGetValue("property", out var property) || string.IsNullOrWhiteSpace(property))
             return;
         var value = property.Trim();
-        if (!value.StartsWith("sc-domain:", StringComparison.OrdinalIgnoreCase) && !TryGetHttpUrl(value, out _))
+        if (value.StartsWith("sc-domain:", StringComparison.OrdinalIgnoreCase))
+        {
+            var domain = value["sc-domain:".Length..];
+            if (!value.StartsWith("sc-domain:", StringComparison.Ordinal) ||
+                domain.Length == 0 ||
+                !domain.Contains('.') ||
+                domain.Any(char.IsWhiteSpace) ||
+                domain.Contains('/') ||
+                domain.Contains(':') ||
+                Uri.CheckHostName(domain) != UriHostNameType.Dns)
+            {
+                AddCheck(
+                    checks,
+                    "provider.gsc-property-invalid",
+                    WebSearchProviderCheckSeverity.Error,
+                    "Google Search Console domain property must use sc-domain:<domain> with a valid DNS name.",
+                    siteId,
+                    providerId);
+            }
+            return;
+        }
+
+        if (!TryGetHttpUrl(value, out _))
         {
             AddCheck(
                 checks,
