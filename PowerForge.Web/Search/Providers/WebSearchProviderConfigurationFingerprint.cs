@@ -47,7 +47,10 @@ public static class WebSearchProviderConfigurationFingerprint
                     values.Add("setting");
                     values.Add(Normalize(setting.Key));
                     values.Add(WebSearchProviderSecretPolicy.CanFingerprintSettingValue(provider?.Kind, setting.Key)
-                        ? setting.Value?.Trim()
+                        ? WebSearchProviderSecretPolicy.NormalizeFingerprintSettingValue(
+                            provider?.Kind,
+                            setting.Key,
+                            setting.Value)
                         : "[redacted-setting]");
                 }
             }
@@ -72,8 +75,8 @@ internal static class WebSearchProviderSecretPolicy
         new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
     {
         ["google-search-console"] = new HashSet<string>(["property"], StringComparer.Ordinal),
-        ["bing-webmaster"] = new HashSet<string>(["siteurl"], StringComparer.Ordinal),
-        ["cloudflare-analytics"] = new HashSet<string>(["zoneid"], StringComparer.Ordinal)
+        ["bing-webmaster"] = new HashSet<string>(["siteUrl"], StringComparer.Ordinal),
+        ["cloudflare-analytics"] = new HashSet<string>(["zoneId"], StringComparer.Ordinal)
     };
 
     private static readonly string[] SecretSettingTokens =
@@ -89,11 +92,49 @@ internal static class WebSearchProviderSecretPolicy
 
     internal static bool CanFingerprintSettingValue(string? providerKind, string? name) =>
         NonSecretSettingNamesByProvider.TryGetValue(providerKind?.Trim().ToLowerInvariant() ?? string.Empty, out var names) &&
-        names.Contains(name?.Trim().ToLowerInvariant() ?? string.Empty);
+        names.Contains(name ?? string.Empty);
+
+    internal static string? NormalizeFingerprintSettingValue(string? providerKind, string? name, string? value)
+    {
+        var normalizedKind = providerKind?.Trim().ToLowerInvariant() ?? string.Empty;
+        var trimmedValue = value?.Trim();
+        if (trimmedValue is null)
+            return null;
+
+        if (normalizedKind == "google-search-console" && name == "property" &&
+            trimmedValue.StartsWith("sc-domain:", StringComparison.OrdinalIgnoreCase))
+        {
+            return "sc-domain:" + NormalizeDomain(trimmedValue["sc-domain:".Length..]);
+        }
+
+        if ((normalizedKind == "google-search-console" && name == "property") ||
+            (normalizedKind == "bing-webmaster" && name == "siteUrl"))
+        {
+            return Uri.TryCreate(trimmedValue, UriKind.Absolute, out var uri)
+                ? uri.AbsoluteUri
+                : trimmedValue;
+        }
+
+        return normalizedKind == "cloudflare-analytics" && name == "zoneId"
+            ? trimmedValue.ToLowerInvariant()
+            : trimmedValue;
+    }
 
     private static string NormalizeSettingName(string? name) => new(
         (name ?? string.Empty)
         .Where(char.IsLetterOrDigit)
         .Select(char.ToLowerInvariant)
         .ToArray());
+
+    private static string NormalizeDomain(string domain)
+    {
+        try
+        {
+            return new System.Globalization.IdnMapping().GetAscii(domain).ToLowerInvariant();
+        }
+        catch (ArgumentException)
+        {
+            return domain.ToLowerInvariant();
+        }
+    }
 }

@@ -166,6 +166,51 @@ public sealed class WebSearchProviderDoctorTests
     }
 
     [Fact]
+    public void ConfigurationFingerprint_RedactsNoncanonicalSettingValues()
+    {
+        var first = CreateGoogleConfiguration();
+        first.Sites[0].Providers[0].Settings = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["PROPERTY"] = "first-candidate"
+        };
+        var second = CreateGoogleConfiguration();
+        second.Sites[0].Providers[0].Settings = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["PROPERTY"] = "second-candidate"
+        };
+
+        Assert.Equal(
+            WebSearchProviderConfigurationFingerprint.Compute(first),
+            WebSearchProviderConfigurationFingerprint.Compute(second));
+    }
+
+    [Fact]
+    public void ConfigurationFingerprint_NormalizesEquivalentProviderSettingValues()
+    {
+        var googleLower = CreateGoogleConfiguration();
+        var googleUpper = CreateGoogleConfiguration();
+        googleUpper.Sites[0].Providers[0].Settings["property"] = "sc-domain:OfficeIMO.COM";
+        var bingLower = CreateBingConfiguration("https://officeimo.com/");
+        var bingUpper = CreateBingConfiguration("HTTPS://OfficeIMO.COM:443/");
+        var cloudflareLower = CreateCloudflareConfiguration("abcdef0123456789abcdef0123456789");
+        var cloudflareUpper = CreateCloudflareConfiguration("ABCDEF0123456789ABCDEF0123456789");
+
+        Assert.All(
+            new[] { googleLower, googleUpper, bingLower, bingUpper, cloudflareLower, cloudflareUpper },
+            configuration => Assert.True(WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value").Success));
+
+        Assert.Equal(
+            WebSearchProviderConfigurationFingerprint.Compute(googleLower),
+            WebSearchProviderConfigurationFingerprint.Compute(googleUpper));
+        Assert.Equal(
+            WebSearchProviderConfigurationFingerprint.Compute(bingLower),
+            WebSearchProviderConfigurationFingerprint.Compute(bingUpper));
+        Assert.Equal(
+            WebSearchProviderConfigurationFingerprint.Compute(cloudflareLower),
+            WebSearchProviderConfigurationFingerprint.Compute(cloudflareUpper));
+    }
+
+    [Fact]
     public void Doctor_RejectsUnsupportedCapabilitiesDuplicateIdentitiesAndSecretSettings()
     {
         var configuration = CreateGoogleConfiguration();
@@ -181,6 +226,66 @@ public sealed class WebSearchProviderDoctorTests
         Assert.Contains(result.Checks, check => check.Code == "provider.capability-unsupported");
         Assert.Contains(result.Checks, check => check.Code == "provider.setting-secret-forbidden");
         Assert.DoesNotContain("must-not-be-here", JsonSerializer.Serialize(result), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("PROPERTY")]
+    [InlineData(" property ")]
+    public void Doctor_RejectsNoncanonicalProviderSettingKeys(string key)
+    {
+        var configuration = CreateGoogleConfiguration();
+        configuration.Sites[0].Providers[0].Settings = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            [key] = "sc-domain:officeimo.com"
+        };
+
+        var result = WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Checks, check => check.Code == "provider.setting-key-noncanonical");
+        Assert.False(Assert.Single(result.Providers).ConfigurationReady);
+    }
+
+    [Fact]
+    public void Doctor_RejectsExplicitNullSettingsForProviderWithoutRequiredSettings()
+    {
+        var configuration = CreateGoogleConfiguration();
+        configuration.Sites[0].Providers =
+        [
+            new WebSearchProviderRegistration
+            {
+                Id = "lighthouse",
+                Kind = "lighthouse",
+                Capabilities = [WebSearchProviderCapabilities.PerformanceLighthouse],
+                Settings = null!
+            }
+        ];
+
+        var result = WebSearchProviderDoctor.Inspect(
+            configuration,
+            _ => null,
+            new HashSet<string>(["lighthouse"], StringComparer.OrdinalIgnoreCase));
+        var document = JsonNode.Parse(JsonSerializer.Serialize(configuration, WebCliJson.Options))!;
+        document["sites"]!.AsArray()[0]!["providers"]!.AsArray()[0]!["settings"] = null;
+
+        Assert.False(LoadProviderSchema().Evaluate(document, new EvaluationOptions()).IsValid);
+        Assert.False(result.Success);
+        Assert.Contains(result.Checks, check => check.Code == "provider.settings-missing");
+        Assert.False(Assert.Single(result.Providers).ConfigurationReady);
+    }
+
+    [Fact]
+    public void Doctor_DoesNotExposeMutableCatalogCapabilityArrays()
+    {
+        var configuration = CreateGoogleConfiguration();
+        var first = WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value");
+        Assert.Single(first.Providers).SupportedCapabilities[0] = WebSearchProviderCapabilities.TrafficAnalytics;
+
+        var second = WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value");
+
+        Assert.True(second.Success);
+        Assert.Contains(WebSearchProviderCapabilities.SearchAnalytics, Assert.Single(second.Providers).SupportedCapabilities);
+        Assert.DoesNotContain(WebSearchProviderCapabilities.TrafficAnalytics, Assert.Single(second.Providers).SupportedCapabilities);
     }
 
     [Fact]
@@ -278,25 +383,7 @@ public sealed class WebSearchProviderDoctorTests
     [Fact]
     public void Doctor_RejectsBingSiteUrlThatDoesNotCoverTheOwningSite()
     {
-        var configuration = CreateGoogleConfiguration();
-        configuration.Sites[0].Providers =
-        [
-            new WebSearchProviderRegistration
-            {
-                Id = "bing-webmaster",
-                Kind = "bing-webmaster",
-                Capabilities = [WebSearchProviderCapabilities.SearchAnalytics],
-                Credential = new WebSearchCredentialReference
-                {
-                    Kind = "bing-api-key",
-                    EnvironmentVariable = "POWERFORGE_TEST_BING"
-                },
-                Settings = new Dictionary<string, string?>
-                {
-                    ["siteUrl"] = "https://example.net/"
-                }
-            }
-        ];
+        var configuration = CreateBingConfiguration("https://example.net/");
 
         var result = WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value");
 
@@ -450,6 +537,54 @@ public sealed class WebSearchProviderDoctorTests
             }
         ]
     };
+
+    private static WebSearchProviderConfiguration CreateBingConfiguration(string siteUrl)
+    {
+        var configuration = CreateGoogleConfiguration();
+        configuration.Sites[0].Providers =
+        [
+            new WebSearchProviderRegistration
+            {
+                Id = "bing-webmaster",
+                Kind = "bing-webmaster",
+                Capabilities = [WebSearchProviderCapabilities.SearchAnalytics],
+                Credential = new WebSearchCredentialReference
+                {
+                    Kind = "bing-api-key",
+                    EnvironmentVariable = "POWERFORGE_TEST_BING"
+                },
+                Settings = new Dictionary<string, string?>
+                {
+                    ["siteUrl"] = siteUrl
+                }
+            }
+        ];
+        return configuration;
+    }
+
+    private static WebSearchProviderConfiguration CreateCloudflareConfiguration(string zoneId)
+    {
+        var configuration = CreateGoogleConfiguration();
+        configuration.Sites[0].Providers =
+        [
+            new WebSearchProviderRegistration
+            {
+                Id = "cloudflare",
+                Kind = "cloudflare-analytics",
+                Capabilities = [WebSearchProviderCapabilities.TrafficAnalytics],
+                Credential = new WebSearchCredentialReference
+                {
+                    Kind = "cloudflare-api-token",
+                    EnvironmentVariable = "POWERFORGE_TEST_CLOUDFLARE"
+                },
+                Settings = new Dictionary<string, string?>
+                {
+                    ["zoneId"] = zoneId
+                }
+            }
+        ];
+        return configuration;
+    }
 
     private static JsonSchema LoadProviderSchema() => JsonSchema.FromText(File.ReadAllText(
         RepositoryPath("Schemas", "powerforge.web.search-providers.schema.json")));

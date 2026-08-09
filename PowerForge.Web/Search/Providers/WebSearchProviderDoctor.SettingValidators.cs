@@ -130,9 +130,17 @@ public static partial class WebSearchProviderDoctor
 
     private static bool DomainPropertyCoversSite(string domain, Uri siteUri)
     {
-        var host = siteUri.IdnHost;
-        return host.Equals(domain, StringComparison.OrdinalIgnoreCase) ||
-               host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase);
+        try
+        {
+            var host = siteUri.IdnHost;
+            var normalizedDomain = new System.Globalization.IdnMapping().GetAscii(domain);
+            return host.Equals(normalizedDomain, StringComparison.OrdinalIgnoreCase) ||
+                   host.EndsWith("." + normalizedDomain, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 
     private static bool UrlPrefixCoversSite(Uri propertyUri, Uri siteUri) =>

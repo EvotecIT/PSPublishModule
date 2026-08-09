@@ -150,7 +150,7 @@ public static partial class WebSearchProviderDoctor
                     ConfigurationReady = false,
                     CollectorAvailable = collectorAvailable,
                     RequestedCapabilities = requestedCapabilities,
-                    SupportedCapabilities = descriptor?.Capabilities ?? Array.Empty<string>()
+                    SupportedCapabilities = descriptor?.Capabilities.ToArray() ?? Array.Empty<string>()
                 });
             }
         }
@@ -374,11 +374,35 @@ public static partial class WebSearchProviderDoctor
         string providerId,
         List<WebSearchProviderCheck> checks)
     {
+        if (provider is not null && provider.Settings is null)
+        {
+            AddCheck(
+                checks,
+                "provider.settings-missing",
+                WebSearchProviderCheckSeverity.Error,
+                "Provider settings must be an object, even when this provider kind has no settings.",
+                siteId,
+                providerId);
+        }
+
         var sourceSettings = provider?.Settings ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var settings = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         foreach (var setting in sourceSettings)
         {
             var key = setting.Key?.Trim() ?? string.Empty;
+            var canonicalKey = descriptor.Settings.FirstOrDefault(candidate =>
+                string.Equals(candidate, key, StringComparison.OrdinalIgnoreCase));
+            if (canonicalKey is not null && !string.Equals(setting.Key, canonicalKey, StringComparison.Ordinal))
+            {
+                AddCheck(
+                    checks,
+                    "provider.setting-key-noncanonical",
+                    WebSearchProviderCheckSeverity.Error,
+                    $"Setting '{SafeLabel(setting.Key)}' must use the canonical key '{canonicalKey}'.",
+                    siteId,
+                    providerId);
+            }
+
             if (!settings.TryAdd(key, setting.Value))
             {
                 AddCheck(
