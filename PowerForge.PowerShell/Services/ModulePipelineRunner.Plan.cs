@@ -800,6 +800,7 @@ public sealed partial class ModulePipelineRunner
             ResolveDependencyVersionSourcePublishes(gateMode, publishes));
 
         var approved = NormalizeApprovedModules(approvedModules);
+        var ignoredModules = NormalizeStringArray(moduleSkipIgnoreModules);
         ApplyMergeDefaultsForPlan(
             refreshPsd1Only,
             csproj,
@@ -813,6 +814,7 @@ public sealed partial class ModulePipelineRunner
             requiredModulesDraft,
             requiredModulesDraftForPackaging,
             approved,
+            ignoredModules,
             mergeMissing,
             importModules,
             compatible,
@@ -842,6 +844,7 @@ public sealed partial class ModulePipelineRunner
             embeddedModules,
             embeddedRoots,
             embeddedSourceDrafts,
+            ignoredModules,
             resolveMissingModulesOnline,
             warnIfRequiredModulesOutdated,
             installMissingModulesPrerelease,
@@ -868,11 +871,7 @@ public sealed partial class ModulePipelineRunner
             {
                 Force = moduleSkipForce,
                 FailOnMissingCommands = moduleSkipFailOnMissingCommands,
-                IgnoreModuleName = moduleSkipIgnoreModules
-                    .Where(s => !string.IsNullOrWhiteSpace(s))
-                    .Select(s => s.Trim())
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray(),
+                IgnoreModuleName = ignoredModules,
                 IgnoreFunctionName = moduleSkipIgnoreFunctions
                     .Where(s => !string.IsNullOrWhiteSpace(s))
                     .Select(s => s.Trim())

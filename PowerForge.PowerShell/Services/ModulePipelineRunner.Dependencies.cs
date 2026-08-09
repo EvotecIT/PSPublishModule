@@ -254,6 +254,7 @@ public sealed partial class ModulePipelineRunner
         IReadOnlyList<RequiredModuleDraft> requiredModules,
         IReadOnlyList<RequiredModuleDraft> requiredModulesForPackaging,
         IReadOnlyList<RequiredModuleDraft> embeddedModules,
+        IReadOnlyCollection<string> ignoredModules,
         bool resolveMissingModulesOnline,
         bool warnIfRequiredModulesOutdated,
         DependencyVersionSourceRepository? publishVersionSource,
@@ -266,6 +267,7 @@ public sealed partial class ModulePipelineRunner
                 requiredModules,
                 requiredModulesForPackaging,
                 embeddedModules,
+                ignoredModules,
                 resolveMissingModulesOnline,
                 warnIfRequiredModulesOutdated,
                 publishVersionSource))
@@ -369,6 +371,7 @@ public sealed partial class ModulePipelineRunner
         IReadOnlyList<RequiredModuleDraft> requiredModules,
         IReadOnlyList<RequiredModuleDraft> requiredModulesForPackaging,
         IReadOnlyList<RequiredModuleDraft> embeddedModules,
+        IReadOnlyCollection<string> ignoredModules,
         bool resolveMissingModulesOnline,
         bool warnIfRequiredModulesOutdated,
         DependencyVersionSourceRepository? publishVersionSource)
@@ -387,7 +390,7 @@ public sealed partial class ModulePipelineRunner
             return true;
         }
 
-        if (HasRepositoryPreferredTransitiveRequiredModules(drafts, publishVersionSource))
+        if (HasRepositoryPreferredTransitiveRequiredModules(drafts, ignoredModules, publishVersionSource))
             return true;
 
         return resolveMissingModulesOnline && HasOnlineResolvableAutoRequiredModules(drafts);
@@ -402,10 +405,12 @@ public sealed partial class ModulePipelineRunner
 
     private bool HasRepositoryPreferredTransitiveRequiredModules(
         IEnumerable<RequiredModuleDraft> drafts,
+        IReadOnlyCollection<string> ignoredModules,
         DependencyVersionSourceRepository? publishVersionSource)
     {
         var sourceDrafts = BuildRequiredModuleDraftMap(drafts ?? Array.Empty<RequiredModuleDraft>());
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var ignored = new HashSet<string>(NormalizeStringArray(ignoredModules), StringComparer.OrdinalIgnoreCase);
 
         foreach (var draft in sourceDrafts.Values)
         {
@@ -420,6 +425,7 @@ public sealed partial class ModulePipelineRunner
                     draft.ModuleName,
                     draft.VersionSource,
                     sourceDrafts,
+                    ignored,
                     publishVersionSource,
                     visited))
             {
@@ -434,6 +440,7 @@ public sealed partial class ModulePipelineRunner
         string moduleName,
         ModuleDependencyVersionSource inheritedVersionSource,
         IReadOnlyDictionary<string, RequiredModuleDraft> sourceDrafts,
+        IReadOnlyCollection<string> ignoredModules,
         DependencyVersionSourceRepository? publishVersionSource,
         HashSet<string> visited)
     {
@@ -451,6 +458,8 @@ public sealed partial class ModulePipelineRunner
                 continue;
 
             var depName = dep.ModuleName.Trim();
+            if (ignoredModules.Contains(depName))
+                continue;
             if (ModulePipelinePlanningHelpers.ShouldSkipTransitiveRequiredDependencyModule(depName))
                 continue;
 
@@ -465,6 +474,7 @@ public sealed partial class ModulePipelineRunner
                     depName,
                     childVersionSource,
                     sourceDrafts,
+                    ignoredModules,
                     publishVersionSource,
                     visited))
             {
@@ -494,6 +504,7 @@ public sealed partial class ModulePipelineRunner
             input.RequiredModules,
             input.RequiredModulesForPackaging,
             input.EmbeddedModules,
+            input.IgnoredModules,
             input.ResolveMissingModulesOnline,
             input.WarnIfRequiredModulesOutdated,
             input.PublishVersionSource);
@@ -675,6 +686,7 @@ public sealed partial class ModulePipelineRunner
             input.RequiredModules,
             input.RequiredModulesForPackaging,
             input.EmbeddedModules,
+            input.IgnoredModules,
             input.ResolveMissingModulesOnline,
             input.WarnIfRequiredModulesOutdated,
             input.PublishVersionSource,
@@ -695,6 +707,7 @@ public sealed partial class ModulePipelineRunner
         var requiredPackagingIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var embeddedModulesDraft = new List<RequiredModuleDraft>();
         var embeddedIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var ignoredModules = new List<string>();
         var publishes = new List<ConfigurationPublishSegment>();
         var resolveMissingModulesOnline = false;
         var resolveMissingModulesOnlineSet = false;
@@ -766,6 +779,9 @@ public sealed partial class ModulePipelineRunner
                     }
                     break;
                 }
+                case ConfigurationModuleSkipSegment skip:
+                    ignoredModules.AddRange(skip.Configuration?.IgnoreModuleName ?? Array.Empty<string>());
+                    break;
                 case ConfigurationPublishSegment publish:
                     publishes.Add(publish);
                     break;
@@ -801,7 +817,8 @@ public sealed partial class ModulePipelineRunner
             refreshPsd1Only,
             requiredModulesDraft.ToArray(),
             requiredModulesDraftForPackaging.ToArray(),
-            embeddedModulesDraft.ToArray());
+            embeddedModulesDraft.ToArray(),
+            NormalizeStringArray(ignoredModules));
     }
 
     private static void AddOrReplaceRequiredModuleDraft(
@@ -835,7 +852,8 @@ public sealed partial class ModulePipelineRunner
             refreshPsd1Only: false,
             requiredModules: Array.Empty<RequiredModuleDraft>(),
             requiredModulesForPackaging: Array.Empty<RequiredModuleDraft>(),
-            embeddedModules: Array.Empty<RequiredModuleDraft>());
+            embeddedModules: Array.Empty<RequiredModuleDraft>(),
+            ignoredModules: Array.Empty<string>());
 
         public bool ResolveMissingModulesOnline { get; }
         public bool WarnIfRequiredModulesOutdated { get; }
@@ -848,6 +866,7 @@ public sealed partial class ModulePipelineRunner
         public RequiredModuleDraft[] RequiredModules { get; }
         public RequiredModuleDraft[] RequiredModulesForPackaging { get; }
         public RequiredModuleDraft[] EmbeddedModules { get; }
+        public string[] IgnoredModules { get; }
 
         public RequiredModulePreflightInput(
             bool resolveMissingModulesOnline,
@@ -860,7 +879,8 @@ public sealed partial class ModulePipelineRunner
             bool refreshPsd1Only,
             RequiredModuleDraft[] requiredModules,
             RequiredModuleDraft[] requiredModulesForPackaging,
-            RequiredModuleDraft[] embeddedModules)
+            RequiredModuleDraft[] embeddedModules,
+            string[] ignoredModules)
         {
             ResolveMissingModulesOnline = resolveMissingModulesOnline;
             WarnIfRequiredModulesOutdated = warnIfRequiredModulesOutdated;
@@ -873,6 +893,7 @@ public sealed partial class ModulePipelineRunner
             RequiredModules = requiredModules ?? Array.Empty<RequiredModuleDraft>();
             RequiredModulesForPackaging = requiredModulesForPackaging ?? Array.Empty<RequiredModuleDraft>();
             EmbeddedModules = embeddedModules ?? Array.Empty<RequiredModuleDraft>();
+            IgnoredModules = ignoredModules ?? Array.Empty<string>();
         }
     }
 

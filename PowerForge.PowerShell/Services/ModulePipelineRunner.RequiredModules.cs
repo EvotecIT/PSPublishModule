@@ -144,6 +144,7 @@ public sealed partial class ModulePipelineRunner
         IReadOnlyList<RequiredModuleDraft> requiredModulesDraft,
         IReadOnlyList<RequiredModuleDraft> requiredModulesDraftForPackaging,
         string[] approved,
+        IReadOnlyCollection<string> ignoredModules,
         bool mergeMissing,
         ImportModulesConfiguration? importModules,
         string[] compatible,
@@ -174,6 +175,7 @@ public sealed partial class ModulePipelineRunner
                 requiredModules,
                 approvedRequiredRoots,
                 requiredSourceDrafts,
+                ignoredModules,
                 resolveMissingModulesOnline,
                 warnIfRequiredModulesOutdated,
                 prerelease,
@@ -205,6 +207,7 @@ public sealed partial class ModulePipelineRunner
             requiredModulesForPackaging,
             requiredPackagingRoots,
             requiredPackagingSourceDrafts,
+            ignoredModules,
             resolveMissingModulesOnline,
             warnIfRequiredModulesOutdated,
             prerelease,
@@ -225,6 +228,7 @@ public sealed partial class ModulePipelineRunner
         RequiredModuleReference[] modules,
         IEnumerable<string> rootModules,
         IReadOnlyDictionary<string, RequiredModuleDraft> sourceDrafts,
+        IReadOnlyCollection<string> ignoredModules,
         bool resolveMissingModulesOnline,
         bool warnIfRequiredModulesOutdated,
         bool prerelease,
@@ -242,6 +246,7 @@ public sealed partial class ModulePipelineRunner
         var discovered = new List<(RequiredModuleReference Reference, ModuleDependencyVersionSource VersionSource)>();
         var discoveredIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var ignored = new HashSet<string>(ignoredModules ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
 
         var rootsByName = output
             .GroupBy(static module => module.ModuleName!, StringComparer.OrdinalIgnoreCase)
@@ -253,7 +258,7 @@ public sealed partial class ModulePipelineRunner
             var rootReference = rootsByName.TryGetValue(root, out var resolvedRoot)
                 ? resolvedRoot
                 : new RequiredModuleReference(root);
-            CollectTransitiveRequiredModules(rootReference, source, sourceDrafts, known, discoveredIndex, visited, discovered);
+            CollectTransitiveRequiredModules(rootReference, source, sourceDrafts, ignored, known, discoveredIndex, visited, discovered);
         }
 
         if (discovered.Count == 0)
@@ -318,6 +323,7 @@ public sealed partial class ModulePipelineRunner
         RequiredModuleReference module,
         ModuleDependencyVersionSource inheritedVersionSource,
         IReadOnlyDictionary<string, RequiredModuleDraft> sourceDrafts,
+        IReadOnlyCollection<string> ignoredModules,
         HashSet<string> known,
         HashSet<string> discoveredIndex,
         HashSet<string> visited,
@@ -336,6 +342,8 @@ public sealed partial class ModulePipelineRunner
                 continue;
 
             var depName = dep.ModuleName.Trim();
+            if (ignoredModules.Contains(depName))
+                continue;
             if (ModulePipelinePlanningHelpers.ShouldSkipTransitiveRequiredDependencyModule(depName))
                 continue;
 
@@ -352,7 +360,7 @@ public sealed partial class ModulePipelineRunner
                     childVersionSource));
             }
 
-            CollectTransitiveRequiredModules(dep, childVersionSource, sourceDrafts, known, discoveredIndex, visited, discovered);
+            CollectTransitiveRequiredModules(dep, childVersionSource, sourceDrafts, ignoredModules, known, discoveredIndex, visited, discovered);
         }
     }
 

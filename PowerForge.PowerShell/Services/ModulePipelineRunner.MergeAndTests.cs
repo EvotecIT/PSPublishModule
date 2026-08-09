@@ -53,7 +53,10 @@ public sealed partial class ModulePipelineRunner
         {
             var requiredModules = GetRequiredModuleNames(plan);
             var approvedModules = plan.ApprovedModules ?? Array.Empty<string>();
-            dependentRequiredModules = ResolveDependentRequiredModules(requiredModules, approvedModules);
+            dependentRequiredModules = ResolveDependentRequiredModules(
+                requiredModules,
+                approvedModules,
+                plan.ModuleSkip?.IgnoreModuleName ?? Array.Empty<string>());
 
             missingReport = AnalyzeMissingFunctions(analysisPath, analysisCode, plan);
             LogMergeSummary(plan, mergeInfo, missingReport, dependentRequiredModules);

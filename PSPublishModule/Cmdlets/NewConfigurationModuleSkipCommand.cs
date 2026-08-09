@@ -26,7 +26,7 @@ namespace PSPublishModule;
 [Cmdlet(VerbsCommon.New, "ConfigurationModuleSkip")]
 public sealed class NewConfigurationModuleSkipCommand : PSCmdlet
 {
-    /// <summary>Ignore module name(s) during missing-command validation.</summary>
+    /// <summary>Ignore module name(s) during missing-command validation and transitive dependency resolution.</summary>
     [Parameter] public string[]? IgnoreModuleName { get; set; }
 
     /// <summary>Ignore command/function name(s) during missing-command validation.</summary>

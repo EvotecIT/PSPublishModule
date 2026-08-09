@@ -569,11 +569,12 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
 
         var dependencies = (string[])method!.Invoke(
             runner,
-            new object?[]
-            {
-                new[] { "Alpha.Tools" },
-                Array.Empty<string>()
-            })!;
+                new object?[]
+                {
+                    new[] { "Alpha.Tools" },
+                    Array.Empty<string>(),
+                    Array.Empty<string>()
+                })!;
 
         Assert.Equal(3, dependencies.Length);
         Assert.Contains("Beta.Tools", dependencies);
@@ -618,6 +619,156 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
             var child = Assert.Single(requiredModules, module => string.Equals(module.ModuleName, "Child.Tools", StringComparison.OrdinalIgnoreCase));
             Assert.Equal("2.0.0", child.ModuleVersion);
             Assert.Equal("22222222-2222-2222-2222-222222222222", child.Guid);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_DoesNotPreserveIgnoredTransitiveDependency_WhenApprovedModuleIsMergedAway()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new("Parent.Tools", "1.0.0", null, @"C:\Modules\Parent.Tools\1.0.0")
+                },
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase),
+                installedRequiredModules: new Dictionary<string, IReadOnlyList<RequiredModuleReference>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new[]
+                    {
+                        new RequiredModuleReference("ActiveDirectory")
+                    }
+                });
+
+            var spec = CreateApprovedParentSpec(root.FullName, moduleName, ModuleDependencyVersionSource.PSGallery);
+            spec.Segments = spec.Segments
+                .Concat(new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSkipSegment
+                    {
+                        Configuration = new ModuleSkipConfiguration
+                        {
+                            IgnoreModuleName = new[] { " activedirectory " }
+                        }
+                    }
+                })
+                .ToArray();
+
+            var logger = new CollectingLogger();
+            var result = new ModulePipelineRunner(logger, new ThrowingPowerShellRunner(), provider).Run(spec);
+
+            Assert.True(ManifestEditor.TryGetRequiredModules(result.BuildResult.ManifestPath, out RequiredModuleReference[]? required));
+            Assert.DoesNotContain(required!, module => string.Equals(module.ModuleName, "Parent.Tools", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(required!, module => string.Equals(module.ModuleName, "ActiveDirectory", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(logger.Infos, message => message.Contains("ActiveDirectory", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(provider.OnlineLookupNames, name => string.Equals(name, "ActiveDirectory", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_ExcludesIgnoredTransitiveDependencyFromPackagingAndEmbeddedModules()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase),
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase),
+                installedRequiredModules: new Dictionary<string, IReadOnlyList<RequiredModuleReference>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new[] { new RequiredModuleReference("ActiveDirectory", moduleVersion: "1.0.1.0") }
+                });
+            var skip = new ConfigurationModuleSkipSegment
+            {
+                Configuration = new ModuleSkipConfiguration
+                {
+                    IgnoreModuleName = new[] { " ActiveDirectory " }
+                }
+            };
+
+            var requiredSpec = CreateRequiredParentSpec(root.FullName, moduleName, ModuleDependencyVersionSource.Auto);
+            requiredSpec.Segments = requiredSpec.Segments.Concat(new IConfigurationSegment[] { skip }).ToArray();
+            var requiredPlan = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider).Plan(requiredSpec);
+
+            Assert.Contains(requiredPlan.RequiredModulesForPackaging, module => string.Equals(module.ModuleName, "Parent.Tools", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(requiredPlan.RequiredModulesForPackaging, module => string.Equals(module.ModuleName, "ActiveDirectory", StringComparison.OrdinalIgnoreCase));
+
+            var embeddedSpec = CreateEmbeddedParentSpec(root.FullName, moduleName, ModuleDependencyVersionSource.Auto);
+            embeddedSpec.Segments = embeddedSpec.Segments.Concat(new IConfigurationSegment[] { skip }).ToArray();
+            var embeddedPlan = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider).Plan(embeddedSpec);
+
+            Assert.Equal(new[] { "Parent.Tools" }, embeddedPlan.EmbeddedModules.Select(static module => module.ModuleName));
+            Assert.DoesNotContain(provider.OnlineLookupNames, name => string.Equals(name, "ActiveDirectory", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_PreservesExplicitRequiredRoot_WhenSameModuleIsIgnoredAsTransitiveDependency()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new("Parent.Tools", "1.0.0", null, @"C:\Modules\Parent.Tools\1.0.0"),
+                    ["ActiveDirectory"] = new("ActiveDirectory", "1.0.1.0", null, @"C:\Windows\System32\WindowsPowerShell\v1.0\Modules\ActiveDirectory")
+                },
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase),
+                installedRequiredModules: new Dictionary<string, IReadOnlyList<RequiredModuleReference>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new[] { new RequiredModuleReference("ActiveDirectory", moduleVersion: "1.0.1.0") }
+                });
+
+            var spec = CreateRequiredParentSpec(root.FullName, moduleName, ModuleDependencyVersionSource.Auto);
+            spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
+            {
+                new ConfigurationModuleSegment
+                {
+                    Kind = ModuleDependencyKind.RequiredModule,
+                    Configuration = new ModuleDependencyConfiguration
+                    {
+                        ModuleName = "ActiveDirectory",
+                        ModuleVersion = "1.0.1.0",
+                        VersionSource = ModuleDependencyVersionSource.Installed
+                    }
+                },
+                new ConfigurationModuleSkipSegment
+                {
+                    Configuration = new ModuleSkipConfiguration
+                    {
+                        IgnoreModuleName = new[] { "ActiveDirectory" }
+                    }
+                }
+            }).ToArray();
+
+            var plan = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider).Plan(spec);
+
+            Assert.Contains(plan.RequiredModules, module => string.Equals(module.ModuleName, "ActiveDirectory", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(plan.RequiredModulesForPackaging, module => string.Equals(module.ModuleName, "ActiveDirectory", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -1046,9 +1197,12 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
             }
         };
 
-    private static ModulePipelineSpec CreateApprovedParentSpec(string sourcePath, string moduleName)
+    private static ModulePipelineSpec CreateApprovedParentSpec(
+        string sourcePath,
+        string moduleName,
+        ModuleDependencyVersionSource versionSource = ModuleDependencyVersionSource.Auto)
     {
-        var spec = CreateRequiredParentSpec(sourcePath, moduleName, ModuleDependencyVersionSource.Auto);
+        var spec = CreateRequiredParentSpec(sourcePath, moduleName, versionSource);
         spec.Segments = spec.Segments
             .Concat(new IConfigurationSegment[]
             {
@@ -1197,6 +1351,7 @@ public sealed class Marker
         internal int OnlineLookups { get; private set; }
         internal int RequiredModuleLookups { get; private set; }
         internal List<RequiredModuleReference> RequiredModuleReferenceLookups { get; } = new();
+        internal List<string> OnlineLookupNames { get; } = new();
         internal string? LastOnlineRepository { get; private set; }
 
         internal FakeModuleDependencyMetadataProvider(
@@ -1254,6 +1409,7 @@ public sealed class Marker
             bool prerelease)
         {
             OnlineLookups++;
+            OnlineLookupNames.AddRange(names ?? Array.Empty<string>());
             LastOnlineRepository = repository;
             var result = new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
             foreach (var name in names ?? Array.Empty<string>())
