@@ -35,7 +35,8 @@ function Register-AppleReceiptEvidenceFile {
              $receiptSource -notmatch '^[0-9A-Fa-f]{40}$')) {
             throw "Apple release evidence does not satisfy the immutable receipt contract: $Path"
         }
-    } elseif (-not $receiptSource.Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase)) {
+    } elseif (-not $HistoryEntry -and
+              -not $receiptSource.Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Apple release receipt source commit does not match the exact consumer HEAD '$SourceCommit'."
     }
     Add-AllowedConsumerEvidencePath -Path $Path -Name 'Apple release receipt'

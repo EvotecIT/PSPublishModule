@@ -273,6 +273,8 @@ internal sealed partial class PowerForgeReleaseService
 
         var options = new
         {
+            plan.Archive,
+            plan.Upload,
             plan.PrepareDistribution,
             plan.SelectBuildForDistribution,
             plan.AllowUnprocessedDistributionBuild,

@@ -288,6 +288,12 @@ internal sealed class AppleReleaseReceiptStore
             throw new InvalidOperationException($"Apple release receipt is not valid JSON: {path}", exception);
         }
 
+        if (receipt.SchemaVersion >= 4 && string.IsNullOrWhiteSpace(receipt.ReceiptSha256))
+        {
+            throw new InvalidOperationException(
+                $"Apple release receipt schema {receipt.SchemaVersion} is missing its required integrity SHA-256: {path}");
+        }
+
         if (!string.IsNullOrWhiteSpace(receipt.ReceiptSha256))
         {
             var expected = receipt.ReceiptSha256!.Trim();

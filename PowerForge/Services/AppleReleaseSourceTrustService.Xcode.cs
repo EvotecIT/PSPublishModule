@@ -354,6 +354,43 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
 
         var manifest = File.ReadAllText(manifestPath);
+        var externalDependencies = Regex.Matches(
+                manifest,
+                "\\.package\\s*\\((?<body>.*?)\\)",
+                RegexOptions.Singleline | RegexOptions.CultureInvariant)
+            .Cast<Match>()
+            .Select(static match => match.Groups["body"].Value)
+            .Where(static body => Regex.IsMatch(body, "\\b(?:url|id)\\s*:", RegexOptions.CultureInvariant))
+            .ToArray();
+        foreach (var dependency in externalDependencies.Where(static body =>
+                     Regex.IsMatch(body, "\\bid\\s*:", RegexOptions.CultureInvariant) ||
+                     !Regex.IsMatch(
+                         body,
+                         "\\brevision\\s*:\\s*\"[A-Fa-f0-9]{40}\"",
+                         RegexOptions.CultureInvariant)))
+        {
+            var identityMatch = Regex.Match(
+                dependency,
+                "\\b(?:url|id)\\s*:\\s*\"(?<identity>[^\"]+)\"",
+                RegexOptions.CultureInvariant);
+            if (!identityMatch.Success)
+            {
+                throw new InvalidOperationException(
+                    $"Local Swift package '{packageRoot}' declares a dynamic external dependency that cannot be bound to exact source. " +
+                    "Use a literal package URL or registry identity and commit its Package.resolved lock.");
+            }
+
+            var identity = identityMatch.Groups["identity"].Value;
+            var locks = FindTrackedPackageLocks(repositoryRoot, projectDirectory, identity);
+            if (locks.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Local Swift package '{packageRoot}' declares external dependency '{identity}' without an exact 40-character revision. " +
+                    "Commit a Package.resolved lock containing that dependency before creating an exact-source Apple checkpoint.");
+            }
+            foreach (var packageLock in locks)
+                EnsureTrackedFile(repositoryRoot, packageLock, "Xcode local Swift package resolution lock");
+        }
         foreach (Match match in Regex.Matches(
                      manifest,
                      "\\bpath\\s*:\\s*\"(?<path>[^\"]+)\"",
@@ -383,19 +420,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             item.Body,
             "(?s)requirement\\s*=\\s*\\{.*?kind\\s*=\\s*revision\\s*;.*?revision\\s*=\\s*[\"']?[A-Fa-f0-9]{40}[\"']?\\s*;",
             RegexOptions.CultureInvariant);
-        var identity = Path.GetFileNameWithoutExtension(repositoryUrl!.TrimEnd('/'));
-        var locks = RunGit(repositoryRoot, "ls-files", "-z")
-            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
-            .Where(static path => Path.GetFileName(path).Equals("Package.resolved", StringComparison.OrdinalIgnoreCase))
-            .Select(path => Path.GetFullPath(Path.Combine(repositoryRoot, path)))
-            .Where(path => IsPathAtOrWithin(path, projectDirectory))
-            .Where(path =>
-            {
-                var text = File.ReadAllText(path);
-                return text.Contains(repositoryUrl, StringComparison.OrdinalIgnoreCase) ||
-                       (!string.IsNullOrWhiteSpace(identity) && text.Contains(identity, StringComparison.OrdinalIgnoreCase));
-            })
-            .ToArray();
+        var locks = FindTrackedPackageLocks(repositoryRoot, projectDirectory, repositoryUrl!);
         if (locks.Length == 0 && !exactRevision)
         {
             throw new InvalidOperationException(
@@ -403,6 +428,27 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
         foreach (var packageLock in locks)
             EnsureTrackedFile(repositoryRoot, packageLock, "Swift package resolution lock");
+    }
+
+    private string[] FindTrackedPackageLocks(
+        string repositoryRoot,
+        string projectDirectory,
+        string dependencyIdentity)
+    {
+        var shortIdentity = Path.GetFileNameWithoutExtension(dependencyIdentity.TrimEnd('/'));
+        return RunGit(repositoryRoot, "ls-files", "-z")
+            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(static path => Path.GetFileName(path).Equals("Package.resolved", StringComparison.OrdinalIgnoreCase))
+            .Select(path => Path.GetFullPath(Path.Combine(repositoryRoot, path)))
+            .Where(path => IsPathAtOrWithin(path, projectDirectory))
+            .Where(path =>
+            {
+                var text = File.ReadAllText(path);
+                return text.Contains(dependencyIdentity, StringComparison.OrdinalIgnoreCase) ||
+                       (!string.IsNullOrWhiteSpace(shortIdentity) &&
+                        text.Contains(shortIdentity, StringComparison.OrdinalIgnoreCase));
+            })
+            .ToArray();
     }
 
     private void ValidateResolvedProjectInput(

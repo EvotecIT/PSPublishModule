@@ -37,6 +37,7 @@ internal sealed partial class AppleReleaseSourceTrustService
     {
         var root = Path.GetFullPath(repositoryRoot);
         var releaseConfigPath = Path.GetFullPath(configPath);
+        EnsureNoGitReplacementRefs(root);
         _git.EnsureClean(root);
         var sourceCommitBeforeValidation = ReadExactHead(root);
         EnsureTrackedFile(root, releaseConfigPath, "Apple release configuration");
@@ -47,6 +48,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         var generatedOutputs = ResolveGeneratedOutputPaths(releaseConfigPath, options);
         ValidateAppleInputs(root, releaseConfigPath, options, generatedOutputs);
 
+        EnsureNoGitReplacementRefs(root);
         _git.EnsureClean(root);
         var sourceCommitAfterValidation = ReadExactHead(root);
         if (!sourceCommitAfterValidation.Equals(sourceCommitBeforeValidation, StringComparison.OrdinalIgnoreCase))
@@ -67,6 +69,7 @@ internal sealed partial class AppleReleaseSourceTrustService
 
         var root = Path.GetFullPath(repositoryRoot);
         var releaseConfigPath = Path.GetFullPath(configPath);
+        EnsureNoGitReplacementRefs(root);
         EnsureNoUnexpectedWorktreeChanges(root, snapshot.GeneratedOutputPaths);
         if (!ReadExactHead(root).Equals(snapshot.SourceCommit, StringComparison.OrdinalIgnoreCase))
         {
@@ -85,11 +88,23 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
 
         ValidateAppleInputs(root, releaseConfigPath, options, generatedOutputs);
+        EnsureNoGitReplacementRefs(root);
         EnsureNoUnexpectedWorktreeChanges(root, generatedOutputs);
         if (!ReadExactHead(root).Equals(snapshot.SourceCommit, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
                 "Repository HEAD changed while the Apple release checkpoint was being built. Rebuild from the new exact source commit.");
+        }
+    }
+
+    private void EnsureNoGitReplacementRefs(string repositoryRoot)
+    {
+        var replacements = RunGit(repositoryRoot, "replace", "-l").StdOut
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        if (replacements.Length > 0)
+        {
+            throw new InvalidOperationException(
+                "Git replacement refs are not accepted for exact-source Apple checkpoints because HEAD would not identify the effective source tree.");
         }
     }
 

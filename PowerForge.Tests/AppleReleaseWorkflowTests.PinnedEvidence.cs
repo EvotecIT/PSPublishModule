@@ -297,7 +297,7 @@ public sealed partial class AppleReleaseWorkflowTests
             File.WriteAllText(Path.Combine(receiptHistory.FullName, "legacy-upload.json"), JsonSerializer.Serialize(new
             {
                 schemaVersion = 3,
-                sourceCommit = commit,
+                sourceCommit = "89abcdef0123456789abcdef0123456789abcdef",
                 action = "Upload",
                 success = false
             }));
@@ -343,10 +343,12 @@ public sealed partial class AppleReleaseWorkflowTests
                 try { Register-AppleAutomationEvidence -SourceCommit '{{commit}}'; throw 'Unsupported receipt history was accepted.' }
                 catch { if ($_.Exception.Message -notlike '*unsupported entry*') { throw } }
                 Remove-Item -LiteralPath (Join-Path $consumer 'build/powerforge/apple/receipts/injected.bin')
-                Set-Content -LiteralPath (Join-Path $consumer 'build/powerforge/apple/receipts/wrong-legacy.json') -Value '{"schemaVersion":3,"sourceCommit":"89abcdef0123456789abcdef0123456789abcdef"}'
-                try { Register-AppleAutomationEvidence -SourceCommit '{{commit}}'; throw 'Wrong-source legacy history was accepted.' }
+                $latestReceipt = Join-Path $consumer 'build/powerforge/apple/release-receipt.json'
+                $savedLatestReceipt = Get-Content -LiteralPath $latestReceipt -Raw
+                Set-Content -LiteralPath $latestReceipt -Value '{"schemaVersion":3,"sourceCommit":"89abcdef0123456789abcdef0123456789abcdef"}'
+                try { Register-AppleAutomationEvidence -SourceCommit '{{commit}}'; throw 'Wrong-source latest legacy receipt was accepted.' }
                 catch { if ($_.Exception.Message -notlike '*source commit does not match*') { throw } }
-                Remove-Item -LiteralPath (Join-Path $consumer 'build/powerforge/apple/receipts/wrong-legacy.json')
+                Set-Content -LiteralPath $latestReceipt -Value $savedLatestReceipt -NoNewline
                 Set-Content -LiteralPath (Join-Path $consumer 'build/powerforge/apple/injected.bin') -Value 'not reviewed'
                 try { Assert-ConsumerRepositoryContent; throw 'Unreviewed file was accepted.' }
                 catch { if ($_.Exception.Message -notlike '*non-reviewed content*') { throw }; 'PASS' }

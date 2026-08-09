@@ -113,6 +113,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Directory.CreateDirectory(Path.GetDirectoryName(receiptPath)!);
             File.WriteAllText(receiptPath, JsonSerializer.Serialize(new PowerForgeAppleReleaseReceipt
             {
+                SchemaVersion = 3,
                 Action = PowerForgeAppleReleaseAction.Upload,
                 SourceCommit = priorSourceCommit,
                 Success = false,

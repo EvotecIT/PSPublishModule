@@ -225,6 +225,41 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_ConfiguredPlan_BindsArchiveAndUploadExecutionFlags()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var service = CreateAppleAutomationService(request => CreateReleaseState(request, "VALID"));
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Archive = false;
+            spec.AppleApps.Upload = false;
+            var request = new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                PlanOnly = true,
+                AppleAction = PowerForgeAppleReleaseAction.Configured
+            };
+
+            var statusOnly = service.Execute(spec, request);
+            spec.AppleApps.Archive = true;
+            var archive = service.Execute(spec, request);
+            spec.AppleApps.Upload = true;
+            var archiveAndUpload = service.Execute(spec, request);
+
+            Assert.NotEqual(statusOnly.AppleReceipt!.PlanSha256, archive.AppleReceipt!.PlanSha256);
+            Assert.NotEqual(archive.AppleReceipt.PlanSha256, archiveAndUpload.AppleReceipt!.PlanSha256);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleProtectedMutationRejectsStateChangedAfterPlanApproval()
     {
         var root = CreateSandbox();
@@ -1051,7 +1086,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_AppleUpload_ResumesFromImmediateBuildUploadAttestationWhenFinalReadbackFailed()
+    public void Execute_AppleUpload_ResumesFromImmediateAttestationBeforeRemoteBuildIsVisible()
     {
         const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
         var root = CreateSandbox();
@@ -1096,22 +1131,16 @@ public sealed partial class PowerForgeReleaseServiceTests
                 receipt => receipt.OperationPhase == "UploadAttested");
 
             var resumed = CreateAppleAutomationService(
-                    request => CreateReleaseState(request, "VALID"),
+                    request => CreateReleaseState(request, processingState: null),
                     archiveAppleApp: _ => throw new InvalidOperationException("Verified resume must skip archive."),
                     uploadAppleApp: _ => throw new InvalidOperationException("Verified resume must skip upload."),
-                    getAppleBuildUpload: (_, id) => new AppStoreConnectBuildUploadInfo
-                    {
-                        Id = id,
-                        State = "COMPLETE",
-                        MarketingVersion = "1.2.0",
-                        BuildNumber = "9",
-                        Platform = "IOS"
-                    })
+                    getAppleBuildUpload: (_, _) => throw new InvalidOperationException("Pre-visibility resume must not require remote build lookup."))
                 .Execute(spec, new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.UploadExisting,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = sourceCommit,
+                    AppleWaitForProcessing = false
                 });
 
             Assert.True(resumed.Success, resumed.ErrorMessage);

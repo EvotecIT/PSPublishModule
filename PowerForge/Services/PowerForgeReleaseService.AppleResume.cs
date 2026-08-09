@@ -67,8 +67,16 @@ internal sealed partial class PowerForgeReleaseService
 
         var state = ReadAppleReleaseState(plan, app);
         var platform = AssertSinglePlatformState(state, app);
+        var attestation = FindVerifiedAppleUploadAttestation(plan, app, state, platform.MatchedBuild);
         if (platform.MatchedBuild is null)
         {
+            if (attestation is not null)
+            {
+                if (plan.Automation.WaitForProcessing)
+                    state = WaitForAppleBuild(plan, app, state, attestation.Target.BuildUploadId);
+                PopulateResumedAppleUpload(result, state, attestation, adopted: false);
+                return true;
+            }
             if (plan.AdoptExistingBuild)
             {
                 throw new InvalidOperationException(
@@ -87,7 +95,6 @@ internal sealed partial class PowerForgeReleaseService
                 state);
         }
 
-        var attestation = FindVerifiedAppleUploadAttestation(plan, app, state, platform.MatchedBuild);
         if (attestation is null && !plan.AdoptExistingBuild)
         {
             throw new InvalidOperationException(
@@ -103,21 +110,30 @@ internal sealed partial class PowerForgeReleaseService
             state = WaitForAppleBuild(plan, app, state);
         }
 
+        PopulateResumedAppleUpload(result, state, attestation, adopted: attestation is null);
+        return true;
+    }
+
+    private static void PopulateResumedAppleUpload(
+        PowerForgeAppleAppReleaseResult result,
+        AppStoreConnectReleaseStateResult state,
+        AppleUploadAttestation? attestation,
+        bool adopted)
+    {
         result.RemoteState = state;
         result.ResumedExistingBuild = true;
-        result.AdoptedExistingBuild = attestation is null;
+        result.AdoptedExistingBuild = adopted;
         result.ResumedUploadAttestation = attestation?.Target;
         result.ResumedUploadAttestationAttemptId = attestation?.Target.UploadAttestationAttemptId ?? attestation?.Receipt.AttemptId;
         result.ArchiveSha256 = attestation?.Target.ArchiveSha256;
         result.SkippedSteps = new[] { "archive", "upload" };
-        return true;
     }
 
     private AppleUploadAttestation? FindVerifiedAppleUploadAttestation(
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app,
         AppStoreConnectReleaseStateResult state,
-        AppStoreConnectBuildInfo remoteBuild)
+        AppStoreConnectBuildInfo? remoteBuild)
     {
         if (string.IsNullOrWhiteSpace(plan.SourceCommit))
             return null;
@@ -147,6 +163,13 @@ internal sealed partial class PowerForgeReleaseService
                 IsVerifiedUploadCheckpoint(receipts, receipt, candidate));
             if (target is null)
                 continue;
+
+            if (remoteBuild is null)
+            {
+                if (string.IsNullOrWhiteSpace(target.BuildUploadId))
+                    continue;
+                return new AppleUploadAttestation(receipt, target);
+            }
 
             if (!string.IsNullOrWhiteSpace(target.BuildId) &&
                 !string.Equals(target.BuildId, remoteBuild.Id, StringComparison.OrdinalIgnoreCase))

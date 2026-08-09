@@ -547,6 +547,109 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains("exact", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_unlocked_remote_dependency_in_local_swift_package()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("LocalRemotePackageInputRepo");
+        var project = scope.CreateDirectory(Path.Combine("LocalRemotePackageInputRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            """
+            000000000000000000000001 = {
+                isa = XCLocalSwiftPackageReference;
+                relativePath = Packages/Shared;
+            };
+            """);
+        var package = scope.CreateDirectory(Path.Combine("LocalRemotePackageInputRepo", "Packages", "Shared"));
+        File.WriteAllText(
+            Path.Combine(package, "Package.swift"),
+            """
+            // swift-tools-version: 6.0
+            import PackageDescription
+            let package = Package(
+                name: "Shared",
+                dependencies: [
+                    .package(url: "https://example.invalid/MutablePackage.git", from: "1.0.0")
+                ]
+            )
+            """);
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Package.resolved", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("exact", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_accepts_tracked_project_lock_for_local_package_dependency()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("LockedLocalRemotePackageInputRepo");
+        var project = scope.CreateDirectory(Path.Combine("LockedLocalRemotePackageInputRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            """
+            000000000000000000000001 = {
+                isa = XCLocalSwiftPackageReference;
+                relativePath = Packages/Shared;
+            };
+            """);
+        var package = scope.CreateDirectory(Path.Combine("LockedLocalRemotePackageInputRepo", "Packages", "Shared"));
+        const string dependencyUrl = "https://example.invalid/MutablePackage.git";
+        File.WriteAllText(
+            Path.Combine(package, "Package.swift"),
+            $$"""
+            // swift-tools-version: 6.0
+            import PackageDescription
+            let package = Package(
+                name: "Shared",
+                dependencies: [
+                    .package(url: "{{dependencyUrl}}", from: "1.0.0")
+                ]
+            )
+            """);
+        var lockDirectory = scope.CreateDirectory(Path.Combine(
+            "LockedLocalRemotePackageInputRepo",
+            "Sample.xcodeproj",
+            "project.xcworkspace",
+            "xcshareddata",
+            "swiftpm"));
+        File.WriteAllText(
+            Path.Combine(lockDirectory, "Package.resolved"),
+            $$"""{ "pins": [ { "location": "{{dependencyUrl}}", "state": { "revision": "0123456789abcdef0123456789abcdef01234567" } } ] }""");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var sourceCommit = CommitRepository(repositoryRoot);
+
+        var resolved = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(sourceCommit, resolved);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_git_replacement_refs()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ReplacementRefRepo");
+        var project = scope.CreateDirectory(Path.Combine("ReplacementRefRepo", "Sample.xcodeproj"));
+        File.WriteAllText(Path.Combine(project, "project.pbxproj"), "// project");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var originalHead = CommitRepository(repositoryRoot);
+        File.WriteAllText(Path.Combine(repositoryRoot, "replacement.txt"), "alternate source");
+        RunGit(repositoryRoot, "add", "replacement.txt");
+        RunGit(repositoryRoot, "commit", "--quiet", "-m", "Replacement source");
+        RunGit(repositoryRoot, "replace", originalHead, "HEAD");
+        RunGit(repositoryRoot, "reset", "--hard", originalHead);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("replacement refs", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string WriteAppleReleaseConfig(
         string repositoryRoot,
         string projectRoot,

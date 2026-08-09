@@ -143,6 +143,52 @@ public sealed class AppleReleaseReceiptStoreTests
         }
     }
 
+    [Fact]
+    public void ReadAll_RejectsSchemaFourReceiptWithoutIntegrityHash()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var plan = CreatePlan(root);
+            Directory.CreateDirectory(Path.GetDirectoryName(plan.ReceiptPath)!);
+            File.WriteAllText(
+                plan.ReceiptPath,
+                "{\"schemaVersion\":4,\"action\":\"Upload\",\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"targets\":[]}");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new AppleReleaseReceiptStore().ReadAll(plan));
+
+            Assert.Contains("required integrity SHA-256", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ReadAll_AllowsExplicitSchemaThreeReceiptWithoutIntegrityHash()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var plan = CreatePlan(root);
+            Directory.CreateDirectory(Path.GetDirectoryName(plan.ReceiptPath)!);
+            File.WriteAllText(
+                plan.ReceiptPath,
+                "{\"schemaVersion\":3,\"action\":\"Upload\",\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"targets\":[]}");
+
+            var receipt = Assert.Single(new AppleReleaseReceiptStore().ReadAll(plan));
+
+            Assert.Equal(3, receipt.SchemaVersion);
+            Assert.Null(receipt.ReceiptSha256);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
 #if NET8_0_OR_GREATER
     [Fact]
     public void WriteAttempt_RejectsLinkedReceiptHistoryDirectory()
