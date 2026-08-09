@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.evotec.xyz/powerforge/web/search-providers/v1.json",
+  "title": "PowerForge.Web Search Intelligence provider configuration",
+  "description": "Structural preflight for fleet provider identities, requested capabilities, non-secret settings, and environment-backed credential references. The capability doctor is the authoritative semantic and runtime-availability gate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sites"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1, "maximum": 1 },
+    "sites": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/site" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "httpUrl": {
+      "type": "string",
+      "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://"
+    },
+    "site": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "baseUrl", "providers"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "baseUrl": { "$ref": "#/$defs/httpUrl" },
+        "providers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/provider" }
+        }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "capabilities"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "kind": {
+          "enum": [
+            "google-search-console",
+            "bing-webmaster",
+            "bing-webmaster-export",
+            "cloudflare-analytics",
+            "lighthouse",
+            "google-crux"
+          ]
+        },
+        "enabled": { "type": "boolean", "default": true },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "search.analytics",
+              "search.sitemaps",
+              "search.url-inspection",
+              "traffic.analytics",
+              "performance.lighthouse",
+              "performance.crux"
+            ]
+          }
+        },
+        "credential": { "$ref": "#/$defs/credential" },
+        "settings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "null"]
+          }
+        }
+      }
+    },
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "environmentVariable"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "google-service-account-json",
+            "google-service-account-file",
+            "google-api-key",
+            "bing-api-key",
+            "cloudflare-api-token"
+          ]
+        },
+        "environmentVariable": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        }
+      }
+    }
+  }
+}

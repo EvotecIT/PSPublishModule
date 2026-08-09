@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "sites": [
+    {
+      "id": "officeimo",
+      "baseUrl": "https://officeimo.com/",
+      "providers": [
+        {
+          "id": "google-search-console",
+          "kind": "google-search-console",
+          "enabled": false,
+          "capabilities": [
+            "search.analytics",
+            "search.sitemaps",
+            "search.url-inspection"
+          ],
+          "credential": {
+            "kind": "google-service-account-file",
+            "environmentVariable": "POWERFORGE_GSC_CREDENTIALS_FILE"
+          },
+          "settings": {
+            "property": "sc-domain:officeimo.com"
+          }
+        },
+        {
+          "id": "bing-webmaster",
+          "kind": "bing-webmaster",
+          "enabled": false,
+          "capabilities": [
+            "search.analytics",
+            "search.sitemaps"
+          ],
+          "credential": {
+            "kind": "bing-api-key",
+            "environmentVariable": "POWERFORGE_BING_API_KEY"
+          },
+          "settings": {
+            "siteUrl": "https://officeimo.com/"
+          }
+        },
+        {
+          "id": "cloudflare",
+          "kind": "cloudflare-analytics",
+          "enabled": false,
+          "capabilities": ["traffic.analytics"],
+          "credential": {
+            "kind": "cloudflare-api-token",
+            "environmentVariable": "POWERFORGE_CLOUDFLARE_API_TOKEN"
+          },
+          "settings": {
+            "zoneId": "00000000000000000000000000000000"
+          }
+        },
+        {
+          "id": "lighthouse",
+          "kind": "lighthouse",
+          "capabilities": ["performance.lighthouse"]
+        },
+        {
+          "id": "crux",
+          "kind": "google-crux",
+          "enabled": false,
+          "capabilities": ["performance.crux"],
+          "credential": {
+            "kind": "google-api-key",
+            "environmentVariable": "POWERFORGE_CRUX_API_KEY"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -59,6 +59,7 @@ collection: {{collection}}
             "xref-merge" => HandleXrefMerge(subArgs, outputJson, logger, outputSchemaVersion),
             "server" => HandleServer(subArgs, outputJson, logger, outputSchemaVersion),
             "cloudflare" => HandleCloudflare(subArgs, outputJson, logger, outputSchemaVersion),
+            "provider" => HandleProvider(subArgs, outputJson, logger, outputSchemaVersion),
             "observe" => HandleObserve(subArgs, outputJson, logger, outputSchemaVersion),
             "opportunity" => HandleOpportunity(subArgs, outputJson, logger, outputSchemaVersion),
             _ => HandleUnknownCommand()
