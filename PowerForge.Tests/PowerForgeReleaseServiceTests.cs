@@ -950,7 +950,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
             File.WriteAllText(keyPath, "private-key");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, "VALID"));
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {

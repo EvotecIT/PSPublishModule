@@ -926,10 +926,15 @@ internal sealed partial class PowerForgeReleaseService
         if (!File.Exists(fullPath))
             throw new FileNotFoundException($"Unified release config was not found: {fullPath}", fullPath);
 
-        var spec = JsonSerializer.Deserialize<PowerForgeReleaseSpec>(
-            File.ReadAllText(fullPath),
-            CreateJsonOptions());
-        return spec ?? throw new InvalidOperationException($"Unable to deserialize unified release config: {fullPath}");
+        return LoadConfigurationContent(File.ReadAllText(fullPath), fullPath);
+    }
+
+    internal static PowerForgeReleaseSpec LoadConfigurationContent(string content, string sourcePath)
+    {
+        if (content is null)
+            throw new ArgumentNullException(nameof(content));
+        var spec = JsonSerializer.Deserialize<PowerForgeReleaseSpec>(content, CreateJsonOptions());
+        return spec ?? throw new InvalidOperationException($"Unable to deserialize unified release config: {sourcePath}");
     }
 
     internal PowerForgeReleaseResult PublishBuiltReleaseOutputs(

@@ -94,6 +94,14 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             if (!unifiedRequest.SkipAppleApps)
             {
                 appleSourceTrust = _captureAppleSourceTrust(repositoryRoot, configPath);
+                if (appleSourceTrust.ExactConfigurationContent is not null)
+                {
+                    unifiedRequest = CreateUnifiedReleaseBuildRequest(
+                        configPath,
+                        PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
+                        moduleStagingPath,
+                        appleSourceTrust.ExactConfigurationContent);
+                }
                 unifiedRequest.AppleSourceCommit = appleSourceTrust.SourceCommit;
             }
             unifiedRequest.CancellationToken = cancellationToken;
@@ -168,7 +176,8 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
     internal static PowerForgeReleaseRequest CreateUnifiedReleaseBuildRequest(
         string configPath,
         string moduleHostPath,
-        string moduleStagingPath)
+        string moduleStagingPath,
+        string? exactConfigurationContent = null)
     {
         var request = new PowerForgeReleaseRequest {
             ConfigPath = configPath,
@@ -184,8 +193,11 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             SkipAppleApps = true,
             SubmitWinget = false
         };
+        request.ExactConfigurationContent = exactConfigurationContent;
 
-        var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
+        var spec = exactConfigurationContent is null
+            ? PowerForgeReleaseService.LoadConfiguration(configPath)
+            : PowerForgeReleaseService.LoadConfigurationContent(exactConfigurationContent, configPath);
         if (spec.AppleApps is not null)
         {
             request.SkipAppleApps = false;
@@ -203,7 +215,9 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
 
     private static PowerForgeReleaseResult ExecuteUnifiedReleaseBuild(string configPath, PowerForgeReleaseRequest request)
     {
-        var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
+        var spec = request.ExactConfigurationContent is null
+            ? PowerForgeReleaseService.LoadConfiguration(configPath)
+            : PowerForgeReleaseService.LoadConfigurationContent(request.ExactConfigurationContent, configPath);
         return new PowerForgeReleaseService(new NullLogger()).Execute(spec, request);
     }
 

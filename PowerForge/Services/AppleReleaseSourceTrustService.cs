@@ -42,9 +42,14 @@ internal sealed partial class AppleReleaseSourceTrustService
         EnsureNoGitReplacementRefs(root);
         _git.EnsureClean(root);
         var sourceCommitBeforeValidation = ReadExactHead(root);
-        EnsureTrackedFile(root, releaseConfigPath, "Apple release configuration");
-
-        var spec = PowerForgeReleaseService.LoadConfiguration(releaseConfigPath);
+        var releaseConfigBytes = File.ReadAllBytes(releaseConfigPath);
+        EnsureTrackedFile(
+            root,
+            releaseConfigPath,
+            "Apple release configuration",
+            ComputeRawGitBlobId(root, releaseConfigBytes));
+        var releaseConfigContent = DecodeTrackedText(releaseConfigBytes);
+        var spec = PowerForgeReleaseService.LoadConfigurationContent(releaseConfigContent, releaseConfigPath);
         var options = spec.AppleApps
             ?? throw new InvalidOperationException("The release configuration does not contain an AppleApps contract.");
         var generatedOutputs = ResolveGeneratedOutputPaths(releaseConfigPath, options);
@@ -58,7 +63,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             throw new InvalidOperationException(
                 "Repository HEAD changed while Apple release inputs were being validated. Rebuild from the new exact source commit.");
         }
-        return new AppleReleaseSourceTrustSnapshot(sourceCommitAfterValidation, generatedOutputs);
+        return new AppleReleaseSourceTrustSnapshot(sourceCommitAfterValidation, generatedOutputs, releaseConfigContent);
     }
 
     internal void ValidateAfterBuild(
@@ -80,7 +85,9 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
 
         EnsureTrackedFile(root, releaseConfigPath, "Apple release configuration");
-        var options = PowerForgeReleaseService.LoadConfiguration(releaseConfigPath).AppleApps
+        var options = PowerForgeReleaseService.LoadConfigurationContent(
+                snapshot.ExactConfigurationContent ?? File.ReadAllText(releaseConfigPath),
+                releaseConfigPath).AppleApps
             ?? throw new InvalidOperationException("The release configuration does not contain an AppleApps contract.");
         var generatedOutputs = ResolveGeneratedOutputPaths(releaseConfigPath, options);
         if (!PathsEqual(snapshot.GeneratedOutputPaths, generatedOutputs))
@@ -459,7 +466,11 @@ internal sealed partial class AppleReleaseSourceTrustService
     private static string[] ResolveSynchronizedRoots(IEnumerable<string> metadataPaths)
         => ResolveObjectAwareSynchronizedRoots(metadataPaths);
 
-    private void EnsureTrackedFile(string repositoryRoot, string path, string name)
+    private void EnsureTrackedFile(
+        string repositoryRoot,
+        string path,
+        string name,
+        string? capturedWorktreeBlob = null)
     {
         var candidate = Path.GetFullPath(path);
         EnsurePathWithinRepository(repositoryRoot, candidate, name);
@@ -482,7 +493,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         var headBlob = RunGitAllowFailure(repositoryRoot, "rev-parse", "--verify", $"HEAD:{relative}");
         if (!headBlob.Succeeded || string.IsNullOrWhiteSpace(headBlob.StdOut))
             throw new InvalidOperationException($"{name} is not present in the exact source commit: {relative}");
-        var worktreeBlob = ComputeRawGitBlobId(repositoryRoot, candidate);
+        var worktreeBlob = capturedWorktreeBlob ?? ComputeRawGitBlobId(repositoryRoot, candidate);
         if (!headBlob.StdOut.Trim().Equals(worktreeBlob, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"{name} differs from the exact source commit: {relative}");
     }
@@ -510,6 +521,32 @@ internal sealed partial class AppleReleaseSourceTrustService
             hash.TransformBlock(buffer, 0, read, buffer, 0);
         hash.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
         return BitConverter.ToString(hash.Hash!).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private string ComputeRawGitBlobId(string repositoryRoot, byte[] content)
+    {
+        var root = Path.GetFullPath(repositoryRoot);
+        if (!_gitObjectFormats.TryGetValue(root, out var objectFormat))
+        {
+            objectFormat = RunGit(root, "rev-parse", "--show-object-format").StdOut.Trim();
+            _gitObjectFormats[root] = objectFormat;
+        }
+        using System.Security.Cryptography.HashAlgorithm hash = objectFormat.Equals("sha256", StringComparison.OrdinalIgnoreCase)
+            ? System.Security.Cryptography.SHA256.Create()
+            : objectFormat.Equals("sha1", StringComparison.OrdinalIgnoreCase)
+                ? System.Security.Cryptography.SHA1.Create()
+                : throw new InvalidOperationException($"Unsupported Git object format '{objectFormat}'.");
+        var prefix = System.Text.Encoding.ASCII.GetBytes($"blob {content.LongLength}\0");
+        hash.TransformBlock(prefix, 0, prefix.Length, prefix, 0);
+        hash.TransformFinalBlock(content, 0, content.Length);
+        return BitConverter.ToString(hash.Hash!).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static string DecodeTrackedText(byte[] content)
+    {
+        using var stream = new MemoryStream(content, writable: false);
+        using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
     }
 
     private Dictionary<string, string> ReadHeadTreeBlobIds(string repositoryRoot, string relativeRoot)
@@ -625,13 +662,19 @@ internal sealed partial class AppleReleaseSourceTrustService
 
 internal sealed class AppleReleaseSourceTrustSnapshot
 {
-    internal AppleReleaseSourceTrustSnapshot(string sourceCommit, string[] generatedOutputPaths)
+    internal AppleReleaseSourceTrustSnapshot(
+        string sourceCommit,
+        string[] generatedOutputPaths,
+        string? exactConfigurationContent = null)
     {
         SourceCommit = sourceCommit;
         GeneratedOutputPaths = generatedOutputPaths;
+        ExactConfigurationContent = exactConfigurationContent;
     }
 
     internal string SourceCommit { get; }
 
     internal string[] GeneratedOutputPaths { get; }
+
+    internal string? ExactConfigurationContent { get; }
 }

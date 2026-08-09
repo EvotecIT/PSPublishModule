@@ -37,6 +37,7 @@ internal sealed class PowerForgeReleaseRequest
     internal string? ResolvedReleaseVersion { get; set; }
     internal IPowerForgeReleaseProgressReporter? Progress { get; set; }
     internal CancellationToken CancellationToken { get; set; }
+    internal string? ExactConfigurationContent { get; set; }
 
     public string ConfigPath { get; set; } = string.Empty;
 

@@ -391,12 +391,15 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(keyPath, "private-key");
             var spec = CreateAppleAutomationSpec(root, keyPath);
 
-            var result = new PowerForgeReleaseService(new NullLogger()).Execute(spec, new PowerForgeReleaseRequest
-            {
-                ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                AppleAction = PowerForgeAppleReleaseAction.Advance,
-                PlanOnly = true
-            });
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, "VALID"),
+                    checkAppleReleaseReadiness: (_, request) => CreateReadyReleaseReadiness(request))
+                .Execute(spec, new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Advance,
+                    PlanOnly = true
+                });
 
             Assert.True(result.Success, result.ErrorMessage);
             var plan = Assert.IsType<PowerForgeAppleReleasePlan>(result.AppleAppPlan);
@@ -408,6 +411,9 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.False(plan.SubmitTestFlightBetaReview);
             Assert.False(plan.SubmitForReview);
             Assert.False(plan.ReleaseApprovedVersion);
+            var target = Assert.Single(result.AppleReceipt!.Targets);
+            Assert.Equal("build-id", target.BuildId);
+            Assert.Equal("VALID", target.BuildProcessingState);
         }
         finally
         {

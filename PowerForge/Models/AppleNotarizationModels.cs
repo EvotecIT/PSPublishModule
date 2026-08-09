@@ -6,7 +6,7 @@ public sealed class AppleNotarizationRequest
     /// <summary>.app, .dmg, or .pkg artifact to notarize.</summary>
     public string ArtifactPath { get; set; } = string.Empty;
 
-    /// <summary>Optional explicit zip path used when ArtifactPath is an .app bundle.</summary>
+    /// <summary>Optional retained copy path for the exact private zip submitted when ArtifactPath is an .app bundle.</summary>
     public string? SubmissionPath { get; set; }
 
     /// <summary>xcrun executable.</summary>

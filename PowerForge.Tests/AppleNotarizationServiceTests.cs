@@ -31,6 +31,7 @@ public sealed class AppleNotarizationServiceTests
             Assert.Equal("submission-1", result.SubmissionId);
             Assert.Equal("Accepted", result.Status);
             Assert.EndsWith(".notarization.zip", result.SubmissionPath, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(result.SubmissionPath));
             Assert.Collection(
                 runner.Requests,
                 request => Assert.Equal("ditto-test", request.FileName),
@@ -71,6 +72,33 @@ public sealed class AppleNotarizationServiceTests
             Assert.False(result.Succeeded);
             Assert.Equal("Invalid", result.Status);
             Assert.Single(runner.Requests);
+        }
+        finally
+        {
+            try { File.Delete(artifact); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NotarizeAsync_SubmitsPrivateImmutableArtifactSnapshot()
+    {
+        var artifact = Path.GetTempFileName() + ".pkg";
+        await File.WriteAllTextAsync(artifact, "approved-pkg");
+        try
+        {
+            var runner = new SnapshotObservingNotaryRunner(artifact);
+            var result = await new AppleNotarizationService(runner).NotarizeAsync(new AppleNotarizationRequest
+            {
+                ArtifactPath = artifact,
+                KeychainProfile = "powerforge-notary",
+                Staple = false,
+                Assess = false
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.NotEqual(artifact, runner.SubmittedPath);
+            Assert.Equal("approved-pkg", runner.SubmittedContents);
+            Assert.Equal("approved-pkg", await File.ReadAllTextAsync(artifact));
         }
         finally
         {
@@ -406,10 +434,52 @@ public sealed class AppleNotarizationServiceTests
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
+            if (request.FileName.Contains("ditto", StringComparison.OrdinalIgnoreCase) && request.Arguments.Count > 0)
+                File.WriteAllText(request.Arguments[^1], "private notarization package");
             var output = request.Arguments.Count > 0 && request.Arguments[0] == "notarytool"
                 ? JsonSerializer.Serialize(new { id = "submission-1", status = _status })
                 : "ok";
             return Task.FromResult(new ProcessRunResult(0, output, string.Empty, request.FileName, TimeSpan.FromMilliseconds(1), false));
+        }
+    }
+
+    private sealed class SnapshotObservingNotaryRunner : IProcessRunner
+    {
+        private readonly string _originalArtifact;
+
+        internal SnapshotObservingNotaryRunner(string originalArtifact)
+        {
+            _originalArtifact = originalArtifact;
+        }
+
+        internal string? SubmittedPath { get; private set; }
+
+        internal string? SubmittedContents { get; private set; }
+
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            if (request.Arguments.Count > 2 && request.Arguments[0] == "notarytool")
+            {
+                SubmittedPath = request.Arguments[2];
+                File.WriteAllText(_originalArtifact, "transient-pkg");
+                SubmittedContents = File.ReadAllText(SubmittedPath);
+                File.WriteAllText(_originalArtifact, "approved-pkg");
+                return Task.FromResult(new ProcessRunResult(
+                    0,
+                    JsonSerializer.Serialize(new { id = "submission-private", status = "Accepted" }),
+                    string.Empty,
+                    request.FileName,
+                    TimeSpan.FromMilliseconds(1),
+                    false));
+            }
+
+            return Task.FromResult(new ProcessRunResult(
+                0,
+                "ok",
+                string.Empty,
+                request.FileName,
+                TimeSpan.FromMilliseconds(1),
+                false));
         }
     }
 

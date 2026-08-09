@@ -401,19 +401,22 @@ public sealed partial class PowerForgeReleaseServiceTests
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
             File.WriteAllText(keyPath, "private-key");
             File.WriteAllText(Path.Combine(root, "metadata.json"), "{}");
-            File.WriteAllText(Path.Combine(root, "screenshots.json"), "{}");
+            WriteScreenshotConfig(root, "screenshots.json", "6778025328", "1.2.0", "iOS", ".", qualityEnabled: false);
             var spec = CreateAppleAutomationSpec(root, keyPath);
             spec.AppleApps!.MetadataConfigPath = "metadata.json";
             spec.AppleApps.ScreenshotConfigPath = "screenshots.json";
 
-            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
-                spec,
-                new PowerForgeReleaseRequest
-                {
-                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                    PlanOnly = true,
-                    AppleAction = PowerForgeAppleReleaseAction.Prepare
-                });
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, "VALID"),
+                    checkAppleReleaseReadiness: (_, request) => CreateReadyReleaseReadiness(request))
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        PlanOnly = true,
+                        AppleAction = PowerForgeAppleReleaseAction.Prepare
+                    });
 
             var plan = Assert.IsType<PowerForgeAppleReleasePlan>(result.AppleAppPlan);
             Assert.True(plan.PrepareDistribution);
@@ -443,19 +446,22 @@ public sealed partial class PowerForgeReleaseServiceTests
             CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
             File.WriteAllText(keyPath, "private-key");
-            File.WriteAllText(Path.Combine(root, "screenshots.json"), "{}");
+            WriteScreenshotConfig(root, "screenshots.json", "6778025328", "1.2.0", "iOS", ".", qualityEnabled: false);
             var spec = CreateAppleAutomationSpec(root, keyPath);
             spec.AppleApps!.ScreenshotConfigPath = "screenshots.json";
             spec.AppleApps.SyncScreenshots = configuredSync;
 
-            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
-                spec,
-                new PowerForgeReleaseRequest
-                {
-                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                    PlanOnly = true,
-                    AppleAction = PowerForgeAppleReleaseAction.Advance
-                });
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, "VALID"),
+                    checkAppleReleaseReadiness: (_, request) => CreateReadyReleaseReadiness(request))
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        PlanOnly = true,
+                        AppleAction = PowerForgeAppleReleaseAction.Advance
+                    });
 
             var plan = Assert.IsType<PowerForgeAppleReleasePlan>(result.AppleAppPlan);
             Assert.Equal(expectedSync, plan.SyncScreenshots);
@@ -849,16 +855,15 @@ public sealed partial class PowerForgeReleaseServiceTests
                 PlanOnly = true
             };
 
-            var withoutBuild = service.Execute(CreateAppleAutomationSpec(root, keyPath), request);
+            var withoutBuild = Assert.Throws<InvalidOperationException>(() =>
+                service.Execute(CreateAppleAutomationSpec(root, keyPath), request));
             processingState = "VALID";
             var withBuild = service.Execute(CreateAppleAutomationSpec(root, keyPath), request);
 
-            var absentTarget = Assert.Single(withoutBuild.AppleReceipt!.Targets);
             var presentTarget = Assert.Single(withBuild.AppleReceipt!.Targets);
-            Assert.Null(absentTarget.BuildId);
+            Assert.Contains("uniquely selected", withoutBuild.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal("build-id", presentTarget.BuildId);
             Assert.Equal("VALID", presentTarget.BuildProcessingState);
-            Assert.NotEqual(withoutBuild.AppleReceipt.PlanSha256, withBuild.AppleReceipt.PlanSha256);
         }
         finally
         {
@@ -1440,6 +1445,17 @@ public sealed partial class PowerForgeReleaseServiceTests
                     NextActions = new[] { "Submit the TestFlight build to Beta App Review." }
                 }
             }
+        };
+
+    private static AppStoreConnectReleaseReadinessResult CreateReadyReleaseReadiness(
+        AppStoreConnectReleaseReadinessRequest request)
+        => new()
+        {
+            AppId = request.AppId,
+            VersionString = request.VersionString,
+            BuildNumber = request.BuildNumber,
+            Platform = request.Platform,
+            IsReady = true
         };
 
     private static AppleAppArchiveResult CreateSuccessfulArchive(AppleAppArchiveRequest request)

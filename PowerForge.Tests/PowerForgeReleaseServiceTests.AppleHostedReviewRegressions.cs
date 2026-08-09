@@ -249,6 +249,89 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_ApplePlan_BindsCompleteXcodeExecutionControls()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var service = CreateAppleAutomationService(
+                _ => throw new InvalidOperationException("Archive planning must not query App Store Connect."));
+            var approved = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Archive,
+                PlanOnly = true
+            });
+            spec.AppleApps!.XcodeBuildExecutable = "/reviewed/tools/xcodebuild";
+            spec.AppleApps.TeamId = "CHANGEDTEAM";
+            var changed = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Archive,
+                PlanOnly = true
+            });
+
+            Assert.NotEqual(approved.AppleReceipt!.MutationInputsSha256, changed.AppleReceipt!.MutationInputsSha256);
+            Assert.NotEqual(approved.AppleReceipt.PlanSha256, changed.AppleReceipt.PlanSha256);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.Prepare)]
+    [InlineData(PowerForgeAppleReleaseAction.TestFlight)]
+    [InlineData(PowerForgeAppleReleaseAction.Advance)]
+    public void AppleDistributionPlanActions_RequireObservedRemoteBuildState(PowerForgeAppleReleaseAction action)
+    {
+        var plan = new PowerForgeAppleReleasePlan { Action = action };
+        var app = new PowerForgeAppleAppReleaseTargetPlan
+        {
+            AppStoreConnectAppId = "6778025328",
+            DistributionRoute = AppleDistributionRoute.AppStore
+        };
+
+        Assert.True(PowerForgeReleaseService.RequiresObservedApplePlanState(plan, app));
+    }
+
+    [Fact]
+    public void Execute_AppleDistributionPlan_RejectsUnselectedRemoteBuild()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.TestFlightBetaGroupNames = ["Internal"];
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, processingState: null));
+
+            var exception = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.TestFlight,
+                    PlanOnly = true
+                }));
+
+            Assert.Contains("uniquely selected", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void AppleArchiveUploadSnapshot_RejectsEscapingSymbolicLinks()
     {
         if (OperatingSystem.IsWindows())

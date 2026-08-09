@@ -24,6 +24,10 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         var root = Path.Combine(Path.GetTempPath(), "PowerForge", "apple-upload-snapshots", Guid.NewGuid().ToString("N"));
         var snapshotPath = Path.Combine(root, Path.GetFileName(source));
         Directory.CreateDirectory(root);
+#if NET8_0_OR_GREATER
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+#endif
         try
         {
             CopyTree(source, snapshotPath);

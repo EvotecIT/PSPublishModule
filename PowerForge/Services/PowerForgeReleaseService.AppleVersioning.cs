@@ -172,6 +172,13 @@ internal sealed partial class PowerForgeReleaseService
 
         var state = ReadAppleReleaseState(plan, app);
         var platform = AssertSinglePlatformState(state, app);
+        if (RequiresSelectedApplePlanBuild(plan) &&
+            (platform.MatchedBuildSelected != true || string.IsNullOrWhiteSpace(platform.MatchedBuild?.Id)))
+        {
+            throw new InvalidOperationException(
+                $"Apple action '{plan.Action}' requires one uniquely selected App Store Connect build for '{app.Name}'. " +
+                "Upload and finish processing the intended exact build, then review a new plan.");
+        }
         var reviewSubmission = platform.ReviewSubmissions.FirstOrDefault(static value => value.IsSubmitted == true) ??
                                platform.ReviewSubmissions.FirstOrDefault();
         target.Version = state.VersionString ?? target.Version;
@@ -226,7 +233,7 @@ internal sealed partial class PowerForgeReleaseService
         return target;
     }
 
-    private static bool RequiresObservedApplePlanState(
+    internal static bool RequiresObservedApplePlanState(
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app)
     {
@@ -234,16 +241,33 @@ internal sealed partial class PowerForgeReleaseService
             return false;
         if (plan.Action is PowerForgeAppleReleaseAction.SubmitTestFlightReview or
             PowerForgeAppleReleaseAction.SubmitAppReview or
-            PowerForgeAppleReleaseAction.Release)
+            PowerForgeAppleReleaseAction.Release or
+            PowerForgeAppleReleaseAction.Prepare or
+            PowerForgeAppleReleaseAction.TestFlight or
+            PowerForgeAppleReleaseAction.Advance)
         {
             return true;
         }
 
         return plan.AdoptExistingBuild ||
+               plan.PrepareDistribution ||
+               plan.DistributeTestFlight ||
                plan.SubmitTestFlightBetaReview ||
                plan.SubmitForReview ||
                plan.ReleaseApprovedVersion;
     }
+
+    private static bool RequiresSelectedApplePlanBuild(PowerForgeAppleReleasePlan plan)
+        => plan.Action is PowerForgeAppleReleaseAction.SubmitTestFlightReview or
+               PowerForgeAppleReleaseAction.SubmitAppReview or
+               PowerForgeAppleReleaseAction.Prepare or
+               PowerForgeAppleReleaseAction.TestFlight or
+               PowerForgeAppleReleaseAction.Advance ||
+           plan.AdoptExistingBuild ||
+           plan.PrepareDistribution ||
+           plan.DistributeTestFlight ||
+           plan.SubmitTestFlightBetaReview ||
+           plan.SubmitForReview;
 
     private static string ComputeApplePlanSha256(PowerForgeAppleReleaseReceipt receipt)
     {
@@ -344,6 +368,27 @@ internal sealed partial class PowerForgeReleaseService
             plan.Configuration,
             plan.Archive,
             plan.Upload,
+            plan.XcodeBuildExecutable,
+            plan.AllowProvisioningUpdates,
+            plan.ManageAppVersionAndBuildNumber,
+            plan.UploadSymbols,
+            plan.GenerateAppStoreInformation,
+            plan.SigningStyle,
+            XcodeTargets = plan.Apps
+                .OrderBy(static app => app.Name, StringComparer.Ordinal)
+                .Select(app => new
+                {
+                    app.Name,
+                    app.TeamId,
+                    app.Upload,
+                    app.VersionUpdateRequested,
+                    app.BuildNumberPolicy,
+                    ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/'),
+                    ExportPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ExportPath).Replace('\\', '/'),
+                    RequiredEmbeddedBundleIds = app.RequiredEmbeddedBundleIds.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+                    RequiredPrivacyUsageDescriptionKeys = app.RequiredPrivacyUsageDescriptionKeys.OrderBy(static value => value, StringComparer.Ordinal).ToArray()
+                })
+                .ToArray(),
             DirectDistribution = new
             {
                 plan.DirectDistribution.ExportMethod,

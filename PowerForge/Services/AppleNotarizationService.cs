@@ -59,9 +59,19 @@ public sealed class AppleNotarizationService
         if (request.StaplingCompleted && !resumed)
             throw new ArgumentException("StaplingCompleted requires AcceptedSubmissionId.", nameof(request));
         var staplingCompleted = request.StaplingCompleted;
-        var submissionPath = resumed
+        using var submissionSnapshot = resumed
+            ? null
+            : AppleNotarizationInputSnapshot.Create(artifactPath, artifactSha256);
+        var submissionArtifactPath = submissionSnapshot?.ArtifactPath ?? artifactPath;
+        var submittedPath = resumed
             ? artifactPath
-            : await PrepareSubmissionAsync(request, artifactPath, timeout, cancellationToken).ConfigureAwait(false);
+            : await PrepareSubmissionAsync(
+                    request,
+                    submissionArtifactPath,
+                    submissionSnapshot!.RootPath,
+                    timeout,
+                    cancellationToken)
+                .ConfigureAwait(false);
         ProcessRunResult submission;
         string? submissionId;
         string? status;
@@ -82,18 +92,28 @@ public sealed class AppleNotarizationService
             var authentication = BuildAuthenticationArguments(request);
             var submitArguments = new List<string>
             {
-                "notarytool", "submit", submissionPath, "--wait", "--output-format", "json"
+                "notarytool", "submit", submittedPath, "--wait", "--output-format", "json"
             };
             submitArguments.AddRange(authentication);
-            submission = await RunAsync(request.XcrunExecutable, artifactPath, submitArguments, timeout, cancellationToken).ConfigureAwait(false);
+            submission = await RunAsync(request.XcrunExecutable, submissionArtifactPath, submitArguments, timeout, cancellationToken).ConfigureAwait(false);
             (submissionId, status) = ParseSubmission(submission);
         }
+        var submissionPath = resumed
+            ? artifactPath
+            : PreserveSubmissionPath(request, artifactPath, submittedPath);
 
         if (!resumed &&
             submission.Succeeded &&
             string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) &&
             !string.IsNullOrWhiteSpace(submissionId))
         {
+            var submittedArtifactSha256 = ComputeArtifactSha256(submissionArtifactPath);
+            if (!submittedArtifactSha256.Equals(artifactSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Apple accepted notarization submission '{submissionId}', but the private submitted artifact changed during notarytool execution. " +
+                    "Do not resubmit until the accepted submission has been reconciled.");
+            }
             try
             {
                 request.AcceptedCheckpoint?.Invoke(new AppleNotarizationAcceptedCheckpoint
@@ -190,15 +210,16 @@ public sealed class AppleNotarizationService
     private async Task<string> PrepareSubmissionAsync(
         AppleNotarizationRequest request,
         string artifactPath,
+        string privateRoot,
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
         if (!Path.GetExtension(artifactPath).Equals(".app", StringComparison.OrdinalIgnoreCase))
             return artifactPath;
 
-        var submissionPath = string.IsNullOrWhiteSpace(request.SubmissionPath)
-            ? Path.Combine(Path.GetDirectoryName(artifactPath)!, Path.GetFileNameWithoutExtension(artifactPath) + ".notarization.zip")
-            : Path.GetFullPath(request.SubmissionPath!);
+        var submissionPath = Path.Combine(
+            privateRoot,
+            Path.GetFileNameWithoutExtension(artifactPath) + ".notarization.zip");
         Directory.CreateDirectory(Path.GetDirectoryName(submissionPath)!);
         var package = await RunAsync(
             request.DittoExecutable,
@@ -209,6 +230,24 @@ public sealed class AppleNotarizationService
         if (!package.Succeeded)
             throw new InvalidOperationException($"ditto failed to package '{artifactPath}' for notarization with exit code {package.ExitCode}: {package.StdErr}");
         return submissionPath;
+    }
+
+    private static string PreserveSubmissionPath(
+        AppleNotarizationRequest request,
+        string originalArtifactPath,
+        string submittedPath)
+    {
+        if (!Path.GetExtension(originalArtifactPath).Equals(".app", StringComparison.OrdinalIgnoreCase))
+            return originalArtifactPath;
+
+        var retainedPath = string.IsNullOrWhiteSpace(request.SubmissionPath)
+            ? Path.Combine(
+                Path.GetDirectoryName(originalArtifactPath)!,
+                Path.GetFileNameWithoutExtension(originalArtifactPath) + ".notarization.zip")
+            : Path.GetFullPath(request.SubmissionPath!);
+        Directory.CreateDirectory(Path.GetDirectoryName(retainedPath)!);
+        File.Copy(submittedPath, retainedPath, overwrite: true);
+        return retainedPath;
     }
 
     private static string[] BuildAuthenticationArguments(AppleNotarizationRequest request)

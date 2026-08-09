@@ -6,6 +6,29 @@ namespace PowerForgeStudio.Tests;
 public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 {
     [Fact]
+    public void AppleCheckpointRequest_UsesCapturedExactReleaseConfiguration()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("CapturedConfigRepo");
+        var project = scope.CreateDirectory(Path.Combine("CapturedConfigRepo", "Sample.xcodeproj"));
+        File.WriteAllText(Path.Combine(project, "project.pbxproj"), "// tracked project");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+        var snapshot = new AppleReleaseSourceTrustService().Capture(repositoryRoot, configPath);
+        File.WriteAllText(configPath, "{}");
+
+        var request = ReleaseBuildExecutionService.CreateUnifiedReleaseBuildRequest(
+            configPath,
+            "PSPublishModule.dll",
+            Path.Combine(repositoryRoot, "staging"),
+            snapshot.ExactConfigurationContent);
+
+        Assert.False(request.SkipAppleApps);
+        Assert.True(request.CheckpointAppleApps);
+        Assert.Equal(snapshot.ExactConfigurationContent, request.ExactConfigurationContent);
+    }
+
+    [Fact]
     public void ResolveExactAppleSourceCommit_accepts_tracked_project_inputs_and_ignored_user_state()
     {
         using var scope = new TemporaryDirectoryScope();
