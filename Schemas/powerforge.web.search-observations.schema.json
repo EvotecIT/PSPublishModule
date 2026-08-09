@@ -115,9 +115,20 @@
           "format": "date"
         },
         "page": {
-          "type": ["string", "null"],
-          "format": "uri",
-          "pattern": "^[hH][tT][tT][pP][sS]?://"
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^\\s*$"
+            },
+            {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^[hH][tT][tT][pP][sS]?://"
+            }
+          ]
         },
         "query": {
           "type": ["string", "null"]

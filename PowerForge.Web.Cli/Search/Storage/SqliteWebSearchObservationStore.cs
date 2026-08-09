@@ -8,11 +8,11 @@ namespace PowerForge.Web.Cli;
 
 internal sealed class SqliteWebSearchObservationStore
 {
-    internal const int CurrentSchemaVersion = 2;
+    internal const int CurrentSchemaVersion = 3;
 
-    private const string CreateSchemaSql = """
+    private const string CreateTablesSql = """
         CREATE TABLE IF NOT EXISTS search_observation_runs (
-            run_id TEXT NOT NULL PRIMARY KEY,
+            run_id TEXT NOT NULL,
             provider TEXT NOT NULL,
             site_id TEXT NOT NULL,
             collected_at_utc TEXT NOT NULL,
@@ -20,7 +20,8 @@ internal sealed class SqliteWebSearchObservationStore
             status TEXT NOT NULL,
             configuration_hash TEXT NULL,
             evidence_reference TEXT NULL,
-            normalized_manifest_json TEXT NOT NULL
+            normalized_manifest_json TEXT NOT NULL,
+            PRIMARY KEY (provider, site_id, run_id)
         );
         CREATE TABLE IF NOT EXISTS search_observations (
             observation_key TEXT NOT NULL PRIMARY KEY,
@@ -38,16 +39,21 @@ internal sealed class SqliteWebSearchObservationStore
             click_through_rate REAL NULL,
             average_position REAL NULL,
             evidence_reference TEXT NULL,
-            FOREIGN KEY (run_id) REFERENCES search_observation_runs(run_id)
+            FOREIGN KEY (provider, site_id, run_id)
+                REFERENCES search_observation_runs(provider, site_id, run_id)
         );
+        """;
+
+    private const string CreateIndexesSql = """
         CREATE INDEX IF NOT EXISTS ix_search_observations_site_date
             ON search_observations(site_id, observation_date);
         CREATE INDEX IF NOT EXISTS ix_search_observations_provider_site_date
             ON search_observations(provider, site_id, observation_date);
         CREATE UNIQUE INDEX IF NOT EXISTS ux_search_observation_runs_provider_site_collected
             ON search_observation_runs(provider, site_id, collected_at_utc);
-        PRAGMA user_version = 2;
         """;
+
+    private const string CreateSchemaSql = CreateTablesSql + CreateIndexesSql + "PRAGMA user_version = 3;";
 
     private const string FindVersionOneCollisionsSql = """
         SELECT provider, site_id, collected_at_utc
@@ -58,11 +64,32 @@ internal sealed class SqliteWebSearchObservationStore
         LIMIT 1;
         """;
 
-    private const string MigrateVersionOneToTwoSql = """
-        CREATE UNIQUE INDEX IF NOT EXISTS ux_search_observation_runs_provider_site_collected
-            ON search_observation_runs(provider, site_id, collected_at_utc);
-        PRAGMA user_version = 2;
-        """;
+    private const string MigrateLegacySchemaSql = """
+        ALTER TABLE search_observations RENAME TO search_observations_legacy;
+        ALTER TABLE search_observation_runs RENAME TO search_observation_runs_legacy;
+        DROP INDEX IF EXISTS ix_search_observations_site_date;
+        DROP INDEX IF EXISTS ix_search_observations_provider_site_date;
+        DROP INDEX IF EXISTS ux_search_observation_runs_provider_site_collected;
+        """ + CreateTablesSql + """
+        INSERT INTO search_observation_runs (
+            run_id, provider, site_id, collected_at_utc, source_kind, status,
+            configuration_hash, evidence_reference, normalized_manifest_json
+        )
+        SELECT run_id, provider, site_id, collected_at_utc, source_kind, status,
+               configuration_hash, evidence_reference, normalized_manifest_json
+        FROM search_observation_runs_legacy;
+        INSERT INTO search_observations (
+            observation_key, run_id, provider, site_id, observation_date, page, query,
+            country, device, search_type, clicks, impressions, click_through_rate,
+            average_position, evidence_reference
+        )
+        SELECT observation_key, run_id, provider, site_id, observation_date, page, query,
+               country, device, search_type, clicks, impressions, click_through_rate,
+               average_position, evidence_reference
+        FROM search_observations_legacy;
+        DROP TABLE search_observations_legacy;
+        DROP TABLE search_observation_runs_legacy;
+        """ + CreateIndexesSql + "PRAGMA user_version = 3;";
 
     private readonly string _databasePath;
 
@@ -105,9 +132,14 @@ internal sealed class SqliteWebSearchObservationStore
                 if (insertedRun == 0)
                 {
                     var existingManifest = await transaction.QueryAsListAsync(
-                        "SELECT normalized_manifest_json FROM search_observation_runs WHERE run_id = @run_id;",
+                        "SELECT normalized_manifest_json FROM search_observation_runs WHERE provider = @provider AND site_id = @site_id AND run_id = @run_id;",
                         static record => record.GetString(0),
-                        new Dictionary<string, object?> { ["@run_id"] = normalizedBatch.RunId },
+                        new Dictionary<string, object?>
+                        {
+                            ["@provider"] = normalizedBatch.Provider,
+                            ["@site_id"] = normalizedBatch.SiteId,
+                            ["@run_id"] = normalizedBatch.RunId
+                        },
                         cancellationToken: token).ConfigureAwait(false);
                     if (existingManifest.Count == 0)
                     {
@@ -118,7 +150,7 @@ internal sealed class SqliteWebSearchObservationStore
                         !string.Equals(existingManifest[0], normalizedManifestJson, StringComparison.Ordinal))
                     {
                         throw new InvalidOperationException(
-                            $"Search run identifier '{normalizedBatch.RunId}' is already assigned to different normalized evidence.");
+                            $"Search run identifier '{normalizedBatch.RunId}' is already assigned to different normalized evidence for provider '{normalizedBatch.Provider}' and site '{normalizedBatch.SiteId}'.");
                     }
                 }
 
@@ -221,7 +253,10 @@ internal sealed class SqliteWebSearchObservationStore
                            ORDER BY runs.collected_at_utc DESC, observations.run_id DESC
                        ) AS revision_rank
                 FROM search_observations AS observations
-                INNER JOIN search_observation_runs AS runs ON runs.run_id = observations.run_id
+                INNER JOIN search_observation_runs AS runs
+                    ON runs.provider = observations.provider
+                   AND runs.site_id = observations.site_id
+                   AND runs.run_id = observations.run_id
                 WHERE {string.Join(" AND ", clauses.Select(clause => "observations." + clause))}
             )
             SELECT observation_key, provider, site_id, observation_date, page, query,
@@ -281,11 +316,13 @@ internal sealed class SqliteWebSearchObservationStore
                     if (collisions.Count > 0)
                     {
                         throw new InvalidOperationException(
-                            $"Search database schema v1 contains competing runs for {collisions[0]}. Resolve the duplicate collection timestamp before upgrading to schema v2.");
+                            $"Search database schema v1 contains competing runs for {collisions[0]}. Resolve the duplicate collection timestamp before upgrading to schema v3.");
                     }
-
+                }
+                if (version is 1 or 2)
+                {
                     await transaction.ExecuteNonQueryAsync(
-                        MigrateVersionOneToTwoSql,
+                        MigrateLegacySchemaSql,
                         cancellationToken: token).ConfigureAwait(false);
                 }
             },

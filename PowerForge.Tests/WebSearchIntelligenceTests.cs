@@ -307,7 +307,7 @@ public sealed partial class WebSearchIntelligenceTests
 
             Assert.Equal(1, first.InsertedCount);
             Assert.Equal(0, first.DuplicateCount);
-            Assert.Equal(2, first.DatabaseSchemaVersion);
+            Assert.Equal(3, first.DatabaseSchemaVersion);
             Assert.Equal(0, second.InsertedCount);
             Assert.Equal(1, second.DuplicateCount);
             var observation = Assert.Single(observations);
@@ -429,7 +429,7 @@ public sealed partial class WebSearchIntelligenceTests
             Assert.Contains("collection time", exception.Message, StringComparison.Ordinal);
             await using var client = new SQLite();
             var version = await client.ExecuteScalarAsync(databasePath, "PRAGMA user_version;");
-            Assert.Equal(2, Convert.ToInt32(version));
+            Assert.Equal(3, Convert.ToInt32(version));
         }
         finally
         {

@@ -17,7 +17,7 @@ The current release supports imported Search Analytics-style data. It does not y
 
 ## Import contract
 
-The JSON contract is versioned by `schemaVersion`. Provider and site identifiers are normalized to lowercase. When `runId` is omitted, the collection run receives a deterministic SHA-256 identity from its normalized evidence; each row then receives a deterministic identity scoped to that run. A caller may instead supply a stable run ID from an external collection system. Re-importing the same normalized run ID is safe: the SQLite store ignores identities it already contains and rejects that ID if it points at different normalized evidence.
+The JSON contract is versioned by `schemaVersion`. Provider and site identifiers are normalized to lowercase. When `runId` is omitted, the collection run receives a deterministic SHA-256 identity from its normalized evidence; each row then receives a deterministic identity scoped to that run. A caller may instead supply a stable run ID from an external collection system. Run IDs are scoped by provider and site, so independent collectors may reuse the same external identifier. Re-importing the same normalized run ID within that scope is safe: the SQLite store ignores identities it already contains and rejects that scoped ID if it points at different normalized evidence.
 
 ```json
 {

@@ -164,6 +164,68 @@ public sealed partial class WebSearchIntelligenceTests
     }
 
     [Fact]
+    public void ObservationSchema_AllowsBlankOptionalPageOnlyWhenQueryIsPresent()
+    {
+        var withQuery = JsonNode.Parse(JsonSerializer.Serialize(CreateBatch()))!;
+        withQuery["observations"]![0]!["page"] = " \t ";
+        var withoutQuery = withQuery.DeepClone();
+        withoutQuery["observations"]![0]!["query"] = null;
+        var schema = LoadObservationSchema();
+
+        Assert.True(schema.Evaluate(withQuery, new EvaluationOptions()).IsValid);
+        Assert.False(schema.Evaluate(withoutQuery, new EvaluationOptions()).IsValid);
+    }
+
+    [Fact]
+    public async Task SqliteStore_ScopesExternalRunIdentifiersByProviderAndSite()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var databasePath = Path.Combine(root, "fleet.db");
+            await CreateLegacyVersionTwoDatabaseAsync(databasePath);
+            var officeGoogle = CreateBatch();
+            officeGoogle.RunId = "42";
+            var tactraGoogle = CreateBatch();
+            tactraGoogle.RunId = "42";
+            tactraGoogle.SiteId = "tactra";
+            var officeBing = CreateBatch();
+            officeBing.RunId = "42";
+            officeBing.Provider = "bing-webmaster";
+            var store = new SqliteWebSearchObservationStore(databasePath);
+
+            var imports = new[]
+            {
+                await store.ImportAsync(WebSearchObservationNormalizer.Normalize(officeGoogle)),
+                await store.ImportAsync(WebSearchObservationNormalizer.Normalize(tactraGoogle)),
+                await store.ImportAsync(WebSearchObservationNormalizer.Normalize(officeBing))
+            };
+
+            Assert.All(imports, result => Assert.Equal(1, result.InsertedCount));
+            Assert.All(imports, result => Assert.Equal(3, result.DatabaseSchemaVersion));
+            Assert.Single(await store.QueryAsync(new WebSearchObservationQuery
+            {
+                SiteId = "officeimo",
+                Provider = "google-search-console"
+            }));
+            Assert.Single(await store.QueryAsync(new WebSearchObservationQuery
+            {
+                SiteId = "officeimo",
+                Provider = "bing-webmaster"
+            }));
+            Assert.Single(await store.QueryAsync(new WebSearchObservationQuery
+            {
+                SiteId = "tactra",
+                Provider = "google-search-console"
+            }));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public async Task SqliteStore_RefusesToClaimUnrelatedVersionZeroDatabase()
     {
         var root = CreateTemporaryDirectory();
@@ -199,5 +261,50 @@ public sealed partial class WebSearchIntelligenceTests
             "Schemas",
             "powerforge.web.search-observations.schema.json"));
         return JsonSchema.FromText(File.ReadAllText(schemaPath));
+    }
+
+    private static async Task CreateLegacyVersionTwoDatabaseAsync(string databasePath)
+    {
+        await using var client = new SQLite();
+        await client.ExecuteNonQueryAsync(
+            databasePath,
+            """
+            CREATE TABLE search_observation_runs (
+                run_id TEXT NOT NULL PRIMARY KEY,
+                provider TEXT NOT NULL,
+                site_id TEXT NOT NULL,
+                collected_at_utc TEXT NOT NULL,
+                source_kind TEXT NOT NULL,
+                status TEXT NOT NULL,
+                configuration_hash TEXT NULL,
+                evidence_reference TEXT NULL,
+                normalized_manifest_json TEXT NOT NULL
+            );
+            CREATE TABLE search_observations (
+                observation_key TEXT NOT NULL PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                site_id TEXT NOT NULL,
+                observation_date TEXT NOT NULL,
+                page TEXT NULL,
+                query TEXT NULL,
+                country TEXT NULL,
+                device TEXT NULL,
+                search_type TEXT NULL,
+                clicks INTEGER NOT NULL,
+                impressions INTEGER NOT NULL,
+                click_through_rate REAL NULL,
+                average_position REAL NULL,
+                evidence_reference TEXT NULL,
+                FOREIGN KEY (run_id) REFERENCES search_observation_runs(run_id)
+            );
+            CREATE INDEX ix_search_observations_site_date
+                ON search_observations(site_id, observation_date);
+            CREATE INDEX ix_search_observations_provider_site_date
+                ON search_observations(provider, site_id, observation_date);
+            CREATE UNIQUE INDEX ux_search_observation_runs_provider_site_collected
+                ON search_observation_runs(provider, site_id, collected_at_utc);
+            PRAGMA user_version = 2;
+            """);
     }
 }
