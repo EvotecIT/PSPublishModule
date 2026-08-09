@@ -25,11 +25,13 @@
     },
     "provider": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "pattern": "\\S"
     },
     "siteId": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "pattern": "\\S"
     },
     "collectedAtUtc": {
       "type": "string",
@@ -37,7 +39,8 @@
     },
     "sourceKind": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "pattern": "\\S"
     },
     "status": {
       "enum": ["complete", "partial"]
@@ -91,7 +94,8 @@
           "properties": {
             "query": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "pattern": "\\S"
             }
           }
         }

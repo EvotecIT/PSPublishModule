@@ -64,7 +64,7 @@ Position-based opportunity rules use only observations that contain both positiv
 
 The public analyzer rejects competing revisions for the same provider, site, date, and dimensions because an observation row does not carry enough run metadata to choose the newest revision safely. Querying through the SQLite store resolves revisions by collection time first; direct library callers must make the same choice before analysis.
 
-Search storage initializes only an empty SQLite database and refuses to claim an unrelated version-zero database. Human-readable opportunity output escapes control and line-separator characters from provider text; JSON output retains the original normalized values for machine consumers.
+Search storage initializes and migrates its schema transactionally. It initializes only an empty SQLite database and refuses to claim an unrelated version-zero database. Human-readable Search command output escapes control and line-separator characters from provider text; JSON output retains the original normalized values for machine consumers.
 
 The import result reports input, inserted and duplicate counts plus the database schema version. The stored run keeps the normalized manifest and a non-secret evidence reference. Providers may revise recent daily metrics, so later collection runs remain immutable revisions while reports select only the latest snapshot for each provider/site/date/dimension. A provider/site pair may have only one run at a given `collectedAtUtc`; collectors must use the actual completion time so competing revisions never rely on arbitrary ID ordering. Raw provider payloads should remain in a separately governed evidence location; do not put access tokens or private account data in the import file.
 

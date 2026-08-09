@@ -1,5 +1,7 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using DBAClientX;
+using Json.Schema;
 using PowerForge.Web;
 using PowerForge.Web.Cli;
 
@@ -139,6 +141,28 @@ public sealed partial class WebSearchIntelligenceTests
         Assert.Equal("fallback", WebCliCommandHandlers.EscapeSearchConsoleText(null, "fallback"));
     }
 
+    [Theory]
+    [InlineData("provider")]
+    [InlineData("siteId")]
+    [InlineData("sourceKind")]
+    public void ObservationSchema_RejectsWhitespaceRequiredBatchValues(string propertyName)
+    {
+        var document = JsonNode.Parse(JsonSerializer.Serialize(CreateBatch()))!;
+        document[propertyName] = " \t ";
+
+        Assert.False(LoadObservationSchema().Evaluate(document, new EvaluationOptions()).IsValid);
+    }
+
+    [Fact]
+    public void ObservationSchema_RejectsWhitespaceOnlyQueryWithoutPage()
+    {
+        var document = JsonNode.Parse(JsonSerializer.Serialize(CreateBatch()))!;
+        document["observations"]![0]!["page"] = null;
+        document["observations"]![0]!["query"] = " \t ";
+
+        Assert.False(LoadObservationSchema().Evaluate(document, new EvaluationOptions()).IsValid);
+    }
+
     [Fact]
     public async Task SqliteStore_RefusesToClaimUnrelatedVersionZeroDatabase()
     {
@@ -165,5 +189,15 @@ public sealed partial class WebSearchIntelligenceTests
         {
             TryDeleteDirectory(root);
         }
+    }
+
+    private static JsonSchema LoadObservationSchema()
+    {
+        var schemaPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..",
+            "Schemas",
+            "powerforge.web.search-observations.schema.json"));
+        return JsonSchema.FromText(File.ReadAllText(schemaPath));
     }
 }

@@ -16,20 +16,20 @@ internal static partial class WebCliCommandHandlers
         int outputSchemaVersion)
     {
         if (subArgs.Length == 0 || !subArgs[0].Equals("import", StringComparison.OrdinalIgnoreCase))
-            return Fail("Observe requires the 'import' action.", outputJson, logger, "web.observe.import");
+            return FailSearch("Observe requires the 'import' action.", outputJson, logger, "web.observe.import");
 
         var args = subArgs.Skip(1).ToArray();
         var missingValueOption = FindSearchOptionWithoutValue(
             args,
             "--input", "--database", "--provider", "--site", "--output");
         if (missingValueOption is not null)
-            return Fail($"{missingValueOption} requires a value.", outputJson, logger, "web.observe.import");
+            return FailSearch($"{missingValueOption} requires a value.", outputJson, logger, "web.observe.import");
         var inputPath = TryGetOptionValue(args, "--input");
         var databasePath = TryGetOptionValue(args, "--database");
         if (string.IsNullOrWhiteSpace(inputPath))
-            return Fail("Observe import requires --input.", outputJson, logger, "web.observe.import");
+            return FailSearch("Observe import requires --input.", outputJson, logger, "web.observe.import");
         if (string.IsNullOrWhiteSpace(databasePath))
-            return Fail("Observe import requires --database.", outputJson, logger, "web.observe.import");
+            return FailSearch("Observe import requires --database.", outputJson, logger, "web.observe.import");
 
         try
         {
@@ -42,7 +42,7 @@ internal static partial class WebCliCommandHandlers
                 providerOverride,
                 siteOverride);
             if (batch is null)
-                return Fail("Observe import input is not a valid search observation batch.", outputJson, logger, "web.observe.import");
+                return FailSearch("Observe import input is not a valid search observation batch.", outputJson, logger, "web.observe.import");
 
             var normalized = WebSearchObservationNormalizer.Normalize(batch);
             var store = new SqliteWebSearchObservationStore(fullDatabasePath);
@@ -63,14 +63,14 @@ internal static partial class WebCliCommandHandlers
             else
             {
                 logger.Success(
-                    $"Imported {result.InsertedCount} search observations for {result.SiteId} from {result.Provider}; {result.DuplicateCount} duplicates ignored.");
+                    $"Imported {result.InsertedCount} search observations for {EscapeSearchConsoleText(result.SiteId, "(unknown site)")} from {EscapeSearchConsoleText(result.Provider, "(unknown provider)")}; {result.DuplicateCount} duplicates ignored.");
             }
 
             return 0;
         }
         catch (Exception ex)
         {
-            return Fail(ex.Message, outputJson, logger, "web.observe.import");
+            return FailSearch(ex.Message, outputJson, logger, "web.observe.import");
         }
     }
 
@@ -81,20 +81,20 @@ internal static partial class WebCliCommandHandlers
         int outputSchemaVersion)
     {
         if (subArgs.Length == 0 || !subArgs[0].Equals("list", StringComparison.OrdinalIgnoreCase))
-            return Fail("Opportunity requires the 'list' action.", outputJson, logger, "web.opportunity.list");
+            return FailSearch("Opportunity requires the 'list' action.", outputJson, logger, "web.opportunity.list");
 
         var args = subArgs.Skip(1).ToArray();
         var missingValueOption = FindSearchOptionWithoutValue(
             args,
             "--database", "--site", "--provider", "--from", "--to", "--min-impressions", "--min-ctr", "--output");
         if (missingValueOption is not null)
-            return Fail($"{missingValueOption} requires a value.", outputJson, logger, "web.opportunity.list");
+            return FailSearch($"{missingValueOption} requires a value.", outputJson, logger, "web.opportunity.list");
         var databasePath = TryGetOptionValue(args, "--database");
         var siteId = TryGetOptionValue(args, "--site");
         if (string.IsNullOrWhiteSpace(databasePath))
-            return Fail("Opportunity list requires --database.", outputJson, logger, "web.opportunity.list");
+            return FailSearch("Opportunity list requires --database.", outputJson, logger, "web.opportunity.list");
         if (string.IsNullOrWhiteSpace(siteId))
-            return Fail("Opportunity list requires --site.", outputJson, logger, "web.opportunity.list");
+            return FailSearch("Opportunity list requires --site.", outputJson, logger, "web.opportunity.list");
 
         try
         {
@@ -108,7 +108,7 @@ internal static partial class WebCliCommandHandlers
             var minimumCtr = ParseRate(TryGetOptionValue(args, "--min-ctr"), 0.02d, "--min-ctr");
             var fullDatabasePath = Path.GetFullPath(databasePath.Trim().Trim('"'));
             if (!File.Exists(fullDatabasePath))
-                return Fail($"Search database not found: {fullDatabasePath}", outputJson, logger, "web.opportunity.list");
+                return FailSearch($"Search database not found: {fullDatabasePath}", outputJson, logger, "web.opportunity.list");
             var store = new SqliteWebSearchObservationStore(fullDatabasePath);
             var observations = store.QueryAsync(new WebSearchObservationQuery
             {
@@ -156,7 +156,7 @@ internal static partial class WebCliCommandHandlers
         }
         catch (Exception ex)
         {
-            return Fail(ex.Message, outputJson, logger, "web.opportunity.list");
+            return FailSearch(ex.Message, outputJson, logger, "web.opportunity.list");
         }
     }
 
@@ -268,4 +268,14 @@ internal static partial class WebCliCommandHandlers
         escaped.Append(value, segmentStart, value.Length - segmentStart);
         return escaped.ToString();
     }
+
+    private static int FailSearch(
+        string message,
+        bool outputJson,
+        WebConsoleLogger logger,
+        string command) => Fail(
+            outputJson ? message : EscapeSearchConsoleText(message, "Search operation failed."),
+            outputJson,
+            logger,
+            command);
 }

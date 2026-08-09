@@ -83,12 +83,7 @@ public sealed partial class WebSearchIntelligenceTests
     [Fact]
     public void ObservationSchema_AcceptsDocumentedContractAndRejectsMissingDimensions()
     {
-        var schemaPath = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..", "..", "..", "..",
-            "Schemas",
-            "powerforge.web.search-observations.schema.json"));
-        var schema = JsonSchema.FromText(File.ReadAllText(schemaPath));
+        var schema = LoadObservationSchema();
         var serialized = JsonSerializer.Serialize(CreateBatch());
         var valid = JsonNode.Parse(serialized)!;
         var invalid = JsonNode.Parse(serialized)!;

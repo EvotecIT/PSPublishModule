@@ -242,53 +242,54 @@ internal sealed class SqliteWebSearchObservationStore
 
     private async Task EnsureSchemaAsync(SQLite client, CancellationToken cancellationToken)
     {
-        var versionValue = await client.ExecuteScalarAsync(
-            _databasePath,
-            "PRAGMA user_version;",
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-        var version = Convert.ToInt32(versionValue, CultureInfo.InvariantCulture);
-        if (version > CurrentSchemaVersion)
-        {
-            throw new InvalidOperationException(
-                $"Search database schema version {version} is newer than supported version {CurrentSchemaVersion}.");
-        }
-        if (version == 0)
-        {
-            var existingObject = await client.QueryAsListAsync(
-                _databasePath,
-                "SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name LIMIT 1;",
-                static record => record.GetString(0),
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-            if (existingObject.Count > 0)
+        await using var session = await client.OpenSessionAsync(_databasePath, cancellationToken).ConfigureAwait(false);
+        await session.RunInTransactionAsync(
+            async (transaction, token) =>
             {
-                throw new InvalidOperationException(
-                    $"Refusing to initialize search storage in nonempty schema-version-zero database '{_databasePath}'. Existing object: {existingObject[0]}.");
-            }
+                var versionValue = await transaction.ExecuteScalarAsync(
+                    "PRAGMA user_version;",
+                    cancellationToken: token).ConfigureAwait(false);
+                var version = Convert.ToInt32(versionValue, CultureInfo.InvariantCulture);
+                if (version > CurrentSchemaVersion)
+                {
+                    throw new InvalidOperationException(
+                        $"Search database schema version {version} is newer than supported version {CurrentSchemaVersion}.");
+                }
+                if (version == 0)
+                {
+                    var existingObject = await transaction.QueryAsListAsync(
+                        "SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name LIMIT 1;",
+                        static record => record.GetString(0),
+                        cancellationToken: token).ConfigureAwait(false);
+                    if (existingObject.Count > 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Refusing to initialize search storage in nonempty schema-version-zero database '{_databasePath}'. Existing object: {existingObject[0]}.");
+                    }
 
-            await client.ExecuteNonQueryAsync(
-                _databasePath,
-                CreateSchemaSql,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-            return;
-        }
-        if (version == 1)
-        {
-            var collisions = await client.QueryAsListAsync(
-                _databasePath,
-                FindVersionOneCollisionsSql,
-                static record => $"{record.GetString(0)}/{record.GetString(1)} at {record.GetString(2)}",
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-            if (collisions.Count > 0)
-            {
-                throw new InvalidOperationException(
-                    $"Search database schema v1 contains competing runs for {collisions[0]}. Resolve the duplicate collection timestamp before upgrading to schema v2.");
-            }
+                    await transaction.ExecuteNonQueryAsync(
+                        CreateSchemaSql,
+                        cancellationToken: token).ConfigureAwait(false);
+                    return;
+                }
+                if (version == 1)
+                {
+                    var collisions = await transaction.QueryAsListAsync(
+                        FindVersionOneCollisionsSql,
+                        static record => $"{record.GetString(0)}/{record.GetString(1)} at {record.GetString(2)}",
+                        cancellationToken: token).ConfigureAwait(false);
+                    if (collisions.Count > 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Search database schema v1 contains competing runs for {collisions[0]}. Resolve the duplicate collection timestamp before upgrading to schema v2.");
+                    }
 
-            await client.ExecuteNonQueryAsync(
-                _databasePath,
-                MigrateVersionOneToTwoSql,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
+                    await transaction.ExecuteNonQueryAsync(
+                        MigrateVersionOneToTwoSql,
+                        cancellationToken: token).ConfigureAwait(false);
+                }
+            },
+            cancellationToken).ConfigureAwait(false);
     }
 
     private void EnsureDatabaseDirectory()
