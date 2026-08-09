@@ -29,12 +29,47 @@ public static class WebSearchProviderConfigurationLoader
             }
             : new JsonSerializerOptions(options);
         serializerOptions.PropertyNameCaseInsensitive = false;
-        var configuration = JsonSerializer.Deserialize<WebSearchProviderConfiguration>(
-            File.ReadAllText(fullPath),
-            serializerOptions);
+        var json = File.ReadAllText(fullPath);
+        ValidateNoDuplicateObjectMembers(json, serializerOptions);
+        var configuration = JsonSerializer.Deserialize<WebSearchProviderConfiguration>(json, serializerOptions);
         if (configuration is null)
             throw new InvalidOperationException($"Failed to deserialize provider configuration: {fullPath}");
 
         return (configuration, fullPath);
+    }
+
+    private static void ValidateNoDuplicateObjectMembers(string json, JsonSerializerOptions serializerOptions)
+    {
+        using var document = JsonDocument.Parse(
+            json,
+            new JsonDocumentOptions
+            {
+                AllowTrailingCommas = serializerOptions.AllowTrailingCommas,
+                CommentHandling = serializerOptions.ReadCommentHandling == JsonCommentHandling.Disallow
+                    ? JsonCommentHandling.Disallow
+                    : JsonCommentHandling.Skip,
+                MaxDepth = serializerOptions.MaxDepth
+            });
+        ValidateNoDuplicateObjectMembers(document.RootElement);
+    }
+
+    private static void ValidateNoDuplicateObjectMembers(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in element.EnumerateObject())
+            {
+                if (!names.Add(property.Name))
+                    throw new JsonException("Provider configuration contains a duplicate JSON object member.");
+                ValidateNoDuplicateObjectMembers(property.Value);
+            }
+            return;
+        }
+
+        if (element.ValueKind != JsonValueKind.Array)
+            return;
+        foreach (var item in element.EnumerateArray())
+            ValidateNoDuplicateObjectMembers(item);
     }
 }

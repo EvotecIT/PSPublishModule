@@ -168,10 +168,11 @@ public static partial class WebSearchProviderDoctor
                 (check.SiteId is null || string.Equals(check.SiteId, state.SiteId, StringComparison.OrdinalIgnoreCase)) &&
                 (check.ProviderId is null || string.Equals(check.ProviderId, state.ProviderId, StringComparison.OrdinalIgnoreCase)));
         }
+        var success = orderedChecks.All(check => check.Severity != WebSearchProviderCheckSeverity.Error);
         return new WebSearchProviderDoctorResult
         {
-            Success = orderedChecks.All(check => check.Severity != WebSearchProviderCheckSeverity.Error),
-            ConfigurationHash = WebSearchProviderConfigurationFingerprint.Compute(configuration),
+            Success = success,
+            ConfigurationHash = success ? WebSearchProviderConfigurationFingerprint.Compute(configuration) : null,
             SiteCount = sites.Length,
             ProviderCount = states.Count,
             ConfigurationReadyCount = states.Count(state => state.ConfigurationReady),

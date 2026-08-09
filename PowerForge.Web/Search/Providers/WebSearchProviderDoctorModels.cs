@@ -70,8 +70,8 @@ public sealed class WebSearchProviderDoctorResult
     /// <summary>Whether the configuration has no blocking errors.</summary>
     public bool Success { get; set; }
 
-    /// <summary>Deterministic identity of the non-secret fleet provider configuration.</summary>
-    public string ConfigurationHash { get; set; } = string.Empty;
+    /// <summary>Deterministic identity of a valid non-secret fleet provider configuration.</summary>
+    public string? ConfigurationHash { get; set; }
 
     /// <summary>Number of configured sites.</summary>
     public int SiteCount { get; set; }

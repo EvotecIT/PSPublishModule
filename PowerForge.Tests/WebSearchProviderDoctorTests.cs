@@ -27,6 +27,7 @@ public sealed class WebSearchProviderDoctorTests
         Assert.Equal(5, result.ProviderCount);
         Assert.Equal(5, result.ConfigurationReadyCount);
         Assert.Equal(1, result.CollectorAvailableCount);
+        Assert.NotNull(result.ConfigurationHash);
         Assert.StartsWith("sha256:", result.ConfigurationHash, StringComparison.Ordinal);
         Assert.All(result.Checks, check => Assert.NotEqual(WebSearchProviderCheckSeverity.Error, check.Severity));
         var lighthouse = Assert.Single(result.Providers, provider => provider.ProviderId == "lighthouse");
@@ -332,6 +333,37 @@ public sealed class WebSearchProviderDoctorTests
     }
 
     [Fact]
+    public void Loader_RejectsDuplicateJsonMembersBeforeDeserialization()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var configPath = Path.Combine(root, "providers.json");
+            var payloads = new[]
+            {
+                """
+                {"schemaVersion":1,"sites":[{"id":"officeimo","baseUrl":"https://officeimo.com/","providers":[{"id":"lighthouse","kind":"lighthouse","enabled":false,"enabled":true,"capabilities":["performance.lighthouse"],"settings":{}}]}]}
+                """,
+                """
+                {"schemaVersion":1,"sites":[{"id":"officeimo","baseUrl":"https://officeimo.com/","providers":[{"id":"lighthouse","kind":"lighthouse","capabilities":["performance.lighthouse"],"settings":{"marker":"first","marker":"second"}}]}]}
+                """
+            };
+
+            foreach (var payload in payloads)
+            {
+                File.WriteAllText(configPath, payload);
+                var exception = Assert.Throws<JsonException>(() =>
+                    WebSearchProviderConfigurationLoader.LoadWithPath(configPath, WebCliJson.Options));
+                Assert.Equal("Provider configuration contains a duplicate JSON object member.", exception.Message);
+            }
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Doctor_RejectsNoncanonicalIdentityAndEnvironmentValues()
     {
         var configuration = CreateGoogleConfiguration();
@@ -363,6 +395,22 @@ public sealed class WebSearchProviderDoctorTests
         Assert.False(result.Success);
         Assert.Contains(result.Checks, check => check.Code == "provider.gsc-property-invalid");
         Assert.False(Assert.Single(result.Providers).ConfigurationReady);
+    }
+
+    [Fact]
+    public void Doctor_OmitsConfigurationHashWhenASettingValueFailsSemanticValidation()
+    {
+        const string credentialCandidate = "low-entropy-secret";
+        var configuration = CreateGoogleConfiguration();
+        configuration.Sites[0].Providers[0].Settings["property"] =
+            $"https://user:{credentialCandidate}@officeimo.com/";
+
+        var result = WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value");
+        var serialized = JsonSerializer.Serialize(result, WebCliJson.Options);
+
+        Assert.False(result.Success);
+        Assert.Null(result.ConfigurationHash);
+        Assert.DoesNotContain(credentialCandidate, serialized, StringComparison.Ordinal);
     }
 
     [Theory]

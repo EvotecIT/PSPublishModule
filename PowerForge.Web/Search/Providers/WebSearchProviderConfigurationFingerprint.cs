@@ -1,12 +1,12 @@
 namespace PowerForge.Web;
 
 /// <summary>Creates a deterministic non-secret identity for provider configuration.</summary>
-public static class WebSearchProviderConfigurationFingerprint
+internal static class WebSearchProviderConfigurationFingerprint
 {
     /// <summary>Computes a SHA-256 identity after ordering fleet sites, providers, capabilities and settings.</summary>
     /// <param name="configuration">Provider configuration to fingerprint.</param>
     /// <returns>Lowercase SHA-256 identity prefixed with <c>sha256:</c>.</returns>
-    public static string Compute(WebSearchProviderConfiguration configuration)
+    internal static string Compute(WebSearchProviderConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         var values = new List<string?>
