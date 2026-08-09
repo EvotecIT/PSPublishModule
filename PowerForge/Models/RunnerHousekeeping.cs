@@ -117,8 +117,8 @@ public sealed class RunnerHousekeepingSpec
     public bool ClearDotNetCaches { get; set; } = true;
 
     /// <summary>
-    /// When true on Linux, superseded unowned stable SDK directories under <c>DOTNET_ROOT/sdk</c> are pruned
-    /// during aggressive cleanup.
+    /// When true on Debian-family Linux runners, superseded unowned stable SDK directories under
+    /// <c>DOTNET_ROOT/sdk</c> are pruned during aggressive cleanup.
     /// </summary>
     public bool PruneDotNetSdks { get; set; }
 
@@ -223,6 +223,11 @@ public sealed class RunnerHousekeepingResult
     /// Optional tool cache path used by the cleanup run.
     /// </summary>
     public string? ToolCachePath { get; set; }
+
+    /// <summary>
+    /// Optional .NET installation root used by the cleanup run.
+    /// </summary>
+    public string? DotNetRootPath { get; set; }
 
     /// <summary>
     /// Free disk before cleanup, in bytes.

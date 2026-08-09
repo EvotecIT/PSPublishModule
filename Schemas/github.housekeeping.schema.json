@@ -150,7 +150,10 @@
         "CleanWorkspaces": { "type": "boolean" },
         "CleanToolCache": { "type": "boolean" },
         "ClearDotNetCaches": { "type": "boolean" },
-        "PruneDotNetSdks": { "type": "boolean" },
+        "PruneDotNetSdks": {
+          "type": "boolean",
+          "description": "Prunes superseded unowned stable SDKs during aggressive cleanup on Debian-family Linux runners."
+        },
         "PruneDocker": { "type": "boolean" },
         "IncludeDockerVolumes": { "type": "boolean" },
         "AllowSudo": { "type": "boolean" }

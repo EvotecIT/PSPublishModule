@@ -44,7 +44,7 @@ public sealed partial class RunnerHousekeepingService
             return SkippedStep(id, title, "dotnet is not available on PATH; active SDK cannot be protected.");
 
         if (!CommandExists("dpkg-query"))
-            return SkippedStep(id, title, "dpkg-query is unavailable; package-manager-owned SDKs cannot be protected.");
+            return SkippedStep(id, title, "SDK pruning currently supports Debian-family Linux runners; dpkg-query is unavailable.");
 
         var versionProbe = RunProcess("dotnet", new[] { "--version" }, activeSdkProbePath);
         var activeVersion = versionProbe.ExitCode == 0 ? versionProbe.StdOut.Trim() : string.Empty;

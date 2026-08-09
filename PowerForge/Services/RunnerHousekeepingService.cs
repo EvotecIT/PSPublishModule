@@ -171,6 +171,7 @@ public sealed partial class RunnerHousekeepingService
             RunnerTempPath = normalized.RunnerTempPath,
             DiagnosticsRootPath = normalized.DiagnosticsRootPath,
             ToolCachePath = normalized.ToolCachePath,
+            DotNetRootPath = normalized.DotNetRootPath,
             FreeBytesBefore = freeBefore,
             FreeBytesAfter = freeAfter,
             RequiredFreeBytes = normalized.RequiredFreeBytes,

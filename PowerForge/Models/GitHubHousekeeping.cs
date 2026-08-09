@@ -253,7 +253,7 @@ public sealed class GitHubHousekeepingRunnerSpec
     public bool ClearDotNetCaches { get; set; } = true;
 
     /// <summary>
-    /// Enables conservative pruning of superseded unowned stable SDK directories on Linux.
+    /// Enables conservative pruning of superseded unowned stable SDK directories on Debian-family Linux runners.
     /// </summary>
     public bool PruneDotNetSdks { get; set; }
 
