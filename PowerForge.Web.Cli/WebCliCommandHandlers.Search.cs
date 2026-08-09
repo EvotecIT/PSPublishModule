@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using PowerForge.Web;
 using static PowerForge.Web.Cli.WebCliHelpers;
 
@@ -28,18 +29,14 @@ internal static partial class WebCliCommandHandlers
         {
             var fullInputPath = ResolveExistingFilePath(inputPath);
             var fullDatabasePath = Path.GetFullPath(databasePath.Trim().Trim('"'));
-            var batch = JsonSerializer.Deserialize<WebSearchObservationBatch>(
-                File.ReadAllText(fullInputPath),
-                WebCliJson.Options);
-            if (batch is null)
-                return Fail("Observe import input is not a valid search observation batch.", outputJson, logger, "web.observe.import");
-
             var providerOverride = TryGetOptionValue(args, "--provider");
             var siteOverride = TryGetOptionValue(args, "--site");
-            if (!string.IsNullOrWhiteSpace(providerOverride))
-                batch.Provider = providerOverride;
-            if (!string.IsNullOrWhiteSpace(siteOverride))
-                batch.SiteId = siteOverride;
+            var batch = DeserializeObservationBatch(
+                File.ReadAllText(fullInputPath),
+                providerOverride,
+                siteOverride);
+            if (batch is null)
+                return Fail("Observe import input is not a valid search observation batch.", outputJson, logger, "web.observe.import");
 
             var normalized = WebSearchObservationNormalizer.Normalize(batch);
             var store = new SqliteWebSearchObservationStore(fullDatabasePath);
@@ -182,5 +179,39 @@ internal static partial class WebCliCommandHandlers
             throw new ArgumentException($"{optionName} must be greater than zero and at most one.", optionName);
         }
         return parsed;
+    }
+
+    private static WebSearchObservationBatch? DeserializeObservationBatch(
+        string json,
+        string? providerOverride,
+        string? siteOverride)
+    {
+        var document = JsonNode.Parse(
+                json,
+                documentOptions: new JsonDocumentOptions
+                {
+                    AllowTrailingCommas = WebCliJson.Options.AllowTrailingCommas,
+                    CommentHandling = WebCliJson.Options.ReadCommentHandling
+                })?.AsObject()
+            ?? throw new JsonException("Observe import input must be a JSON object.");
+        ApplyIdentityOverride(document, "provider", providerOverride);
+        ApplyIdentityOverride(document, "siteId", siteOverride);
+
+        return document.Deserialize<WebSearchObservationBatch>(WebCliJson.Options);
+    }
+
+    private static void ApplyIdentityOverride(JsonObject document, string propertyName, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        foreach (var existingName in document
+                     .Select(property => property.Key)
+                     .Where(name => string.Equals(name, propertyName, StringComparison.OrdinalIgnoreCase))
+                     .ToArray())
+        {
+            document.Remove(existingName);
+        }
+        document[propertyName] = value;
     }
 }

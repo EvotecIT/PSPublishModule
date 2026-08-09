@@ -60,6 +60,8 @@ powerforge-web observe import `
 
 Use `--provider` or `--site` only when an export format cannot carry those fields. Overrides still pass through the same normalization and validation.
 
+Position-based opportunity rules use only observations that contain both positive impressions and average-position evidence. Unpositioned rows remain in imported history and report observation counts, but they cannot inflate the impressions, clicks, CTR, confidence, date range, or evidence links attached to a position-based opportunity.
+
 The import result reports input, inserted and duplicate counts plus the database schema version. The stored run keeps the normalized manifest and a non-secret evidence reference. Providers may revise recent daily metrics, so later collection runs remain immutable revisions while reports select only the latest snapshot for each provider/site/date/dimension. A provider/site pair may have only one run at a given `collectedAtUtc`; collectors must use the actual completion time so competing revisions never rely on arbitrary ID ordering. Raw provider payloads should remain in a separately governed evidence location; do not put access tokens or private account data in the import file.
 
 ## List opportunities

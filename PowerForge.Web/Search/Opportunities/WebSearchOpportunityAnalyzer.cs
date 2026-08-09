@@ -159,24 +159,36 @@ public static class WebSearchOpportunityAnalyzer
     private static ObservationAggregate Aggregate(IEnumerable<WebSearchObservation> observations)
     {
         var rows = observations.OrderBy(observation => observation.ObservationKey, StringComparer.Ordinal).ToArray();
-        var impressions = rows.Sum(observation => observation.Impressions);
-        var clicks = rows.Sum(observation => observation.Clicks);
-        var positionedRows = rows.Where(observation => observation.AveragePosition.HasValue).ToArray();
-        var positionedImpressions = positionedRows.Sum(observation => observation.Impressions);
-        double? position = positionedImpressions > 0
-            ? positionedRows.Sum(observation => observation.AveragePosition!.Value * observation.Impressions) /
-              positionedImpressions
-            : null;
+        var positionedRows = rows
+            .Where(observation => observation.AveragePosition.HasValue && observation.Impressions > 0)
+            .ToArray();
+        if (positionedRows.Length == 0)
+        {
+            return new ObservationAggregate(
+                0,
+                0,
+                0d,
+                null,
+                rows.Min(observation => observation.Date),
+                rows.Max(observation => observation.Date),
+                0,
+                Array.Empty<string>());
+        }
+
+        var impressions = positionedRows.Sum(observation => observation.Impressions);
+        var clicks = positionedRows.Sum(observation => observation.Clicks);
+        var position = positionedRows.Sum(observation => observation.AveragePosition!.Value * observation.Impressions) /
+                       impressions;
 
         return new ObservationAggregate(
             clicks,
             impressions,
             impressions == 0 ? 0d : (double)clicks / impressions,
             position,
-            rows.Min(observation => observation.Date),
-            rows.Max(observation => observation.Date),
-            rows.Select(observation => observation.Date).Distinct().Count(),
-            rows.Select(observation => observation.ObservationKey).ToArray());
+            positionedRows.Min(observation => observation.Date),
+            positionedRows.Max(observation => observation.Date),
+            positionedRows.Select(observation => observation.Date).Distinct().Count(),
+            positionedRows.Select(observation => observation.ObservationKey).ToArray());
     }
 
     private static double CalculateConfidence(ObservationAggregate aggregate)

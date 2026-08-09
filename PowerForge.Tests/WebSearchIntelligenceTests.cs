@@ -229,6 +229,46 @@ public sealed class WebSearchIntelligenceTests
     }
 
     [Fact]
+    public void Analyze_UsesOnlyPositionBackedRowsForOpportunityEvidenceAndMetrics()
+    {
+        var positionedBatch = CreateBatch();
+        positionedBatch.Observations[0].Clicks = 0;
+        positionedBatch.Observations[0].Impressions = 1;
+        var unpositionedBatch = CreateBatch();
+        unpositionedBatch.CollectedAtUtc = unpositionedBatch.CollectedAtUtc.AddDays(1);
+        unpositionedBatch.Observations[0].Date = unpositionedBatch.Observations[0].Date.AddDays(1);
+        unpositionedBatch.Observations[0].Clicks = 50;
+        unpositionedBatch.Observations[0].Impressions = 1000;
+        unpositionedBatch.Observations[0].AveragePosition = null;
+        var positioned = WebSearchObservationNormalizer.Normalize(positionedBatch);
+        var unpositioned = WebSearchObservationNormalizer.Normalize(unpositionedBatch);
+        var observations = positioned.Observations.Concat(unpositioned.Observations).ToArray();
+        var generatedAt = new DateTimeOffset(2026, 8, 5, 12, 0, 0, TimeSpan.Zero);
+
+        var defaultReport = WebSearchOpportunityAnalyzer.Analyze(
+            observations,
+            new WebSearchOpportunityOptions { SiteId = "officeimo" },
+            generatedAt);
+        var lowVolumeReport = WebSearchOpportunityAnalyzer.Analyze(
+            observations,
+            new WebSearchOpportunityOptions { SiteId = "officeimo", MinimumImpressions = 1 },
+            generatedAt);
+
+        Assert.Empty(defaultReport.Opportunities);
+        Assert.Equal(2, lowVolumeReport.ObservationCount);
+        Assert.Equal(2, lowVolumeReport.Opportunities.Length);
+        Assert.All(lowVolumeReport.Opportunities, opportunity =>
+        {
+            Assert.Equal(1, opportunity.Impressions);
+            Assert.Equal(0, opportunity.Clicks);
+            Assert.Equal(0d, opportunity.ClickThroughRate);
+            Assert.Equal(new DateOnly(2026, 8, 1), opportunity.FromDate);
+            Assert.Equal(new DateOnly(2026, 8, 1), opportunity.ThroughDate);
+            Assert.Equal(new[] { positioned.Observations[0].ObservationKey }, opportunity.EvidenceObservationKeys);
+        });
+    }
+
+    [Fact]
     public async Task SqliteStore_ImportsIdempotentlyAndQueriesNormalizedHistory()
     {
         var root = CreateTemporaryDirectory();
@@ -506,6 +546,8 @@ public sealed class WebSearchIntelligenceTests
 
     [Theory]
     [InlineData("schemaVersion", false)]
+    [InlineData("provider", false)]
+    [InlineData("siteId", false)]
     [InlineData("clicks", true)]
     [InlineData("impressions", true)]
     public void Cli_ObserveImport_RejectsMissingRequiredContractMembers(string propertyName, bool observationProperty)
@@ -531,6 +573,46 @@ public sealed class WebSearchIntelligenceTests
 
             Assert.Equal(2, exitCode);
             Assert.False(File.Exists(databasePath));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task Cli_ObserveImport_AppliesIdentityOverridesBeforeRequiredMemberValidation()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var inputPath = Path.Combine(root, "observations.json");
+            var databasePath = Path.Combine(root, "search.db");
+            var document = JsonNode.Parse(JsonSerializer.Serialize(CreateBatch()))!.AsObject();
+            var provider = document["provider"]!.DeepClone();
+            Assert.True(document.Remove("provider"));
+            document["Provider"] = provider;
+            Assert.True(document.Remove("siteId"));
+            var json = document.ToJsonString();
+            File.WriteAllText(inputPath, "/* provider export */" + json[..^1] + ",}");
+
+            var exitCode = WebCliCommandHandlers.HandleSubCommand(
+                "observe",
+                new[]
+                {
+                    "import", "--input", inputPath, "--database", databasePath,
+                    "--provider", " Bing-Webmaster ", "--site", " Tactra "
+                },
+                outputJson: true,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: 1);
+
+            Assert.Equal(0, exitCode);
+            var observations = await new SqliteWebSearchObservationStore(databasePath).QueryAsync(
+                new WebSearchObservationQuery { SiteId = "tactra" });
+            var observation = Assert.Single(observations);
+            Assert.Equal("bing-webmaster", observation.Provider);
+            Assert.Equal("tactra", observation.SiteId);
         }
         finally
         {
