@@ -911,13 +911,17 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         var package = scope.CreateDirectory(Path.Combine("CommentedPackageSyntaxRepo", "Packages", "Shared"));
         File.WriteAllText(
             Path.Combine(package, "Package.swift"),
-            """
+            """"
             // swift-tools-version: 6.0
             import PackageDescription
             // Documentation example: .unsafeFlags(["-I/tmp"]) and .systemLibrary(name: "Host")
             let documentation = ".unsafeFlags( and .systemLibrary( are rejected when used as syntax"
+            let rawDocumentation = #".plugin( and .macro( are rejected when used as syntax"#
+            let multilineDocumentation = """
+            Nested /* comment markers */ and .macro( remain inert inside a multiline string.
+            """
             let package = Package(name: "Shared")
-            """);
+            """");
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
         var sourceCommit = CommitRepository(repositoryRoot);
 

@@ -195,4 +195,71 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 
         Assert.Contains("exact 40-character revision", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_ignores_fake_revision_inside_nested_swift_comment()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("NestedSwiftCommentRepo");
+        var project = scope.CreateDirectory(Path.Combine("NestedSwiftCommentRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCLocalSwiftPackageReference; relativePath = Packages/Shared; };");
+        var package = scope.CreateDirectory(Path.Combine("NestedSwiftCommentRepo", "Packages", "Shared"));
+        File.WriteAllText(
+            Path.Combine(package, "Package.swift"),
+            """
+            // swift-tools-version: 6.0
+            import PackageDescription
+            let package = Package(
+                name: "Shared",
+                dependencies: [
+                    .package(
+                        url: "https://example.invalid/Shared.git",
+                        /* outer /* inner */ revision: "0123456789abcdef0123456789abcdef01234567" */
+                        branch: "main")
+                ],
+                targets: [.target(name: "Shared")])
+            """);
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Shared.git", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Package.resolved", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_executable_swift_macro_target()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("SwiftMacroTargetRepo");
+        var project = scope.CreateDirectory(Path.Combine("SwiftMacroTargetRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCLocalSwiftPackageReference; relativePath = Packages/Shared; };");
+        var package = scope.CreateDirectory(Path.Combine("SwiftMacroTargetRepo", "Packages", "Shared"));
+        File.WriteAllText(
+            Path.Combine(package, "Package.swift"),
+            """
+            // swift-tools-version: 6.0
+            import PackageDescription
+            import CompilerPluginSupport
+            let package = Package(
+                name: "Shared",
+                targets: [
+                    .macro(name: "GeneratedFeature", dependencies: [])
+                ])
+            """);
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("macro", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("executable", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

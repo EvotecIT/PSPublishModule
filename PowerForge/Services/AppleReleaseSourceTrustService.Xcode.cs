@@ -449,11 +449,12 @@ internal sealed partial class AppleReleaseSourceTrustService
                 $"Local Swift package '{packageRoot}' declares a systemLibrary target, whose pkg-config and host library inputs cannot be proven at the exact source commit. " +
                 "Replace the system library dependency with tracked package sources before creating an Apple checkpoint.");
         }
-        if (ContainsSwiftIdentifier(manifestSyntax, "plugin"))
+        if (ContainsSwiftIdentifier(manifestSyntax, "plugin") ||
+            ContainsSwiftMemberReference(manifestSyntax, "macro"))
         {
             throw new InvalidOperationException(
-                $"Local Swift package '{packageRoot}' declares or invokes a SwiftPM plugin, whose executable runtime inputs cannot be proven at the exact source commit. " +
-                "Replace build-tool plugins with tracked deterministic build inputs before creating an Apple checkpoint.");
+                $"Local Swift package '{packageRoot}' declares or invokes a SwiftPM plugin or macro, whose executable runtime inputs cannot be proven at the exact source commit. " +
+                "Replace build-tool plugins and macros with tracked deterministic build inputs before creating an Apple checkpoint.");
         }
         ValidateDirectSwiftPackageDependencyFactories(packageRoot, manifestSyntax);
         var externalDependencies = Regex.Matches(
@@ -524,31 +525,6 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
     }
 
-    private static void ValidateDirectSwiftPackageDependencyFactories(string packageRoot, string manifestSyntax)
-    {
-        foreach (Match reference in Regex.Matches(
-                     manifestSyntax,
-                     "\\.\\s*(?:package\\b|`package`)",
-                     RegexOptions.CultureInvariant))
-        {
-            var next = reference.Index + reference.Length;
-            while (next < manifestSyntax.Length && char.IsWhiteSpace(manifestSyntax[next]))
-                next++;
-            if (next < manifestSyntax.Length && manifestSyntax[next] == '(')
-                continue;
-
-            throw new InvalidOperationException(
-                $"Local Swift package '{packageRoot}' references a package dependency factory indirectly, so its external source cannot be proven. " +
-                "Invoke each package dependency factory directly with a literal URL or registry identity and commit its Package.resolved lock.");
-        }
-    }
-
-    private static bool ContainsSwiftIdentifier(string syntax, string identifier)
-        => Regex.IsMatch(
-            syntax,
-            $"(?<![A-Za-z0-9_]){Regex.Escape(identifier)}(?![A-Za-z0-9_])",
-            RegexOptions.CultureInvariant);
-
     private static void ValidateExternalXcodeBuildInput(
         PbxObject item,
         string metadataPath,
@@ -596,97 +572,6 @@ internal sealed partial class AppleReleaseSourceTrustService
 
         throw new InvalidOperationException(
             $"Xcode build input '{path}' from external source tree '{sourceTree}' is not a validated SDK, toolchain, or owned target product: {metadataPath}");
-    }
-
-    private static string RemoveSwiftComments(string source)
-    {
-        var result = source.ToCharArray();
-        var inString = false;
-        var escaped = false;
-        for (var index = 0; index < result.Length; index++)
-        {
-            var current = result[index];
-            if (inString)
-            {
-                if (escaped)
-                    escaped = false;
-                else if (current == '\\')
-                    escaped = true;
-                else if (current == '"')
-                    inString = false;
-                continue;
-            }
-            if (current == '"')
-            {
-                inString = true;
-                continue;
-            }
-            if (current != '/' || index + 1 >= result.Length)
-                continue;
-            if (result[index + 1] == '/')
-            {
-                while (index < result.Length && result[index] != '\r' && result[index] != '\n')
-                    result[index++] = ' ';
-                index--;
-            }
-            else if (result[index + 1] == '*')
-            {
-                result[index++] = ' ';
-                result[index] = ' ';
-                while (++index < result.Length)
-                {
-                    if (result[index] == '*' && index + 1 < result.Length && result[index + 1] == '/')
-                    {
-                        result[index] = ' ';
-                        result[++index] = ' ';
-                        break;
-                    }
-                    if (result[index] != '\r' && result[index] != '\n')
-                        result[index] = ' ';
-                }
-            }
-        }
-        return new string(result);
-    }
-
-    private static string MaskSwiftStringLiterals(string source)
-    {
-        var result = source.ToCharArray();
-        for (var index = 0; index < result.Length; index++)
-        {
-            if (result[index] != '"')
-                continue;
-
-            var multiline = index + 2 < result.Length && result[index + 1] == '"' && result[index + 2] == '"';
-            var delimiterLength = multiline ? 3 : 1;
-            for (var offset = 0; offset < delimiterLength; offset++)
-                result[index + offset] = ' ';
-            index += delimiterLength;
-            var escaped = false;
-            while (index < result.Length)
-            {
-                if (!multiline && !escaped && result[index] == '"')
-                {
-                    result[index] = ' ';
-                    break;
-                }
-                if (multiline && index + 2 < result.Length &&
-                    result[index] == '"' && result[index + 1] == '"' && result[index + 2] == '"')
-                {
-                    result[index] = result[index + 1] = result[index + 2] = ' ';
-                    index += 2;
-                    break;
-                }
-                if (!multiline && !escaped && result[index] == '\\')
-                    escaped = true;
-                else
-                    escaped = false;
-                if (result[index] != '\r' && result[index] != '\n')
-                    result[index] = ' ';
-                index++;
-            }
-        }
-        return new string(result);
     }
 
     private void ValidateRemotePackageReference(
