@@ -18,6 +18,11 @@ internal static partial class WebCliCommandHandlers
             return Fail("Observe requires the 'import' action.", outputJson, logger, "web.observe.import");
 
         var args = subArgs.Skip(1).ToArray();
+        var missingValueOption = FindSearchOptionWithoutValue(
+            args,
+            "--input", "--database", "--provider", "--site", "--output");
+        if (missingValueOption is not null)
+            return Fail($"{missingValueOption} requires a value.", outputJson, logger, "web.observe.import");
         var inputPath = TryGetOptionValue(args, "--input");
         var databasePath = TryGetOptionValue(args, "--database");
         if (string.IsNullOrWhiteSpace(inputPath))
@@ -78,6 +83,11 @@ internal static partial class WebCliCommandHandlers
             return Fail("Opportunity requires the 'list' action.", outputJson, logger, "web.opportunity.list");
 
         var args = subArgs.Skip(1).ToArray();
+        var missingValueOption = FindSearchOptionWithoutValue(
+            args,
+            "--database", "--site", "--provider", "--from", "--to", "--min-impressions", "--min-ctr", "--output");
+        if (missingValueOption is not null)
+            return Fail($"{missingValueOption} requires a value.", outputJson, logger, "web.opportunity.list");
         var databasePath = TryGetOptionValue(args, "--database");
         var siteId = TryGetOptionValue(args, "--site");
         if (string.IsNullOrWhiteSpace(databasePath))
@@ -213,5 +223,22 @@ internal static partial class WebCliCommandHandlers
             document.Remove(existingName);
         }
         document[propertyName] = value;
+    }
+
+    private static string? FindSearchOptionWithoutValue(string[] args, params string[] optionNames)
+    {
+        for (var index = 0; index < args.Length; index++)
+        {
+            if (!optionNames.Contains(args[index], StringComparer.OrdinalIgnoreCase))
+                continue;
+            if (index + 1 >= args.Length ||
+                string.IsNullOrWhiteSpace(args[index + 1]) ||
+                args[index + 1].StartsWith("--", StringComparison.Ordinal))
+            {
+                return args[index];
+            }
+        }
+
+        return null;
     }
 }

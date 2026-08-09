@@ -33,6 +33,23 @@ public static class WebSearchOpportunityAnalyzer
             .Where(observation => !options.ThroughDate.HasValue || observation.Date <= options.ThroughDate.Value)
             .OrderBy(observation => observation.ObservationKey, StringComparer.Ordinal)
             .ToArray();
+        var unresolvedRevision = filtered
+            .GroupBy(observation => new ObservationRevisionKey(
+                observation.Provider,
+                observation.SiteId,
+                observation.Date,
+                observation.Page,
+                observation.Query,
+                observation.Country,
+                observation.Device,
+                observation.SearchType))
+            .FirstOrDefault(group => group.Count() > 1);
+        if (unresolvedRevision is not null)
+        {
+            throw new ArgumentException(
+                "Search opportunity analysis received competing revisions for the same provider, site, date, and dimensions. Resolve the latest daily revision before analysis.",
+                nameof(observations));
+        }
 
         var opportunities = new List<WebSearchOpportunity>();
         var groups = filtered
@@ -247,6 +264,16 @@ public static class WebSearchOpportunityAnalyzer
         string Provider,
         string SiteId,
         string Page,
+        string? Query,
+        string? Country,
+        string? Device,
+        string? SearchType);
+
+    private sealed record ObservationRevisionKey(
+        string Provider,
+        string SiteId,
+        DateOnly Date,
+        string? Page,
         string? Query,
         string? Country,
         string? Device,

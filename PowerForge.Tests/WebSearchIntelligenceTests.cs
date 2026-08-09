@@ -7,7 +7,7 @@ using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
 
-public sealed class WebSearchIntelligenceTests
+public sealed partial class WebSearchIntelligenceTests
 {
     [Fact]
     public void Normalize_AssignsStableIdentitiesAndCanonicalDimensions()
@@ -266,6 +266,25 @@ public sealed class WebSearchIntelligenceTests
             Assert.Equal(new DateOnly(2026, 8, 1), opportunity.ThroughDate);
             Assert.Equal(new[] { positioned.Observations[0].ObservationKey }, opportunity.EvidenceObservationKeys);
         });
+    }
+
+    [Fact]
+    public void Analyze_RejectsUnresolvedDailyRevisions()
+    {
+        var initialBatch = CreateBatch();
+        var revisedBatch = CreateBatch();
+        revisedBatch.CollectedAtUtc = revisedBatch.CollectedAtUtc.AddDays(1);
+        revisedBatch.Observations[0].Clicks = 4;
+        revisedBatch.Observations[0].Impressions = 120;
+        var observations = WebSearchObservationNormalizer.Normalize(initialBatch).Observations
+            .Concat(WebSearchObservationNormalizer.Normalize(revisedBatch).Observations);
+
+        var exception = Assert.Throws<ArgumentException>(() => WebSearchOpportunityAnalyzer.Analyze(
+            observations,
+            new WebSearchOpportunityOptions { SiteId = "officeimo" },
+            new DateTimeOffset(2026, 8, 5, 12, 0, 0, TimeSpan.Zero)));
+
+        Assert.Contains("competing revisions", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

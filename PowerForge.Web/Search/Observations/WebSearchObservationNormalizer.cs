@@ -100,6 +100,14 @@ public static class WebSearchObservationNormalizer
         var query = NormalizeOptional(observation.Query);
         if (page is null && query is null)
             throw new ArgumentException($"Search observation at index {index} requires a page or query dimension.", nameof(observation));
+        var normalizedClickThroughRate = observation.ClickThroughRate is double providedClickThroughRate
+            ? CanonicalizeZero(providedClickThroughRate)
+            : observation.Impressions == 0
+                ? 0d
+                : (double)observation.Clicks / observation.Impressions;
+        double? normalizedAveragePosition = observation.AveragePosition is double providedAveragePosition
+            ? CanonicalizeZero(providedAveragePosition)
+            : null;
 
         var normalized = new WebSearchObservation
         {
@@ -117,9 +125,8 @@ public static class WebSearchObservationNormalizer
             SearchType = NormalizeDimension(observation.SearchType),
             Clicks = observation.Clicks,
             Impressions = observation.Impressions,
-            ClickThroughRate = observation.ClickThroughRate ??
-                               (observation.Impressions == 0 ? 0d : (double)observation.Clicks / observation.Impressions),
-            AveragePosition = observation.AveragePosition,
+            ClickThroughRate = normalizedClickThroughRate,
+            AveragePosition = normalizedAveragePosition,
             EvidenceReference = NormalizeOptional(observation.EvidenceReference) ?? NormalizeOptional(batchEvidenceReference)
         };
 
@@ -158,6 +165,8 @@ public static class WebSearchObservationNormalizer
     private static string? NormalizeDimension(string? value) => NormalizeOptional(value)?.ToLowerInvariant();
 
     private static string? NormalizeOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static double CanonicalizeZero(double value) => value == 0d ? 0d : value;
 
     private static string ComputeObservationKey(string runId, WebSearchObservation observation) => WebSearchIdentityHasher.Compute(
         runId,
