@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DBAClientX;
 using Json.Schema;
 using PowerForge.Web;
 using PowerForge.Web.Cli;
@@ -170,6 +171,7 @@ public sealed class WebSearchIntelligenceTests
 
             Assert.Equal(1, first.InsertedCount);
             Assert.Equal(0, first.DuplicateCount);
+            Assert.Equal(2, first.DatabaseSchemaVersion);
             Assert.Equal(0, second.InsertedCount);
             Assert.Equal(1, second.DuplicateCount);
             var observation = Assert.Single(observations);
@@ -264,6 +266,72 @@ public sealed class WebSearchIntelligenceTests
             Assert.Contains("collection time", exception.Message, StringComparison.Ordinal);
             var current = Assert.Single(await store.QueryAsync(new WebSearchObservationQuery { SiteId = "officeimo" }));
             Assert.Equal(first.Observations[0].ObservationKey, current.ObservationKey);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task SqliteStore_UpgradesVersionOneBeforeEnforcingCollectionTimeIdentity()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var databasePath = Path.Combine(root, "search.db");
+            var first = WebSearchObservationNormalizer.Normalize(CreateBatch());
+            var competingInput = CreateBatch();
+            competingInput.Observations[0].Impressions = 110;
+            var competing = WebSearchObservationNormalizer.Normalize(competingInput);
+            var store = new SqliteWebSearchObservationStore(databasePath);
+            await store.ImportAsync(first);
+            await DowngradeDatabaseToVersionOneAsync(databasePath);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => store.ImportAsync(competing));
+
+            Assert.Contains("collection time", exception.Message, StringComparison.Ordinal);
+            await using var client = new SQLite();
+            var version = await client.ExecuteScalarAsync(databasePath, "PRAGMA user_version;");
+            Assert.Equal(2, Convert.ToInt32(version));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task SqliteStore_BlocksVersionOneUpgradeWhenCollectionTimesAlreadyConflict()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var databasePath = Path.Combine(root, "search.db");
+            var first = WebSearchObservationNormalizer.Normalize(CreateBatch());
+            var store = new SqliteWebSearchObservationStore(databasePath);
+            await store.ImportAsync(first);
+            await DowngradeDatabaseToVersionOneAsync(databasePath);
+            await using (var client = new SQLite())
+            {
+                await client.ExecuteNonQueryAsync(
+                    databasePath,
+                    """
+                    INSERT INTO search_observation_runs (
+                        run_id, provider, site_id, collected_at_utc, source_kind, status,
+                        configuration_hash, evidence_reference, normalized_manifest_json
+                    ) VALUES (
+                        'legacy-conflict', 'google-search-console', 'officeimo',
+                        '2026-08-02T08:00:00.0000000+00:00', 'fixture', 'complete',
+                        NULL, NULL, '{}'
+                    );
+                    """);
+            }
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => store.QueryAsync(new WebSearchObservationQuery { SiteId = "officeimo" }));
+
+            Assert.Contains("schema v1 contains competing runs", exception.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -383,6 +451,17 @@ public sealed class WebSearchIntelligenceTests
             }
         }
     };
+
+    private static async Task DowngradeDatabaseToVersionOneAsync(string databasePath)
+    {
+        await using var client = new SQLite();
+        await client.ExecuteNonQueryAsync(
+            databasePath,
+            """
+            DROP INDEX ux_search_observation_runs_provider_site_collected;
+            PRAGMA user_version = 1;
+            """);
+    }
 
     private static string CreateTemporaryDirectory()
     {

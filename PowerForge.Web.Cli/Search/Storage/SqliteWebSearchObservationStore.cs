@@ -8,7 +8,7 @@ namespace PowerForge.Web.Cli;
 
 internal sealed class SqliteWebSearchObservationStore
 {
-    internal const int CurrentSchemaVersion = 1;
+    internal const int CurrentSchemaVersion = 2;
 
     private const string CreateSchemaSql = """
         CREATE TABLE IF NOT EXISTS search_observation_runs (
@@ -46,7 +46,22 @@ internal sealed class SqliteWebSearchObservationStore
             ON search_observations(provider, site_id, observation_date);
         CREATE UNIQUE INDEX IF NOT EXISTS ux_search_observation_runs_provider_site_collected
             ON search_observation_runs(provider, site_id, collected_at_utc);
-        PRAGMA user_version = 1;
+        PRAGMA user_version = 2;
+        """;
+
+    private const string FindVersionOneCollisionsSql = """
+        SELECT provider, site_id, collected_at_utc
+        FROM search_observation_runs
+        GROUP BY provider, site_id, collected_at_utc
+        HAVING COUNT(*) > 1
+        ORDER BY provider, site_id, collected_at_utc
+        LIMIT 1;
+        """;
+
+    private const string MigrateVersionOneToTwoSql = """
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_search_observation_runs_provider_site_collected
+            ON search_observation_runs(provider, site_id, collected_at_utc);
+        PRAGMA user_version = 2;
         """;
 
     private readonly string _databasePath;
@@ -242,6 +257,25 @@ internal sealed class SqliteWebSearchObservationStore
             await client.ExecuteNonQueryAsync(
                 _databasePath,
                 CreateSchemaSql,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            return;
+        }
+        if (version == 1)
+        {
+            var collisions = await client.QueryAsListAsync(
+                _databasePath,
+                FindVersionOneCollisionsSql,
+                static record => $"{record.GetString(0)}/{record.GetString(1)} at {record.GetString(2)}",
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (collisions.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Search database schema v1 contains competing runs for {collisions[0]}. Resolve the duplicate collection timestamp before upgrading to schema v2.");
+            }
+
+            await client.ExecuteNonQueryAsync(
+                _databasePath,
+                MigrateVersionOneToTwoSql,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
     }
