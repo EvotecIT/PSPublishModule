@@ -46,9 +46,9 @@ public static class WebSearchProviderConfigurationFingerprint
                 {
                     values.Add("setting");
                     values.Add(Normalize(setting.Key));
-                    values.Add(WebSearchProviderSecretPolicy.IsSecretSettingName(setting.Key)
-                        ? "[redacted-secret-setting]"
-                        : setting.Value?.Trim());
+                    values.Add(WebSearchProviderSecretPolicy.CanFingerprintSettingValue(setting.Key)
+                        ? setting.Value?.Trim()
+                        : "[redacted-setting]");
                 }
             }
         }
@@ -68,12 +68,30 @@ public static class WebSearchProviderConfigurationFingerprint
 
 internal static class WebSearchProviderSecretPolicy
 {
+    private static readonly HashSet<string> NonSecretSettingNames = new(StringComparer.Ordinal)
+    {
+        "property",
+        "siteurl",
+        "zoneid"
+    };
+
     private static readonly string[] SecretSettingTokens =
     [
-        "credential", "password", "private", "secret", "token", "api-key", "apikey"
+        "apikey", "credential", "password", "private", "secret", "token"
     ];
 
-    internal static bool IsSecretSettingName(string? name) =>
-        !string.IsNullOrWhiteSpace(name) &&
-        SecretSettingTokens.Any(token => name.Contains(token, StringComparison.OrdinalIgnoreCase));
+    internal static bool IsSecretSettingName(string? name)
+    {
+        var normalized = NormalizeSettingName(name);
+        return SecretSettingTokens.Any(token => normalized.Contains(token, StringComparison.Ordinal));
+    }
+
+    internal static bool CanFingerprintSettingValue(string? name) =>
+        NonSecretSettingNames.Contains(NormalizeSettingName(name));
+
+    private static string NormalizeSettingName(string? name) => new(
+        (name ?? string.Empty)
+        .Where(char.IsLetterOrDigit)
+        .Select(char.ToLowerInvariant)
+        .ToArray());
 }

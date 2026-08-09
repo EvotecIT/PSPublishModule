@@ -634,7 +634,8 @@ public static class WebSearchProviderDoctor
         uri = null;
         if (!Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var parsed) ||
             (!parsed.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
-             !parsed.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+             !parsed.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) ||
+            !string.IsNullOrEmpty(parsed.UserInfo))
         {
             return false;
         }

@@ -136,13 +136,16 @@ public sealed class WebSearchProviderDoctorTests
     public void ConfigurationFingerprint_RedactsForbiddenSecretSettingValues()
     {
         var first = CreateGoogleConfiguration();
-        first.Sites[0].Providers[0].Settings["password"] = "first-candidate";
+        first.Sites[0].Providers[0].Settings["api_key"] = "first-candidate";
         var second = CreateGoogleConfiguration();
-        second.Sites[0].Providers[0].Settings["password"] = "second-candidate";
+        second.Sites[0].Providers[0].Settings["api_key"] = "second-candidate";
 
         Assert.Equal(
             WebSearchProviderConfigurationFingerprint.Compute(first),
             WebSearchProviderConfigurationFingerprint.Compute(second));
+        Assert.Contains(
+            WebSearchProviderDoctor.Inspect(first, _ => "credential-value").Checks,
+            check => check.Code == "provider.setting-secret-forbidden");
     }
 
     [Fact]
@@ -227,6 +230,7 @@ public sealed class WebSearchProviderDoctorTests
     [InlineData("sc-domain:https://officeimo.com")]
     [InlineData("sc-domain:bad value")]
     [InlineData("SC-DOMAIN:officeimo.com")]
+    [InlineData("https://user:password@officeimo.com/")]
     public void Doctor_RejectsMalformedSearchConsoleDomainProperties(string property)
     {
         var configuration = CreateGoogleConfiguration();
