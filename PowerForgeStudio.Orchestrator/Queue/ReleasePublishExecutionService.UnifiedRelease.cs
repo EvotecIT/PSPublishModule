@@ -290,14 +290,32 @@ public sealed partial class ReleasePublishExecutionService
         PrepareApplePublishFromCheckpoint(spec, builtResult);
         return new PowerForgeReleaseService(new NullLogger()).PublishBuiltReleaseOutputs(
             spec,
-            new PowerForgeReleaseRequest {
-                ConfigPath = configPath,
-                ModuleHostPath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
-                ModuleRunMode = ConfigurationGateMode.Publish,
-                AppleActionConfirmed = true,
-                CancellationToken = cancellationToken
-            },
+            CreateUnifiedPublishRequest(configPath, builtResult, cancellationToken),
             builtResult);
+    }
+
+    internal static PowerForgeReleaseRequest CreateUnifiedPublishRequest(
+        string configPath,
+        PowerForgeReleaseResult builtResult,
+        CancellationToken cancellationToken = default)
+    {
+        var applePlan = builtResult.AppleAppPlan;
+        return new PowerForgeReleaseRequest
+        {
+            ConfigPath = configPath,
+            ModuleHostPath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
+            ModuleRunMode = ConfigurationGateMode.Publish,
+            AppleMarketingVersion = applePlan?.RequestedMarketingVersion,
+            AppleSourceCommit = applePlan?.SourceCommit,
+            AppleExpectedPlanSha256 = builtResult.AppleReceipt?.PlanSha256,
+            AppleAdoptExistingBuild = applePlan?.AdoptExistingBuild == true,
+            AppleResume = applePlan?.Automation.Resume,
+            AppleWaitForProcessing = applePlan?.Automation.WaitForProcessing,
+            AppleProcessingTimeoutSeconds = applePlan?.Automation.ProcessingTimeoutSeconds,
+            ApplePollIntervalSeconds = applePlan?.Automation.PollIntervalSeconds,
+            AppleActionConfirmed = true,
+            CancellationToken = cancellationToken
+        };
     }
 
     internal static void PrepareApplePublishFromCheckpoint(

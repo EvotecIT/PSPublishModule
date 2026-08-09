@@ -80,6 +80,7 @@ internal sealed partial class PowerForgeReleaseService
     private readonly Func<PowerForgeAppleAppReleaseTargetPlan, bool> _generateAppleProject;
     private readonly Action<TimeSpan> _delay;
     private readonly AppleReleaseArtifactService _appleArtifactService;
+    private readonly AppleReleaseReceiptStore _appleReceiptStore;
 
     /// <summary>
     /// Creates a new unified release service.
@@ -168,6 +169,7 @@ internal sealed partial class PowerForgeReleaseService
         Func<PowerForgeAppleAppReleaseTargetPlan, bool>? generateAppleProject = null,
         Action<TimeSpan>? delay = null,
         AppleReleaseArtifactService? appleArtifactService = null,
+        AppleReleaseReceiptStore? appleReceiptStore = null,
         Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, PowerForgeToolReleaseResult>? runToolsWithProgress = null,
         Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, DotNetPublishResult>? runDotNetToolsWithProgress = null,
         Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult>? runDotNetToolsWithProgressAndCancellation = null,
@@ -229,6 +231,7 @@ internal sealed partial class PowerForgeReleaseService
         _generateAppleProject = generateAppleProject ?? (app => new AppleProjectGenerationService().Generate(app));
         _delay = delay ?? Thread.Sleep;
         _appleArtifactService = appleArtifactService ?? new AppleReleaseArtifactService();
+        _appleReceiptStore = appleReceiptStore ?? new AppleReleaseReceiptStore();
         _executeModuleBuild = executeModuleBuild
             ?? ((moduleRequest, cancellationToken) => new ModuleBuildHostService()
                 .ExecuteBuildAsync(moduleRequest, cancellationToken)
@@ -746,9 +749,12 @@ internal sealed partial class PowerForgeReleaseService
                 var cleanup = new PowerForgeAppleReleaseCleanupReceipt();
                 PowerForgeAppleAppReleaseResult[] appleResults;
                 PowerForgeAppleVersionReceipt? appleVersioning = null;
+                var receiptJournalReady = !applePlan.Automation.WriteReceipt;
                 try
                 {
                     AssertApplePlanStillApproved(applePlan, request.AppleExpectedPlanSha256);
+                    PrepareAppleReceiptJournalForMutation(applePlan, request.AppleExpectedPlanSha256);
+                    receiptJournalReady = true;
                     if (applePlan.Action == PowerForgeAppleReleaseAction.Version)
                     {
                         appleVersioning = SelectAppleVersion(applePlan);
@@ -789,7 +795,10 @@ internal sealed partial class PowerForgeReleaseService
                         .ToArray();
                 }
                 result.AppleApps = appleResults;
-                if (!request.CheckpointAppleApps &&
+                if (request.CheckpointAppleApps && appleResults.All(static app => app.Success))
+                    result.AppleReceipt = CreateApplePlanReceipt(applePlan);
+                if (receiptJournalReady &&
+                    !request.CheckpointAppleApps &&
                     (applePlan.Action != PowerForgeAppleReleaseAction.Configured ||
                      appleResults.Any(static app => !app.Success)))
                     result.AppleReceipt ??= CompleteAppleReleaseReceipt(applePlan, appleResults, cleanup, appleVersioning);
@@ -954,7 +963,11 @@ internal sealed partial class PowerForgeReleaseService
                     ConfigPath = configPath,
                     AppleOnly = true,
                     AppleAction = request.AppleAction,
+                    AppleMarketingVersion = request.AppleMarketingVersion,
+                    AppleSourceCommit = request.AppleSourceCommit,
+                    AppleExpectedPlanSha256 = request.AppleExpectedPlanSha256,
                     AppleActionConfirmed = request.AppleActionConfirmed,
+                    AppleAdoptExistingBuild = request.AppleAdoptExistingBuild,
                     AppleResume = request.AppleResume,
                     AppleWaitForProcessing = request.AppleWaitForProcessing,
                     AppleProcessingTimeoutSeconds = request.AppleProcessingTimeoutSeconds,
@@ -1479,6 +1492,8 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException("AppleApps.DirectDistribution.TimeoutSeconds must be greater than zero.");
         var receiptPath = ResolveOutputPath(projectRoot, automation.ReceiptPath);
         EnsurePathWithinProjectRoot(projectRoot, receiptPath, "AppleApps.Automation.ReceiptPath");
+        var receiptHistoryPath = ResolveOutputPath(projectRoot, automation.ReceiptHistoryPath);
+        EnsurePathWithinProjectRoot(projectRoot, receiptHistoryPath, "AppleApps.Automation.ReceiptHistoryPath");
         var planReceiptPath = ResolveOutputPath(projectRoot, automation.PlanReceiptPath);
         EnsurePathWithinProjectRoot(projectRoot, planReceiptPath, "AppleApps.Automation.PlanReceiptPath");
         var lockPath = ResolveOutputPath(projectRoot, automation.LockPath);
@@ -1587,6 +1602,13 @@ internal sealed partial class PowerForgeReleaseService
         {
             throw new InvalidOperationException("Apple source commit must be an exact 40-character Git commit SHA.");
         }
+        if (request.AppleAdoptExistingBuild &&
+            !IsUploadAction(request.AppleAction) &&
+            !(request.AppleAction == PowerForgeAppleReleaseAction.Configured && options.Upload))
+        {
+            throw new InvalidOperationException(
+                "Adopting an existing Apple build is supported only for an upload execution.");
+        }
         if (options.SyncMetadata && metadataConfigPath is null && metadataConfigPaths.Length == 0)
             throw new InvalidOperationException("AppleApps SyncMetadata requires MetadataConfigPath or MetadataConfigPaths.");
         if (options.SyncAppInfo && appInfoConfigPath is null && appInfoConfigPaths.Length == 0)
@@ -1609,6 +1631,17 @@ internal sealed partial class PowerForgeReleaseService
             var missingArchive = apps.FirstOrDefault(app => !Directory.Exists(app.ArchivePath));
             if (missingArchive is not null)
                 throw new FileNotFoundException($"Apple app archive was not found for upload-only release: {missingArchive.ArchivePath}", missingArchive.ArchivePath);
+        }
+        if (!request.PlanOnly &&
+            !request.ValidateOnly &&
+            !request.CheckpointAppleApps &&
+            options.Upload &&
+            automation.WaitForProcessing &&
+            apps.Any(app => UsesAppStoreConnect(app) && string.IsNullOrWhiteSpace(app.AppStoreConnectAppId)))
+        {
+            throw new InvalidOperationException(
+                "Apple upload processing waits require AppStoreConnectAppId for every App Store Connect target. " +
+                "Configure the app id or explicitly disable WaitForProcessing for an upload-only handoff.");
         }
         var explicitAppStoreConnectApiConfiguredCount =
             (string.IsNullOrWhiteSpace(options.AppStoreConnectApiKeyPath) ? 0 : 1) +
@@ -1674,11 +1707,13 @@ internal sealed partial class PowerForgeReleaseService
             Automation = automation,
             DirectDistribution = directDistribution,
             ReceiptPath = receiptPath,
+            ReceiptHistoryPath = receiptHistoryPath,
             PlanReceiptPath = planReceiptPath,
             LockPath = lockPath,
             VersionSourcePath = versionSourcePath,
             RequestedMarketingVersion = requestedMarketingVersion,
             SourceCommit = appleSourceCommit.Length == 0 ? null : appleSourceCommit,
+            AdoptExistingBuild = request.AppleAdoptExistingBuild,
             Archive = options.Archive,
             Upload = options.Upload,
             SyncScreenshots = options.SyncScreenshots,
@@ -2090,10 +2125,12 @@ internal sealed partial class PowerForgeReleaseService
                     result.ErrorMessage = $"xcodebuild archive failed for '{app.Name}' with exit code {archive.ProcessResult.ExitCode}.";
                     return CompleteAppleExecutionFailure(plan, resultsByApp, app);
                 }
+                CaptureAppleArchiveSha256(result, app);
             }
 
             if (plan.Upload && result.Success && !resumedUpload)
             {
+                CaptureAppleArchiveSha256(result, app);
                 var direct = app.DistributionRoute == AppleDistributionRoute.DirectNotarized;
                 var upload = _uploadAppleApp(new AppleAppArchiveUploadRequest
                 {
@@ -2122,15 +2159,23 @@ internal sealed partial class PowerForgeReleaseService
                     return CompleteAppleExecutionFailure(plan, resultsByApp, app);
                 }
 
+                VerifyAppleArchiveUnchangedAfterUpload(app, result);
+
                 if (direct)
                 {
                     result.Notarization = NotarizeDirectAppleExport(plan, app);
+                    WriteAppleNotarizationAttestation(plan, app, result);
                     if (!result.Notarization.Succeeded)
                         throw CreateAppleNotarizationFailure(app, result.Notarization);
                 }
-                else if (IsUploadAction(plan.Action) &&
-                    plan.Automation.WaitForProcessing)
-                    result.RemoteState = WaitForAppleBuild(plan, app, buildUploadId: upload.BuildUploadId);
+                else
+                {
+                    WriteAppleUploadAttestation(plan, app, result);
+                    if (IsUploadExecution(plan) &&
+                        plan.Automation.WaitForProcessing &&
+                        UsesAppStoreConnect(app))
+                        result.RemoteState = WaitForAppleBuild(plan, app, buildUploadId: upload.BuildUploadId);
+                }
             }
 
             var appInfoMetadataSpecs = app.DistributionRoute == AppleDistributionRoute.AppStore &&
@@ -2273,6 +2318,17 @@ internal sealed partial class PowerForgeReleaseService
         return plan.Apps.Select(app => resultsByApp[app]).ToArray();
     }
 
+    private static void CaptureAppleArchiveSha256(
+        PowerForgeAppleAppReleaseResult result,
+        PowerForgeAppleAppReleaseTargetPlan app)
+    {
+        if (!string.IsNullOrWhiteSpace(result.ArchiveSha256))
+            return;
+        if (!File.Exists(app.ArchivePath) && !Directory.Exists(app.ArchivePath))
+            return;
+        result.ArchiveSha256 = AppleNotarizationService.ComputeArtifactSha256(app.ArchivePath);
+    }
+
     private PowerForgeAppleAppReleaseResult[] RunAppleArchiveCheckpoint(
         PowerForgeAppleReleasePlan plan,
         out PowerForgeAppleReleaseCleanupReceipt cleanup)
@@ -2284,6 +2340,7 @@ internal sealed partial class PowerForgeReleaseService
             Action = PowerForgeAppleReleaseAction.Archive,
             Automation = new PowerForgeAppleReleaseAutomationOptions(),
             ReceiptPath = plan.ReceiptPath,
+            ReceiptHistoryPath = plan.ReceiptHistoryPath,
             Archive = true,
             Upload = false,
             XcodeBuildExecutable = plan.XcodeBuildExecutable,

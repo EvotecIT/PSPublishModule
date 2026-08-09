@@ -194,6 +194,7 @@ submitting a version.
     "Automation": {
       "WriteReceipt": true,
       "ReceiptPath": "build/powerforge/apple/release-receipt.json",
+      "ReceiptHistoryPath": "build/powerforge/apple/receipts",
       "PlanReceiptPath": "build/powerforge/apple/release-plan.json",
       "LockPath": "build/powerforge/apple/release.lock",
       "VersionSourcePath": "project.yml",
@@ -254,8 +255,8 @@ Use the same entry point for each transition:
 | `Doctor` | Reads release state plus local topology, embedded-product evidence, metadata ownership, App Review details, age rating, pricing, availability, accessibility, encryption, monetization, webhook coverage, and TestFlight feedback. It does not mutate Apple state. |
 | `Version` | Updates the configured XcodeGen version source and chooses one build number above both local state and every configured App Store Connect platform. |
 | `Archive` | Creates signed archives without uploading. |
-| `Upload` | Archives, uploads, waits for processing, and resumes an exact remote build when possible. |
-| `UploadExisting` | Uploads existing archives and uses the same resume/wait behavior. |
+| `Upload` | Archives, uploads, waits for processing, and resumes an exact remote build only when an immutable receipt binds it to the same source commit and archive SHA-256. |
+| `UploadExisting` | Uploads existing archives and uses the same provenance-bound resume and wait behavior. |
 | `Prepare` | Creates/updates versions, metadata, app information, build selection, and readiness. |
 | `Screenshots` | Validates and syncs configured screenshot sets as a separate, deliberate transition. |
 | `TestFlight` | Assigns the processed build to configured groups and testers. |
@@ -309,6 +310,50 @@ uses a separate plan receipt, checks the exact version/build remotely, and stops
 `SubmitTestFlightReview`, `SubmitAppReview`, or `Release`.
 Screenshot replacement is opt-in during `Advance`. Keep `SyncScreenshots=false` when the
 protected `powerforge-apple-screenshots.yml` lane owns capture, approval, and immediate sync.
+
+### Receipts and recovery
+
+Each executed Apple action writes an atomic latest receipt and one immutable attempt
+receipt under `ReceiptHistoryPath`. The history is append-only: a later `Status` or
+`Doctor` run does not erase the upload or notarization evidence needed by a retry.
+Receipts contain a canonical hash and previous-receipt hash; PowerForge rejects changed,
+missing, forked, linked, or otherwise incomplete history before it trusts that evidence.
+Canonical hashes are derived from the JSON properties actually stored, so adding an
+optional receipt field in a later PowerForge version does not invalidate old evidence.
+The first schema-v4 write also preserves a schema-v3 latest receipt in history before
+replacing it.
+
+Mutating actions validate the complete journal and append a `Started` checkpoint before
+their first side effect. Upload and direct notarization append `UploadAttested` or
+`NotarizationAttested` immediately after the external tool succeeds, before processing
+polls, stapling, readiness checks, or cleanup can fail. A final `Completed` receipt then
+records the reconciled outcome. This means a terminated process can be resumed from the
+last durable fact without guessing whether the external mutation happened.
+
+For App Store uploads, the original attempt records the exact source commit, archive
+path, archive SHA-256, build id or build-upload id, and attestation attempt id. A matching
+version/build in App Store Connect is not enough by itself. If no retained attempt proves
+that PowerForge uploaded that binary from the current source, the action stops instead
+of silently treating an unrelated binary as the current release.
+
+Run real publication through `scripts/Invoke-PinnedPowerForge.ps1`; it supplies the exact
+consumer commit automatically. Direct CLI callers should pass the same 40-character SHA
+with `--apple-source-commit`. If an older binary must be recovered and independent evidence
+has already established its identity, adoption is available as an explicit exception:
+
+```text
+powerforge apple-release Upload --config powerforge.release.json --apple-source-commit <exact-commit> --apple-adopt-existing-build --plan --summary --output json
+powerforge apple-release Upload --config powerforge.release.json --apple-source-commit <exact-commit> --apple-adopt-existing-build --confirm-apple-action --summary --output json
+```
+
+Adoption never claims that PowerForge uploaded the binary. The receipt records
+`adoptedExistingBuild=true` and emits
+`APPLE_BUILD_ADOPTED_WITHOUT_UPLOAD_ATTESTATION`. Prefer a new build number and a fresh
+upload whenever that is possible.
+
+`CleanupAfterProcessing` removes only artifacts older than `ArtifactRetentionDays` after
+the remote build is valid. It deliberately retains the current archive and export so a
+successful upload does not immediately destroy its local evidence.
 
 ## Commercial and compliance governance
 

@@ -228,6 +228,9 @@ internal sealed class PowerForgeReleaseRequest
 
     public bool AppleActionConfirmed { get; set; }
 
+    /// <summary>Explicitly adopt a matching remote build when no verified local upload attestation exists.</summary>
+    public bool AppleAdoptExistingBuild { get; set; }
+
     public bool? AppleResume { get; set; }
 
     public bool? AppleWaitForProcessing { get; set; }
@@ -503,6 +506,8 @@ internal sealed class PowerForgeAppleReleasePlan
 
     public string ReceiptPath { get; set; } = string.Empty;
 
+    public string ReceiptHistoryPath { get; set; } = string.Empty;
+
     public string PlanReceiptPath { get; set; } = string.Empty;
 
     public string LockPath { get; set; } = string.Empty;
@@ -512,6 +517,8 @@ internal sealed class PowerForgeAppleReleasePlan
     public string? RequestedMarketingVersion { get; set; }
 
     public string? SourceCommit { get; set; }
+
+    public bool AdoptExistingBuild { get; set; }
 
     public bool Archive { get; set; }
 
@@ -690,6 +697,16 @@ internal sealed class PowerForgeAppleAppReleaseResult
     public AppStoreConnectGovernancePlan? Governance { get; set; }
 
     public bool ResumedExistingBuild { get; set; }
+
+    public bool AdoptedExistingBuild { get; set; }
+
+    public string? ArchiveSha256 { get; set; }
+
+    public string? UploadAttestationAttemptId { get; set; }
+
+    public string? ResumedUploadAttestationAttemptId { get; set; }
+
+    public PowerForgeAppleReleaseTargetReceipt? ResumedUploadAttestation { get; set; }
 
     public bool ResumedAcceptedNotarization { get; set; }
 

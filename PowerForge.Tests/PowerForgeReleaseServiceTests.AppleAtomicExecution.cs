@@ -3,6 +3,50 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void Execute_AppleCheckpoint_writes_publish_shaped_plan_after_archive()
+    {
+        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Archive = true;
+            spec.AppleApps.Upload = true;
+            spec.AppleApps.Automation.MinimumFreeSpaceGB = 0;
+            spec.AppleApps.Automation.CleanupBeforeArchive = false;
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Archive checkpoint must not query App Store Connect."),
+                    archiveAppleApp: request =>
+                    {
+                        var archive = Directory.CreateDirectory(request.ArchivePath!);
+                        File.WriteAllText(Path.Combine(archive.FullName, "payload"), "signed archive");
+                        return CreateSuccessfulArchive(request);
+                    })
+                .Execute(spec, new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    CheckpointAppleApps = true,
+                    AppleSourceCommit = sourceCommit
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.False(result.AppleAppPlan!.Archive);
+            var receipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt);
+            Assert.True(receipt.PlanOnly);
+            Assert.Equal(sourceCommit, receipt.SourceCommit);
+            Assert.Matches("^[0-9A-Fa-f]{64}$", receipt.PlanSha256);
+            Assert.True(File.Exists(result.AppleAppPlan.PlanReceiptPath));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void PublishBuiltReleaseOutputs_ExecutesConfiguredAppleLane()
     {
         var root = CreateSandbox();

@@ -7,6 +7,7 @@ internal static partial class Program
         "Usage: powerforge apple-release <Status|Doctor|Version|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|Advance|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup> " +
         "[--config <release.json>] [--plan] [--validate] [--confirm-apple-action] " +
         "[--apple-version <marketing-version-or-X-pattern>] [--apple-source-commit <sha>] [--apple-expected-plan-sha256 <sha256>] " +
+        "[--apple-adopt-existing-build] " +
         "[--apple-resume|--no-apple-resume] [--apple-wait|--no-apple-wait] " +
         "[--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>] " +
         "[--target <Name[,Name...]>] [--summary] [--output json]";
@@ -73,6 +74,7 @@ internal static partial class Program
             "--dry-run",
             "--validate",
             "--confirm-apple-action",
+            "--apple-adopt-existing-build",
             "--apple-resume",
             "--no-apple-resume",
             "--apple-wait",

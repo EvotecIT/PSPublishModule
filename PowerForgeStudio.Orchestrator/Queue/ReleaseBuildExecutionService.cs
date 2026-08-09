@@ -13,6 +13,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
     private readonly ProjectBuildCommandHostService _projectBuildCommandHostService;
     private readonly ModuleBuildHostService _moduleBuildHostService;
     private readonly Func<string, PowerForgeReleaseRequest, PowerForgeReleaseResult> _executeUnifiedReleaseBuild;
+    private readonly Func<string, string> _resolveAppleSourceCommit;
 
     public ReleaseBuildExecutionService()
         : this(new RepositoryCatalogScanner(), new ProjectBuildHostService(), new ProjectBuildCommandHostService(), new ModuleBuildHostService())
@@ -24,13 +25,15 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         ProjectBuildHostService projectBuildHostService,
         ProjectBuildCommandHostService projectBuildCommandHostService,
         ModuleBuildHostService moduleBuildHostService,
-        Func<string, PowerForgeReleaseRequest, PowerForgeReleaseResult>? executeUnifiedReleaseBuild = null)
+        Func<string, PowerForgeReleaseRequest, PowerForgeReleaseResult>? executeUnifiedReleaseBuild = null,
+        Func<string, string>? resolveAppleSourceCommit = null)
     {
         _catalogScanner = catalogScanner;
         _projectBuildHostService = projectBuildHostService;
         _projectBuildCommandHostService = projectBuildCommandHostService;
         _moduleBuildHostService = moduleBuildHostService;
         _executeUnifiedReleaseBuild = executeUnifiedReleaseBuild ?? ExecuteUnifiedReleaseBuild;
+        _resolveAppleSourceCommit = resolveAppleSourceCommit ?? ResolveExactGitHead;
     }
 
     public async Task<ReleaseBuildExecutionResult> ExecuteAsync(string repositoryRoot, CancellationToken cancellationToken = default)
@@ -67,10 +70,21 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 configPath,
                 PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
                 moduleStagingPath);
+            if (!unifiedRequest.SkipAppleApps)
+                unifiedRequest.AppleSourceCommit = _resolveAppleSourceCommit(repositoryRoot);
             unifiedRequest.CancellationToken = cancellationToken;
             var unified = await Task.Run(
                 () => _executeUnifiedReleaseBuild(configPath, unifiedRequest),
                 cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(unifiedRequest.AppleSourceCommit))
+            {
+                var completedSourceCommit = _resolveAppleSourceCommit(repositoryRoot);
+                if (!completedSourceCommit.Equals(unifiedRequest.AppleSourceCommit, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        "Repository HEAD changed while the Apple release checkpoint was being built. Rebuild from the new exact source commit.");
+                }
+            }
             var moduleExportCheckpoint =
                 await CaptureScriptModuleExportedConfigFingerprintAsync(
                     repository,
@@ -173,6 +187,16 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
     {
         var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
         return new PowerForgeReleaseService(new NullLogger()).Execute(spec, request);
+    }
+
+    internal static string ResolveExactGitHead(string repositoryRoot)
+    {
+        var git = new HomeAssistantReleaseGitService();
+        git.EnsureClean(repositoryRoot);
+        var sourceCommit = git.GetHeadSha(repositoryRoot).Trim();
+        if (sourceCommit.Length != 40 || !sourceCommit.All(Uri.IsHexDigit))
+            throw new InvalidOperationException("Apple release checkpoints require an exact 40-character repository HEAD.");
+        return sourceCommit.ToLowerInvariant();
     }
 
     private static IReadOnlyList<ReleaseBuildAdapterResult> CreateUnifiedAdapterResults(

@@ -1,0 +1,130 @@
+namespace PowerForge;
+
+internal sealed partial class PowerForgeReleaseService
+{
+    private void PrepareAppleReceiptJournalForMutation(
+        PowerForgeAppleReleasePlan plan,
+        string? expectedPlanSha256)
+    {
+        if (!plan.Automation.WriteReceipt)
+            return;
+
+        _appleReceiptStore.Validate(plan);
+        if (!HasAppleExecutionMutation(plan))
+            return;
+
+        _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
+        {
+            Action = plan.Action,
+            SourceCommit = plan.SourceCommit,
+            PlanSha256 = expectedPlanSha256,
+            OperationPhase = "Started",
+            Success = false,
+            ErrorMessage = "Apple release operation started; inspect later receipts and remote state before retrying.",
+            Targets = plan.Apps.Select(CreateAppleCheckpointTarget).ToArray()
+        });
+    }
+
+    private void WriteAppleUploadAttestation(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        PowerForgeAppleAppReleaseResult result)
+    {
+        if (!plan.Automation.WriteReceipt || result.Upload?.Succeeded != true)
+            return;
+
+        var attemptId = Guid.NewGuid().ToString("N");
+        result.UploadAttestationAttemptId = attemptId;
+        var target = CreateAppleCheckpointTarget(app);
+        target.UploadPerformed = true;
+        target.ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/');
+        target.ArchiveSha256 = result.ArchiveSha256;
+        target.BuildUploadId = result.Upload.BuildUploadId;
+        target.UploadAttestationAttemptId = attemptId;
+        _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
+        {
+            AttemptId = attemptId,
+            Action = plan.Action,
+            SourceCommit = plan.SourceCommit,
+            OperationPhase = "UploadAttested",
+            Success = true,
+            Targets = new[] { target }
+        });
+    }
+
+    private void WriteAppleNotarizationAttestation(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        PowerForgeAppleAppReleaseResult result)
+    {
+        if (!plan.Automation.WriteReceipt || result.Notarization is null)
+            return;
+
+        var target = CreateAppleCheckpointTarget(app);
+        target.DirectArtifactPath = result.Notarization.ArtifactPath;
+        target.DirectArtifactSha256 = result.Notarization.ArtifactSha256;
+        target.NotarizationSubmissionId = result.Notarization.SubmissionId;
+        target.NotarizationStatus = result.Notarization.Status;
+        target.Stapled = result.Notarization.Staple?.Succeeded;
+        target.StapleValidated = result.Notarization.StapleValidation?.Succeeded;
+        target.GatekeeperAccepted = result.Notarization.Assessment?.Succeeded;
+        target.ErrorMessage = result.Notarization.Succeeded
+            ? null
+            : $"Direct notarization post-processing did not complete for '{app.Name}'.";
+        _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
+        {
+            Action = plan.Action,
+            SourceCommit = plan.SourceCommit,
+            OperationPhase = "NotarizationAttested",
+            Success = result.Notarization.Succeeded,
+            ErrorMessage = result.Notarization.Succeeded
+                ? null
+                : $"Direct notarization post-processing did not complete for '{app.Name}'.",
+            Targets = new[] { target }
+        });
+    }
+
+    private static PowerForgeAppleReleaseTargetReceipt CreateAppleCheckpointTarget(
+        PowerForgeAppleAppReleaseTargetPlan app)
+        => new()
+        {
+            Name = app.Name,
+            BundleId = app.BundleId,
+            Platform = app.Platform,
+            DistributionRoute = app.DistributionRoute,
+            ProductRole = app.ProductRole,
+            ParentTarget = app.ParentTarget,
+            Capabilities = app.Capabilities,
+            TestFlightPolicy = app.TestFlightPolicy,
+            AppId = app.AppStoreConnectAppId,
+            Version = app.MarketingVersion,
+            Build = app.BuildNumber
+        };
+
+    private static bool HasAppleExecutionMutation(PowerForgeAppleReleasePlan plan)
+        => plan.Action == PowerForgeAppleReleaseAction.Version ||
+           plan.Action == PowerForgeAppleReleaseAction.Cleanup ||
+           plan.Archive ||
+           plan.Upload ||
+           HasAppleRemoteMutation(plan);
+
+    private static void VerifyAppleArchiveUnchangedAfterUpload(
+        PowerForgeAppleAppReleaseTargetPlan app,
+        PowerForgeAppleAppReleaseResult result)
+    {
+        // A successful real xcodebuild archive always leaves the archive on disk. A null value is
+        // retained only for injected test/process adapters that do not materialize their artifact.
+        if (string.IsNullOrWhiteSpace(result.ArchiveSha256))
+            return;
+        if (!File.Exists(app.ArchivePath) && !Directory.Exists(app.ArchivePath))
+            throw new InvalidOperationException($"The archive disappeared while uploading '{app.Name}': {app.ArchivePath}");
+
+        var afterUpload = AppleNotarizationService.ComputeArtifactSha256(app.ArchivePath);
+        if (!afterUpload.Equals(result.ArchiveSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The archive for '{app.Name}' changed during upload. Expected SHA-256 " +
+                $"'{result.ArchiveSha256}', received '{afterUpload}'. The upload cannot be used as release evidence.");
+        }
+    }
+}

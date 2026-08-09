@@ -46,6 +46,7 @@ internal sealed partial class PowerForgeReleaseService
             CheckedAt = DateTimeOffset.UtcNow,
             Success = true,
             ReceiptPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, plan.PlanReceiptPath).Replace('\\', '/'),
+            AdoptExistingBuild = plan.AdoptExistingBuild,
             Versioning = versioning,
             Targets = targets,
             NextActions = new[] { $"Run Apple action '{plan.Action}' without --plan after reviewing this plan receipt." }
@@ -53,7 +54,7 @@ internal sealed partial class PowerForgeReleaseService
         receipt.PlanSha256 = ComputeApplePlanSha256(receipt);
 
         if (plan.Automation.WriteReceipt)
-            WriteAppleReceipt(plan.ProjectRoot, plan.PlanReceiptPath, receipt);
+            _appleReceiptStore.WritePlan(plan.ProjectRoot, plan.PlanReceiptPath, receipt);
         return receipt;
     }
 
@@ -151,6 +152,7 @@ internal sealed partial class PowerForgeReleaseService
             receipt.Action,
             receipt.SourceCommit,
             receipt.PlanOnly,
+            receipt.AdoptExistingBuild,
             receipt.Success,
             receipt.ErrorMessage,
             receipt.Versioning,

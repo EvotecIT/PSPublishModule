@@ -256,11 +256,30 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     [Parameter]
     public PowerForgeAppleReleaseAction AppleAction { get; set; } = PowerForgeAppleReleaseAction.Configured;
 
+    /// <summary>Overrides the Apple marketing version selected for this operation.</summary>
+    [Parameter]
+    public string? AppleVersion { get; set; }
+
+    /// <summary>Binds Apple release evidence to an exact 40-character source commit.</summary>
+    [Parameter]
+    public string? AppleSourceCommit { get; set; }
+
+    /// <summary>Requires the persisted Apple plan receipt to match this exact SHA-256.</summary>
+    [Parameter]
+    public string? AppleExpectedPlanSha256 { get; set; }
+
     /// <summary>
     /// Explicitly confirms a risky Apple screenshot replacement, review submission, or public release action.
     /// </summary>
     [Parameter]
     public SwitchParameter ConfirmAppleAction { get; set; }
+
+    /// <summary>
+    /// Explicitly adopts an exact remote Apple build when no matching local upload attestation exists.
+    /// Requires ConfirmAppleAction and is intended only for deliberate recovery.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter AdoptExistingAppleBuild { get; set; }
 
     /// <summary>Forces exact remote-build reuse on this run.</summary>
     [Parameter]
@@ -811,7 +830,11 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             PackageSignStore = NormalizeNullable(PackageSignStore),
             PackageSignTimestampUrl = NormalizeNullable(PackageSignTimestampUrl),
             AppleAction = AppleAction,
+            AppleMarketingVersion = NormalizeNullable(AppleVersion),
+            AppleSourceCommit = NormalizeNullable(AppleSourceCommit),
+            AppleExpectedPlanSha256 = NormalizeNullable(AppleExpectedPlanSha256),
             AppleActionConfirmed = ConfirmAppleAction.IsPresent,
+            AppleAdoptExistingBuild = AdoptExistingAppleBuild.IsPresent,
             AppleResume = ResolveMutuallyExclusiveFlag(
                 boundParameters,
                 nameof(AppleResume),

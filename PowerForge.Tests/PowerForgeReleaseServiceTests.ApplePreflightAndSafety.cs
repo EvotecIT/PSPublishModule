@@ -457,7 +457,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                     new PowerForgeReleaseRequest
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                        AppleAction = PowerForgeAppleReleaseAction.Upload
+                        AppleAction = PowerForgeAppleReleaseAction.Upload,
+                        AppleAdoptExistingBuild = true,
+                        AppleActionConfirmed = true
                     });
 
             Assert.False(result.Success, System.Text.Json.JsonSerializer.Serialize(result.AppleReceipt));
@@ -478,7 +480,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_AppleUpload_CleansArtifactsWhenEmbeddedTargetsAreModeled()
+    public void Execute_AppleUpload_RemovesOnlyExpiredArtifactsWhenEmbeddedTargetsAreModeled()
     {
         var root = CreateSandbox();
         try
@@ -516,15 +518,23 @@ public sealed partial class PowerForgeReleaseServiceTests
             var parentArchive = planned.AppleAppPlan!.Apps.Single(app => app.Name == parent.Name).ArchivePath;
             Directory.CreateDirectory(parentArchive);
             File.WriteAllText(Path.Combine(parentArchive, "Info.plist"), "archive");
+            Directory.SetLastWriteTimeUtc(parentArchive, DateTime.UtcNow.AddDays(-10));
+            var staleArchive = Path.Combine(Path.GetDirectoryName(parentArchive)!, "stale.xcarchive");
+            Directory.CreateDirectory(staleArchive);
+            File.WriteAllText(Path.Combine(staleArchive, "Info.plist"), "stale archive");
+            Directory.SetLastWriteTimeUtc(staleArchive, DateTime.UtcNow.AddDays(-10));
 
             var result = service.Execute(spec, new PowerForgeReleaseRequest
             {
                 ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                AppleAction = PowerForgeAppleReleaseAction.Upload
+                AppleAction = PowerForgeAppleReleaseAction.Upload,
+                AppleAdoptExistingBuild = true,
+                AppleActionConfirmed = true
             });
 
             Assert.True(result.Success, result.ErrorMessage);
-            Assert.False(Directory.Exists(parentArchive));
+            Assert.True(Directory.Exists(parentArchive));
+            Assert.False(Directory.Exists(staleArchive));
             Assert.Contains(result.AppleReceipt!.Targets, target =>
                 target.DistributionRoute == AppleDistributionRoute.EmbeddedCompanion &&
                 target.SkippedSteps.Contains("independentRelease"));
@@ -536,7 +546,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_AppleUpload_RetainsDirectArtifactsWhenStoreTargetIsCleaned()
+    public void Execute_AppleUpload_RetainsCurrentStoreAndDirectArtifactsAfterProcessing()
     {
         var root = CreateSandbox();
         try
@@ -599,17 +609,31 @@ public sealed partial class PowerForgeReleaseServiceTests
                     Assessment = new ProcessRunResult(0, "accepted", string.Empty, "spctl", TimeSpan.Zero, false)
                 });
 
+            var planned = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Upload,
+                PlanOnly = true
+            });
+            var plannedStore = planned.AppleAppPlan!.Apps.Single(app => app.Name == store.Name);
+            Directory.CreateDirectory(plannedStore.ArchivePath);
+            File.WriteAllText(Path.Combine(plannedStore.ArchivePath, "archive.txt"), "reviewed store archive");
+            Directory.CreateDirectory(plannedStore.ExportPath);
+            File.WriteAllText(Path.Combine(plannedStore.ExportPath, "upload.txt"), "reviewed store export");
+
             var result = service.Execute(spec, new PowerForgeReleaseRequest
             {
                 ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                AppleAction = PowerForgeAppleReleaseAction.Upload
+                AppleAction = PowerForgeAppleReleaseAction.Upload,
+                AppleAdoptExistingBuild = true,
+                AppleActionConfirmed = true
             });
 
             Assert.True(result.Success, result.ErrorMessage);
             var storePlan = result.AppleAppPlan!.Apps.Single(app => app.Name == store.Name);
             var directPlan = result.AppleAppPlan.Apps.Single(app => app.Name == "EasyControlX Agent");
-            Assert.False(Directory.Exists(storePlan.ArchivePath));
-            Assert.False(Directory.Exists(storePlan.ExportPath));
+            Assert.True(Directory.Exists(storePlan.ArchivePath));
+            Assert.True(Directory.Exists(storePlan.ExportPath));
             Assert.True(Directory.Exists(directPlan.ArchivePath));
             Assert.True(Directory.Exists(directPlan.ExportPath));
         }

@@ -404,6 +404,7 @@
           "properties": {
             "WriteReceipt": { "type": "boolean" },
             "ReceiptPath": { "type": "string" },
+            "ReceiptHistoryPath": { "type": "string" },
             "PlanReceiptPath": { "type": "string" },
             "LockPath": { "type": "string" },
             "VersionSourcePath": { "type": [ "string", "null" ] },

@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text.Json;
 using PowerForge;
 using PowerForgeStudio.Orchestrator.Catalog;
 using PowerForgeStudio.Orchestrator.Portfolio;
@@ -7,6 +9,20 @@ namespace PowerForgeStudio.Tests;
 
 public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 {
+    [Fact]
+    public void ResolveExactGitHead_rejects_dirty_Apple_checkpoint_source()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("DirtyAppleRepo");
+        RunGit(repositoryRoot, "init", "--quiet");
+        File.WriteAllText(Path.Combine(repositoryRoot, "uncommitted.txt"), "not represented by HEAD");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactGitHead(repositoryRoot));
+
+        Assert.Contains("must be clean", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task ExecuteAsync_UsesSharedProjectBuildHostServiceForProjectBuilds()
     {
@@ -72,6 +88,26 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Equal(ReleaseBuildAdapterKind.ProjectBuild, adapter.AdapterKind);
         Assert.Contains(outputDirectory, adapter.ArtifactDirectories);
         Assert.Contains(adapter.ArtifactFiles, path => path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void RunGit(string workingDirectory, params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        foreach (var argument in arguments)
+            startInfo.ArgumentList.Add(argument);
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Unable to start git test process.");
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"git {string.Join(' ', arguments)} failed: {output} {error}");
     }
 
     [Fact]
@@ -469,10 +505,12 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                 Assert.Equal(releaseConfig, configPath);
                 Assert.True(request.PlanOnly);
                 Assert.False(request.SkipAppleApps);
+                Assert.Equal("0123456789abcdef0123456789abcdef01234567", request.AppleSourceCommit);
                 return new PowerForgeReleaseResult {
                     Success = true,
                     ConfigPath = configPath,
                     AppleAppPlan = new PowerForgeAppleReleasePlan {
+                        SourceCommit = request.AppleSourceCommit,
                         Archive = false,
                         Upload = true,
                         Apps = [
@@ -484,7 +522,8 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                         ]
                     }
                 };
-            });
+            },
+            resolveAppleSourceCommit: _ => "0123456789abcdef0123456789abcdef01234567");
 
         var result = await service.ExecuteAsync(repositoryRoot);
 
@@ -493,6 +532,15 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         var adapter = Assert.Single(result.AdapterResults);
         Assert.Equal(ReleaseBuildAdapterKind.AppleBuild, adapter.AdapterKind);
         Assert.Equal([archivePath], adapter.ArtifactDirectories);
+        var checkpoint = Assert.IsType<PowerForgeReleaseResult>(
+            JsonSerializer.Deserialize<PowerForgeReleaseResult>(result.UnifiedReleaseStateJson!));
+        Assert.Equal(
+            "0123456789abcdef0123456789abcdef01234567",
+            checkpoint.AppleAppPlan!.SourceCommit);
+        var publishRequest = ReleasePublishExecutionService.CreateUnifiedPublishRequest(
+            releaseConfig,
+            checkpoint);
+        Assert.Equal(checkpoint.AppleAppPlan.SourceCommit, publishRequest.AppleSourceCommit);
     }
 
     [Fact]
@@ -538,6 +586,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                 Assert.False(request.PlanOnly);
                 Assert.False(request.SkipAppleApps);
                 Assert.True(request.CheckpointAppleApps);
+                Assert.Equal("0123456789abcdef0123456789abcdef01234567", request.AppleSourceCommit);
                 return new PowerForgeReleaseResult
                 {
                     Success = true,
@@ -558,6 +607,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                     },
                     AppleAppPlan = new PowerForgeAppleReleasePlan
                     {
+                        SourceCommit = request.AppleSourceCommit,
                         Archive = false,
                         Upload = true,
                         Apps =
@@ -569,9 +619,16 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                                 ArchivePath = archivePath
                             }
                         ]
+                    },
+                    AppleReceipt = new PowerForgeAppleReleaseReceipt
+                    {
+                        PlanOnly = true,
+                        SourceCommit = request.AppleSourceCommit,
+                        PlanSha256 = "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"
                     }
                 };
-            });
+            },
+            resolveAppleSourceCommit: _ => "0123456789abcdef0123456789abcdef01234567");
 
         var result = await service.ExecuteAsync(repositoryRoot);
 
@@ -582,6 +639,16 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains(result.AdapterResults, adapter =>
             adapter.AdapterKind == ReleaseBuildAdapterKind.AppleBuild &&
             adapter.ArtifactDirectories.Contains(archivePath));
+        var checkpoint = Assert.IsType<PowerForgeReleaseResult>(
+            JsonSerializer.Deserialize<PowerForgeReleaseResult>(result.UnifiedReleaseStateJson!));
+        Assert.Equal(
+            "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+            checkpoint.AppleReceipt!.PlanSha256);
+        var publishRequest = ReleasePublishExecutionService.CreateUnifiedPublishRequest(
+            releaseConfig,
+            checkpoint);
+        Assert.Equal(checkpoint.AppleReceipt.PlanSha256, publishRequest.AppleExpectedPlanSha256);
+        Assert.Equal(checkpoint.AppleAppPlan!.SourceCommit, publishRequest.AppleSourceCommit);
     }
 
     [Fact]

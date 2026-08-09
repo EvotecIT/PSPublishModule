@@ -62,6 +62,9 @@ internal sealed class PowerForgeAppleReleaseAutomationOptions
     /// <summary>Receipt path relative to the Apple project root.</summary>
     public string ReceiptPath { get; set; } = "build/powerforge/apple/release-receipt.json";
 
+    /// <summary>Directory containing immutable Apple release attempt receipts.</summary>
+    public string ReceiptHistoryPath { get; set; } = "build/powerforge/apple/receipts";
+
     /// <summary>Plan receipt path relative to the Apple project root.</summary>
     public string PlanReceiptPath { get; set; } = "build/powerforge/apple/release-plan.json";
 
@@ -98,7 +101,7 @@ internal sealed class PowerForgeAppleReleaseAutomationOptions
     /// <summary>Remove stale release artifacts before archive creation.</summary>
     public bool CleanupBeforeArchive { get; set; }
 
-    /// <summary>Remove the exact local archive/export after the remote build is valid.</summary>
+    /// <summary>Remove expired local archive/export artifacts after the remote build is valid.</summary>
     public bool CleanupAfterProcessing { get; set; }
 
     /// <summary>Age threshold used by bounded stale-artifact cleanup.</summary>
@@ -138,13 +141,19 @@ internal sealed class PowerForgeAppleDirectDistributionOptions
 /// </summary>
 internal sealed class PowerForgeAppleReleaseReceipt
 {
-    public int SchemaVersion { get; set; } = 3;
+    public int SchemaVersion { get; set; } = 4;
+
+    /// <summary>Unique immutable attempt identity.</summary>
+    public string? AttemptId { get; set; }
 
     public PowerForgeAppleReleaseAction Action { get; set; }
 
     public string? SourceCommit { get; set; }
 
     public bool PlanOnly { get; set; }
+
+    /// <summary>Durability checkpoint represented by this immutable receipt.</summary>
+    public string? OperationPhase { get; set; }
 
     public DateTimeOffset CheckedAt { get; set; } = DateTimeOffset.UtcNow;
 
@@ -156,6 +165,18 @@ internal sealed class PowerForgeAppleReleaseReceipt
     public string? ErrorMessage { get; set; }
 
     public string? ReceiptPath { get; set; }
+
+    /// <summary>Project-relative immutable history path for this attempt.</summary>
+    public string? HistoryPath { get; set; }
+
+    /// <summary>Canonical SHA-256 of the previous immutable attempt receipt.</summary>
+    public string? PreviousReceiptSha256 { get; set; }
+
+    /// <summary>Canonical SHA-256 of this receipt with this property omitted.</summary>
+    public string? ReceiptSha256 { get; set; }
+
+    /// <summary>True when the operator explicitly requested adoption of an unattested existing build.</summary>
+    public bool AdoptExistingBuild { get; set; }
 
     public PowerForgeAppleVersionReceipt? Versioning { get; set; }
 
@@ -283,6 +304,15 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public bool UploadPerformed { get; set; }
 
+    /// <summary>Project-relative archive path used for an upload attempt.</summary>
+    public string? ArchivePath { get; set; }
+
+    /// <summary>SHA-256 of the exact local archive used for an upload attempt.</summary>
+    public string? ArchiveSha256 { get; set; }
+
+    /// <summary>Attempt id that originally attested the uploaded archive.</summary>
+    public string? UploadAttestationAttemptId { get; set; }
+
     public string? DirectArtifactPath { get; set; }
 
     public string? DirectArtifactSha256 { get; set; }
@@ -300,6 +330,9 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
     public bool ResumedAcceptedNotarization { get; set; }
 
     public bool ResumedExistingBuild { get; set; }
+
+    /// <summary>True when an existing remote build was adopted without a matching local upload attestation.</summary>
+    public bool AdoptedExistingBuild { get; set; }
 
     public string[] SkippedSteps { get; set; } = Array.Empty<string>();
 

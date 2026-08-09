@@ -275,10 +275,32 @@ public sealed partial class AppleReleaseWorkflowTests
         {
             var output = Path.Combine(sandbox, "build", "powerforge", "apple");
             Directory.CreateDirectory(output);
+            var receiptHistory = Directory.CreateDirectory(Path.Combine(output, "receipts"));
             File.WriteAllText(Path.Combine(sandbox, "powerforge.release.json"),
-                """{ "AppleApps": { "ProjectRoot": ".", "Automation": { "ReceiptPath": "build/powerforge/apple/release-receipt.json", "PlanReceiptPath": "build/powerforge/apple/release-plan.json", "LockPath": "build/powerforge/apple/release.lock" }, "Apps": [ { "Enabled": true, "DistributionRoute": "AppStore", "ProjectPath": "Sample.xcodeproj" } ] } }""");
+                """{ "AppleApps": { "ProjectRoot": ".", "Automation": { "ReceiptPath": "build/powerforge/apple/release-receipt.json", "ReceiptHistoryPath": "build/powerforge/apple/receipts", "PlanReceiptPath": "build/powerforge/apple/release-plan.json", "LockPath": "build/powerforge/apple/release.lock" }, "Apps": [ { "Enabled": true, "DistributionRoute": "AppStore", "ProjectPath": "Sample.xcodeproj" } ] } }""");
             File.WriteAllText(Path.Combine(sandbox, ".gitignore"), "build/\n");
             File.WriteAllText(Path.Combine(output, "release-receipt.json"), JsonSerializer.Serialize(new { sourceCommit = commit }));
+            File.WriteAllText(Path.Combine(receiptHistory.FullName, "prior-upload.json"), JsonSerializer.Serialize(new
+            {
+                schemaVersion = 4,
+                attemptId = "11111111111111111111111111111111",
+                receiptSha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                sourceCommit = "89abcdef0123456789abcdef0123456789abcdef"
+            }));
+            File.WriteAllText(Path.Combine(receiptHistory.FullName, "local-status.json"), JsonSerializer.Serialize(new
+            {
+                schemaVersion = 4,
+                attemptId = "22222222222222222222222222222222",
+                receiptSha256 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                action = "Status"
+            }));
+            File.WriteAllText(Path.Combine(receiptHistory.FullName, "legacy-upload.json"), JsonSerializer.Serialize(new
+            {
+                schemaVersion = 3,
+                sourceCommit = commit,
+                action = "Upload",
+                success = false
+            }));
             File.WriteAllText(Path.Combine(output, "release-plan.json"), JsonSerializer.Serialize(new
             {
                 planOnly = true,
@@ -305,6 +327,7 @@ public sealed partial class AppleReleaseWorkflowTests
                 function Resolve-OptionPath { param([string]$Value); if([IO.Path]::IsPathRooted($Value)){return [IO.Path]::GetFullPath($Value)}; return [IO.Path]::GetFullPath((Join-Path $consumer $Value)) }
                 function Resolve-PathFromBase { param([string]$BasePath,[string]$Value); if([IO.Path]::IsPathRooted($Value)){return [IO.Path]::GetFullPath($Value)}; return [IO.Path]::GetFullPath((Join-Path $BasePath $Value)) }
                 function Assert-UnlinkedPath { param([string]$Path,[string]$Name,[switch]$AllowMissingLeaf) }
+                function Assert-UnlinkedDirectory { param([string]$Path,[string]$Name) }
                 . $Support
                 Register-AppleAutomationEvidence -SourceCommit '{{commit}}'
                 Assert-ConsumerRepositoryContent
@@ -316,6 +339,14 @@ public sealed partial class AppleReleaseWorkflowTests
                     Register-AppleAutomationEvidence -SourceCommit '{{commit}}'
                     Assert-ConsumerRepositoryContent
                 }
+                Set-Content -LiteralPath (Join-Path $consumer 'build/powerforge/apple/receipts/injected.bin') -Value 'not a receipt'
+                try { Register-AppleAutomationEvidence -SourceCommit '{{commit}}'; throw 'Unsupported receipt history was accepted.' }
+                catch { if ($_.Exception.Message -notlike '*unsupported entry*') { throw } }
+                Remove-Item -LiteralPath (Join-Path $consumer 'build/powerforge/apple/receipts/injected.bin')
+                Set-Content -LiteralPath (Join-Path $consumer 'build/powerforge/apple/receipts/wrong-legacy.json') -Value '{"schemaVersion":3,"sourceCommit":"89abcdef0123456789abcdef0123456789abcdef"}'
+                try { Register-AppleAutomationEvidence -SourceCommit '{{commit}}'; throw 'Wrong-source legacy history was accepted.' }
+                catch { if ($_.Exception.Message -notlike '*source commit does not match*') { throw } }
+                Remove-Item -LiteralPath (Join-Path $consumer 'build/powerforge/apple/receipts/wrong-legacy.json')
                 Set-Content -LiteralPath (Join-Path $consumer 'build/powerforge/apple/injected.bin') -Value 'not reviewed'
                 try { Assert-ConsumerRepositoryContent; throw 'Unreviewed file was accepted.' }
                 catch { if ($_.Exception.Message -notlike '*non-reviewed content*') { throw }; 'PASS' }

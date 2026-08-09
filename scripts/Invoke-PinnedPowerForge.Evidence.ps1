@@ -10,6 +10,37 @@ function Add-AllowedConsumerEvidencePath {
     $null = $script:allowedConsumerEvidencePaths.Add($full)
 }
 
+function Register-AppleReceiptEvidenceFile {
+    param(
+        [Parameter(Mandatory)][string] $Path,
+        [Parameter(Mandatory)][string] $SourceCommit,
+        [switch] $HistoryEntry
+    )
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return }
+    $item = Get-Item -LiteralPath $Path -Force
+    if ($item.Length -gt 2MB) { throw "Apple release receipt exceeds the 2 MB evidence limit: $Path" }
+    Assert-UnlinkedPath -Path $Path -Name 'Apple release receipt'
+    try {
+        $receipt = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    } catch {
+        throw "Apple release receipt is not valid JSON: $Path"
+    }
+    $receiptSource = [string]$receipt.sourceCommit
+    $immutableReceipt = [int]$receipt.schemaVersion -ge 4
+    if ($immutableReceipt) {
+        if (
+            ([string]$receipt.attemptId) -notmatch '^[0-9A-Fa-f]{32}$' -or
+            ([string]$receipt.receiptSha256) -notmatch '^[0-9A-Fa-f]{64}$' -or
+            (-not [string]::IsNullOrWhiteSpace($receiptSource) -and
+             $receiptSource -notmatch '^[0-9A-Fa-f]{40}$')) {
+            throw "Apple release evidence does not satisfy the immutable receipt contract: $Path"
+        }
+    } elseif (-not $receiptSource.Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Apple release receipt source commit does not match the exact consumer HEAD '$SourceCommit'."
+    }
+    Add-AllowedConsumerEvidencePath -Path $Path -Name 'Apple release receipt'
+}
+
 function Get-ForwardedArgumentList {
     param([Parameter(Mandatory)][string] $SourceCommit)
     if ($ArgumentList[0] -ne 'apple-release') { return @($ArgumentList) }
@@ -109,13 +140,20 @@ function Register-AppleAutomationEvidence {
     } else { [string]$automation.ReceiptPath }
     $receiptPath = Resolve-PathFromBase -BasePath $projectRoot -Value $receiptValue
     if (Test-Path -LiteralPath $receiptPath) {
-        $directTargets = @($apple.Apps | Where-Object { $_.Enabled -ne $false -and [string]$_.DistributionRoute -eq 'DirectNotarized' })
-        if ($directTargets.Count -eq 0) {
-            $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
-            if (-not ([string]$receipt.sourceCommit).Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase)) {
-                throw "Apple release receipt source commit does not match the exact consumer HEAD '$SourceCommit'."
+        Register-AppleReceiptEvidenceFile -Path $receiptPath -SourceCommit $SourceCommit
+    }
+
+    $historyValue = if ([string]::IsNullOrWhiteSpace([string]$automation.ReceiptHistoryPath)) {
+        'build/powerforge/apple/receipts'
+    } else { [string]$automation.ReceiptHistoryPath }
+    $historyPath = Resolve-PathFromBase -BasePath $projectRoot -Value $historyValue
+    if (Test-Path -LiteralPath $historyPath) {
+        Assert-UnlinkedDirectory -Path $historyPath -Name 'Apple release receipt history'
+        foreach ($entry in @(Get-ChildItem -LiteralPath $historyPath -Force)) {
+            if ($entry.PSIsContainer -or -not $entry.Name.EndsWith('.json', [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Apple release receipt history contains an unsupported entry: $($entry.FullName)"
             }
-            Add-AllowedConsumerEvidencePath -Path $receiptPath -Name 'Apple release receipt'
+            Register-AppleReceiptEvidenceFile -Path $entry.FullName -SourceCommit $SourceCommit -HistoryEntry
         }
     }
 

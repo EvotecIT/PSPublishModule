@@ -46,15 +46,22 @@ internal sealed class AppleReleaseArtifactService
         return cleanup;
     }
 
-    internal PowerForgeAppleReleaseCleanupReceipt RemoveStaleArtifacts(PowerForgeAppleReleasePlan plan)
+    internal PowerForgeAppleReleaseCleanupReceipt RemoveStaleArtifacts(
+        PowerForgeAppleReleasePlan plan,
+        IEnumerable<string>? protectedPaths = null)
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
         var roots = GetConfiguredRoots(plan);
+        var protectedFullPaths = (protectedPaths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .ToHashSet(PathComparer);
         var cutoff = _utcNow().UtcDateTime.AddDays(-Math.Max(0, plan.Automation.ArtifactRetentionDays));
         var candidates = roots
             .Where(Directory.Exists)
             .SelectMany(static root => Directory.EnumerateFileSystemEntries(root))
+            .Where(path => !protectedFullPaths.Contains(Path.GetFullPath(path)))
             .Where(path => GetLastWriteTimeUtc(path) <= cutoff)
             .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();

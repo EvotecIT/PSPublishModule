@@ -162,7 +162,15 @@ internal sealed class PowerForgeReleaseInvocationOptions
 
     public PowerForgeAppleReleaseAction AppleAction { get; set; } = PowerForgeAppleReleaseAction.Configured;
 
+    public string? AppleMarketingVersion { get; set; }
+
+    public string? AppleSourceCommit { get; set; }
+
+    public string? AppleExpectedPlanSha256 { get; set; }
+
     public bool AppleActionConfirmed { get; set; }
+
+    public bool AppleAdoptExistingBuild { get; set; }
 
     public bool? AppleResume { get; set; }
 
