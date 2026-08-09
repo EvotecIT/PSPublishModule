@@ -798,7 +798,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                 }
                 """);
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, "VALID"),
+                checkAppleReleaseReadiness: (_, request) => CreateReadyReleaseReadiness(request));
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {

@@ -10,6 +10,11 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleReleasePlan plan,
         string? expectedPlanSha256)
     {
+        if (plan.SyncScreenshots && plan.ReplaceScreenshots && string.IsNullOrWhiteSpace(expectedPlanSha256))
+        {
+            throw new InvalidOperationException(
+                "Destructive App Store screenshot replacement requires the SHA-256 from a reviewed exact Apple plan.");
+        }
         if (string.IsNullOrWhiteSpace(expectedPlanSha256))
             return;
 
@@ -103,7 +108,8 @@ internal sealed partial class PowerForgeReleaseService
         if (plan.Action == PowerForgeAppleReleaseAction.Version)
             versioning = PlanAppleVersion(plan, whatIf: true);
 
-        var screenshotSpecs = (plan.CheckReleaseReadiness ||
+        var screenshotSpecs = ((plan.SyncScreenshots && plan.ReplaceScreenshots) ||
+                               plan.CheckReleaseReadiness ||
                                (plan.SubmitForReview && !plan.SkipReviewReadinessCheck))
             ? LoadAppleScreenshotSpecs(plan)
             : Array.Empty<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
@@ -170,32 +176,38 @@ internal sealed partial class PowerForgeReleaseService
             return target;
         }
 
-        var state = ReadAppleReleaseState(plan, app);
-        var platform = AssertSinglePlatformState(state, app);
-        if (RequiresSelectedApplePlanBuild(plan) &&
-            (platform.MatchedBuildSelected != true || string.IsNullOrWhiteSpace(platform.MatchedBuild?.Id)))
+        if (RequiresObservedAppleReleaseState(plan))
         {
-            throw new InvalidOperationException(
-                $"Apple action '{plan.Action}' requires one uniquely selected App Store Connect build for '{app.Name}'. " +
-                "Upload and finish processing the intended exact build, then review a new plan.");
+            var state = ReadAppleReleaseState(plan, app);
+            var platform = AssertSinglePlatformState(state, app);
+            if (RequiresSelectedApplePlanBuild(plan) &&
+                (platform.MatchedBuildSelected != true || string.IsNullOrWhiteSpace(platform.MatchedBuild?.Id)))
+            {
+                throw new InvalidOperationException(
+                    $"Apple action '{plan.Action}' requires one uniquely selected App Store Connect build for '{app.Name}'. " +
+                    "Upload and finish processing the intended exact build, then review a new plan.");
+            }
+            var reviewSubmission = platform.ReviewSubmissions.FirstOrDefault(static value => value.IsSubmitted == true) ??
+                                   platform.ReviewSubmissions.FirstOrDefault();
+            target.Version = state.VersionString ?? target.Version;
+            target.Build = state.BuildNumber ?? target.Build;
+            target.BuildId = platform.MatchedBuild?.Id;
+            target.BuildProcessingState = platform.MatchedBuild?.ProcessingState;
+            target.DistributionVersionId = platform.Version?.Id;
+            target.DistributionState = platform.Version?.AppStoreState ?? platform.Version?.AppVersionState;
+            target.BuildSelected = platform.MatchedBuildSelected;
+            target.TestFlightInternalState = platform.BetaDetail?.InternalBuildState;
+            target.TestFlightExternalState = platform.BetaDetail?.ExternalBuildState;
+            target.TestFlightReviewState = platform.BetaReviewSubmission?.BetaReviewState;
+            target.AppReviewSubmissionId = reviewSubmission?.Id;
+            target.AppReviewState = reviewSubmission?.State;
+            target.NextActions = platform.NextActions;
         }
-        var reviewSubmission = platform.ReviewSubmissions.FirstOrDefault(static value => value.IsSubmitted == true) ??
-                               platform.ReviewSubmissions.FirstOrDefault();
-        target.Version = state.VersionString ?? target.Version;
-        target.Build = state.BuildNumber ?? target.Build;
-        target.BuildId = platform.MatchedBuild?.Id;
-        target.BuildProcessingState = platform.MatchedBuild?.ProcessingState;
-        target.DistributionVersionId = platform.Version?.Id;
-        target.DistributionState = platform.Version?.AppStoreState ?? platform.Version?.AppVersionState;
-        target.BuildSelected = platform.MatchedBuildSelected;
-        target.TestFlightInternalState = platform.BetaDetail?.InternalBuildState;
-        target.TestFlightExternalState = platform.BetaDetail?.ExternalBuildState;
-        target.TestFlightReviewState = platform.BetaReviewSubmission?.BetaReviewState;
-        target.AppReviewSubmissionId = reviewSubmission?.Id;
-        target.AppReviewState = reviewSubmission?.State;
-        target.NextActions = platform.NextActions;
-        if (plan.CheckReleaseReadiness ||
-            (plan.SubmitForReview && !plan.SkipReviewReadinessCheck))
+
+        var bindScreenshotInventory = plan.SyncScreenshots && plan.ReplaceScreenshots;
+        var checkReadiness = plan.CheckReleaseReadiness ||
+                             (plan.SubmitForReview && !plan.SkipReviewReadinessCheck);
+        if (bindScreenshotInventory || checkReadiness)
         {
             var values = ResolveAppleDistributionValues(app, versionUpdate: null);
             var matchingScreenshotSpec = ResolveMatchingScreenshotSpec(
@@ -212,23 +224,36 @@ internal sealed partial class PowerForgeReleaseService
                 {
                     AppId = app.AppStoreConnectAppId!,
                     VersionString = values.MarketingVersion,
-                    BuildNumber = values.BuildNumber,
+                    BuildNumber = checkReadiness ? values.BuildNumber : null,
                     Platform = app.Platform,
-                    ScreenshotSpec = boundScreenshotSpec
+                    ScreenshotSpec = boundScreenshotSpec,
+                    RequireSelectedBuild = checkReadiness,
+                    RequireValidBuild = checkReadiness,
+                    RequireDescription = checkReadiness,
+                    RequireKeywords = checkReadiness,
+                    RequireSupportUrl = checkReadiness
                 });
-            target.ReadinessChecked = true;
-            target.ReadyForSubmission = readiness.IsReady;
             target.ScreenshotCount = readiness.ScreenshotSets.Sum(static set => set.Count);
             target.ScreenshotDeliveryStates = readiness.ScreenshotSets
                 .SelectMany(static set => set.AssetDeliveryStates)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(static stateValue => stateValue, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            target.ReadinessChecks = readiness.Checks
-                .OrderBy(static check => check.Name, StringComparer.Ordinal)
-                .ThenBy(static check => check.Message, StringComparer.Ordinal)
-                .ToArray();
-            target.ReadinessSha256 = ComputeReadinessSha256(readiness);
+            if (bindScreenshotInventory)
+            {
+                target.ScreenshotInventorySha256 = AppStoreConnectScreenshotInventory.ComputeSha256(readiness.ScreenshotSets);
+                app.ExpectedScreenshotInventorySha256 = target.ScreenshotInventorySha256;
+            }
+            if (checkReadiness)
+            {
+                target.ReadinessChecked = true;
+                target.ReadyForSubmission = readiness.IsReady;
+                target.ReadinessChecks = readiness.Checks
+                    .OrderBy(static check => check.Name, StringComparer.Ordinal)
+                    .ThenBy(static check => check.Message, StringComparer.Ordinal)
+                    .ToArray();
+                target.ReadinessSha256 = ComputeReadinessSha256(readiness);
+            }
         }
         return target;
     }
@@ -239,6 +264,14 @@ internal sealed partial class PowerForgeReleaseService
     {
         if (!UsesAppStoreConnect(app) || !ShouldExecuteAppleTarget(plan.Action, app))
             return false;
+        return RequiresObservedAppleReleaseState(plan) ||
+               (plan.SyncScreenshots && plan.ReplaceScreenshots) ||
+               plan.CheckReleaseReadiness ||
+               (plan.SubmitForReview && !plan.SkipReviewReadinessCheck);
+    }
+
+    private static bool RequiresObservedAppleReleaseState(PowerForgeAppleReleasePlan plan)
+    {
         if (plan.Action is PowerForgeAppleReleaseAction.SubmitTestFlightReview or
             PowerForgeAppleReleaseAction.SubmitAppReview or
             PowerForgeAppleReleaseAction.Release or
@@ -494,7 +527,15 @@ internal sealed partial class PowerForgeReleaseService
                     set.ScreenshotSetId,
                     set.Count,
                     AssetDeliveryStates = set.AssetDeliveryStates.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
-                    FileNames = set.FileNames.OrderBy(static value => value, StringComparer.Ordinal).ToArray()
+                    FileNames = set.FileNames.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+                    Screenshots = (set.Screenshots ?? Array.Empty<AppStoreConnectReleaseScreenshotAssetReadiness>()).Select(static screenshot => new
+                    {
+                        screenshot.Id,
+                        screenshot.FileName,
+                        screenshot.FileSize,
+                        screenshot.SourceFileChecksum,
+                        screenshot.AssetDeliveryState
+                    }).ToArray()
                 })
                 .ToArray(),
             Checks = readiness.Checks

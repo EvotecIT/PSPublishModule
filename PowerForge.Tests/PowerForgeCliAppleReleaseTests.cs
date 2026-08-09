@@ -151,7 +151,7 @@ public sealed class PowerForgeCliAppleReleaseTests
                     StringComparison.Ordinal));
             var configured = await RunCliAsync(
                 repoRoot,
-                $"\"{GetCliPath(repoRoot)}\" release --config \"{configPath}\" --plan --summary --output json");
+                $"\"{GetCliPath(repoRoot)}\" release --config \"{configPath}\" --validate --summary --output json");
 
             Assert.True(
                 configured.ExitCode == 0,

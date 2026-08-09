@@ -117,6 +117,32 @@ public sealed class AppStoreConnectScreenshotSyncService
             plannedSets.Add(new PlannedScreenshotSet(preflightedSet, set, existingScreenshots));
         }
 
+        if (request.ReplaceExisting && !string.IsNullOrWhiteSpace(request.ExpectedRemoteInventorySha256))
+        {
+            var remoteInventory = plannedSets.Select(static plannedSet =>
+                new AppStoreConnectReleaseScreenshotSetReadiness
+                {
+                    ScreenshotDisplayType = plannedSet.Preflighted.ScreenshotDisplayType,
+                    ScreenshotSetId = plannedSet.ScreenshotSet?.Id,
+                    Count = plannedSet.ExistingScreenshots.Length,
+                    Screenshots = plannedSet.ExistingScreenshots.Select(static screenshot =>
+                        new AppStoreConnectReleaseScreenshotAssetReadiness
+                        {
+                            Id = screenshot.Id,
+                            FileName = screenshot.FileName,
+                            FileSize = screenshot.FileSize,
+                            SourceFileChecksum = screenshot.SourceFileChecksum,
+                            AssetDeliveryState = screenshot.AssetDeliveryState
+                        }).ToArray()
+                });
+            var actualInventorySha256 = AppStoreConnectScreenshotInventory.ComputeSha256(remoteInventory);
+            if (!actualInventorySha256.Equals(request.ExpectedRemoteInventorySha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "App Store Connect screenshots changed after Apple plan approval. Review a new exact screenshot replacement plan before deleting remote assets.");
+            }
+        }
+
         var results = new List<AppStoreConnectScreenshotSetSyncResult>();
         foreach (var plannedSet in plannedSets)
         {

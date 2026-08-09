@@ -212,4 +212,28 @@ public sealed class AppStoreConnectReleaseScreenshotSetReadiness
 
     /// <summary>Screenshot file names currently in the set.</summary>
     public string[] FileNames { get; set; } = Array.Empty<string>();
+
+    /// <summary>Exact ordered screenshot inventory used to bind destructive replacement plans.</summary>
+    public AppStoreConnectReleaseScreenshotAssetReadiness[] Screenshots { get; set; } = Array.Empty<AppStoreConnectReleaseScreenshotAssetReadiness>();
+}
+
+/// <summary>
+/// Stable remote identity for one screenshot in a release-readiness inventory.
+/// </summary>
+public sealed class AppStoreConnectReleaseScreenshotAssetReadiness
+{
+    /// <summary>App Store Connect screenshot id.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>Screenshot file name when reported by App Store Connect.</summary>
+    public string? FileName { get; set; }
+
+    /// <summary>Screenshot file size when reported by App Store Connect.</summary>
+    public long? FileSize { get; set; }
+
+    /// <summary>Source checksum when reported by App Store Connect.</summary>
+    public string? SourceFileChecksum { get; set; }
+
+    /// <summary>Asset delivery state when reported by App Store Connect.</summary>
+    public string? AssetDeliveryState { get; set; }
 }

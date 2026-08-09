@@ -73,6 +73,16 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void UploadAttestationResume_UsesPlatformCorrectProjectPathIdentity()
+    {
+        var matches = PowerForgeReleaseService.AppleReleasePathsEqual(
+            "CasaRay.xcodeproj",
+            "casaray.xcodeproj");
+
+        Assert.Equal(Path.DirectorySeparatorChar == '\\', matches);
+    }
+
+    [Fact]
     public void Execute_AppleDirectNotarizationResume_FollowsRelativeReceiptAfterCheckoutRelocation()
     {
         const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";

@@ -173,7 +173,15 @@ public sealed class AppStoreConnectReleaseReadinessService
                 ScreenshotSetId = set.Id,
                 Count = screenshots.Length,
                 AssetDeliveryStates = deliveryStates,
-                FileNames = fileNames
+                FileNames = fileNames,
+                Screenshots = screenshots.Select(static screenshot => new AppStoreConnectReleaseScreenshotAssetReadiness
+                {
+                    Id = screenshot.Id,
+                    FileName = screenshot.FileName,
+                    FileSize = screenshot.FileSize,
+                    SourceFileChecksum = screenshot.SourceFileChecksum,
+                    AssetDeliveryState = screenshot.AssetDeliveryState
+                }).ToArray()
             });
 
             var enough = screenshots.Length >= Math.Max(1, request.MinimumScreenshotsPerSet);

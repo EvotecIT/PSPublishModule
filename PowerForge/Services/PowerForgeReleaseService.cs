@@ -2327,6 +2327,7 @@ internal sealed partial class PowerForgeReleaseService
                             Path.DirectorySeparatorChar == '\\'
                                 ? StringComparer.OrdinalIgnoreCase
                                 : StringComparer.Ordinal),
+                    ExpectedScreenshotInventorySha256 = app.ExpectedScreenshotInventorySha256,
                     CheckReadiness = plan.CheckReleaseReadiness,
                     ReadinessRequest = plan.CheckReleaseReadiness && matchingScreenshotSpec is not null
                         ? new AppStoreConnectReleaseReadinessRequest

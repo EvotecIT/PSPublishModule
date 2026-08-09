@@ -145,7 +145,8 @@ public sealed class AppStoreConnectReleasePreparationService
                     ReplaceExisting = request.ReplaceScreenshots,
                     BaseDirectory = request.BaseDirectory,
                     ExpectedSourceCommit = request.ExpectedSourceCommit,
-                    ExpectedFileSha256 = request.ExpectedScreenshotFileSha256
+                    ExpectedFileSha256 = request.ExpectedScreenshotFileSha256,
+                    ExpectedRemoteInventorySha256 = request.ExpectedScreenshotInventorySha256
                 },
                 cancellationToken).ConfigureAwait(false);
             messages.Add("Synchronized App Store screenshots.");

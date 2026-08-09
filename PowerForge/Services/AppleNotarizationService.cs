@@ -59,16 +59,14 @@ public sealed class AppleNotarizationService
         if (request.StaplingCompleted && !resumed)
             throw new ArgumentException("StaplingCompleted requires AcceptedSubmissionId.", nameof(request));
         var staplingCompleted = request.StaplingCompleted;
-        using var submissionSnapshot = resumed
-            ? null
-            : AppleNotarizationInputSnapshot.Create(artifactPath, artifactSha256);
-        var submissionArtifactPath = submissionSnapshot?.ArtifactPath ?? artifactPath;
+        using var submissionSnapshot = AppleNotarizationInputSnapshot.Create(artifactPath, artifactSha256);
+        var submissionArtifactPath = submissionSnapshot.ArtifactPath;
         var submittedPath = resumed
             ? artifactPath
             : await PrepareSubmissionAsync(
                     request,
                     submissionArtifactPath,
-                    submissionSnapshot!.RootPath,
+                    submissionSnapshot.RootPath,
                     timeout,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -155,14 +153,15 @@ public sealed class AppleNotarizationService
             }
             else
             {
-                staple = await RunAsync(request.XcrunExecutable, artifactPath, new[] { "stapler", "staple", artifactPath }, timeout, cancellationToken).ConfigureAwait(false);
+                staple = await RunAsync(request.XcrunExecutable, submissionArtifactPath, new[] { "stapler", "staple", submissionArtifactPath }, timeout, cancellationToken).ConfigureAwait(false);
                 stapledThisInvocation = staple.Succeeded;
             }
             if (staple?.Succeeded == true && validation is null)
-                validation = await RunAsync(request.XcrunExecutable, artifactPath, new[] { "stapler", "validate", artifactPath }, timeout, cancellationToken).ConfigureAwait(false);
+                validation = await RunAsync(request.XcrunExecutable, submissionArtifactPath, new[] { "stapler", "validate", submissionArtifactPath }, timeout, cancellationToken).ConfigureAwait(false);
             if (stapledThisInvocation && validation?.Succeeded == true && !string.IsNullOrWhiteSpace(submissionId))
             {
-                var stapledArtifactSha256 = ComputeArtifactSha256(artifactPath);
+                var privateStapledArtifactSha256 = ComputeArtifactSha256(submissionArtifactPath);
+                var stapledArtifactSha256 = submissionSnapshot.PublishTo(artifactPath, privateStapledArtifactSha256);
                 try
                 {
                     request.StapledCheckpoint?.Invoke(new AppleNotarizationStapledCheckpoint
@@ -185,20 +184,36 @@ public sealed class AppleNotarizationService
         if (submission.Succeeded && string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) && request.Assess)
         {
             var assessmentArguments = extension.Equals(".dmg", StringComparison.OrdinalIgnoreCase)
-                ? new[] { "--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=4", artifactPath }
+                ? new[] { "--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=4", submissionArtifactPath }
                 : new[]
                 {
                     "--assess", "--type",
                     extension.Equals(".app", StringComparison.OrdinalIgnoreCase) ? "execute" : "install",
-                    "--verbose=4", artifactPath
+                    "--verbose=4", submissionArtifactPath
                 };
-            assessment = await RunAsync(request.SpctlExecutable, artifactPath, assessmentArguments, timeout, cancellationToken).ConfigureAwait(false);
+            assessment = await RunAsync(request.SpctlExecutable, submissionArtifactPath, assessmentArguments, timeout, cancellationToken).ConfigureAwait(false);
+        }
+
+        string finalArtifactSha256;
+        if (request.Staple && staple?.Succeeded == true && validation?.Succeeded == true)
+        {
+            var privateFinalSha256 = ComputeArtifactSha256(submissionArtifactPath);
+            finalArtifactSha256 = submissionSnapshot.PublishTo(artifactPath, privateFinalSha256);
+        }
+        else
+        {
+            finalArtifactSha256 = ComputeArtifactSha256(artifactPath);
+            if (!finalArtifactSha256.Equals(artifactSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"The public Apple notarization artifact changed while its private snapshot was being processed. Expected '{artifactSha256}', received '{finalArtifactSha256}'.");
+            }
         }
 
         return new AppleNotarizationResult
         {
             ArtifactPath = artifactPath,
-            ArtifactSha256 = ComputeArtifactSha256(artifactPath),
+            ArtifactSha256 = finalArtifactSha256,
             SubmissionPath = submissionPath,
             SubmissionId = submissionId,
             Status = status,

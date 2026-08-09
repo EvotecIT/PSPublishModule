@@ -413,19 +413,13 @@ internal sealed partial class AppleReleaseSourceTrustService
         var manifest = File.ReadAllText(manifestPath);
         var manifestWithoutComments = RemoveSwiftComments(manifest);
         var manifestSyntax = MaskSwiftStringLiterals(manifestWithoutComments);
-        if (Regex.IsMatch(
-                manifestSyntax,
-                "\\.unsafeFlags\\s*\\(",
-                RegexOptions.CultureInvariant))
+        if (ContainsSwiftIdentifier(manifestSyntax, "unsafeFlags"))
         {
             throw new InvalidOperationException(
                 $"Local Swift package '{packageRoot}' uses unsafeFlags, whose compiler and linker inputs cannot be proven at the exact source commit. " +
                 "Replace unsafe flags with tracked package settings before creating an Apple checkpoint.");
         }
-        if (Regex.IsMatch(
-                manifestSyntax,
-                "\\.systemLibrary\\s*\\(",
-                RegexOptions.CultureInvariant))
+        if (ContainsSwiftIdentifier(manifestSyntax, "systemLibrary"))
         {
             throw new InvalidOperationException(
                 $"Local Swift package '{packageRoot}' declares a systemLibrary target, whose pkg-config and host library inputs cannot be proven at the exact source commit. " +
@@ -498,6 +492,12 @@ internal sealed partial class AppleReleaseSourceTrustService
                 throw new FileNotFoundException($"Swift package manifest input was not found: {explicitPath}", explicitPath);
         }
     }
+
+    private static bool ContainsSwiftIdentifier(string syntax, string identifier)
+        => Regex.IsMatch(
+            syntax,
+            $"(?<![A-Za-z0-9_]){Regex.Escape(identifier)}(?![A-Za-z0-9_])",
+            RegexOptions.CultureInvariant);
 
     private static string RemoveSwiftComments(string source)
     {

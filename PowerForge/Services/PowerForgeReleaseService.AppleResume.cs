@@ -251,7 +251,7 @@ internal sealed partial class PowerForgeReleaseService
             string.Equals(candidate.AppId, app.AppStoreConnectAppId, StringComparison.OrdinalIgnoreCase) &&
             candidate.Platform == app.Platform &&
             string.Equals(candidate.Configuration, app.Configuration, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(candidate.ProjectPath, FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/'), StringComparison.OrdinalIgnoreCase) &&
+            AppleReleasePathsEqual(candidate.ProjectPath, FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/')) &&
             candidate.IsWorkspace == app.IsWorkspace &&
             string.Equals(candidate.Scheme, app.Scheme, StringComparison.Ordinal) &&
             candidate.ArchiveVariant == app.ArchiveVariant &&
@@ -296,13 +296,13 @@ internal sealed partial class PowerForgeReleaseService
             string.Equals(candidate.BundleId, target.BundleId, StringComparison.OrdinalIgnoreCase) &&
             candidate.Platform == target.Platform &&
             string.Equals(candidate.Configuration, target.Configuration, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(candidate.ProjectPath, target.ProjectPath, StringComparison.OrdinalIgnoreCase) &&
+            AppleReleasePathsEqual(candidate.ProjectPath, target.ProjectPath) &&
             candidate.IsWorkspace == target.IsWorkspace &&
             string.Equals(candidate.Scheme, target.Scheme, StringComparison.Ordinal) &&
             candidate.ArchiveVariant == target.ArchiveVariant &&
             string.Equals(candidate.Destination, target.Destination, StringComparison.Ordinal) &&
             candidate.DistributionRoute == target.DistributionRoute &&
-            string.Equals(candidate.ArchivePath, target.ArchivePath, StringComparison.OrdinalIgnoreCase) &&
+            AppleReleasePathsEqual(candidate.ArchivePath, target.ArchivePath) &&
             string.Equals(candidate.ArchiveSha256, target.ArchiveSha256, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -404,10 +404,9 @@ internal sealed partial class PowerForgeReleaseService
            string.Equals(target.BundleId, app.BundleId, StringComparison.OrdinalIgnoreCase) &&
            target.Platform == app.Platform &&
            string.Equals(target.Configuration, app.Configuration, StringComparison.OrdinalIgnoreCase) &&
-           string.Equals(
+           AppleReleasePathsEqual(
                target.ProjectPath,
-               FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/'),
-               Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) &&
+               FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/')) &&
            target.IsWorkspace == app.IsWorkspace &&
            string.Equals(target.Scheme, app.Scheme, StringComparison.Ordinal) &&
            target.ArchiveVariant == app.ArchiveVariant &&
@@ -422,6 +421,12 @@ internal sealed partial class PowerForgeReleaseService
         => !string.IsNullOrWhiteSpace(value) &&
            value!.Length == 64 &&
            value.All(static character => Uri.IsHexDigit(character));
+
+    internal static bool AppleReleasePathsEqual(string? left, string? right)
+        => string.Equals(
+            left,
+            right,
+            Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     private sealed class AppleUploadAttestation
     {

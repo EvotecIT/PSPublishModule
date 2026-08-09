@@ -667,6 +667,9 @@ internal sealed class PowerForgeAppleAppReleaseTargetPlan
     /// <summary>SHA-256 of the exact retained archive approved by a prior build checkpoint.</summary>
     public string? ExpectedArchiveSha256 { get; set; }
 
+    /// <summary>SHA-256 of the exact remote screenshot inventory approved for destructive replacement.</summary>
+    public string? ExpectedScreenshotInventorySha256 { get; set; }
+
     public string? TeamId { get; set; }
 
     public bool Upload { get; set; }

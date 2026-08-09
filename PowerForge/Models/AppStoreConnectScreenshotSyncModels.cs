@@ -246,6 +246,9 @@ public sealed class AppStoreConnectScreenshotSyncRequest
 
     /// <summary>Approved SHA-256 values keyed by absolute source path for release-orchestrated uploads.</summary>
     internal IReadOnlyDictionary<string, string>? ExpectedFileSha256 { get; set; }
+
+    /// <summary>Approved SHA-256 of the exact ordered remote screenshot inventory.</summary>
+    internal string? ExpectedRemoteInventorySha256 { get; set; }
 }
 
 /// <summary>

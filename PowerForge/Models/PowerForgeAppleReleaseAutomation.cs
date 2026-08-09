@@ -306,6 +306,8 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public string[]? ScreenshotDeliveryStates { get; set; }
 
+    public string? ScreenshotInventorySha256 { get; set; }
+
     public AppStoreConnectReleaseReadinessCheck[]? ReadinessChecks { get; set; }
 
     public string? ReadinessSha256 { get; set; }

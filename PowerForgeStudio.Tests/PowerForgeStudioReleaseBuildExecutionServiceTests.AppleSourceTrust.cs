@@ -766,6 +766,34 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains("cannot be proven", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("let rejected = CSetting.`unsafeFlags`([\"-include\", \"/tmp/injected.h\"])", "unsafeFlags")]
+    [InlineData("let rejected = CSetting.unsafeFlags", "unsafeFlags")]
+    [InlineData("let rejected = Target.`systemLibrary`", "systemLibrary")]
+    public void ResolveExactAppleSourceCommit_rejects_any_executable_unsafe_manifest_identifier(
+        string manifestSyntax,
+        string expectedIdentifier)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("UnsafeManifestIdentifierRepo");
+        var project = scope.CreateDirectory(Path.Combine("UnsafeManifestIdentifierRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCLocalSwiftPackageReference; relativePath = Packages/Shared; };");
+        var package = scope.CreateDirectory(Path.Combine("UnsafeManifestIdentifierRepo", "Packages", "Shared"));
+        File.WriteAllText(
+            Path.Combine(package, "Package.swift"),
+            $"// swift-tools-version: 6.0\nimport PackageDescription\n{manifestSyntax}\nlet package = Package(name: \"Shared\")");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains(expectedIdentifier, exception.Message, StringComparison.Ordinal);
+        Assert.Contains("cannot be proven", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void ResolveExactAppleSourceCommit_ignores_disallowed_manifest_tokens_in_comments_and_strings()
     {

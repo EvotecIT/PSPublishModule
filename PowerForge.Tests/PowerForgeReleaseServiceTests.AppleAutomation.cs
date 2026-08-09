@@ -339,6 +339,136 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleScreenshotReplacementRejectsRemoteInventoryChangedAfterPlanApproval()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var screenshotFolder = Directory.CreateDirectory(Path.Combine(root, "screenshots"));
+            File.WriteAllText(Path.Combine(screenshotFolder.FullName, "home.png"), "approved pixels");
+            WriteScreenshotConfig(root, "screenshots.json", "6778025328", "1.2.0", "iOS", "screenshots", qualityEnabled: false);
+            var remoteScreenshotId = "screenshot-before";
+            var prepareCalls = 0;
+            string? forwardedScreenshotInventorySha256 = null;
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, "VALID"),
+                prepareAppleDistribution: request =>
+                {
+                    prepareCalls++;
+                    forwardedScreenshotInventorySha256 = request.ExpectedScreenshotInventorySha256;
+                    return new AppStoreConnectReleasePreparationResult();
+                },
+                checkAppleReleaseReadiness: (_, request) => new AppStoreConnectReleaseReadinessResult
+                {
+                    AppId = request.AppId,
+                    VersionString = request.VersionString,
+                    BuildNumber = request.BuildNumber,
+                    Platform = request.Platform,
+                    ScreenshotSets =
+                    [
+                        new AppStoreConnectReleaseScreenshotSetReadiness
+                        {
+                            ScreenshotDisplayType = "APP_IPHONE_65",
+                            ScreenshotSetId = "set-1",
+                            Count = 1,
+                            Screenshots =
+                            [
+                                new AppStoreConnectReleaseScreenshotAssetReadiness
+                                {
+                                    Id = remoteScreenshotId,
+                                    FileName = "remote.png",
+                                    FileSize = 1234,
+                                    SourceFileChecksum = remoteScreenshotId + "-checksum",
+                                    AssetDeliveryState = "COMPLETE"
+                                }
+                            ]
+                        }
+                    ]
+                });
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Archive = false;
+            spec.AppleApps.Upload = false;
+            spec.AppleApps!.SyncScreenshots = true;
+            spec.AppleApps.ReplaceScreenshots = true;
+            spec.AppleApps.ScreenshotConfigPath = "screenshots.json";
+
+            var approved = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    AppleAction = PowerForgeAppleReleaseAction.Configured
+                });
+            var approvedTarget = Assert.Single(approved.AppleReceipt!.Targets);
+            Assert.False(approvedTarget.ReadinessChecked);
+            Assert.Matches("^[0-9A-F]{64}$", approvedTarget.ScreenshotInventorySha256!);
+            var approvedPlan = Assert.IsType<PowerForgeAppleReleasePlan>(approved.AppleAppPlan);
+            Assert.Equal(
+                approvedTarget.ScreenshotInventorySha256,
+                Assert.Single(approvedPlan.Apps).ExpectedScreenshotInventorySha256);
+
+            var missingPlanApproval = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Configured,
+                    AppleActionConfirmed = true
+                });
+            Assert.False(missingPlanApproval.Success);
+            Assert.Contains("reviewed exact Apple plan", missingPlanApproval.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, prepareCalls);
+
+            remoteScreenshotId = "screenshot-after";
+
+            var execution = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Configured,
+                    AppleActionConfirmed = true,
+                    AppleExpectedPlanSha256 = approved.AppleReceipt.PlanSha256
+                });
+
+            Assert.False(execution.Success);
+            Assert.Equal(0, prepareCalls);
+            Assert.Contains("changed after plan approval", execution.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+
+            var refreshed = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    AppleAction = PowerForgeAppleReleaseAction.Configured
+                });
+            var refreshedInventorySha256 = Assert.Single(refreshed.AppleReceipt!.Targets).ScreenshotInventorySha256;
+            var successfulExecution = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Configured,
+                    AppleActionConfirmed = true,
+                    AppleExpectedPlanSha256 = refreshed.AppleReceipt.PlanSha256
+                });
+
+            Assert.True(successfulExecution.Success, successfulExecution.ErrorMessage);
+            Assert.Equal(1, prepareCalls);
+            Assert.Equal(refreshedInventorySha256, forwardedScreenshotInventorySha256);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_ExplicitAppleAction_IgnoresEveryNonAppleReleaseSection()
     {
         var root = CreateSandbox();
@@ -483,19 +613,23 @@ public sealed partial class PowerForgeReleaseServiceTests
             CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
             File.WriteAllText(keyPath, "private-key");
-            File.WriteAllText(Path.Combine(root, "screenshots.json"), "{}");
+            Directory.CreateDirectory(Path.Combine(root, "screenshots"));
+            WriteScreenshotConfig(root, "screenshots.json", "6778025328", "1.2.0", "iOS", "screenshots", qualityEnabled: false);
             var spec = CreateAppleAutomationSpec(root, keyPath);
             spec.AppleApps!.ScreenshotConfigPath = "screenshots.json";
             spec.AppleApps.ReplaceScreenshots = true;
 
-            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
-                spec,
-                new PowerForgeReleaseRequest
-                {
-                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                    PlanOnly = true,
-                    AppleAction = PowerForgeAppleReleaseAction.Screenshots
-                });
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, "VALID"),
+                    checkAppleReleaseReadiness: (_, request) => CreateReadyReleaseReadiness(request))
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        PlanOnly = true,
+                        AppleAction = PowerForgeAppleReleaseAction.Screenshots
+                    });
 
             var plan = Assert.IsType<PowerForgeAppleReleasePlan>(result.AppleAppPlan);
             Assert.True(plan.SyncScreenshots);
@@ -1575,7 +1709,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var screenshotFolder = Directory.CreateDirectory(Path.Combine(root, "screenshots"));
             var screenshotPath = Path.Combine(screenshotFolder.FullName, "home.png");
             File.WriteAllText(screenshotPath, "approved pixels");
-            WriteScreenshotConfig(root, "screenshots.json", "app-123", "1.2.0", "iOS", "screenshots", qualityEnabled: false);
+            WriteScreenshotConfig(root, "screenshots.json", "6778025328", "1.2.0", "iOS", "screenshots", qualityEnabled: false);
             var spec = CreateAppleAutomationSpec(root, keyPath);
             spec.AppleApps!.SyncScreenshots = true;
             spec.AppleApps.ScreenshotConfigPath = "screenshots.json";
