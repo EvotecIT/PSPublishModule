@@ -42,7 +42,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_AppleUpload_RejectsArchiveMutationAfterUploaderReturns()
+    public void Execute_AppleUpload_UsesPrivateArchiveSnapshotDuringUploaderMutation()
     {
         var root = CreateSandbox();
         try
@@ -53,6 +53,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             var spec = CreateAppleAutomationSpec(root, keyPath);
             spec.AppleApps!.Automation.MinimumFreeSpaceGB = 0;
             spec.AppleApps.Automation.CleanupBeforeArchive = false;
+            spec.AppleApps.Automation.WaitForProcessing = false;
+            string? uploaderArchivePath = null;
             var service = CreateAppleAutomationService(
                 request => CreateReleaseState(request, processingState: null),
                 archiveAppleApp: request =>
@@ -63,6 +65,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 },
                 uploadAppleApp: request =>
                 {
+                    uploaderArchivePath = request.ArchivePath;
                     File.WriteAllText(Path.Combine(request.ArchivePath!, "payload"), "after");
                     return CreateSuccessfulUpload(request);
                 });
@@ -76,9 +79,11 @@ public sealed partial class PowerForgeReleaseServiceTests
                     AppleAction = PowerForgeAppleReleaseAction.Upload
                 });
 
-            Assert.False(result.Success);
-            Assert.Contains("changed during upload", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain(
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.NotNull(uploaderArchivePath);
+            Assert.NotEqual(Assert.Single(result.AppleAppPlan!.Apps).ArchivePath, uploaderArchivePath);
+            Assert.Equal("before", File.ReadAllText(Path.Combine(Assert.Single(result.AppleAppPlan.Apps).ArchivePath, "payload")));
+            Assert.Contains(
                 new AppleReleaseReceiptStore().ReadAll(result.AppleAppPlan!),
                 receipt => receipt.OperationPhase == "UploadAttested");
         }

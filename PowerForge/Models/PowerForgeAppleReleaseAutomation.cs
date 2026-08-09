@@ -248,6 +248,16 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public string Configuration { get; set; } = "Release";
 
+    public string? ProjectPath { get; set; }
+
+    public bool IsWorkspace { get; set; }
+
+    public string? Scheme { get; set; }
+
+    public AppleArchiveVariant ArchiveVariant { get; set; }
+
+    public string? Destination { get; set; }
+
     public AppleDistributionRoute DistributionRoute { get; set; }
 
     public AppleProductRole ProductRole { get; set; }

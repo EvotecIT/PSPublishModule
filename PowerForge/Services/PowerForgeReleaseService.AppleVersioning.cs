@@ -23,6 +23,48 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException(
                 "Apple state or release inputs changed after plan approval. Review a new exact plan before allowing mutation.");
         }
+
+        CaptureApprovedMutationInputContents(plan);
+    }
+
+    internal static void CaptureApprovedMutationInputContents(PowerForgeAppleReleasePlan plan)
+    {
+        var paths = new List<string>();
+        if (!string.IsNullOrWhiteSpace(plan.ScreenshotConfigPath)) paths.Add(plan.ScreenshotConfigPath!);
+        paths.AddRange(plan.ScreenshotConfigPaths);
+        if (!string.IsNullOrWhiteSpace(plan.MetadataConfigPath)) paths.Add(plan.MetadataConfigPath!);
+        paths.AddRange(plan.MetadataConfigPaths);
+        if (!string.IsNullOrWhiteSpace(plan.AppInfoConfigPath)) paths.Add(plan.AppInfoConfigPath!);
+        paths.AddRange(plan.AppInfoConfigPaths);
+        if (!string.IsNullOrWhiteSpace(plan.GovernanceConfigPath)) paths.Add(plan.GovernanceConfigPath!);
+        paths.AddRange(plan.GovernanceConfigPaths);
+        if (!string.IsNullOrWhiteSpace(plan.VersionSourcePath)) paths.Add(plan.VersionSourcePath!);
+
+        var captured = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in paths.Where(static value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var fullPath = Path.GetFullPath(path);
+            var bytes = File.ReadAllBytes(fullPath);
+            using var sha256 = SHA256.Create();
+            var actual = BitConverter.ToString(sha256.ComputeHash(bytes)).Replace("-", string.Empty).ToLowerInvariant();
+            var relative = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, fullPath).Replace('\\', '/');
+            if (!plan.ApprovedMutationInputFilesSha256.TryGetValue(relative, out var expected) ||
+                !actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Approved Apple mutation input changed before execution: {relative}");
+            }
+            captured[fullPath] = System.Text.Encoding.UTF8.GetString(bytes);
+        }
+        plan.ApprovedMutationInputContents = captured;
+    }
+
+    internal static string ReadApprovedMutationInputText(PowerForgeAppleReleasePlan plan, string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        return plan.ApprovedMutationInputContents.TryGetValue(fullPath, out var content)
+            ? content
+            : File.ReadAllText(fullPath);
     }
 
     private PowerForgeAppleReleaseReceipt CreateApplePlanReceipt(
@@ -84,6 +126,11 @@ internal sealed partial class PowerForgeReleaseService
             BundleId = app.BundleId,
             Platform = app.Platform,
             Configuration = app.Configuration,
+            ProjectPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/'),
+            IsWorkspace = app.IsWorkspace,
+            Scheme = app.Scheme,
+            ArchiveVariant = app.ArchiveVariant,
+            Destination = app.Destination,
             DistributionRoute = app.DistributionRoute,
             ProductRole = app.ProductRole,
             ParentTarget = app.ParentTarget,
@@ -435,7 +482,8 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException("Requested Apple marketing version is required for Version.");
 
         var source = new AppleReleaseVersionSourceService();
-        var current = source.Read(plan.VersionSourcePath!);
+        var approvedContent = ReadApprovedMutationInputText(plan, plan.VersionSourcePath!);
+        var current = source.Read(plan.VersionSourcePath!, approvedContent);
         if (!long.TryParse(current.BuildNumber, out var currentBuild) || currentBuild < 0)
             throw new InvalidOperationException($"Apple version source build number '{current.BuildNumber}' is not a non-negative integer.");
 
@@ -484,6 +532,7 @@ internal sealed partial class PowerForgeReleaseService
             : checked(Math.Max(currentBuild, highestRemote) + 1);
         var receipt = source.Update(
             plan.VersionSourcePath!,
+            approvedContent,
             requestedVersion,
             nextBuild.ToString(System.Globalization.CultureInfo.InvariantCulture),
             highestRemote,

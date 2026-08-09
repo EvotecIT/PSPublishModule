@@ -21,7 +21,7 @@ internal sealed partial class PowerForgeReleaseService
             OperationPhase = "Started",
             Success = false,
             ErrorMessage = "Apple release operation started; inspect later receipts and remote state before retrying.",
-            Targets = plan.Apps.Select(CreateAppleCheckpointTarget).ToArray()
+            Targets = plan.Apps.Select(app => CreateAppleCheckpointTarget(plan, app)).ToArray()
         });
     }
 
@@ -35,7 +35,7 @@ internal sealed partial class PowerForgeReleaseService
 
         var attemptId = Guid.NewGuid().ToString("N");
         result.UploadAttestationAttemptId = attemptId;
-        var target = CreateAppleCheckpointTarget(app);
+        var target = CreateAppleCheckpointTarget(plan, app);
         target.UploadPerformed = true;
         target.ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/');
         target.ArchiveSha256 = result.ArchiveSha256;
@@ -60,7 +60,7 @@ internal sealed partial class PowerForgeReleaseService
         if (!plan.Automation.WriteReceipt || result.Notarization is null)
             return;
 
-        var target = CreateAppleCheckpointTarget(app);
+        var target = CreateAppleCheckpointTarget(plan, app);
         target.ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/');
         target.ArchiveSha256 = result.ArchiveSha256 ?? app.ExpectedArchiveSha256;
         target.DirectArtifactPath = CreatePortableDirectArtifactPath(plan, app, result.Notarization.ArtifactPath);
@@ -94,7 +94,7 @@ internal sealed partial class PowerForgeReleaseService
         if (!plan.Automation.WriteReceipt)
             return;
 
-        var target = CreateAppleCheckpointTarget(app);
+        var target = CreateAppleCheckpointTarget(plan, app);
         target.ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/');
         target.ArchiveSha256 = app.ExpectedArchiveSha256;
         target.DirectArtifactPath = CreatePortableDirectArtifactPath(plan, app, checkpoint.ArtifactPath);
@@ -121,7 +121,7 @@ internal sealed partial class PowerForgeReleaseService
         if (!plan.Automation.WriteReceipt)
             return;
 
-        var target = CreateAppleCheckpointTarget(app);
+        var target = CreateAppleCheckpointTarget(plan, app);
         target.ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/');
         target.ArchiveSha256 = app.ExpectedArchiveSha256;
         target.DirectArtifactPath = CreatePortableDirectArtifactPath(plan, app, checkpoint.ArtifactPath);
@@ -143,6 +143,7 @@ internal sealed partial class PowerForgeReleaseService
     }
 
     private static PowerForgeAppleReleaseTargetReceipt CreateAppleCheckpointTarget(
+        PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app)
         => new()
         {
@@ -150,6 +151,11 @@ internal sealed partial class PowerForgeReleaseService
             BundleId = app.BundleId,
             Platform = app.Platform,
             Configuration = app.Configuration,
+            ProjectPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/'),
+            IsWorkspace = app.IsWorkspace,
+            Scheme = app.Scheme,
+            ArchiveVariant = app.ArchiveVariant,
+            Destination = app.Destination,
             DistributionRoute = app.DistributionRoute,
             ProductRole = app.ProductRole,
             ParentTarget = app.ParentTarget,

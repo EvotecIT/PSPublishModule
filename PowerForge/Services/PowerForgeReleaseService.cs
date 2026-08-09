@@ -1793,6 +1793,9 @@ internal sealed partial class PowerForgeReleaseService
             RequestedMarketingVersion = requestedMarketingVersion,
             SourceCommit = appleSourceCommit.Length == 0 ? null : appleSourceCommit,
             RequireImmutableSourceSnapshot = request.RequireImmutableAppleSourceSnapshot,
+            ExactSourceConfigPath = request.RequireImmutableAppleSourceSnapshot && File.Exists(request.ConfigPath)
+                ? request.ConfigPath
+                : null,
             AdoptExistingBuild = request.AppleAdoptExistingBuild,
             Archive = options.Archive,
             Upload = options.Upload,
@@ -2213,9 +2216,12 @@ internal sealed partial class PowerForgeReleaseService
                 CaptureAppleArchiveSha256(result, app);
                 var approvedArchiveSha256 = result.ArchiveSha256;
                 var direct = app.DistributionRoute == AppleDistributionRoute.DirectNotarized;
+                using var uploadSnapshot = string.IsNullOrWhiteSpace(approvedArchiveSha256)
+                    ? null
+                    : AppleArchiveUploadSnapshot.Create(app.ArchivePath, approvedArchiveSha256!);
                 var upload = _uploadAppleApp(new AppleAppArchiveUploadRequest
                 {
-                    ArchivePath = app.ArchivePath,
+                    ArchivePath = uploadSnapshot?.ArchivePath ?? app.ArchivePath,
                     BundleId = app.BundleId,
                     RequiredPrivacyUsageDescriptionKeys = app.RequiredPrivacyUsageDescriptionKeys,
                     ExportPath = app.ExportPath,
@@ -2232,6 +2238,7 @@ internal sealed partial class PowerForgeReleaseService
                     AppStoreConnectApiIssuerId = direct ? null : plan.AppStoreConnectApiIssuerId,
                     AllowProvisioningUpdates = plan.AllowProvisioningUpdates
                 });
+                upload.ArchivePath = app.ArchivePath;
                 result.Upload = upload;
                 CaptureAppleArchiveSha256(result, app, approvedArchiveSha256);
                 if (!upload.Succeeded)
@@ -2444,6 +2451,7 @@ internal sealed partial class PowerForgeReleaseService
             ReceiptHistoryPath = plan.ReceiptHistoryPath,
             SourceCommit = plan.SourceCommit,
             RequireImmutableSourceSnapshot = plan.RequireImmutableSourceSnapshot,
+            ExactSourceConfigPath = plan.ExactSourceConfigPath,
             Archive = true,
             Upload = false,
             XcodeBuildExecutable = plan.XcodeBuildExecutable,
@@ -2635,7 +2643,7 @@ internal sealed partial class PowerForgeReleaseService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(path =>
             {
-                var json = File.ReadAllText(path);
+                var json = ReadApprovedMutationInputText(plan, path);
                 var spec = JsonSerializer.Deserialize<AppStoreConnectScreenshotSyncSpec>(json, CreateJsonOptions())
                     ?? throw new InvalidOperationException($"Unable to deserialize screenshot sync config: {path}");
                 return (spec, path);
@@ -2654,7 +2662,7 @@ internal sealed partial class PowerForgeReleaseService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(path =>
             {
-                var json = File.ReadAllText(path);
+                var json = ReadApprovedMutationInputText(plan, path);
                 var spec = JsonSerializer.Deserialize<AppStoreConnectVersionMetadataSpec>(json, CreateJsonOptions())
                     ?? throw new InvalidOperationException($"Unable to deserialize App Store version metadata config: {path}");
                 return (spec, path);
@@ -2671,7 +2679,7 @@ internal sealed partial class PowerForgeReleaseService
         var result = new Dictionary<string, AppStoreConnectGovernanceSpec>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var spec = configuration.Load(path);
+            var spec = configuration.LoadContent(ReadApprovedMutationInputText(plan, path), path);
             var findings = configuration.Validate(spec);
             var errors = findings.Where(static finding => finding.IsError).ToArray();
             if (errors.Length > 0)

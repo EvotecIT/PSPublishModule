@@ -212,7 +212,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         return kind.ToLowerInvariant() switch
         {
             "container" or "group" => ResolvePath(containerRoot, value),
-            "absolute" => Path.GetFullPath(value),
+            "absolute" => throw new InvalidOperationException(
+                $"Absolute Xcode scheme references are not accepted for exact-source snapshot builds: {reference}"),
             _ => throw new InvalidOperationException($"Unsupported Xcode scheme container kind '{kind}'.")
         };
     }
@@ -277,6 +278,12 @@ internal sealed partial class AppleReleaseSourceTrustService
 
             if (!IsPathBearingPbxObject(item.Isa))
                 continue;
+
+            if (Path.IsPathRooted(item.Path ?? string.Empty))
+            {
+                throw new InvalidOperationException(
+                    $"Absolute Xcode project inputs are not accepted for exact-source snapshot builds: {item.Path} ({metadataPath})");
+            }
 
             var candidate = ResolvePbxObjectPath(projectDirectory, item.Id, objects, parents, cache, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             if (candidate is null)
@@ -804,6 +811,11 @@ internal sealed partial class AppleReleaseSourceTrustService
     private static string ResolveBuildSettingPath(string projectDirectory, string value, string key)
     {
         var expanded = value.Trim();
+        if (Path.IsPathRooted(expanded))
+        {
+            throw new InvalidOperationException(
+                $"Xcode build setting {key} must resolve inside the repository for exact-source snapshot builds; absolute paths are not accepted: {value}");
+        }
         foreach (var variable in new[] { "$(SRCROOT)", "$(PROJECT_DIR)", "$(SOURCE_ROOT)", "${SRCROOT}", "${PROJECT_DIR}", "${SOURCE_ROOT}" })
             expanded = expanded.Replace(variable, projectDirectory);
         expanded = expanded.Replace("$(inherited)", string.Empty).Replace("$(INHERITED)", string.Empty).Trim();

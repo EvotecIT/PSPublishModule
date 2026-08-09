@@ -59,7 +59,7 @@ internal sealed partial class PowerForgeReleaseService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(path =>
             {
-                var json = File.ReadAllText(path);
+                var json = ReadApprovedMutationInputText(plan, path);
                 var spec = JsonSerializer.Deserialize<AppStoreConnectAppInfoMetadataSpec>(json, CreateJsonOptions())
                     ?? throw new InvalidOperationException($"Unable to deserialize App Information metadata config: {path}");
                 if (string.IsNullOrWhiteSpace(spec.AppId))

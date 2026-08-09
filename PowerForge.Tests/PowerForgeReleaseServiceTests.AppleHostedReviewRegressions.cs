@@ -80,6 +80,101 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_ApplePlan_BindsEffectiveXcodeTargetSelectors()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var service = CreateAppleAutomationService(
+                _ => throw new InvalidOperationException("Planning must not query App Store Connect."));
+            var approved = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Archive,
+                PlanOnly = true
+            });
+            Assert.Single(spec.AppleApps!.Apps).Scheme = "CasaRay-Alternate";
+            var changed = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Archive,
+                PlanOnly = true
+            });
+
+            Assert.NotEqual(approved.AppleReceipt!.PlanSha256, changed.AppleReceipt!.PlanSha256);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ApprovedAppleMutationConfig_UsesCapturedBytesAfterSourceReplacement()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var metadataPath = Path.Combine(root, "metadata.json");
+            File.WriteAllText(metadataPath, "{ \"value\": \"approved\" }");
+            var approvedHash = Convert.ToHexString(
+                    System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(metadataPath)))
+                .ToLowerInvariant();
+            var plan = new PowerForgeAppleReleasePlan
+            {
+                ProjectRoot = root,
+                SyncMetadata = true,
+                MetadataConfigPath = metadataPath,
+                ApprovedMutationInputFilesSha256 = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["metadata.json"] = approvedHash
+                }
+            };
+
+            PowerForgeReleaseService.CaptureApprovedMutationInputContents(plan);
+            File.WriteAllText(metadataPath, "{ \"value\": \"replaced\" }");
+
+            Assert.Equal(
+                "{ \"value\": \"approved\" }",
+                PowerForgeReleaseService.ReadApprovedMutationInputText(plan, metadataPath));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void AppleArchiveUploadSnapshot_RejectsEscapingSymbolicLinks()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var root = CreateSandbox();
+        try
+        {
+            var archive = Directory.CreateDirectory(Path.Combine(root, "CasaRay.xcarchive"));
+            var outside = Path.Combine(root, "outside-payload");
+            File.WriteAllText(outside, "outside");
+            File.CreateSymbolicLink(Path.Combine(archive.FullName, "escaped"), outside);
+            var expected = AppleNotarizationService.ComputeArtifactSha256(archive.FullName);
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                AppleArchiveUploadSnapshot.Create(archive.FullName, expected));
+
+            Assert.Contains("inside the archive", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleCheckpoint_ArchivesFromDetachedExactSourceSnapshot()
     {
         var root = CreateSandbox();

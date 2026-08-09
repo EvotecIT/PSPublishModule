@@ -9,19 +9,23 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
 {
     private readonly GitClient _git = new(defaultTimeout: TimeSpan.FromMinutes(2));
     private readonly string _repositoryRoot;
+    private readonly string _sourceRepositoryRoot;
     private readonly string _sourceProjectRoot;
     private readonly string _snapshotProjectRoot;
     private readonly string _sourceCommit;
+    private string? _snapshotConfigPath;
     private bool _disposed;
 
     private AppleReleaseSourceSnapshot(
         string repositoryRoot,
+        string sourceRepositoryRoot,
         string sourceProjectRoot,
         string snapshotRoot,
         string snapshotProjectRoot,
         string sourceCommit)
     {
         _repositoryRoot = repositoryRoot;
+        _sourceRepositoryRoot = sourceRepositoryRoot;
         _sourceProjectRoot = sourceProjectRoot;
         _snapshotProjectRoot = snapshotProjectRoot;
         RootPath = snapshotRoot;
@@ -41,6 +45,9 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
         var repositoryRoot = Path.GetFullPath(topLevel.StdOut.Trim());
         var projectPrefix = Run(git, plan.ProjectRoot, new[] { "rev-parse", "--show-prefix" }, "resolve the Apple project root")
             .StdOut.Trim().Replace('/', Path.DirectorySeparatorChar);
+        var sourceRepositoryRoot = Path.GetFullPath(plan.ProjectRoot);
+        foreach (var _ in projectPrefix.Split(new[] { Path.DirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries))
+            sourceRepositoryRoot = Path.GetDirectoryName(sourceRepositoryRoot)!;
 
         var snapshotParent = Path.Combine(Path.GetTempPath(), "PowerForge", "apple-source-snapshots");
         Directory.CreateDirectory(snapshotParent);
@@ -55,11 +62,14 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
             var snapshotProjectRoot = Path.GetFullPath(Path.Combine(snapshotRoot, projectPrefix));
             var snapshot = new AppleReleaseSourceSnapshot(
                 repositoryRoot,
+                sourceRepositoryRoot,
                 Path.GetFullPath(plan.ProjectRoot),
                 snapshotRoot,
                 snapshotProjectRoot,
                 sourceCommit);
             snapshot.ValidateUnchanged();
+            if (!string.IsNullOrWhiteSpace(plan.ExactSourceConfigPath))
+                snapshot.ValidateExactSourceInputs(plan.ExactSourceConfigPath!);
             return snapshot;
         }
         catch
@@ -91,6 +101,32 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
         return mapped;
     }
 
+    private string MapRepositoryPath(string sourcePath)
+    {
+        var fullPath = Path.GetFullPath(sourcePath);
+        EnsureContained(_sourceRepositoryRoot, fullPath, "Apple exact-source config path");
+        var relative = FrameworkCompatibility.GetRelativePath(_sourceRepositoryRoot, fullPath);
+        var mapped = Path.GetFullPath(Path.Combine(RootPath, relative));
+        EnsureContained(RootPath, mapped, "Apple snapshot config path");
+        return mapped;
+    }
+
+    private void ValidateExactSourceInputs(string configPath)
+    {
+        _snapshotConfigPath = MapRepositoryPath(configPath);
+        ValidateMappedExactSourceInputs();
+    }
+
+    private void ValidateMappedExactSourceInputs()
+    {
+        var trust = new AppleReleaseSourceTrustService().Capture(RootPath, _snapshotConfigPath!);
+        if (!trust.SourceCommit.Equals(_sourceCommit, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The isolated Apple build snapshot resolved commit '{trust.SourceCommit}' instead of '{_sourceCommit}'.");
+        }
+    }
+
     internal void ValidateUnchanged()
     {
         var head = Run(_git, RootPath, new[] { "rev-parse", "HEAD" }, "verify the Apple build snapshot commit")
@@ -111,6 +147,8 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
             throw new InvalidOperationException(
                 "The isolated Apple build snapshot changed while xcodebuild was running. Discard the archive and rebuild from a new snapshot.");
         }
+        if (!string.IsNullOrWhiteSpace(_snapshotConfigPath))
+            ValidateMappedExactSourceInputs();
     }
 
     public void Dispose()

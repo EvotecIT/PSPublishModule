@@ -28,9 +28,15 @@ public sealed partial class PowerForgeReleaseServiceTests
             ArchiveSha256 = new string('a', 64)
         };
 
-        Assert.False(PowerForgeReleaseService.IsMatchingDirectReceiptTarget(receipt, app));
+        var plan = new PowerForgeAppleReleasePlan { ProjectRoot = Directory.GetCurrentDirectory() };
+        app.ProjectPath = Path.Combine(plan.ProjectRoot, "EasyControlXAgent.xcodeproj");
+        receipt.ProjectPath = "EasyControlXAgent.xcodeproj";
+        receipt.Scheme = app.Scheme;
+        receipt.Configuration = app.Configuration;
+        receipt.Destination = app.Destination;
+        Assert.False(PowerForgeReleaseService.IsMatchingDirectReceiptTarget(plan, receipt, app));
         receipt.ArchiveSha256 = app.ExpectedArchiveSha256;
-        Assert.True(PowerForgeReleaseService.IsMatchingDirectReceiptTarget(receipt, app));
+        Assert.True(PowerForgeReleaseService.IsMatchingDirectReceiptTarget(plan, receipt, app));
     }
 
     [Fact]

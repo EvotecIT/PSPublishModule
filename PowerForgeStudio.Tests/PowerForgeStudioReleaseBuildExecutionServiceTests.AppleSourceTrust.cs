@@ -794,6 +794,39 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
+    public void AppleSourceSnapshot_rejects_smudged_bytes_created_only_in_detached_checkout()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("FilteredSnapshotAppleRepo");
+        var project = scope.CreateDirectory(Path.Combine("FilteredSnapshotAppleRepo", "Sample.xcodeproj"));
+        var projectFile = Path.Combine(project, "project.pbxproj");
+        File.WriteAllText(projectFile, "// committed project");
+        File.WriteAllText(Path.Combine(repositoryRoot, ".gitattributes"), "*.pbxproj filter=attested\n");
+        RunGit(repositoryRoot, "init", "--quiet");
+        RunGit(repositoryRoot, "config", "filter.attested.clean", "sed 's/worktree/committed/g'");
+        RunGit(repositoryRoot, "config", "filter.attested.smudge", "sed 's/committed/worktree/g'");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var sourceCommit = CommitRepository(repositoryRoot);
+        Assert.Equal("// committed project", File.ReadAllText(projectFile));
+
+        var plan = new PowerForgeAppleReleasePlan
+        {
+            ProjectRoot = repositoryRoot,
+            Archive = true,
+            SourceCommit = sourceCommit,
+            RequireImmutableSourceSnapshot = true,
+            ExactSourceConfigPath = configPath
+        };
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+        {
+            using var _ = AppleReleaseSourceSnapshot.CreateIfRequired(plan);
+        });
+
+        Assert.Contains("differs from the exact source commit", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("project.pbxproj", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ResolveExactAppleSourceCommit_rejects_filtered_bytes_in_synchronized_tree()
     {
         using var scope = new TemporaryDirectoryScope();

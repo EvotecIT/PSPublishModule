@@ -370,7 +370,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         var value = separator < 0 ? location : location.Substring(separator + 1);
         return kind.ToLowerInvariant() switch
         {
-            "absolute" => Path.GetFullPath(value),
+            "absolute" => throw new InvalidOperationException(
+                $"Absolute Xcode workspace references are not accepted for exact-source snapshot builds: {location}"),
             "container" => ResolvePath(workspaceRoot, value),
             "group" => ResolvePath(groupRoot, value),
             _ => throw new InvalidOperationException($"Unsupported Xcode workspace location kind '{kind}'.")

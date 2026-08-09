@@ -17,7 +17,12 @@ internal sealed class AppleReleaseVersionSourceService
     internal PowerForgeAppleVersionReceipt Read(string sourcePath)
     {
         var fullPath = ResolveSourcePath(sourcePath);
-        var content = File.ReadAllText(fullPath);
+        return Read(fullPath, File.ReadAllText(fullPath));
+    }
+
+    internal PowerForgeAppleVersionReceipt Read(string sourcePath, string content)
+    {
+        var fullPath = ResolveSourcePath(sourcePath);
         return new PowerForgeAppleVersionReceipt
         {
             SourcePath = fullPath,
@@ -28,6 +33,7 @@ internal sealed class AppleReleaseVersionSourceService
 
     internal PowerForgeAppleVersionReceipt Update(
         string sourcePath,
+        string approvedContent,
         string marketingVersion,
         string buildNumber,
         long highestRemoteBuildNumber,
@@ -42,7 +48,7 @@ internal sealed class AppleReleaseVersionSourceService
             throw new ArgumentException("Apple build number must be a positive integer.", nameof(buildNumber));
 
         var fullPath = ResolveSourcePath(sourcePath);
-        var content = File.ReadAllText(fullPath);
+        var content = approvedContent ?? throw new ArgumentNullException(nameof(approvedContent));
         var previousMarketingVersion = ReadSingleValue(content, MarketingVersionPattern, "MARKETING_VERSION", fullPath);
         var previousBuildNumber = ReadSingleValue(content, BuildNumberPattern, "CURRENT_PROJECT_VERSION", fullPath);
         var updated = ReplaceSingleValue(content, MarketingVersionPattern, marketingVersion.Trim());
@@ -50,7 +56,15 @@ internal sealed class AppleReleaseVersionSourceService
         var changed = !string.Equals(content, updated, StringComparison.Ordinal);
 
         if (changed && !whatIf)
+        {
+            var currentContent = File.ReadAllText(fullPath);
+            if (!string.Equals(currentContent, approvedContent, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Apple version source changed after plan approval: {fullPath}");
+            }
             WriteAtomic(fullPath, updated);
+        }
 
         return new PowerForgeAppleVersionReceipt
         {

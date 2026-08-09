@@ -251,6 +251,11 @@ internal sealed partial class PowerForgeReleaseService
             string.Equals(candidate.AppId, app.AppStoreConnectAppId, StringComparison.OrdinalIgnoreCase) &&
             candidate.Platform == app.Platform &&
             string.Equals(candidate.Configuration, app.Configuration, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(candidate.ProjectPath, FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/'), StringComparison.OrdinalIgnoreCase) &&
+            candidate.IsWorkspace == app.IsWorkspace &&
+            string.Equals(candidate.Scheme, app.Scheme, StringComparison.Ordinal) &&
+            candidate.ArchiveVariant == app.ArchiveVariant &&
+            string.Equals(candidate.Destination, app.Destination, StringComparison.Ordinal) &&
             candidate.DistributionRoute == app.DistributionRoute &&
             (string.IsNullOrWhiteSpace(version) ||
              string.Equals(candidate.Version, version, StringComparison.OrdinalIgnoreCase)) &&
@@ -291,6 +296,11 @@ internal sealed partial class PowerForgeReleaseService
             string.Equals(candidate.BundleId, target.BundleId, StringComparison.OrdinalIgnoreCase) &&
             candidate.Platform == target.Platform &&
             string.Equals(candidate.Configuration, target.Configuration, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(candidate.ProjectPath, target.ProjectPath, StringComparison.OrdinalIgnoreCase) &&
+            candidate.IsWorkspace == target.IsWorkspace &&
+            string.Equals(candidate.Scheme, target.Scheme, StringComparison.Ordinal) &&
+            candidate.ArchiveVariant == target.ArchiveVariant &&
+            string.Equals(candidate.Destination, target.Destination, StringComparison.Ordinal) &&
             candidate.DistributionRoute == target.DistributionRoute &&
             string.Equals(candidate.ArchivePath, target.ArchivePath, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(candidate.ArchiveSha256, target.ArchiveSha256, StringComparison.OrdinalIgnoreCase));
@@ -310,7 +320,7 @@ internal sealed partial class PowerForgeReleaseService
                 !string.IsNullOrWhiteSpace(receipt.ReceiptSha256) &&
                 !string.IsNullOrWhiteSpace(plan.SourceCommit) &&
                 string.Equals(receipt.SourceCommit, plan.SourceCommit, StringComparison.OrdinalIgnoreCase))
-            .SelectMany(receipt => receipt.Targets.Where(target => IsMatchingDirectReceiptTarget(target, app)))
+            .SelectMany(receipt => receipt.Targets.Where(target => IsMatchingDirectReceiptTarget(plan, target, app)))
             .FirstOrDefault(target =>
                 string.Equals(target.NotarizationStatus, "Accepted", StringComparison.OrdinalIgnoreCase) &&
                 !string.IsNullOrWhiteSpace(target.NotarizationSubmissionId) &&
@@ -387,12 +397,18 @@ internal sealed partial class PowerForgeReleaseService
     }
 
     internal static bool IsMatchingDirectReceiptTarget(
+        PowerForgeAppleReleasePlan plan,
         PowerForgeAppleReleaseTargetReceipt target,
         PowerForgeAppleAppReleaseTargetPlan app)
         => target.Name.Equals(app.Name, StringComparison.OrdinalIgnoreCase) &&
            string.Equals(target.BundleId, app.BundleId, StringComparison.OrdinalIgnoreCase) &&
            target.Platform == app.Platform &&
            string.Equals(target.Configuration, app.Configuration, StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(target.ProjectPath, FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/'), StringComparison.OrdinalIgnoreCase) &&
+           target.IsWorkspace == app.IsWorkspace &&
+           string.Equals(target.Scheme, app.Scheme, StringComparison.Ordinal) &&
+           target.ArchiveVariant == app.ArchiveVariant &&
+           string.Equals(target.Destination, app.Destination, StringComparison.Ordinal) &&
            target.DistributionRoute == AppleDistributionRoute.DirectNotarized &&
            string.Equals(target.Version, app.MarketingVersion, StringComparison.OrdinalIgnoreCase) &&
            string.Equals(target.Build, app.BuildNumber, StringComparison.OrdinalIgnoreCase) &&

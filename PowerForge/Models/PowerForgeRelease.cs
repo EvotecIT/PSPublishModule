@@ -540,6 +540,10 @@ internal sealed class PowerForgeAppleReleasePlan
 
     public Dictionary<string, string> ApprovedMutationInputFilesSha256 { get; set; } = new(StringComparer.Ordinal);
 
+    internal Dictionary<string, string> ApprovedMutationInputContents { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    internal string? ExactSourceConfigPath { get; set; }
+
     public string? MetadataConfigPath { get; set; }
 
     public string[] MetadataConfigPaths { get; set; } = Array.Empty<string>();
