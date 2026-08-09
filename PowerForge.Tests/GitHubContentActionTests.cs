@@ -54,6 +54,17 @@ public sealed class GitHubContentActionTests
     }
 
     [Fact]
+    public void ReusableWorkflow_UsesSupportedOptionalTokenSecret()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflow = File.ReadAllText(Path.Combine(repoRoot, ".github", "workflows", "powerforge-github-content.yml"));
+
+        Assert.Contains("github-token:\n        required: false", Normalize(workflow), StringComparison.Ordinal);
+        Assert.Contains("github-token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("github_token", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Schema_AllowsEnvironmentBasedSponsorableLoginFallback()
     {
         var repoRoot = FindRepoRoot();

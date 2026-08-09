@@ -24,7 +24,7 @@ on:
         default: "docs: update GitHub sponsors"
         type: string
     secrets:
-      github_token:
+      github-token:
         required: false
 
 permissions:
@@ -97,7 +97,7 @@ jobs:
         uses: ./.powerforge-runtime/pspublishmodule/.github/actions/github-content
         with:
           config-path: ${{ inputs.config_path }}
-          github-token: ${{ secrets.github_token != '' && secrets.github_token || github.token }}
+          github-token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
 
       - name: Commit generated content
         if: inputs.commit_changes && steps.content.outputs.changed == 'true'
