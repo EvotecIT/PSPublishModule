@@ -149,6 +149,23 @@ public sealed class WebSearchProviderDoctorTests
     }
 
     [Fact]
+    public void ConfigurationFingerprint_RedactsUnsupportedSettingValuesEvenWhenPunctuationLooksAllowed()
+    {
+        var first = CreateGoogleConfiguration();
+        first.Sites[0].Providers[0].Settings["pro_per_ty"] = "first-candidate";
+        first.Sites[0].Providers[0].Settings["siteUrl"] = "https://first.example/";
+        var second = CreateGoogleConfiguration();
+        second.Sites[0].Providers[0].Settings["pro_per_ty"] = "second-candidate";
+        second.Sites[0].Providers[0].Settings["siteUrl"] = "https://second.example/";
+
+        Assert.Equal(
+            WebSearchProviderConfigurationFingerprint.Compute(first),
+            WebSearchProviderConfigurationFingerprint.Compute(second));
+        Assert.Equal(2, WebSearchProviderDoctor.Inspect(first, _ => "credential-value").Checks.Count(
+            check => check.Code == "provider.setting-unsupported"));
+    }
+
+    [Fact]
     public void Doctor_RejectsUnsupportedCapabilitiesDuplicateIdentitiesAndSecretSettings()
     {
         var configuration = CreateGoogleConfiguration();
@@ -241,6 +258,76 @@ public sealed class WebSearchProviderDoctorTests
         Assert.False(result.Success);
         Assert.Contains(result.Checks, check => check.Code == "provider.gsc-property-invalid");
         Assert.False(Assert.Single(result.Providers).ConfigurationReady);
+    }
+
+    [Theory]
+    [InlineData("sc-domain:example.net")]
+    [InlineData("https://example.net/")]
+    public void Doctor_RejectsSearchConsolePropertiesThatDoNotCoverTheOwningSite(string property)
+    {
+        var configuration = CreateGoogleConfiguration();
+        configuration.Sites[0].Providers[0].Settings["property"] = property;
+
+        var result = WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Checks, check => check.Code == "provider.gsc-property-site-mismatch");
+        Assert.False(Assert.Single(result.Providers).ConfigurationReady);
+    }
+
+    [Fact]
+    public void Doctor_RejectsBingSiteUrlThatDoesNotCoverTheOwningSite()
+    {
+        var configuration = CreateGoogleConfiguration();
+        configuration.Sites[0].Providers =
+        [
+            new WebSearchProviderRegistration
+            {
+                Id = "bing-webmaster",
+                Kind = "bing-webmaster",
+                Capabilities = [WebSearchProviderCapabilities.SearchAnalytics],
+                Credential = new WebSearchCredentialReference
+                {
+                    Kind = "bing-api-key",
+                    EnvironmentVariable = "POWERFORGE_TEST_BING"
+                },
+                Settings = new Dictionary<string, string?>
+                {
+                    ["siteUrl"] = "https://example.net/"
+                }
+            }
+        ];
+
+        var result = WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Checks, check => check.Code == "provider.bing-site-url-mismatch");
+        Assert.False(Assert.Single(result.Providers).ConfigurationReady);
+    }
+
+    [Fact]
+    public void Doctor_KeepsBlankIdentityErrorsScopedToTheirRegistrations()
+    {
+        var configuration = CreateGoogleConfiguration();
+        var blankProvider = CreateGoogleConfiguration().Sites[0].Providers[0];
+        blankProvider.Id = string.Empty;
+        configuration.Sites[0].Providers = [configuration.Sites[0].Providers[0], blankProvider];
+
+        var blankSite = CreateGoogleConfiguration().Sites[0];
+        blankSite.Id = string.Empty;
+        blankSite.BaseUrl = "https://tactra.dev/";
+        blankSite.Providers[0].Settings["property"] = "sc-domain:tactra.dev";
+        configuration.Sites = [configuration.Sites[0], blankSite];
+
+        var result = WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value");
+
+        Assert.False(result.Success);
+        Assert.True(Assert.Single(result.Providers, state =>
+            state.SiteId == "officeimo" && state.ProviderId == "google-search-console").ConfigurationReady);
+        Assert.False(Assert.Single(result.Providers, state =>
+            state.SiteId == "officeimo" && state.ProviderId == string.Empty).ConfigurationReady);
+        Assert.False(Assert.Single(result.Providers, state =>
+            state.SiteId == string.Empty).ConfigurationReady);
     }
 
     [Fact]

@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 namespace PowerForge.Web;
 
 /// <summary>Validates fleet provider identities, requested capabilities, settings and credential references.</summary>
-public static class WebSearchProviderDoctor
+public static partial class WebSearchProviderDoctor
 {
     private static readonly Regex IdentifierRegex = new(
         "^[a-z0-9][a-z0-9._-]*$",
@@ -124,7 +124,7 @@ public static class WebSearchProviderDoctor
                 else
                 {
                     ValidateCapabilities(provider, descriptor, requestedCapabilities, siteId, providerId, checks);
-                    ValidateSettings(provider, descriptor, siteId, providerId, checks);
+                    ValidateSettings(provider, descriptor, siteId, site?.BaseUrl, providerId, checks);
                     ValidateCredential(provider, descriptor, environmentResolver, siteId, providerId, checks);
                 }
 
@@ -370,6 +370,7 @@ public static class WebSearchProviderDoctor
         WebSearchProviderRegistration? provider,
         ProviderDescriptor descriptor,
         string siteId,
+        string? siteBaseUrl,
         string providerId,
         List<WebSearchProviderCheck> checks)
     {
@@ -447,7 +448,7 @@ public static class WebSearchProviderDoctor
             }
         }
 
-        descriptor.SettingValidator?.Invoke(settings, siteId, providerId, checks);
+        descriptor.SettingValidator?.Invoke(settings, siteId, siteBaseUrl, providerId, checks);
     }
 
     private static void ValidateCredential(
@@ -546,87 +547,6 @@ public static class WebSearchProviderDoctor
         }
     }
 
-    private static void ValidateGoogleSearchConsole(
-        IReadOnlyDictionary<string, string?> settings,
-        string siteId,
-        string providerId,
-        List<WebSearchProviderCheck> checks)
-    {
-        if (!settings.TryGetValue("property", out var property) || string.IsNullOrWhiteSpace(property))
-            return;
-        var value = property.Trim();
-        if (value.StartsWith("sc-domain:", StringComparison.OrdinalIgnoreCase))
-        {
-            var domain = value["sc-domain:".Length..];
-            if (!value.StartsWith("sc-domain:", StringComparison.Ordinal) ||
-                domain.Length == 0 ||
-                !domain.Contains('.') ||
-                domain.Any(char.IsWhiteSpace) ||
-                domain.Contains('/') ||
-                domain.Contains(':') ||
-                Uri.CheckHostName(domain) != UriHostNameType.Dns)
-            {
-                AddCheck(
-                    checks,
-                    "provider.gsc-property-invalid",
-                    WebSearchProviderCheckSeverity.Error,
-                    "Google Search Console domain property must use sc-domain:<domain> with a valid DNS name.",
-                    siteId,
-                    providerId);
-            }
-            return;
-        }
-
-        if (!TryGetHttpUrl(value, out _))
-        {
-            AddCheck(
-                checks,
-                "provider.gsc-property-invalid",
-                WebSearchProviderCheckSeverity.Error,
-                "Google Search Console property must be sc-domain:<domain> or an absolute HTTP(S) URL-prefix property.",
-                siteId,
-                providerId);
-        }
-    }
-
-    private static void ValidateBingWebmaster(
-        IReadOnlyDictionary<string, string?> settings,
-        string siteId,
-        string providerId,
-        List<WebSearchProviderCheck> checks)
-    {
-        if (settings.TryGetValue("siteUrl", out var value) && !string.IsNullOrWhiteSpace(value) && !TryGetHttpUrl(value, out _))
-        {
-            AddCheck(
-                checks,
-                "provider.bing-site-url-invalid",
-                WebSearchProviderCheckSeverity.Error,
-                "Bing Webmaster siteUrl must be an absolute HTTP(S) URL.",
-                siteId,
-                providerId);
-        }
-    }
-
-    private static void ValidateCloudflare(
-        IReadOnlyDictionary<string, string?> settings,
-        string siteId,
-        string providerId,
-        List<WebSearchProviderCheck> checks)
-    {
-        if (settings.TryGetValue("zoneId", out var value) &&
-            !string.IsNullOrWhiteSpace(value) &&
-            !CloudflareZoneRegex.IsMatch(value.Trim()))
-        {
-            AddCheck(
-                checks,
-                "provider.cloudflare-zone-invalid",
-                WebSearchProviderCheckSeverity.Error,
-                "Cloudflare zoneId must be a 32-character hexadecimal zone identifier.",
-                siteId,
-                providerId);
-        }
-    }
-
     private static bool IsIdentifier(string value) => IdentifierRegex.IsMatch(value);
 
     private static bool TryGetHttpUrl(string? value, out Uri? uri)
@@ -666,8 +586,8 @@ public static class WebSearchProviderDoctor
         {
             Code = code,
             Severity = severity,
-            SiteId = string.IsNullOrWhiteSpace(siteId) ? null : siteId,
-            ProviderId = string.IsNullOrWhiteSpace(providerId) ? null : providerId,
+            SiteId = siteId,
+            ProviderId = providerId,
             Message = message,
             Remediation = remediation
         });
@@ -676,5 +596,5 @@ public static class WebSearchProviderDoctor
         string[] Capabilities,
         string[] Settings,
         string[] CredentialKinds,
-        Action<IReadOnlyDictionary<string, string?>, string, string, List<WebSearchProviderCheck>>? SettingValidator);
+        Action<IReadOnlyDictionary<string, string?>, string, string?, string, List<WebSearchProviderCheck>>? SettingValidator);
 }

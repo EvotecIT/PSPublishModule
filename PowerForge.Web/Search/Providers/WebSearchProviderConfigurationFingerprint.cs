@@ -46,7 +46,7 @@ public static class WebSearchProviderConfigurationFingerprint
                 {
                     values.Add("setting");
                     values.Add(Normalize(setting.Key));
-                    values.Add(WebSearchProviderSecretPolicy.CanFingerprintSettingValue(setting.Key)
+                    values.Add(WebSearchProviderSecretPolicy.CanFingerprintSettingValue(provider?.Kind, setting.Key)
                         ? setting.Value?.Trim()
                         : "[redacted-setting]");
                 }
@@ -68,11 +68,12 @@ public static class WebSearchProviderConfigurationFingerprint
 
 internal static class WebSearchProviderSecretPolicy
 {
-    private static readonly HashSet<string> NonSecretSettingNames = new(StringComparer.Ordinal)
+    private static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> NonSecretSettingNamesByProvider =
+        new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
     {
-        "property",
-        "siteurl",
-        "zoneid"
+        ["google-search-console"] = new HashSet<string>(["property"], StringComparer.Ordinal),
+        ["bing-webmaster"] = new HashSet<string>(["siteurl"], StringComparer.Ordinal),
+        ["cloudflare-analytics"] = new HashSet<string>(["zoneid"], StringComparer.Ordinal)
     };
 
     private static readonly string[] SecretSettingTokens =
@@ -86,8 +87,9 @@ internal static class WebSearchProviderSecretPolicy
         return SecretSettingTokens.Any(token => normalized.Contains(token, StringComparison.Ordinal));
     }
 
-    internal static bool CanFingerprintSettingValue(string? name) =>
-        NonSecretSettingNames.Contains(NormalizeSettingName(name));
+    internal static bool CanFingerprintSettingValue(string? providerKind, string? name) =>
+        NonSecretSettingNamesByProvider.TryGetValue(providerKind?.Trim().ToLowerInvariant() ?? string.Empty, out var names) &&
+        names.Contains(name?.Trim().ToLowerInvariant() ?? string.Empty);
 
     private static string NormalizeSettingName(string? name) => new(
         (name ?? string.Empty)
