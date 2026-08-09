@@ -101,7 +101,7 @@ With the default `commit_changes: true`, the caller must run on a branch ref bec
 
 ```yaml
     secrets:
-      github_token: ${{ secrets.SPONSORS_TOKEN }}
+      github-token: ${{ secrets.SPONSORS_TOKEN }}
 ```
 
 GitHub does not expose a public sponsorship's selected tier to every viewer. The repository `GITHUB_TOKEN` is sufficient for the public roster, but it may return no tier for every sponsor. In that case all accounts use `unmappedTierKey`; no amount is guessed. Store a suitable user token as `SPONSORS_TOKEN` (or another repository or organization secret) when tier grouping must reflect the selected GitHub tier.
