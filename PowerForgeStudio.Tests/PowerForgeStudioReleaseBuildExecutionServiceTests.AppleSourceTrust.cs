@@ -523,6 +523,32 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_ignored_source_inside_archive_root_outside_exact_artifact()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ArchiveRootSourceRepo");
+        var project = scope.CreateDirectory(Path.Combine("ArchiveRootSourceRepo", "Sample.xcodeproj"));
+        File.WriteAllText(Path.Combine(project, "project.pbxproj"), "// project");
+        var generatedRoot = scope.CreateDirectory(Path.Combine("ArchiveRootSourceRepo", "Generated"));
+        File.WriteAllText(Path.Combine(generatedRoot, "Secret.h"), "#define INJECTED 1");
+        File.WriteAllText(Path.Combine(repositoryRoot, ".gitignore"), "Generated/\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        File.WriteAllText(
+            configPath,
+            File.ReadAllText(configPath).Replace(
+                "\"ProjectRoot\": \".\",",
+                "\"ProjectRoot\": \".\",\n    \"ArchiveRoot\": \"Generated\",",
+                StringComparison.Ordinal));
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Generated/Secret.h", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Ignored Apple build input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ResolveExactAppleSourceCommit_rejects_unlocked_remote_swift_package()
     {
         using var scope = new TemporaryDirectoryScope();
@@ -622,6 +648,61 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             Path.Combine(lockDirectory, "Package.resolved"),
             $$"""{ "pins": [ { "location": "{{dependencyUrl}}", "state": { "revision": "0123456789abcdef0123456789abcdef01234567" } } ] }""");
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var sourceCommit = CommitRepository(repositoryRoot);
+
+        var resolved = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(sourceCommit, resolved);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_accepts_tracked_workspace_lock_for_nested_project_dependency()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("WorkspacePackageLockRepo");
+        var project = scope.CreateDirectory(Path.Combine("WorkspacePackageLockRepo", "Apps", "iOS", "App.xcodeproj"));
+        const string dependencyUrl = "https://example.invalid/WorkspacePackage.git";
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            $$"""
+            000000000000000000000001 = {
+                isa = XCRemoteSwiftPackageReference;
+                repositoryURL = "{{dependencyUrl}}";
+                requirement = { kind = upToNextMajorVersion; minimumVersion = 1.0.0; };
+            };
+            """);
+        var workspace = scope.CreateDirectory(Path.Combine("WorkspacePackageLockRepo", "Main.xcworkspace"));
+        File.WriteAllText(
+            Path.Combine(workspace, "contents.xcworkspacedata"),
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <Workspace version="1.0"><FileRef location="group:Apps/iOS/App.xcodeproj"/></Workspace>
+            """);
+        var schemeDirectory = scope.CreateDirectory(Path.Combine(
+            "WorkspacePackageLockRepo", "Main.xcworkspace", "xcshareddata", "xcschemes"));
+        File.WriteAllText(Path.Combine(schemeDirectory, "App.xcscheme"), "<Scheme/>");
+        var lockDirectory = scope.CreateDirectory(Path.Combine(
+            "WorkspacePackageLockRepo", "Main.xcworkspace", "xcshareddata", "swiftpm"));
+        File.WriteAllText(
+            Path.Combine(lockDirectory, "Package.resolved"),
+            $$"""{ "pins": [ { "location": "{{dependencyUrl}}", "state": { "revision": "0123456789abcdef0123456789abcdef01234567" } } ] }""");
+        var configPath = Path.Combine(repositoryRoot, "powerforge.release.json");
+        File.WriteAllText(
+            configPath,
+            """
+            {
+              "AppleApps": {
+                "ProjectRoot": ".",
+                "Apps": [
+                  {
+                    "Name": "App",
+                    "ProjectPath": "Main.xcworkspace",
+                    "Scheme": "App"
+                  }
+                ]
+              }
+            }
+            """);
         var sourceCommit = CommitRepository(repositoryRoot);
 
         var resolved = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);

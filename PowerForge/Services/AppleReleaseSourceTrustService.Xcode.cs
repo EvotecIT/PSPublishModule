@@ -52,7 +52,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         foreach (var metadataPath in metadataPaths.Where(path =>
                      path.EndsWith("project.pbxproj", StringComparison.OrdinalIgnoreCase) && File.Exists(path)))
         {
-            ValidateProjectGraph(repositoryRoot, metadataPath, generatedOutputPaths);
+            ValidateProjectGraph(repositoryRoot, metadataPath, metadataPaths, generatedOutputPaths);
         }
     }
 
@@ -173,9 +173,11 @@ internal sealed partial class AppleReleaseSourceTrustService
     private void ValidateProjectGraph(
         string repositoryRoot,
         string metadataPath,
+        IReadOnlyCollection<string> metadataPaths,
         IReadOnlyCollection<string> generatedOutputPaths)
     {
         var projectDirectory = Path.GetDirectoryName(Path.GetDirectoryName(metadataPath)!)!;
+        var packageLockRoots = ResolvePackageLockSearchRoots(metadataPath, metadataPaths);
         var objects = ParsePbxObjects(File.ReadAllText(metadataPath));
         var parents = BuildPbxParentMap(objects);
         var buildFileReferences = objects.Values
@@ -202,13 +204,13 @@ internal sealed partial class AppleReleaseSourceTrustService
 
             if (item.Isa.Equals("XCLocalSwiftPackageReference", StringComparison.OrdinalIgnoreCase))
             {
-                ValidateLocalPackageReference(repositoryRoot, projectDirectory, item);
+                ValidateLocalPackageReference(repositoryRoot, projectDirectory, packageLockRoots, item);
                 continue;
             }
 
             if (item.Isa.Equals("XCRemoteSwiftPackageReference", StringComparison.OrdinalIgnoreCase))
             {
-                ValidateRemotePackageReference(repositoryRoot, projectDirectory, item);
+                ValidateRemotePackageReference(repositoryRoot, packageLockRoots, item);
                 continue;
             }
 
@@ -331,6 +333,7 @@ internal sealed partial class AppleReleaseSourceTrustService
     private void ValidateLocalPackageReference(
         string repositoryRoot,
         string projectDirectory,
+        IReadOnlyCollection<string> packageLockRoots,
         PbxObject item)
     {
         var relativePath = ReadPbxScalar(item.Body, "relativePath");
@@ -381,7 +384,11 @@ internal sealed partial class AppleReleaseSourceTrustService
             }
 
             var identity = identityMatch.Groups["identity"].Value;
-            var locks = FindTrackedPackageLocks(repositoryRoot, projectDirectory, identity);
+            var lockRoots = packageLockRoots
+                .Concat(new[] { packageRoot })
+                .Distinct(GetPathComparer())
+                .ToArray();
+            var locks = FindTrackedPackageLocks(repositoryRoot, lockRoots, identity);
             if (locks.Length == 0)
             {
                 throw new InvalidOperationException(
@@ -409,7 +416,7 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private void ValidateRemotePackageReference(
         string repositoryRoot,
-        string projectDirectory,
+        IReadOnlyCollection<string> packageLockRoots,
         PbxObject item)
     {
         var repositoryUrl = ReadPbxScalar(item.Body, "repositoryURL")?.Trim();
@@ -420,7 +427,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             item.Body,
             "(?s)requirement\\s*=\\s*\\{.*?kind\\s*=\\s*revision\\s*;.*?revision\\s*=\\s*[\"']?[A-Fa-f0-9]{40}[\"']?\\s*;",
             RegexOptions.CultureInvariant);
-        var locks = FindTrackedPackageLocks(repositoryRoot, projectDirectory, repositoryUrl!);
+        var locks = FindTrackedPackageLocks(repositoryRoot, packageLockRoots, repositoryUrl!);
         if (locks.Length == 0 && !exactRevision)
         {
             throw new InvalidOperationException(
@@ -432,7 +439,7 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private string[] FindTrackedPackageLocks(
         string repositoryRoot,
-        string projectDirectory,
+        IReadOnlyCollection<string> searchRoots,
         string dependencyIdentity)
     {
         var shortIdentity = Path.GetFileNameWithoutExtension(dependencyIdentity.TrimEnd('/'));
@@ -440,7 +447,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
             .Where(static path => Path.GetFileName(path).Equals("Package.resolved", StringComparison.OrdinalIgnoreCase))
             .Select(path => Path.GetFullPath(Path.Combine(repositoryRoot, path)))
-            .Where(path => IsPathAtOrWithin(path, projectDirectory))
+            .Where(path => searchRoots.Any(root => IsPathAtOrWithin(path, root)))
             .Where(path =>
             {
                 var text = File.ReadAllText(path);
@@ -449,6 +456,65 @@ internal sealed partial class AppleReleaseSourceTrustService
                         text.Contains(shortIdentity, StringComparison.OrdinalIgnoreCase));
             })
             .ToArray();
+    }
+
+    private static string[] ResolvePackageLockSearchRoots(
+        string projectMetadataPath,
+        IReadOnlyCollection<string> metadataPaths)
+    {
+        var projectContainer = Path.GetDirectoryName(projectMetadataPath)!;
+        var roots = new HashSet<string>(GetPathComparer())
+        {
+            Path.GetDirectoryName(projectContainer)!
+        };
+        var knownMetadata = new HashSet<string>(metadataPaths.Select(Path.GetFullPath), GetPathComparer());
+        foreach (var workspaceMetadata in knownMetadata.Where(path =>
+                     path.EndsWith("contents.xcworkspacedata", StringComparison.OrdinalIgnoreCase) &&
+                     File.Exists(path)))
+        {
+            if (WorkspaceReferencesContainer(
+                    workspaceMetadata,
+                    projectContainer,
+                    knownMetadata,
+                    new HashSet<string>(GetPathComparer())))
+            {
+                roots.Add(Path.GetDirectoryName(workspaceMetadata)!);
+            }
+        }
+
+        return roots.ToArray();
+    }
+
+    private static bool WorkspaceReferencesContainer(
+        string workspaceMetadata,
+        string targetContainer,
+        ISet<string> knownMetadata,
+        ISet<string> visited)
+    {
+        var normalizedMetadata = Path.GetFullPath(workspaceMetadata);
+        if (!visited.Add(normalizedMetadata))
+            return false;
+
+        var workspaceContainer = Path.GetDirectoryName(normalizedMetadata)!;
+        var workspaceRoot = Path.GetDirectoryName(workspaceContainer)!;
+        var document = XDocument.Load(normalizedMetadata, LoadOptions.None);
+        foreach (var candidate in EnumerateWorkspaceReferences(document.Root, workspaceRoot, workspaceRoot))
+        {
+            var normalizedCandidate = Path.GetFullPath(candidate);
+            if (GetPathComparer().Equals(normalizedCandidate, Path.GetFullPath(targetContainer)))
+                return true;
+            if (!normalizedCandidate.EndsWith(".xcworkspace", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var nestedMetadata = Path.Combine(normalizedCandidate, "contents.xcworkspacedata");
+            if (knownMetadata.Contains(nestedMetadata) &&
+                WorkspaceReferencesContainer(nestedMetadata, targetContainer, knownMetadata, visited))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void ValidateResolvedProjectInput(

@@ -1130,11 +1130,16 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new AppleReleaseReceiptStore().ReadAll(seeded.AppleAppPlan!),
                 receipt => receipt.OperationPhase == "UploadAttested");
 
+            var buildUploadQueries = 0;
             var resumed = CreateAppleAutomationService(
                     request => CreateReleaseState(request, processingState: null),
                     archiveAppleApp: _ => throw new InvalidOperationException("Verified resume must skip archive."),
                     uploadAppleApp: _ => throw new InvalidOperationException("Verified resume must skip upload."),
-                    getAppleBuildUpload: (_, _) => throw new InvalidOperationException("Pre-visibility resume must not require remote build lookup."))
+                    getAppleBuildUpload: (_, id) =>
+                    {
+                        buildUploadQueries++;
+                        return new AppStoreConnectBuildUploadInfo { Id = id, State = "PROCESSING" };
+                    })
                 .Execute(spec, new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
@@ -1144,7 +1149,39 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
 
             Assert.True(resumed.Success, resumed.ErrorMessage);
+            Assert.Equal(1, buildUploadQueries);
             Assert.True(Assert.Single(resumed.AppleApps).ResumedExistingBuild);
+
+            var rejected = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, processingState: null),
+                    archiveAppleApp: _ => throw new InvalidOperationException("Terminal resume must skip archive."),
+                    uploadAppleApp: _ => throw new InvalidOperationException("Terminal resume must skip upload."),
+                    getAppleBuildUpload: (_, id) => new AppStoreConnectBuildUploadInfo
+                    {
+                        Id = id,
+                        State = "FAILED",
+                        Errors =
+                        [
+                            new AppStoreConnectBuildUploadIssue
+                            {
+                                Code = "90683",
+                                Description = "Missing purpose string in Info.plist."
+                            }
+                        ]
+                    })
+                .Execute(spec, new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.UploadExisting,
+                    AppleSourceCommit = sourceCommit,
+                    AppleWaitForProcessing = false
+                });
+
+            Assert.False(rejected.Success);
+            var rejectedTarget = Assert.Single(rejected.AppleReceipt!.Targets);
+            var rejectedError = Assert.IsType<string>(rejectedTarget.ErrorMessage);
+            Assert.Contains("FAILED", rejectedError, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("90683", rejectedError, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

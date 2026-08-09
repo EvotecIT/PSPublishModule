@@ -5170,7 +5170,7 @@ internal sealed partial class PowerForgeReleaseService
         };
     }
 
-    private static string SanitizeStageEntryName(string value)
+    internal static string SanitizeStageEntryName(string value)
     {
         var normalized = value.Trim();
         if (string.IsNullOrWhiteSpace(normalized))

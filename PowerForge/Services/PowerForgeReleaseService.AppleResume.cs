@@ -74,6 +74,8 @@ internal sealed partial class PowerForgeReleaseService
             {
                 if (plan.Automation.WaitForProcessing)
                     state = WaitForAppleBuild(plan, app, state, attestation.Target.BuildUploadId);
+                else
+                    EnsureAppleBuildUploadIsNotTerminal(plan, app, state, attestation.Target.BuildUploadId!);
                 PopulateResumedAppleUpload(result, state, attestation, adopted: false);
                 return true;
             }
@@ -127,6 +129,27 @@ internal sealed partial class PowerForgeReleaseService
         result.ResumedUploadAttestationAttemptId = attestation?.Target.UploadAttestationAttemptId ?? attestation?.Receipt.AttemptId;
         result.ArchiveSha256 = attestation?.Target.ArchiveSha256;
         result.SkippedSteps = new[] { "archive", "upload" };
+    }
+
+    private void EnsureAppleBuildUploadIsNotTerminal(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        AppStoreConnectReleaseStateResult state,
+        string buildUploadId)
+    {
+        var upload = _getAppleBuildUpload(CreateAppStoreConnectCredential(plan), buildUploadId);
+        if (upload is null || !IsTerminalAppleBuildFailure(upload.State))
+            return;
+
+        var issues = upload.Errors
+            .Select(static issue => FormatAppleBuildUploadIssue(issue))
+            .Where(static issue => !string.IsNullOrWhiteSpace(issue))
+            .ToArray();
+        var issueDetail = issues.Length == 0 ? string.Empty : $" {string.Join(" ", issues)}";
+        throw new AppleBuildProcessingException(
+            $"App Store Connect rejected uploaded build {state.VersionString} ({state.BuildNumber}) " +
+            $"for '{app.Name}' in build-upload state '{upload.State}'.{issueDetail}",
+            state);
     }
 
     private AppleUploadAttestation? FindVerifiedAppleUploadAttestation(

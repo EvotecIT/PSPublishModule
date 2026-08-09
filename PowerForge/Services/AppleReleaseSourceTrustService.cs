@@ -184,19 +184,34 @@ internal sealed partial class AppleReleaseSourceTrustService
             configDirectory,
             string.IsNullOrWhiteSpace(options.ProjectRoot) ? "." : options.ProjectRoot!);
         var automation = options.Automation ?? new PowerForgeAppleReleaseAutomationOptions();
-        return new[]
+        var archiveRoot = ResolvePath(projectRoot, string.IsNullOrWhiteSpace(options.ArchiveRoot)
+            ? Path.Combine("Artifacts", "Apple", "Archives")
+            : options.ArchiveRoot!);
+        var exportRoot = ResolvePath(projectRoot, string.IsNullOrWhiteSpace(options.ExportRoot)
+            ? Path.Combine("Artifacts", "Apple", "Exports")
+            : options.ExportRoot!);
+        var artifactPaths = (options.Apps ?? Array.Empty<AppleAppConfiguration>())
+            .Where(static app => app.Enabled && !string.IsNullOrWhiteSpace(app.Scheme))
+            .SelectMany(app =>
             {
-                ResolvePath(projectRoot, string.IsNullOrWhiteSpace(options.ArchiveRoot)
-                    ? Path.Combine("Artifacts", "Apple", "Archives")
-                    : options.ArchiveRoot!),
-                ResolvePath(projectRoot, string.IsNullOrWhiteSpace(options.ExportRoot)
-                    ? Path.Combine("Artifacts", "Apple", "Exports")
-                    : options.ExportRoot!),
+                var name = string.IsNullOrWhiteSpace(app.Name) ? app.Scheme!.Trim() : app.Name!.Trim();
+                var safeName = PowerForgeReleaseService.SanitizeStageEntryName(name).Replace(' ', '-');
+                if (string.IsNullOrWhiteSpace(safeName))
+                    safeName = "AppleApp";
+                return new[]
+                {
+                    Path.Combine(archiveRoot, app.Platform.ToString(), $"{safeName}.xcarchive"),
+                    Path.Combine(exportRoot, app.Platform.ToString(), safeName)
+                };
+            });
+        return artifactPaths
+            .Concat(new[]
+            {
                 ResolvePath(projectRoot, automation.ReceiptPath),
                 ResolvePath(projectRoot, automation.ReceiptHistoryPath),
                 ResolvePath(projectRoot, automation.PlanReceiptPath),
                 ResolvePath(projectRoot, automation.LockPath)
-            }
+            })
             .Distinct(GetPathComparer())
             .OrderBy(static path => path, GetPathComparer())
             .ToArray();
