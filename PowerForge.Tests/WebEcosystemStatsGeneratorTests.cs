@@ -49,6 +49,11 @@ public sealed class WebEcosystemStatsGeneratorTests
             var gitHub = rootElement.GetProperty("gitHub");
             Assert.Equal("EvotecIT", gitHub.GetProperty("organization").GetString());
             Assert.Equal(2, gitHub.GetProperty("repositoryCount").GetInt32());
+            Assert.Equal(1, gitHub.GetProperty("totalOpenIssues").GetInt32());
+            var repositories = gitHub.GetProperty("repositories");
+            Assert.Equal(0, repositories[0].GetProperty("openIssues").GetInt32());
+            Assert.Equal("PSWriteHTML", repositories[0].GetProperty("name").GetString());
+            Assert.Equal(1, repositories[1].GetProperty("openIssues").GetInt32());
 
             var nuget = rootElement.GetProperty("nuget");
             Assert.Equal("Evotec", nuget.GetProperty("owner").GetString());
@@ -130,6 +135,33 @@ public sealed class WebEcosystemStatsGeneratorTests
         }
     }
 
+    [Fact]
+    public void Generate_GitHubIncompleteIssueSearch_DoesNotPublishFalseZeroCounts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-ecosystem-stats-incomplete-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var outPath = Path.Combine(root, "data", "ecosystem-stats.json");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                WebEcosystemStatsGenerator.Generate(new WebEcosystemStatsOptions
+                {
+                    OutputPath = outPath,
+                    GitHubOrganization = "EvotecIT",
+                    MaxItems = 10
+                }, new GitHubIncompleteIssueSearchHandler()));
+
+            Assert.Contains("incomplete", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(outPath));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try
@@ -158,6 +190,22 @@ public sealed class WebEcosystemStatsGeneratorTests
 
             if (uri.Host.Equals("api.github.com", StringComparison.OrdinalIgnoreCase))
             {
+                if (uri.AbsolutePath.Equals("/search/issues", StringComparison.OrdinalIgnoreCase))
+                {
+                    const string issueSearch = """
+                    {
+                      "total_count": 1,
+                      "incomplete_results": false,
+                      "items": [
+                        {
+                          "repository_url": "https://api.github.com/repos/EvotecIT/ADEssentials"
+                        }
+                      ]
+                    }
+                    """;
+                    return JsonResponse(issueSearch);
+                }
+
                 var page = ParseQuery(uri, "page", fallback: 1);
                 if (page == 1)
                 {
@@ -346,6 +394,24 @@ public sealed class WebEcosystemStatsGeneratorTests
 
             if (uri.Host.Equals("api.github.com", StringComparison.OrdinalIgnoreCase))
             {
+                if (uri.AbsolutePath.Equals("/search/issues", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (request.Headers.Authorization is not null)
+                    {
+                        SawAuthorizedForbidden = true;
+                        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden)
+                        {
+                            Content = new StringContent("forbidden", Encoding.UTF8, "text/plain")
+                        });
+                    }
+
+                    SawAnonymousSuccess = true;
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent("{\"total_count\":0,\"incomplete_results\":false,\"items\":[]}", Encoding.UTF8, "application/json")
+                    });
+                }
+
                 var page = ParseQuery(uri, "page", fallback: 1);
                 if (page == 1 && request.Headers.Authorization is not null)
                 {
@@ -425,6 +491,24 @@ public sealed class WebEcosystemStatsGeneratorTests
 
             if (uri.Host.Equals("api.github.com", StringComparison.OrdinalIgnoreCase))
             {
+                if (uri.AbsolutePath.Equals("/search/issues", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (request.Headers.Authorization is not null)
+                    {
+                        SawAuthorizedUnauthorized = true;
+                        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                        {
+                            Content = new StringContent("unauthorized", Encoding.UTF8, "text/plain")
+                        });
+                    }
+
+                    SawAnonymousSuccess = true;
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent("{\"total_count\":0,\"incomplete_results\":false,\"items\":[]}", Encoding.UTF8, "application/json")
+                    });
+                }
+
                 if (request.Headers.Authorization is not null)
                 {
                     SawAuthorizedUnauthorized = true;
@@ -460,6 +544,49 @@ public sealed class WebEcosystemStatsGeneratorTests
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
             {
                 Content = new StringContent("{}", Encoding.UTF8, "application/json")
+            });
+        }
+    }
+
+    private sealed class GitHubIncompleteIssueSearchHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri;
+            if (uri?.AbsolutePath.Equals("/search/issues", StringComparison.OrdinalIgnoreCase) is true)
+            {
+                return JsonResponse("{\"total_count\":1,\"incomplete_results\":true,\"items\":[]}");
+            }
+
+            if (uri?.AbsolutePath.EndsWith("/repos", StringComparison.OrdinalIgnoreCase) is true)
+            {
+                const string repositoryPayload = """
+                [
+                  {
+                    "name":"ImagePlayground",
+                    "full_name":"EvotecIT/ImagePlayground",
+                    "html_url":"https://github.com/EvotecIT/ImagePlayground",
+                    "language":"C#",
+                    "archived":false,
+                    "stargazers_count":98,
+                    "forks_count":7,
+                    "watchers_count":98,
+                    "open_issues_count":2,
+                    "pushed_at":"2026-08-07T08:00:00Z"
+                  }
+                ]
+                """;
+                return JsonResponse(repositoryPayload);
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+
+        private static Task<HttpResponseMessage> JsonResponse(string json)
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
             });
         }
     }

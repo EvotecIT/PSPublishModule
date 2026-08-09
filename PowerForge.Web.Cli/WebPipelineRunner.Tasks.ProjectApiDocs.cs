@@ -627,52 +627,6 @@ internal static partial class WebPipelineRunner
         return true;
     }
 
-    private static bool TryBuildDotNetProjectApiInput(
-        string root,
-        IReadOnlyList<string> placeholderMarkers,
-        out ProjectApiInputCandidate? candidate)
-    {
-        candidate = null;
-        var dotNetRoot = ResolveExistingSubdirectory(root, "dotnet", "DotNet", "csharp", "CSharp");
-        if (string.IsNullOrWhiteSpace(dotNetRoot))
-            dotNetRoot = root;
-        if (!Directory.Exists(dotNetRoot))
-            return false;
-
-        var xmlFiles = Directory.GetFiles(dotNetRoot, "*.xml", SearchOption.AllDirectories)
-            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (xmlFiles.Length == 0)
-            return false;
-
-        foreach (var xmlPath in xmlFiles)
-        {
-            var baseName = Path.GetFileNameWithoutExtension(xmlPath);
-            var xmlDirectory = Path.GetDirectoryName(xmlPath) ?? dotNetRoot;
-            var assemblyPath = Directory.GetFiles(xmlDirectory, "*.dll", SearchOption.TopDirectoryOnly)
-                .FirstOrDefault(path => Path.GetFileNameWithoutExtension(path).Equals(baseName, StringComparison.OrdinalIgnoreCase));
-            assemblyPath ??= Directory.GetFiles(dotNetRoot, "*.dll", SearchOption.AllDirectories)
-                .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(assemblyPath))
-                continue;
-
-            var hasPlaceholder = TryDetectPlaceholderContent(xmlPath, placeholderMarkers, out var placeholderPath);
-            candidate = new ProjectApiInputCandidate
-            {
-                Type = "CSharp",
-                RootPath = dotNetRoot,
-                XmlPath = Path.GetFullPath(xmlPath),
-                AssemblyPath = Path.GetFullPath(assemblyPath),
-                HasPlaceholderContent = hasPlaceholder,
-                PlaceholderPath = placeholderPath
-            };
-            return true;
-        }
-
-        return false;
-    }
-
     private static string? ResolveExistingSubdirectory(string root, params string[] candidates)
     {
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
@@ -847,6 +801,8 @@ internal static partial class WebPipelineRunner
             node["psExamplesPath"] = selected.PowerShellExamplesPath;
         if (!string.IsNullOrWhiteSpace(selected.XmlPath))
             node["xml"] = selected.XmlPath;
+        if (selected.XmlPaths is { Length: > 1 })
+            node["xmls"] = new JsonArray(selected.XmlPaths.Select(static path => (JsonNode?)path).ToArray());
         if (!string.IsNullOrWhiteSpace(selected.AssemblyPath))
             node["assembly"] = selected.AssemblyPath;
 
@@ -2804,6 +2760,7 @@ internal static partial class WebPipelineRunner
         public string? PowerShellCommandMetadataPath { get; init; }
         public string? PowerShellExamplesPath { get; init; }
         public string? XmlPath { get; init; }
+        public string[] XmlPaths { get; init; } = Array.Empty<string>();
         public string? AssemblyPath { get; init; }
         public bool HasPlaceholderContent { get; init; }
         public string PlaceholderPath { get; init; } = string.Empty;
