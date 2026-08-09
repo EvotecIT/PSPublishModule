@@ -183,6 +183,19 @@ internal sealed partial class PowerForgeReleaseService
             PowerForgeAppleReleaseAction.SubmitAppReview or
             PowerForgeAppleReleaseAction.Release;
 
+    private static bool RequiresAppleReleaseIdentity(PowerForgeAppleReleasePlan plan)
+        => plan.Action == PowerForgeAppleReleaseAction.Status ||
+           plan.Action == PowerForgeAppleReleaseAction.Doctor ||
+           IsUploadExecution(plan) ||
+           plan.PrepareDistribution ||
+           plan.SyncScreenshots ||
+           plan.SyncMetadata ||
+           plan.CheckReleaseReadiness ||
+           plan.DistributeTestFlight ||
+           plan.SubmitTestFlightBetaReview ||
+           plan.SubmitForReview ||
+           plan.ReleaseApprovedVersion;
+
     private static void ValidateAppleAutomation(PowerForgeAppleReleaseAutomationOptions automation)
     {
         if (string.IsNullOrWhiteSpace(automation.ReceiptPath))
@@ -376,14 +389,17 @@ internal sealed partial class PowerForgeReleaseService
         var remoteAction = plan.Action != PowerForgeAppleReleaseAction.Archive &&
                            plan.Action != PowerForgeAppleReleaseAction.Version &&
                            plan.Action != PowerForgeAppleReleaseAction.Cleanup;
-        var refreshSuccessfulMutation = HasAppleRemoteMutation(plan);
+        var refreshSuccessfulMutation = HasAppleReleaseStateMutation(plan);
         foreach (var app in plan.Apps.Where(UsesAppStoreConnect))
         {
             if (!resultByName.TryGetValue(app.Name, out var result))
                 continue;
             if (string.IsNullOrWhiteSpace(app.AppStoreConnectAppId))
                 continue;
-            if (remoteAction && (refreshSuccessfulMutation || !result.Success || result.RemoteState is null))
+            var requiresFinalReadback = plan.Action == PowerForgeAppleReleaseAction.Configured
+                ? refreshSuccessfulMutation
+                : remoteAction && (refreshSuccessfulMutation || !result.Success || result.RemoteState is null);
+            if (requiresFinalReadback)
             {
                 try
                 {
@@ -465,7 +481,11 @@ internal sealed partial class PowerForgeReleaseService
                         result?.VersionUpdate?.After.BuildNumber ?? app.BuildNumber);
                 }
             }
-            else if (!skippedIndependentRelease && plan.Action != PowerForgeAppleReleaseAction.Cleanup)
+            else if (!skippedIndependentRelease &&
+                     plan.Action != PowerForgeAppleReleaseAction.Cleanup &&
+                     (RequiresAppleReleaseIdentity(plan) ||
+                      !string.IsNullOrWhiteSpace(app.MarketingVersion) ||
+                      !string.IsNullOrWhiteSpace(app.BuildNumber)))
             {
                 try
                 {
@@ -626,6 +646,15 @@ internal sealed partial class PowerForgeReleaseService
            plan.SyncScreenshots ||
            plan.SyncMetadata ||
            plan.SyncAppInfo ||
+           plan.DistributeTestFlight ||
+           plan.SubmitTestFlightBetaReview ||
+           plan.SubmitForReview ||
+           plan.ReleaseApprovedVersion;
+
+    private static bool HasAppleReleaseStateMutation(PowerForgeAppleReleasePlan plan)
+        => plan.PrepareDistribution ||
+           plan.SyncScreenshots ||
+           plan.SyncMetadata ||
            plan.DistributeTestFlight ||
            plan.SubmitTestFlightBetaReview ||
            plan.SubmitForReview ||

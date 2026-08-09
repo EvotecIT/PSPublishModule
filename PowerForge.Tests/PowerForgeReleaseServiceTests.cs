@@ -598,7 +598,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                         Build = new AppStoreConnectBuildInfo { Id = "build-5", Version = request.BuildNumber },
                         SelectedBuild = true
                     };
-                });
+                },
+                getAppleReleaseState: request => CreateReleaseState(request, "VALID"));
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -1087,7 +1088,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                             BuildId = "build-6"
                         }
                     };
-                });
+                },
+                getAppleReleaseState: request => CreateReleaseState(request, "VALID"));
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -1251,7 +1253,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                             State = "WAITING_FOR_REVIEW"
                         }
                     };
-                });
+                },
+                getAppleReleaseState: request => CreateReleaseState(request, "VALID"));
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec

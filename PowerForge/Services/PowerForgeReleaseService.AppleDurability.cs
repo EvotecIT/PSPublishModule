@@ -84,6 +84,58 @@ internal sealed partial class PowerForgeReleaseService
         });
     }
 
+    private void WriteAppleNotarizationAcceptance(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        AppleNotarizationAcceptedCheckpoint checkpoint)
+    {
+        if (!plan.Automation.WriteReceipt)
+            return;
+
+        var target = CreateAppleCheckpointTarget(app);
+        target.DirectArtifactPath = checkpoint.ArtifactPath;
+        target.DirectArtifactSha256 = checkpoint.ArtifactSha256;
+        target.NotarizationSubmissionId = checkpoint.SubmissionId;
+        target.NotarizationStatus = checkpoint.Status;
+        target.ErrorMessage = $"Apple notarization accepted for '{app.Name}', but local post-processing is incomplete.";
+        _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
+        {
+            Action = plan.Action,
+            SourceCommit = plan.SourceCommit,
+            OperationPhase = "NotarizationAccepted",
+            Success = false,
+            ErrorMessage = target.ErrorMessage,
+            Targets = new[] { target }
+        });
+    }
+
+    private void WriteAppleNotarizationStapled(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        AppleNotarizationStapledCheckpoint checkpoint)
+    {
+        if (!plan.Automation.WriteReceipt)
+            return;
+
+        var target = CreateAppleCheckpointTarget(app);
+        target.DirectArtifactPath = checkpoint.ArtifactPath;
+        target.DirectArtifactSha256 = checkpoint.ArtifactSha256;
+        target.NotarizationSubmissionId = checkpoint.SubmissionId;
+        target.NotarizationStatus = checkpoint.Status;
+        target.Stapled = true;
+        target.StapleValidated = true;
+        target.ErrorMessage = $"Apple notarization was stapled and validated for '{app.Name}', but Gatekeeper assessment is incomplete.";
+        _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
+        {
+            Action = plan.Action,
+            SourceCommit = plan.SourceCommit,
+            OperationPhase = "NotarizationStapled",
+            Success = false,
+            ErrorMessage = target.ErrorMessage,
+            Targets = new[] { target }
+        });
+    }
+
     private static PowerForgeAppleReleaseTargetReceipt CreateAppleCheckpointTarget(
         PowerForgeAppleAppReleaseTargetPlan app)
         => new()

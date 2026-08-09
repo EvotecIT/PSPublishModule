@@ -225,6 +225,12 @@ internal sealed class AppleReleaseReceiptStore
         }
 
         EnsureUnlinkedPath(plan.ProjectRoot, historyPath, "Apple release receipt history entry");
+        var historyReceipt = Read(plan.ProjectRoot, historyPath);
+        if (!string.Equals(historyReceipt.ReceiptSha256, receipt.ReceiptSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Immutable Apple release receipt history entry does not contain its declared receipt: {receipt.HistoryPath}");
+        }
     }
 
     private static PowerForgeAppleReleaseReceipt[] OrderReceipts(

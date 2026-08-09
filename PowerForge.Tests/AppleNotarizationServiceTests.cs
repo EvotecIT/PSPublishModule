@@ -18,7 +18,13 @@ public sealed class AppleNotarizationServiceTests
                 KeychainProfile = "powerforge-notary",
                 XcrunExecutable = "xcrun-test",
                 DittoExecutable = "ditto-test",
-                SpctlExecutable = "spctl-test"
+                SpctlExecutable = "spctl-test",
+                AcceptedCheckpoint = checkpoint =>
+                {
+                    Assert.Equal("submission-1", checkpoint.SubmissionId);
+                    Assert.Equal("Accepted", checkpoint.Status);
+                    Assert.Equal(2, runner.Requests.Count);
+                }
             });
 
             Assert.True(result.Succeeded);
@@ -65,6 +71,34 @@ public sealed class AppleNotarizationServiceTests
             Assert.False(result.Succeeded);
             Assert.Equal("Invalid", result.Status);
             Assert.Single(runner.Requests);
+        }
+        finally
+        {
+            try { File.Delete(artifact); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NotarizeAsync_AcceptedCheckpointFailureReportsSubmissionBeforeStapling()
+    {
+        var artifact = Path.GetTempFileName() + ".pkg";
+        await File.WriteAllTextAsync(artifact, "pkg");
+        try
+        {
+            var runner = new NotaryProcessRunner();
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleNotarizationService(runner).NotarizeAsync(new AppleNotarizationRequest
+                {
+                    ArtifactPath = artifact,
+                    KeychainProfile = "powerforge-notary",
+                    AcceptedCheckpoint = _ => throw new IOException("receipt storage unavailable")
+                }));
+
+            Assert.Contains("submission-1", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("Do not resubmit", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Single(runner.Requests);
+            Assert.DoesNotContain(runner.Requests, request =>
+                request.Arguments.Count > 1 && request.Arguments[0] == "stapler");
         }
         finally
         {
@@ -163,7 +197,8 @@ public sealed class AppleNotarizationServiceTests
                 {
                     ArtifactPath = artifact,
                     AcceptedSubmissionId = "submission-existing",
-                    ExpectedArtifactSha256 = new string('0', 64)
+                    ExpectedArtifactSha256 = new string('0', 64),
+                    Staple = false
                 }));
 
             Assert.Contains("artifact changed", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -298,6 +333,34 @@ public sealed class AppleNotarizationServiceTests
                 request.Arguments.Count > 1 &&
                 request.Arguments[0] == "stapler" &&
                 request.Arguments[1] == "validate");
+        }
+        finally
+        {
+            try { File.Delete(artifact); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NotarizeAsync_ResumeRejectsChangedArtifactEvenWhenStaplerCouldValidateIt()
+    {
+        var artifact = Path.GetTempFileName() + ".pkg";
+        await File.WriteAllTextAsync(artifact, "pkg-before-stapling");
+        try
+        {
+            var acceptedHash = AppleNotarizationService.ComputeArtifactSha256(artifact);
+            await File.AppendAllTextAsync(artifact, "-ticket-stapled-before-crash");
+            var runner = new MutatingStapleRunner(artifact, failAssessment: false);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleNotarizationService(runner).NotarizeAsync(new AppleNotarizationRequest
+                {
+                    ArtifactPath = artifact,
+                    AcceptedSubmissionId = "accepted-before-crash",
+                    ExpectedArtifactSha256 = acceptedHash
+                }));
+
+            Assert.Contains("cannot prove artifact identity", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(runner.Requests);
         }
         finally
         {

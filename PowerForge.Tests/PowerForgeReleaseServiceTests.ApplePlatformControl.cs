@@ -855,14 +855,15 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
 
             Assert.True(resumed.Success);
-            Assert.NotNull(resumedRequest);
-            Assert.Equal("accepted-then-staple-failed", resumedRequest!.AcceptedSubmissionId);
-            Assert.Equal(
-                AppleNotarizationService.ComputeArtifactSha256(resumedRequest.ArtifactPath),
-                resumedRequest.ExpectedArtifactSha256);
+            Assert.Null(resumedRequest);
             var resumedTarget = Assert.Single(resumed.AppleReceipt!.Targets);
             Assert.True(resumedTarget.ResumedAcceptedNotarization);
+            Assert.Contains("archive", resumedTarget.SkippedSteps);
+            Assert.Contains("export", resumedTarget.SkippedSteps);
             Assert.Contains("notarySubmission", resumedTarget.SkippedSteps);
+            Assert.Contains("staple", resumedTarget.SkippedSteps);
+            Assert.Contains("stapleValidation", resumedTarget.SkippedSteps);
+            Assert.Contains("gatekeeperAssessment", resumedTarget.SkippedSteps);
 
             // Simulate another target failing after this target completed. Aggregate failure
             // must retain and reuse the fully verified direct target.

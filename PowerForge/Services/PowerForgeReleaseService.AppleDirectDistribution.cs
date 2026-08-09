@@ -23,6 +23,8 @@ internal sealed partial class PowerForgeReleaseService
             AcceptedSubmissionId = acceptedSubmissionId,
             ExpectedArtifactSha256 = expectedArtifactSha256,
             StaplingCompleted = staplingCompleted,
+            AcceptedCheckpoint = checkpoint => WriteAppleNotarizationAcceptance(plan, app, checkpoint),
+            StapledCheckpoint = checkpoint => WriteAppleNotarizationStapled(plan, app, checkpoint),
             Timeout = TimeSpan.FromSeconds(plan.DirectDistribution.TimeoutSeconds),
             Staple = plan.DirectDistribution.Staple,
             Assess = plan.DirectDistribution.Assess

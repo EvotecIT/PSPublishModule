@@ -800,6 +800,7 @@ internal sealed partial class PowerForgeReleaseService
                 if (receiptJournalReady &&
                     !request.CheckpointAppleApps &&
                     (applePlan.Action != PowerForgeAppleReleaseAction.Configured ||
+                     HasAppleExecutionMutation(applePlan) ||
                      appleResults.Any(static app => !app.Success)))
                     result.AppleReceipt ??= CompleteAppleReleaseReceipt(applePlan, appleResults, cleanup, appleVersioning);
 
@@ -1609,6 +1610,11 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException(
                 "Adopting an existing Apple build is supported only for an upload execution.");
         }
+        if (request.AppleAdoptExistingBuild && !automation.Resume)
+        {
+            throw new InvalidOperationException(
+                "Adopting an existing Apple build requires AppleApps.Automation.Resume=true and cannot be combined with --no-apple-resume.");
+        }
         if (options.SyncMetadata && metadataConfigPath is null && metadataConfigPaths.Length == 0)
             throw new InvalidOperationException("AppleApps SyncMetadata requires MetadataConfigPath or MetadataConfigPaths.");
         if (options.SyncAppInfo && appInfoConfigPath is null && appInfoConfigPaths.Length == 0)
@@ -1966,18 +1972,7 @@ internal sealed partial class PowerForgeReleaseService
                         new XcodeProjectVersionEditor());
                 }
 
-                var needsReleaseIdentity =
-                    plan.Action == PowerForgeAppleReleaseAction.Status ||
-                    plan.Action == PowerForgeAppleReleaseAction.Doctor ||
-                    IsUploadExecution(plan) ||
-                    plan.PrepareDistribution ||
-                    plan.SyncScreenshots ||
-                    plan.SyncMetadata ||
-                    plan.CheckReleaseReadiness ||
-                    plan.DistributeTestFlight ||
-                    plan.SubmitTestFlightBetaReview ||
-                    plan.SubmitForReview ||
-                    plan.ReleaseApprovedVersion;
+                var needsReleaseIdentity = RequiresAppleReleaseIdentity(plan);
                 if (needsReleaseIdentity)
                 {
                     var values = ResolveAppleDistributionValues(app, versionUpdate: null);
@@ -2224,6 +2219,8 @@ internal sealed partial class PowerForgeReleaseService
                             : Path.GetDirectoryName(matchingMetadataSpec.Value.ConfigPath) ?? plan.ProjectRoot
                         : Path.GetDirectoryName(matchingScreenshotSpec.Value.ConfigPath) ?? plan.ProjectRoot
                 });
+                if (appInfoMetadataSpecs.Length > 0)
+                    ValidateAppleAppInfoMutationResults(appInfoMetadataSpecs, result.Distribution.AppInfoMetadataResults);
             }
 
             if (plan.DistributeTestFlight && result.Success && UsesTestFlight(app))

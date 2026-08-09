@@ -523,7 +523,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                     }
                 };
             },
-            resolveAppleSourceCommit: _ => "0123456789abcdef0123456789abcdef01234567");
+            resolveAppleSourceCommit: (_, _) => "0123456789abcdef0123456789abcdef01234567");
 
         var result = await service.ExecuteAsync(repositoryRoot);
 
@@ -628,7 +628,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                     }
                 };
             },
-            resolveAppleSourceCommit: _ => "0123456789abcdef0123456789abcdef01234567");
+            resolveAppleSourceCommit: (_, _) => "0123456789abcdef0123456789abcdef01234567");
 
         var result = await service.ExecuteAsync(repositoryRoot);
 

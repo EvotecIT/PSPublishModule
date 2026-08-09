@@ -44,18 +44,21 @@ public sealed class AppleNotarizationService
         var expectedArtifactSha256 = string.IsNullOrWhiteSpace(request.ExpectedArtifactSha256)
             ? null
             : request.ExpectedArtifactSha256!.Trim();
-        if (expectedArtifactSha256 is not null &&
-            !artifactSha256.Equals(expectedArtifactSha256, StringComparison.OrdinalIgnoreCase))
+        var artifactChangedSinceCheckpoint = expectedArtifactSha256 is not null &&
+                                             !artifactSha256.Equals(expectedArtifactSha256, StringComparison.OrdinalIgnoreCase);
+        if (artifactChangedSinceCheckpoint)
         {
             throw new InvalidOperationException(
-                $"The direct Apple artifact changed after notarization acceptance. Expected SHA-256 " +
-                $"'{expectedArtifactSha256}', received '{artifactSha256}'. Archive, export, and submit the changed artifact as a new release attempt.");
+                $"The direct Apple artifact changed after its last trusted notarization checkpoint. Expected SHA-256 " +
+                $"'{expectedArtifactSha256}', received '{artifactSha256}'. A stapler validation alone cannot prove artifact identity; " +
+                "re-export and reconcile the accepted submission before retrying.");
         }
 
         var timeout = request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(30) : request.Timeout;
         var resumed = !string.IsNullOrWhiteSpace(request.AcceptedSubmissionId);
         if (request.StaplingCompleted && !resumed)
             throw new ArgumentException("StaplingCompleted requires AcceptedSubmissionId.", nameof(request));
+        var staplingCompleted = request.StaplingCompleted;
         var submissionPath = resumed
             ? artifactPath
             : await PrepareSubmissionAsync(request, artifactPath, timeout, cancellationToken).ConfigureAwait(false);
@@ -86,16 +89,42 @@ public sealed class AppleNotarizationService
             (submissionId, status) = ParseSubmission(submission);
         }
 
+        if (!resumed &&
+            submission.Succeeded &&
+            string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(submissionId))
+        {
+            try
+            {
+                request.AcceptedCheckpoint?.Invoke(new AppleNotarizationAcceptedCheckpoint
+                {
+                    ArtifactPath = artifactPath,
+                    ArtifactSha256 = artifactSha256,
+                    SubmissionPath = submissionPath,
+                    SubmissionId = submissionId!,
+                    Status = status!
+                });
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Apple accepted notarization submission '{submissionId}', but its local recovery checkpoint could not be persisted. " +
+                    "Do not resubmit the artifact until the accepted submission has been reconciled.",
+                    ex);
+            }
+        }
+
         ProcessRunResult? staple = null;
         ProcessRunResult? validation = null;
         ProcessRunResult? assessment = null;
+        var stapledThisInvocation = false;
         if (submission.Succeeded && string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) && request.Staple)
         {
-            if (request.StaplingCompleted)
+            if (staplingCompleted)
             {
                 staple = new ProcessRunResult(
                     0,
-                    "Skipped stapling because the retained receipt records that it already succeeded.",
+                    "Skipped stapling because a retained exact post-staple checkpoint proves that it already succeeded.",
                     string.Empty,
                     request.XcrunExecutable,
                     TimeSpan.Zero,
@@ -104,9 +133,31 @@ public sealed class AppleNotarizationService
             else
             {
                 staple = await RunAsync(request.XcrunExecutable, artifactPath, new[] { "stapler", "staple", artifactPath }, timeout, cancellationToken).ConfigureAwait(false);
+                stapledThisInvocation = staple.Succeeded;
             }
-            if (staple?.Succeeded == true)
+            if (staple?.Succeeded == true && validation is null)
                 validation = await RunAsync(request.XcrunExecutable, artifactPath, new[] { "stapler", "validate", artifactPath }, timeout, cancellationToken).ConfigureAwait(false);
+            if (stapledThisInvocation && validation?.Succeeded == true && !string.IsNullOrWhiteSpace(submissionId))
+            {
+                var stapledArtifactSha256 = ComputeArtifactSha256(artifactPath);
+                try
+                {
+                    request.StapledCheckpoint?.Invoke(new AppleNotarizationStapledCheckpoint
+                    {
+                        ArtifactPath = artifactPath,
+                        ArtifactSha256 = stapledArtifactSha256,
+                        SubmissionId = submissionId!,
+                        Status = status ?? "Accepted"
+                    });
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Apple notarization submission '{submissionId}' was stapled and validated, but its local recovery checkpoint could not be persisted. " +
+                        "Do not replace or resubmit the artifact until the stapled submission has been reconciled.",
+                        ex);
+                }
+            }
         }
         if (submission.Succeeded && string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) && request.Assess)
         {

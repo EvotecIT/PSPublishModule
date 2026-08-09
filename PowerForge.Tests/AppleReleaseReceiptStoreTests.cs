@@ -55,6 +55,32 @@ public sealed class AppleReleaseReceiptStoreTests
     }
 
     [Fact]
+    public void ReadAll_RejectsLatestReceiptThatPointsAtDifferentValidHistoryEntry()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var plan = CreatePlan(root);
+            var store = new AppleReleaseReceiptStore();
+            store.WriteAttempt(plan, CreateReceipt(PowerForgeAppleReleaseAction.Upload, success: true));
+            store.WriteAttempt(plan, CreateReceipt(PowerForgeAppleReleaseAction.Status, success: true));
+            var latest = store.ReadAll(plan)[0];
+            var declaredHistory = Path.Combine(plan.ProjectRoot, latest.HistoryPath!);
+            var other = Assert.Single(Directory.GetFiles(plan.ReceiptHistoryPath, "*.json"), path =>
+                !string.Equals(path, declaredHistory, StringComparison.OrdinalIgnoreCase));
+            File.Copy(other, declaredHistory, overwrite: true);
+
+            var exception = Assert.Throws<InvalidOperationException>(() => store.ReadAll(plan));
+
+            Assert.Contains("does not contain its declared receipt", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void WriteAttempt_ReconstructsLatestFromValidatedHistoryWhenLatestIsMissing()
     {
         var root = CreateSandbox();

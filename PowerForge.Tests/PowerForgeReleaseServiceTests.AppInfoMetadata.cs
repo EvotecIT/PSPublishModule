@@ -190,6 +190,35 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleApps_RejectsUnconfirmedAppInfoMutationResult()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
+            File.WriteAllText(keyPath, "private-key");
+            WriteAppInfoConfig(root, includeAppId: true);
+            var result = CreateAppInfoReleaseService(
+                    new List<AppStoreConnectReleasePreparationRequest>(),
+                    corruptResponse: true)
+                .Execute(
+                    CreateAppInfoReleaseSpec(keyPath),
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json")
+                    });
+
+            Assert.False(result.Success);
+            Assert.Contains("did not confirm App Information field", result.AppleReceipt!.ErrorMessage, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleApps_RejectsMissingAppInfoConfigMatch()
     {
         var root = CreateSandbox();
@@ -287,7 +316,8 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     private static PowerForgeReleaseService CreateAppInfoReleaseService(
-        List<AppStoreConnectReleasePreparationRequest> requests)
+        List<AppStoreConnectReleasePreparationRequest> requests,
+        bool corruptResponse = false)
         => new(
             new NullLogger(),
             executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
@@ -306,15 +336,27 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     AppId = request.AppId,
                     Platform = request.Platform,
-                    AppInfoMetadataResults = new[]
-                    {
-                        new AppStoreConnectAppInfoMetadataSyncResult
+                    AppInfoMetadataResults = request.AppInfoMetadataSpecs
+                        .Select((spec, index) => new AppStoreConnectAppInfoMetadataSyncResult
                         {
+                            AppInfo = new AppStoreConnectAppInformationInfo { Id = "app-info-1" },
+                            After = new AppStoreConnectAppInfoLocalizationInfo
+                            {
+                                Id = $"localization-{index + 1}",
+                                Locale = spec.Locale,
+                                Name = spec.Metadata.Name,
+                                Subtitle = spec.Metadata.Subtitle,
+                                PrivacyPolicyUrl = corruptResponse ? "https://unexpected.example.invalid/" : spec.Metadata.PrivacyPolicyUrl,
+                                PrivacyChoicesUrl = spec.Metadata.PrivacyChoicesUrl,
+                                PrivacyPolicyText = spec.Metadata.PrivacyPolicyText
+                            },
                             UpdatedFields = new[] { "privacyPolicyUrl" }
-                        }
-                    }
+                        })
+                        .ToArray()
                 };
-            });
+            },
+            getAppleReleaseState: _ => throw new InvalidOperationException(
+                "App Information-only mutation must not read version/build release state."));
 
     private static PowerForgeReleaseSpec CreateAppInfoReleaseSpec(string keyPath)
         => new()

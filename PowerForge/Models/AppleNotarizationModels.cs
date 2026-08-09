@@ -50,6 +50,34 @@ public sealed class AppleNotarizationRequest
 
     /// <summary>Run Gatekeeper assessment.</summary>
     public bool Assess { get; set; } = true;
+
+    internal Action<AppleNotarizationAcceptedCheckpoint>? AcceptedCheckpoint { get; set; }
+
+    internal Action<AppleNotarizationStapledCheckpoint>? StapledCheckpoint { get; set; }
+}
+
+internal sealed class AppleNotarizationAcceptedCheckpoint
+{
+    internal string ArtifactPath { get; set; } = string.Empty;
+
+    internal string ArtifactSha256 { get; set; } = string.Empty;
+
+    internal string SubmissionPath { get; set; } = string.Empty;
+
+    internal string SubmissionId { get; set; } = string.Empty;
+
+    internal string Status { get; set; } = "Accepted";
+}
+
+internal sealed class AppleNotarizationStapledCheckpoint
+{
+    internal string ArtifactPath { get; set; } = string.Empty;
+
+    internal string ArtifactSha256 { get; set; } = string.Empty;
+
+    internal string SubmissionId { get; set; } = string.Empty;
+
+    internal string Status { get; set; } = "Accepted";
 }
 
 /// <summary>Result of notarizing, stapling, and assessing a direct macOS artifact.</summary>
