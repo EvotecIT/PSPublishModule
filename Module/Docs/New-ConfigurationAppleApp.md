@@ -11,12 +11,12 @@ Creates configuration for preparing an Apple app target in a release pipeline.
 ## SYNTAX
 ### ExplicitVersion (Default)
 ```powershell
-New-ConfigurationAppleApp [-ProjectPath] <string> -MarketingVersion <string> [-Name <string>] [-BundleId <string>] [-Platform <ApplePlatform>] [-ArchiveVariant <AppleArchiveVariant>] [-Scheme <string>] [-AppStoreConnectAppId <string>] [-BuildNumber <string>] [-BuildNumberPolicy <AppleBuildNumberPolicy>] [-Disabled] [<CommonParameters>]
+New-ConfigurationAppleApp [-ProjectPath] <string> -MarketingVersion <string> [-Name <string>] [-BundleId <string>] [-Platform <ApplePlatform>] [-ArchiveVariant <AppleArchiveVariant>] [-Scheme <string>] [-AppStoreConnectAppId <string>] [-RequiredPrivacyUsageDescriptionKeys <string[]>] [-BuildNumber <string>] [-BuildNumberPolicy <AppleBuildNumberPolicy>] [-Disabled] [<CommonParameters>]
 ```
 
 ### ResolvedVersion
 ```powershell
-New-ConfigurationAppleApp [-ProjectPath] <string> -UseResolvedVersion [-Name <string>] [-BundleId <string>] [-Platform <ApplePlatform>] [-ArchiveVariant <AppleArchiveVariant>] [-Scheme <string>] [-AppStoreConnectAppId <string>] [-BuildNumber <string>] [-BuildNumberPolicy <AppleBuildNumberPolicy>] [-Disabled] [<CommonParameters>]
+New-ConfigurationAppleApp [-ProjectPath] <string> -UseResolvedVersion [-Name <string>] [-BundleId <string>] [-Platform <ApplePlatform>] [-ArchiveVariant <AppleArchiveVariant>] [-Scheme <string>] [-AppStoreConnectAppId <string>] [-RequiredPrivacyUsageDescriptionKeys <string[]>] [-BuildNumber <string>] [-BuildNumberPolicy <AppleBuildNumberPolicy>] [-Disabled] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -191,6 +191,22 @@ Possible values:
 
 Required: True
 Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RequiredPrivacyUsageDescriptionKeys
+Privacy purpose-string keys that must contain non-empty values in the final archived app before upload.
+
+```yaml
+Type: String[]
+Parameter Sets: ExplicitVersion, ResolvedVersion
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
