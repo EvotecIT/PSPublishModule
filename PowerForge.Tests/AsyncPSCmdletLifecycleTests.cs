@@ -661,6 +661,65 @@ public sealed partial class AsyncPSCmdletTests
     }
 
     [Fact]
+    public void AsyncPSCmdlet_acknowledged_output_transfers_ownership_after_delivery()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncAcknowledgedOutput",
+            typeof(TestAsyncAcknowledgedOutputCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncAcknowledgedOutput");
+        TestAsyncAcknowledgedOutputCommand.Reset();
+
+        var result = powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors, string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
+        Assert.Equal(2, result.Count);
+        Assert.False(TestAsyncAcknowledgedOutputCommand.Disposed);
+        Assert.IsType<TestAsyncAcknowledgedOutputCommand.TrackedOutput>(result[1].BaseObject).Dispose();
+        Assert.True(TestAsyncAcknowledgedOutputCommand.Disposed);
+    }
+
+    [Fact]
+    public async Task AsyncPSCmdlet_acknowledged_output_retains_ownership_when_queued_delivery_is_canceled()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncAcknowledgedOutputCancellation",
+            typeof(TestAsyncAcknowledgedOutputCancellationCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncAcknowledgedOutputCancellation");
+        TestAsyncAcknowledgedOutputCancellationCommand.Reset();
+
+        var invocation = powerShell.BeginInvoke();
+        Assert.True(
+            TestAsyncAcknowledgedOutputCancellationCommand.EnumerationStarted.Wait(TimeSpan.FromSeconds(5)),
+            "Pipeline enumeration did not start in time.");
+        Assert.True(
+            TestAsyncAcknowledgedOutputCancellationCommand.AcknowledgedWriteStarted.Wait(TimeSpan.FromSeconds(5)),
+            "The acknowledged output write did not start in time.");
+
+        var stopTask = Task.Run(powerShell.Stop);
+        TestAsyncAcknowledgedOutputCancellationCommand.ReleaseEnumeration();
+
+        await stopTask.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Throws<PipelineStoppedException>(() => powerShell.EndInvoke(invocation));
+        Assert.True(
+            TestAsyncAcknowledgedOutputCancellationCommand.DisposeObserved.Wait(TimeSpan.FromSeconds(5)),
+            "The caller-owned output was not disposed after canceled delivery.");
+    }
+
+    [Fact]
     public void AsyncPSCmdlet_suppresses_pipeline_stop_from_posted_progress_callbacks()
     {
         var sessionState = InitialSessionState.CreateDefault();

@@ -729,6 +729,109 @@ public sealed class TestAsyncSuccessfulCompletionCommand : AsyncPSCmdlet
     }
 }
 
+[Cmdlet(VerbsDiagnostic.Test, "AsyncAcknowledgedOutput")]
+public sealed class TestAsyncAcknowledgedOutputCommand : AsyncPSCmdlet
+{
+    private static int _disposed;
+
+    public static bool Disposed => Volatile.Read(ref _disposed) != 0;
+
+    public static void Reset()
+        => Volatile.Write(ref _disposed, 0);
+
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        WriteObjectAndWait(1);
+
+        TrackedOutput? output = new();
+        try
+        {
+            WriteObjectAndWait(output);
+            output = null;
+        }
+        finally
+        {
+            output?.Dispose();
+        }
+    }
+
+    public sealed class TrackedOutput : IDisposable
+    {
+        public void Dispose()
+            => Volatile.Write(ref _disposed, 1);
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncAcknowledgedOutputCancellation")]
+public sealed class TestAsyncAcknowledgedOutputCancellationCommand : AsyncPSCmdlet
+{
+    private static ManualResetEventSlim _acknowledgedWriteStarted = new();
+    private static ManualResetEventSlim _disposeObserved = new();
+    private static ManualResetEventSlim _enumerationStarted = new();
+    private static ManualResetEventSlim _releaseEnumeration = new();
+
+    public static ManualResetEventSlim AcknowledgedWriteStarted => _acknowledgedWriteStarted;
+
+    public static ManualResetEventSlim DisposeObserved => _disposeObserved;
+
+    public static ManualResetEventSlim EnumerationStarted => _enumerationStarted;
+
+    public static void ReleaseEnumeration()
+        => _releaseEnumeration.Set();
+
+    public static void Reset()
+    {
+        _acknowledgedWriteStarted.Dispose();
+        _disposeObserved.Dispose();
+        _enumerationStarted.Dispose();
+        _releaseEnumeration.Dispose();
+        _acknowledgedWriteStarted = new ManualResetEventSlim();
+        _disposeObserved = new ManualResetEventSlim();
+        _enumerationStarted = new ManualResetEventSlim();
+        _releaseEnumeration = new ManualResetEventSlim();
+    }
+
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        WriteObject(new BlockingEnumerable(), enumerateCollection: true);
+
+        TrackedOutput? output = new();
+        try
+        {
+            _acknowledgedWriteStarted.Set();
+            WriteObjectAndWait(output);
+            output = null;
+        }
+        finally
+        {
+            output?.Dispose();
+        }
+    }
+
+    private sealed class BlockingEnumerable : IEnumerable<int>
+    {
+        public IEnumerator<int> GetEnumerator()
+        {
+            _enumerationStarted.Set();
+            Assert.True(
+                _releaseEnumeration.Wait(TimeSpan.FromSeconds(5)),
+                "The test did not release pipeline enumeration in time.");
+            yield return 1;
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            => GetEnumerator();
+    }
+
+    private sealed class TrackedOutput : IDisposable
+    {
+        public void Dispose()
+            => _disposeObserved.Set();
+    }
+}
+
 [Cmdlet(VerbsDiagnostic.Test, "AsyncLateProgress")]
 public sealed class TestAsyncLateProgressCommand : AsyncPSCmdlet
 {

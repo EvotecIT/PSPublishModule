@@ -90,6 +90,20 @@ public abstract partial class AsyncPSCmdlet
                     case PipelineType.OutputEnumerate:
                         base.WriteObject(item.Value, enumerateCollection: true);
                         break;
+                    case PipelineType.OutputAcknowledged:
+                        item.ReplyPipe!.Publish(() =>
+                        {
+                            base.WriteObject(item.Value);
+                            return null;
+                        });
+                        break;
+                    case PipelineType.OutputEnumerateAcknowledged:
+                        item.ReplyPipe!.Publish(() =>
+                        {
+                            base.WriteObject(item.Value, enumerateCollection: true);
+                            return null;
+                        });
+                        break;
                     case PipelineType.Error:
                         base.WriteError((ErrorRecord)item.Value!);
                         break;

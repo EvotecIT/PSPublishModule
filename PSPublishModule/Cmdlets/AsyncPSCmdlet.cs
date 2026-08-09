@@ -84,6 +84,8 @@ public abstract partial class AsyncPSCmdlet : PSCmdlet, IDisposable
     {
         Output,
         OutputEnumerate,
+        OutputAcknowledged,
+        OutputEnumerateAcknowledged,
         Error,
         TerminatingError,
         Warning,
@@ -612,6 +614,32 @@ public abstract partial class AsyncPSCmdlet : PSCmdlet, IDisposable
             return;
 
         _ = TryQueue(item);
+    }
+
+    /// <summary>
+    /// Writes an object to the PowerShell pipeline and returns only after the pipeline has accepted it.
+    /// </summary>
+    /// <remarks>
+    /// Use this ownership-transfer bridge for disposable or otherwise caller-owned values. If pipeline
+    /// delivery is rejected or stopped before acceptance, the method throws and ownership remains with
+    /// the caller.
+    /// </remarks>
+    protected void WriteObjectAndWait(object? sendToPipeline, bool enumerateCollection = false)
+    {
+        ThrowIfStopped();
+        if (CanAccessPipelineDirectly)
+        {
+            using var pipelineContext = EnterDirectPipelineAccess();
+            base.WriteObject(sendToPipeline, enumerateCollection);
+            return;
+        }
+
+        _ = RequestPipelineReply(
+            sendToPipeline,
+            enumerateCollection
+                ? PipelineType.OutputEnumerateAcknowledged
+                : PipelineType.OutputAcknowledged,
+            throwIfStoppedAfterReply: false);
     }
 
     /// <summary>Thread-safe error bridge for asynchronous cmdlet code.</summary>
