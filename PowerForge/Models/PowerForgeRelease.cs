@@ -226,6 +226,9 @@ internal sealed class PowerForgeReleaseRequest
 
     public string? AppleExpectedPlanSha256 { get; set; }
 
+    /// <summary>Checkpoint-only archive hashes keyed by stable Apple target name.</summary>
+    internal Dictionary<string, string> AppleExpectedArchiveSha256ByTarget { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public bool AppleActionConfirmed { get; set; }
 
     /// <summary>Explicitly adopt a matching remote build when no verified local upload attestation exists.</summary>
@@ -648,6 +651,9 @@ internal sealed class PowerForgeAppleAppReleaseTargetPlan
     public string ArchivePath { get; set; } = string.Empty;
 
     public string ExportPath { get; set; } = string.Empty;
+
+    /// <summary>SHA-256 of the exact retained archive approved by a prior build checkpoint.</summary>
+    public string? ExpectedArchiveSha256 { get; set; }
 
     public string? TeamId { get; set; }
 

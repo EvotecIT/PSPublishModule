@@ -137,13 +137,15 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void AppleReleaseDoctor_FindsControlPlaneFailuresBeforeSubmission()
     {
+        var root = CreateSandbox();
+        CreateXcodeProject(root, "CasaRay.xcodeproj");
         var app = new PowerForgeAppleAppReleaseTargetPlan
         {
             Name = "CasaRay",
             BundleId = "com.evotec.casarray",
             AppStoreConnectAppId = "app-1",
             DistributionRoute = AppleDistributionRoute.AppStore,
-            ProjectPath = Path.GetTempFileName()
+            ProjectPath = Path.Combine(root, "CasaRay.xcodeproj")
         };
         try
         {
@@ -160,7 +162,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
         finally
         {
-            File.Delete(app.ProjectPath);
+            TryDelete(root);
         }
     }
 

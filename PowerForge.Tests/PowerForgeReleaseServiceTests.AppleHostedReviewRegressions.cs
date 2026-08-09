@@ -196,6 +196,68 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("history-equals-receipt")]
+    [InlineData("history-contains-plan")]
+    [InlineData("history-under-lock")]
+    [InlineData("receipt-equals-plan")]
+    [InlineData("history-under-archive-root")]
+    [InlineData("plan-overwrites-project")]
+    public void Execute_ApplePlan_RejectsOverlappingAutomationOutputPaths(string scenario)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var automation = spec.AppleApps!.Automation;
+            switch (scenario)
+            {
+                case "history-equals-receipt":
+                    automation.ReceiptHistoryPath = automation.ReceiptPath;
+                    break;
+                case "history-contains-plan":
+                    automation.ReceiptHistoryPath = "build/powerforge/apple";
+                    break;
+                case "history-under-lock":
+                    automation.LockPath = "build/powerforge/apple/release";
+                    automation.ReceiptHistoryPath = "build/powerforge/apple/release/history";
+                    break;
+                case "receipt-equals-plan":
+                    automation.PlanReceiptPath = automation.ReceiptPath;
+                    break;
+                case "history-under-archive-root":
+                    automation.ReceiptHistoryPath = "build/powerforge/apple/archives/receipts";
+                    break;
+                case "plan-overwrites-project":
+                    automation.PlanReceiptPath = "CasaRay.xcodeproj/project.pbxproj";
+                    break;
+            }
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new PowerForgeReleaseService(new NullLogger()).Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        PlanOnly = true,
+                        AppleAction = PowerForgeAppleReleaseAction.Archive
+                    }));
+
+            Assert.True(
+                exception.Message.Contains("ReceiptHistoryPath", StringComparison.Ordinal) ||
+                exception.Message.Contains("distinct paths", StringComparison.OrdinalIgnoreCase) ||
+                exception.Message.Contains("automation output", StringComparison.OrdinalIgnoreCase),
+                exception.Message);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Fact]
     public void Execute_DirectNotarizationCrash_PersistsAcceptedSubmissionBeforeLocalPostProcessing()
     {
@@ -216,7 +278,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             app.DistributionRoute = AppleDistributionRoute.DirectNotarized;
             app.AppStoreConnectAppId = null;
 
-            var result = CreateAppleAutomationService(
+            var service = CreateAppleAutomationService(
                     _ => throw new InvalidOperationException("Direct distribution must not query App Store release state."),
                     archiveAppleApp: CreateSuccessfulArchive,
                     uploadAppleApp: request =>
@@ -238,8 +300,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Status = "Accepted"
                         });
                         throw new InvalidOperationException("simulated process loss after Apple acceptance");
-                    })
-                .Execute(
+                    });
+            var result = service.Execute(
                     spec,
                     new PowerForgeReleaseRequest
                     {
@@ -257,6 +319,26 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("accepted-before-local-crash", target.NotarizationSubmissionId);
             Assert.Equal("Accepted", target.NotarizationStatus);
             Assert.False(accepted.Success);
+
+            var protectedArtifact = Assert.IsType<string>(target.DirectArtifactPath);
+            var cleanupCandidate = Directory.GetParent(protectedArtifact)!.FullName;
+            Directory.SetLastWriteTimeUtc(cleanupCandidate, DateTime.UtcNow.AddDays(-30));
+            spec.AppleApps.Automation.ArtifactRetentionDays = 0;
+            var cleanup = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Cleanup,
+                    AppleActionConfirmed = true,
+                    AppleSourceCommit = sourceCommit
+                });
+
+            Assert.True(cleanup.Success, cleanup.ErrorMessage);
+            Assert.True(Directory.Exists(protectedArtifact) || File.Exists(protectedArtifact));
+            Assert.DoesNotContain(
+                FrameworkCompatibility.GetRelativePath(root, cleanupCandidate).Replace('\\', '/'),
+                cleanup.AppleReceipt!.Cleanup.RemovedPaths);
         }
         finally
         {

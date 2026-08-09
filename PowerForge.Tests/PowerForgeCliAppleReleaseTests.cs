@@ -152,7 +152,14 @@ public sealed class PowerForgeCliAppleReleaseTests
                     StringComparison.OrdinalIgnoreCase);
             }
 
-            WriteReleaseConfig(configPath, submitForReview: true, includeInvalidModule: false);
+            WriteReleaseConfig(configPath, submitForReview: false, includeInvalidModule: false);
+            File.WriteAllText(Path.Combine(tempRoot, "screenshots.json"), "{}");
+            File.WriteAllText(
+                configPath,
+                File.ReadAllText(configPath).Replace(
+                    "\"Archive\": false,",
+                    "\"Archive\": false, \"SyncScreenshots\": true, \"ReplaceScreenshots\": true, \"ScreenshotConfigPath\": \"screenshots.json\",",
+                    StringComparison.Ordinal));
             var configured = await RunCliAsync(
                 repoRoot,
                 $"\"{GetCliPath(repoRoot)}\" release --config \"{configPath}\" --plan --summary --output json");

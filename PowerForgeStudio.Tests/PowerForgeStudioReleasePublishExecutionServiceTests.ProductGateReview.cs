@@ -321,7 +321,15 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     WaitForProcessing = true,
                     ProcessingTimeoutSeconds = 1200,
                     PollIntervalSeconds = 30
-                }
+                },
+                Apps =
+                [
+                    new PowerForgeAppleAppReleaseTargetPlan
+                    {
+                        Name = "CasaRay iOS",
+                        ExpectedArchiveSha256 = "1111111111111111111111111111111111111111111111111111111111111111"
+                    }
+                ]
             },
             AppleReceipt = new PowerForgeAppleReleaseReceipt
             {
@@ -338,6 +346,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         Assert.Equal("1.6", request.AppleMarketingVersion);
         Assert.Equal("0123456789abcdef0123456789abcdef01234567", request.AppleSourceCommit);
         Assert.Equal("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd", request.AppleExpectedPlanSha256);
+        Assert.Equal(
+            "1111111111111111111111111111111111111111111111111111111111111111",
+            Assert.Single(request.AppleExpectedArchiveSha256ByTarget).Value);
         Assert.True(request.AppleAdoptExistingBuild);
         Assert.False(request.AppleResume);
         Assert.True(request.AppleWaitForProcessing);

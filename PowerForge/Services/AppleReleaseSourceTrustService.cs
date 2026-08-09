@@ -31,6 +31,9 @@ internal sealed partial class AppleReleaseSourceTrustService
     }
 
     internal string ResolveExactCommit(string repositoryRoot, string configPath)
+        => Capture(repositoryRoot, configPath).SourceCommit;
+
+    internal AppleReleaseSourceTrustSnapshot Capture(string repositoryRoot, string configPath)
     {
         var root = Path.GetFullPath(repositoryRoot);
         var releaseConfigPath = Path.GetFullPath(configPath);
@@ -41,7 +44,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         var spec = PowerForgeReleaseService.LoadConfiguration(releaseConfigPath);
         var options = spec.AppleApps
             ?? throw new InvalidOperationException("The release configuration does not contain an AppleApps contract.");
-        ValidateAppleInputs(root, releaseConfigPath, options);
+        var generatedOutputs = ResolveGeneratedOutputPaths(releaseConfigPath, options);
+        ValidateAppleInputs(root, releaseConfigPath, options, generatedOutputs);
 
         _git.EnsureClean(root);
         var sourceCommitAfterValidation = ReadExactHead(root);
@@ -50,13 +54,50 @@ internal sealed partial class AppleReleaseSourceTrustService
             throw new InvalidOperationException(
                 "Repository HEAD changed while Apple release inputs were being validated. Rebuild from the new exact source commit.");
         }
-        return sourceCommitAfterValidation;
+        return new AppleReleaseSourceTrustSnapshot(sourceCommitAfterValidation, generatedOutputs);
+    }
+
+    internal void ValidateAfterBuild(
+        string repositoryRoot,
+        string configPath,
+        AppleReleaseSourceTrustSnapshot snapshot)
+    {
+        if (snapshot is null)
+            throw new ArgumentNullException(nameof(snapshot));
+
+        var root = Path.GetFullPath(repositoryRoot);
+        var releaseConfigPath = Path.GetFullPath(configPath);
+        EnsureNoUnexpectedWorktreeChanges(root, snapshot.GeneratedOutputPaths);
+        if (!ReadExactHead(root).Equals(snapshot.SourceCommit, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Repository HEAD changed while the Apple release checkpoint was being built. Rebuild from the new exact source commit.");
+        }
+
+        EnsureTrackedFile(root, releaseConfigPath, "Apple release configuration");
+        var options = PowerForgeReleaseService.LoadConfiguration(releaseConfigPath).AppleApps
+            ?? throw new InvalidOperationException("The release configuration does not contain an AppleApps contract.");
+        var generatedOutputs = ResolveGeneratedOutputPaths(releaseConfigPath, options);
+        if (!PathsEqual(snapshot.GeneratedOutputPaths, generatedOutputs))
+        {
+            throw new InvalidOperationException(
+                "Apple generated output paths changed while the release checkpoint was being built. Rebuild from the updated release contract.");
+        }
+
+        ValidateAppleInputs(root, releaseConfigPath, options, generatedOutputs);
+        EnsureNoUnexpectedWorktreeChanges(root, generatedOutputs);
+        if (!ReadExactHead(root).Equals(snapshot.SourceCommit, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Repository HEAD changed while the Apple release checkpoint was being built. Rebuild from the new exact source commit.");
+        }
     }
 
     private void ValidateAppleInputs(
         string repositoryRoot,
         string configPath,
-        PowerForgeAppleReleaseOptions options)
+        PowerForgeAppleReleaseOptions options,
+        IReadOnlyCollection<string> generatedOutputPaths)
     {
         var configDirectory = Path.GetDirectoryName(configPath) ?? repositoryRoot;
         var projectRoot = ResolvePath(
@@ -65,7 +106,11 @@ internal sealed partial class AppleReleaseSourceTrustService
         EnsureDirectoryWithinRepository(repositoryRoot, projectRoot, "AppleApps.ProjectRoot");
 
         foreach (var input in EnumerateConfiguredInputs(options))
-            EnsureTrackedFile(repositoryRoot, ResolvePath(projectRoot, input.Path), input.Name);
+        {
+            var inputPath = ResolvePath(projectRoot, input.Path);
+            EnsureNoGeneratedOutputOverlap(inputPath, generatedOutputPaths, input.Name);
+            EnsureTrackedFile(repositoryRoot, inputPath, input.Name);
+        }
 
         var metadataPaths = new HashSet<string>(GetPathComparer());
         foreach (var app in options.Apps ?? Array.Empty<AppleAppConfiguration>())
@@ -81,6 +126,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             }
 
             var configuredProjectPath = ResolvePath(projectRoot, app.ProjectPath);
+            EnsureNoGeneratedOutputOverlap(configuredProjectPath, generatedOutputPaths, "AppleApps.Apps.ProjectPath");
             EnsurePathWithinRepository(repositoryRoot, configuredProjectPath, "AppleApps.Apps.ProjectPath");
             if (File.Exists(configuredProjectPath))
             {
@@ -105,9 +151,92 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
 
         AddReferencedWorkspaceProjects(repositoryRoot, metadataPaths);
-        ValidateXcodeBuildGraph(repositoryRoot, projectRoot, options.Apps ?? Array.Empty<AppleAppConfiguration>(), metadataPaths);
-        RejectIgnoredAppleInputs(repositoryRoot, repositoryRoot, metadataPaths);
+        ValidateXcodeBuildGraph(
+            repositoryRoot,
+            projectRoot,
+            options.Apps ?? Array.Empty<AppleAppConfiguration>(),
+            metadataPaths,
+            generatedOutputPaths);
+        RejectIgnoredAppleInputs(repositoryRoot, projectRoot, metadataPaths, generatedOutputPaths);
     }
+
+    private static string[] ResolveGeneratedOutputPaths(
+        string configPath,
+        PowerForgeAppleReleaseOptions options)
+    {
+        var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
+        var projectRoot = ResolvePath(
+            configDirectory,
+            string.IsNullOrWhiteSpace(options.ProjectRoot) ? "." : options.ProjectRoot!);
+        var automation = options.Automation ?? new PowerForgeAppleReleaseAutomationOptions();
+        return new[]
+            {
+                ResolvePath(projectRoot, string.IsNullOrWhiteSpace(options.ArchiveRoot)
+                    ? Path.Combine("Artifacts", "Apple", "Archives")
+                    : options.ArchiveRoot!),
+                ResolvePath(projectRoot, string.IsNullOrWhiteSpace(options.ExportRoot)
+                    ? Path.Combine("Artifacts", "Apple", "Exports")
+                    : options.ExportRoot!),
+                ResolvePath(projectRoot, automation.ReceiptPath),
+                ResolvePath(projectRoot, automation.ReceiptHistoryPath),
+                ResolvePath(projectRoot, automation.PlanReceiptPath),
+                ResolvePath(projectRoot, automation.LockPath)
+            }
+            .Distinct(GetPathComparer())
+            .OrderBy(static path => path, GetPathComparer())
+            .ToArray();
+    }
+
+    private void EnsureNoUnexpectedWorktreeChanges(
+        string repositoryRoot,
+        IReadOnlyCollection<string> generatedOutputPaths)
+    {
+        var status = RunGit(
+                repositoryRoot,
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+                "-z")
+            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var entry in status)
+        {
+            if (entry.Length < 4)
+                throw new InvalidOperationException("Git returned an invalid worktree status while validating Apple release source trust.");
+            var statusCode = entry.Substring(0, 2);
+            var pathText = entry.Substring(3);
+            var candidate = Path.GetFullPath(Path.Combine(repositoryRoot, pathText.Replace('/', Path.DirectorySeparatorChar)));
+            if (statusCode == "??" &&
+                (generatedOutputPaths.Any(output => IsPathAtOrWithin(candidate, output)) ||
+                 IsBenignIgnoredXcodeUserState(pathText.Replace('\\', '/'))))
+            {
+                continue;
+            }
+
+            throw new InvalidOperationException(
+                $"Apple release source changed while the checkpoint was being built: {pathText}. " +
+                "Only declared generated Apple artifact and receipt outputs may change during the build.");
+        }
+    }
+
+    private static void EnsureNoGeneratedOutputOverlap(
+        string sourcePath,
+        IReadOnlyCollection<string> generatedOutputPaths,
+        string name)
+    {
+        var overlap = generatedOutputPaths.FirstOrDefault(output =>
+            IsPathAtOrWithin(sourcePath, output) || IsPathAtOrWithin(output, sourcePath));
+        if (overlap is not null)
+        {
+            throw new InvalidOperationException(
+                $"{name} overlaps a declared generated Apple output and cannot be proven as exact source: {sourcePath} ({overlap})");
+        }
+    }
+
+    private static bool PathsEqual(
+        IReadOnlyCollection<string> left,
+        IReadOnlyCollection<string> right)
+        => left.Count == right.Count &&
+           new HashSet<string>(left, GetPathComparer()).SetEquals(right);
 
     private static IEnumerable<(string Name, string Path)> EnumerateConfiguredInputs(
         PowerForgeAppleReleaseOptions options)
@@ -218,7 +347,8 @@ internal sealed partial class AppleReleaseSourceTrustService
     private void RejectIgnoredAppleInputs(
         string repositoryRoot,
         string projectRoot,
-        IReadOnlyCollection<string> metadataPaths)
+        IReadOnlyCollection<string> metadataPaths,
+        IReadOnlyCollection<string> generatedOutputPaths)
     {
         var metadata = metadataPaths
             .Where(File.Exists)
@@ -240,6 +370,8 @@ internal sealed partial class AppleReleaseSourceTrustService
                 continue;
 
             var fullPath = Path.GetFullPath(Path.Combine(repositoryRoot, normalized));
+            if (generatedOutputPaths.Any(output => IsPathAtOrWithin(fullPath, output)))
+                continue;
             if (!File.Exists(fullPath) ||
                 !IsPotentialAppleBuildInput(projectRoot, fullPath, metadata, synchronizedRoots))
                 continue;
@@ -393,4 +525,17 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private static StringComparer GetPathComparer()
         => Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+}
+
+internal sealed class AppleReleaseSourceTrustSnapshot
+{
+    internal AppleReleaseSourceTrustSnapshot(string sourceCommit, string[] generatedOutputPaths)
+    {
+        SourceCommit = sourceCommit;
+        GeneratedOutputPaths = generatedOutputPaths;
+    }
+
+    internal string SourceCommit { get; }
+
+    internal string[] GeneratedOutputPaths { get; }
 }

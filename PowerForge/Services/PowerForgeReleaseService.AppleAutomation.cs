@@ -437,10 +437,11 @@ internal sealed partial class PowerForgeReleaseService
                     _appleArtifactService.RemoveStaleArtifacts(
                         plan,
                         results.SelectMany(static result => new[]
-                        {
-                            result.Plan.ArchivePath,
-                            result.Plan.ExportPath
-                        })));
+                            {
+                                result.Plan.ArchivePath,
+                                result.Plan.ExportPath
+                            })
+                            .Concat(GetProtectedAppleRecoveryArtifactPaths(plan))));
             }
             catch (Exception exception)
             {

@@ -25,12 +25,14 @@ internal sealed class AppleReleaseArtifactService
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
     }
 
-    internal PowerForgeAppleReleaseCleanupReceipt Preflight(PowerForgeAppleReleasePlan plan)
+    internal PowerForgeAppleReleaseCleanupReceipt Preflight(
+        PowerForgeAppleReleasePlan plan,
+        IEnumerable<string>? protectedPaths = null)
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
         var cleanup = plan.Automation.CleanupBeforeArchive
-            ? RemoveStaleArtifacts(plan)
+            ? RemoveStaleArtifacts(plan, protectedPaths)
             : new PowerForgeAppleReleaseCleanupReceipt();
 
         var availableBytes = _getAvailableBytes(plan.ProjectRoot);
@@ -61,11 +63,20 @@ internal sealed class AppleReleaseArtifactService
         var candidates = roots
             .Where(Directory.Exists)
             .SelectMany(static root => Directory.EnumerateFileSystemEntries(root))
-            .Where(path => !protectedFullPaths.Contains(Path.GetFullPath(path)))
+            .Where(path => !protectedFullPaths.Any(protectedPath => PathsOverlap(path, protectedPath)))
             .Where(path => GetLastWriteTimeUtc(path) <= cutoff)
             .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         return RemovePaths(plan, candidates);
+    }
+
+    private static bool PathsOverlap(string first, string second)
+    {
+        var left = Path.GetFullPath(first).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var right = Path.GetFullPath(second).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return left.Equals(right, PathComparison) ||
+               left.StartsWith(right + Path.DirectorySeparatorChar, PathComparison) ||
+               right.StartsWith(left + Path.DirectorySeparatorChar, PathComparison);
     }
 
     internal PowerForgeAppleReleaseCleanupReceipt RemoveCurrentArtifacts(

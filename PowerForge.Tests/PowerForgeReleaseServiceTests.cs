@@ -1005,7 +1005,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
             File.WriteAllText(keyPath, "private-key");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = CreateAppleAutomationService(request => CreateReleaseState(request, "VALID"));
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -1148,7 +1148,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
             File.WriteAllText(keyPath, "private-key");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = CreateAppleAutomationService(request => CreateReleaseState(request, "VALID"));
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -1310,7 +1310,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
             File.WriteAllText(keyPath, "private-key");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = CreateAppleAutomationService(request => CreateReleaseState(request, "VALID"));
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -3518,6 +3518,53 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(result.Success);
             Assert.Equal(Path.Combine(root, "Artifacts", "Apple", "Archives", "iOS", "Tactra.xcarchive"),
                 Assert.Single(result.AppleAppPlan!.Apps).ArchivePath);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleApps_PlanOnly_BindsExistingReuseArchiveHash()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var archivePath = Path.Combine(root, "Artifacts", "Apple", "Archives", "iOS", "Tactra.xcarchive");
+            Directory.CreateDirectory(archivePath);
+            File.WriteAllText(Path.Combine(archivePath, "payload"), "approved archive");
+
+            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseSpec
+                {
+                    AppleApps = new PowerForgeAppleReleaseOptions
+                    {
+                        ProjectRoot = ".",
+                        Archive = false,
+                        Upload = true,
+                        Apps =
+                        [
+                            new AppleAppConfiguration
+                            {
+                                Name = "Tactra",
+                                ProjectPath = "Tactra.xcodeproj",
+                                Scheme = "Tactra",
+                                Platform = ApplePlatform.iOS
+                            }
+                        ]
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true
+                });
+
+            Assert.Equal(
+                AppleNotarizationService.ComputeArtifactSha256(archivePath),
+                Assert.Single(result.AppleReceipt!.Targets).ArchiveSha256);
         }
         finally
         {

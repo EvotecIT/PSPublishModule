@@ -160,6 +160,12 @@ internal sealed class PowerForgeAppleReleaseReceipt
     /// <summary>SHA-256 binding the stable action, source, target, and observed Apple state represented by a plan.</summary>
     public string? PlanSha256 { get; set; }
 
+    /// <summary>Canonical SHA-256 of effective mutation flags and every local payload consumed by this plan.</summary>
+    public string? MutationInputsSha256 { get; set; }
+
+    /// <summary>Project-relative content hashes for configuration and asset files consumed by this plan.</summary>
+    public Dictionary<string, string> MutationInputFiles { get; set; } = new(StringComparer.Ordinal);
+
     public bool Success { get; set; }
 
     public string? ErrorMessage { get; set; }

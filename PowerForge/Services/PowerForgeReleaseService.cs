@@ -752,6 +752,7 @@ internal sealed partial class PowerForgeReleaseService
                 var receiptJournalReady = !applePlan.Automation.WriteReceipt;
                 try
                 {
+                    VerifyExpectedAppleCheckpointArchives(applePlan);
                     AssertApplePlanStillApproved(applePlan, request.AppleExpectedPlanSha256);
                     PrepareAppleReceiptJournalForMutation(applePlan, request.AppleExpectedPlanSha256);
                     receiptJournalReady = true;
@@ -766,7 +767,9 @@ internal sealed partial class PowerForgeReleaseService
                     }
                     else if (applePlan.Action == PowerForgeAppleReleaseAction.Cleanup)
                     {
-                        cleanup = _appleArtifactService.RemoveStaleArtifacts(applePlan);
+                        cleanup = _appleArtifactService.RemoveStaleArtifacts(
+                            applePlan,
+                            GetProtectedAppleRecoveryArtifactPaths(applePlan));
                         appleResults = applePlan.Apps
                             .Select(app => new PowerForgeAppleAppReleaseResult
                             {
@@ -796,7 +799,7 @@ internal sealed partial class PowerForgeReleaseService
                 }
                 result.AppleApps = appleResults;
                 if (request.CheckpointAppleApps && appleResults.All(static app => app.Success))
-                    result.AppleReceipt = CreateApplePlanReceipt(applePlan);
+                    result.AppleReceipt = CreateApplePlanReceipt(applePlan, appleResults);
                 if (receiptJournalReady &&
                     !request.CheckpointAppleApps &&
                     (applePlan.Action != PowerForgeAppleReleaseAction.Configured ||
@@ -967,6 +970,9 @@ internal sealed partial class PowerForgeReleaseService
                     AppleMarketingVersion = request.AppleMarketingVersion,
                     AppleSourceCommit = request.AppleSourceCommit,
                     AppleExpectedPlanSha256 = request.AppleExpectedPlanSha256,
+                    AppleExpectedArchiveSha256ByTarget = new Dictionary<string, string>(
+                        request.AppleExpectedArchiveSha256ByTarget,
+                        StringComparer.OrdinalIgnoreCase),
                     AppleActionConfirmed = request.AppleActionConfirmed,
                     AppleAdoptExistingBuild = request.AppleAdoptExistingBuild,
                     AppleResume = request.AppleResume,
@@ -1537,6 +1543,32 @@ internal sealed partial class PowerForgeReleaseService
                 allowMissingProject: request.AppleAction == PowerForgeAppleReleaseAction.Cleanup))
             .ToArray();
 
+        foreach (var app in apps)
+        {
+            if (!options.Archive &&
+                options.Upload &&
+                ShouldExecuteAppleTarget(request.AppleAction, app) &&
+                (File.Exists(app.ArchivePath) || Directory.Exists(app.ArchivePath)))
+            {
+                app.ExpectedArchiveSha256 = AppleNotarizationService.ComputeArtifactSha256(app.ArchivePath);
+            }
+            if (request.AppleExpectedArchiveSha256ByTarget.TryGetValue(app.Name, out var expectedArchiveSha256))
+            {
+                var expected = expectedArchiveSha256.Trim();
+                if (expected.Length != 64 || expected.Any(static value => !Uri.IsHexDigit(value)))
+                    throw new InvalidOperationException($"The expected Apple archive SHA-256 for '{app.Name}' is invalid.");
+                app.ExpectedArchiveSha256 = expected.ToLowerInvariant();
+            }
+        }
+        var unknownExpectedArchiveTargets = request.AppleExpectedArchiveSha256ByTarget.Keys
+            .Where(name => apps.All(app => !app.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+        if (unknownExpectedArchiveTargets.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Expected Apple archive evidence references unknown target(s): {string.Join(", ", unknownExpectedArchiveTargets)}");
+        }
+
         if (apps.Length == 0)
             throw new InvalidOperationException("AppleApps.Apps must contain at least one enabled app entry.");
         var duplicateName = apps
@@ -1557,6 +1589,34 @@ internal sealed partial class PowerForgeReleaseService
             apps,
             static app => app.ExportPath,
             "export");
+        var protectedApplePaths = new List<(string Name, string Path, bool IsDirectory)>
+        {
+            ("release configuration", releaseConfigPath, false),
+            ("archive root", archiveRoot, true),
+            ("export root", exportRoot, true)
+        };
+        if (versionSourcePath is not null)
+            protectedApplePaths.Add(("version source", versionSourcePath, false));
+        protectedApplePaths.AddRange(
+            new[] { screenshotConfigPath, metadataConfigPath, appInfoConfigPath, governanceConfigPath }
+                .Where(static path => path is not null)
+                .Select(static path => ("Apple mutation input", path!, false)));
+        protectedApplePaths.AddRange(screenshotConfigPaths.Select(static path => ("screenshot config", path, false)));
+        protectedApplePaths.AddRange(metadataConfigPaths.Select(static path => ("metadata config", path, false)));
+        protectedApplePaths.AddRange(appInfoConfigPaths.Select(static path => ("App Information config", path, false)));
+        protectedApplePaths.AddRange(governanceConfigPaths.Select(static path => ("governance config", path, false)));
+        foreach (var app in apps)
+        {
+            protectedApplePaths.Add(($"{app.Name} Xcode container", app.ProjectPath, Directory.Exists(app.ProjectPath)));
+            protectedApplePaths.Add(($"{app.Name} archive", app.ArchivePath, true));
+            protectedApplePaths.Add(($"{app.Name} export", app.ExportPath, true));
+        }
+        ValidateAppleAutomationOutputPaths(
+            receiptPath,
+            receiptHistoryPath,
+            planReceiptPath,
+            lockPath,
+            protectedApplePaths);
         var appStoreConnectAction = request.AppleAction == PowerForgeAppleReleaseAction.Status ||
                                     request.AppleAction == PowerForgeAppleReleaseAction.Doctor ||
                                     request.AppleAction == PowerForgeAppleReleaseAction.Version ||
@@ -2084,7 +2144,9 @@ internal sealed partial class PowerForgeReleaseService
                 {
                     if (!preflightCompleted)
                     {
-                        cleanup = _appleArtifactService.Preflight(plan);
+                        cleanup = _appleArtifactService.Preflight(
+                            plan,
+                            GetProtectedAppleRecoveryArtifactPaths(plan));
                         preflightCompleted = true;
                     }
                 }
@@ -2126,6 +2188,7 @@ internal sealed partial class PowerForgeReleaseService
             if (plan.Upload && result.Success && !resumedUpload)
             {
                 CaptureAppleArchiveSha256(result, app);
+                var approvedArchiveSha256 = result.ArchiveSha256;
                 var direct = app.DistributionRoute == AppleDistributionRoute.DirectNotarized;
                 var upload = _uploadAppleApp(new AppleAppArchiveUploadRequest
                 {
@@ -2147,6 +2210,7 @@ internal sealed partial class PowerForgeReleaseService
                     AllowProvisioningUpdates = plan.AllowProvisioningUpdates
                 });
                 result.Upload = upload;
+                CaptureAppleArchiveSha256(result, app, approvedArchiveSha256);
                 if (!upload.Succeeded)
                 {
                     result.Success = false;
@@ -2317,13 +2381,21 @@ internal sealed partial class PowerForgeReleaseService
 
     private static void CaptureAppleArchiveSha256(
         PowerForgeAppleAppReleaseResult result,
-        PowerForgeAppleAppReleaseTargetPlan app)
+        PowerForgeAppleAppReleaseTargetPlan app,
+        string? requiredSha256 = null)
     {
-        if (!string.IsNullOrWhiteSpace(result.ArchiveSha256))
-            return;
         if (!File.Exists(app.ArchivePath) && !Directory.Exists(app.ArchivePath))
             return;
-        result.ArchiveSha256 = AppleNotarizationService.ComputeArtifactSha256(app.ArchivePath);
+        var actual = AppleNotarizationService.ComputeArtifactSha256(app.ArchivePath);
+        var expected = requiredSha256 ?? app.ExpectedArchiveSha256 ?? result.ArchiveSha256;
+        if (!string.IsNullOrWhiteSpace(expected) &&
+            !actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The Apple archive for '{app.Name}' changed during upload or between approval and validation. " +
+                $"Expected SHA-256 '{expected}', received '{actual}'. Rebuild and approve a new exact archive.");
+        }
+        result.ArchiveSha256 = actual;
     }
 
     private PowerForgeAppleAppReleaseResult[] RunAppleArchiveCheckpoint(
@@ -2353,7 +2425,17 @@ internal sealed partial class PowerForgeReleaseService
         };
         var results = RunAppleRelease(checkpointPlan, out cleanup);
         if (results.All(static app => app.Success))
+        {
+            var missingEvidence = results.FirstOrDefault(result =>
+                ShouldExecuteAppleTarget(PowerForgeAppleReleaseAction.Archive, result.Plan) &&
+                string.IsNullOrWhiteSpace(result.ArchiveSha256));
+            if (missingEvidence is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Apple archive checkpoint for '{missingEvidence.Plan.Name}' did not produce exact archive SHA-256 evidence.");
+            }
             plan.Archive = false;
+        }
         return results;
     }
 

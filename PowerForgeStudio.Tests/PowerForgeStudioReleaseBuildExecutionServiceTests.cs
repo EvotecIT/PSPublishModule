@@ -616,7 +616,8 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                             {
                                 Name = "Sample iOS",
                                 Upload = true,
-                                ArchivePath = archivePath
+                                ArchivePath = archivePath,
+                                ExpectedArchiveSha256 = "1111111111111111111111111111111111111111111111111111111111111111"
                             }
                         ]
                     },
@@ -649,6 +650,9 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             checkpoint);
         Assert.Equal(checkpoint.AppleReceipt.PlanSha256, publishRequest.AppleExpectedPlanSha256);
         Assert.Equal(checkpoint.AppleAppPlan!.SourceCommit, publishRequest.AppleSourceCommit);
+        Assert.Equal(
+            Assert.Single(checkpoint.AppleAppPlan.Apps).ExpectedArchiveSha256,
+            Assert.Single(publishRequest.AppleExpectedArchiveSha256ByTarget).Value);
     }
 
     [Fact]

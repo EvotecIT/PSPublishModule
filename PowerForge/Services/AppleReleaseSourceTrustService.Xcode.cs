@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
@@ -11,11 +10,41 @@ internal sealed partial class AppleReleaseSourceTrustService
         "BUILT_PRODUCTS_DIR", "SDKROOT", "DEVELOPER_DIR"
     };
 
+    private static readonly HashSet<string> FileValuedBuildSettings = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "INFOPLIST_FILE",
+        "CODE_SIGN_ENTITLEMENTS",
+        "SWIFT_OBJC_BRIDGING_HEADER",
+        "GCC_PREFIX_HEADER",
+        "CLANG_PREFIX_HEADER",
+        "MODULEMAP_FILE",
+        "DEVELOPMENT_ASSET_PATHS"
+    };
+
+    private static readonly HashSet<string> SearchPathBuildSettings = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "HEADER_SEARCH_PATHS",
+        "USER_HEADER_SEARCH_PATHS",
+        "SYSTEM_HEADER_SEARCH_PATHS",
+        "FRAMEWORK_SEARCH_PATHS",
+        "LIBRARY_SEARCH_PATHS",
+        "SWIFT_INCLUDE_PATHS"
+    };
+
+    private static readonly HashSet<string> FlagBuildSettings = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "OTHER_CFLAGS",
+        "OTHER_CPLUSPLUSFLAGS",
+        "OTHER_LDFLAGS",
+        "OTHER_SWIFT_FLAGS"
+    };
+
     private void ValidateXcodeBuildGraph(
         string repositoryRoot,
         string projectRoot,
         IReadOnlyCollection<AppleAppConfiguration> apps,
-        IReadOnlyCollection<string> metadataPaths)
+        IReadOnlyCollection<string> metadataPaths,
+        IReadOnlyCollection<string> generatedOutputPaths)
     {
         foreach (var app in apps.Where(static value => value.Enabled && !string.IsNullOrWhiteSpace(value.ProjectPath)))
             EnsureTrackedSharedScheme(repositoryRoot, projectRoot, app, metadataPaths);
@@ -23,7 +52,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         foreach (var metadataPath in metadataPaths.Where(path =>
                      path.EndsWith("project.pbxproj", StringComparison.OrdinalIgnoreCase) && File.Exists(path)))
         {
-            ValidateProjectGraph(repositoryRoot, metadataPath);
+            ValidateProjectGraph(repositoryRoot, metadataPath, generatedOutputPaths);
         }
     }
 
@@ -141,11 +170,20 @@ internal sealed partial class AppleReleaseSourceTrustService
         };
     }
 
-    private void ValidateProjectGraph(string repositoryRoot, string metadataPath)
+    private void ValidateProjectGraph(
+        string repositoryRoot,
+        string metadataPath,
+        IReadOnlyCollection<string> generatedOutputPaths)
     {
         var projectDirectory = Path.GetDirectoryName(Path.GetDirectoryName(metadataPath)!)!;
         var objects = ParsePbxObjects(File.ReadAllText(metadataPath));
         var parents = BuildPbxParentMap(objects);
+        var buildFileReferences = objects.Values
+            .Where(static value => value.Isa.Equals("PBXBuildFile", StringComparison.OrdinalIgnoreCase))
+            .Select(value => ReadPbxScalar(value.Body, "fileRef"))
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value!.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)[0])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var cache = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var item in objects.Values)
@@ -156,9 +194,35 @@ internal sealed partial class AppleReleaseSourceTrustService
                     $"PBX shell-script build phases are not accepted for exact-source checkpoints because arbitrary runtime inputs cannot be proven: {metadataPath}");
             }
 
+            if (item.Isa.Equals("PBXBuildRule", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"PBX custom build rules are not accepted for exact-source checkpoints because their runtime inputs cannot be proven: {metadataPath}");
+            }
+
             if (item.Isa.Equals("XCLocalSwiftPackageReference", StringComparison.OrdinalIgnoreCase))
             {
                 ValidateLocalPackageReference(repositoryRoot, projectDirectory, item);
+                continue;
+            }
+
+            if (item.Isa.Equals("XCRemoteSwiftPackageReference", StringComparison.OrdinalIgnoreCase))
+            {
+                ValidateRemotePackageReference(repositoryRoot, projectDirectory, item);
+                continue;
+            }
+
+            if (item.Isa.Equals("XCBuildConfiguration", StringComparison.OrdinalIgnoreCase))
+            {
+                ValidateBuildConfiguration(
+                    repositoryRoot,
+                    projectDirectory,
+                    item,
+                    objects,
+                    parents,
+                    cache,
+                    metadataPath,
+                    generatedOutputPaths);
                 continue;
             }
 
@@ -168,7 +232,99 @@ internal sealed partial class AppleReleaseSourceTrustService
             var candidate = ResolvePbxObjectPath(projectDirectory, item.Id, objects, parents, cache, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             if (candidate is null)
                 continue;
-            ValidateResolvedProjectInput(repositoryRoot, candidate, item, metadataPath);
+            ValidateResolvedProjectInput(
+                repositoryRoot,
+                candidate,
+                item,
+                metadataPath,
+                generatedOutputPaths,
+                buildFileReferences);
+        }
+    }
+
+    private void ValidateBuildConfiguration(
+        string repositoryRoot,
+        string projectDirectory,
+        PbxObject item,
+        IReadOnlyDictionary<string, PbxObject> objects,
+        IReadOnlyDictionary<string, string> parents,
+        IDictionary<string, string?> cache,
+        string metadataPath,
+        IReadOnlyCollection<string> generatedOutputPaths)
+    {
+        var baseConfigurationReference = ReadPbxScalar(item.Body, "baseConfigurationReference")?
+            .Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(baseConfigurationReference))
+        {
+            var baseConfigurationPath = ResolvePbxObjectPath(
+                projectDirectory,
+                baseConfigurationReference!,
+                objects,
+                parents,
+                cache,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            if (baseConfigurationPath is null)
+                throw new InvalidOperationException($"Xcode base configuration uses an external source tree: {metadataPath}");
+            EnsureNoGeneratedOutputOverlap(baseConfigurationPath, generatedOutputPaths, "Xcode base configuration");
+            EnsureTrackedFile(repositoryRoot, baseConfigurationPath, "Xcode base configuration");
+            EnsureTrackedXcconfigGraph(
+                repositoryRoot,
+                projectDirectory,
+                baseConfigurationPath,
+                generatedOutputPaths,
+                new HashSet<string>(GetPathComparer()));
+        }
+
+        var buildSettings = ReadPbxDictionary(item.Body, "buildSettings");
+        if (buildSettings is null)
+            return;
+        ValidateBuildSettingAssignments(
+            repositoryRoot,
+            projectDirectory,
+            ReadPbxAssignments(buildSettings),
+            generatedOutputPaths,
+            "PBX build settings");
+    }
+
+    private void EnsureTrackedXcconfigGraph(
+        string repositoryRoot,
+        string projectDirectory,
+        string configPath,
+        IReadOnlyCollection<string> generatedOutputPaths,
+        ISet<string> visited)
+    {
+        var fullPath = Path.GetFullPath(configPath);
+        if (!visited.Add(fullPath))
+            return;
+        var contents = File.ReadAllText(fullPath);
+        ValidateBuildSettingAssignments(
+            repositoryRoot,
+            projectDirectory,
+            ReadXcconfigAssignments(contents),
+            generatedOutputPaths,
+            $"xcconfig '{fullPath}'");
+        foreach (Match include in Regex.Matches(
+                     contents,
+                     "(?m)^[ \\t]*#include(?<optional>\\?)?[ \\t]+[\\\"<](?<path>[^\\\">]+)[\\\">]",
+                     RegexOptions.CultureInvariant))
+        {
+            var value = include.Groups["path"].Value.Trim();
+            var includedPath = ResolvePbxPath(
+                Path.GetDirectoryName(fullPath)!,
+                value,
+                "xcconfig include");
+            EnsurePathWithinRepository(repositoryRoot, includedPath, "Xcode xcconfig include");
+            EnsureNoGeneratedOutputOverlap(includedPath, generatedOutputPaths, "Xcode xcconfig include");
+            if (!File.Exists(includedPath))
+            {
+                var directive = include.Groups["optional"].Success ? "optional " : string.Empty;
+                throw new FileNotFoundException(
+                    $"Xcode {directive}xcconfig include cannot be proven at the exact source commit: {includedPath}",
+                    includedPath);
+            }
+            EnsureTrackedFile(repositoryRoot, includedPath, "Xcode xcconfig include");
+            EnsureTrackedXcconfigGraph(repositoryRoot, projectDirectory, includedPath, generatedOutputPaths, visited);
         }
     }
 
@@ -182,20 +338,110 @@ internal sealed partial class AppleReleaseSourceTrustService
             throw new InvalidOperationException("Local Swift package reference is missing relativePath.");
         var packageRoot = ResolvePbxPath(projectDirectory, relativePath!, "local Swift package");
         EnsureDirectoryWithinRepository(repositoryRoot, packageRoot, "Xcode local Swift package");
-        EnsureTrackedFile(repositoryRoot, Path.Combine(packageRoot, "Package.swift"), "Xcode local Swift package manifest");
+        var manifestPath = Path.Combine(packageRoot, "Package.swift");
+        EnsureTrackedFile(repositoryRoot, manifestPath, "Xcode local Swift package manifest");
+        foreach (var conventionalInput in new[]
+                 {
+                     Path.Combine(packageRoot, "Package.resolved"),
+                     Path.Combine(packageRoot, "Sources"),
+                     Path.Combine(packageRoot, "Plugins")
+                 })
+        {
+            if (File.Exists(conventionalInput))
+                EnsureTrackedFile(repositoryRoot, conventionalInput, "Xcode local Swift package input");
+            else if (Directory.Exists(conventionalInput))
+                EnsureTrackedDirectoryTree(repositoryRoot, conventionalInput, "Xcode local Swift package input");
+        }
+
+        var manifest = File.ReadAllText(manifestPath);
+        foreach (Match match in Regex.Matches(
+                     manifest,
+                     "\\bpath\\s*:\\s*\"(?<path>[^\"]+)\"",
+                     RegexOptions.CultureInvariant))
+        {
+            var explicitPath = ResolvePbxPath(packageRoot, match.Groups["path"].Value, "Swift package manifest input");
+            EnsurePathWithinRepository(repositoryRoot, explicitPath, "Swift package manifest input");
+            if (File.Exists(explicitPath))
+                EnsureTrackedFile(repositoryRoot, explicitPath, "Swift package manifest input");
+            else if (Directory.Exists(explicitPath))
+                EnsureTrackedDirectoryTree(repositoryRoot, explicitPath, "Swift package manifest input");
+            else
+                throw new FileNotFoundException($"Swift package manifest input was not found: {explicitPath}", explicitPath);
+        }
+    }
+
+    private void ValidateRemotePackageReference(
+        string repositoryRoot,
+        string projectDirectory,
+        PbxObject item)
+    {
+        var repositoryUrl = ReadPbxScalar(item.Body, "repositoryURL")?.Trim();
+        if (string.IsNullOrWhiteSpace(repositoryUrl))
+            throw new InvalidOperationException("Remote Swift package reference is missing repositoryURL.");
+
+        var exactRevision = Regex.IsMatch(
+            item.Body,
+            "(?s)requirement\\s*=\\s*\\{.*?kind\\s*=\\s*revision\\s*;.*?revision\\s*=\\s*[\"']?[A-Fa-f0-9]{40}[\"']?\\s*;",
+            RegexOptions.CultureInvariant);
+        var identity = Path.GetFileNameWithoutExtension(repositoryUrl!.TrimEnd('/'));
+        var locks = RunGit(repositoryRoot, "ls-files", "-z")
+            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(static path => Path.GetFileName(path).Equals("Package.resolved", StringComparison.OrdinalIgnoreCase))
+            .Select(path => Path.GetFullPath(Path.Combine(repositoryRoot, path)))
+            .Where(path => IsPathAtOrWithin(path, projectDirectory))
+            .Where(path =>
+            {
+                var text = File.ReadAllText(path);
+                return text.Contains(repositoryUrl, StringComparison.OrdinalIgnoreCase) ||
+                       (!string.IsNullOrWhiteSpace(identity) && text.Contains(identity, StringComparison.OrdinalIgnoreCase));
+            })
+            .ToArray();
+        if (locks.Length == 0 && !exactRevision)
+        {
+            throw new InvalidOperationException(
+                $"Remote Swift package '{repositoryUrl}' must be bound by a tracked Package.resolved lock or an exact 40-character revision.");
+        }
+        foreach (var packageLock in locks)
+            EnsureTrackedFile(repositoryRoot, packageLock, "Swift package resolution lock");
     }
 
     private void ValidateResolvedProjectInput(
         string repositoryRoot,
         string candidate,
         PbxObject item,
-        string metadataPath)
+        string metadataPath,
+        IReadOnlyCollection<string> generatedOutputPaths,
+        ISet<string> buildFileReferences)
     {
         EnsurePathWithinRepository(repositoryRoot, candidate, $"Xcode {item.Isa} input");
+        var directoryFileReferenceIsBuilt =
+            item.Isa.Equals("PBXFileReference", StringComparison.OrdinalIgnoreCase) &&
+            Directory.Exists(candidate) &&
+            buildFileReferences.Contains(item.Id);
+        var concreteFileReference = !item.Isa.Equals("PBXFileReference", StringComparison.OrdinalIgnoreCase) ||
+                                    File.Exists(candidate) ||
+                                    directoryFileReferenceIsBuilt;
+        if (concreteFileReference &&
+            !item.Isa.Equals("PBXGroup", StringComparison.OrdinalIgnoreCase) &&
+            !item.Isa.Equals("PBXVariantGroup", StringComparison.OrdinalIgnoreCase))
+        {
+            EnsureNoGeneratedOutputOverlap(candidate, generatedOutputPaths, $"Xcode {item.Isa} input");
+        }
         if (File.Exists(candidate))
             EnsureTrackedFile(repositoryRoot, candidate, $"Xcode {item.Isa} input");
         else if (Directory.Exists(candidate))
-            EnsureNoLinkedTraversal(repositoryRoot, candidate, $"Xcode {item.Isa} input");
+        {
+            if (directoryFileReferenceIsBuilt ||
+                item.Isa.Equals("XCVersionGroup", StringComparison.OrdinalIgnoreCase) ||
+                item.Isa.Equals("PBXFileSystemSynchronizedRootGroup", StringComparison.OrdinalIgnoreCase))
+            {
+                EnsureTrackedDirectoryTree(repositoryRoot, candidate, $"Xcode {item.Isa} input");
+            }
+            else
+            {
+                EnsureNoLinkedTraversal(repositoryRoot, candidate, $"Xcode {item.Isa} input");
+            }
+        }
         else if (Path.IsPathRooted(item.Path ?? string.Empty) ||
                  (item.Path ?? string.Empty).Split('/', '\\').Any(segment => segment == ".."))
         {
@@ -203,6 +449,56 @@ internal sealed partial class AppleReleaseSourceTrustService
                 $"Xcode project references a missing explicit path that cannot be proven: {candidate} ({metadataPath})",
                 candidate);
         }
+    }
+
+    private void EnsureTrackedDirectoryTree(string repositoryRoot, string path, string name)
+    {
+        EnsureDirectoryWithinRepository(repositoryRoot, path, name);
+        var relativeRoot = FrameworkCompatibility.GetRelativePath(repositoryRoot, path).Replace('\\', '/');
+        var tracked = RunGit(repositoryRoot, "ls-files", "-z", "--", relativeRoot)
+            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(entry => Path.GetFullPath(Path.Combine(repositoryRoot, entry)))
+            .ToHashSet(GetPathComparer());
+        foreach (var entry in Directory.EnumerateFileSystemEntries(path, "*", SearchOption.AllDirectories))
+        {
+            if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException($"{name} must not contain a symbolic link or reparse point: {entry}");
+            if (File.Exists(entry) && !tracked.Contains(Path.GetFullPath(entry)))
+            {
+                throw new InvalidOperationException(
+                    $"{name} must be tracked at the exact source commit: " +
+                    FrameworkCompatibility.GetRelativePath(repositoryRoot, entry).Replace('\\', '/'));
+            }
+        }
+    }
+
+    private static string ResolveBuildSettingPath(string projectDirectory, string value, string key)
+    {
+        var expanded = value.Trim();
+        foreach (var variable in new[] { "$(SRCROOT)", "$(PROJECT_DIR)", "$(SOURCE_ROOT)", "${SRCROOT}", "${PROJECT_DIR}", "${SOURCE_ROOT}" })
+            expanded = expanded.Replace(variable, projectDirectory);
+        expanded = expanded.Replace("$(inherited)", string.Empty).Replace("$(INHERITED)", string.Empty).Trim();
+        if (expanded.Contains("$(", StringComparison.Ordinal) || expanded.Contains("${", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Variable-based Xcode build setting {key} cannot be proven for an exact-source checkpoint: {value}");
+        }
+        return ResolvePath(projectDirectory, expanded);
+    }
+
+    private static string[] SplitBuildSettingPaths(string value)
+    {
+        var normalized = value.Trim();
+        if (normalized.StartsWith("(", StringComparison.Ordinal) && normalized.EndsWith(")", StringComparison.Ordinal))
+            normalized = normalized.Substring(1, normalized.Length - 2);
+        return Regex.Matches(normalized, "\"(?<quoted>(?:\\\\.|[^\"])*)\"|(?<bare>[^,\\s]+)", RegexOptions.CultureInvariant)
+            .Cast<Match>()
+            .Select(match => match.Groups["quoted"].Success
+                ? UnescapePbxString(match.Groups["quoted"].Value)
+                : match.Groups["bare"].Value.Trim())
+            .Where(static value => !string.IsNullOrWhiteSpace(value) &&
+                                   !value.Equals("$(inherited)", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
     }
 
     private static bool IsPathBearingPbxObject(string isa)
@@ -318,145 +614,4 @@ internal sealed partial class AppleReleaseSourceTrustService
         return roots.ToArray();
     }
 
-    private static Dictionary<string, PbxObject> ParsePbxObjects(string text)
-    {
-        var objects = new Dictionary<string, PbxObject>(StringComparer.OrdinalIgnoreCase);
-        foreach (Match start in Regex.Matches(
-                     text,
-                     "(?m)^[ \\t]*(?<id>[A-Fa-f0-9]{8,32})(?:[ \\t]+/\\*.*?\\*/)?[ \\t]*=[ \\t]*\\{",
-                     RegexOptions.CultureInvariant))
-        {
-            var id = start.Groups["id"].Value;
-            var openingBrace = text.IndexOf('{', start.Index + start.Length - 1);
-            var closingBrace = FindMatchingPbxBrace(text, openingBrace);
-            var body = text.Substring(openingBrace + 1, closingBrace - openingBrace - 1);
-            var isa = ReadPbxScalar(body, "isa");
-            if (string.IsNullOrWhiteSpace(isa))
-                continue;
-            objects[id] = new PbxObject
-            {
-                Id = id,
-                Isa = isa!,
-                Path = ReadPbxScalar(body, "path"),
-                SourceTree = ReadPbxScalar(body, "sourceTree"),
-                Body = body
-            };
-        }
-        return objects;
-    }
-
-    private static int FindMatchingPbxBrace(string text, int openingBrace)
-    {
-        var depth = 0;
-        var inString = false;
-        var escaped = false;
-        var inLineComment = false;
-        var inBlockComment = false;
-        for (var index = openingBrace; index < text.Length; index++)
-        {
-            var current = text[index];
-            var next = index + 1 < text.Length ? text[index + 1] : '\0';
-            if (inLineComment)
-            {
-                if (current == '\n') inLineComment = false;
-                continue;
-            }
-            if (inBlockComment)
-            {
-                if (current == '*' && next == '/')
-                {
-                    inBlockComment = false;
-                    index++;
-                }
-                continue;
-            }
-            if (inString)
-            {
-                if (escaped) escaped = false;
-                else if (current == '\\') escaped = true;
-                else if (current == '"') inString = false;
-                continue;
-            }
-            if (current == '/' && next == '/')
-            {
-                inLineComment = true;
-                index++;
-            }
-            else if (current == '/' && next == '*')
-            {
-                inBlockComment = true;
-                index++;
-            }
-            else if (current == '"') inString = true;
-            else if (current == '{') depth++;
-            else if (current == '}' && --depth == 0) return index;
-        }
-        throw new InvalidOperationException("Xcode project contains an unterminated PBX object.");
-    }
-
-    private static string? ReadPbxScalar(string body, string name)
-    {
-        var match = Regex.Match(
-            body,
-            "(?:^|[\\r\\n;])[ \\t]*" + Regex.Escape(name) +
-            "[ \\t]*=[ \\t]*(?:\\\"(?<quoted>(?:\\\\.|[^\\\"])*)\\\"|(?<bare>[^;\\r\\n]+))[ \\t]*;",
-            RegexOptions.CultureInvariant);
-        if (!match.Success)
-            return null;
-        var value = match.Groups["quoted"].Success
-            ? UnescapePbxString(match.Groups["quoted"].Value)
-            : match.Groups["bare"].Value.Trim();
-        return value;
-    }
-
-    private static string[] ReadPbxReferences(string body, string name)
-    {
-        var match = Regex.Match(
-            body,
-            "(?:^|[\\r\\n;])[ \\t]*" + Regex.Escape(name) + "[ \\t]*=[ \\t]*\\((?<items>.*?)\\)[ \\t]*;",
-            RegexOptions.Singleline | RegexOptions.CultureInvariant);
-        if (!match.Success)
-            return Array.Empty<string>();
-        return Regex.Matches(match.Groups["items"].Value, "(?m)^[ \\t]*(?<id>[A-Fa-f0-9]{8,32})", RegexOptions.CultureInvariant)
-            .Cast<Match>()
-            .Select(value => value.Groups["id"].Value)
-            .ToArray();
-    }
-
-    private static string UnescapePbxString(string value)
-    {
-        var builder = new StringBuilder(value.Length);
-        var escaped = false;
-        foreach (var character in value)
-        {
-            if (escaped)
-            {
-                builder.Append(character);
-                escaped = false;
-            }
-            else if (character == '\\')
-            {
-                escaped = true;
-            }
-            else
-            {
-                builder.Append(character);
-            }
-        }
-        if (escaped) builder.Append('\\');
-        return builder.ToString();
-    }
-
-    private sealed class PbxObject
-    {
-        internal string Id { get; set; } = string.Empty;
-
-        internal string Isa { get; set; } = string.Empty;
-
-        internal string? Path { get; set; }
-
-        internal string? SourceTree { get; set; }
-
-        internal string Body { get; set; } = string.Empty;
-    }
 }

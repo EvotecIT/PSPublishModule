@@ -13,7 +13,8 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
     private readonly ProjectBuildCommandHostService _projectBuildCommandHostService;
     private readonly ModuleBuildHostService _moduleBuildHostService;
     private readonly Func<string, PowerForgeReleaseRequest, PowerForgeReleaseResult> _executeUnifiedReleaseBuild;
-    private readonly Func<string, string, string> _resolveAppleSourceCommit;
+    private readonly Func<string, string, AppleReleaseSourceTrustSnapshot> _captureAppleSourceTrust;
+    private readonly Action<string, string, AppleReleaseSourceTrustSnapshot> _validateAppleSourceTrustAfterBuild;
 
     public ReleaseBuildExecutionService()
         : this(new RepositoryCatalogScanner(), new ProjectBuildHostService(), new ProjectBuildCommandHostService(), new ModuleBuildHostService())
@@ -26,14 +27,33 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         ProjectBuildCommandHostService projectBuildCommandHostService,
         ModuleBuildHostService moduleBuildHostService,
         Func<string, PowerForgeReleaseRequest, PowerForgeReleaseResult>? executeUnifiedReleaseBuild = null,
-        Func<string, string, string>? resolveAppleSourceCommit = null)
+        Func<string, string, string>? resolveAppleSourceCommit = null,
+        Func<string, string, AppleReleaseSourceTrustSnapshot>? captureAppleSourceTrust = null,
+        Action<string, string, AppleReleaseSourceTrustSnapshot>? validateAppleSourceTrustAfterBuild = null)
     {
         _catalogScanner = catalogScanner;
         _projectBuildHostService = projectBuildHostService;
         _projectBuildCommandHostService = projectBuildCommandHostService;
         _moduleBuildHostService = moduleBuildHostService;
         _executeUnifiedReleaseBuild = executeUnifiedReleaseBuild ?? ExecuteUnifiedReleaseBuild;
-        _resolveAppleSourceCommit = resolveAppleSourceCommit ?? ResolveExactAppleSourceCommit;
+        if (resolveAppleSourceCommit is not null)
+        {
+            _captureAppleSourceTrust = (root, config) =>
+                new AppleReleaseSourceTrustSnapshot(resolveAppleSourceCommit(root, config), Array.Empty<string>());
+            _validateAppleSourceTrustAfterBuild = (root, config, snapshot) =>
+            {
+                var completed = resolveAppleSourceCommit(root, config);
+                if (!completed.Equals(snapshot.SourceCommit, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        "Repository HEAD changed while the Apple release checkpoint was being built. Rebuild from the new exact source commit.");
+            };
+        }
+        else
+        {
+            var sourceTrust = new AppleReleaseSourceTrustService();
+            _captureAppleSourceTrust = captureAppleSourceTrust ?? sourceTrust.Capture;
+            _validateAppleSourceTrustAfterBuild = validateAppleSourceTrustAfterBuild ?? sourceTrust.ValidateAfterBuild;
+        }
     }
 
     public async Task<ReleaseBuildExecutionResult> ExecuteAsync(string repositoryRoot, CancellationToken cancellationToken = default)
@@ -70,21 +90,18 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 configPath,
                 PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
                 moduleStagingPath);
+            AppleReleaseSourceTrustSnapshot? appleSourceTrust = null;
             if (!unifiedRequest.SkipAppleApps)
-                unifiedRequest.AppleSourceCommit = _resolveAppleSourceCommit(repositoryRoot, configPath);
+            {
+                appleSourceTrust = _captureAppleSourceTrust(repositoryRoot, configPath);
+                unifiedRequest.AppleSourceCommit = appleSourceTrust.SourceCommit;
+            }
             unifiedRequest.CancellationToken = cancellationToken;
             var unified = await Task.Run(
                 () => _executeUnifiedReleaseBuild(configPath, unifiedRequest),
                 cancellationToken).ConfigureAwait(false);
-            if (!string.IsNullOrWhiteSpace(unifiedRequest.AppleSourceCommit))
-            {
-                var completedSourceCommit = _resolveAppleSourceCommit(repositoryRoot, configPath);
-                if (!completedSourceCommit.Equals(unifiedRequest.AppleSourceCommit, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException(
-                        "Repository HEAD changed while the Apple release checkpoint was being built. Rebuild from the new exact source commit.");
-                }
-            }
+            if (appleSourceTrust is not null)
+                _validateAppleSourceTrustAfterBuild(repositoryRoot, configPath, appleSourceTrust);
             var moduleExportCheckpoint =
                 await CaptureScriptModuleExportedConfigFingerprintAsync(
                     repository,

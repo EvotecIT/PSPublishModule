@@ -308,6 +308,13 @@ public sealed partial class ReleasePublishExecutionService
             AppleMarketingVersion = applePlan?.RequestedMarketingVersion,
             AppleSourceCommit = applePlan?.SourceCommit,
             AppleExpectedPlanSha256 = builtResult.AppleReceipt?.PlanSha256,
+            AppleExpectedArchiveSha256ByTarget = applePlan?.Apps
+                .Where(static app => !string.IsNullOrWhiteSpace(app.ExpectedArchiveSha256))
+                .ToDictionary(
+                    static app => app.Name,
+                    static app => app.ExpectedArchiveSha256!,
+                    StringComparer.OrdinalIgnoreCase)
+                ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
             AppleAdoptExistingBuild = applePlan?.AdoptExistingBuild == true,
             AppleResume = applePlan?.Automation.Resume,
             AppleWaitForProcessing = applePlan?.Automation.WaitForProcessing,

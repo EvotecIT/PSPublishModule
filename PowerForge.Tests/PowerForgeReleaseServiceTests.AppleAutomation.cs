@@ -188,6 +188,43 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_ConfiguredProtectedPlan_BindsExactObservedAppleState()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var processingState = "PROCESSING";
+            var service = CreateAppleAutomationService(request => CreateReleaseState(request, processingState));
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Archive = false;
+            spec.AppleApps.Upload = false;
+            spec.AppleApps.SubmitForReview = true;
+            spec.AppleApps.SkipReviewReadinessCheck = true;
+            var request = new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                PlanOnly = true,
+                AppleAction = PowerForgeAppleReleaseAction.Configured
+            };
+
+            var first = service.Execute(spec, request);
+            processingState = "VALID";
+            var changed = service.Execute(spec, request);
+
+            Assert.Equal("PROCESSING", Assert.Single(first.AppleReceipt!.Targets).BuildProcessingState);
+            Assert.Equal("VALID", Assert.Single(changed.AppleReceipt!.Targets).BuildProcessingState);
+            Assert.NotEqual(first.AppleReceipt.PlanSha256, changed.AppleReceipt.PlanSha256);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleProtectedMutationRejectsStateChangedAfterPlanApproval()
     {
         var root = CreateSandbox();
@@ -1348,6 +1385,111 @@ public sealed partial class PowerForgeReleaseServiceTests
             },
             SelectedBuild = true
         };
+
+    [Fact]
+    public void Execute_ApplePlan_RejectsChangedMetadataPayloadBeforeMutation()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var metadataPath = Path.Combine(root, "metadata.json");
+            File.WriteAllText(metadataPath, "{ \"payload\": \"approved\" }");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.SyncMetadata = true;
+            spec.AppleApps.MetadataConfigPath = "metadata.json";
+            var mutationCalls = 0;
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, "VALID"),
+                prepareAppleDistribution: request =>
+                {
+                    mutationCalls++;
+                    return CreateSuccessfulPreparation(request);
+                });
+            var plan = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    AppleAction = PowerForgeAppleReleaseAction.Configured
+                });
+            File.WriteAllText(metadataPath, "{ \"payload\": \"changed\" }");
+
+            var execution = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Configured,
+                    AppleExpectedPlanSha256 = plan.AppleReceipt!.PlanSha256
+                });
+
+            Assert.False(execution.Success);
+            Assert.Equal(0, mutationCalls);
+            Assert.Contains("changed after plan approval", execution.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_ApplePlan_BindsScreenshotPixelBytes()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var screenshotFolder = Directory.CreateDirectory(Path.Combine(root, "screenshots"));
+            var screenshotPath = Path.Combine(screenshotFolder.FullName, "home.png");
+            File.WriteAllText(screenshotPath, "approved pixels");
+            WriteScreenshotConfig(root, "screenshots.json", "app-123", "1.2.0", "iOS", "screenshots", qualityEnabled: false);
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.SyncScreenshots = true;
+            spec.AppleApps.ScreenshotConfigPath = "screenshots.json";
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, "VALID"),
+                checkAppleReleaseReadiness: (_, request) => new AppStoreConnectReleaseReadinessResult
+                {
+                    AppId = request.AppId,
+                    VersionString = request.VersionString,
+                    BuildNumber = request.BuildNumber,
+                    Platform = request.Platform,
+                    IsReady = true
+                });
+
+            var approved = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    AppleAction = PowerForgeAppleReleaseAction.Screenshots
+                });
+            File.WriteAllText(screenshotPath, "different pixels");
+            var changed = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    AppleAction = PowerForgeAppleReleaseAction.Screenshots
+                });
+
+            Assert.NotEqual(approved.AppleReceipt!.PlanSha256, changed.AppleReceipt!.PlanSha256);
+            Assert.Contains("screenshots/home.png", approved.AppleReceipt.MutationInputFiles.Keys);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
 
     private static void WriteScreenshotConfig(
         string root,

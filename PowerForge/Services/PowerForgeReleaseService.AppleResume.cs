@@ -2,6 +2,59 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
+    private string[] GetProtectedAppleRecoveryArtifactPaths(PowerForgeAppleReleasePlan plan)
+    {
+        if (!plan.Automation.WriteReceipt)
+            return Array.Empty<string>();
+
+        var protectedPaths = new List<string>();
+        var seenSubmissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var receipt in _appleReceiptStore.ReadAll(plan))
+        {
+            foreach (var target in receipt.Targets)
+            {
+                if (target.DistributionRoute != AppleDistributionRoute.DirectNotarized ||
+                    string.IsNullOrWhiteSpace(target.NotarizationSubmissionId))
+                {
+                    continue;
+                }
+
+                var key = string.Join(
+                    "|",
+                    target.Name,
+                    target.BundleId,
+                    target.Platform,
+                    target.NotarizationSubmissionId);
+                if (!seenSubmissions.Add(key))
+                    continue;
+
+                var accepted = string.Equals(target.NotarizationStatus, "Accepted", StringComparison.OrdinalIgnoreCase);
+                var stapleCompleted = !plan.DirectDistribution.Staple ||
+                                      (target.Stapled == true && target.StapleValidated == true);
+                var assessmentCompleted = !plan.DirectDistribution.Assess ||
+                                          target.GatekeeperAccepted == true;
+                if (!accepted || (stapleCompleted && assessmentCompleted) ||
+                    string.IsNullOrWhiteSpace(target.DirectArtifactPath))
+                {
+                    continue;
+                }
+
+                var app = plan.Apps.SingleOrDefault(candidate =>
+                    candidate.Name.Equals(target.Name, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(candidate.BundleId, target.BundleId, StringComparison.OrdinalIgnoreCase) &&
+                    candidate.Platform == target.Platform &&
+                    candidate.DistributionRoute == target.DistributionRoute);
+                if (app is null || string.IsNullOrWhiteSpace(receipt.ReceiptSha256))
+                    continue;
+                var artifactPath = ValidateDirectRecoveryArtifactPath(plan, app, target.DirectArtifactPath!);
+                if (File.Exists(artifactPath) || Directory.Exists(artifactPath))
+                    protectedPaths.Add(artifactPath);
+            }
+        }
+
+        return protectedPaths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
     private bool TryResumeAppleUpload(
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app,
@@ -166,6 +219,7 @@ internal sealed partial class PowerForgeReleaseService
         var prior = _appleReceiptStore.ReadAll(plan)
             .Where(receipt =>
                 !receipt.PlanOnly &&
+                !string.IsNullOrWhiteSpace(receipt.ReceiptSha256) &&
                 !string.IsNullOrWhiteSpace(plan.SourceCommit) &&
                 string.Equals(receipt.SourceCommit, plan.SourceCommit, StringComparison.OrdinalIgnoreCase))
             .SelectMany(receipt => receipt.Targets.Where(target => IsMatchingDirectReceiptTarget(target, app)))
@@ -173,12 +227,13 @@ internal sealed partial class PowerForgeReleaseService
                 string.Equals(target.NotarizationStatus, "Accepted", StringComparison.OrdinalIgnoreCase) &&
                 !string.IsNullOrWhiteSpace(target.NotarizationSubmissionId) &&
                 !string.IsNullOrWhiteSpace(target.DirectArtifactPath) &&
-                IsSha256(target.DirectArtifactSha256) &&
-                (File.Exists(target.DirectArtifactPath) || Directory.Exists(target.DirectArtifactPath)));
+                IsSha256(target.DirectArtifactSha256));
         if (prior is null)
             return false;
 
-        var artifactPath = Path.GetFullPath(prior.DirectArtifactPath!);
+        var artifactPath = ValidateDirectRecoveryArtifactPath(plan, app, prior.DirectArtifactPath!);
+        if (!File.Exists(artifactPath) && !Directory.Exists(artifactPath))
+            return false;
         var stapleCompleted = !plan.DirectDistribution.Staple ||
                               (prior.Stapled == true && prior.StapleValidated == true);
         var assessmentCompleted = !plan.DirectDistribution.Assess ||
