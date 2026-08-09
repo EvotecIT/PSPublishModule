@@ -59,6 +59,9 @@ internal sealed class PowerForgeReleaseRequest
 
     internal bool CheckpointAppleApps { get; set; }
 
+    /// <summary>Build Apple archives from a private detached exact-commit source worktree.</summary>
+    internal bool RequireImmutableAppleSourceSnapshot { get; set; }
+
     public bool? PublishNuget { get; set; }
 
     public bool? PublishProjectGitHub { get; set; }
@@ -520,6 +523,8 @@ internal sealed class PowerForgeAppleReleasePlan
     public string? RequestedMarketingVersion { get; set; }
 
     public string? SourceCommit { get; set; }
+
+    public bool RequireImmutableSourceSnapshot { get; set; }
 
     public bool AdoptExistingBuild { get; set; }
 

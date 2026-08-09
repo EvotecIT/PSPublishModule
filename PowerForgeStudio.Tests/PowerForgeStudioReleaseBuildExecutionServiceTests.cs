@@ -586,6 +586,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                 Assert.False(request.PlanOnly);
                 Assert.False(request.SkipAppleApps);
                 Assert.True(request.CheckpointAppleApps);
+                Assert.True(request.RequireImmutableAppleSourceSnapshot);
                 Assert.Equal("0123456789abcdef0123456789abcdef01234567", request.AppleSourceCommit);
                 return new PowerForgeReleaseResult
                 {

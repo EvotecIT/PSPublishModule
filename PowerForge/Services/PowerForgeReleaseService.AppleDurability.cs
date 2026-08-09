@@ -61,6 +61,8 @@ internal sealed partial class PowerForgeReleaseService
             return;
 
         var target = CreateAppleCheckpointTarget(app);
+        target.ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/');
+        target.ArchiveSha256 = result.ArchiveSha256 ?? app.ExpectedArchiveSha256;
         target.DirectArtifactPath = CreatePortableDirectArtifactPath(plan, app, result.Notarization.ArtifactPath);
         target.DirectArtifactSha256 = result.Notarization.ArtifactSha256;
         target.NotarizationSubmissionId = result.Notarization.SubmissionId;
@@ -93,6 +95,8 @@ internal sealed partial class PowerForgeReleaseService
             return;
 
         var target = CreateAppleCheckpointTarget(app);
+        target.ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/');
+        target.ArchiveSha256 = app.ExpectedArchiveSha256;
         target.DirectArtifactPath = CreatePortableDirectArtifactPath(plan, app, checkpoint.ArtifactPath);
         target.DirectArtifactSha256 = checkpoint.ArtifactSha256;
         target.NotarizationSubmissionId = checkpoint.SubmissionId;
@@ -118,6 +122,8 @@ internal sealed partial class PowerForgeReleaseService
             return;
 
         var target = CreateAppleCheckpointTarget(app);
+        target.ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/');
+        target.ArchiveSha256 = app.ExpectedArchiveSha256;
         target.DirectArtifactPath = CreatePortableDirectArtifactPath(plan, app, checkpoint.ArtifactPath);
         target.DirectArtifactSha256 = checkpoint.ArtifactSha256;
         target.NotarizationSubmissionId = checkpoint.SubmissionId;
@@ -143,6 +149,7 @@ internal sealed partial class PowerForgeReleaseService
             Name = app.Name,
             BundleId = app.BundleId,
             Platform = app.Platform,
+            Configuration = app.Configuration,
             DistributionRoute = app.DistributionRoute,
             ProductRole = app.ProductRole,
             ParentTarget = app.ParentTarget,

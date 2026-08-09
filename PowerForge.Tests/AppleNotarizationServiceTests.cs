@@ -297,6 +297,30 @@ public sealed class AppleNotarizationServiceTests
     }
 
     [Fact]
+    public void ComputeArtifactSha256_IsStableAcrossTimestampOnlyCopyChanges()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "Portable.app"));
+            var contents = Directory.CreateDirectory(Path.Combine(app.FullName, "Contents"));
+            var payload = Path.Combine(contents.FullName, "payload");
+            File.WriteAllText(payload, "identical signed bytes");
+            var expected = AppleNotarizationService.ComputeArtifactSha256(app.FullName);
+
+            File.SetLastWriteTimeUtc(payload, DateTime.UtcNow.AddYears(-2));
+            Directory.SetLastWriteTimeUtc(contents.FullName, DateTime.UtcNow.AddYears(-1));
+            Directory.SetLastWriteTimeUtc(app.FullName, DateTime.UtcNow.AddMonths(-3));
+
+            Assert.Equal(expected, AppleNotarizationService.ComputeArtifactSha256(app.FullName));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task NotarizeAsync_ResumeUsesPostStapleHashAndDoesNotStapleAgain()
     {
         var artifact = Path.GetTempFileName() + ".pkg";

@@ -542,6 +542,7 @@ internal sealed partial class PowerForgeReleaseService
                 ErrorMessage = result?.ErrorMessage,
                 BundleId = app.BundleId,
                 Platform = app.Platform,
+                Configuration = app.Configuration,
                 DistributionRoute = app.DistributionRoute,
                 ProductRole = app.ProductRole,
                 ParentTarget = app.ParentTarget,

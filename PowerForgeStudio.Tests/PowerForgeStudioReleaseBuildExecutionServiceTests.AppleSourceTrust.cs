@@ -178,6 +178,45 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
+    public void ResolveExactAppleSourceCommit_recursively_validates_referenced_subprojects()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("NestedProjectAppleRepo");
+        var outer = scope.CreateDirectory(Path.Combine("NestedProjectAppleRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(outer, "project.pbxproj"),
+            """
+            000000000000000000000001 = {
+                isa = PBXFileReference;
+                path = Nested.xcodeproj;
+                sourceTree = SOURCE_ROOT;
+            };
+            """);
+        var nested = scope.CreateDirectory(Path.Combine("NestedProjectAppleRepo", "Nested.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(nested, "project.pbxproj"),
+            """
+            000000000000000000000001 = {
+                isa = XCBuildConfiguration;
+                buildSettings = {
+                    INFOPLIST_FILE = Secret/Nested-Info.plist;
+                };
+            };
+            """);
+        var secret = scope.CreateDirectory(Path.Combine("NestedProjectAppleRepo", "Secret"));
+        File.WriteAllText(Path.Combine(secret, "Nested-Info.plist"), "unreviewed nested input");
+        File.WriteAllText(Path.Combine(repositoryRoot, ".gitignore"), "Secret/\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("INFOPLIST_FILE", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("tracked", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ResolveExactAppleSourceCommit_rejects_generated_project_metadata()
     {
         using var scope = new TemporaryDirectoryScope();

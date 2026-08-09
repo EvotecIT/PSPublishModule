@@ -1792,6 +1792,7 @@ internal sealed partial class PowerForgeReleaseService
             VersionSourcePath = versionSourcePath,
             RequestedMarketingVersion = requestedMarketingVersion,
             SourceCommit = appleSourceCommit.Length == 0 ? null : appleSourceCommit,
+            RequireImmutableSourceSnapshot = request.RequireImmutableAppleSourceSnapshot,
             AdoptExistingBuild = request.AppleAdoptExistingBuild,
             Archive = options.Archive,
             Upload = options.Upload,
@@ -1970,6 +1971,7 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleReleasePlan plan,
         out PowerForgeAppleReleaseCleanupReceipt cleanup)
     {
+        using var sourceSnapshot = AppleReleaseSourceSnapshot.CreateIfRequired(plan);
         cleanup = new PowerForgeAppleReleaseCleanupReceipt();
         var preflightCompleted = false;
         var releaseApps = plan.Apps
@@ -2167,6 +2169,12 @@ internal sealed partial class PowerForgeReleaseService
 
                 if (plan.Archive && app.VersionUpdateRequested && !resumedUpload)
                 {
+                    if (sourceSnapshot is not null)
+                    {
+                        throw new InvalidOperationException(
+                            $"Apple app '{app.Name}' cannot mutate project versions while building an exact-source archive. " +
+                            "Commit the requested version first, then create the checkpoint from that commit.");
+                    }
                     result.VersionUpdate = new XcodeProjectVersionEditor().Update(app.ProjectPath, app.MarketingVersion!, app.BuildNumber);
                 }
 
@@ -2175,7 +2183,7 @@ internal sealed partial class PowerForgeReleaseService
                     var directArchive = app.DistributionRoute == AppleDistributionRoute.DirectNotarized;
                     var archive = _archiveAppleApp(new AppleAppArchiveRequest
                 {
-                    ProjectPath = app.ProjectPath,
+                    ProjectPath = sourceSnapshot?.MapPath(app.ProjectPath) ?? app.ProjectPath,
                     IsWorkspace = app.IsWorkspace,
                     Scheme = app.Scheme,
                     Configuration = app.Configuration,
@@ -2190,6 +2198,7 @@ internal sealed partial class PowerForgeReleaseService
                     AppStoreConnectApiIssuerId = directArchive ? null : plan.AppStoreConnectApiIssuerId
                 });
                 result.Archive = archive;
+                sourceSnapshot?.ValidateUnchanged();
                 if (!archive.Succeeded)
                 {
                     result.Success = false;
@@ -2418,6 +2427,7 @@ internal sealed partial class PowerForgeReleaseService
                 $"Expected SHA-256 '{expected}', received '{actual}'. Rebuild and approve a new exact archive.");
         }
         result.ArchiveSha256 = actual;
+        app.ExpectedArchiveSha256 = actual;
     }
 
     private PowerForgeAppleAppReleaseResult[] RunAppleArchiveCheckpoint(
@@ -2432,6 +2442,8 @@ internal sealed partial class PowerForgeReleaseService
             Automation = new PowerForgeAppleReleaseAutomationOptions(),
             ReceiptPath = plan.ReceiptPath,
             ReceiptHistoryPath = plan.ReceiptHistoryPath,
+            SourceCommit = plan.SourceCommit,
+            RequireImmutableSourceSnapshot = plan.RequireImmutableSourceSnapshot,
             Archive = true,
             Upload = false,
             XcodeBuildExecutable = plan.XcodeBuildExecutable,

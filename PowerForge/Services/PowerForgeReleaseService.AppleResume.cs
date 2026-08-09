@@ -250,6 +250,7 @@ internal sealed partial class PowerForgeReleaseService
             string.Equals(candidate.BundleId, app.BundleId, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(candidate.AppId, app.AppStoreConnectAppId, StringComparison.OrdinalIgnoreCase) &&
             candidate.Platform == app.Platform &&
+            string.Equals(candidate.Configuration, app.Configuration, StringComparison.OrdinalIgnoreCase) &&
             candidate.DistributionRoute == app.DistributionRoute &&
             (string.IsNullOrWhiteSpace(version) ||
              string.Equals(candidate.Version, version, StringComparison.OrdinalIgnoreCase)) &&
@@ -289,6 +290,7 @@ internal sealed partial class PowerForgeReleaseService
             candidate.Name.Equals(target.Name, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(candidate.BundleId, target.BundleId, StringComparison.OrdinalIgnoreCase) &&
             candidate.Platform == target.Platform &&
+            string.Equals(candidate.Configuration, target.Configuration, StringComparison.OrdinalIgnoreCase) &&
             candidate.DistributionRoute == target.DistributionRoute &&
             string.Equals(candidate.ArchivePath, target.ArchivePath, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(candidate.ArchiveSha256, target.ArchiveSha256, StringComparison.OrdinalIgnoreCase));
@@ -384,15 +386,18 @@ internal sealed partial class PowerForgeReleaseService
         return true;
     }
 
-    private static bool IsMatchingDirectReceiptTarget(
+    internal static bool IsMatchingDirectReceiptTarget(
         PowerForgeAppleReleaseTargetReceipt target,
         PowerForgeAppleAppReleaseTargetPlan app)
         => target.Name.Equals(app.Name, StringComparison.OrdinalIgnoreCase) &&
            string.Equals(target.BundleId, app.BundleId, StringComparison.OrdinalIgnoreCase) &&
            target.Platform == app.Platform &&
+           string.Equals(target.Configuration, app.Configuration, StringComparison.OrdinalIgnoreCase) &&
            target.DistributionRoute == AppleDistributionRoute.DirectNotarized &&
            string.Equals(target.Version, app.MarketingVersion, StringComparison.OrdinalIgnoreCase) &&
-           string.Equals(target.Build, app.BuildNumber, StringComparison.OrdinalIgnoreCase);
+           string.Equals(target.Build, app.BuildNumber, StringComparison.OrdinalIgnoreCase) &&
+           (!IsSha256(app.ExpectedArchiveSha256) ||
+            string.Equals(target.ArchiveSha256, app.ExpectedArchiveSha256, StringComparison.OrdinalIgnoreCase));
 
     private static bool IsSha256(string? value)
         => !string.IsNullOrWhiteSpace(value) &&

@@ -57,6 +57,52 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
     }
 
+    private void AddReferencedXcodeProjects(
+        string repositoryRoot,
+        HashSet<string> metadataPaths,
+        IReadOnlyCollection<string> generatedOutputPaths)
+    {
+        var pending = new Queue<string>(metadataPaths.Where(path =>
+            path.EndsWith("project.pbxproj", StringComparison.OrdinalIgnoreCase)));
+        var inspected = new HashSet<string>(GetPathComparer());
+        while (pending.Count > 0)
+        {
+            var metadataPath = Path.GetFullPath(pending.Dequeue());
+            if (!inspected.Add(metadataPath))
+                continue;
+
+            var projectDirectory = Path.GetDirectoryName(Path.GetDirectoryName(metadataPath)!)!;
+            var objects = ParsePbxObjects(File.ReadAllText(metadataPath));
+            var parents = BuildPbxParentMap(objects);
+            var cache = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in objects.Values.Where(static value =>
+                         value.Isa.Equals("PBXFileReference", StringComparison.OrdinalIgnoreCase) &&
+                         (value.Path ?? string.Empty).EndsWith(".xcodeproj", StringComparison.OrdinalIgnoreCase)))
+            {
+                var projectPath = ResolvePbxObjectPath(
+                    projectDirectory,
+                    item.Id,
+                    objects,
+                    parents,
+                    cache,
+                    new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                if (projectPath is null)
+                {
+                    throw new InvalidOperationException(
+                        $"Referenced Xcode subproject uses an external source tree and cannot be attested: {metadataPath}");
+                }
+
+                EnsurePathWithinRepository(repositoryRoot, projectPath, "Xcode referenced subproject");
+                EnsureNoGeneratedOutputOverlap(projectPath, generatedOutputPaths, "Xcode referenced subproject");
+                EnsureNoLinkedTraversal(repositoryRoot, projectPath, "Xcode referenced subproject");
+                var referencedMetadata = Path.Combine(projectPath, "project.pbxproj");
+                EnsureTrackedFile(repositoryRoot, referencedMetadata, "Xcode referenced subproject metadata");
+                if (metadataPaths.Add(referencedMetadata))
+                    pending.Enqueue(referencedMetadata);
+            }
+        }
+    }
+
     private void EnsureTrackedSharedScheme(
         string repositoryRoot,
         string projectRoot,

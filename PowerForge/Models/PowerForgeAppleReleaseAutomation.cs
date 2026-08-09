@@ -246,6 +246,8 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public ApplePlatform Platform { get; set; }
 
+    public string Configuration { get; set; } = "Release";
+
     public AppleDistributionRoute DistributionRoute { get; set; }
 
     public AppleProductRole ProductRole { get; set; }

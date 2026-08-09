@@ -44,6 +44,103 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_ApplePlan_BindsEffectiveBuildConfiguration()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var service = CreateAppleAutomationService(
+                _ => throw new InvalidOperationException("Planning must not query App Store Connect."));
+            spec.AppleApps!.Configuration = "Release";
+            var release = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Upload,
+                PlanOnly = true
+            });
+            spec.AppleApps.Configuration = "Debug";
+            var debug = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Upload,
+                PlanOnly = true
+            });
+
+            Assert.NotEqual(release.AppleReceipt!.MutationInputsSha256, debug.AppleReceipt!.MutationInputsSha256);
+            Assert.NotEqual(release.AppleReceipt.PlanSha256, debug.AppleReceipt.PlanSha256);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleCheckpoint_ArchivesFromDetachedExactSourceSnapshot()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var sourceFile = Path.Combine(root, "CasaRay.xcodeproj", "project.pbxproj");
+            var committedContents = File.ReadAllText(sourceFile);
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var sourceCommit = RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
+            string? archivedProjectPath = null;
+            var service = CreateAppleAutomationService(
+                _ => throw new InvalidOperationException("Archive-only checkpoint must not query App Store Connect."),
+                archiveAppleApp: request =>
+                {
+                    archivedProjectPath = request.ProjectPath;
+                    File.AppendAllText(sourceFile, "\n// concurrent original-worktree mutation");
+                    Assert.Equal(committedContents, File.ReadAllText(Path.Combine(request.ProjectPath, "project.pbxproj")));
+                    var archive = Directory.CreateDirectory(request.ArchivePath!);
+                    File.WriteAllText(Path.Combine(archive.FullName, "payload"), "archive from immutable source");
+                    return CreateSuccessfulArchive(request);
+                });
+
+            var result = service.Execute(
+                CreateAppleAutomationSpec(root, keyPath),
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Archive,
+                    AppleSourceCommit = sourceCommit,
+                    RequireImmutableAppleSourceSnapshot = true
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.NotNull(archivedProjectPath);
+            Assert.False(archivedProjectPath!.StartsWith(root, StringComparison.Ordinal));
+            Assert.False(Directory.Exists(Path.GetDirectoryName(archivedProjectPath!)!));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    private static string RunSnapshotGit(string root, params string[] arguments)
+    {
+        var result = new GitClient(defaultTimeout: TimeSpan.FromMinutes(1))
+            .RunRawAsync(root, arguments, TimeSpan.FromMinutes(1))
+            .GetAwaiter()
+            .GetResult();
+        Assert.True(result.Succeeded, result.StdErr);
+        return result.StdOut;
+    }
+
+    [Fact]
     public void Execute_ConfiguredAppleUploadOnly_ResumesAfterAttestedArchiveWasRemoved()
     {
         const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";

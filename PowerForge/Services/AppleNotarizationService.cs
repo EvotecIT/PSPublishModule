@@ -314,7 +314,6 @@ public sealed class AppleNotarizationService
     {
         AppendValue(hash, relativePath);
         AppendValue(hash, ((int)entry.Attributes).ToString(System.Globalization.CultureInfo.InvariantCulture));
-        AppendValue(hash, entry.LastWriteTimeUtc.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture));
 #if NET8_0_OR_GREATER
         if (OperatingSystem.IsWindows())
         {

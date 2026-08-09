@@ -190,6 +190,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         {
             request.SkipAppleApps = false;
             request.CheckpointAppleApps = true;
+            request.RequireImmutableAppleSourceSnapshot = true;
             request.PlanOnly =
                 spec.Module is null &&
                 spec.Packages is null &&

@@ -83,6 +83,7 @@ internal sealed partial class PowerForgeReleaseService
             Name = app.Name,
             BundleId = app.BundleId,
             Platform = app.Platform,
+            Configuration = app.Configuration,
             DistributionRoute = app.DistributionRoute,
             ProductRole = app.ProductRole,
             ParentTarget = app.ParentTarget,
@@ -274,6 +275,7 @@ internal sealed partial class PowerForgeReleaseService
 
         var options = new
         {
+            plan.Configuration,
             plan.Archive,
             plan.Upload,
             Automation = new

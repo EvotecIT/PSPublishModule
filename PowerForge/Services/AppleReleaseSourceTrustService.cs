@@ -168,6 +168,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
 
         AddReferencedWorkspaceProjects(repositoryRoot, metadataPaths);
+        AddReferencedXcodeProjects(repositoryRoot, metadataPaths, generatedOutputPaths);
         ValidateXcodeBuildGraph(
             repositoryRoot,
             projectRoot,

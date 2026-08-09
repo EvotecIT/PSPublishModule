@@ -5,6 +5,35 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void DirectNotarizationResume_RequiresCheckpointArchiveIdentity()
+    {
+        var app = new PowerForgeAppleAppReleaseTargetPlan
+        {
+            Name = "EasyControlX Agent",
+            BundleId = "com.evotecit.easycontrolx.agent",
+            Platform = ApplePlatform.macOS,
+            DistributionRoute = AppleDistributionRoute.DirectNotarized,
+            MarketingVersion = "1.0.0",
+            BuildNumber = "4",
+            ExpectedArchiveSha256 = new string('b', 64)
+        };
+        var receipt = new PowerForgeAppleReleaseTargetReceipt
+        {
+            Name = app.Name,
+            BundleId = app.BundleId,
+            Platform = app.Platform,
+            DistributionRoute = app.DistributionRoute,
+            Version = app.MarketingVersion,
+            Build = app.BuildNumber,
+            ArchiveSha256 = new string('a', 64)
+        };
+
+        Assert.False(PowerForgeReleaseService.IsMatchingDirectReceiptTarget(receipt, app));
+        receipt.ArchiveSha256 = app.ExpectedArchiveSha256;
+        Assert.True(PowerForgeReleaseService.IsMatchingDirectReceiptTarget(receipt, app));
+    }
+
+    [Fact]
     public void Execute_AppleDirectNotarizationResume_FollowsRelativeReceiptAfterCheckoutRelocation()
     {
         const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
