@@ -40,6 +40,15 @@ internal sealed partial class AppleReleaseSourceTrustService
         "OTHER_SWIFT_FLAGS"
     };
 
+    private static readonly HashSet<string> ExecutableBuildSettings = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ACTOOL", "AR", "AS", "BITCODE_STRIP", "CC", "CHMOD", "CHOWN", "CODE_SIGN", "CODESIGN_ALLOCATE",
+        "COPYSTRINGS", "COREML_COMPILER", "CPLUSPLUS", "DITTO", "DSYMUTIL", "IBTOOL", "INSTALL_NAME_TOOL",
+        "INTENTS_COMPILER", "LD", "LDPLUSPLUS", "LEX", "LIBTOOL", "LIPO", "MAPC", "MIG", "MOMC",
+        "MTL_COMPILER", "NM", "OTOOL", "PLUTIL", "PRODUCT_PACKAGING_UTILITY", "RANLIB", "RESMERGER", "REZ",
+        "SEGEDIT", "STRIP", "SWIFT_DRIVER_SWIFT_EXEC", "SWIFT_EXEC", "TAPI", "TOUCH", "UNZIP", "YACC"
+    };
+
     private void ValidateXcodeBuildGraph(
         string repositoryRoot,
         string projectRoot,
@@ -256,6 +265,12 @@ internal sealed partial class AppleReleaseSourceTrustService
                     $"PBX custom build rules are not accepted for exact-source checkpoints because their runtime inputs cannot be proven: {metadataPath}");
             }
 
+            if (item.Isa.Equals("PBXLegacyTarget", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"PBX legacy targets are not accepted for exact-source checkpoints because their external build tool cannot be proven: {metadataPath}");
+            }
+
             if (item.Isa.Equals("XCLocalSwiftPackageReference", StringComparison.OrdinalIgnoreCase))
             {
                 ValidateLocalPackageReference(repositoryRoot, projectDirectory, packageLockRoots, item);
@@ -442,7 +457,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
         var externalDependencies = Regex.Matches(
                 manifestWithoutComments,
-                "\\.package\\s*\\((?<body>.*?)\\)",
+                "\\.\\s*(?:package|`package`)\\s*\\((?<body>.*?)\\)",
                 RegexOptions.Singleline | RegexOptions.CultureInvariant)
             .Cast<Match>()
             .Select(static match => match.Groups["body"].Value)
@@ -872,7 +887,8 @@ internal sealed partial class AppleReleaseSourceTrustService
                 EnsureNoLinkedTraversal(repositoryRoot, candidate, $"Xcode {item.Isa} input");
             }
         }
-        else if (Path.IsPathRooted(item.Path ?? string.Empty) ||
+        else if (buildFileReferences.Contains(item.Id) ||
+                 Path.IsPathRooted(item.Path ?? string.Empty) ||
                  (item.Path ?? string.Empty).Split('/', '\\').Any(segment => segment == ".."))
         {
             throw new FileNotFoundException(

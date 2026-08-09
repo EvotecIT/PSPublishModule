@@ -91,6 +91,10 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("signing")]
     [InlineData("export")]
     [InlineData("staple")]
+    [InlineData("generate")]
+    [InlineData("regenerate")]
+    [InlineData("xcodegen")]
+    [InlineData("generation-timeout")]
     public void DirectNotarizationResume_RejectsChangedExecutionPolicy(string changedControl)
     {
         var root = Directory.GetCurrentDirectory();
@@ -147,6 +151,18 @@ public sealed partial class PowerForgeReleaseServiceTests
                 break;
             case "staple":
                 plan.DirectDistribution.Staple = false;
+                break;
+            case "generate":
+                app.GenerateProjectIfMissing = true;
+                break;
+            case "regenerate":
+                app.RegenerateProject = true;
+                break;
+            case "xcodegen":
+                app.XcodeGenExecutable = "/reviewed/tools/xcodegen";
+                break;
+            case "generation-timeout":
+                app.ProjectGenerationTimeoutSeconds++;
                 break;
         }
 

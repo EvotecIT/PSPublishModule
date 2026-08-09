@@ -203,6 +203,10 @@ internal sealed partial class PowerForgeReleaseService
             app.TeamId,
             app.MarketingVersion,
             app.BuildNumber,
+            app.GenerateProjectIfMissing,
+            app.RegenerateProject,
+            app.XcodeGenExecutable,
+            app.ProjectGenerationTimeoutSeconds,
             RequiredEmbeddedBundleIds = app.RequiredEmbeddedBundleIds.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
             RequiredPrivacyUsageDescriptionKeys = app.RequiredPrivacyUsageDescriptionKeys.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
             DirectDistribution = new

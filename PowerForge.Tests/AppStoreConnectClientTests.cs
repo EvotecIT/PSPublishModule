@@ -924,6 +924,11 @@ public sealed partial class AppStoreConnectClientTests
                       }
                     }
                     """));
+            handler.OnRequest = count =>
+            {
+                if (count == 1)
+                    File.WriteAllBytes(screenshotPath, new byte[] { 9, 9, 9, 9, 9 });
+            };
 
             using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
             using var client = new AppStoreConnectClient(CreateCredential(), http);
@@ -959,6 +964,7 @@ public sealed partial class AppStoreConnectClientTests
             var screenshotPath = Path.Combine(folder.FullName, "01-home.png");
             await File.WriteAllBytesAsync(screenshotPath, new byte[] { 9, 8, 7 });
             UnixFileMode? snapshotRootMode = null;
+            string? snapshotFilePath = null;
 
             var handler = new SequenceHandler(
                 new SequenceResponse(HttpStatusCode.OK,
@@ -1043,16 +1049,20 @@ public sealed partial class AppStoreConnectClientTests
             {
                 if (count == 1)
                 {
+                    var snapshotBase = Path.Combine(Path.GetTempPath(), "PowerForge", "appstore-screenshot-snapshot");
+                    snapshotFilePath = Directory.EnumerateFiles(snapshotBase, "01-home.png", SearchOption.AllDirectories)
+                        .Where(path => File.ReadAllBytes(path).SequenceEqual(new byte[] { 9, 8, 7 }))
+                        .OrderByDescending(File.GetLastWriteTimeUtc)
+                        .First();
                     if (!OperatingSystem.IsWindows())
                     {
-                        var snapshotBase = Path.Combine(Path.GetTempPath(), "PowerForge", "appstore-screenshot-snapshot");
-                        var snapshotFile = Directory.EnumerateFiles(snapshotBase, "01-home.png", SearchOption.AllDirectories)
-                            .Where(path => File.ReadAllBytes(path).SequenceEqual(new byte[] { 9, 8, 7 }))
-                            .OrderByDescending(File.GetLastWriteTimeUtc)
-                            .First();
-                        snapshotRootMode = File.GetUnixFileMode(Directory.GetParent(Path.GetDirectoryName(snapshotFile)!)!.FullName);
+                        snapshotRootMode = File.GetUnixFileMode(Directory.GetParent(Path.GetDirectoryName(snapshotFilePath)!)!.FullName);
                     }
                     File.WriteAllBytes(screenshotPath, new byte[] { 6, 6, 6 });
+                }
+                else if (count == 5)
+                {
+                    File.WriteAllBytes(snapshotFilePath!, new byte[] { 5, 5, 5 });
                 }
             };
             using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };

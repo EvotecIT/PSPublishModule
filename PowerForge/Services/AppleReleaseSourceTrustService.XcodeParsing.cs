@@ -16,6 +16,13 @@ internal sealed partial class AppleReleaseSourceTrustService
         {
             var key = assignment.Key.Trim();
             var baseKey = key.Split('[')[0].Trim();
+            if (ExecutableBuildSettings.Contains(baseKey) &&
+                !string.IsNullOrWhiteSpace(assignment.Value) &&
+                !assignment.Value.Trim().Equals("$(inherited)", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Xcode build setting {key} overrides a compiler or build executable and cannot be proven at the exact source commit: {source}");
+            }
             IEnumerable<string> values;
             if (FileValuedBuildSettings.Contains(baseKey) ||
                 SearchPathBuildSettings.Contains(baseKey) ||
@@ -207,28 +214,79 @@ internal sealed partial class AppleReleaseSourceTrustService
     private static Dictionary<string, PbxObject> ParsePbxObjects(string text)
     {
         var objects = new Dictionary<string, PbxObject>(StringComparer.OrdinalIgnoreCase);
-        foreach (Match start in Regex.Matches(
-                     text,
-                     "(?m)^[ \\t]*(?<id>[A-Fa-f0-9]{8,32})(?:[ \\t]+/\\*.*?\\*/)?[ \\t]*=[ \\t]*\\{",
-                     RegexOptions.CultureInvariant))
+        var objectDictionary = ReadPbxDictionary(text, "objects") ?? text;
+        for (var index = 0; index < objectDictionary.Length; index++)
         {
-            var id = start.Groups["id"].Value;
-            var openingBrace = text.IndexOf('{', start.Index + start.Length - 1);
-            var closingBrace = FindMatchingPbxBrace(text, openingBrace);
-            var body = text.Substring(openingBrace + 1, closingBrace - openingBrace - 1);
-            var isa = ReadPbxScalar(body, "isa");
-            if (string.IsNullOrWhiteSpace(isa))
+            index = SkipPbxTrivia(objectDictionary, index);
+            if (index >= objectDictionary.Length)
+                break;
+            if (!IsHexCharacter(objectDictionary[index]))
                 continue;
-            objects[id] = new PbxObject
+
+            var idStart = index;
+            while (index < objectDictionary.Length && IsHexCharacter(objectDictionary[index]))
+                index++;
+            var idLength = index - idStart;
+            if (idLength < 8 || idLength > 32)
+                continue;
+
+            var id = objectDictionary.Substring(idStart, idLength);
+            index = SkipPbxTrivia(objectDictionary, index);
+            if (index >= objectDictionary.Length || objectDictionary[index] != '=')
+                continue;
+            index = SkipPbxTrivia(objectDictionary, index + 1);
+            if (index >= objectDictionary.Length || objectDictionary[index] != '{')
+                continue;
+
+            var openingBrace = index;
+            var closingBrace = FindMatchingPbxBrace(objectDictionary, openingBrace);
+            var body = objectDictionary.Substring(openingBrace + 1, closingBrace - openingBrace - 1);
+            var isa = ReadPbxScalar(body, "isa");
+            if (!string.IsNullOrWhiteSpace(isa))
             {
-                Id = id,
-                Isa = isa!,
-                Path = ReadPbxScalar(body, "path"),
-                SourceTree = ReadPbxScalar(body, "sourceTree"),
-                Body = body
-            };
+                objects[id] = new PbxObject
+                {
+                    Id = id,
+                    Isa = isa!,
+                    Path = ReadPbxScalar(body, "path"),
+                    SourceTree = ReadPbxScalar(body, "sourceTree"),
+                    Body = body
+                };
+            }
+            index = closingBrace;
         }
         return objects;
+    }
+
+    private static bool IsHexCharacter(char value)
+        => value is >= '0' and <= '9' or >= 'A' and <= 'F' or >= 'a' and <= 'f';
+
+    private static int SkipPbxTrivia(string text, int index)
+    {
+        while (index < text.Length)
+        {
+            if (char.IsWhiteSpace(text[index]) || text[index] == ';' || text[index] == ',')
+            {
+                index++;
+                continue;
+            }
+            if (index + 1 < text.Length && text[index] == '/' && text[index + 1] == '*')
+            {
+                var end = text.IndexOf("*/", index + 2, StringComparison.Ordinal);
+                if (end < 0)
+                    throw new InvalidOperationException("Xcode project contains an unterminated PBX comment.");
+                index = end + 2;
+                continue;
+            }
+            if (index + 1 < text.Length && text[index] == '/' && text[index + 1] == '/')
+            {
+                var end = text.IndexOf('\n', index + 2);
+                index = end < 0 ? text.Length : end + 1;
+                continue;
+            }
+            break;
+        }
+        return index;
     }
 
     private static int FindMatchingPbxBrace(string text, int openingBrace)
@@ -298,7 +356,7 @@ internal sealed partial class AppleReleaseSourceTrustService
     {
         var match = Regex.Match(
             body,
-            "(?:^|[\\r\\n;])[ \\t]*" + Regex.Escape(name) + "[ \\t]*=[ \\t]*\\{",
+            "(?:^|[{\\r\\n;])[ \\t]*" + Regex.Escape(name) + "[ \\t]*=[ \\t]*\\{",
             RegexOptions.CultureInvariant);
         if (!match.Success)
             return null;
@@ -309,15 +367,86 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private static IEnumerable<KeyValuePair<string, string>> ReadPbxAssignments(string body)
     {
-        foreach (Match match in Regex.Matches(
-                     body,
-                     "(?m)^[ \\t]*(?:\\\"(?<quotedKey>(?:\\\\.|[^\\\"])*)\\\"|(?<bareKey>[^=\\r\\n]+?))[ \\t]*=[ \\t]*(?<value>\\([^;]*?\\)|\\\"(?:\\\\.|[^\\\"])*\\\"|[^;\\r\\n]+)[ \\t]*;",
-                     RegexOptions.CultureInvariant))
+        for (var index = 0; index < body.Length; index++)
         {
-            var key = match.Groups["quotedKey"].Success
-                ? UnescapePbxString(match.Groups["quotedKey"].Value)
-                : match.Groups["bareKey"].Value.Trim();
-            var value = match.Groups["value"].Value.Trim();
+            index = SkipPbxTrivia(body, index);
+            if (index >= body.Length)
+                yield break;
+
+            var keyStart = index;
+            var inString = false;
+            var escaped = false;
+            while (index < body.Length)
+            {
+                var current = body[index];
+                if (inString)
+                {
+                    if (escaped) escaped = false;
+                    else if (current == '\\') escaped = true;
+                    else if (current == '"') inString = false;
+                }
+                else if (current == '"') inString = true;
+                else if (current == '=') break;
+                else if (current == ';') break;
+                index++;
+            }
+            if (index >= body.Length || body[index] != '=')
+                continue;
+
+            var key = body.Substring(keyStart, index - keyStart).Trim();
+            if (key.Length >= 2 && key[0] == '"' && key[key.Length - 1] == '"')
+                key = UnescapePbxString(key.Substring(1, key.Length - 2));
+            var valueStart = ++index;
+            var parentheses = 0;
+            var braces = 0;
+            inString = false;
+            escaped = false;
+            var inLineComment = false;
+            var inBlockComment = false;
+            while (index < body.Length)
+            {
+                var current = body[index];
+                var next = index + 1 < body.Length ? body[index + 1] : '\0';
+                if (inLineComment)
+                {
+                    if (current == '\n') inLineComment = false;
+                }
+                else if (inBlockComment)
+                {
+                    if (current == '*' && next == '/')
+                    {
+                        inBlockComment = false;
+                        index++;
+                    }
+                }
+                else if (inString)
+                {
+                    if (escaped) escaped = false;
+                    else if (current == '\\') escaped = true;
+                    else if (current == '"') inString = false;
+                }
+                else if (current == '/' && next == '/')
+                {
+                    inLineComment = true;
+                    index++;
+                }
+                else if (current == '/' && next == '*')
+                {
+                    inBlockComment = true;
+                    index++;
+                }
+                else if (current == '"') inString = true;
+                else if (current == '(') parentheses++;
+                else if (current == ')') parentheses--;
+                else if (current == '{') braces++;
+                else if (current == '}') braces--;
+                else if (current == ';' && parentheses == 0 && braces == 0) break;
+                index++;
+            }
+            if (index >= body.Length)
+                throw new InvalidOperationException($"Xcode PBX assignment '{key}' is not terminated.");
+
+            var value = body.Substring(valueStart, index - valueStart).Trim();
             if (value.Length >= 2 && value[0] == '"' && value[value.Length - 1] == '"')
                 value = UnescapePbxString(value.Substring(1, value.Length - 2));
             yield return new KeyValuePair<string, string>(key, value);
@@ -332,7 +461,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             RegexOptions.Singleline | RegexOptions.CultureInvariant);
         if (!match.Success)
             return Array.Empty<string>();
-        return Regex.Matches(match.Groups["items"].Value, "(?m)^[ \\t]*(?<id>[A-Fa-f0-9]{8,32})", RegexOptions.CultureInvariant)
+        return Regex.Matches(match.Groups["items"].Value, "(?:^|,)[ \\t\\r\\n]*(?<id>[A-Fa-f0-9]{8,32})", RegexOptions.CultureInvariant)
             .Cast<Match>()
             .Select(value => value.Groups["id"].Value)
             .ToArray();

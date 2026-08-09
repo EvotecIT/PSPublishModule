@@ -1,0 +1,121 @@
+using PowerForgeStudio.Orchestrator.Queue;
+
+namespace PowerForgeStudio.Tests;
+
+public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
+{
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_same_line_shell_phase_object()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("CompactPbxObjectRepo");
+        var project = scope.CreateDirectory(Path.Combine("CompactPbxObjectRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            """000000000000000000000001 = { isa = PBXGroup; }; 000000000000000000000002 = { isa = PBXShellScriptBuildPhase; shellScript = "date > generated.txt"; };""");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("shell-script", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("SWIFT_EXEC", "/tmp/custom-swiftc")]
+    [InlineData("CC", "/tmp/custom-clang")]
+    [InlineData("LD", "custom-linker")]
+    public void ResolveExactAppleSourceCommit_rejects_compiler_and_build_tool_overrides(
+        string setting,
+        string value)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("BuildToolOverrideRepo");
+        var project = scope.CreateDirectory(Path.Combine("BuildToolOverrideRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            $$"""
+            000000000000000000000001 = {
+                isa = XCBuildConfiguration;
+                buildSettings = { PRODUCT_NAME = Sample; {{setting}} = {{value}}; };
+            };
+            """);
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains(setting, exception.Message, StringComparison.Ordinal);
+        Assert.Contains("executable", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_legacy_external_build_target()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("LegacyTargetRepo");
+        var project = scope.CreateDirectory(Path.Combine("LegacyTargetRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXLegacyTarget; buildToolPath = /tmp/custom-build; };");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("legacy target", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_missing_relative_build_file_input()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("MissingBuildFileRepo");
+        var project = scope.CreateDirectory(Path.Combine("MissingBuildFileRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            """000000000000000000000002 = { isa = PBXFileReference; path = Injected.swift; sourceTree = "<group>"; };""");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Injected.swift", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("cannot be proven", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_escaped_unpinned_swift_package_dependency()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("EscapedPackageDependencyRepo");
+        var project = scope.CreateDirectory(Path.Combine("EscapedPackageDependencyRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCLocalSwiftPackageReference; relativePath = Packages/Shared; };");
+        var package = scope.CreateDirectory(Path.Combine("EscapedPackageDependencyRepo", "Packages", "Shared"));
+        File.WriteAllText(
+            Path.Combine(package, "Package.swift"),
+            """
+            // swift-tools-version: 6.0
+            import PackageDescription
+            let package = Package(
+                name: "Shared",
+                dependencies: [Package.Dependency.`package`(url: "https://example.invalid/Shared.git", branch: "main")],
+                targets: [.target(name: "Shared")])
+            """);
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Shared.git", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Package.resolved", exception.Message, StringComparison.Ordinal);
+    }
+}

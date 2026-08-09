@@ -285,6 +285,60 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Theory]
+    [InlineData("generate")]
+    [InlineData("regenerate")]
+    [InlineData("executable")]
+    [InlineData("timeout")]
+    public void Execute_ApplePlan_BindsProjectGenerationControls(string changedControl)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            File.WriteAllText(Path.Combine(root, "project.yml"), "name: CasaRay");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var service = CreateAppleAutomationService(
+                _ => throw new InvalidOperationException("Archive planning must not query App Store Connect."));
+            var approved = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Archive,
+                PlanOnly = true
+            });
+            var app = Assert.Single(spec.AppleApps!.Apps);
+            switch (changedControl)
+            {
+                case "generate":
+                    app.GenerateProjectIfMissing = true;
+                    break;
+                case "regenerate":
+                    app.RegenerateProject = true;
+                    break;
+                case "executable":
+                    app.XcodeGenExecutable = "/reviewed/tools/xcodegen";
+                    break;
+                case "timeout":
+                    app.ProjectGenerationTimeoutSeconds++;
+                    break;
+            }
+            var changed = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Archive,
+                PlanOnly = true
+            });
+
+            Assert.NotEqual(approved.AppleReceipt!.PlanSha256, changed.AppleReceipt!.PlanSha256);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
     [InlineData(PowerForgeAppleReleaseAction.Prepare)]
     [InlineData(PowerForgeAppleReleaseAction.TestFlight)]
     [InlineData(PowerForgeAppleReleaseAction.Advance)]

@@ -183,7 +183,11 @@ public sealed class AppStoreConnectScreenshotSyncService
             var uploaded = new List<AppStoreConnectScreenshotUploadResult>();
             foreach (var file in filesToUpload)
             {
-                var upload = await _client.UploadScreenshotAsync(set.Id, file, cancellationToken).ConfigureAwait(false);
+                var upload = await _client.UploadScreenshotAsync(
+                    set.Id,
+                    file,
+                    screenshotSnapshot.GetSha256(file),
+                    cancellationToken).ConfigureAwait(false);
                 upload.FilePath = screenshotSnapshot.GetSourcePath(file);
                 uploaded.Add(upload);
             }
@@ -235,6 +239,7 @@ public sealed class AppStoreConnectScreenshotSyncService
         try
         {
             var mappings = new Dictionary<string, string>(comparer);
+            var sha256 = new Dictionary<string, string>(comparer);
             var sets = sourceSets.Select((set, setIndex) =>
             {
                 var setRoot = Path.Combine(root, setIndex.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -251,9 +256,9 @@ public sealed class AppStoreConnectScreenshotSyncService
 
                     var snapshotPath = Path.Combine(setRoot, Path.GetFileName(source));
                     File.Copy(source, snapshotPath, overwrite: false);
+                    var actualSha256 = ComputeSha256(snapshotPath);
                     if (expected is not null)
                     {
-                        var actualSha256 = ComputeSha256(snapshotPath);
                         if (!actualSha256.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
                         {
                             throw new InvalidOperationException(
@@ -261,11 +266,12 @@ public sealed class AppStoreConnectScreenshotSyncService
                         }
                     }
                     mappings[snapshotPath] = source;
+                    sha256[snapshotPath] = actualSha256;
                     return snapshotPath;
                 }).ToArray();
                 return new PreflightedScreenshotSet(set.ScreenshotDisplayType, set.Folder, files);
             }).ToArray();
-            return new ScreenshotSnapshot(root, sets, mappings);
+            return new ScreenshotSnapshot(root, sets, mappings, sha256);
         }
         catch
         {
@@ -376,20 +382,25 @@ public sealed class AppStoreConnectScreenshotSyncService
     {
         private readonly string _root;
         private readonly IReadOnlyDictionary<string, string> _sourcePaths;
+        private readonly IReadOnlyDictionary<string, string> _sha256;
 
         public ScreenshotSnapshot(
             string root,
             PreflightedScreenshotSet[] sets,
-            IReadOnlyDictionary<string, string> sourcePaths)
+            IReadOnlyDictionary<string, string> sourcePaths,
+            IReadOnlyDictionary<string, string> sha256)
         {
             _root = root;
             Sets = sets;
             _sourcePaths = sourcePaths;
+            _sha256 = sha256;
         }
 
         public PreflightedScreenshotSet[] Sets { get; }
 
         public string GetSourcePath(string snapshotPath) => _sourcePaths[snapshotPath];
+
+        public string GetSha256(string snapshotPath) => _sha256[snapshotPath];
 
         public void Dispose()
         {
