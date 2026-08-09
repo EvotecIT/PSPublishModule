@@ -239,6 +239,54 @@ public sealed partial class WebSearchIntelligenceTests
     }
 
     [Fact]
+    public async Task SqliteStore_PrefersCompleteEvidenceOverNewerPartialRevision()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var databasePath = Path.Combine(root, "revisions.db");
+            var complete = WebSearchObservationNormalizer.Normalize(CreateBatch());
+            var partialInput = CreateBatch();
+            partialInput.Status = "partial";
+            partialInput.CollectedAtUtc = complete.CollectedAtUtc.AddHours(1);
+            partialInput.Observations[0].Clicks = 0;
+            partialInput.Observations[0].Impressions = 1;
+            partialInput.Observations[0].AveragePosition = null;
+            partialInput.Observations = partialInput.Observations.Append(new WebSearchObservation
+            {
+                Date = partialInput.Observations[0].Date,
+                Page = "https://officeimo.com/partial-only/",
+                Query = "partial-only query",
+                Clicks = 0,
+                Impressions = 5,
+                AveragePosition = 15d
+            }).ToArray();
+            var partial = WebSearchObservationNormalizer.Normalize(partialInput);
+            var store = new SqliteWebSearchObservationStore(databasePath);
+
+            await store.ImportAsync(complete);
+            await store.ImportAsync(partial);
+            var current = await store.QueryAsync(new WebSearchObservationQuery
+            {
+                SiteId = "officeimo",
+                Provider = "google-search-console"
+            });
+            var completeDimension = Assert.Single(current, observation =>
+                observation.Page == complete.Observations[0].Page);
+            var partialOnlyDimension = Assert.Single(current, observation =>
+                observation.Page == "https://officeimo.com/partial-only/");
+
+            Assert.Equal(complete.Observations[0].ObservationKey, completeDimension.ObservationKey);
+            Assert.Equal(100, completeDimension.Impressions);
+            Assert.Equal(5, partialOnlyDimension.Impressions);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public async Task SqliteStore_RefusesToClaimUnrelatedVersionZeroDatabase()
     {
         var root = CreateTemporaryDirectory();

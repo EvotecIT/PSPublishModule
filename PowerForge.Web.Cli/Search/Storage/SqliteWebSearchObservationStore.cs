@@ -250,7 +250,9 @@ internal sealed class SqliteWebSearchObservationStore
                                         COALESCE(observations.country, ''),
                                         COALESCE(observations.device, ''),
                                         COALESCE(observations.search_type, '')
-                           ORDER BY runs.collected_at_utc DESC, observations.run_id DESC
+                           ORDER BY CASE WHEN runs.status = 'complete' THEN 0 ELSE 1 END,
+                                    runs.collected_at_utc DESC,
+                                    observations.run_id DESC
                        ) AS revision_rank
                 FROM search_observations AS observations
                 INNER JOIN search_observation_runs AS runs
