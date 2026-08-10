@@ -21,7 +21,9 @@ public static class WebTrafficObservationNormalizer
         if (batch.CollectedAtUtc == default)
             throw new ArgumentException("Traffic observation batch requires collectedAtUtc.", nameof(batch));
 
-        var observations = (batch.Observations ?? Array.Empty<WebTrafficObservation>())
+        if (batch.Observations is null)
+            throw new ArgumentException("Traffic observations must be an array.", nameof(batch));
+        var observations = batch.Observations
             .Select((value, index) => NormalizeObservation(value, provider, siteId, batch.EvidenceReference, index))
             .OrderBy(ContentFingerprint, StringComparer.Ordinal)
             .ToArray();

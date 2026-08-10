@@ -7,6 +7,18 @@ namespace PowerForge.Tests;
 
 public sealed partial class WebCloudflareAnalyticsCollectorTests
 {
+    [Fact]
+    public void Normalizer_RejectsNullTrafficObservationArraysBeforeConfirmingZero()
+    {
+        var batch = CreateTrafficBatch();
+        batch.Observations = null!;
+        batch.ZeroDataConfirmed = true;
+
+        var exception = Assert.Throws<ArgumentException>(() => WebTrafficObservationNormalizer.Normalize(batch));
+
+        Assert.Contains("must be an array", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("/docs/page?draft=1")]
     [InlineData("/docs/page#draft")]

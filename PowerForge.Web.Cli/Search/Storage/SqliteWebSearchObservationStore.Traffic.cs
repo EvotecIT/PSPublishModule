@@ -170,7 +170,7 @@ internal sealed partial class SqliteWebSearchObservationStore
             .GroupBy(value => (value.Batch.Provider, value.Batch.SiteId, value.Date))
             .Select(group => group
                 .OrderBy(value => value.IsComplete ? 0 : 1)
-                .ThenBy(value => value.HasUsableObservations ? 0 : 1)
+                .ThenBy(value => value.IsComplete || value.HasUsableObservations ? 0 : 1)
                 .ThenByDescending(value => value.Batch.CollectedAtUtc)
                 .ThenByDescending(value => value.Batch.RunId, StringComparer.Ordinal)
                 .First())
@@ -201,12 +201,15 @@ internal sealed partial class SqliteWebSearchObservationStore
             .ThenBy(value => value.SelectedDates.FirstOrDefault())
             .ThenBy(value => value.RunId, StringComparer.Ordinal)
             .ToArray();
-        var requestedDates = query.FromDate.HasValue && query.ThroughDate.HasValue
-            ? Enumerable.Range(0, query.ThroughDate.Value.DayNumber - query.FromDate.Value.DayNumber + 1)
-                .Select(query.FromDate.Value.AddDays)
+        var selectedDates = selectedByDate.Keys.Select(key => key.Date).ToArray();
+        var requestedFrom = query.FromDate ?? (query.ThroughDate.HasValue && selectedDates.Length > 0 ? selectedDates.Min() : null);
+        var requestedThrough = query.ThroughDate ?? (query.FromDate.HasValue && selectedDates.Length > 0 ? selectedDates.Max() : null);
+        var requestedDates = requestedFrom.HasValue && requestedThrough.HasValue
+            ? Enumerable.Range(0, requestedThrough.Value.DayNumber - requestedFrom.Value.DayNumber + 1)
+                .Select(requestedFrom.Value.AddDays)
                 .ToArray()
             : Array.Empty<DateOnly>();
-        var coveredDates = selectedByDate.Keys.Select(key => key.Date).ToHashSet();
+        var coveredDates = selectedDates.ToHashSet();
         var missingDates = requestedDates.Where(date => !coveredDates.Contains(date)).ToArray();
         if (selectedByDate.Count == 0)
         {
