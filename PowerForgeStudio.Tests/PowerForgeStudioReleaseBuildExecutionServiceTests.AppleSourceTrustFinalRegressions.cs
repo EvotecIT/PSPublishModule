@@ -166,6 +166,23 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
+    public void ResolveExactAppleSourceCommit_validates_imacros_compiler_input()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "CompilerMacrosInputRepo",
+            "OTHER_CFLAGS = -imacros Injected.h\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Injected.h", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ResolveExactAppleSourceCommit_rejects_host_dependent_source_selection()
     {
         using var scope = new TemporaryDirectoryScope();
@@ -220,6 +237,33 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("/usr/bin/xcodebuild", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("not trusted", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("XcrunExecutable", "/usr/bin/xcrun")]
+    [InlineData("DittoExecutable", "/usr/bin/ditto")]
+    [InlineData("SpctlExecutable", "/usr/sbin/spctl")]
+    public void ResolveExactAppleSourceCommit_rejects_custom_notarization_tool_executable(
+        string propertyName,
+        string trustedPath)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("CustomAppleToolRepo");
+        var project = scope.CreateDirectory(Path.Combine("CustomAppleToolRepo", "Sample.xcodeproj"));
+        File.WriteAllText(Path.Combine(project, "project.pbxproj"), "// project");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        File.WriteAllText(
+            configPath,
+            File.ReadAllText(configPath).Replace(
+                "\"AppleApps\": {",
+                $"\"AppleApps\": {{ \"DirectDistribution\": {{ \"{propertyName}\": \"/tmp/hostile-tool\" }},"));
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains(trustedPath, exception.Message, StringComparison.Ordinal);
         Assert.Contains("not trusted", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 

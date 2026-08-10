@@ -165,6 +165,18 @@ internal sealed partial class AppleReleaseSourceTrustService
                 token.Equals("-F", StringComparison.Ordinal) ||
                 token.Equals("-L", StringComparison.Ordinal) ||
                 token.Equals("-include", StringComparison.Ordinal) ||
+                token.Equals("-imacros", StringComparison.Ordinal) ||
+                token.Equals("-include-pch", StringComparison.Ordinal) ||
+                token.Equals("-include-pth", StringComparison.Ordinal) ||
+                token.Equals("-iquote", StringComparison.Ordinal) ||
+                token.Equals("-isystem", StringComparison.Ordinal) ||
+                token.Equals("-isystem-after", StringComparison.Ordinal) ||
+                token.Equals("-idirafter", StringComparison.Ordinal) ||
+                token.Equals("-iframework", StringComparison.Ordinal) ||
+                token.Equals("-iframeworkwithsysroot", StringComparison.Ordinal) ||
+                token.Equals("-iprefix", StringComparison.Ordinal) ||
+                token.Equals("-iwithprefix", StringComparison.Ordinal) ||
+                token.Equals("-iwithprefixbefore", StringComparison.Ordinal) ||
                 token.Equals("-force_load", StringComparison.Ordinal) ||
                 token.Equals("-ivfsoverlay", StringComparison.Ordinal) ||
                 token.Equals("-vfsoverlay", StringComparison.Ordinal) ||
@@ -174,6 +186,15 @@ internal sealed partial class AppleReleaseSourceTrustService
                 token.Equals("-plugin", StringComparison.Ordinal) ||
                 token.Equals("-plugin-path", StringComparison.Ordinal) ||
                 token.Equals("-module-map-file", StringComparison.Ordinal) ||
+                token.Equals("-fmodule-map-file", StringComparison.Ordinal) ||
+                token.Equals("-fmodule-file", StringComparison.Ordinal) ||
+                token.Equals("-fprofile-use", StringComparison.Ordinal) ||
+                token.Equals("-fprofile-instr-use", StringComparison.Ordinal) ||
+                token.Equals("-fprofile-sample-use", StringComparison.Ordinal) ||
+                token.Equals("-resource-dir", StringComparison.Ordinal) ||
+                token.Equals("-working-directory", StringComparison.Ordinal) ||
+                token.Equals("-gcc-toolchain", StringComparison.Ordinal) ||
+                token.Equals("--sysroot", StringComparison.Ordinal) ||
                 token.Equals("-install_name", StringComparison.Ordinal) ||
                 token.Equals("-rpath", StringComparison.Ordinal) ||
                 token.Equals("-isysroot", StringComparison.Ordinal) ||
@@ -193,15 +214,27 @@ internal sealed partial class AppleReleaseSourceTrustService
 
             var prefixes = new[]
             {
-                "-I", "-F", "-L", "-fmodule-map-file=", "-fplugin=", "-fpass-plugin=",
-                "-ivfsoverlay=", "-vfsoverlay=", "-plugin-path=", "-module-map-file=",
-                "-isysroot=", "-sdk="
+                "-iframeworkwithsysroot", "-iwithprefixbefore", "-fprofile-instr-use=",
+                "-fprofile-sample-use=", "-fmodule-map-file=", "-working-directory=",
+                "-include-pch=", "-include-pth=", "-gcc-toolchain=", "-resource-dir=",
+                "-iwithprefix", "-fprofile-use=", "-fmodule-file=", "-module-map-file=",
+                "-ivfsoverlay=", "-vfsoverlay=", "-plugin-path=", "-fpass-plugin=",
+                "-iframework", "-idirafter", "-imacros=", "-include=", "--sysroot=",
+                "-isystem-after", "-isystem", "-iquote", "-iprefix", "-fplugin=", "-isysroot=", "-sdk=",
+                "-I", "-F", "-L"
             };
             var prefix = prefixes.FirstOrDefault(candidate =>
                 token.StartsWith(candidate, StringComparison.Ordinal) && token.Length > candidate.Length);
             if (prefix is not null)
             {
-                yield return token.Substring(prefix.Length);
+                var pathValue = token.Substring(prefix.Length);
+                if (prefix.Equals("-fmodule-file=", StringComparison.Ordinal))
+                {
+                    var moduleSeparator = pathValue.IndexOf('=');
+                    if (moduleSeparator >= 0)
+                        pathValue = pathValue.Substring(moduleSeparator + 1);
+                }
+                yield return pathValue;
                 continue;
             }
 
@@ -233,6 +266,9 @@ internal sealed partial class AppleReleaseSourceTrustService
             if (linkerFlags && TrySkipNonInputLinkerOption(tokens, ref index, token, key))
                 continue;
 
+            if (!linkerFlags && TrySkipNonInputCompilerOption(tokens, ref index, token, key))
+                continue;
+
             if (token.StartsWith("-", StringComparison.Ordinal) && IsPathLikeBuildFlagToken(token))
             {
                 throw new InvalidOperationException(
@@ -246,11 +282,38 @@ internal sealed partial class AppleReleaseSourceTrustService
                     $"Path-like token in Xcode build setting {key} cannot be classified safely: {token}");
             }
 
-            if (linkerFlags && !token.StartsWith("-", StringComparison.Ordinal))
+            if (!token.StartsWith("-", StringComparison.Ordinal))
                 yield return token;
         }
         if (consumeNext)
             throw new InvalidOperationException($"Xcode build setting {key} ends with a path-consuming flag and no input.");
+    }
+
+    private static bool TrySkipNonInputCompilerOption(string[] tokens, ref int index, string token, string key)
+    {
+        var consumesOneValue = token.Equals("-arch", StringComparison.Ordinal) ||
+                               token.Equals("-target", StringComparison.Ordinal) ||
+                               token.Equals("--target", StringComparison.Ordinal) ||
+                               token.Equals("-std", StringComparison.Ordinal) ||
+                               token.Equals("-x", StringComparison.Ordinal) ||
+                               token.Equals("-stdlib", StringComparison.Ordinal) ||
+                               token.Equals("-module-name", StringComparison.Ordinal) ||
+                               token.Equals("-swift-version", StringComparison.Ordinal) ||
+                               token.Equals("-enforce-exclusivity", StringComparison.Ordinal) ||
+                               token.Equals("-enable-experimental-feature", StringComparison.Ordinal) ||
+                               token.Equals("-enable-upcoming-feature", StringComparison.Ordinal) ||
+                               token.Equals("-strict-concurrency", StringComparison.Ordinal);
+        if (!consumesOneValue)
+            return false;
+        if (++index >= tokens.Length)
+            throw new InvalidOperationException($"Xcode build setting {key} ends with compiler option '{token}' and no argument.");
+        var value = tokens[index];
+        if (IsPathLikeBuildFlagToken(value))
+        {
+            throw new InvalidOperationException(
+                $"Non-path compiler option '{token}' in Xcode build setting {key} contains a path-like argument: {value}");
+        }
+        return true;
     }
 
     private static bool TrySkipNonInputLinkerOption(string[] tokens, ref int index, string token, string key)

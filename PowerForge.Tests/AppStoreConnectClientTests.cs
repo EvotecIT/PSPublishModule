@@ -1219,10 +1219,8 @@ public sealed partial class AppStoreConnectClientTests
         }
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ScreenshotSyncService_RetryRetainsMatchingChecksumWithoutReupload(bool replaceExisting)
+    [Fact]
+    public async Task ScreenshotSyncService_RetryRetainsMatchingChecksumWithoutReupload()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -1237,8 +1235,6 @@ public sealed partial class AppStoreConnectClientTests
                 new SequenceResponse(HttpStatusCode.OK,
                     """{ "data": [{ "id": "set-1", "type": "appScreenshotSets", "attributes": { "screenshotDisplayType": "APP_IPHONE_65" } }] }"""),
                 new SequenceResponse(HttpStatusCode.OK,
-                    """{ "data": [{ "id": "shot-1", "type": "appScreenshots", "attributes": { "fileName": "01-home.png", "fileSize": 3, "sourceFileChecksum": "0c8e83d7bd4e4d5e9c170932482c3264", "assetDeliveryState": { "state": "UPLOAD_COMPLETE" } } }] }"""),
-                new SequenceResponse(HttpStatusCode.OK,
                     """{ "data": [{ "id": "shot-1", "type": "appScreenshots", "attributes": { "fileName": "01-home.png", "fileSize": 3, "sourceFileChecksum": "0c8e83d7bd4e4d5e9c170932482c3264", "assetDeliveryState": { "state": "UPLOAD_COMPLETE" } } }] }"""));
             using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
             using var client = new AppStoreConnectClient(CreateCredential(), http);
@@ -1246,7 +1242,7 @@ public sealed partial class AppStoreConnectClientTests
             var result = await new AppStoreConnectScreenshotSyncService(client).SyncAsync(new AppStoreConnectScreenshotSyncRequest
             {
                 BaseDirectory = root.FullName,
-                ReplaceExisting = replaceExisting,
+                ReplaceExisting = false,
                 Spec = new AppStoreConnectScreenshotSyncSpec
                 {
                     AppId = "app-1",
@@ -1267,7 +1263,65 @@ public sealed partial class AppStoreConnectClientTests
             var set = Assert.Single(result.ScreenshotSets);
             Assert.Equal(0, set.DeletedCount);
             Assert.Empty(set.Uploaded);
-            Assert.Equal(replaceExisting ? 5 : 4, handler.RequestUris.Count);
+            Assert.Equal(4, handler.RequestUris.Count);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task ScreenshotSyncService_ReplaceExistingReuploadsMatchingChecksumWithFreshAssetIdentity()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root.FullName, "iphone-6-5"));
+            await File.WriteAllBytesAsync(Path.Combine(folder.FullName, "01-home.png"), new byte[] { 9, 8, 7 });
+            var handler = new SequenceHandler(
+                new SequenceResponse(HttpStatusCode.OK,
+                    """{ "data": [{ "id": "version-1", "type": "appStoreVersions", "attributes": { "versionString": "1.0.0", "platform": "IOS" } }] }"""),
+                new SequenceResponse(HttpStatusCode.OK,
+                    """{ "data": [{ "id": "loc-1", "type": "appStoreVersionLocalizations", "attributes": { "locale": "en-US" } }] }"""),
+                new SequenceResponse(HttpStatusCode.OK,
+                    """{ "data": [{ "id": "set-1", "type": "appScreenshotSets", "attributes": { "screenshotDisplayType": "APP_IPHONE_65" } }] }"""),
+                new SequenceResponse(HttpStatusCode.OK,
+                    """{ "data": [{ "id": "old-shot", "type": "appScreenshots", "attributes": { "fileName": "01-home.png", "fileSize": 3, "sourceFileChecksum": "0c8e83d7bd4e4d5e9c170932482c3264", "assetDeliveryState": { "state": "UPLOAD_COMPLETE" } } }] }"""),
+                new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
+                ScreenshotReservation("fresh-shot", "01-home.png", 3),
+                ScreenshotCommit("fresh-shot", "01-home.png", "0c8e83d7bd4e4d5e9c170932482c3264"),
+                new SequenceResponse(HttpStatusCode.OK,
+                    """{ "data": [{ "id": "fresh-shot", "type": "appScreenshots", "attributes": { "fileName": "01-home.png", "fileSize": 3, "sourceFileChecksum": "0c8e83d7bd4e4d5e9c170932482c3264", "assetDeliveryState": { "state": "UPLOAD_COMPLETE" } } }] }"""));
+            using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+            using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+            var result = await new AppStoreConnectScreenshotSyncService(client).SyncAsync(new AppStoreConnectScreenshotSyncRequest
+            {
+                BaseDirectory = root.FullName,
+                ReplaceExisting = true,
+                Spec = new AppStoreConnectScreenshotSyncSpec
+                {
+                    AppId = "app-1",
+                    VersionString = "1.0.0",
+                    Platform = ApplePlatform.iOS,
+                    Locale = "en-US",
+                    ScreenshotSets =
+                    [
+                        new AppStoreConnectScreenshotSetSyncSpec
+                        {
+                            ScreenshotDisplayType = "APP_IPHONE_65",
+                            Path = "iphone-6-5"
+                        }
+                    ]
+                }
+            });
+
+            var set = Assert.Single(result.ScreenshotSets);
+            Assert.Equal(1, set.DeletedCount);
+            Assert.Equal("fresh-shot", Assert.Single(set.Uploaded).Screenshot.Id);
+            Assert.Equal(HttpMethod.Delete, handler.Methods[4]);
+            Assert.Equal(8, handler.RequestUris.Count);
         }
         finally
         {

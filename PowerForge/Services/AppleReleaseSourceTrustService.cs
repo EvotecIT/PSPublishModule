@@ -128,7 +128,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         PowerForgeAppleReleaseOptions options,
         IReadOnlyCollection<string> generatedOutputPaths)
     {
-        ValidateTrustedXcodeBuildExecutable(options.XcodeBuildExecutable);
+        ValidateTrustedAppleToolExecutables(options);
         var configDirectory = Path.GetDirectoryName(configPath) ?? repositoryRoot;
         var projectRoot = ResolvePath(
             configDirectory,

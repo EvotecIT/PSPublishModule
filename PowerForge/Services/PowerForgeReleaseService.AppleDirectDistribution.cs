@@ -17,6 +17,7 @@ internal sealed partial class PowerForgeReleaseService
             XcrunExecutable = plan.DirectDistribution.XcrunExecutable,
             DittoExecutable = plan.DirectDistribution.DittoExecutable,
             SpctlExecutable = plan.DirectDistribution.SpctlExecutable,
+            RequireTrustedSystemTools = !string.IsNullOrWhiteSpace(plan.SourceCommit),
             KeychainProfile = plan.DirectDistribution.KeychainProfile,
             ApiKeyPath = plan.AppStoreConnectApiKeyPath,
             ApiKeyId = plan.AppStoreConnectApiKeyId,

@@ -18,6 +18,9 @@ public sealed class AppleNotarizationRequest
     /// <summary>spctl executable.</summary>
     public string SpctlExecutable { get; set; } = "spctl";
 
+    /// <summary>Require fixed system notarization, packaging, and Gatekeeper executables under a sanitized PATH.</summary>
+    public bool RequireTrustedSystemTools { get; set; }
+
     /// <summary>Optional notarytool keychain profile.</summary>
     public string? KeychainProfile { get; set; }
 

@@ -68,6 +68,71 @@ public sealed partial class AppleNotarizationServiceTests
     }
 
     [Fact]
+    public async Task NotarizeAsync_ExactSourceRejectsCustomAppleToolExecutable()
+    {
+        var artifact = Path.GetTempFileName() + ".pkg";
+        await File.WriteAllTextAsync(artifact, "pkg");
+        try
+        {
+            var runner = new NotaryProcessRunner();
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleNotarizationService(runner).NotarizeAsync(new AppleNotarizationRequest
+                {
+                    ArtifactPath = artifact,
+                    KeychainProfile = "powerforge-notary",
+                    XcrunExecutable = "/tmp/hostile-xcrun",
+                    RequireTrustedSystemTools = true,
+                    Staple = false,
+                    Assess = false
+                }));
+
+            Assert.Contains("trusted system tool '/usr/bin/xcrun'", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { File.Delete(artifact); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NotarizeAsync_ExactSourceUsesFixedAppleToolPathAndSanitizedPath()
+    {
+        var artifact = Path.GetTempFileName() + ".pkg";
+        await File.WriteAllTextAsync(artifact, "pkg");
+        try
+        {
+            var runner = new NotaryProcessRunner();
+            var result = await new AppleNotarizationService(runner).NotarizeAsync(new AppleNotarizationRequest
+            {
+                ArtifactPath = artifact,
+                KeychainProfile = "powerforge-notary",
+                RequireTrustedSystemTools = true,
+                Staple = false,
+                Assess = true
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.Collection(
+                runner.Requests,
+                request =>
+                {
+                    Assert.Equal("/usr/bin/xcrun", request.FileName);
+                    Assert.Equal("/usr/bin:/bin:/usr/sbin:/sbin", request.EnvironmentVariables?["PATH"]);
+                },
+                request =>
+                {
+                    Assert.Equal("/usr/sbin/spctl", request.FileName);
+                    Assert.Equal("/usr/bin:/bin:/usr/sbin:/sbin", request.EnvironmentVariables?["PATH"]);
+                });
+        }
+        finally
+        {
+            try { File.Delete(artifact); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task NotarizeAsync_RejectsAcceptedAppSubmissionWhenPrivateZipChangesDuringUpload()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
@@ -449,6 +514,64 @@ public sealed partial class AppleNotarizationServiceTests
             Directory.SetLastWriteTimeUtc(app.FullName, DateTime.UtcNow.AddMonths(-3));
 
             Assert.Equal(expected, AppleNotarizationService.ComputeArtifactSha256(app.FullName));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ComputeArtifactSha256_LengthFramesMetadataAndFileContents()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var original = Directory.CreateDirectory(Path.Combine(root.FullName, "Original.app"));
+            var forged = Directory.CreateDirectory(Path.Combine(root.FullName, "Forged.app"));
+            var originalA = Path.Combine(original.FullName, "a");
+            var originalB = Path.Combine(original.FullName, "b");
+            var forgedA = Path.Combine(forged.FullName, "a");
+            File.WriteAllBytes(originalA, new byte[] { 0x41 });
+            File.WriteAllBytes(originalB, new byte[] { 0x42 });
+            File.WriteAllBytes(forgedA, new byte[] { 0x41 });
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows())
+            {
+                var mode = File.GetUnixFileMode(originalA);
+                File.SetUnixFileMode(originalB, mode);
+                File.SetUnixFileMode(forgedA, mode);
+            }
+#endif
+
+            // This payload made the prior delimiter-only digest interpret one file's bytes as
+            // the entry boundary and metadata for a second file.
+            var collisionPayload = new List<byte> { 0x41, 0xff };
+            static void AppendLegacyValue(List<byte> payload, string value)
+            {
+                payload.AddRange(System.Text.Encoding.UTF8.GetBytes(value));
+                payload.Add(0);
+            }
+            AppendLegacyValue(collisionPayload, "b");
+            AppendLegacyValue(
+                collisionPayload,
+                ((int)new FileInfo(originalB).Attributes).ToString(System.Globalization.CultureInfo.InvariantCulture));
+#if NET8_0_OR_GREATER
+            AppendLegacyValue(
+                collisionPayload,
+                OperatingSystem.IsWindows()
+                    ? string.Empty
+                    : ((int)File.GetUnixFileMode(originalB)).ToString(System.Globalization.CultureInfo.InvariantCulture));
+#else
+            AppendLegacyValue(collisionPayload, string.Empty);
+#endif
+            AppendLegacyValue(collisionPayload, string.Empty);
+            collisionPayload.Add(0x42);
+            File.WriteAllBytes(forgedA, collisionPayload.ToArray());
+
+            Assert.NotEqual(
+                AppleNotarizationService.ComputeArtifactSha256(original.FullName),
+                AppleNotarizationService.ComputeArtifactSha256(forged.FullName));
         }
         finally
         {

@@ -158,26 +158,15 @@ public sealed class AppStoreConnectScreenshotSyncService
             var filesToUpload = FindMissingFiles(plannedSet.Preflighted.Files, plannedSet.ExistingScreenshots);
             if (request.ReplaceExisting)
             {
-                var retainedIds = new HashSet<string>(StringComparer.Ordinal);
-                var prefixLength = 0;
-                while (prefixLength < plannedSet.Preflighted.Files.Length &&
-                       prefixLength < plannedSet.ExistingScreenshots.Length)
-                {
-                    var expected = ComputeSourceChecksum(plannedSet.Preflighted.Files[prefixLength]);
-                    var existing = plannedSet.ExistingScreenshots[prefixLength];
-                    if (!string.Equals(expected, existing.SourceFileChecksum, StringComparison.OrdinalIgnoreCase))
-                        break;
-                    retainedIds.Add(existing.Id);
-                    prefixLength++;
-                }
-
-                foreach (var screenshot in plannedSet.ExistingScreenshots.Where(screenshot => !retainedIds.Contains(screenshot.Id)))
+                // MD5 is an App Store Connect transport field, not approval evidence. A destructive
+                // replacement must create fresh asset identities for every approved immutable byte set.
+                foreach (var screenshot in plannedSet.ExistingScreenshots)
                 {
                     await _client.DeleteScreenshotAsync(screenshot.Id, cancellationToken).ConfigureAwait(false);
                     deletedCount++;
                 }
 
-                filesToUpload = plannedSet.Preflighted.Files.Skip(prefixLength).ToArray();
+                filesToUpload = plannedSet.Preflighted.Files;
             }
 
             var uploaded = new List<AppStoreConnectScreenshotUploadResult>();
@@ -213,7 +202,15 @@ public sealed class AppStoreConnectScreenshotSyncService
                 var finalChecksums = finalScreenshots
                     .Select(static screenshot => screenshot.SourceFileChecksum?.Trim() ?? string.Empty)
                     .ToArray();
-                if (finalChecksums.Length != expectedChecksums.Length ||
+                var expectedIds = uploaded
+                    .Select(static upload => upload.Screenshot.Id)
+                    .ToArray();
+                var finalIds = finalScreenshots
+                    .Select(static screenshot => screenshot.Id)
+                    .ToArray();
+                if (finalIds.Length != expectedIds.Length ||
+                    !finalIds.SequenceEqual(expectedIds, StringComparer.Ordinal) ||
+                    finalChecksums.Length != expectedChecksums.Length ||
                     !finalChecksums.SequenceEqual(expectedChecksums, StringComparer.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException(

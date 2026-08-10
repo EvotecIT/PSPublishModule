@@ -7,6 +7,12 @@ namespace PowerForge;
 /// <summary>Submits direct macOS artifacts for notarization and verifies the accepted result locally.</summary>
 public sealed class AppleNotarizationService
 {
+    private static readonly IReadOnlyDictionary<string, string?> TrustedSystemToolEnvironment =
+        new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
+        };
+
     private readonly IProcessRunner _processRunner;
 
     /// <summary>Creates a notarization service.</summary>
@@ -39,6 +45,25 @@ public sealed class AppleNotarizationService
                 "ZIP archives can be submitted to Apple but cannot be stapled directly; submit the contained app instead.",
                 nameof(request));
         }
+
+        var xcrunExecutable = ResolveAppleToolExecutable(
+            request.XcrunExecutable,
+            "xcrun",
+            "/usr/bin/xcrun",
+            request.RequireTrustedSystemTools);
+        var dittoExecutable = ResolveAppleToolExecutable(
+            request.DittoExecutable,
+            "ditto",
+            "/usr/bin/ditto",
+            request.RequireTrustedSystemTools);
+        var spctlExecutable = ResolveAppleToolExecutable(
+            request.SpctlExecutable,
+            "spctl",
+            "/usr/sbin/spctl",
+            request.RequireTrustedSystemTools);
+        var toolEnvironment = request.RequireTrustedSystemTools
+            ? TrustedSystemToolEnvironment
+            : null;
 
         var artifactSha256 = ComputeArtifactSha256(artifactPath);
         var expectedArtifactSha256 = string.IsNullOrWhiteSpace(request.ExpectedArtifactSha256)
@@ -73,6 +98,8 @@ public sealed class AppleNotarizationService
             ? artifactPath
             : await PrepareSubmissionAsync(
                     request,
+                    dittoExecutable,
+                    toolEnvironment,
                     submissionArtifactPath,
                     submissionSnapshot.RootPath,
                     timeout,
@@ -120,7 +147,7 @@ public sealed class AppleNotarizationService
                 "private Apple notarization submission",
                 "notarytool",
                 "Do not resubmit until the accepted submission has been reconciled.");
-            submission = await RunAsync(request.XcrunExecutable, submissionArtifactPath, submitArguments, timeout, cancellationToken).ConfigureAwait(false);
+            submission = await RunAsync(xcrunExecutable, submissionArtifactPath, submitArguments, timeout, toolEnvironment, cancellationToken).ConfigureAwait(false);
             (submissionId, status) = ParseSubmission(submission);
             try
             {
@@ -189,17 +216,17 @@ public sealed class AppleNotarizationService
                     0,
                     "Skipped stapling because a retained exact post-staple checkpoint proves that it already succeeded.",
                     string.Empty,
-                    request.XcrunExecutable,
+                    xcrunExecutable,
                     TimeSpan.Zero,
                     false);
             }
             else
             {
-                staple = await RunAsync(request.XcrunExecutable, submissionArtifactPath, new[] { "stapler", "staple", submissionArtifactPath }, timeout, cancellationToken).ConfigureAwait(false);
+                staple = await RunAsync(xcrunExecutable, submissionArtifactPath, new[] { "stapler", "staple", submissionArtifactPath }, timeout, toolEnvironment, cancellationToken).ConfigureAwait(false);
                 stapledThisInvocation = staple.Succeeded;
             }
             if (staple?.Succeeded == true && validation is null)
-                validation = await RunAsync(request.XcrunExecutable, submissionArtifactPath, new[] { "stapler", "validate", submissionArtifactPath }, timeout, cancellationToken).ConfigureAwait(false);
+                validation = await RunAsync(xcrunExecutable, submissionArtifactPath, new[] { "stapler", "validate", submissionArtifactPath }, timeout, toolEnvironment, cancellationToken).ConfigureAwait(false);
             if (stapledThisInvocation && validation?.Succeeded == true && !string.IsNullOrWhiteSpace(submissionId))
             {
                 var privateStapledArtifactSha256 = ComputeArtifactSha256(submissionArtifactPath);
@@ -234,7 +261,7 @@ public sealed class AppleNotarizationService
                     extension.Equals(".app", StringComparison.OrdinalIgnoreCase) ? "execute" : "install",
                     "--verbose=4", submissionArtifactPath
                 };
-            assessment = await RunAsync(request.SpctlExecutable, submissionArtifactPath, assessmentArguments, timeout, cancellationToken).ConfigureAwait(false);
+            assessment = await RunAsync(spctlExecutable, submissionArtifactPath, assessmentArguments, timeout, toolEnvironment, cancellationToken).ConfigureAwait(false);
         }
 
         string finalArtifactSha256;
@@ -271,6 +298,8 @@ public sealed class AppleNotarizationService
 
     private async Task<string> PrepareSubmissionAsync(
         AppleNotarizationRequest request,
+        string dittoExecutable,
+        IReadOnlyDictionary<string, string?>? toolEnvironment,
         string artifactPath,
         string privateRoot,
         TimeSpan timeout,
@@ -284,10 +313,11 @@ public sealed class AppleNotarizationService
             Path.GetFileNameWithoutExtension(artifactPath) + ".notarization.zip");
         Directory.CreateDirectory(Path.GetDirectoryName(submissionPath)!);
         var package = await RunAsync(
-            request.DittoExecutable,
+            dittoExecutable,
             artifactPath,
             new[] { "-c", "-k", "--keepParent", artifactPath, submissionPath },
             timeout,
+            toolEnvironment,
             cancellationToken).ConfigureAwait(false);
         if (!package.Succeeded)
             throw new InvalidOperationException($"ditto failed to package '{artifactPath}' for notarization with exit code {package.ExitCode}: {package.StdErr}");
@@ -347,14 +377,37 @@ public sealed class AppleNotarizationService
         string artifactPath,
         IReadOnlyList<string> arguments,
         TimeSpan timeout,
+        IReadOnlyDictionary<string, string?>? environmentVariables,
         CancellationToken cancellationToken)
         => _processRunner.RunAsync(
             new ProcessRunRequest(
-                string.IsNullOrWhiteSpace(executable) ? "xcrun" : executable.Trim(),
+                executable,
                 Path.GetDirectoryName(artifactPath) ?? Directory.GetCurrentDirectory(),
                 arguments,
-                timeout),
+                timeout,
+                environmentVariables),
             cancellationToken);
+
+    private static string ResolveAppleToolExecutable(
+        string? executable,
+        string defaultName,
+        string trustedPath,
+        bool requireTrustedSystemTool)
+    {
+        var value = string.IsNullOrWhiteSpace(executable)
+            ? defaultName
+            : executable!.Trim();
+        if (!requireTrustedSystemTool)
+            return value;
+        if (value.Equals(defaultName, StringComparison.Ordinal) ||
+            value.Equals(trustedPath, StringComparison.Ordinal))
+        {
+            return trustedPath;
+        }
+
+        throw new InvalidOperationException(
+            $"Exact-source Apple notarization requires the trusted system tool '{trustedPath}'; received '{value}'.");
+    }
 
     private static (string? Id, string? Status) ParseSubmission(ProcessRunResult result)
     {
@@ -376,6 +429,7 @@ public sealed class AppleNotarizationService
     internal static string ComputeArtifactSha256(string artifactPath)
     {
         using var sha256 = SHA256.Create();
+        AppendValue(sha256, "PowerForge.ArtifactSha256.v2");
         if (File.Exists(artifactPath))
         {
             AppendFileSystemEntry(
@@ -436,6 +490,7 @@ public sealed class AppleNotarizationService
         string relativePath,
         bool includeContents)
     {
+        AppendValue(hash, "entry");
         AppendValue(hash, relativePath);
         AppendValue(hash, ((int)entry.Attributes).ToString(System.Globalization.CultureInfo.InvariantCulture));
 #if NET8_0_OR_GREATER
@@ -456,26 +511,42 @@ public sealed class AppleNotarizationService
         AppendValue(hash, string.Empty);
         AppendValue(hash, string.Empty);
 #endif
+        AppendValue(hash, includeContents ? "file" : "metadata");
         if (includeContents)
             AppendFile(hash, entry.FullName);
-        AppendBytes(hash, new byte[] { 0xff });
     }
 
     private static void AppendValue(HashAlgorithm hash, string value)
     {
-        AppendBytes(hash, Encoding.UTF8.GetBytes(value));
-        AppendBytes(hash, new byte[] { 0 });
+        var bytes = Encoding.UTF8.GetBytes(value);
+        AppendLength(hash, bytes.LongLength);
+        AppendBytes(hash, bytes);
     }
 
     private static void AppendFile(HashAlgorithm hash, string path)
     {
         using var stream = File.OpenRead(path);
+        AppendLength(hash, stream.Length);
         var buffer = new byte[81920];
         int read;
         while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
             hash.TransformBlock(buffer, 0, read, buffer, 0);
     }
 
+    private static void AppendLength(HashAlgorithm hash, long value)
+    {
+        var bytes = new byte[sizeof(long)];
+        for (var index = bytes.Length - 1; index >= 0; index--)
+        {
+            bytes[index] = (byte)(value & 0xff);
+            value >>= 8;
+        }
+        AppendBytes(hash, bytes);
+    }
+
     private static void AppendBytes(HashAlgorithm hash, byte[] bytes)
-        => hash.TransformBlock(bytes, 0, bytes.Length, bytes, 0);
+    {
+        if (bytes.Length > 0)
+            hash.TransformBlock(bytes, 0, bytes.Length, bytes, 0);
+    }
 }
