@@ -263,7 +263,11 @@ internal sealed partial class AppleReleaseSourceTrustService
         {
             var target = call.Groups["target"].Value.Replace("`", string.Empty).Replace(" ", string.Empty);
             if (string.IsNullOrWhiteSpace(target))
-                continue;
+            {
+                throw new InvalidOperationException(
+                    $"Local Swift package '{packageRoot}' uses a parenthesized executable manifest expression, " +
+                    "which can hide an indirect or host-dependent call. Use direct PackageDescription construction only before creating an exact-source Apple checkpoint.");
+            }
             var segments = target.Split('.');
             var accepted = segments.Length == 1
                 ? directFactories.Contains(segments[0])

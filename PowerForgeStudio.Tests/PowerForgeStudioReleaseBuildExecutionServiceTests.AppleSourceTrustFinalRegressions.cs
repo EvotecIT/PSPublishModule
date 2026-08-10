@@ -289,6 +289,28 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains("String", exception.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("let seed = ((Int.random)(in: 0...999999)).description")]
+    [InlineData("let seed = (Int.random)(in: 0...999999).description")]
+    [InlineData("let seed = ({ Int.random(in: 0...999999) })().description")]
+    public void ResolveExactAppleSourceCommit_rejects_parenthesized_swift_manifest_execution(string declaration)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, _, packageRoot) = CreateLocalPackageFixture(scope, "ParenthesizedManifestRepo");
+        File.WriteAllText(
+            Path.Combine(packageRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\n" +
+            declaration + "\n" +
+            "let package = Package(name: \"Shared\", targets: [.target(name: \"Shared\", swiftSettings: [.define(\"SEED\", to: seed)])])");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("parenthesized executable manifest expression", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void ResolveExactAppleSourceCommit_rejects_host_reference_in_unclassified_build_setting()
     {
