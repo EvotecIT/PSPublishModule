@@ -307,6 +307,9 @@ public sealed partial class WebPerformanceObservationTests
             partial.CollectedAtUtc = CollectionTime.AddMinutes(1);
             partial.Status = "partial";
             partial.Observations[0].Value = 5000;
+            partial.Observations[0].Histogram[0].Density = 0.7;
+            partial.Observations[0].Histogram[1].Density = 0.04;
+            partial.Observations[0].Histogram[2].Density = 0.26;
             await store.ImportPerformanceAsync(WebPerformanceObservationNormalizer.Normalize(partial));
 
             var evidence = await store.QueryPerformanceEvidenceAsync(new WebPerformanceObservationQuery { SiteId = "officeimo", MeasurementKind = "field" });

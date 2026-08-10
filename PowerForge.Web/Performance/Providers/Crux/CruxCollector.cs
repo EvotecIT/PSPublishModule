@@ -45,8 +45,6 @@ public sealed class CruxCollector
     {
         ArgumentNullException.ThrowIfNull(options);
         ValidateOptions(options);
-        var collectedAt = _timeProvider.GetUtcNow();
-        var partial = CreateBatch(options, collectedAt, "partial");
         string apiKey;
         try
         {
@@ -54,10 +52,10 @@ public sealed class CruxCollector
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return Failure(partial, 0, "credential-unavailable", "CrUX API credential is unavailable.");
+            return Failure(CreateBatch(options, _timeProvider.GetUtcNow(), "partial"), 0, "credential-unavailable", "CrUX API credential is unavailable.");
         }
         if (string.IsNullOrWhiteSpace(apiKey))
-            return Failure(partial, 0, "credential-unavailable", "CrUX API credential is unavailable.");
+            return Failure(CreateBatch(options, _timeProvider.GetUtcNow(), "partial"), 0, "credential-unavailable", "CrUX API credential is unavailable.");
 
         using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint);
         try
@@ -66,7 +64,7 @@ public sealed class CruxCollector
         }
         catch (FormatException)
         {
-            return Failure(partial, 0, "credential-unavailable", "CrUX API credential is unavailable.");
+            return Failure(CreateBatch(options, _timeProvider.GetUtcNow(), "partial"), 0, "credential-unavailable", "CrUX API credential is unavailable.");
         }
         request.Content = JsonContent.Create(CreateRequestBody(options));
         HttpResponseMessage response;
@@ -76,13 +74,13 @@ public sealed class CruxCollector
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
         {
-            return Failure(partial, 1, "provider-unavailable", "CrUX API request did not complete.");
+            return Failure(CreateBatch(options, _timeProvider.GetUtcNow(), "partial"), 1, "provider-unavailable", "CrUX API request did not complete.");
         }
         using (response)
         {
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
-            var zero = CreateBatch(options, collectedAt, "complete");
+            var zero = CreateBatch(options, _timeProvider.GetUtcNow(), "complete");
             zero.ZeroDataConfirmed = true;
             return new CruxCollectionResult
             {
@@ -92,14 +90,14 @@ public sealed class CruxCollector
             };
         }
         if (!response.IsSuccessStatusCode)
-            return Failure(partial, 1, ClassifyHttpError(response.StatusCode), $"CrUX API returned HTTP {(int)response.StatusCode}.");
+            return Failure(CreateBatch(options, _timeProvider.GetUtcNow(), "partial"), 1, ClassifyHttpError(response.StatusCode), $"CrUX API returned HTTP {(int)response.StatusCode}.");
 
         try
         {
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
             WebPerformanceJsonBoundary.ValidateNoDuplicateObjectMembers(document.RootElement, "CrUX response");
-            var complete = ParseResponse(document.RootElement, options, collectedAt);
+            var complete = ParseResponse(document.RootElement, options, _timeProvider.GetUtcNow());
             return new CruxCollectionResult
             {
                 Success = true,
@@ -109,7 +107,7 @@ public sealed class CruxCollector
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException)
         {
-            return Failure(partial, 1, "invalid-response", ex.Message);
+            return Failure(CreateBatch(options, _timeProvider.GetUtcNow(), "partial"), 1, "invalid-response", ex.Message);
         }
         }
     }

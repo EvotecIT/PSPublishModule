@@ -66,6 +66,9 @@ public static class WebPerformanceObservationNormalizer
         {
             throw new ArgumentException("All field metrics in one batch must share the same aggregation period.", nameof(batch));
         }
+        var collectedDate = DateOnly.FromDateTime(batch.CollectedAtUtc.ToUniversalTime().UtcDateTime);
+        if (measurementKind == "field" && observations.Any(value => value.PeriodEndDate > collectedDate))
+            throw new ArgumentException("Field aggregation periods cannot end after collectedAtUtc.", nameof(batch));
         if (status == "complete" && observations.Length == 0 && !batch.ZeroDataConfirmed)
             throw new ArgumentException("A complete empty performance batch must explicitly confirm no provider data.", nameof(batch));
         if (batch.ZeroDataConfirmed && (measurementKind != "field" || status != "complete" || observations.Length != 0))
@@ -166,6 +169,14 @@ public static class WebPerformanceObservationNormalizer
             var density = histogram.Sum(bin => bin.Density);
             if (density < 0.999d || density > 1.001d)
                 throw new ArgumentException($"Metric '{metric}' histogram densities must sum to one.", nameof(value));
+            var cumulativeDensity = 0d;
+            var percentileBin = histogram.First(bin => (cumulativeDensity += bin.Density) >= 0.75d);
+            var tolerance = Math.Max(1e-9d, Math.Abs(value.Value) * 1e-12d);
+            if (percentileBin.Start is double percentileStart && value.Value < percentileStart - tolerance ||
+                percentileBin.End is double percentileEnd && value.Value > percentileEnd + tolerance)
+            {
+                throw new ArgumentException($"Metric '{metric}' p75 value is inconsistent with its histogram.", nameof(value));
+            }
         }
 
         return new WebPerformanceObservation
