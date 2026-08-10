@@ -87,7 +87,7 @@ public interface IBingWebmasterApiKeyProvider
 internal sealed class BingWebmasterEnvelope<T>
 {
     [JsonPropertyName("d")]
-    public T[] Values { get; set; } = Array.Empty<T>();
+    public T[]? Values { get; set; }
 }
 
 internal sealed class BingWebmasterSite

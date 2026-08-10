@@ -230,6 +230,53 @@ public sealed class WebBingWebmasterCollectorTests
     }
 
     [Fact]
+    public async Task Collect_RejectsDuplicateProviderRowsBeforeBuildingAPartialBatch()
+    {
+        var duplicate = Stat("powerforge", 1, 10, 2);
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => SitesResponse("https://officeimo.com/", true),
+            1 => StatsResponse(duplicate, duplicate),
+            _ => throw new InvalidOperationException("A duplicate response must fail before the next provider request.")
+        });
+        using var httpClient = new HttpClient(handler);
+        var collector = new BingWebmasterCollector(httpClient, new FakeApiKeyProvider());
+
+        var result = await collector.CollectAsync(CreateOptions());
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid-response", result.ErrorCode);
+        Assert.Equal(2, result.RequestCount);
+        Assert.Empty(result.Batch.Observations);
+        WebSearchObservationNormalizer.Normalize(result.Batch);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{}")]
+    [InlineData("{\"other\":[]}")]
+    [InlineData("{\"d\":null}")]
+    public async Task Collect_RejectsResponsesWithoutANonNullBingEnvelope(string json)
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => SitesResponse("https://officeimo.com/", true),
+            1 => RawJsonResponse(json),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var httpClient = new HttpClient(handler);
+        var collector = new BingWebmasterCollector(httpClient, new FakeApiKeyProvider());
+
+        var result = await collector.CollectAsync(CreateOptions());
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid-response", result.ErrorCode);
+        Assert.Equal("partial", result.Batch.Status);
+        Assert.Empty(result.Batch.Observations);
+        WebSearchObservationNormalizer.Normalize(result.Batch);
+    }
+
+    [Fact]
     public async Task Collect_RejectsMissingRequiredMetricsInsteadOfTreatingThemAsZero()
     {
         var handler = new ScriptedHandler((_, index) => index switch
@@ -425,7 +472,25 @@ public sealed class WebBingWebmasterCollectorTests
             var configPath = Path.Combine(root, "providers.json");
             var inputPath = Path.Combine(root, "bing.csv");
             var databasePath = Path.Combine(root, "search.db");
-            File.WriteAllText(configPath, JsonSerializer.Serialize(CreateConfiguration(BingWebmasterCollector.ProviderKind)));
+            var configuration = CreateConfiguration(BingWebmasterCollector.ProviderKind);
+            configuration.Sites[0].Providers =
+            [
+                .. configuration.Sites[0].Providers,
+                new WebSearchProviderRegistration
+                {
+                    Id = "google-search-console",
+                    Kind = GoogleSearchConsoleCollector.ProviderKind,
+                    Enabled = true,
+                    Capabilities = [WebSearchProviderCapabilities.SearchAnalytics],
+                    Credential = new WebSearchCredentialReference
+                    {
+                        Kind = "google-service-account-json",
+                        EnvironmentVariable = "POWERFORGE_TEST_GSC_UNRELATED_UNAVAILABLE"
+                    },
+                    Settings = new Dictionary<string, string?> { ["property"] = "sc-domain:officeimo.com" }
+                }
+            ];
+            File.WriteAllText(configPath, JsonSerializer.Serialize(configuration));
             File.WriteAllText(inputPath, "Date,Page,Clicks,Impressions,CTR,Position\n2026-08-01,https://officeimo.com/,1,10,10%,2\n");
 
             var commandArgs = new[]
@@ -682,6 +747,11 @@ public sealed class WebBingWebmasterCollectorTests
     private static HttpResponseMessage JsonResponse(object value) => new(HttpStatusCode.OK)
     {
         Content = new StringContent(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json")
+    };
+
+    private static HttpResponseMessage RawJsonResponse(string json) => new(HttpStatusCode.OK)
+    {
+        Content = new StringContent(json, Encoding.UTF8, "application/json")
     };
 
     private sealed class FakeApiKeyProvider : IBingWebmasterApiKeyProvider

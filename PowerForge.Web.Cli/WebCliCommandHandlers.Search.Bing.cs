@@ -156,13 +156,10 @@ internal static partial class WebCliCommandHandlers
                 string.Equals(candidate.Id, providerId, StringComparison.OrdinalIgnoreCase));
             if (configuredSite is null || configuredProvider is null)
                 return FailSearch("Observe import-bing site or provider is not configured.", outputJson, logger, "web.observe.import-bing");
-            var unusedCredentialVariable = configuredProvider.Credential?.EnvironmentVariable;
             var doctor = WebSearchProviderDoctor.InspectWithCapabilities(
                 loaded.Configuration,
                 WebSearchCollectorCatalog.AvailableCapabilities,
-                name => string.Equals(name, unusedCredentialVariable, StringComparison.Ordinal)
-                    ? "credential-not-used-by-csv-import"
-                    : Environment.GetEnvironmentVariable(name));
+                _ => "credential-not-used-by-csv-import");
             if (!doctor.Success || string.IsNullOrWhiteSpace(doctor.ConfigurationHash))
             {
                 var firstError = doctor.Checks.FirstOrDefault(check => check.Severity == WebSearchProviderCheckSeverity.Error);

@@ -271,7 +271,9 @@ public sealed partial class BingWebmasterCollector
             var payload = await response.Content
                 .ReadFromJsonAsync<BingWebmasterEnvelope<T>>(JsonOptions, cancellationToken)
                 .ConfigureAwait(false);
-            return ApiResponse<T>.Succeeded(payload?.Values ?? Array.Empty<T>());
+            if (payload?.Values is not { } values || values.Any(static value => value is null))
+                return ApiResponse<T>.Failure("invalid-response", "Bing Webmaster returned an invalid response envelope.");
+            return ApiResponse<T>.Succeeded(values);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -331,7 +333,9 @@ public sealed partial class BingWebmasterCollector
             });
         }
         observations = mapped.ToArray();
-        return true;
+        return observations
+            .GroupBy(observation => (observation.Date, observation.Page, observation.Query))
+            .All(group => group.Count() == 1);
     }
 
     private BingWebmasterCollectionResult BuildFailure(
