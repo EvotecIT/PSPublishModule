@@ -74,11 +74,7 @@ internal static partial class WebCliCommandHandlers
                 throw new ArgumentException("CrUX requires a credential reference.");
             var scope = (TryGetOptionValue(args, "--scope") ?? "origin").Trim().ToLowerInvariant();
             var target = TryGetOptionValue(args, "--target") ?? context.Site.BaseUrl;
-            if (scope == "origin")
-            {
-                var uri = new Uri(target, UriKind.Absolute);
-                target = new UriBuilder(uri) { Path = "/", Query = string.Empty, Fragment = string.Empty }.Uri.AbsoluteUri;
-            }
+            target = NormalizeCruxCommandTarget(scope, target);
             using var httpClient = new HttpClient();
             var collector = new CruxCollector(httpClient, CruxEnvironmentApiKeyProvider.Create(context.Provider.Credential));
             var result = collector.CollectAsync(new CruxCollectionOptions
@@ -104,6 +100,15 @@ internal static partial class WebCliCommandHandlers
         {
             return FailSearch(ex.Message, outputJson, logger, "web.performance.collect-crux");
         }
+    }
+
+    internal static string NormalizeCruxCommandTarget(string scope, string target)
+    {
+        if (scope != "origin")
+            return target;
+        var uri = new Uri(target.Trim(), UriKind.Absolute);
+        var origin = new UriBuilder(uri) { Path = "/", Query = string.Empty, Fragment = string.Empty }.Uri.AbsoluteUri;
+        return WebPerformanceObservationNormalizer.CanonicalizeTarget(origin, "origin");
     }
 
     internal static int CompleteCruxCollection(

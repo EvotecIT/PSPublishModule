@@ -1,5 +1,6 @@
 using System.Net;
 using PowerForge.Web;
+using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
 
@@ -73,5 +74,13 @@ public sealed partial class WebPerformanceObservationTests
         using var body = System.Text.Json.JsonDocument.Parse(Assert.Single(handler.Requests).Body);
         Assert.Equal("https://officeimo.com/", body.RootElement.GetProperty("origin").GetString());
         Assert.Equal("https://officeimo.com/", result.Batch.TargetUrl);
+    }
+
+    [Fact]
+    public void CruxCli_CanonicalizesOriginBeforeConstructingProviderOptions()
+    {
+        var target = WebCliCommandHandlers.NormalizeCruxCommandTarget("origin", " HTTPS://OFFICEIMO.COM:443/docs/ ");
+
+        Assert.Equal("https://officeimo.com/", target);
     }
 }
