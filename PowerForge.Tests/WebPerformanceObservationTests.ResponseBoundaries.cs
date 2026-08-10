@@ -4,6 +4,25 @@ namespace PowerForge.Tests;
 
 public sealed partial class WebPerformanceObservationTests
 {
+    [Theory]
+    [InlineData(0.749)]
+    [InlineData(0.751)]
+    public void Normalizer_AllowsP75AtExactProviderDensityRoundingToleranceEndpoints(double firstBinDensity)
+    {
+        var batch = CreateFieldBatch();
+        batch.Observations[0].Value = 2600;
+        batch.Observations[0].Histogram =
+        [
+            new WebPerformanceHistogramBin { Start = 0, End = 2500, Density = firstBinDensity },
+            new WebPerformanceHistogramBin { Start = 2500, End = 4000, Density = 1d - firstBinDensity },
+            new WebPerformanceHistogramBin { Start = 4000, Density = 0 }
+        ];
+
+        var normalized = WebPerformanceObservationNormalizer.Normalize(batch);
+
+        Assert.Equal(2600, Assert.Single(normalized.Observations).Value);
+    }
+
     [Fact]
     public void Normalizer_AllowsP75InAdjacentBinWithinProviderDensityRoundingTolerance()
     {

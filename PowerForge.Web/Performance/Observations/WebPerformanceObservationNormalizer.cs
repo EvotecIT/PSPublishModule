@@ -6,6 +6,7 @@ namespace PowerForge.Web;
 public static class WebPerformanceObservationNormalizer
 {
     private const double HistogramDensityTolerance = 0.001d;
+    private const double HistogramDensityComparisonEpsilon = 1e-12d;
 
     private static readonly IReadOnlyDictionary<string, string> LabMetricUnits = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -179,11 +180,12 @@ public static class WebPerformanceObservationNormalizer
             for (var binIndex = 0; binIndex < histogram.Length; binIndex++)
             {
                 cumulativeDensity += histogram[binIndex].Density;
-                if (cumulativeDensity < 0.75d - HistogramDensityTolerance)
+                if (cumulativeDensity < 0.75d - HistogramDensityTolerance - HistogramDensityComparisonEpsilon)
                     continue;
 
                 percentileConsistent = ValueBelongsToBin(value.Value, histogram[binIndex], tolerance);
-                if (Math.Abs(cumulativeDensity - 0.75d) <= HistogramDensityTolerance && binIndex + 1 < histogram.Length)
+                if (Math.Abs(cumulativeDensity - 0.75d) <= HistogramDensityTolerance + HistogramDensityComparisonEpsilon &&
+                    binIndex + 1 < histogram.Length)
                     percentileConsistent |= ValueBelongsToBin(value.Value, histogram[binIndex + 1], tolerance);
                 break;
             }
