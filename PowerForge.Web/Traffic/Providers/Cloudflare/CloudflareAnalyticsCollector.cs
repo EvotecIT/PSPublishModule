@@ -210,14 +210,11 @@ public sealed class CloudflareAnalyticsCollector
                 observations = Array.Empty<WebTrafficObservation>();
                 return false;
             }
-            if (!IsValidRequestPath(dimensions.Path) ||
-                !Uri.TryCreate("https://" + dimensions.Host.TrimEnd('.') + "/", UriKind.Absolute, out var rowUri) ||
-                Uri.CheckHostName(rowUri.IdnHost) != UriHostNameType.Dns)
+            if (!IsValidRequestPath(dimensions.Path) || !TryNormalizeHostDimension(dimensions.Host, out var rowHost))
             {
                 observations = Array.Empty<WebTrafficObservation>();
                 return false;
             }
-            var rowHost = rowUri.IdnHost.TrimEnd('.').ToLowerInvariant();
             if (!rowHost.Equals(siteHost, StringComparison.Ordinal) || !PathBelongsToSite(dimensions.Path, sitePath))
             {
                 observations = Array.Empty<WebTrafficObservation>();
@@ -226,7 +223,7 @@ public sealed class CloudflareAnalyticsCollector
             mapped.Add(new WebTrafficObservation
             {
                 Date = requestedDate,
-                Host = dimensions.Host,
+                Host = rowHost,
                 Path = dimensions.Path,
                 Requests = (long)row.Count.Value,
                 Visits = (long)row.Sum.Visits.Value,
@@ -279,6 +276,31 @@ public sealed class CloudflareAnalyticsCollector
 
     private static bool IsValidRequestPath(string path) =>
         path.StartsWith("/", StringComparison.Ordinal) && !path.Contains('#') && !path.Any(char.IsControl);
+
+    private static bool TryNormalizeHostDimension(string value, out string host)
+    {
+        host = string.Empty;
+        var candidate = value.Trim();
+        if (!candidate.Equals(value, StringComparison.Ordinal) ||
+            candidate.Length == 0 ||
+            candidate.Any(char.IsWhiteSpace) ||
+            candidate.Any(char.IsControl) ||
+            candidate.IndexOfAny(['/', '\\', ':', '@', '?', '#']) >= 0)
+        {
+            return false;
+        }
+
+        candidate = candidate.TrimEnd('.');
+        if (candidate.Length == 0 ||
+            !Uri.TryCreate("https://" + candidate + "/", UriKind.Absolute, out var uri) ||
+            Uri.CheckHostName(uri.IdnHost) != UriHostNameType.Dns)
+        {
+            return false;
+        }
+
+        host = uri.IdnHost.TrimEnd('.').ToLowerInvariant();
+        return host.Length > 0;
+    }
 
     private CloudflareAnalyticsCollectionResult Failure(
         CloudflareAnalyticsCollectionOptions options,

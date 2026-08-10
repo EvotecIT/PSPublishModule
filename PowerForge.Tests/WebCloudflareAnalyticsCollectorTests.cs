@@ -293,6 +293,34 @@ public sealed class WebCloudflareAnalyticsCollectorTests
         Assert.Single(result.Batch.Observations);
     }
 
+    [Theory]
+    [InlineData("officeimo.com/path")]
+    [InlineData("officeimo.com:443")]
+    [InlineData("officeimo.com?query")]
+    [InlineData(" officeimo.com")]
+    public async Task Collect_RejectsMalformedReturnedHostsWithoutDiscardingCompletedPartitions(string host)
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => TrafficResponse(TrafficRow(new DateOnly(2026, 8, 1), "officeimo.com", "/", 10, 2, 1000, 1)),
+            3 => TrafficResponse(TrafficRow(new DateOnly(2026, 8, 2), host, "/", 5, 1, 500, 1)),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+        var collector = new CloudflareAnalyticsCollector(client, new FakeTokenProvider());
+        var options = CreateOptions();
+        options.ThroughDate = new DateOnly(2026, 8, 2);
+
+        var result = await collector.CollectAsync(options);
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid-response", result.ErrorCode);
+        Assert.Equal([new DateOnly(2026, 8, 1)], result.Batch.CollectionCoverage.CompletedDates);
+        Assert.Single(result.Batch.Observations);
+    }
+
     [Fact]
     public async Task Collect_ReachingThePlanRowLimitProducesAnHonestPartialPartition()
     {
