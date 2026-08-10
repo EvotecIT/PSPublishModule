@@ -130,13 +130,14 @@ internal sealed partial class SqliteWebSearchObservationStore
                    json_extract(normalized_manifest_json, '$.collectionCoverage.fromDate'),
                    json_extract(normalized_manifest_json, '$.collectionCoverage.throughDate'),
                    json_extract(normalized_manifest_json, '$.collectionCoverage.searchType'),
-                   json_extract(normalized_manifest_json, '$.collectionCoverage.failureCategory')
+                   json_extract(normalized_manifest_json, '$.collectionCoverage.failureCategory'),
+                   json_extract(normalized_manifest_json, '$.collectionCoverage.failedDate')
             FROM search_observation_runs;
             """,
             static record => new SearchFleetRunMetadata(
                 record.GetString(0), record.GetString(1), record.GetString(2), ParseFleetTimestamp(record.GetString(3)), record.GetString(4),
                 NullableString(record, 5), NullableString(record, 6), NullableDate(record, 7), NullableDate(record, 8),
-                NullableString(record, 9), NullableString(record, 10)),
+                NullableString(record, 9), NullableString(record, 10), NullableDate(record, 11)),
             cancellationToken: cancellationToken).ConfigureAwait(false);
         var coverageDates = await client.QueryAsListAsync(_databasePath,
             """
@@ -171,7 +172,7 @@ internal sealed partial class SqliteWebSearchObservationStore
                         ? [new WebSearchFleetCompletedRange { FromDate = run.FromDate.Value, ThroughDate = run.ThroughDate.Value }]
                         : MergeDates(explicitDates);
                     result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
-                        run.SearchType.Trim().ToLowerInvariant(), ranges, run.ConfigurationHash, run.FailureCategory));
+                        run.SearchType.Trim().ToLowerInvariant(), ranges, run.ConfigurationHash, run.FailureCategory, run.FailureDate));
                 }
                 else
                 {
@@ -184,21 +185,27 @@ internal sealed partial class SqliteWebSearchObservationStore
                             ? [new WebSearchFleetCompletedRange { FromDate = run.FromDate.Value, ThroughDate = run.ThroughDate.Value }]
                             : MergeDates(explicitDates);
                         result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
-                            "web", ranges, run.ConfigurationHash, run.FailureCategory));
+                            "web", ranges, run.ConfigurationHash, run.FailureCategory, run.FailureDate));
                     }
                     foreach (var scope in scopes)
                     {
                         result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
-                            scope.Key, MergeDates(scope.Select(value => value.Date)), run.ConfigurationHash, run.FailureCategory));
+                            scope.Key, MergeDates(scope.Select(value => value.Date)), run.ConfigurationHash, run.FailureCategory, run.FailureDate));
                     }
                 }
                 continue;
             }
 
-            foreach (var scope in observationsByRun[identity].GroupBy(value => value.Scope, StringComparer.Ordinal))
+            var legacyScopes = observationsByRun[identity].GroupBy(value => value.Scope, StringComparer.Ordinal).ToArray();
+            if (legacyScopes.Length == 0)
             {
                 result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
-                    scope.Key, MergeDates(scope.Select(value => value.Date)), run.ConfigurationHash, run.FailureCategory));
+                    "web", Array.Empty<WebSearchFleetCompletedRange>(), run.ConfigurationHash, run.FailureCategory, run.FailureDate));
+            }
+            foreach (var scope in legacyScopes)
+            {
+                result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
+                    scope.Key, MergeDates(scope.Select(value => value.Date)), run.ConfigurationHash, run.FailureCategory, run.FailureDate));
             }
         }
         return result.ToArray();
@@ -212,12 +219,13 @@ internal sealed partial class SqliteWebSearchObservationStore
                    configuration_hash,
                    json_extract(normalized_manifest_json, '$.collectionCoverage.fromDate'),
                    json_extract(normalized_manifest_json, '$.collectionCoverage.throughDate'),
-                   json_extract(normalized_manifest_json, '$.collectionCoverage.failureCategory')
+                   json_extract(normalized_manifest_json, '$.collectionCoverage.failureCategory'),
+                   json_extract(normalized_manifest_json, '$.collectionCoverage.failedDate')
             FROM traffic_observation_runs;
             """,
             static record => new TrafficFleetRunMetadata(
                 record.GetString(0), record.GetString(1), record.GetString(2), ParseFleetTimestamp(record.GetString(3)), record.GetString(4),
-                NullableString(record, 5), NullableDate(record, 6), NullableDate(record, 7), NullableString(record, 8)),
+                NullableString(record, 5), NullableDate(record, 6), NullableDate(record, 7), NullableString(record, 8), NullableDate(record, 9)),
             cancellationToken: cancellationToken).ConfigureAwait(false);
         var coverageDates = await client.QueryAsListAsync(_databasePath,
             """
@@ -234,7 +242,7 @@ internal sealed partial class SqliteWebSearchObservationStore
                 ? [new WebSearchFleetCompletedRange { FromDate = run.FromDate.Value, ThroughDate = run.ThroughDate.Value }]
                 : MergeDates(coverageByRun[FleetRunIdentity(run.Provider, run.SiteId, run.RunId)].Select(value => value.Date));
             return new FleetRun("traffic", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status, "traffic", ranges,
-                run.ConfigurationHash, run.FailureCategory);
+                run.ConfigurationHash, run.FailureCategory, run.FailureDate);
         }).ToArray();
     }
 
@@ -252,8 +260,7 @@ internal sealed partial class SqliteWebSearchObservationStore
                 Array.Empty<WebSearchFleetCompletedRange>(),
                 batch.ConfigurationHash,
                 null,
-                false,
-                batch.MeasurementKind))
+                MeasurementKind: batch.MeasurementKind))
             .ToArray();
     }
 
@@ -284,7 +291,7 @@ internal sealed partial class SqliteWebSearchObservationStore
         [new WebSearchFleetCompletedRange { FromDate = value.FromDate, ThroughDate = value.ThroughDate }],
         value.ConfigurationHash,
         null,
-        true);
+        IsCoverageSummary: true);
 
     private static IEnumerable<WebSearchFleetEvidenceStream> BuildSearchStreams(IEnumerable<FleetRun> runs) =>
         BuildDailyStreams(runs, WebSearchProviderCapabilities.SearchAnalytics);
@@ -333,6 +340,7 @@ internal sealed partial class SqliteWebSearchObservationStore
             LastAttemptAtUtc = latestActual?.CollectedAtUtc,
             HasPartialEvidence = latestActual?.Status == "partial",
             LatestFailureCategory = latestActual?.Status == "partial" ? latestActual.FailureCategory : null,
+            LatestFailureDate = latestActual?.Status == "partial" ? latestActual.FailureDate : null,
             HasRetainedCoverage = runs.Any(value => value.IsCoverageSummary),
             RunCount = actualRuns.Length
         };
@@ -482,6 +490,7 @@ internal sealed partial class SqliteWebSearchObservationStore
         WebSearchFleetCompletedRange[] CompletedRanges,
         string? ConfigurationHash,
         string? FailureCategory,
+        DateOnly? FailureDate = null,
         bool IsCoverageSummary = false,
         string? MeasurementKind = null);
 
@@ -496,7 +505,8 @@ internal sealed partial class SqliteWebSearchObservationStore
         DateOnly? FromDate,
         DateOnly? ThroughDate,
         string? SearchType,
-        string? FailureCategory);
+        string? FailureCategory,
+        DateOnly? FailureDate);
 
     private sealed record TrafficFleetRunMetadata(
         string RunId,
@@ -507,7 +517,8 @@ internal sealed partial class SqliteWebSearchObservationStore
         string? ConfigurationHash,
         DateOnly? FromDate,
         DateOnly? ThroughDate,
-        string? FailureCategory);
+        string? FailureCategory,
+        DateOnly? FailureDate);
 
     private sealed record FleetDatedScope(string Provider, string SiteId, string RunId, DateOnly Date, string Scope);
 

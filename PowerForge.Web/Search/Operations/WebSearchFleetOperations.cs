@@ -27,6 +27,8 @@ public sealed class WebSearchFleetEvidenceStream
     public bool HasPartialEvidence { get; set; }
     /// <summary>Failure category recorded by the newest partial daily attempt.</summary>
     public string? LatestFailureCategory { get; set; }
+    /// <summary>Reporting partition that failed in the newest partial daily attempt.</summary>
+    public DateOnly? LatestFailureDate { get; set; }
     /// <summary>Whether completed coverage survives only as a compact retention summary.</summary>
     public bool HasRetainedCoverage { get; set; }
     /// <summary>Number of stored runs contributing to this stream.</summary>
@@ -366,6 +368,7 @@ public static class WebSearchFleetPlanner
         if (nextCoveredRange is not null)
             through = nextCoveredRange.FromDate.AddDays(-1);
         var failureCategory = evidence?.HasPartialEvidence == true &&
+                              evidence.LatestFailureDate == start &&
                               PermanentDailyFailureCategories.Contains(evidence.LatestFailureCategory ?? string.Empty)
             ? evidence.LatestFailureCategory
             : null;

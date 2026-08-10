@@ -7,7 +7,7 @@ using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
 
-public sealed class WebSearchFleetOperationsTests
+public sealed partial class WebSearchFleetOperationsTests
 {
     private static readonly DateTimeOffset AsOf = new(2026, 8, 10, 12, 0, 0, TimeSpan.Zero);
 
@@ -457,11 +457,11 @@ public sealed class WebSearchFleetOperationsTests
     }
 
     [Fact]
-    public void Planner_SurfacesPermanentDailyFailuresAsInputRequired()
+    public void Planner_SurfacesPermanentDailyFailuresOnlyForTheMatchingPartition()
     {
         var configuration = CreateConfiguration();
         configuration.Sites[0].Providers = [configuration.Sites[0].Providers.Single(value => value.Id == "cloudflare")];
-        configuration.Operations!.BackfillStartDate = null;
+        configuration.Operations!.BackfillStartDate = new DateOnly(2026, 8, 8);
         var doctor = Doctor(configuration);
         var snapshot = new WebSearchFleetEvidenceSnapshot
         {
@@ -476,7 +476,8 @@ public sealed class WebSearchFleetOperationsTests
                     AsOf.AddMinutes(-1),
                     partial: true,
                     configurationHash: doctor.ConfigurationHash,
-                    failureCategory: "retention-boundary")
+                    failureCategory: "retention-boundary",
+                    failureDate: new DateOnly(2026, 8, 8))
             ]
         };
 
@@ -741,7 +742,8 @@ public sealed class WebSearchFleetOperationsTests
         DateTimeOffset completeAt,
         bool partial = false,
         string? configurationHash = null,
-        string? failureCategory = null) => new()
+        string? failureCategory = null,
+        DateOnly? failureDate = null) => new()
     {
         SiteId = "officeimo",
         ProviderId = provider,
@@ -762,6 +764,7 @@ public sealed class WebSearchFleetOperationsTests
         LastAttemptAtUtc = partial ? completeAt.AddMinutes(1) : completeAt,
         HasPartialEvidence = partial,
         LatestFailureCategory = failureCategory,
+        LatestFailureDate = failureDate,
         RunCount = partial ? 2 : 1
     };
 
