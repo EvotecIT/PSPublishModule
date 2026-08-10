@@ -39,6 +39,9 @@ public sealed class AppleNotarizationRequest
     /// <summary>Expected SHA-256 of the retained artifact bytes when resuming an accepted submission.</summary>
     public string? ExpectedArtifactSha256 { get; set; }
 
+    /// <summary>SHA-256 of the exact file previously accepted by Apple's notary service.</summary>
+    public string? AcceptedSubmissionSha256 { get; set; }
+
     /// <summary>Whether stapling already succeeded and must not mutate the artifact again during resume.</summary>
     public bool StaplingCompleted { get; set; }
 
@@ -64,6 +67,8 @@ internal sealed class AppleNotarizationAcceptedCheckpoint
 
     internal string SubmissionPath { get; set; } = string.Empty;
 
+    internal string SubmissionSha256 { get; set; } = string.Empty;
+
     internal string SubmissionId { get; set; } = string.Empty;
 
     internal string Status { get; set; } = "Accepted";
@@ -74,6 +79,8 @@ internal sealed class AppleNotarizationStapledCheckpoint
     internal string ArtifactPath { get; set; } = string.Empty;
 
     internal string ArtifactSha256 { get; set; } = string.Empty;
+
+    internal string SubmissionSha256 { get; set; } = string.Empty;
 
     internal string SubmissionId { get; set; } = string.Empty;
 
@@ -91,6 +98,9 @@ public sealed class AppleNotarizationResult
 
     /// <summary>File submitted to notarytool.</summary>
     public string SubmissionPath { get; set; } = string.Empty;
+
+    /// <summary>SHA-256 of the exact file read and accepted by notarytool.</summary>
+    public string? SubmissionSha256 { get; set; }
 
     /// <summary>Notary submission id.</summary>
     public string? SubmissionId { get; set; }

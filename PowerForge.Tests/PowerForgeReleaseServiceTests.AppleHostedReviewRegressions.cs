@@ -891,6 +891,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             ArtifactPath = request.ArtifactPath,
                             ArtifactSha256 = AppleNotarizationService.ComputeArtifactSha256(request.ArtifactPath),
                             SubmissionPath = request.ArtifactPath + ".zip",
+                            SubmissionSha256 = new string('b', 64),
                             SubmissionId = "accepted-before-local-crash",
                             Status = "Accepted"
                         });
@@ -912,6 +913,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal(sourceCommit, accepted.SourceCommit);
             var target = Assert.Single(accepted.Targets);
             Assert.Equal("accepted-before-local-crash", target.NotarizationSubmissionId);
+            Assert.Equal(new string('b', 64), target.NotarizationSubmissionSha256);
             Assert.Equal("Accepted", target.NotarizationStatus);
             Assert.False(accepted.Success);
 

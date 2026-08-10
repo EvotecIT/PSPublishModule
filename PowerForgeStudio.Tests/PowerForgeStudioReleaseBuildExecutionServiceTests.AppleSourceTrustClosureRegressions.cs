@@ -195,6 +195,79 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_quoted_pbx_shell_phase_property()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("QuotedPbxPropertyRepo");
+        var project = scope.CreateDirectory(Path.Combine("QuotedPbxPropertyRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { \"isa\" = PBXShellScriptBuildPhase; shellScript = \"date > generated.txt\"; };");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("shell-script", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_quoted_pbx_build_settings_property()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("QuotedBuildSettingsRepo");
+        var project = scope.CreateDirectory(Path.Combine("QuotedBuildSettingsRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCBuildConfiguration; \"buildSettings\" = { SWIFT_EXEC = /tmp/custom-swiftc; }; };");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("SWIFT_EXEC", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_dynamic_remote_binary_target()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, _, packageRoot) = CreateLocalPackageFixture(scope, "DynamicBinaryTargetRepo");
+        File.WriteAllText(
+            Path.Combine(packageRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\n" +
+            "let binaryUrl = \"https://example.invalid/Tool.zip\"\n" +
+            "let package = Package(name: \"Shared\", targets: [.binaryTarget(name: \"Tool\", url: binaryUrl, checksum: \"" + new string('a', 64) + "\")])");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("binary target", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("literal URL", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_accepts_literal_checksum_bound_remote_binary_target()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, _, packageRoot) = CreateLocalPackageFixture(scope, "ChecksumBoundBinaryTargetRepo");
+        File.WriteAllText(
+            Path.Combine(packageRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\n" +
+            "let package = Package(name: \"Shared\", targets: [.binaryTarget(name: \"Tool\", url: \"https://example.invalid/Tool.zip\", checksum: \"" + new string('a', 64) + "\")])");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var expected = CommitRepository(repositoryRoot);
+
+        var actual = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
     public void ResolveExactAppleSourceCommit_rejects_external_input_hidden_in_nested_response_file()
     {
         using var scope = new TemporaryDirectoryScope();

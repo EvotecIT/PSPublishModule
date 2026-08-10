@@ -8,6 +8,7 @@ internal sealed partial class PowerForgeReleaseService
         string? artifactPath = null,
         string? acceptedSubmissionId = null,
         string? expectedArtifactSha256 = null,
+        string? acceptedSubmissionSha256 = null,
         bool staplingCompleted = false)
     {
         var result = _notarizeAppleArtifact(new AppleNotarizationRequest
@@ -22,6 +23,7 @@ internal sealed partial class PowerForgeReleaseService
             ApiIssuerId = plan.AppStoreConnectApiIssuerId,
             AcceptedSubmissionId = acceptedSubmissionId,
             ExpectedArtifactSha256 = expectedArtifactSha256,
+            AcceptedSubmissionSha256 = acceptedSubmissionSha256,
             StaplingCompleted = staplingCompleted,
             AcceptedCheckpoint = checkpoint => WriteAppleNotarizationAcceptance(plan, app, checkpoint),
             StapledCheckpoint = checkpoint => WriteAppleNotarizationStapled(plan, app, checkpoint),

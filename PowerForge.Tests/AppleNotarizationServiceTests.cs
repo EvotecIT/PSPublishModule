@@ -12,6 +12,7 @@ public sealed class AppleNotarizationServiceTests
         {
             var app = Directory.CreateDirectory(Path.Combine(root.FullName, "EasyControlX Agent.app"));
             var runner = new NotaryProcessRunner();
+            string? checkpointSubmissionSha256 = null;
             var result = await new AppleNotarizationService(runner).NotarizeAsync(new AppleNotarizationRequest
             {
                 ArtifactPath = app.FullName,
@@ -23,6 +24,7 @@ public sealed class AppleNotarizationServiceTests
                 {
                     Assert.Equal("submission-1", checkpoint.SubmissionId);
                     Assert.Equal("Accepted", checkpoint.Status);
+                    checkpointSubmissionSha256 = checkpoint.SubmissionSha256;
                     Assert.Equal(2, runner.Requests.Count);
                 }
             });
@@ -32,6 +34,9 @@ public sealed class AppleNotarizationServiceTests
             Assert.Equal("Accepted", result.Status);
             Assert.EndsWith(".notarization.zip", result.SubmissionPath, StringComparison.OrdinalIgnoreCase);
             Assert.True(File.Exists(result.SubmissionPath));
+            Assert.Equal(64, result.SubmissionSha256?.Length);
+            Assert.Equal(result.SubmissionSha256, checkpointSubmissionSha256);
+            Assert.Equal(result.SubmissionSha256, AppleNotarizationService.ComputeFileSha256(result.SubmissionPath));
             string? privateArtifactPath = null;
             Assert.Collection(
                 runner.Requests,
@@ -55,6 +60,34 @@ public sealed class AppleNotarizationServiceTests
                     Assert.Contains("execute", request.Arguments);
                     Assert.Equal(privateArtifactPath, request.Arguments[^1]);
                 });
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NotarizeAsync_RejectsAcceptedAppSubmissionWhenPrivateZipChangesDuringUpload()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "Mutable.app"));
+            var checkpointed = false;
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleNotarizationService(new MutatingSubmissionRunner()).NotarizeAsync(new AppleNotarizationRequest
+                {
+                    ArtifactPath = app.FullName,
+                    KeychainProfile = "powerforge-notary",
+                    Staple = false,
+                    Assess = false,
+                    AcceptedCheckpoint = _ => checkpointed = true
+                }));
+
+            Assert.Contains("exact submitted file changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Do not resubmit", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(checkpointed);
         }
         finally
         {
@@ -520,6 +553,28 @@ public sealed class AppleNotarizationServiceTests
                 ? JsonSerializer.Serialize(new { id = "submission-1", status = _status })
                 : "ok";
             return Task.FromResult(new ProcessRunResult(0, output, string.Empty, request.FileName, TimeSpan.FromMilliseconds(1), false));
+        }
+    }
+
+    private sealed class MutatingSubmissionRunner : IProcessRunner
+    {
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            if (request.FileName.Contains("ditto", StringComparison.OrdinalIgnoreCase))
+                File.WriteAllText(request.Arguments[^1], "approved private notarization package");
+            if (request.Arguments.Count > 2 && request.Arguments[0] == "notarytool")
+            {
+                File.AppendAllText(request.Arguments[2], "-mutated-during-upload");
+                return Task.FromResult(new ProcessRunResult(
+                    0,
+                    JsonSerializer.Serialize(new { id = "submission-mutated", status = "Accepted" }),
+                    string.Empty,
+                    request.FileName,
+                    TimeSpan.Zero,
+                    false));
+            }
+
+            return Task.FromResult(new ProcessRunResult(0, "ok", string.Empty, request.FileName, TimeSpan.Zero, false));
         }
     }
 

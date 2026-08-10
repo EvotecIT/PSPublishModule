@@ -68,6 +68,7 @@ internal sealed partial class PowerForgeReleaseService
         target.DirectArtifactSha256 = result.Notarization.ArtifactSha256;
         target.DirectExecutionSha256 = ComputeDirectExecutionSha256(plan, app);
         target.NotarizationSubmissionId = result.Notarization.SubmissionId;
+        target.NotarizationSubmissionSha256 = result.Notarization.SubmissionSha256;
         target.NotarizationStatus = result.Notarization.Status;
         target.Stapled = result.Notarization.Staple?.Succeeded;
         target.StapleValidated = result.Notarization.StapleValidation?.Succeeded;
@@ -103,6 +104,7 @@ internal sealed partial class PowerForgeReleaseService
         target.DirectArtifactSha256 = checkpoint.ArtifactSha256;
         target.DirectExecutionSha256 = ComputeDirectExecutionSha256(plan, app);
         target.NotarizationSubmissionId = checkpoint.SubmissionId;
+        target.NotarizationSubmissionSha256 = checkpoint.SubmissionSha256;
         target.NotarizationStatus = checkpoint.Status;
         target.ErrorMessage = $"Apple notarization accepted for '{app.Name}', but local post-processing is incomplete.";
         _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
@@ -131,6 +133,7 @@ internal sealed partial class PowerForgeReleaseService
         target.DirectArtifactSha256 = checkpoint.ArtifactSha256;
         target.DirectExecutionSha256 = ComputeDirectExecutionSha256(plan, app);
         target.NotarizationSubmissionId = checkpoint.SubmissionId;
+        target.NotarizationSubmissionSha256 = checkpoint.SubmissionSha256;
         target.NotarizationStatus = checkpoint.Status;
         target.Stapled = true;
         target.StapleValidated = true;

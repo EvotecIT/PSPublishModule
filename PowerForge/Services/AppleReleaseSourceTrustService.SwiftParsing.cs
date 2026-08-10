@@ -46,7 +46,7 @@ internal sealed partial class AppleReleaseSourceTrustService
     {
         foreach (Match reference in Regex.Matches(
                      manifestSyntax,
-                     "\\.\\s*(?:package\\b|`package`)",
+                     "\\.\\s*(?:package\\b|`package`|binaryTarget\\b|`binaryTarget`)",
                      RegexOptions.CultureInvariant))
         {
             var next = reference.Index + reference.Length;
@@ -56,8 +56,8 @@ internal sealed partial class AppleReleaseSourceTrustService
                 continue;
 
             throw new InvalidOperationException(
-                $"Local Swift package '{packageRoot}' references a package dependency factory indirectly, so its external source cannot be proven. " +
-                "Invoke each package dependency factory directly with a literal URL or registry identity and commit its Package.resolved lock.");
+                $"Local Swift package '{packageRoot}' references a package or binary target factory indirectly, so its external source cannot be proven. " +
+                "Invoke each factory directly with literal source identity and integrity arguments.");
         }
     }
 

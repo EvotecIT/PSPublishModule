@@ -313,29 +313,28 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private static string? ReadPbxScalar(string body, string name)
     {
-        var match = Regex.Match(
-            body,
-            "(?:^|[\\r\\n;])[ \\t]*" + Regex.Escape(name) +
-            "[ \\t]*=[ \\t]*(?:\\\"(?<quoted>(?:\\\\.|[^\\\"])*)\\\"|(?<bare>[^;\\r\\n]+))[ \\t]*;",
-            RegexOptions.CultureInvariant);
-        if (!match.Success)
-            return null;
-        return match.Groups["quoted"].Success
-            ? UnescapePbxString(match.Groups["quoted"].Value)
-            : match.Groups["bare"].Value.Trim();
+        return ReadPbxAssignmentValue(body, name);
     }
 
     private static string? ReadPbxDictionary(string body, string name)
     {
-        var match = Regex.Match(
-            body,
-            "(?:^|[{\\r\\n;])[ \\t]*" + Regex.Escape(name) + "[ \\t]*=[ \\t]*\\{",
-            RegexOptions.CultureInvariant);
-        if (!match.Success)
+        var value = ReadPbxAssignmentValue(body, name);
+        if (value is null)
             return null;
-        var openingBrace = body.IndexOf('{', match.Index + match.Length - 1);
-        var closingBrace = FindMatchingPbxBrace(body, openingBrace);
-        return body.Substring(openingBrace + 1, closingBrace - openingBrace - 1);
+        if (value.Length < 2 || value[0] != '{' || value[value.Length - 1] != '}')
+            throw new InvalidOperationException($"Xcode PBX property '{name}' must be a dictionary.");
+        return value.Substring(1, value.Length - 2);
+    }
+
+    private static string? ReadPbxAssignmentValue(string body, string name)
+    {
+        var values = ReadPbxAssignments(body)
+            .Where(assignment => assignment.Key.Equals(name, StringComparison.Ordinal))
+            .Select(static assignment => assignment.Value)
+            .ToArray();
+        if (values.Length > 1)
+            throw new InvalidOperationException($"Xcode PBX property '{name}' is declared more than once.");
+        return values.Length == 0 ? null : values[0];
     }
 
     private static IEnumerable<KeyValuePair<string, string>> ReadPbxAssignments(string body)
@@ -428,13 +427,12 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private static string[] ReadPbxReferences(string body, string name)
     {
-        var match = Regex.Match(
-            body,
-            "(?:^|[\\r\\n;])[ \\t]*" + Regex.Escape(name) + "[ \\t]*=[ \\t]*\\((?<items>.*?)\\)[ \\t]*;",
-            RegexOptions.Singleline | RegexOptions.CultureInvariant);
-        if (!match.Success)
+        var value = ReadPbxAssignmentValue(body, name);
+        if (value is null)
             return Array.Empty<string>();
-        return match.Groups["items"].Value
+        if (value.Length < 2 || value[0] != '(' || value[value.Length - 1] != ')')
+            throw new InvalidOperationException($"Xcode PBX property '{name}' must be a reference list.");
+        return value.Substring(1, value.Length - 2)
             .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .Select(value => ParsePbxObjectIdentifier(value, $"reference in {name}"))

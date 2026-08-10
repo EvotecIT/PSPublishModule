@@ -6,11 +6,21 @@ namespace PowerForge;
 /// </summary>
 internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
     private readonly FileSystemWatcher _watcher;
+    private readonly string _scopeDescription;
+    private readonly string _readerDescription;
+    private readonly string _failureInstruction;
     private string? _firstMutation;
     private Exception? _watcherError;
     private bool _disposed;
 
-    internal AppleReleaseSourceMutationMonitor(string rootPath) {
+    internal AppleReleaseSourceMutationMonitor(
+        string rootPath,
+        string scopeDescription = "exact-source Apple build snapshot",
+        string readerDescription = "xcodebuild",
+        string failureInstruction = "Discard the archive and rebuild from a new snapshot.") {
+        _scopeDescription = scopeDescription;
+        _readerDescription = readerDescription;
+        _failureInstruction = failureInstruction;
         _watcher = new FileSystemWatcher(rootPath) {
             IncludeSubdirectories = true,
             InternalBufferSize = 64 * 1024,
@@ -37,13 +47,13 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         _watcher.EnableRaisingEvents = false;
         if (_watcherError is not null) {
             throw new InvalidOperationException(
-                "The exact-source Apple build snapshot mutation monitor failed; the archive cannot be trusted.",
+                $"The {_scopeDescription} mutation monitor failed; its output cannot be trusted. {_failureInstruction}",
                 _watcherError);
         }
         if (!string.IsNullOrWhiteSpace(_firstMutation)) {
             throw new InvalidOperationException(
-                $"The exact-source Apple build snapshot changed while xcodebuild was reading it: {_firstMutation}. " +
-                "Discard the archive and rebuild from a new snapshot.");
+                $"The {_scopeDescription} changed while {_readerDescription} was reading it: {_firstMutation}. " +
+                _failureInstruction);
         }
     }
 

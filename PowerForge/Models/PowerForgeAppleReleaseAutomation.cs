@@ -345,6 +345,9 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public string? NotarizationSubmissionId { get; set; }
 
+    /// <summary>SHA-256 of the exact file accepted by Apple's notary service.</summary>
+    public string? NotarizationSubmissionSha256 { get; set; }
+
     public string? NotarizationStatus { get; set; }
 
     public bool? Stapled { get; set; }

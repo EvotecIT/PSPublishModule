@@ -601,6 +601,7 @@ internal sealed partial class PowerForgeReleaseService
                     ? null
                     : ComputeDirectExecutionSha256(plan, app),
                 NotarizationSubmissionId = result?.Notarization?.SubmissionId,
+                NotarizationSubmissionSha256 = result?.Notarization?.SubmissionSha256,
                 NotarizationStatus = result?.Notarization?.Status,
                 Stapled = result?.Notarization?.Staple?.Succeeded,
                 StapleValidated = result?.Notarization?.StapleValidation?.Succeeded,

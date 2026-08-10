@@ -70,6 +70,9 @@ public sealed class AppleNotarizationService
                     timeout,
                     cancellationToken)
                 .ConfigureAwait(false);
+        var submissionSha256 = resumed
+            ? request.AcceptedSubmissionSha256?.Trim()
+            : ComputeFileSha256(submittedPath);
         ProcessRunResult submission;
         string? submissionId;
         string? status;
@@ -93,8 +96,34 @@ public sealed class AppleNotarizationService
                 "notarytool", "submit", submittedPath, "--wait", "--output-format", "json"
             };
             submitArguments.AddRange(authentication);
+            using var submissionMonitor = new AppleReleaseSourceMutationMonitor(
+                submissionSnapshot.RootPath,
+                "private Apple notarization submission",
+                "notarytool",
+                "Do not resubmit until the accepted submission has been reconciled.");
             submission = await RunAsync(request.XcrunExecutable, submissionArtifactPath, submitArguments, timeout, cancellationToken).ConfigureAwait(false);
             (submissionId, status) = ParseSubmission(submission);
+            try
+            {
+                submissionMonitor.ValidateNoChanges();
+                var observedSubmissionSha256 = ComputeFileSha256(submittedPath);
+                if (!observedSubmissionSha256.Equals(submissionSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"The private Apple notarization submission changed during notarytool execution. Expected SHA-256 " +
+                        $"'{submissionSha256}', received '{observedSubmissionSha256}'.");
+                }
+            }
+            catch (Exception ex) when (
+                submission.Succeeded &&
+                string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(submissionId))
+            {
+                throw new InvalidOperationException(
+                    $"Apple accepted notarization submission '{submissionId}', but the exact submitted file changed while notarytool was reading it. " +
+                    "Do not resubmit until the accepted submission has been reconciled.",
+                    ex);
+            }
         }
         var submissionPath = resumed
             ? artifactPath
@@ -105,13 +134,6 @@ public sealed class AppleNotarizationService
             string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase) &&
             !string.IsNullOrWhiteSpace(submissionId))
         {
-            var submittedArtifactSha256 = ComputeArtifactSha256(submissionArtifactPath);
-            if (!submittedArtifactSha256.Equals(artifactSha256, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"Apple accepted notarization submission '{submissionId}', but the private submitted artifact changed during notarytool execution. " +
-                    "Do not resubmit until the accepted submission has been reconciled.");
-            }
             try
             {
                 request.AcceptedCheckpoint?.Invoke(new AppleNotarizationAcceptedCheckpoint
@@ -119,6 +141,7 @@ public sealed class AppleNotarizationService
                     ArtifactPath = artifactPath,
                     ArtifactSha256 = artifactSha256,
                     SubmissionPath = submissionPath,
+                    SubmissionSha256 = submissionSha256!,
                     SubmissionId = submissionId!,
                     Status = status!
                 });
@@ -133,7 +156,7 @@ public sealed class AppleNotarizationService
         }
 
         if (!resumed)
-            PreserveSubmissionPath(artifactPath, submittedPath, submissionPath);
+            PreserveSubmissionPath(artifactPath, submittedPath, submissionPath, submissionSha256!);
 
         ProcessRunResult? staple = null;
         ProcessRunResult? validation = null;
@@ -168,6 +191,7 @@ public sealed class AppleNotarizationService
                     {
                         ArtifactPath = artifactPath,
                         ArtifactSha256 = stapledArtifactSha256,
+                        SubmissionSha256 = submissionSha256 ?? string.Empty,
                         SubmissionId = submissionId!,
                         Status = status ?? "Accepted"
                     });
@@ -215,6 +239,7 @@ public sealed class AppleNotarizationService
             ArtifactPath = artifactPath,
             ArtifactSha256 = finalArtifactSha256,
             SubmissionPath = submissionPath,
+            SubmissionSha256 = submissionSha256,
             SubmissionId = submissionId,
             Status = status,
             ResumedAcceptedSubmission = resumed,
@@ -267,13 +292,21 @@ public sealed class AppleNotarizationService
     private static void PreserveSubmissionPath(
         string originalArtifactPath,
         string submittedPath,
-        string retainedPath)
+        string retainedPath,
+        string expectedSubmissionSha256)
     {
         if (!Path.GetExtension(originalArtifactPath).Equals(".app", StringComparison.OrdinalIgnoreCase))
             return;
 
         Directory.CreateDirectory(Path.GetDirectoryName(retainedPath)!);
         File.Copy(submittedPath, retainedPath, overwrite: true);
+        var retainedSha256 = ComputeFileSha256(retainedPath);
+        if (!retainedSha256.Equals(expectedSubmissionSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The retained Apple notarization submission does not match the exact accepted file. Expected SHA-256 " +
+                $"'{expectedSubmissionSha256}', received '{retainedSha256}'.");
+        }
     }
 
     private static string[] BuildAuthenticationArguments(AppleNotarizationRequest request)
@@ -369,6 +402,13 @@ public sealed class AppleNotarizationService
 
         sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
         return BitConverter.ToString(sha256.Hash!).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    internal static string ComputeFileSha256(string path)
+    {
+        using var sha256 = SHA256.Create();
+        using var stream = File.OpenRead(path);
+        return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
     }
 
     private static void AppendFileSystemEntry(

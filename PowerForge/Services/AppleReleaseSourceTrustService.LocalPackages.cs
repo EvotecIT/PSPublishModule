@@ -182,6 +182,19 @@ internal sealed partial class AppleReleaseSourceTrustService
             var arguments = ParseTopLevelSwiftArguments(
                 manifest.Substring(openingParenthesis + 1, closingParenthesis - openingParenthesis - 1),
                 manifestSyntax.Substring(openingParenthesis + 1, closingParenthesis - openingParenthesis - 1));
+            if (factory.Equals("binaryTarget", StringComparison.Ordinal) && !arguments.ContainsKey("path"))
+            {
+                if (!arguments.TryGetValue("url", out var urlArgument) ||
+                    !arguments.TryGetValue("checksum", out var checksumArgument) ||
+                    !TryReadLiteralSwiftString(urlArgument, out _) ||
+                    !TryReadLiteralSwiftString(checksumArgument, out var checksum) ||
+                    !Regex.IsMatch(checksum, "^[A-Fa-f0-9]{64}$", RegexOptions.CultureInvariant))
+                {
+                    throw new InvalidOperationException(
+                        $"Local Swift package '{packageRoot}' declares a remote binary target without a literal URL and literal 64-character SHA-256 checksum. " +
+                        "Bind every remote binary target to immutable, integrity-checked bytes before creating an exact-source Apple checkpoint.");
+                }
+            }
             if (!arguments.TryGetValue("path", out var pathArgument))
                 continue;
             if (!TryReadLiteralSwiftString(pathArgument, out var literalPath))

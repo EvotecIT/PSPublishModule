@@ -361,6 +361,7 @@ internal sealed partial class PowerForgeReleaseService
                 ArtifactPath = artifactPath,
                 ArtifactSha256 = artifactSha256,
                 SubmissionPath = artifactPath,
+                SubmissionSha256 = prior.NotarizationSubmissionSha256,
                 SubmissionId = prior.NotarizationSubmissionId,
                 Status = "Accepted",
                 ResumedAcceptedSubmission = true,
@@ -391,6 +392,7 @@ internal sealed partial class PowerForgeReleaseService
             artifactPath,
             prior.NotarizationSubmissionId,
             prior.DirectArtifactSha256,
+            prior.NotarizationSubmissionSha256,
             prior.Stapled == true);
         result.ResumedAcceptedNotarization = true;
         result.SkippedSteps = MergeAppleSkippedSteps(
