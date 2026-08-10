@@ -398,8 +398,9 @@ public static class WebSearchFleetPlanner
         WebSearchFleetOperationsConfiguration policy)
     {
         var ranges = evidence?.CompletedRanges ?? Array.Empty<WebSearchFleetCompletedRange>();
-        var defaultStart = ranges.Length > 0
-            ? ranges.Min(value => value.FromDate)
+        var eligibleRanges = ranges.Where(value => value.FromDate <= targetThrough).ToArray();
+        var defaultStart = eligibleRanges.Length > 0
+            ? eligibleRanges.Min(value => value.FromDate)
             : targetThrough.AddDays(1 - policy.MaxBackfillDaysPerRun);
         var requestedStart = policy.BackfillStartDate ?? defaultStart;
         var permanentFailures = (evidence?.PermanentFailures ?? Array.Empty<WebSearchFleetFailurePartition>())

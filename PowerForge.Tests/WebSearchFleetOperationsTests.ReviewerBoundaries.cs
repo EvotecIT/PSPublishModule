@@ -279,6 +279,36 @@ public sealed partial class WebSearchFleetOperationsTests
     }
 
     [Fact]
+    public async Task Snapshot_DoesNotCreditFailedBingAggregateDatesWithoutDimensionRows()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            var date = new DateOnly(2026, 8, 1);
+            var batch = SearchBatch("bing-missing-dimensions", date, AsOf.AddMinutes(-1));
+            batch.SchemaVersion = 3;
+            batch.Provider = "bing";
+            batch.Status = "partial";
+            batch.CollectionCoverage!.Mode = "snapshot";
+            batch.CollectionCoverage.DimensionScopes = ["page", "query"];
+            batch.CollectionCoverage.FailureCategory = "dimension-data-unavailable";
+            batch.Observations = Array.Empty<WebSearchObservation>();
+            await store.ImportAsync(WebSearchObservationNormalizer.Normalize(batch));
+
+            var stream = Assert.Single((await store.ReadFleetSnapshotAsync()).Streams);
+
+            Assert.True(stream.HasPartialEvidence);
+            Assert.Empty(stream.CompletedRanges);
+            Assert.Null(stream.LatestCompleteDate);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Snapshot_CombinesComplementaryCompleteBingCsvDimensionCoverage()
     {
         var root = CreateTempRoot();
