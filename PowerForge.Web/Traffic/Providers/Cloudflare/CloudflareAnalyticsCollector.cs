@@ -438,9 +438,12 @@ public sealed class CloudflareAnalyticsCollector
     {
         if (!Uri.TryCreate(siteBaseUrl, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+            !uri.IsDefaultPort ||
             !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
         {
-            throw new ArgumentException("Cloudflare site base URL must be absolute HTTP(S) without user info, query or fragment.", nameof(siteBaseUrl));
+            throw new ArgumentException(
+                "Cloudflare site base URL must be absolute HTTP(S) on its default port without user info, query or fragment.",
+                nameof(siteBaseUrl));
         }
 
         return uri.IdnHost.TrimEnd('.').ToLowerInvariant();

@@ -110,7 +110,7 @@ public static partial class WebSearchProviderDoctor
     private static void ValidateCloudflare(
         IReadOnlyDictionary<string, string?> settings,
         string siteId,
-        string? _,
+        string? siteBaseUrl,
         string providerId,
         List<WebSearchProviderCheck> checks)
     {
@@ -123,6 +123,17 @@ public static partial class WebSearchProviderDoctor
                 "provider.cloudflare-zone-invalid",
                 WebSearchProviderCheckSeverity.Error,
                 "Cloudflare zoneId must be a 32-character hexadecimal zone identifier.",
+                siteId,
+                providerId);
+        }
+
+        if (TryGetHttpUrl(siteBaseUrl, out var siteUri) && !siteUri!.IsDefaultPort)
+        {
+            AddCheck(
+                checks,
+                "provider.cloudflare-site-port-unsupported",
+                WebSearchProviderCheckSeverity.Error,
+                "Cloudflare traffic collection requires the owning site baseUrl to use the default HTTP(S) port.",
                 siteId,
                 providerId);
         }
