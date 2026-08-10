@@ -1,4 +1,5 @@
 using System.Data;
+using System.Globalization;
 using System.Text.Json;
 using DBAClientX;
 using PowerForge.Web;
@@ -101,30 +102,92 @@ internal sealed partial class SqliteWebSearchObservationStore
 
     private async Task<FleetRun[]> ReadSearchFleetRunsAsync(SQLite client, CancellationToken cancellationToken)
     {
-        var manifests = await client.QueryAsListAsync(_databasePath,
-            "SELECT normalized_manifest_json FROM search_observation_runs;", static record => record.GetString(0),
+        var runs = await client.QueryAsListAsync(_databasePath,
+            """
+            SELECT run_id, provider, site_id, collected_at_utc, status,
+                   json_extract(normalized_manifest_json, '$.collectionCoverage.mode'),
+                   json_extract(normalized_manifest_json, '$.collectionCoverage.fromDate'),
+                   json_extract(normalized_manifest_json, '$.collectionCoverage.throughDate'),
+                   json_extract(normalized_manifest_json, '$.collectionCoverage.searchType')
+            FROM search_observation_runs;
+            """,
+            static record => new SearchFleetRunMetadata(
+                record.GetString(0), record.GetString(1), record.GetString(2), ParseFleetTimestamp(record.GetString(3)), record.GetString(4),
+                NullableString(record, 5), NullableDate(record, 6), NullableDate(record, 7), NullableString(record, 8)),
             cancellationToken: cancellationToken).ConfigureAwait(false);
-        return manifests.Select(value => JsonSerializer.Deserialize<WebSearchObservationBatch>(value, WebCliJson.Options)
-                                         ?? throw new InvalidOperationException("Stored search manifest is empty."))
-            .Select(WebSearchObservationNormalizer.Normalize)
-            .Select(batch => new FleetRun(
-                "search", batch.Provider, batch.SiteId, batch.RunId!, batch.CollectedAtUtc, batch.Status,
-                SearchStreamKey(batch), SearchCompletedRanges(batch)))
-            .ToArray();
+        var coverageDates = await client.QueryAsListAsync(_databasePath,
+            """
+            SELECT r.provider, r.site_id, r.run_id, dates.value
+            FROM search_observation_runs r
+            JOIN json_each(r.normalized_manifest_json, '$.collectionCoverage.completedDates') dates;
+            """,
+            static record => new FleetDatedScope(record.GetString(0), record.GetString(1), record.GetString(2),
+                ParseFleetDate(record.GetString(3)), string.Empty), cancellationToken: cancellationToken).ConfigureAwait(false);
+        var observationScopes = await client.QueryAsListAsync(_databasePath,
+            """
+            SELECT provider, site_id, run_id, observation_date,
+                   COALESCE(NULLIF(LOWER(TRIM(search_type)), ''), 'web')
+            FROM search_observations
+            GROUP BY provider, site_id, run_id, observation_date, COALESCE(NULLIF(LOWER(TRIM(search_type)), ''), 'web');
+            """,
+            static record => new FleetDatedScope(record.GetString(0), record.GetString(1), record.GetString(2),
+                ParseFleetDate(record.GetString(3)), record.GetString(4)), cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        var coverageByRun = coverageDates.ToLookup(FleetScopeIdentity, StringComparer.Ordinal);
+        var observationsByRun = observationScopes.ToLookup(FleetScopeIdentity, StringComparer.Ordinal);
+        var result = new List<FleetRun>();
+        foreach (var run in runs)
+        {
+            var identity = FleetRunIdentity(run.Provider, run.SiteId, run.RunId);
+            if (run.FromDate.HasValue && run.ThroughDate.HasValue)
+            {
+                var explicitDates = coverageByRun[identity].Select(value => value.Date);
+                var ranges = run.Status == "complete" && string.Equals(run.CoverageMode, "daily", StringComparison.Ordinal)
+                    ? [new WebSearchFleetCompletedRange { FromDate = run.FromDate.Value, ThroughDate = run.ThroughDate.Value }]
+                    : MergeDates(explicitDates);
+                result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
+                    run.SearchType?.Trim().ToLowerInvariant() ?? "web", ranges));
+                continue;
+            }
+
+            foreach (var scope in observationsByRun[identity].GroupBy(value => value.Scope, StringComparer.Ordinal))
+            {
+                result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
+                    scope.Key, MergeDates(scope.Select(value => value.Date))));
+            }
+        }
+        return result.ToArray();
     }
 
     private async Task<FleetRun[]> ReadTrafficFleetRunsAsync(SQLite client, CancellationToken cancellationToken)
     {
-        var manifests = await client.QueryAsListAsync(_databasePath,
-            "SELECT normalized_manifest_json FROM traffic_observation_runs;", static record => record.GetString(0),
+        var runs = await client.QueryAsListAsync(_databasePath,
+            """
+            SELECT run_id, provider, site_id, collected_at_utc, status,
+                   json_extract(normalized_manifest_json, '$.collectionCoverage.fromDate'),
+                   json_extract(normalized_manifest_json, '$.collectionCoverage.throughDate')
+            FROM traffic_observation_runs;
+            """,
+            static record => new TrafficFleetRunMetadata(
+                record.GetString(0), record.GetString(1), record.GetString(2), ParseFleetTimestamp(record.GetString(3)), record.GetString(4),
+                NullableDate(record, 5), NullableDate(record, 6)),
             cancellationToken: cancellationToken).ConfigureAwait(false);
-        return manifests.Select(value => JsonSerializer.Deserialize<WebTrafficObservationBatch>(value, WebCliJson.Options)
-                                         ?? throw new InvalidOperationException("Stored traffic manifest is empty."))
-            .Select(WebTrafficObservationNormalizer.Normalize)
-            .Select(batch => new FleetRun(
-                "traffic", batch.Provider, batch.SiteId, batch.RunId!, batch.CollectedAtUtc, batch.Status,
-                "traffic", TrafficCompletedRanges(batch)))
-            .ToArray();
+        var coverageDates = await client.QueryAsListAsync(_databasePath,
+            """
+            SELECT r.provider, r.site_id, r.run_id, dates.value
+            FROM traffic_observation_runs r
+            JOIN json_each(r.normalized_manifest_json, '$.collectionCoverage.completedDates') dates;
+            """,
+            static record => new FleetDatedScope(record.GetString(0), record.GetString(1), record.GetString(2),
+                ParseFleetDate(record.GetString(3)), "traffic"), cancellationToken: cancellationToken).ConfigureAwait(false);
+        var coverageByRun = coverageDates.ToLookup(FleetScopeIdentity, StringComparer.Ordinal);
+        return runs.Select(run =>
+        {
+            var ranges = run.Status == "complete" && run.FromDate.HasValue && run.ThroughDate.HasValue
+                ? [new WebSearchFleetCompletedRange { FromDate = run.FromDate.Value, ThroughDate = run.ThroughDate.Value }]
+                : MergeDates(coverageByRun[FleetRunIdentity(run.Provider, run.SiteId, run.RunId)].Select(value => value.Date));
+            return new FleetRun("traffic", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status, "traffic", ranges);
+        }).ToArray();
     }
 
     private async Task<FleetRun[]> ReadPerformanceFleetRunsAsync(SQLite client, CancellationToken cancellationToken)
@@ -204,6 +267,8 @@ internal sealed partial class SqliteWebSearchObservationStore
             .ToHashSet(StringComparer.Ordinal);
         var candidates = runs
             .Where(value => value.CollectedAtUtc < cutoffUtc && !preserved.Contains(FleetRunIdentity(value)))
+            .GroupBy(FleetRunIdentity, StringComparer.Ordinal)
+            .Select(value => value.First())
             .OrderBy(value => value.CollectedAtUtc)
             .ToArray();
         return new RetentionPlan(runTable, observationTable, candidates, new WebSearchFleetRetentionKindResult
@@ -247,31 +312,6 @@ internal sealed partial class SqliteWebSearchObservationStore
         return count;
     }
 
-    private static string SearchStreamKey(WebSearchObservationBatch batch) =>
-        batch.CollectionCoverage?.SearchType?.Trim().ToLowerInvariant() ?? "web";
-
-    private static WebSearchFleetCompletedRange[] SearchCompletedRanges(WebSearchObservationBatch batch)
-    {
-        if (batch.CollectionCoverage is { } coverage)
-        {
-            if (batch.Status == "complete")
-                return [new WebSearchFleetCompletedRange { FromDate = coverage.FromDate, ThroughDate = coverage.ThroughDate }];
-            return MergeDates(coverage.CompletedDates);
-        }
-        return MergeDates(batch.Observations.Select(value => value.Date));
-    }
-
-    private static WebSearchFleetCompletedRange[] TrafficCompletedRanges(WebTrafficObservationBatch batch)
-    {
-        if (batch.Status == "complete")
-            return [new WebSearchFleetCompletedRange
-            {
-                FromDate = batch.CollectionCoverage.FromDate,
-                ThroughDate = batch.CollectionCoverage.ThroughDate
-            }];
-        return MergeDates(batch.CollectionCoverage.CompletedDates);
-    }
-
     private static WebSearchFleetCompletedRange[] MergeDates(IEnumerable<DateOnly> dates) => MergeRanges(
         dates.Distinct().Select(value => new WebSearchFleetCompletedRange { FromDate = value, ThroughDate = value }));
 
@@ -299,6 +339,26 @@ internal sealed partial class SqliteWebSearchObservationStore
 
     private static string FleetRunIdentity(FleetRun run) => string.Join("\u001f", run.Provider, run.SiteId, run.RunId);
 
+    private static string FleetRunIdentity(string provider, string siteId, string runId) =>
+        string.Join("\u001f", provider, siteId, runId);
+
+    private static string FleetScopeIdentity(FleetDatedScope value) => FleetRunIdentity(value.Provider, value.SiteId, value.RunId);
+
+    private static string? NullableString(IDataRecord record, int index) => record.IsDBNull(index) ? null : record.GetString(index);
+
+    private static DateOnly? NullableDate(IDataRecord record, int index) =>
+        record.IsDBNull(index) ? null : ParseFleetDate(record.GetString(index));
+
+    private static DateOnly ParseFleetDate(string value) =>
+        DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+            ? date
+            : throw new InvalidOperationException("Stored fleet coverage contains an invalid date.");
+
+    private static DateTimeOffset ParseFleetTimestamp(string value) =>
+        DateTimeOffset.TryParseExact(value, "O", CultureInfo.InvariantCulture, DateTimeStyles.None, out var timestamp)
+            ? timestamp.ToUniversalTime()
+            : throw new InvalidOperationException("Stored fleet run contains an invalid collection timestamp.");
+
     private static Dictionary<string, object?> FleetRunParameters(FleetRun run) => new()
     {
         ["@provider"] = run.Provider,
@@ -316,6 +376,28 @@ internal sealed partial class SqliteWebSearchObservationStore
         string StreamKey,
         WebSearchFleetCompletedRange[] CompletedRanges,
         string? MeasurementKind = null);
+
+    private sealed record SearchFleetRunMetadata(
+        string RunId,
+        string Provider,
+        string SiteId,
+        DateTimeOffset CollectedAtUtc,
+        string Status,
+        string? CoverageMode,
+        DateOnly? FromDate,
+        DateOnly? ThroughDate,
+        string? SearchType);
+
+    private sealed record TrafficFleetRunMetadata(
+        string RunId,
+        string Provider,
+        string SiteId,
+        DateTimeOffset CollectedAtUtc,
+        string Status,
+        DateOnly? FromDate,
+        DateOnly? ThroughDate);
+
+    private sealed record FleetDatedScope(string Provider, string SiteId, string RunId, DateOnly Date, string Scope);
 
     private sealed record RetentionPlan(
         string RunTable,

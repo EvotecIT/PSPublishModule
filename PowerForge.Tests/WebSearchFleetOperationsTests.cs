@@ -233,6 +233,78 @@ public sealed class WebSearchFleetOperationsTests
     }
 
     [Fact]
+    public async Task SnapshotCoverage_PreservesOnlyExplicitDatesAndSchedulesTheFirstGap()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            var snapshotBatch = SearchBatch("bing-snapshot", new DateOnly(2026, 8, 1), AsOf.AddMinutes(-1));
+            snapshotBatch.Provider = "gsc";
+            snapshotBatch.CollectionCoverage!.Mode = "snapshot";
+            snapshotBatch.CollectionCoverage.ThroughDate = new DateOnly(2026, 8, 7);
+            snapshotBatch.CollectionCoverage.CompletedDates = [new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 7)];
+            snapshotBatch.Observations =
+            [
+                new WebSearchObservation { Date = new DateOnly(2026, 8, 1), Page = "https://officeimo.com/", SearchType = "web", Clicks = 1, Impressions = 2 },
+                new WebSearchObservation { Date = new DateOnly(2026, 8, 7), Page = "https://officeimo.com/docs/", SearchType = "web", Clicks = 1, Impressions = 2 }
+            ];
+            await store.ImportAsync(WebSearchObservationNormalizer.Normalize(snapshotBatch));
+
+            var snapshot = await store.ReadFleetSnapshotAsync();
+            var stream = Assert.Single(snapshot.Streams, value => value.Capability == WebSearchProviderCapabilities.SearchAnalytics);
+            Assert.Equal(2, stream.CompletedRanges.Length);
+            Assert.DoesNotContain(stream.CompletedRanges, value => value.FromDate <= new DateOnly(2026, 8, 2) && value.ThroughDate >= new DateOnly(2026, 8, 2));
+
+            var configuration = CreateConfiguration();
+            configuration.Sites[0].Providers = [configuration.Sites[0].Providers.Single(value => value.Id == "gsc")];
+            configuration.Operations!.BackfillStartDate = new DateOnly(2026, 8, 1);
+            var plan = WebSearchFleetPlanner.CreateSchedule(configuration, Doctor(configuration), snapshot, AsOf);
+            var work = Assert.Single(plan.WorkItems);
+            Assert.Equal(new DateOnly(2026, 8, 2), work.FromDate);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LegacySearchRuns_DeriveDistinctScopesFromStoredObservations()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            var legacy = new WebSearchObservationBatch
+            {
+                SchemaVersion = 1,
+                RunId = "legacy-mixed-scopes",
+                Provider = "gsc",
+                SiteId = "officeimo",
+                CollectedAtUtc = AsOf.AddMinutes(-1),
+                SourceKind = "fixture",
+                Status = "complete",
+                Observations =
+                [
+                    new WebSearchObservation { Date = new DateOnly(2026, 8, 7), Page = "https://officeimo.com/web/", SearchType = "web", Clicks = 1, Impressions = 2 },
+                    new WebSearchObservation { Date = new DateOnly(2026, 8, 6), Page = "https://officeimo.com/image/", SearchType = "image", Clicks = 1, Impressions = 2 }
+                ]
+            };
+            await store.ImportAsync(WebSearchObservationNormalizer.Normalize(legacy));
+
+            var snapshot = await store.ReadFleetSnapshotAsync();
+
+            Assert.Contains(snapshot.Streams, value => value.ScopeKey == "web" && value.LatestCompleteDate == new DateOnly(2026, 8, 7));
+            Assert.Contains(snapshot.Streams, value => value.ScopeKey == "image" && value.LatestCompleteDate == new DateOnly(2026, 8, 6));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Retention_PreservesNewestReportingEvidenceIncludingCompletedPartialPartitions()
     {
         var root = CreateTempRoot();
