@@ -249,6 +249,7 @@ public sealed partial class WebSearchFleetOperationsTests
             snapshotBatch.Provider = "gsc";
             snapshotBatch.ConfigurationHash = Doctor(configuration).ConfigurationHash;
             snapshotBatch.CollectionCoverage!.Mode = "snapshot";
+            snapshotBatch.CollectionCoverage.DimensionScopes = ["page", "query"];
             snapshotBatch.CollectionCoverage.ThroughDate = new DateOnly(2026, 8, 7);
             snapshotBatch.CollectionCoverage.CompletedDates = [new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 7)];
             snapshotBatch.Observations =
