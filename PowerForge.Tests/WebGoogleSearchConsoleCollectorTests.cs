@@ -133,7 +133,7 @@ public sealed partial class WebGoogleSearchConsoleCollectorTests
         {
             Assert.Equal("all", finalityDocument.RootElement.GetProperty("dataState").GetString());
             Assert.Equal(["date"], finalityDocument.RootElement.GetProperty("dimensions").EnumerateArray().Select(value => value.GetString()));
-            AssertPageScopeFilter(finalityDocument.RootElement, "^https://officeimo\\.com/");
+            AssertPageScopeFilter(finalityDocument.RootElement, "^https://officeimo\\.com(?:/|\\?|$)");
         }
 
         var analyticsRequests = handler.Requests.Skip(2).ToArray();
@@ -149,7 +149,7 @@ public sealed partial class WebGoogleSearchConsoleCollectorTests
             Assert.Equal(
                 ["date", "page", "query", "country", "device"],
                 document.RootElement.GetProperty("dimensions").EnumerateArray().Select(value => value.GetString()));
-            AssertPageScopeFilter(document.RootElement, "^https://officeimo\\.com/");
+            AssertPageScopeFilter(document.RootElement, "^https://officeimo\\.com(?:/|\\?|$)");
         });
 
         var normalized = WebSearchObservationNormalizer.Normalize(result.Batch);

@@ -15,6 +15,12 @@ public sealed class GoogleSearchConsoleCollector
     /// <summary>Google's current maximum Search Analytics page size.</summary>
     public const int MaximumRowLimit = 25_000;
 
+    /// <summary>Maximum Search Analytics rows Google exposes for one date and search type.</summary>
+    public const int MaximumRowsPerDate = 50_000;
+
+    /// <summary>Maximum daily partitions retained in one in-memory collection batch.</summary>
+    public const int MaximumCollectionDateCount = 7;
+
     /// <summary>Provider kind implemented by this collector.</summary>
     public const string ProviderKind = "google-search-console";
 
@@ -217,6 +223,7 @@ public sealed class GoogleSearchConsoleCollector
                 cancellationToken.ThrowIfCancellationRequested();
                 requestCount++;
                 var endpoint = BuildSearchAnalyticsEndpoint(probe.Property);
+                var requestRowLimit = Math.Min(options.RowLimit, MaximumRowsPerDate - startRow);
                 var body = new GoogleSearchConsoleQueryRequest
                 {
                     StartDate = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
@@ -224,7 +231,7 @@ public sealed class GoogleSearchConsoleCollector
                     Dimensions = dimensions,
                     Type = options.SearchType,
                     DataState = "final",
-                    RowLimit = options.RowLimit,
+                    RowLimit = requestRowLimit,
                     StartRow = startRow,
                     DimensionFilterGroups = CreatePageFilterGroups(options.SiteBaseUrl)
                 };
@@ -262,9 +269,9 @@ public sealed class GoogleSearchConsoleCollector
                             throw new InvalidOperationException("Google Search Console returned a null analytics row.");
                         observations.Add(MapRow(row, dimensions, date, options, probe.Property));
                     }
-                    if (rows.Length < options.RowLimit)
+                    if (rows.Length < requestRowLimit || startRow + rows.Length >= MaximumRowsPerDate)
                         break;
-                    startRow = checked(startRow + options.RowLimit);
+                    startRow = checked(startRow + requestRowLimit);
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
@@ -425,8 +432,8 @@ public sealed class GoogleSearchConsoleCollector
         var authority = site.GetLeftPart(UriPartial.Authority);
         var path = site.AbsolutePath;
         var expression = path == "/"
-            ? "^" + Regex.Escape(authority) + "/"
-            : "^" + Regex.Escape(authority + path.TrimEnd('/')) + "(?:/|$)";
+            ? "^" + Regex.Escape(authority) + "(?:/|\\?|$)"
+            : "^" + Regex.Escape(authority + path.TrimEnd('/')) + "(?:/|\\?|$)";
         return
         [
             new GoogleSearchConsoleDimensionFilterGroup
@@ -491,6 +498,9 @@ public sealed class GoogleSearchConsoleCollector
             throw new ArgumentException("Google Search Console property is required.", nameof(options));
         if (options.FromDate == default || options.ThroughDate == default || options.FromDate > options.ThroughDate)
             throw new ArgumentException("Google Search Console date range is invalid.", nameof(options));
+        var dateCount = options.ThroughDate.DayNumber - options.FromDate.DayNumber + 1;
+        if (dateCount > MaximumCollectionDateCount)
+            throw new ArgumentOutOfRangeException(nameof(options), $"Google Search Console collection is limited to {MaximumCollectionDateCount} daily partitions per run.");
         if (!SearchTypes.Contains(options.SearchType, StringComparer.Ordinal))
             throw new ArgumentException("Google Search Console search type is not supported.", nameof(options));
         if (options.RowLimit is < 1 or > MaximumRowLimit)

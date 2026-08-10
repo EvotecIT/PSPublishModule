@@ -5,7 +5,7 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebCliCommandHandlers
 {
-    private const string UnrelatedProviderCredentialPlaceholder = "credential-not-required-by-selected-action";
+    private const string SelectedActionCredentialPlaceholder = "credential-not-required-by-selected-action";
 
     internal static WebSearchProviderDoctorResult InspectProviderAction(
         WebSearchProviderConfiguration configuration,
@@ -17,13 +17,15 @@ internal static partial class WebCliCommandHandlers
         var selectedCredentialVariable = useSelectedCredential
             ? provider.Credential?.EnvironmentVariable
             : null;
-        var doctor = WebSearchProviderDoctor.InspectWithCapabilities(
+        var doctor = WebSearchProviderDoctor.InspectProviderAction(
             configuration,
+            site,
+            provider,
             WebSearchCollectorCatalog.AvailableCapabilities,
             name => !string.IsNullOrWhiteSpace(selectedCredentialVariable) &&
                     string.Equals(name, selectedCredentialVariable, StringComparison.Ordinal)
                 ? Environment.GetEnvironmentVariable(name)
-                : UnrelatedProviderCredentialPlaceholder);
+                : SelectedActionCredentialPlaceholder);
         if (!doctor.Success || string.IsNullOrWhiteSpace(doctor.ConfigurationHash))
         {
             var firstError = doctor.Checks.FirstOrDefault(check => check.Severity == WebSearchProviderCheckSeverity.Error);

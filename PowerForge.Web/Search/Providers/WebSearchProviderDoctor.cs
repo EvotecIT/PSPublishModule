@@ -86,6 +86,34 @@ public static partial class WebSearchProviderDoctor
         return InspectCore(configuration, environmentResolver, null, availableCollectorCapabilities);
     }
 
+    /// <summary>Inspects one provider action without allowing unrelated fleet registrations to affect readiness or identity.</summary>
+    internal static WebSearchProviderDoctorResult InspectProviderAction(
+        WebSearchProviderConfiguration configuration,
+        WebSearchSiteProviderConfiguration site,
+        WebSearchProviderRegistration provider,
+        IReadOnlyDictionary<string, IReadOnlySet<string>> availableCollectorCapabilities,
+        Func<string, string?>? environmentResolver = null)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(site);
+        ArgumentNullException.ThrowIfNull(provider);
+        ArgumentNullException.ThrowIfNull(availableCollectorCapabilities);
+        var scopedConfiguration = new WebSearchProviderConfiguration
+        {
+            SchemaVersion = configuration.SchemaVersion,
+            Sites =
+            [
+                new WebSearchSiteProviderConfiguration
+                {
+                    Id = site.Id,
+                    BaseUrl = site.BaseUrl,
+                    Providers = [provider]
+                }
+            ]
+        };
+        return InspectCore(scopedConfiguration, environmentResolver, null, availableCollectorCapabilities);
+    }
+
     private static WebSearchProviderDoctorResult InspectCore(
         WebSearchProviderConfiguration configuration,
         Func<string, string?>? environmentResolver,

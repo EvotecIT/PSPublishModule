@@ -6,7 +6,7 @@ using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
 
-public sealed class WebSearchProviderDoctorTests
+public sealed partial class WebSearchProviderDoctorTests
 {
     [Fact]
     public void ExampleConfiguration_PassesSchemaLoaderAndCapabilityDoctor()
