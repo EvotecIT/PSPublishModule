@@ -23,6 +23,11 @@ internal sealed partial class AppleReleaseSourceTrustService
                 throw new InvalidOperationException(
                     $"Xcode build setting {key} overrides a compiler or build executable and cannot be proven at the exact source commit: {source}");
             }
+            if (SdkSelectionBuildSettings.Contains(baseKey))
+            {
+                ValidateSdkSelectionBuildSetting(key, assignment.Value, source);
+                continue;
+            }
             IEnumerable<string> values;
             if (FileValuedBuildSettings.Contains(baseKey) ||
                 SearchPathBuildSettings.Contains(baseKey) ||
@@ -68,13 +73,26 @@ internal sealed partial class AppleReleaseSourceTrustService
         var logical = Regex.Replace(contents, "\\\\[ \\t]*\\r?\\n", " ");
         foreach (Match match in Regex.Matches(
                      logical,
-                     "(?m)^[ \\t]*(?!#)(?<key>[A-Za-z_][A-Za-z0-9_]*(?:\\[[^\\]]+\\])?)[ \\t]*(?:\\?=|\\+=|=)[ \\t]*(?<value>.*?)[ \\t]*(?://.*)?$",
+                     "(?m)^[ \\t]*(?!#)(?<key>[A-Za-z_][A-Za-z0-9_]*(?:\\[[^\\]]+\\])*)[ \\t]*(?:\\?=|\\+=|=)[ \\t]*(?<value>.*?)[ \\t]*(?://.*)?$",
                      RegexOptions.CultureInvariant))
         {
             yield return new KeyValuePair<string, string>(
                 match.Groups["key"].Value,
                 match.Groups["value"].Value.Trim());
         }
+    }
+
+    private static void ValidateSdkSelectionBuildSetting(string key, string value, string source)
+    {
+        var selector = value.Trim();
+        if (string.IsNullOrWhiteSpace(selector) ||
+            selector.Equals("$(inherited)", StringComparison.OrdinalIgnoreCase))
+            return;
+        if (Regex.IsMatch(selector, "^[A-Za-z0-9._*-]+$", RegexOptions.CultureInvariant))
+            return;
+
+        throw new InvalidOperationException(
+            $"Xcode build setting {key} selects a custom SDK path or expression that cannot be proven at the exact source commit: {source}");
     }
 
     private static IEnumerable<string> ExtractBuildFlagInputPaths(string value, string key)
@@ -203,14 +221,28 @@ internal sealed partial class AppleReleaseSourceTrustService
         string key,
         string source)
     {
+        var unownedBuildRoots = new[]
+        {
+            "$(BUILT_PRODUCTS_DIR)", "${BUILT_PRODUCTS_DIR}",
+            "$(CONFIGURATION_BUILD_DIR)", "${CONFIGURATION_BUILD_DIR}",
+            "$(TARGET_BUILD_DIR)", "${TARGET_BUILD_DIR}"
+        };
+        var unownedBuildRoot = unownedBuildRoots.FirstOrDefault(candidate =>
+            value.Equals(candidate, StringComparison.Ordinal) ||
+            (value.StartsWith(candidate, StringComparison.Ordinal) &&
+             value.Length > candidate.Length &&
+             (value[candidate.Length] == '/' || value[candidate.Length] == '\\')));
+        if (unownedBuildRoot is not null)
+        {
+            throw new InvalidOperationException(
+                $"Xcode build setting {key} consumes unowned build output '{unownedBuildRoot}', whose producing target and bytes cannot be proven at the exact source commit: {value} ({source})");
+        }
+
         var known = new[]
         {
             "$(SDKROOT)", "${SDKROOT}",
             "$(DEVELOPER_DIR)", "${DEVELOPER_DIR}",
-            "$(TOOLCHAIN_DIR)", "${TOOLCHAIN_DIR}",
-            "$(BUILT_PRODUCTS_DIR)", "${BUILT_PRODUCTS_DIR}",
-            "$(CONFIGURATION_BUILD_DIR)", "${CONFIGURATION_BUILD_DIR}",
-            "$(TARGET_BUILD_DIR)", "${TARGET_BUILD_DIR}"
+            "$(TOOLCHAIN_DIR)", "${TOOLCHAIN_DIR}"
         };
         var prefix = known.FirstOrDefault(candidate =>
             value.Equals(candidate, StringComparison.Ordinal) ||

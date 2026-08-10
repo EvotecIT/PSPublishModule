@@ -48,6 +48,11 @@ internal sealed partial class AppleReleaseSourceTrustService
         "SEGEDIT", "STRIP", "SWIFT_DRIVER_SWIFT_EXEC", "SWIFT_EXEC", "TAPI", "TOUCH", "UNZIP", "YACC"
     };
 
+    private static readonly HashSet<string> SdkSelectionBuildSettings = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "SDKROOT"
+    };
+
     private void ValidateXcodeBuildGraph(
         string repositoryRoot,
         string projectRoot,
@@ -249,6 +254,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             .Select(static value => value!.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)[0])
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var cache = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var validatedLocalPackageRoots = new HashSet<string>(GetPathComparer());
 
         foreach (var item in objects.Values)
         {
@@ -272,8 +278,19 @@ internal sealed partial class AppleReleaseSourceTrustService
 
             if (item.Isa.Equals("XCLocalSwiftPackageReference", StringComparison.OrdinalIgnoreCase))
             {
-                ValidateLocalPackageReference(repositoryRoot, projectDirectory, packageLockPaths, item);
+                ValidateLocalPackageReference(
+                    repositoryRoot,
+                    projectDirectory,
+                    packageLockPaths,
+                    item,
+                    validatedLocalPackageRoots);
                 continue;
+            }
+
+            if (item.Isa.Equals("PBXFileSystemSynchronizedBuildFileExceptionSet", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"PBX file-system synchronized build-file exception sets are not accepted for exact-source checkpoints because their per-file compiler overrides cannot be proven: {metadataPath}");
             }
 
             if (item.Isa.Equals("XCRemoteSwiftPackageReference", StringComparison.OrdinalIgnoreCase))
@@ -397,131 +414,14 @@ internal sealed partial class AppleReleaseSourceTrustService
             EnsureNoGeneratedOutputOverlap(includedPath, generatedOutputPaths, "Xcode xcconfig include");
             if (!File.Exists(includedPath))
             {
-                var directive = include.Groups["optional"].Success ? "optional " : string.Empty;
+                if (include.Groups["optional"].Success)
+                    continue;
                 throw new FileNotFoundException(
-                    $"Xcode {directive}xcconfig include cannot be proven at the exact source commit: {includedPath}",
+                    $"Xcode xcconfig include cannot be proven at the exact source commit: {includedPath}",
                     includedPath);
             }
             EnsureTrackedFile(repositoryRoot, includedPath, "Xcode xcconfig include");
             EnsureTrackedXcconfigGraph(repositoryRoot, projectDirectory, includedPath, generatedOutputPaths, visited);
-        }
-    }
-
-    private void ValidateLocalPackageReference(
-        string repositoryRoot,
-        string projectDirectory,
-        IReadOnlyCollection<string> packageLockPaths,
-        PbxObject item)
-    {
-        var relativePath = ReadPbxScalar(item.Body, "relativePath");
-        if (string.IsNullOrWhiteSpace(relativePath))
-            throw new InvalidOperationException("Local Swift package reference is missing relativePath.");
-        var packageRoot = ResolvePbxPath(projectDirectory, relativePath!, "local Swift package");
-        EnsureDirectoryWithinRepository(repositoryRoot, packageRoot, "Xcode local Swift package");
-        var manifestPath = Path.Combine(packageRoot, "Package.swift");
-        EnsureTrackedFile(repositoryRoot, manifestPath, "Xcode local Swift package manifest");
-        foreach (var conventionalInput in new[]
-                 {
-                     Path.Combine(packageRoot, "Package.resolved"),
-                     Path.Combine(packageRoot, "Sources"),
-                     Path.Combine(packageRoot, "Plugins")
-                 })
-        {
-            if (File.Exists(conventionalInput))
-                EnsureTrackedFile(repositoryRoot, conventionalInput, "Xcode local Swift package input");
-            else if (Directory.Exists(conventionalInput))
-                EnsureTrackedDirectoryTree(repositoryRoot, conventionalInput, "Xcode local Swift package input");
-        }
-
-        var manifest = File.ReadAllText(manifestPath);
-        var manifestWithoutComments = RemoveSwiftComments(manifest);
-        EnsureNoExecutableSwiftStringInterpolation(packageRoot, manifestWithoutComments);
-        var manifestSyntax = MaskSwiftStringLiterals(manifestWithoutComments);
-        if (ContainsSwiftIdentifier(manifestSyntax, "unsafeFlags"))
-        {
-            throw new InvalidOperationException(
-                $"Local Swift package '{packageRoot}' uses unsafeFlags, whose compiler and linker inputs cannot be proven at the exact source commit. " +
-                "Replace unsafe flags with tracked package settings before creating an Apple checkpoint.");
-        }
-        if (ContainsSwiftIdentifier(manifestSyntax, "systemLibrary"))
-        {
-            throw new InvalidOperationException(
-                $"Local Swift package '{packageRoot}' declares a systemLibrary target, whose pkg-config and host library inputs cannot be proven at the exact source commit. " +
-                "Replace the system library dependency with tracked package sources before creating an Apple checkpoint.");
-        }
-        if (ContainsSwiftIdentifier(manifestSyntax, "plugin") ||
-            ContainsSwiftMemberReference(manifestSyntax, "macro"))
-        {
-            throw new InvalidOperationException(
-                $"Local Swift package '{packageRoot}' declares or invokes a SwiftPM plugin or macro, whose executable runtime inputs cannot be proven at the exact source commit. " +
-                "Replace build-tool plugins and macros with tracked deterministic build inputs before creating an Apple checkpoint.");
-        }
-        ValidateDirectSwiftPackageDependencyFactories(packageRoot, manifestSyntax);
-        var externalDependencies = Regex.Matches(
-                manifestWithoutComments,
-                "\\.\\s*(?:package|`package`)\\s*\\((?<body>.*?)\\)",
-                RegexOptions.Singleline | RegexOptions.CultureInvariant)
-            .Cast<Match>()
-            .Select(static match => match.Groups["body"].Value)
-            .Where(static body => Regex.IsMatch(body, "\\b(?:url|id)\\s*:", RegexOptions.CultureInvariant))
-            .ToArray();
-        foreach (var dependency in externalDependencies.Where(static body =>
-                     Regex.IsMatch(body, "\\bid\\s*:", RegexOptions.CultureInvariant) ||
-                     !Regex.IsMatch(
-                         body,
-                         "\\brevision\\s*:\\s*\"[A-Fa-f0-9]{40}\"",
-                         RegexOptions.CultureInvariant)))
-        {
-            var identityMatch = Regex.Match(
-                dependency,
-                "\\b(?:url|id)\\s*:\\s*\"(?<identity>[^\"]+)\"",
-                RegexOptions.CultureInvariant);
-            if (!identityMatch.Success)
-            {
-                throw new InvalidOperationException(
-                    $"Local Swift package '{packageRoot}' declares a dynamic external dependency that cannot be bound to exact source. " +
-                    "Use a literal package URL or registry identity and commit its Package.resolved lock.");
-            }
-
-            var identity = identityMatch.Groups["identity"].Value;
-            var locksForPackage = packageLockPaths
-                .Concat(new[] { Path.Combine(packageRoot, "Package.resolved") })
-                .Distinct(GetPathComparer())
-                .ToArray();
-            var locks = FindTrackedPackageLocks(locksForPackage, identity);
-            if (locks.Length == 0)
-            {
-                throw new InvalidOperationException(
-                    $"Local Swift package '{packageRoot}' declares external dependency '{identity}' without an exact 40-character revision. " +
-                    "Commit a Package.resolved lock containing that dependency before creating an exact-source Apple checkpoint.");
-            }
-            foreach (var packageLock in locks)
-                EnsureTrackedFile(repositoryRoot, packageLock, "Xcode local Swift package resolution lock");
-        }
-        var pathArguments = Regex.Matches(
-            manifestWithoutComments,
-            "(?:\\bpath\\b|`path`)\\s*:",
-            RegexOptions.CultureInvariant);
-        var literalPathArguments = Regex.Matches(
-            manifestWithoutComments,
-            "(?:\\bpath\\b|`path`)\\s*:\\s*\"(?<path>[^\"\\\\\\r\\n]+)\"\\s*(?=[,)])",
-            RegexOptions.CultureInvariant);
-        if (pathArguments.Count != literalPathArguments.Count)
-        {
-            throw new InvalidOperationException(
-                $"Local Swift package '{packageRoot}' uses a computed, interpolated, or escaped path argument that cannot be bound to exact source. " +
-                "Use a simple literal path inside the tracked repository.");
-        }
-        foreach (Match match in literalPathArguments)
-        {
-            var explicitPath = ResolvePbxPath(packageRoot, match.Groups["path"].Value, "Swift package manifest input");
-            EnsurePathWithinRepository(repositoryRoot, explicitPath, "Swift package manifest input");
-            if (File.Exists(explicitPath))
-                EnsureTrackedFile(repositoryRoot, explicitPath, "Swift package manifest input");
-            else if (Directory.Exists(explicitPath))
-                EnsureTrackedDirectoryTree(repositoryRoot, explicitPath, "Swift package manifest input");
-            else
-                throw new FileNotFoundException($"Swift package manifest input was not found: {explicitPath}", explicitPath);
         }
     }
 
