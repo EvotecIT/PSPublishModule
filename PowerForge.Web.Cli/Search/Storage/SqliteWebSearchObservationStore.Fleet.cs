@@ -174,16 +174,27 @@ internal sealed partial class SqliteWebSearchObservationStore
             """,
             static record => new FleetDatedScope(record.GetString(0), record.GetString(1), record.GetString(2),
                 ParseFleetDate(record.GetString(3)), record.GetString(4)), cancellationToken: cancellationToken).ConfigureAwait(false);
+        var dimensionScopes = await client.QueryAsListAsync(_databasePath,
+            """
+            SELECT r.provider, r.site_id, r.run_id, LOWER(TRIM(scopes.value))
+            FROM search_observation_runs r
+            JOIN json_each(r.normalized_manifest_json, '$.collectionCoverage.dimensionScopes') scopes;
+            """,
+            static record => new FleetRunScope(record.GetString(0), record.GetString(1), record.GetString(2), record.GetString(3)),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         var coverageByRun = coverageDates.ToLookup(FleetScopeIdentity, StringComparer.Ordinal);
         var observationsByRun = observationScopes.ToLookup(FleetScopeIdentity, StringComparer.Ordinal);
+        var dimensionScopesByRun = dimensionScopes.ToLookup(FleetScopeIdentity, StringComparer.Ordinal);
         var result = new List<FleetRun>();
         foreach (var run in runs)
         {
             var identity = FleetRunIdentity(run.Provider, run.SiteId, run.RunId);
             if (run.FromDate.HasValue && run.ThroughDate.HasValue)
             {
-                var explicitDates = coverageByRun[identity].Select(value => value.Date);
+                var explicitDates = SearchSnapshotCoversFleetCapability(run, dimensionScopesByRun[identity])
+                    ? coverageByRun[identity].Select(value => value.Date)
+                    : Enumerable.Empty<DateOnly>();
                 if (!string.IsNullOrWhiteSpace(run.SearchType))
                 {
                     var ranges = run.Status == "complete" && string.Equals(run.CoverageMode, "daily", StringComparison.Ordinal)
@@ -403,7 +414,8 @@ internal sealed partial class SqliteWebSearchObservationStore
         DateTimeOffset cutoffUtc,
         DateTimeOffset retainedAtUtc)
     {
-        var preserved = runs
+        var visibleRuns = runs.Where(value => value.CollectedAtUtc <= retainedAtUtc).ToArray();
+        var preserved = visibleRuns
             .GroupBy(value => (value.Provider, value.SiteId, value.StreamKey, value.ConfigurationHash))
             .SelectMany(SelectRetentionPreservationRuns)
             .Select(FleetRunIdentity)
@@ -513,6 +525,16 @@ internal sealed partial class SqliteWebSearchObservationStore
 
     private static string FleetScopeIdentity(FleetDatedScope value) => FleetRunIdentity(value.Provider, value.SiteId, value.RunId);
 
+    private static string FleetScopeIdentity(FleetRunScope value) => FleetRunIdentity(value.Provider, value.SiteId, value.RunId);
+
+    private static bool SearchSnapshotCoversFleetCapability(SearchFleetRunMetadata run, IEnumerable<FleetRunScope> scopes)
+    {
+        if (!string.Equals(run.CoverageMode, "snapshot", StringComparison.Ordinal))
+            return true;
+        var dimensionScopes = scopes.Select(value => value.Scope).ToHashSet(StringComparer.Ordinal);
+        return dimensionScopes.Count == 0 || dimensionScopes.Contains("page") && dimensionScopes.Contains("query");
+    }
+
     private static string? NullableString(IDataRecord record, int index) => record.IsDBNull(index) ? null : record.GetString(index);
 
     private static DateOnly? NullableDate(IDataRecord record, int index) =>
@@ -602,6 +624,8 @@ internal sealed partial class SqliteWebSearchObservationStore
         string? ConfigurationHash);
 
     private sealed record FleetDatedScope(string Provider, string SiteId, string RunId, DateOnly Date, string Scope);
+
+    private sealed record FleetRunScope(string Provider, string SiteId, string RunId, string Scope);
 
     private sealed record FleetRetainedCoverage(
         string Kind,

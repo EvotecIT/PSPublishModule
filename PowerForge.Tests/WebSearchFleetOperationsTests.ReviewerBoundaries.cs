@@ -145,6 +145,75 @@ public sealed partial class WebSearchFleetOperationsTests
     }
 
     [Fact]
+    public async Task Snapshot_DoesNotCreditQueryOnlyBingCoverageToTheWholeSearchCapability()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            var batch = SearchBatch("bing-query-only", new DateOnly(2026, 8, 1), AsOf.AddMinutes(-1));
+            batch.SchemaVersion = 3;
+            batch.Provider = "bing";
+            batch.Status = "partial";
+            batch.CollectionCoverage!.Mode = "snapshot";
+            batch.CollectionCoverage.DimensionScopes = ["query"];
+            batch.CollectionCoverage.FailureCategory = "provider-unavailable";
+            batch.Observations =
+            [
+                new WebSearchObservation
+                {
+                    Date = new DateOnly(2026, 8, 1), Query = "office docs", SearchType = "web", Clicks = 1, Impressions = 2
+                }
+            ];
+            await store.ImportAsync(WebSearchObservationNormalizer.Normalize(batch));
+
+            var stream = Assert.Single((await store.ReadFleetSnapshotAsync()).Streams);
+
+            Assert.True(stream.HasPartialEvidence);
+            Assert.Empty(stream.CompletedRanges);
+            Assert.Null(stream.LatestCompleteDate);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Snapshot_CreditsBingCoverageOnlyWhenPageAndQueryScopesAreCompleteTogether()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            var date = new DateOnly(2026, 8, 1);
+            var batch = SearchBatch("bing-combined", date, AsOf.AddMinutes(-1));
+            batch.SchemaVersion = 3;
+            batch.Provider = "bing";
+            batch.Status = "partial";
+            batch.CollectionCoverage!.Mode = "snapshot";
+            batch.CollectionCoverage.DimensionScopes = ["page", "query"];
+            batch.CollectionCoverage.FailureCategory = "provider-unavailable";
+            batch.Observations =
+            [
+                new WebSearchObservation { Date = date, Page = "https://officeimo.com/", SearchType = "web", Clicks = 1, Impressions = 2 },
+                new WebSearchObservation { Date = date, Query = "office docs", SearchType = "web", Clicks = 1, Impressions = 2 }
+            ];
+            await store.ImportAsync(WebSearchObservationNormalizer.Normalize(batch));
+
+            var stream = Assert.Single((await store.ReadFleetSnapshotAsync()).Streams);
+
+            var range = Assert.Single(stream.CompletedRanges);
+            Assert.Equal(date, range.FromDate);
+            Assert.Equal(date, range.ThroughDate);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Snapshot_ExcludesRunsCollectedAfterTheRequestedAsOfTime()
     {
         var root = CreateTempRoot();
@@ -194,6 +263,47 @@ public sealed partial class WebSearchFleetOperationsTests
             Assert.Equal(0, Assert.Single(result.Kinds, value => value.Kind == "traffic").DeletedRunCount);
             var stream = Assert.Single((await store.ReadFleetSnapshotAsync()).Streams);
             Assert.Equal("row-limit-reached", stream.LatestFailureCategory);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Retention_DoesNotLetPostAsOfRunsDisplaceVisiblePreservationEvidence()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            var failureDate = new DateOnly(2026, 1, 2);
+            foreach (var (runId, collectedAt) in new[]
+                     {
+                         ("visible-failure", AsOf.AddDays(-60)),
+                         ("future-failure", AsOf.AddDays(1))
+                     })
+            {
+                var failure = TrafficBatch(runId, failureDate, collectedAt);
+                failure.Status = "partial";
+                failure.Observations = Array.Empty<WebTrafficObservation>();
+                failure.CollectionCoverage!.CompletedDates = Array.Empty<DateOnly>();
+                failure.CollectionCoverage.FailedDate = failureDate;
+                failure.CollectionCoverage.FailureCategory = "row-limit-reached";
+                await store.ImportTrafficAsync(WebTrafficObservationNormalizer.Normalize(failure));
+            }
+
+            var result = await store.ApplyFleetRetentionAsync(new WebSearchFleetOperationsConfiguration
+            {
+                SearchRunRetentionDays = 30,
+                TrafficRunRetentionDays = 30,
+                PerformanceRunRetentionDays = 30
+            }, AsOf, apply: true);
+
+            Assert.Equal(0, Assert.Single(result.Kinds, value => value.Kind == "traffic").DeletedRunCount);
+            var stream = Assert.Single((await store.ReadFleetSnapshotAsync(AsOf)).Streams);
+            Assert.Equal("row-limit-reached", stream.LatestFailureCategory);
+            Assert.Equal(failureDate, stream.LatestFailureDate);
         }
         finally
         {
