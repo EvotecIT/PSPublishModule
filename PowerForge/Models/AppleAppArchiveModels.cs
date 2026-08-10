@@ -164,6 +164,12 @@ public sealed class AppleAppArchiveUploadResult
     /// <summary>Build-upload id accepted by App Store Connect, when reported by Xcode delivery.</summary>
     public string? BuildUploadId { get; set; }
 
+    /// <summary>Developer ID artifact path observed immediately when xcodebuild export completed.</summary>
+    public string? ExportArtifactPath { get; set; }
+
+    /// <summary>SHA-256 of the exact Developer ID artifact observed immediately when xcodebuild export completed.</summary>
+    public string? ExportArtifactSha256 { get; set; }
+
     /// <summary>xcodebuild process result.</summary>
     public ProcessRunResult ProcessResult { get; set; } = new(0, string.Empty, string.Empty, "xcodebuild", TimeSpan.Zero, false);
 

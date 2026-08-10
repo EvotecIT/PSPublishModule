@@ -4,6 +4,8 @@ namespace PowerForge;
 internal sealed class AppleDirectExportSnapshot : IDisposable
 {
     private bool _disposed;
+    private string? _approvedArtifactPath;
+    private string? _approvedArtifactSha256;
 
     private AppleDirectExportSnapshot(string rootPath, string exportPath)
     {
@@ -27,17 +29,47 @@ internal sealed class AppleDirectExportSnapshot : IDisposable
         return new AppleDirectExportSnapshot(root, exportPath);
     }
 
+    internal void BindProducedArtifact(string? producerArtifactPath, string? producerArtifactSha256)
+    {
+        var artifactPath = PowerForgeReleaseService.ResolveDirectAppleArtifactPath(ExportPath);
+        EnsureArtifactWithinExportRoot(artifactPath);
+        var artifactSha256 = AppleNotarizationService.ComputeArtifactSha256(artifactPath);
+        if (!string.IsNullOrWhiteSpace(producerArtifactPath) &&
+            !Path.GetFullPath(producerArtifactPath).Equals(
+                artifactPath,
+                Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"xcodebuild reported Developer ID artifact '{producerArtifactPath}', but the private export contains '{artifactPath}'.");
+        }
+        if (!string.IsNullOrWhiteSpace(producerArtifactSha256) &&
+            !string.Equals(producerArtifactSha256, artifactSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The private Developer ID export changed after xcodebuild completed. Expected '{producerArtifactSha256}', received '{artifactSha256}'.");
+        }
+
+        _approvedArtifactPath = artifactPath;
+        _approvedArtifactSha256 = artifactSha256;
+    }
+
     internal ApplePublishedDirectExport Publish(string destinationExportPath)
     {
+        if (string.IsNullOrWhiteSpace(_approvedArtifactPath) || string.IsNullOrWhiteSpace(_approvedArtifactSha256))
+            throw new InvalidOperationException("The Developer ID export must be bound immediately after xcodebuild completes before it can be published.");
         var sourceArtifact = PowerForgeReleaseService.ResolveDirectAppleArtifactPath(ExportPath);
+        EnsureArtifactWithinExportRoot(sourceArtifact);
         var sourceArtifactSha256 = AppleNotarizationService.ComputeArtifactSha256(sourceArtifact);
-        var relativeArtifactPath = FrameworkCompatibility.GetRelativePath(ExportPath, sourceArtifact);
-        if (Path.IsPathRooted(relativeArtifactPath) ||
-            relativeArtifactPath.Equals("..", StringComparison.Ordinal) ||
-            relativeArtifactPath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+        if (!sourceArtifact.Equals(
+                _approvedArtifactPath,
+                Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) ||
+            !sourceArtifactSha256.Equals(_approvedArtifactSha256, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException($"Direct Apple export artifact escaped its private export root: {sourceArtifact}");
+            throw new InvalidOperationException(
+                $"The private Developer ID export changed after xcodebuild completed. Expected '{_approvedArtifactSha256}' at '{_approvedArtifactPath}', " +
+                $"received '{sourceArtifactSha256}' at '{sourceArtifact}'.");
         }
+        var relativeArtifactPath = FrameworkCompatibility.GetRelativePath(ExportPath, sourceArtifact);
 
         var destination = Path.GetFullPath(destinationExportPath);
         var parent = Path.GetDirectoryName(destination)
@@ -106,6 +138,17 @@ internal sealed class AppleDirectExportSnapshot : IDisposable
         {
             if (Directory.Exists(stage))
                 Directory.Delete(stage, recursive: true);
+        }
+    }
+
+    private void EnsureArtifactWithinExportRoot(string artifactPath)
+    {
+        var relativeArtifactPath = FrameworkCompatibility.GetRelativePath(ExportPath, artifactPath);
+        if (Path.IsPathRooted(relativeArtifactPath) ||
+            relativeArtifactPath.Equals("..", StringComparison.Ordinal) ||
+            relativeArtifactPath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Direct Apple export artifact escaped its private export root: {artifactPath}");
         }
     }
 

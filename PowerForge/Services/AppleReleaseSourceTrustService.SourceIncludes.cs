@@ -90,8 +90,14 @@ internal sealed partial class AppleReleaseSourceTrustService
 
             var candidate = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(fullSourcePath)!, include));
             EnsurePathWithinRepository(repositoryRoot, candidate, $"preprocessor include from {fullSourcePath}");
-            if (File.Exists(candidate))
-                EnsureTrackedFile(repositoryRoot, candidate, $"preprocessor include from {fullSourcePath}");
+            if (!File.Exists(candidate))
+            {
+                throw new FileNotFoundException(
+                    $"Quoted preprocessor include '{include}' from '{fullSourcePath}' was not found beside the including source. " +
+                    "Its compiler search-path selection cannot be bound to the exact source commit; use an adjacent tracked include or an approved module/framework reference.",
+                    candidate);
+            }
+            EnsureTrackedFile(repositoryRoot, candidate, $"preprocessor include from {fullSourcePath}");
         }
 
         if (extension.Equals(".s", StringComparison.OrdinalIgnoreCase))
@@ -177,6 +183,10 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private void ValidateAssemblerInputs(string repositoryRoot, string sourcePath, string source)
     {
+        var fullSourcePath = Path.GetFullPath(sourcePath);
+        if (!_validatedAssemblerInputFiles.Add(fullSourcePath))
+            return;
+
         foreach (Match directive in Regex.Matches(
                      source,
                      "(?im)^[ \\t]*\\.(?<kind>include|incbin)(?![A-Za-z0-9_])[ \\t]+(?<operand>[^\\r\\n]+)",
@@ -202,6 +212,13 @@ internal sealed partial class AppleReleaseSourceTrustService
             if (!File.Exists(candidate))
                 throw new FileNotFoundException($"Assembler input was not found inside the exact checked-out source: {candidate}", candidate);
             EnsureTrackedFile(repositoryRoot, candidate, $"assembler .{directive.Groups["kind"].Value} input from {sourcePath}");
+            if (directive.Groups["kind"].Value.Equals("include", StringComparison.OrdinalIgnoreCase))
+            {
+                var nestedPhysicalSource = File.ReadAllText(candidate);
+                RejectCTrigraphs(nestedPhysicalSource, candidate);
+                var nestedSource = RemoveCComments(SpliceCPreprocessingLines(nestedPhysicalSource));
+                ValidateAssemblerInputs(repositoryRoot, candidate, nestedSource);
+            }
         }
     }
 

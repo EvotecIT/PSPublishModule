@@ -201,6 +201,13 @@ public sealed partial class AppleAppArchiveService
                 inheritEnvironment: toolEnvironment is null),
             cancellationToken).ConfigureAwait(false);
 
+        string? exportArtifactPath = null;
+        string? exportArtifactSha256 = null;
+        if (result.Succeeded && request.Destination.Equals("export", StringComparison.OrdinalIgnoreCase))
+        {
+            exportArtifactPath = PowerForgeReleaseService.ResolveDirectAppleArtifactPath(exportPath);
+            exportArtifactSha256 = AppleNotarizationService.ComputeArtifactSha256(exportArtifactPath);
+        }
         var diagnostics = ResolveUploadDiagnostics(result);
 
         return new AppleAppArchiveUploadResult
@@ -210,6 +217,8 @@ public sealed partial class AppleAppArchiveService
             ExportOptionsPlistPath = plistPath,
             DistributionLogPath = diagnostics.DistributionLogPath,
             BuildUploadId = diagnostics.BuildUploadId,
+            ExportArtifactPath = exportArtifactPath,
+            ExportArtifactSha256 = exportArtifactSha256,
             ProcessResult = result
         };
     }

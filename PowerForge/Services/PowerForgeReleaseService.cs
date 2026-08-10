@@ -2263,6 +2263,8 @@ internal sealed partial class PowerForgeReleaseService
                     AppStoreConnectApiIssuerId = direct ? null : plan.AppStoreConnectApiIssuerId,
                     AllowProvisioningUpdates = plan.AllowProvisioningUpdates
                 });
+                if (direct && upload.Succeeded)
+                    directExportSnapshot!.BindProducedArtifact(upload.ExportArtifactPath, upload.ExportArtifactSha256);
                 uploadMutationMonitor?.ValidateNoChanges();
                 if (uploadSnapshot is not null)
                     uploadSnapshot.ValidateUnchanged(approvedArchiveSha256!);
@@ -2283,6 +2285,8 @@ internal sealed partial class PowerForgeReleaseService
                 {
                     var published = directExportSnapshot!.Publish(app.ExportPath);
                     upload.ExportPath = published.ExportPath;
+                    upload.ExportArtifactPath = published.ArtifactPath;
+                    upload.ExportArtifactSha256 = published.ArtifactSha256;
                     upload.ExportOptionsPlistPath = MapDirectExportOutputPath(
                         directExportSnapshot.ExportPath,
                         published.ExportPath,

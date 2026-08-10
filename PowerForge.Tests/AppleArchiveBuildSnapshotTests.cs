@@ -3,6 +3,32 @@ namespace PowerForge.Tests;
 public sealed class AppleArchiveBuildSnapshotTests
 {
     [Fact]
+    public void DirectExport_publish_rejects_artifact_replaced_after_xcodebuild_identity_was_observed()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var destination = Path.Combine(root.FullName, "export");
+            using var snapshot = AppleDirectExportSnapshot.Create();
+            var artifact = Directory.CreateDirectory(Path.Combine(snapshot.ExportPath, "App.app"));
+            var payload = Path.Combine(artifact.FullName, "payload");
+            File.WriteAllText(payload, "approved export");
+            var expected = AppleNotarizationService.ComputeArtifactSha256(artifact.FullName);
+            snapshot.BindProducedArtifact(artifact.FullName, expected);
+            File.WriteAllText(payload, "replacement export");
+
+            var exception = Assert.Throws<InvalidOperationException>(() => snapshot.Publish(destination));
+
+            Assert.Contains("changed after xcodebuild completed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(destination));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Publish_rejects_archive_replaced_after_xcodebuild_identity_was_observed()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

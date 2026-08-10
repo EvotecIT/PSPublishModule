@@ -434,6 +434,28 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
     }
 
     [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_absolute_input_in_nested_assembler_include()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("NestedAssemblerInputRepo");
+        var project = scope.CreateDirectory(Path.Combine("NestedAssemblerInputRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = Startup.S; sourceTree = \"<group>\"; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Startup.S"), ".include \"Nested.inc\"\n");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Nested.inc"), ".incbin \"/tmp/injected.bin\"\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Assembler source input", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("/tmp/injected.bin", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ResolveExactAppleSourceCommit_rejects_host_reference_in_entitlements()
     {
         using var scope = new TemporaryDirectoryScope();
@@ -491,6 +513,27 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 
         Assert.Contains("angled preprocessor include", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("unbound compiler search roots", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_missing_quoted_source_include()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("MissingQuotedIncludeRepo");
+        var project = scope.CreateDirectory(Path.Combine("MissingQuotedIncludeRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = Source.m; sourceTree = \"<group>\"; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Source.m"), "#include \"Injected.h\"\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Quoted preprocessor include", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Injected.h", exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]

@@ -1183,6 +1183,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 AppleNotarizationService.ComputeArtifactSha256(notarizationRequest.ArtifactPath),
                 notarizationRequest.ExpectedArtifactSha256);
             Assert.Equal(Path.GetFullPath(publicExport), result.AppleApps.Single().Upload!.ExportPath);
+            Assert.Equal(notarizationRequest.ArtifactPath, result.AppleApps.Single().Upload!.ExportArtifactPath);
+            Assert.Equal(notarizationRequest.ExpectedArtifactSha256, result.AppleApps.Single().Upload!.ExportArtifactSha256);
         }
         finally
         {
