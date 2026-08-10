@@ -8,6 +8,24 @@ namespace PowerForge.Tests;
 public sealed partial class WebCloudflareAnalyticsCollectorTests
 {
     [Fact]
+    public async Task Probe_RejectsNullCapabilityZoneElementsAsInvalidResponses()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityNullZoneResponse(),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).ProbeAsync(ZoneId, "https://officeimo.com/");
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid-response", result.ErrorCode);
+        Assert.Equal(2, result.RequestCount);
+    }
+
+    [Fact]
     public async Task Collect_ScalesSampledRequestCountsBeforePersistence()
     {
         var handler = new ScriptedHandler((_, index) => index switch

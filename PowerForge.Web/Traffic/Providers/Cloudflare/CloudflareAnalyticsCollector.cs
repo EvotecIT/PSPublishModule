@@ -72,6 +72,8 @@ public sealed class CloudflareAnalyticsCollector
         var zones = response.Value?.Viewer?.Zones ?? Array.Empty<CloudflareCapabilityZone>();
         if (zones.Length != 1)
             return ProbeFailure(2, "zone-not-visible", "The configured Cloudflare zone is not visible to this credential.");
+        if (zones[0] is null)
+            return ProbeFailure(2, "invalid-response", "Cloudflare returned an invalid analytics capability response.");
         var settings = zones[0].Settings?.HttpRequestsAdaptiveGroups;
         if (settings?.Enabled != true)
             return ProbeFailure(2, "dataset-unavailable", "Cloudflare httpRequestsAdaptiveGroups is not enabled for this zone.");

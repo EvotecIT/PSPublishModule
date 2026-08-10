@@ -127,6 +127,12 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         }
     });
 
+    private static HttpResponseMessage CapabilityNullZoneResponse() => JsonResponse(new
+    {
+        errors = (object?)null,
+        data = new { viewer = new { zones = new object?[] { null } } }
+    });
+
     private static HttpResponseMessage ZoneResponse(string name) => JsonResponse(new
     {
         success = true,
