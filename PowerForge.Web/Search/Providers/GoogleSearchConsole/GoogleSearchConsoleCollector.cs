@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Google.Apis.Auth.OAuth2.Responses;
 
 namespace PowerForge.Web;
 
@@ -102,7 +103,7 @@ public sealed class GoogleSearchConsoleCollector
         {
             throw;
         }
-        catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException)
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException or TokenResponseException)
         {
             return ProbeFailure(normalizedProperty, ClassifyException(ex), SafeFailureMessage(ex, "Google Search Console property probe failed."));
         }
@@ -178,7 +179,7 @@ public sealed class GoogleSearchConsoleCollector
         {
             throw;
         }
-        catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException or FormatException)
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException or FormatException or TokenResponseException)
         {
             return BuildResult(
                 options,
@@ -258,6 +259,8 @@ public sealed class GoogleSearchConsoleCollector
                             throw new InvalidOperationException("Google Search Console returned a null analytics row.");
                         observations.Add(MapRow(row, dimensions, date, options, probe.Property));
                     }
+                    if (rows.Length < options.RowLimit)
+                        break;
                     startRow = checked(startRow + options.RowLimit);
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -268,7 +271,7 @@ public sealed class GoogleSearchConsoleCollector
                 {
                     throw;
                 }
-                catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException or OverflowException or FormatException)
+                catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException or OverflowException or FormatException or TokenResponseException)
                 {
                     return BuildResult(
                         options,
@@ -378,6 +381,8 @@ public sealed class GoogleSearchConsoleCollector
             throw new InvalidOperationException("Google Search Console returned a row with missing metrics.");
         var clicks = ConvertCount(row.Clicks.Value, "clicks");
         var impressions = ConvertCount(row.Impressions.Value, "impressions");
+        if (clicks > impressions)
+            throw new InvalidOperationException("Google Search Console returned clicks greater than impressions.");
         if (!double.IsFinite(row.ClickThroughRate.Value) || row.ClickThroughRate.Value is < 0d or > 1d)
             throw new InvalidOperationException("Google Search Console returned an invalid click-through rate.");
         if (!double.IsFinite(row.Position.Value) || row.Position.Value < 0d)
@@ -497,6 +502,7 @@ public sealed class GoogleSearchConsoleCollector
     private static string ClassifyException(Exception exception) => exception switch
     {
         JsonException => "provider-response-invalid",
+        TokenResponseException => "authentication-failed",
         HttpRequestException => "provider-unavailable",
         FormatException or OverflowException => "provider-response-invalid",
         _ when exception.Message.Contains("authentication", StringComparison.OrdinalIgnoreCase) => "authentication-failed",
@@ -507,6 +513,7 @@ public sealed class GoogleSearchConsoleCollector
     {
         HttpRequestException when !string.IsNullOrWhiteSpace(exception.Message) => $"{fallback} {exception.Message}",
         JsonException => "Google Search Console returned an invalid JSON response.",
+        TokenResponseException => fallback,
         _ => fallback
     };
 

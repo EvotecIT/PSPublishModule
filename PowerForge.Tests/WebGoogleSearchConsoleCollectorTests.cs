@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Google.Apis.Auth.OAuth2.Responses;
 using PowerForge.Web;
 using PowerForge.Web.Cli;
 
@@ -50,6 +51,24 @@ public sealed class WebGoogleSearchConsoleCollectorTests
         Assert.Equal("siteUnverifiedUser", result.PermissionLevel);
     }
 
+    [Fact]
+    public async Task Probe_ClassifiesOAuthTokenRejectionWithoutSendingARequest()
+    {
+        var handler = new ScriptedHandler((_, _) => throw new InvalidOperationException("HTTP transport must not be reached."));
+        using var httpClient = new HttpClient(handler);
+        var tokenError = new TokenErrorResponse { Error = "invalid_grant" };
+        var collector = new GoogleSearchConsoleCollector(
+            httpClient,
+            new ThrowingTokenProvider(new TokenResponseException(tokenError)));
+
+        var result = await collector.ProbeAsync("sc-domain:officeimo.com");
+
+        Assert.False(result.Success);
+        Assert.Equal("authentication-failed", result.ErrorCode);
+        Assert.Empty(handler.Requests);
+        Assert.DoesNotContain("invalid_grant", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("null")]
     [InlineData("{\"siteEntry\":[null,{\"siteUrl\":\"sc-domain:officeimo.com\",\"permissionLevel\":\"siteOwner\"}]}")]
@@ -77,7 +96,6 @@ public sealed class WebGoogleSearchConsoleCollectorTests
                 Row("2026-08-01", "https://officeimo.com/docs/b", "beta", "pol", "MOBILE", 2, 20, 0.1, 3.5)),
             3 => QueryResponse(
                 Row("2026-08-01", "https://officeimo.com/docs/c", "gamma", "gbr", "TABLET", 0, 0, 0, 0)),
-            4 => QueryResponse(),
             _ => throw new InvalidOperationException("Unexpected request.")
         });
         using var httpClient = new HttpClient(handler);
@@ -90,7 +108,7 @@ public sealed class WebGoogleSearchConsoleCollectorTests
 
         Assert.True(result.Success);
         Assert.Equal(1, result.CompletedDateCount);
-        Assert.Equal(4, result.RequestCount);
+        Assert.Equal(3, result.RequestCount);
         Assert.Equal("complete", result.Batch.Status);
         Assert.False(result.Batch.ZeroDataConfirmed);
         Assert.Equal(CompletionTime, result.Batch.CollectedAtUtc);
@@ -118,7 +136,7 @@ public sealed class WebGoogleSearchConsoleCollectorTests
         }
 
         var analyticsRequests = handler.Requests.Skip(2).ToArray();
-        Assert.Equal([0, 2, 4], analyticsRequests.Select(RequestStartRow));
+        Assert.Equal([0, 2], analyticsRequests.Select(RequestStartRow));
         Assert.All(analyticsRequests, request =>
         {
             Assert.Equal(HttpMethod.Post, request.Method);
@@ -539,6 +557,28 @@ public sealed class WebGoogleSearchConsoleCollectorTests
     }
 
     [Fact]
+    public async Task Collect_RejectsClicksGreaterThanImpressionsAsPartialEvidence()
+    {
+        var handler = new ScriptedHandler((request, index) => index switch
+        {
+            0 => SitesResponse("sc-domain:officeimo.com"),
+            1 => QueryResponse(),
+            2 => QueryResponse(Row("2026-08-01", "https://officeimo.com/", "officeimo", "pol", "DESKTOP", 11, 10, 1, 2)),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var httpClient = new HttpClient(handler);
+        var collector = new GoogleSearchConsoleCollector(httpClient, new FakeTokenProvider());
+
+        var result = await collector.CollectAsync(CreateOptions());
+
+        Assert.False(result.Success);
+        Assert.Equal("provider-response-invalid", result.ErrorCode);
+        Assert.Equal("partial", result.Batch.Status);
+        Assert.Empty(result.Batch.Observations);
+        WebSearchObservationNormalizer.Normalize(result.Batch);
+    }
+
+    [Fact]
     public void Doctor_ReportsAnalyticsAvailableWithoutClaimingUnimplementedGoogleCapabilities()
     {
         var configuration = CreateConfiguration(
@@ -761,6 +801,12 @@ public sealed class WebGoogleSearchConsoleCollectorTests
             RequestUris.Add(requestUri);
             return Task.FromResult("test-access-token");
         }
+    }
+
+    private sealed class ThrowingTokenProvider(Exception exception) : IGoogleSearchConsoleAccessTokenProvider
+    {
+        public Task<string> GetAccessTokenAsync(Uri requestUri, CancellationToken cancellationToken = default) =>
+            Task.FromException<string>(exception);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset value) : TimeProvider
