@@ -24,7 +24,7 @@ public sealed partial class WebSearchFleetOperationsTests
                     null,
                     AsOf.AddMinutes(-1),
                     partial: true,
-                    configurationHash: doctor.ConfigurationHash,
+                    configurationHash: ProviderConfigurationHash(configuration, "cloudflare"),
                     failureCategory: "row-limit-reached",
                     failureDate: new DateOnly(2026, 7, 1))
             ]

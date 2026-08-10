@@ -110,7 +110,7 @@ public sealed partial class WebSearchFleetOperationsTests
             ]
         };
         foreach (var stream in snapshot.Streams)
-            stream.ConfigurationHash = doctor.ConfigurationHash;
+            stream.ConfigurationHash = ProviderConfigurationHash(configuration, stream.ProviderId);
 
         var report = WebSearchFleetPlanner.CreateReport(configuration, doctor, snapshot, AsOf);
 
@@ -416,13 +416,14 @@ public sealed partial class WebSearchFleetOperationsTests
         Assert.False(doctor.Success);
         Assert.NotNull(doctor.ConfigurationHash);
         Assert.True(doctor.Providers.Single(value => value.ProviderId == "gsc").ConfigurationReady);
+        var gscHash = ProviderConfigurationHash(configuration, "gsc");
 
         var gscEvidence = Stream(
             "gsc",
             WebSearchProviderCapabilities.SearchAnalytics,
             new DateOnly(2026, 8, 7),
             AsOf.AddHours(-1),
-            configurationHash: doctor.ConfigurationHash);
+            configurationHash: gscHash);
         var plan = WebSearchFleetPlanner.CreateSchedule(
             configuration,
             doctor,
@@ -443,7 +444,8 @@ public sealed partial class WebSearchFleetOperationsTests
             configuration.Operations!.BackfillStartDate = null;
             var doctor = Doctor(configuration);
             var batch = SearchBatch("configured-run", new DateOnly(2026, 8, 7), AsOf.AddMinutes(-1));
-            batch.ConfigurationHash = doctor.ConfigurationHash;
+            var originalHash = ProviderConfigurationHash(configuration, "gsc");
+            batch.ConfigurationHash = originalHash;
             var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
             await store.ImportAsync(WebSearchObservationNormalizer.Normalize(batch));
             var snapshot = await store.ReadFleetSnapshotAsync();
@@ -452,9 +454,10 @@ public sealed partial class WebSearchFleetOperationsTests
 
             configuration.Sites[0].Providers[0].Settings["property"] = "https://officeimo.com/";
             var changedDoctor = Doctor(configuration);
+            var changedHash = ProviderConfigurationHash(configuration, "gsc");
             var changedPlan = WebSearchFleetPlanner.CreateSchedule(configuration, changedDoctor, snapshot, AsOf);
 
-            Assert.NotEqual(doctor.ConfigurationHash, changedDoctor.ConfigurationHash);
+            Assert.NotEqual(originalHash, changedHash);
             Assert.Single(changedPlan.WorkItems);
         }
         finally
@@ -482,7 +485,7 @@ public sealed partial class WebSearchFleetOperationsTests
                     null,
                     AsOf.AddMinutes(-1),
                     partial: true,
-                    configurationHash: doctor.ConfigurationHash,
+                    configurationHash: ProviderConfigurationHash(configuration, "cloudflare"),
                     failureCategory: "retention-boundary",
                     failureDate: new DateOnly(2026, 8, 8))
             ]
@@ -501,7 +504,7 @@ public sealed partial class WebSearchFleetOperationsTests
         configuration.Sites[0].BaseUrl = "https://officeimo.com/docs/";
         configuration.Sites[0].Providers = [configuration.Sites[0].Providers.Single(value => value.Id == "crux")];
         var doctor = Doctor(configuration);
-        var stream = Stream("crux", WebSearchProviderCapabilities.PerformanceCrux, null, AsOf.AddDays(-1), configurationHash: doctor.ConfigurationHash);
+        var stream = Stream("crux", WebSearchProviderCapabilities.PerformanceCrux, null, AsOf.AddDays(-1), configurationHash: ProviderConfigurationHash(configuration, "crux"));
 
         var plan = WebSearchFleetPlanner.CreateSchedule(
             configuration,
@@ -755,7 +758,7 @@ public sealed partial class WebSearchFleetOperationsTests
         SiteId = "officeimo",
         ProviderId = provider,
         Capability = capability,
-        ConfigurationHash = configurationHash ?? CurrentConfigurationHash,
+        ConfigurationHash = configurationHash ?? ProviderConfigurationHash(CreateConfiguration(), provider),
         ScopeKey = capability switch
         {
             WebSearchProviderCapabilities.SearchAnalytics => "web",
@@ -781,7 +784,17 @@ public sealed partial class WebSearchFleetOperationsTests
             WebSearchCollectorCatalog.AvailableCapabilities,
             _ => "test-credential");
 
-    private static string CurrentConfigurationHash => Doctor(CreateConfiguration()).ConfigurationHash!;
+    private static string ProviderConfigurationHash(WebSearchProviderConfiguration configuration, string providerId)
+    {
+        var site = configuration.Sites.Single(value => value.Providers.Any(provider => provider.Id == providerId));
+        var provider = site.Providers.Single(value => value.Id == providerId);
+        return WebSearchProviderDoctor.InspectProviderAction(
+            configuration,
+            site,
+            provider,
+            WebSearchCollectorCatalog.AvailableCapabilities,
+            _ => "test-credential").ConfigurationHash!;
+    }
 
     private static WebSearchProviderConfiguration CreateConfiguration() => new()
     {
@@ -843,7 +856,7 @@ public sealed partial class WebSearchFleetOperationsTests
         CollectedAtUtc = collectedAt,
         SourceKind = "fixture",
         Status = "complete",
-        ConfigurationHash = CurrentConfigurationHash,
+        ConfigurationHash = ProviderConfigurationHash(CreateConfiguration(), "gsc"),
         CollectionCoverage = new WebSearchObservationCollectionCoverage
         {
             Mode = "daily", FromDate = date, ThroughDate = date, SearchType = searchType, CompletedDates = [date]
@@ -862,7 +875,7 @@ public sealed partial class WebSearchFleetOperationsTests
         CollectedAtUtc = collectedAt,
         SourceKind = "fixture",
         Status = "partial",
-        ConfigurationHash = CurrentConfigurationHash,
+        ConfigurationHash = ProviderConfigurationHash(CreateConfiguration(), "gsc"),
         CollectionCoverage = new WebSearchObservationCollectionCoverage
         {
             Mode = "daily",
@@ -887,7 +900,7 @@ public sealed partial class WebSearchFleetOperationsTests
         CollectedAtUtc = collectedAt,
         SourceKind = "fixture",
         Status = "complete",
-        ConfigurationHash = CurrentConfigurationHash,
+        ConfigurationHash = ProviderConfigurationHash(CreateConfiguration(), "cloudflare"),
         CollectionCoverage = new WebTrafficObservationCollectionCoverage
         {
             FromDate = date, ThroughDate = date, CompletedDates = [date]
@@ -906,7 +919,7 @@ public sealed partial class WebSearchFleetOperationsTests
         CollectedAtUtc = collectedAt,
         SourceKind = "fixture",
         Status = "complete",
-        ConfigurationHash = CurrentConfigurationHash,
+        ConfigurationHash = ProviderConfigurationHash(CreateConfiguration(), "crux"),
         MeasurementKind = "field",
         TargetKind = "origin",
         TargetUrl = "https://officeimo.com/",

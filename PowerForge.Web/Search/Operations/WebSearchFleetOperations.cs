@@ -174,6 +174,7 @@ public sealed class WebSearchFleetRetentionResult
 /// <summary>Builds deterministic schedule and fleet-report contracts without contacting providers.</summary>
 public static class WebSearchFleetPlanner
 {
+    private const string PlanningCredentialPlaceholder = "credential-not-required-by-fleet-planning";
     private static readonly IReadOnlySet<string> PermanentDailyFailureCategories = new HashSet<string>(StringComparer.Ordinal)
     {
         "retention-boundary", "duration-boundary", "row-limit-reached"
@@ -208,13 +209,15 @@ public static class WebSearchFleetPlanner
             var providerState = doctor.Providers.FirstOrDefault(value =>
                 value.SiteId.Equals(site.Id ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
                 value.ProviderId.Equals(provider.Id ?? string.Empty, StringComparison.OrdinalIgnoreCase));
-            var readiness = providerState?.ConfigurationReady != true
+            var actionDoctor = InspectProviderAction(configuration, site, provider);
+            var actionReady = providerState?.ConfigurationReady == true && actionDoctor.Success;
+            var readiness = !actionReady
                 ? "configuration-error"
-                : providerState.AvailableCollectorCapabilities.Contains(capability, StringComparer.OrdinalIgnoreCase)
+                : providerState?.AvailableCollectorCapabilities.Contains(capability, StringComparer.OrdinalIgnoreCase) == true
                     ? null
                     : "collector-unavailable";
-            var evidence = providerState?.ConfigurationReady == true
-                ? FindStream(snapshot, site, provider, capability, doctor.ConfigurationHash)
+            var evidence = actionReady
+                ? FindStream(snapshot, site, provider, capability, actionDoctor.ConfigurationHash)
                 : null;
             if (capability == WebSearchProviderCapabilities.SearchAnalytics)
             {
@@ -281,16 +284,18 @@ public static class WebSearchFleetPlanner
             var providerState = doctor.Providers.FirstOrDefault(value =>
                 value.SiteId.Equals(site.Id ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
                 value.ProviderId.Equals(provider.Id ?? string.Empty, StringComparison.OrdinalIgnoreCase));
+            var actionDoctor = InspectProviderAction(configuration, site, provider);
+            var actionReady = providerState?.ConfigurationReady == true && actionDoctor.Success;
             var capabilityAvailable = providerState?.AvailableCollectorCapabilities.Contains(capability, StringComparer.OrdinalIgnoreCase) == true;
-            var evidence = providerState?.ConfigurationReady == true
-                ? FindStream(snapshot, site, provider, capability, doctor.ConfigurationHash)
+            var evidence = actionReady
+                ? FindStream(snapshot, site, provider, capability, actionDoctor.ConfigurationHash)
                 : null;
             var due = schedule.WorkItems.Any(value =>
                 value.SiteId.Equals(site.Id ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
                 value.ProviderId.Equals(provider.Id ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
                 value.Capability.Equals(capability, StringComparison.OrdinalIgnoreCase));
             var state = !provider.Enabled ? "disabled" :
-                providerState?.ConfigurationReady != true ? "configuration-error" :
+                !actionReady ? "configuration-error" :
                 !capabilityAvailable ? "collector-unavailable" :
                 evidence is null ? "missing" :
                 evidence.HasPartialEvidence ? "partial" :
@@ -303,7 +308,7 @@ public static class WebSearchFleetPlanner
                 ProviderKind = provider.Kind ?? string.Empty,
                 Capability = capability,
                 Enabled = provider.Enabled,
-                ConfigurationReady = providerState?.ConfigurationReady == true,
+                ConfigurationReady = actionReady,
                 CollectorAvailable = capabilityAvailable,
                 EvidenceState = state,
                 LatestCompleteDate = evidence?.LatestCompleteDate,
@@ -358,7 +363,10 @@ public static class WebSearchFleetPlanner
         var start = FindFirstMissing(policy.BackfillStartDate ?? defaultStart, targetThrough, ranges);
         if (start is null)
             return;
-        var through = start.Value.AddDays(policy.MaxBackfillDaysPerRun - 1);
+        var maximumDays = provider.Kind.Equals(GoogleSearchConsoleCollector.ProviderKind, StringComparison.OrdinalIgnoreCase)
+            ? Math.Min(policy.MaxBackfillDaysPerRun, GoogleSearchConsoleCollector.MaximumCollectionDateCount)
+            : policy.MaxBackfillDaysPerRun;
+        var through = start.Value.AddDays(maximumDays - 1);
         if (through > targetThrough)
             through = targetThrough;
         var nextCoveredRange = ranges
@@ -438,6 +446,17 @@ public static class WebSearchFleetPlanner
             ? matches.OrderByDescending(value => value.LastCompleteAtUtc).ThenByDescending(value => value.LastAttemptAtUtc).FirstOrDefault()
             : matches.FirstOrDefault(value => value.ScopeKey.Equals(expectedScope, StringComparison.Ordinal));
     }
+
+    private static WebSearchProviderDoctorResult InspectProviderAction(
+        WebSearchProviderConfiguration configuration,
+        WebSearchSiteProviderConfiguration site,
+        WebSearchProviderRegistration provider) =>
+        WebSearchProviderDoctor.InspectProviderAction(
+            configuration,
+            site,
+            provider,
+            WebSearchCollectorCatalog.AvailableCapabilities,
+            _ => PlanningCredentialPlaceholder);
 
     private static string CanonicalizeSiteOrigin(string siteBaseUrl)
     {
