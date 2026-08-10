@@ -22,8 +22,10 @@ public static class WebSearchObservationNormalizer
             throw new ArgumentException($"Unsupported search observation schema version '{batch.SchemaVersion}'.", nameof(batch));
         if (batch.SchemaVersion == 1 && (batch.CollectionCoverageSpecified || batch.ZeroDataConfirmedSpecified))
             throw new ArgumentException("Search observation schema version 1 cannot contain collection coverage or zero-data confirmation.", nameof(batch));
-        if (batch.SchemaVersion == 2 && batch.CollectionCoverage is null)
-            throw new ArgumentException("Search observation schema version 2 requires collection coverage.", nameof(batch));
+        if (batch.SchemaVersion >= 2 && batch.CollectionCoverage is null)
+            throw new ArgumentException("Search observation schema versions 2 and later require collection coverage.", nameof(batch));
+        if (batch.SchemaVersion == 2 && batch.CollectionCoverage?.ModeSpecified == true)
+            throw new ArgumentException("Search observation schema version 2 cannot contain a coverage mode.", nameof(batch));
         if (batch.ObservationsWasNull)
             throw new ArgumentException("Search observation observations must be an array.", nameof(batch));
 
@@ -55,7 +57,7 @@ public static class WebSearchObservationNormalizer
             .Select(item => item.Observation)
             .ToArray();
 
-        var collectionCoverage = NormalizeCollectionCoverage(batch.CollectionCoverage, status, observations);
+        var collectionCoverage = NormalizeCollectionCoverage(batch.CollectionCoverage, batch.SchemaVersion, status, observations);
 
         if (status == "complete" && observations.Length == 0 && !batch.ZeroDataConfirmed)
             throw new ArgumentException("A complete empty search observation batch must explicitly confirm zero provider data.", nameof(batch));
@@ -63,6 +65,17 @@ public static class WebSearchObservationNormalizer
             throw new ArgumentException("zeroDataConfirmed is valid only for a complete batch with no observations.", nameof(batch));
         if (batch.ZeroDataConfirmed && collectionCoverage is null)
             throw new ArgumentException("zeroDataConfirmed requires durable collection coverage.", nameof(batch));
+        if (batch.ZeroDataConfirmed && collectionCoverage is { Mode: "snapshot" } snapshotCoverage)
+        {
+            var expectedDateCount = snapshotCoverage.ThroughDate.DayNumber - snapshotCoverage.FromDate.DayNumber + 1;
+            if (snapshotCoverage.CompletedDates.Length != expectedDateCount)
+                throw new ArgumentException("Snapshot zero-data confirmation requires explicit provider coverage for every requested date.", nameof(batch));
+            for (var index = 0; index < snapshotCoverage.CompletedDates.Length; index++)
+            {
+                if (snapshotCoverage.CompletedDates[index] != snapshotCoverage.FromDate.AddDays(index))
+                    throw new ArgumentException("Snapshot zero-data confirmation requires every requested date exactly once.", nameof(batch));
+            }
+        }
 
         var normalized = new WebSearchObservationBatch
         {
@@ -89,6 +102,7 @@ public static class WebSearchObservationNormalizer
 
     private static WebSearchObservationCollectionCoverage? NormalizeCollectionCoverage(
         WebSearchObservationCollectionCoverage? coverage,
+        int schemaVersion,
         string status,
         IReadOnlyCollection<WebSearchObservation> observations)
     {
@@ -108,7 +122,30 @@ public static class WebSearchObservationNormalizer
             throw new ArgumentException("Search collection coverage completed dates must be unique and inside the requested range.", nameof(coverage));
         }
 
+        var mode = schemaVersion == 2 ? "daily" : NormalizeDimension(coverage.Mode);
+        if (schemaVersion >= 3 && mode is not ("daily" or "snapshot"))
+            throw new ArgumentException("Search collection coverage mode must be 'daily' or 'snapshot'.", nameof(coverage));
         var searchType = NormalizeDimension(coverage.SearchType);
+        if (schemaVersion == 2 && coverage.DimensionScopesSpecified)
+            throw new ArgumentException("Search collection coverage dimensionScopes is not supported by schema version 2.", nameof(coverage));
+        if (schemaVersion >= 3 && coverage.DimensionScopesSpecified && coverage.DimensionScopes is null)
+            throw new ArgumentException("Search collection coverage dimensionScopes must be an array.", nameof(coverage));
+        var dimensionScopes = (coverage.DimensionScopes ?? Array.Empty<string>())
+            .Select(NormalizeDimension)
+            .ToArray();
+        if (dimensionScopes.Any(scope => scope is not ("page" or "query" or "page-query")) ||
+            dimensionScopes.Distinct(StringComparer.Ordinal).Count() != dimensionScopes.Length)
+        {
+            throw new ArgumentException(
+                "Search collection coverage dimensionScopes must contain unique page, query, or page-query values.",
+                nameof(coverage));
+        }
+        var normalizedDimensionScopes = dimensionScopes
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .Select(value => value!)
+            .ToArray();
+        if (mode != "snapshot" && normalizedDimensionScopes.Length > 0)
+            throw new ArgumentException("Search collection coverage dimensionScopes is supported only in snapshot mode.", nameof(coverage));
         if (searchType is null && observations.Any(observation =>
                 observation.SearchType is not null &&
                 !observation.SearchType.Equals("web", StringComparison.Ordinal)))
@@ -121,7 +158,7 @@ public static class WebSearchObservationNormalizer
         if (coverage.FailedDate is DateOnly duplicateFailedDate && completedDates.Contains(duplicateFailedDate))
             throw new ArgumentException("Search collection coverage cannot mark the same date completed and failed.", nameof(coverage));
 
-        if (status == "complete")
+        if (mode == "daily" && status == "complete")
         {
             var expectedDateCount = coverage.ThroughDate.DayNumber - coverage.FromDate.DayNumber + 1;
             if (coverage.FailedDate is not null || failureCategory is not null || completedDates.Length != expectedDateCount)
@@ -132,7 +169,7 @@ public static class WebSearchObservationNormalizer
                     throw new ArgumentException("Complete search collection coverage must include every requested date exactly once.", nameof(coverage));
             }
         }
-        else
+        else if (mode == "daily")
         {
             if (coverage.FailedDate is not DateOnly failedDate || failureCategory is null)
                 throw new ArgumentException("Partial search collection coverage must provide both failedDate and failureCategory.", nameof(coverage));
@@ -146,17 +183,37 @@ public static class WebSearchObservationNormalizer
             }
         }
 
+        else if (status == "complete")
+        {
+            if (coverage.FailedDate is not null || failureCategory is not null)
+                throw new ArgumentException("Complete snapshot coverage cannot contain failure metadata.", nameof(coverage));
+        }
+        else
+        {
+            if (coverage.FailedDate is not null || failureCategory is null)
+                throw new ArgumentException("Partial snapshot coverage requires a failure category and cannot claim a date-bound failure.", nameof(coverage));
+        }
+
         foreach (var observation in observations)
         {
             if (observation.Date < coverage.FromDate || observation.Date > coverage.ThroughDate)
                 throw new ArgumentException("Search observations must fall inside collection coverage.", nameof(coverage));
-            if (!completedDates.Contains(observation.Date) && observation.Date != coverage.FailedDate)
-                throw new ArgumentException("Partial search observations may belong only to completed dates or the failed date.", nameof(coverage));
+            if (mode == "daily")
+            {
+                if (!completedDates.Contains(observation.Date) && observation.Date != coverage.FailedDate)
+                    throw new ArgumentException("Partial search observations may belong only to completed dates or the failed date.", nameof(coverage));
+            }
+            else if (!completedDates.Contains(observation.Date))
+            {
+                throw new ArgumentException("Snapshot search observations must belong to dates explicitly present in the provider response.", nameof(coverage));
+            }
             if (searchType is not null && !string.Equals(observation.SearchType, searchType, StringComparison.Ordinal))
                 throw new ArgumentException("Search observation type must match collection coverage.", nameof(coverage));
+            if (normalizedDimensionScopes.Length > 0 && !normalizedDimensionScopes.Contains(GetDimensionScope(observation), StringComparer.Ordinal))
+                throw new ArgumentException("Search observation dimensions must match collection coverage.", nameof(coverage));
         }
 
-        return new WebSearchObservationCollectionCoverage
+        var normalizedCoverage = new WebSearchObservationCollectionCoverage
         {
             FromDate = coverage.FromDate,
             ThroughDate = coverage.ThroughDate,
@@ -165,6 +222,12 @@ public static class WebSearchObservationNormalizer
             FailedDate = coverage.FailedDate,
             FailureCategory = failureCategory
         };
+        if (schemaVersion >= 3)
+        {
+            normalizedCoverage.Mode = mode;
+            normalizedCoverage.DimensionScopes = normalizedDimensionScopes;
+        }
+        return normalizedCoverage;
     }
 
     private static WebSearchObservation NormalizeObservation(
@@ -261,6 +324,11 @@ public static class WebSearchObservationNormalizer
 
     private static string? NormalizeDimension(string? value) => NormalizeOptional(value)?.ToLowerInvariant();
 
+    private static string GetDimensionScope(WebSearchObservation observation) =>
+        observation.Page is not null
+            ? observation.Query is not null ? "page-query" : "page"
+            : "query";
+
     private static string? NormalizeOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static double CanonicalizeZero(double value) => value == 0d ? 0d : value;
@@ -311,6 +379,26 @@ public static class WebSearchObservationNormalizer
         }
 
         var coverage = batch.CollectionCoverage;
+        if (batch.SchemaVersion == 2)
+        {
+            return WebSearchIdentityHasher.Compute(
+                batch.SchemaVersion.ToString(CultureInfo.InvariantCulture),
+                batch.Provider,
+                batch.SiteId,
+                batch.CollectedAtUtc.ToString("O", CultureInfo.InvariantCulture),
+                batch.SourceKind,
+                batch.Status,
+                batch.ConfigurationHash,
+                batch.EvidenceReference,
+                batch.ZeroDataConfirmed ? "zero-data-confirmed" : null,
+                coverage?.FromDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                coverage?.ThroughDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                coverage?.SearchType,
+                coverage is null ? null : string.Join(",", coverage.CompletedDates.Select(date => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))),
+                coverage?.FailedDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                coverage?.FailureCategory,
+                observations);
+        }
         return WebSearchIdentityHasher.Compute(
             batch.SchemaVersion.ToString(CultureInfo.InvariantCulture),
             batch.Provider,
@@ -321,9 +409,11 @@ public static class WebSearchObservationNormalizer
             batch.ConfigurationHash,
             batch.EvidenceReference,
             batch.ZeroDataConfirmed ? "zero-data-confirmed" : null,
+            coverage?.Mode,
             coverage?.FromDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             coverage?.ThroughDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             coverage?.SearchType,
+            coverage is null ? null : string.Join(",", coverage.DimensionScopes ?? Array.Empty<string>()),
             coverage is null ? null : string.Join(",", coverage.CompletedDates.Select(date => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))),
             coverage?.FailedDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             coverage?.FailureCategory,

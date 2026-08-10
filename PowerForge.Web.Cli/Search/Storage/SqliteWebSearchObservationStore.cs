@@ -226,12 +226,16 @@ internal sealed class SqliteWebSearchObservationStore
         }
 
         var sql = $"""
-            WITH complete_coverage AS MATERIALIZED (
+            WITH completed_runs AS MATERIALIZED (
                 SELECT runs.provider,
                        runs.site_id,
                        runs.run_id,
                        runs.collected_at_utc,
+                       runs.normalized_manifest_json,
                        completed_dates.value AS observation_date,
+                       COALESCE(NULLIF(LOWER(TRIM(json_extract(
+                           runs.normalized_manifest_json,
+                           '$.collectionCoverage.mode'))), ''), 'daily') AS coverage_mode,
                        COALESCE(
                            NULLIF(LOWER(TRIM(json_extract(
                                runs.normalized_manifest_json,
@@ -242,6 +246,49 @@ internal sealed class SqliteWebSearchObservationStore
                     runs.normalized_manifest_json,
                     '$.collectionCoverage.completedDates') AS completed_dates
                 WHERE runs.status = 'complete'
+            ),
+            complete_coverage AS MATERIALIZED (
+                SELECT completed.provider,
+                       completed.site_id,
+                       completed.run_id,
+                       completed.collected_at_utc,
+                       completed.observation_date,
+                       completed.search_type,
+                       COALESCE(NULLIF(LOWER(TRIM(dimension_scopes.value)), ''), '*') AS dimension_scope
+                FROM completed_runs AS completed
+                LEFT JOIN json_each(
+                    completed.normalized_manifest_json,
+                    '$.collectionCoverage.dimensionScopes') AS dimension_scopes ON TRUE
+                WHERE completed.coverage_mode != 'snapshot'
+                   OR NOT EXISTS (
+                       SELECT 1
+                       FROM search_observations AS covered_observations
+                       WHERE covered_observations.provider = completed.provider
+                         AND covered_observations.site_id = completed.site_id
+                         AND covered_observations.run_id = completed.run_id
+                         AND covered_observations.observation_date = completed.observation_date
+                   )
+
+                UNION
+
+                SELECT completed.provider,
+                       completed.site_id,
+                       completed.run_id,
+                       completed.collected_at_utc,
+                       completed.observation_date,
+                       completed.search_type,
+                       CASE
+                           WHEN covered_observations.page IS NOT NULL AND covered_observations.query IS NOT NULL THEN 'page-query'
+                           WHEN covered_observations.page IS NOT NULL THEN 'page'
+                           ELSE 'query'
+                       END AS dimension_scope
+                FROM completed_runs AS completed
+                INNER JOIN search_observations AS covered_observations
+                    ON covered_observations.provider = completed.provider
+                   AND covered_observations.site_id = completed.site_id
+                   AND covered_observations.run_id = completed.run_id
+                   AND covered_observations.observation_date = completed.observation_date
+                WHERE completed.coverage_mode = 'snapshot'
             ),
             ranked_observations AS (
                 SELECT observations.observation_key,
@@ -284,6 +331,14 @@ internal sealed class SqliteWebSearchObservationStore
                         AND coverage.site_id = observations.site_id
                         AND coverage.observation_date = observations.observation_date
                         AND coverage.search_type = COALESCE(NULLIF(LOWER(TRIM(observations.search_type)), ''), 'web')
+                        AND (
+                            coverage.dimension_scope = '*' OR
+                            coverage.dimension_scope = CASE
+                                WHEN observations.page IS NOT NULL AND observations.query IS NOT NULL THEN 'page-query'
+                                WHEN observations.page IS NOT NULL THEN 'page'
+                                ELSE 'query'
+                            END
+                        )
                         AND (
                             coverage.collected_at_utc > runs.collected_at_utc OR
                             (coverage.collected_at_utc = runs.collected_at_utc AND coverage.run_id > runs.run_id)

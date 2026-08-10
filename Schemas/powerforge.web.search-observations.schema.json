@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.evotec.xyz/powerforge/web/search-observations/v2.json",
+  "$id": "https://schemas.evotec.xyz/powerforge/web/search-observations/v3.json",
   "title": "PowerForge.Web Search Observation Batch",
   "description": "Portable structural schema for Search observation exchange. Cross-field semantic invariants are enforced by WebSearchObservationNormalizer during import.",
   "type": "object",
@@ -18,7 +18,7 @@
     "schemaVersion": {
       "type": "integer",
       "minimum": 1,
-      "maximum": 2
+      "maximum": 3
     },
     "runId": {
       "type": ["string", "null"],
@@ -77,7 +77,15 @@
       "enforcedBy": "PowerForge.Web.WebSearchObservationNormalizer"
     },
     {
-      "expression": "partial collectionCoverage requires failedDate and failureCategory; completedDates are the consecutive prefix before failedDate; observations belong only to completedDates or failedDate",
+      "expression": "partial daily collectionCoverage requires failedDate and failureCategory; completedDates are the consecutive prefix before failedDate; observations belong only to completedDates or failedDate",
+      "enforcedBy": "PowerForge.Web.WebSearchObservationNormalizer"
+    },
+    {
+      "expression": "schemaVersion=3 requires collectionCoverage.mode; daily preserves consecutive partition semantics while snapshot records only dates explicitly present in a provider response",
+      "enforcedBy": "PowerForge.Web.WebSearchObservationNormalizer"
+    },
+    {
+      "expression": "collectionCoverage.dimensionScopes is a schemaVersion=3 snapshot-only qualifier",
       "enforcedBy": "PowerForge.Web.WebSearchObservationNormalizer"
     }
   ],
@@ -105,6 +113,39 @@
       },
       "then": {
         "required": ["collectionCoverage"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "schemaVersion": { "minimum": 3 }
+        }
+      },
+      "then": {
+        "properties": {
+          "collectionCoverage": {
+            "required": ["mode"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "schemaVersion": { "maximum": 2 }
+        }
+      },
+      "then": {
+        "properties": {
+          "collectionCoverage": {
+            "not": {
+              "anyOf": [
+                { "required": ["mode"] },
+                { "required": ["dimensionScopes"] }
+              ]
+            }
+          }
+        }
       }
     },
     {
@@ -138,6 +179,9 @@
       "additionalProperties": false,
       "required": ["fromDate", "throughDate", "completedDates"],
       "properties": {
+        "mode": {
+          "enum": ["daily", "snapshot"]
+        },
         "fromDate": {
           "type": "string",
           "format": "date"
@@ -148,6 +192,13 @@
         },
         "searchType": {
           "type": ["string", "null"]
+        },
+        "dimensionScopes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": ["page", "query", "page-query"]
+          }
         },
         "completedDates": {
           "type": "array",

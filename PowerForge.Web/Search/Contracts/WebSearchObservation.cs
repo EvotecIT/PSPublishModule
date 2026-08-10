@@ -11,7 +11,7 @@ public sealed class WebSearchObservationBatch
     private bool _zeroDataConfirmed;
 
     /// <summary>Current JSON contract version.</summary>
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     /// <summary>Oldest JSON contract version that remains import-compatible.</summary>
     public const int MinimumSupportedSchemaVersion = 1;
@@ -108,6 +108,29 @@ public sealed class WebSearchObservationBatch
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class WebSearchObservationCollectionCoverage
 {
+    private string? _mode;
+    private string[]? _dimensionScopes;
+
+    /// <summary>
+    /// Coverage acquisition mode. Version 2 omits this value and means <c>daily</c>.
+    /// Version 3 supports <c>daily</c> and <c>snapshot</c>.
+    /// </summary>
+    [JsonPropertyName("mode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Mode
+    {
+        get => _mode;
+        set
+        {
+            ModeSpecified = true;
+            _mode = value;
+        }
+    }
+
+    /// <summary>Whether mode was explicitly supplied, including an explicit null JSON value.</summary>
+    [JsonIgnore]
+    internal bool ModeSpecified { get; private set; }
+
     /// <summary>Inclusive first reporting date requested from the provider.</summary>
     [JsonPropertyName("fromDate"), JsonRequired]
     public DateOnly FromDate { get; set; }
@@ -120,7 +143,30 @@ public sealed class WebSearchObservationCollectionCoverage
     [JsonPropertyName("searchType")]
     public string? SearchType { get; set; }
 
-    /// <summary>Daily partitions whose pagination completed successfully.</summary>
+    /// <summary>
+    /// Optional observation dimension shapes covered by this snapshot. Empty means every dimension shape for the
+    /// selected search type. Supported values are <c>page</c>, <c>query</c>, and <c>page-query</c>.
+    /// </summary>
+    [JsonPropertyName("dimensionScopes")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string[]? DimensionScopes
+    {
+        get => _dimensionScopes;
+        set
+        {
+            DimensionScopesSpecified = true;
+            _dimensionScopes = value;
+        }
+    }
+
+    /// <summary>Whether dimensionScopes was explicitly supplied, including an explicit null JSON value.</summary>
+    [JsonIgnore]
+    internal bool DimensionScopesSpecified { get; private set; }
+
+    /// <summary>
+    /// Dates whose daily partitions completed in <c>daily</c> mode, or dates explicitly present in a successful
+    /// provider response in <c>snapshot</c> mode.
+    /// </summary>
     [JsonPropertyName("completedDates"), JsonRequired]
     public DateOnly[] CompletedDates { get; set; } = Array.Empty<DateOnly>();
 

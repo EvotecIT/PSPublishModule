@@ -95,13 +95,13 @@ public static partial class WebSearchProviderDoctor
         }
 
         if (TryGetHttpUrl(siteBaseUrl, out var siteUri) &&
-            !UrlPrefixCoversSite(propertyUri!, siteUri!))
+            !ExactSiteUrlMatches(propertyUri!, siteUri!))
         {
             AddCheck(
                 checks,
                 "provider.bing-site-url-mismatch",
                 WebSearchProviderCheckSeverity.Error,
-                "Bing Webmaster siteUrl does not cover the owning site baseUrl.",
+                "Bing Webmaster siteUrl must match the owning site baseUrl exactly.",
                 siteId,
                 providerId);
         }
@@ -144,4 +144,13 @@ public static partial class WebSearchProviderDoctor
         string.IsNullOrEmpty(propertyUri.Query) &&
         string.IsNullOrEmpty(propertyUri.Fragment) &&
         siteUri.AbsolutePath.StartsWith(propertyUri.AbsolutePath, StringComparison.Ordinal);
+
+    private static bool ExactSiteUrlMatches(Uri propertyUri, Uri siteUri) =>
+        propertyUri.Scheme.Equals(siteUri.Scheme, StringComparison.OrdinalIgnoreCase) &&
+        WebSearchProviderConfigurationFingerprint.NormalizeDnsHost(propertyUri.IdnHost)
+            .Equals(WebSearchProviderConfigurationFingerprint.NormalizeDnsHost(siteUri.IdnHost), StringComparison.Ordinal) &&
+        propertyUri.Port == siteUri.Port &&
+        propertyUri.AbsolutePath.TrimEnd('/').Equals(siteUri.AbsolutePath.TrimEnd('/'), StringComparison.Ordinal) &&
+        string.IsNullOrEmpty(propertyUri.Query) &&
+        string.IsNullOrEmpty(propertyUri.Fragment);
 }

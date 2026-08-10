@@ -27,8 +27,7 @@
           "kind": "bing-webmaster",
           "enabled": false,
           "capabilities": [
-            "search.analytics",
-            "search.sitemaps"
+            "search.analytics"
           ],
           "credential": {
             "kind": "bing-api-key",

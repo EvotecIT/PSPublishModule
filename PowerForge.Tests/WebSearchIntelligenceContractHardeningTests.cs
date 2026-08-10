@@ -204,10 +204,61 @@ public sealed partial class WebSearchIntelligenceTests
         var documented = JsonNode.Parse(JsonSerializer.Serialize(batch))!;
         var missingCoverage = documented.DeepClone();
         missingCoverage.AsObject().Remove("collectionCoverage");
+        var modeFromVersionThree = documented.DeepClone();
+        modeFromVersionThree["collectionCoverage"]!["mode"] = "daily";
         var schema = LoadObservationSchema();
 
         Assert.True(schema.Evaluate(documented, new EvaluationOptions()).IsValid);
+        Assert.Null(documented["collectionCoverage"]!["dimensionScopes"]);
+        var normalizedDocument = JsonNode.Parse(JsonSerializer.Serialize(WebSearchObservationNormalizer.Normalize(batch)))!;
+        var reparsed = JsonSerializer.Deserialize<WebSearchObservationBatch>(normalizedDocument.ToJsonString(), WebCliJson.Options)!;
+        var renormalizedDocument = JsonNode.Parse(JsonSerializer.Serialize(WebSearchObservationNormalizer.Normalize(reparsed)))!;
+        Assert.Null(normalizedDocument["collectionCoverage"]!["dimensionScopes"]);
+        Assert.True(JsonNode.DeepEquals(normalizedDocument, renormalizedDocument));
         Assert.False(schema.Evaluate(missingCoverage, new EvaluationOptions()).IsValid);
+        Assert.False(schema.Evaluate(modeFromVersionThree, new EvaluationOptions()).IsValid);
+    }
+
+    [Fact]
+    public void Normalizer_RejectsDimensionScopesFromVersionTwoJson()
+    {
+        var batch = CreateBatch();
+        batch.SchemaVersion = 2;
+        batch.CollectionCoverage = new WebSearchObservationCollectionCoverage
+        {
+            FromDate = new DateOnly(2026, 8, 1),
+            ThroughDate = new DateOnly(2026, 8, 1),
+            SearchType = "web",
+            CompletedDates = [new DateOnly(2026, 8, 1)]
+        };
+        var document = JsonNode.Parse(JsonSerializer.Serialize(batch))!;
+        document["collectionCoverage"]!["dimensionScopes"] = new JsonArray();
+        var schema = LoadObservationSchema();
+        var parsed = JsonSerializer.Deserialize<WebSearchObservationBatch>(document.ToJsonString(), WebCliJson.Options)!;
+
+        Assert.False(schema.Evaluate(document, new EvaluationOptions()).IsValid);
+        var exception = Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(parsed));
+        Assert.Contains("version 2", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Normalizer_RejectsDimensionScopesOutsideSnapshotMode()
+    {
+        var batch = CreateBatch();
+        batch.SchemaVersion = 3;
+        batch.CollectionCoverage = new WebSearchObservationCollectionCoverage
+        {
+            Mode = "daily",
+            FromDate = batch.Observations[0].Date,
+            ThroughDate = batch.Observations[0].Date,
+            SearchType = "web",
+            DimensionScopes = ["page"],
+            CompletedDates = [batch.Observations[0].Date]
+        };
+
+        var exception = Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(batch));
+
+        Assert.Contains("snapshot", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -226,6 +277,50 @@ public sealed partial class WebSearchIntelligenceTests
         var exception = Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(batch));
 
         Assert.Contains("coverage searchType", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Normalizer_RejectsAnExplicitNullCoverageModeFromVersionTwoJson()
+    {
+        var batch = CreateBatch();
+        batch.SchemaVersion = 2;
+        batch.CollectionCoverage = new WebSearchObservationCollectionCoverage
+        {
+            FromDate = new DateOnly(2026, 8, 1),
+            ThroughDate = new DateOnly(2026, 8, 1),
+            SearchType = "web",
+            CompletedDates = [new DateOnly(2026, 8, 1)]
+        };
+        var document = JsonNode.Parse(JsonSerializer.Serialize(batch))!;
+        document["collectionCoverage"]!["mode"] = null;
+        var parsed = JsonSerializer.Deserialize<WebSearchObservationBatch>(document.ToJsonString(), WebCliJson.Options)!;
+
+        var exception = Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(parsed));
+
+        Assert.Contains("version 2", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ObservationSchema_VersionThreeRequiresADeclaredCoverageMode()
+    {
+        var batch = CreateBatch();
+        batch.SchemaVersion = 3;
+        batch.CollectionCoverage = new WebSearchObservationCollectionCoverage
+        {
+            Mode = "snapshot",
+            FromDate = new DateOnly(2026, 8, 1),
+            ThroughDate = new DateOnly(2026, 8, 7),
+            SearchType = "web",
+            CompletedDates = [new DateOnly(2026, 8, 1)]
+        };
+        var documented = JsonNode.Parse(JsonSerializer.Serialize(batch))!;
+        var missingMode = documented.DeepClone();
+        missingMode["collectionCoverage"]!.AsObject().Remove("mode");
+        var schema = LoadObservationSchema();
+
+        Assert.True(schema.Evaluate(documented, new EvaluationOptions()).IsValid);
+        Assert.False(schema.Evaluate(missingMode, new EvaluationOptions()).IsValid);
+        Assert.Single(WebSearchObservationNormalizer.Normalize(batch).CollectionCoverage!.CompletedDates);
     }
 
     [Fact]
@@ -318,6 +413,80 @@ public sealed partial class WebSearchIntelligenceTests
             Assert.Equal(complete.Observations[0].ObservationKey, completeDimension.ObservationKey);
             Assert.Equal(100, completeDimension.Impressions);
             Assert.Equal(5, partialOnlyDimension.Impressions);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task SqliteStore_PreservesSnapshotCoverageByDateAndDimensionShape()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var firstDate = new DateOnly(2026, 8, 1);
+            var secondDate = firstDate.AddDays(1);
+            var older = WebSearchObservationNormalizer.Normalize(new WebSearchObservationBatch
+            {
+                Provider = "bing-webmaster",
+                SiteId = "officeimo",
+                CollectedAtUtc = new DateTimeOffset(2026, 8, 3, 8, 0, 0, TimeSpan.Zero),
+                SourceKind = "fixture",
+                Status = "complete",
+                CollectionCoverage = new WebSearchObservationCollectionCoverage
+                {
+                    Mode = "snapshot",
+                    FromDate = firstDate,
+                    ThroughDate = secondDate,
+                    SearchType = "web",
+                    DimensionScopes = ["page", "query"],
+                    CompletedDates = [firstDate, secondDate]
+                },
+                Observations =
+                [
+                    new WebSearchObservation { Date = firstDate, Page = "https://officeimo.com/old-page", SearchType = "web", Clicks = 1, Impressions = 10 },
+                    new WebSearchObservation { Date = secondDate, Query = "old query", SearchType = "web", Clicks = 2, Impressions = 20 }
+                ]
+            });
+            var newer = WebSearchObservationNormalizer.Normalize(new WebSearchObservationBatch
+            {
+                Provider = "bing-webmaster",
+                SiteId = "officeimo",
+                CollectedAtUtc = older.CollectedAtUtc.AddHours(1),
+                SourceKind = "fixture",
+                Status = "complete",
+                CollectionCoverage = new WebSearchObservationCollectionCoverage
+                {
+                    Mode = "snapshot",
+                    FromDate = firstDate,
+                    ThroughDate = secondDate,
+                    SearchType = "web",
+                    DimensionScopes = ["page", "query"],
+                    CompletedDates = [firstDate, secondDate]
+                },
+                Observations =
+                [
+                    new WebSearchObservation { Date = firstDate, Query = "new query", SearchType = "web", Clicks = 3, Impressions = 30 },
+                    new WebSearchObservation { Date = secondDate, Page = "https://officeimo.com/new-page", SearchType = "web", Clicks = 4, Impressions = 40 }
+                ]
+            });
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "snapshot-revisions.db"));
+
+            await store.ImportAsync(older);
+            await store.ImportAsync(newer);
+            var current = await store.QueryAsync(new WebSearchObservationQuery
+            {
+                SiteId = "officeimo",
+                Provider = "bing-webmaster"
+            });
+
+            Assert.Equal(4, current.Count);
+            Assert.Contains(current, value => value.Date == firstDate && value.Page == "https://officeimo.com/old-page");
+            Assert.Contains(current, value => value.Date == firstDate && value.Query == "new query");
+            Assert.Contains(current, value => value.Date == secondDate && value.Query == "old query");
+            Assert.Contains(current, value => value.Date == secondDate && value.Page == "https://officeimo.com/new-page");
         }
         finally
         {

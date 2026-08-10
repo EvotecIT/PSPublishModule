@@ -87,10 +87,10 @@ Legend:
   - Code: `PowerForge.Web/Services/WebSiteBuilder.Seo.cs`, `PowerForge.Web/Services/WebSiteBuilder.RenderAssetsAndRouting.cs`, `PowerForge.Web/Services/WebSiteBuilder.StructuredDataProfiles.cs`
 - **Have**: specialized sitemap family includes news/image/video sitemap outputs + sitemap index.
   - Code: `PowerForge.Web/Services/WebSitemapGenerator.cs`, `PowerForge.Web/Services/WebSitemapGenerator.Specialized.cs`
-- **Partial**: Search Intelligence now has a versioned provider-neutral Search Analytics contract, deterministic observation identity, idempotent DbaClientX SQLite history, evidence-linked weak-page/CTR opportunity reports, fleet provider configuration with a credential-safe capability doctor, and authenticated Google Search Console Search Analytics collection through `powerforge-web`.
+- **Partial**: Search Intelligence now has a versioned provider-neutral Search Analytics contract, deterministic observation identity, idempotent DbaClientX SQLite history, evidence-linked weak-page/CTR opportunity reports, fleet provider configuration with a credential-safe capability doctor, authenticated Google Search Console collection, and Bing Webmaster API collection with a CSV export fallback through `powerforge-web`.
   - Code: `PowerForge.Web/Search/`, `PowerForge.Web.Cli/Search/`
   - Docs: `Docs/PowerForge.Web.SearchIntelligence.md`
-  - Remaining: Bing collection plus export fallback, Cloudflare collection, performance/traffic observation families, scheduling/backfill/retention, competitor evidence, briefs, outcomes, Google sitemap/URL-inspection workflows, and fleet UI.
+  - Remaining: Cloudflare collection, performance/traffic observation families, scheduling/backfill/retention, competitor evidence, briefs, outcomes, Google and Bing sitemap/URL-inspection workflows, and fleet UI.
 
 ### Themes + Contracts
 

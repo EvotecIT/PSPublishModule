@@ -39,9 +39,9 @@ public static partial class WebSearchProviderDoctor
                 ValidateBingWebmaster),
             ["bing-webmaster-export"] = new(
                 [WebSearchProviderCapabilities.SearchAnalytics],
+                ["siteUrl"],
                 [],
-                [],
-                null),
+                ValidateBingWebmaster),
             ["cloudflare-analytics"] = new(
                 [WebSearchProviderCapabilities.TrafficAnalytics],
                 ["zoneId"],
