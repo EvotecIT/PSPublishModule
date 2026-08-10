@@ -5,25 +5,23 @@ namespace PowerForge;
 /// </summary>
 internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 {
-    private static readonly IReadOnlyDictionary<string, string?> IsolatedGitEnvironment =
-        new Dictionary<string, string?>(StringComparer.Ordinal)
-        {
-            ["GIT_CONFIG_NOSYSTEM"] = "1",
-            ["GIT_CONFIG_SYSTEM"] = "/dev/null",
-            ["GIT_CONFIG_GLOBAL"] = "/dev/null",
-            ["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
-        };
-
     private readonly AppleReleaseSourceTrustService _sourceTrust = new();
+    private readonly IReadOnlyDictionary<string, string> _approvedPackageRevisions;
+    private readonly IReadOnlyDictionary<string, string?> _environmentVariables;
     private readonly AppleReleaseSourceMutationMonitor? _monitor;
     private bool _disposed;
 
-    private AppleSwiftPackageBuildSnapshot(string rootPath)
+    private AppleSwiftPackageBuildSnapshot(
+        string rootPath,
+        IReadOnlyDictionary<string, string> approvedPackageRevisions,
+        IReadOnlyDictionary<string, string?> environmentVariables)
     {
         RootPath = rootPath;
-        _monitor = Directory.Exists(rootPath)
+        _approvedPackageRevisions = approvedPackageRevisions;
+        _environmentVariables = environmentVariables;
+        _monitor = Directory.Exists(SourcePackagesPath)
             ? new AppleReleaseSourceMutationMonitor(
-                rootPath,
+                SourcePackagesPath,
                 "materialized Swift package root",
                 "xcodebuild archive",
                 "Discard the archive and resolve the exact package graph again.")
@@ -32,7 +30,11 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 
     internal string RootPath { get; }
 
-    internal IReadOnlyDictionary<string, string?> EnvironmentVariables => IsolatedGitEnvironment;
+    internal string SourcePackagesPath => Path.Combine(RootPath, "SourcePackages");
+
+    internal string DerivedDataPath => Path.Combine(RootPath, "DerivedData");
+
+    internal IReadOnlyDictionary<string, string?> EnvironmentVariables => _environmentVariables;
 
     internal static async Task<AppleSwiftPackageBuildSnapshot> CreateAsync(
         IProcessRunner processRunner,
@@ -53,6 +55,15 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 #endif
         try
         {
+            var sourcePackagesPath = Path.Combine(root, "SourcePackages");
+            var derivedDataPath = Path.Combine(root, "DerivedData");
+            Directory.CreateDirectory(sourcePackagesPath);
+            Directory.CreateDirectory(derivedDataPath);
+            var repositoryRoot = FindRepositoryRoot(projectPath);
+            var approvedPackageRevisions = new AppleReleaseSourceTrustService().ReadApprovedTrackedPackageRevisions(
+                repositoryRoot,
+                DiscoverApprovedPackageLocks(repositoryRoot, projectPath));
+            var environmentVariables = BuildIsolatedEnvironment();
             var arguments = new[]
             {
                 isWorkspace ? "-workspace" : "-project",
@@ -61,7 +72,9 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 scheme,
                 "-resolvePackageDependencies",
                 "-clonedSourcePackagesDirPath",
-                root,
+                sourcePackagesPath,
+                "-derivedDataPath",
+                derivedDataPath,
                 "-onlyUsePackageVersionsFromResolvedFile",
                 "-disableAutomaticPackageResolution",
                 "-skipPackageUpdates"
@@ -72,7 +85,10 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                         Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
                         arguments,
                         timeout,
-                        IsolatedGitEnvironment),
+                        environmentVariables,
+                        captureOutput: true,
+                        captureError: true,
+                        inheritEnvironment: false),
                     cancellationToken)
                 .ConfigureAwait(false);
             if (!result.Succeeded)
@@ -82,8 +98,10 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                     (string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr));
             }
 
-            new AppleReleaseSourceTrustService().ValidateMaterializedPackageCheckouts(root);
-            var snapshot = new AppleSwiftPackageBuildSnapshot(root);
+            new AppleReleaseSourceTrustService().ValidateMaterializedPackageCheckouts(
+                sourcePackagesPath,
+                approvedPackageRevisions);
+            var snapshot = new AppleSwiftPackageBuildSnapshot(root, approvedPackageRevisions, environmentVariables);
             try
             {
                 return snapshot;
@@ -105,7 +123,9 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
     internal void AppendArchiveArguments(ICollection<string> arguments)
     {
         arguments.Add("-clonedSourcePackagesDirPath");
-        arguments.Add(RootPath);
+        arguments.Add(SourcePackagesPath);
+        arguments.Add("-derivedDataPath");
+        arguments.Add(DerivedDataPath);
         arguments.Add("-onlyUsePackageVersionsFromResolvedFile");
         arguments.Add("-disableAutomaticPackageResolution");
         arguments.Add("-skipPackageUpdates");
@@ -114,7 +134,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
     internal void ValidateUnchanged()
     {
         _monitor?.ValidateNoChanges();
-        _sourceTrust.ValidateMaterializedPackageCheckouts(RootPath);
+        _sourceTrust.ValidateMaterializedPackageCheckouts(SourcePackagesPath, _approvedPackageRevisions);
     }
 
     internal static void RejectConflictingArguments(IEnumerable<string> arguments)
@@ -122,6 +142,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         var forbidden = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "-clonedSourcePackagesDirPath",
+            "-derivedDataPath",
             "-packageCachePath",
             "-resolvePackageDependencies",
             "-disableAutomaticPackageResolution",
@@ -146,5 +167,53 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         _monitor?.Dispose();
         if (Directory.Exists(RootPath))
             Directory.Delete(RootPath, recursive: true);
+    }
+
+    private static IReadOnlyDictionary<string, string?> BuildIsolatedEnvironment()
+    {
+        var environment = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["GIT_CONFIG_NOSYSTEM"] = "1",
+            ["GIT_CONFIG_SYSTEM"] = "/dev/null",
+            ["GIT_CONFIG_GLOBAL"] = "/dev/null",
+            ["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
+        };
+        foreach (var name in new[] { "HOME", "TMPDIR", "USER", "LOGNAME", "LANG", "LC_ALL", "SSH_AUTH_SOCK" })
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (!string.IsNullOrWhiteSpace(value))
+                environment[name] = value;
+        }
+        return environment;
+    }
+
+    private static IEnumerable<string> DiscoverApprovedPackageLocks(string repositoryRoot, string projectPath)
+    {
+        var project = Path.GetFullPath(projectPath);
+        var projectDirectory = Path.GetDirectoryName(project)
+            ?? throw new InvalidOperationException($"Xcode project path has no parent: {project}");
+        return new[]
+            {
+                Path.Combine(repositoryRoot, "Package.resolved"),
+                Path.Combine(projectDirectory, "Package.resolved"),
+                Path.Combine(project, "xcshareddata", "swiftpm", "Package.resolved"),
+                Path.Combine(project, "project.xcworkspace", "xcshareddata", "swiftpm", "Package.resolved")
+            }
+            .Distinct(Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .Where(File.Exists);
+    }
+
+    private static string FindRepositoryRoot(string startPath)
+    {
+        var fullStartPath = Path.GetFullPath(startPath);
+        var current = new DirectoryInfo(Directory.Exists(fullStartPath) ? fullStartPath : Path.GetDirectoryName(fullStartPath)!);
+        while (current is not null)
+        {
+            var marker = Path.Combine(current.FullName, ".git");
+            if (File.Exists(marker) || Directory.Exists(marker))
+                return current.FullName;
+            current = current.Parent;
+        }
+        throw new InvalidOperationException($"Exact-source Xcode project is not inside a Git worktree: {startPath}");
     }
 }

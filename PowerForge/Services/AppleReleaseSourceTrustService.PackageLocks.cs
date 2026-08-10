@@ -1,10 +1,71 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace PowerForge;
 
 internal sealed partial class AppleReleaseSourceTrustService
 {
+    /// <summary>
+    /// Reads the exact remote package map only after every effective lock is proven to match the current Git commit.
+    /// </summary>
+    internal IReadOnlyDictionary<string, string> ReadApprovedTrackedPackageRevisions(
+        string repositoryRoot,
+        IEnumerable<string> lockPaths)
+    {
+        var locks = lockPaths.Select(Path.GetFullPath).Distinct(GetPathComparer()).Where(File.Exists).ToArray();
+        foreach (var path in locks)
+            EnsureTrackedFile(repositoryRoot, path, "Swift package resolution lock consumed by xcodebuild");
+        return ReadApprovedPackageRevisions(locks);
+    }
+
+    /// <summary>
+    /// Parses a normalized remote URL to exact-revision map from supported Package.resolved schemas.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> ReadApprovedPackageRevisions(
+        IEnumerable<string> lockPaths)
+    {
+        var approved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in lockPaths.Select(Path.GetFullPath).Distinct(GetPathComparer()).Where(File.Exists))
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            var root = document.RootElement;
+            JsonElement pins;
+            if (!(root.TryGetProperty("pins", out pins) ||
+                  (root.TryGetProperty("object", out var legacyObject) &&
+                   legacyObject.TryGetProperty("pins", out pins))) ||
+                pins.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var pin in pins.EnumerateArray())
+            {
+                var location = ReadJsonString(pin, "location") ?? ReadJsonString(pin, "repositoryURL");
+                if (string.IsNullOrWhiteSpace(location) || !pin.TryGetProperty("state", out var state))
+                    continue;
+                var revision = ReadJsonString(state, "revision");
+                if (string.IsNullOrWhiteSpace(revision) ||
+                    !Regex.IsMatch(revision, "^(?:[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})$", RegexOptions.CultureInvariant))
+                {
+                    throw new InvalidOperationException(
+                        $"Swift package '{location}' in '{path}' is not bound to an exact Git revision.");
+                }
+
+                var normalized = NormalizePackageLocation(location!);
+                if (approved.TryGetValue(normalized, out var existing) &&
+                    !existing.Equals(revision, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"Swift package '{location}' resolves to conflicting exact revisions across the approved Package.resolved graph.");
+                }
+                approved[normalized] = revision!.ToLowerInvariant();
+            }
+        }
+
+        return approved;
+    }
+
     private static string[] FindTrackedPackageLocks(
         IReadOnlyCollection<string> effectiveLockPaths,
         string dependencyIdentity)

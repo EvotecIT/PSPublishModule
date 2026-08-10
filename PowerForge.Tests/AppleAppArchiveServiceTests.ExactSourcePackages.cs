@@ -13,7 +13,10 @@ public sealed partial class AppleAppArchiveServiceTests
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "App.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var runner = new ExactPackageProcessRunner();
+            RunGit(root.FullName, "init", "--quiet");
+            var runner = new ExactPackageProcessRunner(root.FullName);
+            WritePackageLock(root.FullName, runner.RemoteUrl, runner.ApprovedRevision);
+            CommitApprovedInputs(root.FullName);
 
             var result = await new AppleAppArchiveService(runner).CreateArchiveAsync(new AppleAppArchiveRequest
             {
@@ -32,12 +35,20 @@ public sealed partial class AppleAppArchiveServiceTests
             Assert.Contains("-onlyUsePackageVersionsFromResolvedFile", resolve.Arguments);
             Assert.Equal("1", resolve.EnvironmentVariables!["GIT_CONFIG_NOSYSTEM"]);
             Assert.Equal("/usr/bin:/bin:/usr/sbin:/sbin", resolve.EnvironmentVariables["PATH"]);
+            Assert.False(resolve.InheritEnvironment);
             Assert.Contains("-clonedSourcePackagesDirPath", archive.Arguments);
+            Assert.Contains("-derivedDataPath", resolve.Arguments);
+            Assert.Contains("-derivedDataPath", archive.Arguments);
             Assert.Equal("/usr/bin:/bin:/usr/sbin:/sbin", archive.EnvironmentVariables!["PATH"]);
+            Assert.False(archive.InheritEnvironment);
             Assert.Equal(
                 resolve.Arguments[Array.IndexOf(resolve.Arguments.ToArray(), "-clonedSourcePackagesDirPath") + 1],
                 archive.Arguments[Array.IndexOf(archive.Arguments.ToArray(), "-clonedSourcePackagesDirPath") + 1]);
+            Assert.Equal(
+                resolve.Arguments[Array.IndexOf(resolve.Arguments.ToArray(), "-derivedDataPath") + 1],
+                archive.Arguments[Array.IndexOf(archive.Arguments.ToArray(), "-derivedDataPath") + 1]);
             Assert.False(Directory.Exists(runner.SourcePackagesRoot));
+            Assert.False(Directory.Exists(runner.DerivedDataRoot));
         }
         finally
         {
@@ -54,7 +65,10 @@ public sealed partial class AppleAppArchiveServiceTests
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "App.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var runner = new ExactPackageProcessRunner(mutateDuringArchive: true);
+            RunGit(root.FullName, "init", "--quiet");
+            var runner = new ExactPackageProcessRunner(root.FullName, mutateDuringArchive: true);
+            WritePackageLock(root.FullName, runner.RemoteUrl, runner.ApprovedRevision);
+            CommitApprovedInputs(root.FullName);
 
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 new AppleAppArchiveService(runner).CreateArchiveAsync(new AppleAppArchiveRequest
@@ -74,18 +88,71 @@ public sealed partial class AppleAppArchiveServiceTests
         }
     }
 
+    [Fact]
+    public async Task CreateArchiveAsync_exact_source_rejects_materialized_package_revision_outside_lock()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "App.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            RunGit(root.FullName, "init", "--quiet");
+            var runner = new ExactPackageProcessRunner(root.FullName, materializeWrongRevision: true);
+            WritePackageLock(root.FullName, runner.RemoteUrl, runner.ApprovedRevision);
+            CommitApprovedInputs(root.FullName);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleAppArchiveService(runner).CreateArchiveAsync(new AppleAppArchiveRequest
+                {
+                    ProjectPath = project.FullName,
+                    Scheme = "App",
+                    ArchivePath = Path.Combine(root.FullName, "App.xcarchive"),
+                    RequireExactPackageSnapshot = true
+                }));
+
+            Assert.Contains("approved revision", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     private sealed class ExactPackageProcessRunner : IProcessRunner
     {
         private readonly bool _mutateDuringArchive;
+        private readonly bool _materializeWrongRevision;
+        private readonly string _remoteSourceRoot;
 
-        internal ExactPackageProcessRunner(bool mutateDuringArchive = false)
+        internal ExactPackageProcessRunner(
+            string fixtureRoot,
+            bool mutateDuringArchive = false,
+            bool materializeWrongRevision = false)
         {
             _mutateDuringArchive = mutateDuringArchive;
+            _materializeWrongRevision = materializeWrongRevision;
+            _remoteSourceRoot = Directory.CreateDirectory(Path.Combine(fixtureRoot, "RemoteShared")).FullName;
+            RunGit(_remoteSourceRoot, "init", "--quiet");
+            RunGit(_remoteSourceRoot, "config", "user.name", "PowerForge Tests");
+            RunGit(_remoteSourceRoot, "config", "user.email", "powerforge-tests@example.invalid");
+            File.WriteAllText(
+                Path.Combine(_remoteSourceRoot, "Package.swift"),
+                "// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"Shared\")\n");
+            RunGit(_remoteSourceRoot, "add", ".");
+            RunGit(_remoteSourceRoot, "commit", "--quiet", "-m", "Package fixture");
+            ApprovedRevision = ReadGit(_remoteSourceRoot, "rev-parse", "HEAD").Trim();
         }
 
         internal List<ProcessRunRequest> Requests { get; } = new();
 
         internal string SourcePackagesRoot { get; private set; } = string.Empty;
+
+        internal string DerivedDataRoot { get; private set; } = string.Empty;
+
+        internal string RemoteUrl { get; } = "https://example.invalid/Shared.git";
+
+        internal string ApprovedRevision { get; }
 
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
@@ -94,15 +161,20 @@ public sealed partial class AppleAppArchiveServiceTests
             {
                 var index = Array.IndexOf(request.Arguments.ToArray(), "-clonedSourcePackagesDirPath");
                 SourcePackagesRoot = request.Arguments[index + 1];
-                var checkout = Directory.CreateDirectory(Path.Combine(SourcePackagesRoot, "checkouts", "Shared")).FullName;
-                RunGit(checkout, "init", "--quiet");
-                RunGit(checkout, "config", "user.name", "PowerForge Tests");
-                RunGit(checkout, "config", "user.email", "powerforge-tests@example.invalid");
-                File.WriteAllText(
-                    Path.Combine(checkout, "Package.swift"),
-                    "// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"Shared\")\n");
-                RunGit(checkout, "add", ".");
-                RunGit(checkout, "commit", "--quiet", "-m", "Package fixture");
+                var derivedIndex = Array.IndexOf(request.Arguments.ToArray(), "-derivedDataPath");
+                DerivedDataRoot = request.Arguments[derivedIndex + 1];
+                var checkouts = Directory.CreateDirectory(Path.Combine(SourcePackagesRoot, "checkouts")).FullName;
+                var checkout = Path.Combine(checkouts, "Shared");
+                RunGit(checkouts, "clone", "--quiet", _remoteSourceRoot, checkout);
+                RunGit(checkout, "remote", "set-url", "origin", RemoteUrl);
+                if (_materializeWrongRevision)
+                {
+                    RunGit(checkout, "config", "user.name", "PowerForge Tests");
+                    RunGit(checkout, "config", "user.email", "powerforge-tests@example.invalid");
+                    File.AppendAllText(Path.Combine(checkout, "Package.swift"), "// replacement\n");
+                    RunGit(checkout, "add", ".");
+                    RunGit(checkout, "commit", "--quiet", "-m", "Unapproved replacement");
+                }
             }
             else if (_mutateDuringArchive)
             {
@@ -120,6 +192,55 @@ public sealed partial class AppleAppArchiveServiceTests
                 TimeSpan.FromMilliseconds(1),
                 false));
         }
+    }
+
+    private static void WritePackageLock(string root, string url, string revision)
+    {
+        File.WriteAllText(
+            Path.Combine(root, "Package.resolved"),
+            System.Text.Json.JsonSerializer.Serialize(new
+            {
+                pins = new[]
+                {
+                    new
+                    {
+                        identity = "shared",
+                        kind = "remoteSourceControl",
+                        location = url,
+                        state = new { revision, version = "1.0.0" }
+                    }
+                },
+                version = 3
+            }));
+    }
+
+    private static void CommitApprovedInputs(string root)
+    {
+        RunGit(root, "config", "user.name", "PowerForge Tests");
+        RunGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+        RunGit(root, "add", "App.xcodeproj/project.pbxproj", "Package.resolved");
+        RunGit(root, "commit", "--quiet", "-m", "Approved exact inputs");
+    }
+
+    private static string ReadGit(string workingDirectory, params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        foreach (var argument in arguments)
+            startInfo.ArgumentList.Add(argument);
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Unable to start git fixture process.");
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"git {string.Join(' ', arguments)} failed: {output}{error}");
+        return output;
     }
 
     private static void RunGit(string workingDirectory, params string[] arguments)

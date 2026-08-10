@@ -4,21 +4,45 @@ namespace PowerForge;
 internal sealed class AppleNotarizationInputSnapshot : IDisposable
 {
     private readonly AppleArchiveUploadSnapshot? _directorySnapshot;
+    private AppleReleaseSourceMutationMonitor? _fileSnapshotMonitor;
     private bool _disposed;
 
     private AppleNotarizationInputSnapshot(
         string rootPath,
         string artifactPath,
-        AppleArchiveUploadSnapshot? directorySnapshot)
+        AppleArchiveUploadSnapshot? directorySnapshot,
+        AppleReleaseSourceMutationMonitor? fileSnapshotMonitor = null)
     {
         RootPath = rootPath;
         ArtifactPath = artifactPath;
         _directorySnapshot = directorySnapshot;
+        _fileSnapshotMonitor = fileSnapshotMonitor;
     }
 
     internal string RootPath { get; }
 
     internal string ArtifactPath { get; }
+
+    internal void CompleteSubmissionCapture(string expectedSha256)
+    {
+        if (_fileSnapshotMonitor is null)
+            return;
+        try
+        {
+            _fileSnapshotMonitor.ValidateNoChanges();
+            var actual = AppleNotarizationService.ComputeArtifactSha256(ArtifactPath);
+            if (!actual.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"The private Apple notarization file changed while its submission bytes were captured. Expected '{expectedSha256}', received '{actual}'.");
+            }
+        }
+        finally
+        {
+            _fileSnapshotMonitor.Dispose();
+            _fileSnapshotMonitor = null;
+        }
+    }
 
     internal string PublishTo(string destinationPath, string expectedSha256)
     {
@@ -145,7 +169,12 @@ internal sealed class AppleNotarizationInputSnapshot : IDisposable
                 throw new InvalidOperationException(
                     $"The private Apple notarization input does not match the approved artifact. Expected '{expectedSha256}', received '{actual}'.");
             }
-            return new AppleNotarizationInputSnapshot(root, snapshotPath, directorySnapshot: null);
+            var monitor = new AppleReleaseSourceMutationMonitor(
+                root,
+                "private Apple notarization file snapshot",
+                "submission hashing",
+                "Discard the snapshot and recreate it from the approved artifact.");
+            return new AppleNotarizationInputSnapshot(root, snapshotPath, directorySnapshot: null, monitor);
         }
         catch
         {
@@ -160,6 +189,8 @@ internal sealed class AppleNotarizationInputSnapshot : IDisposable
         if (_disposed)
             return;
         _disposed = true;
+        _fileSnapshotMonitor?.Dispose();
+        _fileSnapshotMonitor = null;
         if (_directorySnapshot is not null)
         {
             _directorySnapshot.Dispose();

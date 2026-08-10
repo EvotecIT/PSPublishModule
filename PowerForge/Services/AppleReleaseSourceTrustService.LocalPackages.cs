@@ -76,6 +76,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         var manifestSyntax = MaskSwiftStringLiterals(manifestWithoutComments);
         ValidateLocalPackageExecutableSafety(packageRoot, manifestWithoutComments, manifestSyntax);
         ValidateDirectSwiftPackageDependencyFactories(packageRoot, manifestSyntax);
+        ValidatePackageDescriptionCalls(packageRoot, manifestSyntax);
         var dependencyCalls = ParseDirectSwiftPackageDependencyCalls(manifestWithoutComments, manifestSyntax);
         ValidateRemotePackageDependencies(repositoryRoot, packageRoot, packageLockPaths, dependencyCalls);
         ValidateNestedLocalPackageDependencies(
@@ -235,6 +236,42 @@ internal sealed partial class AppleReleaseSourceTrustService
             throw new InvalidOperationException(
                 $"Local Swift package '{packageRoot}' uses executable manifest construct '{construct}', which cannot be proven independent of host state. " +
                 "Use declarative PackageDescription declarations before creating an exact-source Apple checkpoint.");
+        }
+
+    }
+
+    private static void ValidatePackageDescriptionCalls(string packageRoot, string manifestSyntax)
+    {
+        var directFactories = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "Package", "Version", "SupportedPlatform", "SystemPackageProvider", "LanguageTag", "BuildSettingCondition"
+        };
+        var memberFactories = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "package", "product", "target", "executableTarget", "testTarget", "systemLibrary",
+            "binaryTarget", "plugin", "macro", "library", "executable", "pluginCommandIntent",
+            "pluginPermission", "define", "linkedLibrary", "linkedFramework", "headerSearchPath",
+            "unsafeFlags", "when", "exact", "revision", "branch", "upToNextMajor", "upToNextMinor",
+            "range", "Dependency", "Product", "Target", "SupportedPlatform", "SystemPackageProvider", "LanguageTag", "BuildSettingCondition",
+            "iOS", "macOS", "macCatalyst", "watchOS", "tvOS", "visionOS", "driverKit"
+        };
+        foreach (Match call in Regex.Matches(
+                     manifestSyntax,
+                     "(?<![A-Za-z0-9_])(?<target>(?:[A-Za-z_][A-Za-z0-9_]*|`[A-Za-z_][A-Za-z0-9_]*`)?(?:\\s*\\.\\s*(?:[A-Za-z_][A-Za-z0-9_]*|`[A-Za-z_][A-Za-z0-9_]*`))*)\\s*\\(",
+                     RegexOptions.CultureInvariant))
+        {
+            var target = call.Groups["target"].Value.Replace("`", string.Empty).Replace(" ", string.Empty);
+            if (string.IsNullOrWhiteSpace(target))
+                continue;
+            var segments = target.Split('.');
+            var accepted = segments.Length == 1
+                ? directFactories.Contains(segments[0])
+                : memberFactories.Contains(segments[segments.Length - 1]);
+            if (accepted)
+                continue;
+            throw new InvalidOperationException(
+                $"Local Swift package '{packageRoot}' executes non-declarative manifest call '{target}', " +
+                "which cannot be proven independent of host state. Use PackageDescription construction only before creating an exact-source Apple checkpoint.");
         }
     }
 

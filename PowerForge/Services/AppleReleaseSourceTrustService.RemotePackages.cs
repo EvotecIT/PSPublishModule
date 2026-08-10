@@ -105,30 +105,46 @@ internal sealed partial class AppleReleaseSourceTrustService
     /// <summary>
     /// Validates the exact Swift package checkouts that Xcode will consume for an archive.
     /// </summary>
-    internal void ValidateMaterializedPackageCheckouts(string sourcePackagesRoot)
+    internal void ValidateMaterializedPackageCheckouts(
+        string sourcePackagesRoot,
+        IReadOnlyDictionary<string, string> approvedRevisions)
     {
         var root = Path.GetFullPath(sourcePackagesRoot);
         var checkouts = Path.Combine(root, "checkouts");
         if (!Directory.Exists(checkouts))
+        {
+            if (approvedRevisions.Count > 0)
+                throw new InvalidOperationException("Xcode did not materialize the complete approved Swift package graph.");
             return;
+        }
         EnsureNoLinkedTraversal(checkouts, checkouts, "Xcode materialized Swift package checkout root");
 
+        var observed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in Directory.EnumerateFileSystemEntries(checkouts).OrderBy(static path => path, GetPathComparer()))
         {
             if (!Directory.Exists(entry))
                 throw new InvalidOperationException($"Xcode materialized Swift package checkout root contains an unsupported entry: {entry}");
             EnsureNoLinkedTraversal(checkouts, entry, "Xcode materialized Swift package checkout");
-            var head = RunGit(entry, "rev-parse", "HEAD").StdOut.Trim();
-            var objectFormat = ReadGitObjectFormat(entry);
-            if (!GitObjectId.IsFullForObjectFormat(head, objectFormat))
-                throw new InvalidOperationException($"Xcode materialized Swift package checkout does not have an exact Git HEAD: {entry}");
+            var originResult = RunGitAllowFailure(entry, "remote", "get-url", "origin");
+            if (!originResult.Succeeded || string.IsNullOrWhiteSpace(originResult.StdOut))
+                throw new InvalidOperationException($"Xcode materialized Swift package checkout has no approved origin: {entry}");
+            var origin = originResult.StdOut.Trim();
+            var normalizedOrigin = NormalizePackageLocation(origin);
+            if (!approvedRevisions.TryGetValue(normalizedOrigin, out var approvedRevision))
+                throw new InvalidOperationException($"Xcode materialized an additional Swift package checkout outside the approved graph: {origin}");
+            if (!observed.Add(normalizedOrigin))
+                throw new InvalidOperationException($"Xcode materialized duplicate Swift package checkouts for approved origin '{origin}'.");
             ValidateRemotePackageCheckout(
                 entry,
-                Path.GetFileName(entry),
-                head,
+                origin,
+                approvedRevision,
                 Array.Empty<string>(),
                 validateRemoteDependencies: false);
         }
+
+        var missing = approvedRevisions.Keys.FirstOrDefault(key => !observed.Contains(key));
+        if (missing is not null)
+            throw new InvalidOperationException($"Xcode did not materialize approved Swift package checkout '{missing}'.");
     }
 
     private void EnsureRemotePackageHasNoGitLinks(string checkoutPath, string repositoryUrl)
@@ -201,6 +217,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                 syntax,
                 allowInactiveNonAppleSystemLibraries: true);
             ValidateDirectSwiftPackageDependencyFactories(packageRoot, syntax);
+            ValidatePackageDescriptionCalls(packageRoot, syntax);
             ValidateLiteralSwiftPackagePaths(checkoutRoot, packageRoot, source, syntax);
             foreach (var dependency in ParseDirectSwiftPackageDependencyCalls(source, syntax))
             {

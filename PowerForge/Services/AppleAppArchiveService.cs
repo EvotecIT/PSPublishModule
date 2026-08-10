@@ -107,7 +107,10 @@ public sealed partial class AppleAppArchiveService
                     Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
                     args,
                     timeout,
-                    packageSnapshot?.EnvironmentVariables),
+                    packageSnapshot?.EnvironmentVariables,
+                    captureOutput: true,
+                    captureError: true,
+                    inheritEnvironment: packageSnapshot is null),
                 cancellationToken).ConfigureAwait(false);
             packageSnapshot?.ValidateUnchanged();
         }

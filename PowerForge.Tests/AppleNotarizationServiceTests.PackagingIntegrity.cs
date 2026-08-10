@@ -3,6 +3,28 @@ namespace PowerForge.Tests;
 public sealed partial class AppleNotarizationServiceTests
 {
     [Fact]
+    public void FileSnapshot_rejects_mutation_before_submission_monitor_takes_ownership()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var package = Path.Combine(root.FullName, "Race.pkg");
+            File.WriteAllText(package, "approved-package");
+            var expected = AppleNotarizationService.ComputeArtifactSha256(package);
+            using var snapshot = AppleNotarizationInputSnapshot.Create(package, expected);
+
+            File.WriteAllText(snapshot.ArtifactPath, "attacker-package");
+
+            var exception = Assert.Throws<InvalidOperationException>(() => snapshot.CompleteSubmissionCapture(expected));
+            Assert.Contains("changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task NotarizeAsync_RejectsTransientAppMutationWhileDittoCreatesSubmissionZip()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.NotaryTests", Guid.NewGuid().ToString("N")));

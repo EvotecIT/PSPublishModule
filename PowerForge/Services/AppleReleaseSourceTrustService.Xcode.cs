@@ -645,6 +645,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                         $"{name} differs from the exact source commit: " +
                         FrameworkCompatibility.GetRelativePath(repositoryRoot, entry).Replace('\\', '/'));
                 }
+                ValidateSourceLevelIncludes(repositoryRoot, fullPath);
             }
         }
     }

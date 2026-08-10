@@ -147,6 +147,7 @@ public sealed class AppleNotarizationService
                 "private Apple notarization submission",
                 "notarytool",
                 "Do not resubmit until the accepted submission has been reconciled.");
+            submissionSnapshot.CompleteSubmissionCapture(artifactSha256);
             submission = await RunAsync(xcrunExecutable, submissionArtifactPath, submitArguments, timeout, toolEnvironment, cancellationToken).ConfigureAwait(false);
             (submissionId, status) = ParseSubmission(submission);
             try

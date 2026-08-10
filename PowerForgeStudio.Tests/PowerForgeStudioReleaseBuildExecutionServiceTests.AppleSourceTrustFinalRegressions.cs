@@ -267,6 +267,65 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains("not trusted", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_standard_library_execution_in_swift_manifest()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, _, packageRoot) = CreateLocalPackageFixture(scope, "RandomManifestRepo");
+        File.WriteAllText(
+            Path.Combine(packageRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\n" +
+            "let seed = String(Int.random(in: 0...999999))\n" +
+            "let package = Package(name: \"Shared\", targets: [.target(name: \"Shared\", swiftSettings: [.define(\"SEED\", to: seed)])])");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("non-declarative manifest call", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("String", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_host_reference_in_unclassified_build_setting()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("HostBundleIdentifierRepo");
+        var project = scope.CreateDirectory(Path.Combine("HostBundleIdentifierRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCBuildConfiguration; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = com.example.$(USER); }; };");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("PRODUCT_BUNDLE_IDENTIFIER", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("$(USER)", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_escaping_source_include()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, _, packageRoot) = CreateLocalPackageFixture(scope, "EscapingIncludeRepo");
+        File.WriteAllText(
+            Path.Combine(packageRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"Shared\")\n");
+        var sources = scope.CreateDirectory(Path.Combine("EscapingIncludeRepo", "Packages", "Shared", "Sources", "Shared"));
+        File.WriteAllText(Path.Combine(sources, "Injected.c"), "#include \"../../../../../../tmp/injected.h\"\nint value = 1;\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("preprocessor include", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("injected.h", exception.Message, StringComparison.Ordinal);
+    }
+
     private static string ReadFixtureHead(string repositoryRoot)
     {
         var startInfo = new System.Diagnostics.ProcessStartInfo("git")

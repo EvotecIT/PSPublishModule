@@ -35,7 +35,42 @@ public sealed class ProcessRunRequest
             captureOutput,
             captureError,
             outputLineReceived: null,
-            errorLineReceived: null)
+            errorLineReceived: null,
+            inheritEnvironment: true)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a process request that can opt out of parent-environment inheritance.
+    /// </summary>
+    /// <param name="fileName">Executable name or path.</param>
+    /// <param name="workingDirectory">Working directory for the process.</param>
+    /// <param name="arguments">Structured arguments passed to the process.</param>
+    /// <param name="timeout">Maximum runtime before the process is terminated.</param>
+    /// <param name="environmentVariables">Environment variables applied to the child.</param>
+    /// <param name="captureOutput">When true, capture standard output.</param>
+    /// <param name="captureError">When true, capture standard error.</param>
+    /// <param name="inheritEnvironment">When false, start from an empty environment.</param>
+    public ProcessRunRequest(
+        string fileName,
+        string workingDirectory,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        bool captureOutput,
+        bool captureError,
+        bool inheritEnvironment)
+        : this(
+            fileName,
+            workingDirectory,
+            arguments,
+            timeout,
+            environmentVariables,
+            captureOutput,
+            captureError,
+            outputLineReceived: null,
+            errorLineReceived: null,
+            inheritEnvironment: inheritEnvironment)
     {
     }
 
@@ -61,6 +96,44 @@ public sealed class ProcessRunRequest
         bool captureError,
         Action<string>? outputLineReceived,
         Action<string>? errorLineReceived)
+        : this(
+            fileName,
+            workingDirectory,
+            arguments,
+            timeout,
+            environmentVariables,
+            captureOutput,
+            captureError,
+            outputLineReceived,
+            errorLineReceived,
+            inheritEnvironment: true)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a streaming process request with explicit parent-environment inheritance policy.
+    /// </summary>
+    /// <param name="fileName">Executable name or path.</param>
+    /// <param name="workingDirectory">Working directory for the process.</param>
+    /// <param name="arguments">Structured arguments passed to the process.</param>
+    /// <param name="timeout">Maximum runtime before the process is terminated.</param>
+    /// <param name="environmentVariables">Environment variables applied to the child.</param>
+    /// <param name="captureOutput">When true, capture standard output.</param>
+    /// <param name="captureError">When true, capture standard error.</param>
+    /// <param name="outputLineReceived">Optional callback for each captured standard-output line.</param>
+    /// <param name="errorLineReceived">Optional callback for each captured standard-error line.</param>
+    /// <param name="inheritEnvironment">When false, start from an empty environment.</param>
+    public ProcessRunRequest(
+        string fileName,
+        string workingDirectory,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        bool captureOutput,
+        bool captureError,
+        Action<string>? outputLineReceived,
+        Action<string>? errorLineReceived,
+        bool inheritEnvironment)
     {
         FileName = fileName;
         WorkingDirectory = workingDirectory;
@@ -71,6 +144,7 @@ public sealed class ProcessRunRequest
         CaptureError = captureError;
         OutputLineReceived = outputLineReceived;
         ErrorLineReceived = errorLineReceived;
+        InheritEnvironment = inheritEnvironment;
     }
 
     /// <summary>
@@ -97,6 +171,11 @@ public sealed class ProcessRunRequest
     /// Gets optional environment variable overrides.
     /// </summary>
     public IReadOnlyDictionary<string, string?>? EnvironmentVariables { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the child process inherits the parent environment.
+    /// </summary>
+    public bool InheritEnvironment { get; }
 
     /// <summary>
     /// Gets a value indicating whether standard output should be captured.
@@ -298,6 +377,9 @@ public sealed class ProcessRunner : IProcessRunner
         };
 
         ProcessStartInfoEncoding.TryApplyUtf8(startInfo);
+
+        if (!request.InheritEnvironment)
+            startInfo.EnvironmentVariables.Clear();
 
         if (request.EnvironmentVariables is not null)
         {

@@ -61,6 +61,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             }
             else
             {
+                ValidateUnclassifiedBuildSettingReferences(key, assignment.Value, source);
                 continue;
             }
 
@@ -84,6 +85,27 @@ internal sealed partial class AppleReleaseSourceTrustService
                         $"Xcode build setting {key} references a missing exact-source input: {candidate}",
                         candidate);
             }
+        }
+    }
+
+    private static void ValidateUnclassifiedBuildSettingReferences(string key, string value, string source)
+    {
+        var approvedReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "inherited", "TARGET_NAME", "PRODUCT_NAME", "EXECUTABLE_NAME", "WRAPPER_NAME",
+            "FULL_PRODUCT_NAME", "CONTENTS_FOLDER_PATH", "INFOPLIST_PATH", "TEST_HOST"
+        };
+        foreach (Match reference in Regex.Matches(
+                     value,
+                     "\\$\\((?<name>[A-Za-z_][A-Za-z0-9_]*)\\)|\\$\\{(?<name>[A-Za-z_][A-Za-z0-9_]*)\\}",
+                     RegexOptions.CultureInvariant))
+        {
+            var name = reference.Groups["name"].Value;
+            if (approvedReferences.Contains(name))
+                continue;
+            throw new InvalidOperationException(
+                $"Xcode build setting {key} contains unapproved host or environment reference '{reference.Value}' " +
+                $"and cannot be bound to the exact source commit: {source}");
         }
     }
 
