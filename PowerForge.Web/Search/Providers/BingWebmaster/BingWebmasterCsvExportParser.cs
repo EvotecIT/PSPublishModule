@@ -305,9 +305,26 @@ public static class BingWebmasterCsvExportParser
 
     private static long ParseCount(string value, int rowIndex, string label)
     {
-        if (!long.TryParse(value.Trim(), NumberStyles.Integer | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var parsed) || parsed < 0)
+        var normalized = value.Trim();
+        if (!HasValidInvariantThousandsGrouping(normalized) ||
+            !long.TryParse(normalized, NumberStyles.Integer | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var parsed) ||
+            parsed < 0)
             throw new FormatException($"Bing Webmaster CSV row {rowIndex + 1} has invalid {label}.");
         return parsed;
+    }
+
+    private static bool HasValidInvariantThousandsGrouping(string value)
+    {
+        var digits = value;
+        if (digits.Length > 0 && digits[0] is '+' or '-')
+            digits = digits[1..];
+        if (digits.Length == 0)
+            return false;
+        var groups = digits.Split(',');
+        if (groups.Any(group => group.Length == 0 || group.Any(character => character is < '0' or > '9')))
+            return false;
+        return groups.Length == 1 ||
+               (groups[0].Length is >= 1 and <= 3 && groups.Skip(1).All(group => group.Length == 3));
     }
 
     private static double? ParseOptionalRate(string? value, int rowIndex)

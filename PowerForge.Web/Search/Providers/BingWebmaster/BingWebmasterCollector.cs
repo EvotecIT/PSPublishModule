@@ -85,7 +85,7 @@ public sealed partial class BingWebmasterCollector
             return new BingWebmasterSiteProbeResult
             {
                 Success = true,
-                SiteUrl = siteUrl,
+                SiteUrl = normalizedSite,
                 Verified = true,
                 AvailableCapabilities = AvailableCapabilities.OrderBy(value => value, StringComparer.Ordinal).ToArray()
             };
@@ -129,7 +129,7 @@ public sealed partial class BingWebmasterCollector
 
         var observations = new List<WebSearchObservation>();
         var requestCount = 1;
-        var parameters = new Dictionary<string, string> { ["siteUrl"] = options.SiteUrl };
+        var parameters = new Dictionary<string, string> { ["siteUrl"] = probe.SiteUrl };
 
         var queryResponse = await SendAsync<BingWebmasterQueryStat>(
             "GetQueryStats", parameters, apiKey, cancellationToken).ConfigureAwait(false);
