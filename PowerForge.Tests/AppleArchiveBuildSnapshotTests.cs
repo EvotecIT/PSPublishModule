@@ -76,4 +76,40 @@ public sealed class AppleArchiveBuildSnapshotTests
             try { root.Delete(recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void RollbackPublication_preserves_concurrently_replaced_archive_and_previous_backup()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var approved = Directory.CreateDirectory(Path.Combine(root.FullName, "approved"));
+            File.WriteAllText(Path.Combine(approved.FullName, "payload"), "published archive");
+            var publishedSha256 = AppleNotarizationService.ComputeArtifactSha256(approved.FullName);
+            approved.Delete(recursive: true);
+            var destination = Directory.CreateDirectory(Path.Combine(root.FullName, "App.xcarchive"));
+            File.WriteAllText(Path.Combine(destination.FullName, "payload"), "concurrent archive");
+            var backup = Directory.CreateDirectory(Path.Combine(root.FullName, ".App.xcarchive.powerforge-backup-test"));
+            File.WriteAllText(Path.Combine(backup.FullName, "payload"), "previous archive");
+            var rollbackCandidate = Path.Combine(root.FullName, ".App.xcarchive.powerforge-failed-test");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                AppleArchiveBuildSnapshot.RollbackPublication(
+                    destination.FullName,
+                    backup.FullName,
+                    rollbackCandidate,
+                    publishedSha256,
+                    published: true,
+                    movedExisting: true));
+
+            Assert.Contains("no unrecognized archive bytes were deleted", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("concurrent archive", File.ReadAllText(Path.Combine(destination.FullName, "payload")));
+            Assert.Equal("previous archive", File.ReadAllText(Path.Combine(backup.FullName, "payload")));
+            Assert.False(Directory.Exists(rollbackCandidate));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
 }

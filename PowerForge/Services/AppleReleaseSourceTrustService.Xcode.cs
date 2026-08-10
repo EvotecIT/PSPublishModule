@@ -274,6 +274,20 @@ internal sealed partial class AppleReleaseSourceTrustService
         var cache = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var validatedLocalPackageRoots = new HashSet<string>(GetPathComparer());
 
+        foreach (var buildConfiguration in objects.Values.Where(static value =>
+                     value.Isa.Equals("XCBuildConfiguration", StringComparison.OrdinalIgnoreCase)))
+        {
+            ValidateBuildConfiguration(
+                repositoryRoot,
+                projectDirectory,
+                buildConfiguration,
+                objects,
+                parents,
+                cache,
+                metadataPath,
+                generatedOutputPaths);
+        }
+
         foreach (var item in objects.Values)
         {
             if (item.Isa.Equals("PBXShellScriptBuildPhase", StringComparison.OrdinalIgnoreCase))
@@ -329,18 +343,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             }
 
             if (item.Isa.Equals("XCBuildConfiguration", StringComparison.OrdinalIgnoreCase))
-            {
-                ValidateBuildConfiguration(
-                    repositoryRoot,
-                    projectDirectory,
-                    item,
-                    objects,
-                    parents,
-                    cache,
-                    metadataPath,
-                    generatedOutputPaths);
                 continue;
-            }
 
             if (!IsPathBearingPbxObject(item.Isa))
                 continue;

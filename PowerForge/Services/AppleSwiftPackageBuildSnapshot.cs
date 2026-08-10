@@ -9,6 +9,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
     private readonly IReadOnlyDictionary<string, string> _approvedPackageRevisions;
     private readonly IReadOnlyDictionary<string, string?> _environmentVariables;
     private readonly AppleReleaseSourceMutationMonitor? _monitor;
+    private readonly string? _artifactSha256;
     private bool _disposed;
 
     private AppleSwiftPackageBuildSnapshot(
@@ -26,6 +27,21 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 "xcodebuild archive",
                 "Discard the archive and resolve the exact package graph again.")
             : null;
+        try
+        {
+            _sourceTrust.ValidateMaterializedPackageCheckouts(SourcePackagesPath, _approvedPackageRevisions);
+            var artifactsPath = Path.Combine(SourcePackagesPath, "artifacts");
+            if (Directory.Exists(artifactsPath))
+            {
+                ValidateNoEscapingArtifactLinks(artifactsPath);
+                _artifactSha256 = AppleNotarizationService.ComputeArtifactSha256(artifactsPath);
+            }
+        }
+        catch
+        {
+            _monitor?.Dispose();
+            throw;
+        }
     }
 
     internal string RootPath { get; }
@@ -98,19 +114,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                     (string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr));
             }
 
-            new AppleReleaseSourceTrustService().ValidateMaterializedPackageCheckouts(
-                sourcePackagesPath,
-                approvedPackageRevisions);
-            var snapshot = new AppleSwiftPackageBuildSnapshot(root, approvedPackageRevisions, environmentVariables);
-            try
-            {
-                return snapshot;
-            }
-            catch
-            {
-                snapshot.Dispose();
-                throw;
-            }
+            return new AppleSwiftPackageBuildSnapshot(root, approvedPackageRevisions, environmentVariables);
         }
         catch
         {
@@ -133,8 +137,59 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 
     internal void ValidateUnchanged()
     {
-        _monitor?.ValidateNoChanges();
         _sourceTrust.ValidateMaterializedPackageCheckouts(SourcePackagesPath, _approvedPackageRevisions);
+        var artifactsPath = Path.Combine(SourcePackagesPath, "artifacts");
+        if (_artifactSha256 is not null)
+        {
+            if (!Directory.Exists(artifactsPath))
+                throw new InvalidOperationException("The materialized Swift binary-artifact tree disappeared before xcodebuild archive.");
+            ValidateNoEscapingArtifactLinks(artifactsPath);
+            var actual = AppleNotarizationService.ComputeArtifactSha256(artifactsPath);
+            if (!actual.Equals(_artifactSha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("The materialized Swift binary-artifact tree changed before xcodebuild archive.");
+        }
+        else if (Directory.Exists(artifactsPath) && Directory.EnumerateFileSystemEntries(artifactsPath).Any())
+        {
+            throw new InvalidOperationException("A materialized Swift binary-artifact tree appeared after package approval.");
+        }
+        _monitor?.ValidateNoChanges();
+    }
+
+    private static void ValidateNoEscapingArtifactLinks(string artifactsRoot)
+    {
+        var root = Path.GetFullPath(artifactsRoot);
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
+            {
+                var attributes = File.GetAttributes(entry);
+                var isDirectory = (attributes & FileAttributes.Directory) != 0;
+                if ((attributes & FileAttributes.ReparsePoint) == 0)
+                {
+                    if (isDirectory)
+                        pending.Push(entry);
+                    continue;
+                }
+#if NET8_0_OR_GREATER
+                var target = isDirectory ? new DirectoryInfo(entry).LinkTarget : new FileInfo(entry).LinkTarget;
+                if (string.IsNullOrWhiteSpace(target) || Path.IsPathRooted(target))
+                    throw new InvalidOperationException($"Materialized Swift binary artifact contains an unbound symbolic link: {entry}");
+                var resolved = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(entry)!, target));
+                var relative = FrameworkCompatibility.GetRelativePath(root, resolved);
+                if (Path.IsPathRooted(relative) ||
+                    relative.Equals("..", StringComparison.Ordinal) ||
+                    relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"Materialized Swift binary artifact link escapes its approved root: {entry}");
+                }
+#else
+                throw new PlatformNotSupportedException("Swift binary-artifact link validation requires .NET 8 or newer.");
+#endif
+            }
+        }
     }
 
     internal static void RejectConflictingArguments(IEnumerable<string> arguments)

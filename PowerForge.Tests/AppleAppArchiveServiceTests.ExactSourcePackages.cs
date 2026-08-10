@@ -120,19 +120,59 @@ public sealed partial class AppleAppArchiveServiceTests
         }
     }
 
+    [Fact]
+    public async Task CreateArchiveAsync_exact_source_rejects_materialized_binary_artifact_mutation()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "App.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            RunGit(root.FullName, "init", "--quiet");
+            var runner = new ExactPackageProcessRunner(
+                root.FullName,
+                materializeBinaryArtifact: true,
+                mutateBinaryArtifactDuringArchive: true);
+            WritePackageLock(root.FullName, runner.RemoteUrl, runner.ApprovedRevision);
+            CommitApprovedInputs(root.FullName);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleAppArchiveService(runner).CreateArchiveAsync(new AppleAppArchiveRequest
+                {
+                    ProjectPath = project.FullName,
+                    Scheme = "App",
+                    ArchivePath = Path.Combine(root.FullName, "App.xcarchive"),
+                    RequireExactPackageSnapshot = true
+                }));
+
+            Assert.Contains("materialized Swift binary-artifact tree changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     private sealed class ExactPackageProcessRunner : IProcessRunner
     {
         private readonly bool _mutateDuringArchive;
         private readonly bool _materializeWrongRevision;
+        private readonly bool _materializeBinaryArtifact;
+        private readonly bool _mutateBinaryArtifactDuringArchive;
         private readonly string _remoteSourceRoot;
 
         internal ExactPackageProcessRunner(
             string fixtureRoot,
             bool mutateDuringArchive = false,
-            bool materializeWrongRevision = false)
+            bool materializeWrongRevision = false,
+            bool materializeBinaryArtifact = false,
+            bool mutateBinaryArtifactDuringArchive = false)
         {
             _mutateDuringArchive = mutateDuringArchive;
             _materializeWrongRevision = materializeWrongRevision;
+            _materializeBinaryArtifact = materializeBinaryArtifact;
+            _mutateBinaryArtifactDuringArchive = mutateBinaryArtifactDuringArchive;
             _remoteSourceRoot = Directory.CreateDirectory(Path.Combine(fixtureRoot, "RemoteShared")).FullName;
             RunGit(_remoteSourceRoot, "init", "--quiet");
             RunGit(_remoteSourceRoot, "config", "user.name", "PowerForge Tests");
@@ -176,6 +216,11 @@ public sealed partial class AppleAppArchiveServiceTests
                     RunGit(checkout, "add", ".");
                     RunGit(checkout, "commit", "--quiet", "-m", "Unapproved replacement");
                 }
+                if (_materializeBinaryArtifact)
+                {
+                    var artifact = Directory.CreateDirectory(Path.Combine(SourcePackagesRoot, "artifacts", "Shared", "Framework.xcframework"));
+                    File.WriteAllText(Path.Combine(artifact.FullName, "payload"), "approved binary artifact");
+                }
             }
             else if (_mutateDuringArchive)
             {
@@ -183,6 +228,11 @@ public sealed partial class AppleAppArchiveServiceTests
                 var original = File.ReadAllText(manifest);
                 File.WriteAllText(manifest, original + "// injected\n");
                 File.WriteAllText(manifest, original);
+            }
+            else if (_mutateBinaryArtifactDuringArchive)
+            {
+                var payload = Path.Combine(SourcePackagesRoot, "artifacts", "Shared", "Framework.xcframework", "payload");
+                File.WriteAllText(payload, "replacement binary artifact");
             }
 
             if (!request.Arguments.Contains("-resolvePackageDependencies"))

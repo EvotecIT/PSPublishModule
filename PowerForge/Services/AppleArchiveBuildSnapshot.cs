@@ -55,6 +55,7 @@ internal sealed class AppleArchiveBuildSnapshot : IDisposable {
         var stageRoot = Path.Combine(parent, $".{name}.powerforge-stage-{Guid.NewGuid():N}");
         var stage = Path.Combine(stageRoot, name);
         var backup = Path.Combine(parent, $".{name}.powerforge-backup-{Guid.NewGuid():N}");
+        var rollbackCandidate = Path.Combine(parent, $".{name}.powerforge-failed-publication-{Guid.NewGuid():N}");
         var movedExisting = false;
         var published = false;
         try {
@@ -87,10 +88,7 @@ internal sealed class AppleArchiveBuildSnapshot : IDisposable {
             return publishedSha256;
         } catch (Exception publicationException) {
             try {
-                if (published && Directory.Exists(destination))
-                    Directory.Delete(destination, recursive: true);
-                if (movedExisting)
-                    AppleArtifactCopy.RestoreDirectoryBackup(destination, backup);
+                RollbackPublication(destination, backup, rollbackCandidate, sourceSha256, published, movedExisting);
             } catch (Exception rollbackException) {
                 throw new AggregateException(
                     $"Apple archive publication failed and rollback could not complete. Recovery bytes are retained at '{backup}'.",
@@ -102,6 +100,31 @@ internal sealed class AppleArchiveBuildSnapshot : IDisposable {
             if (Directory.Exists(stageRoot))
                 Directory.Delete(stageRoot, recursive: true);
         }
+    }
+
+    internal static void RollbackPublication(
+        string destination,
+        string backup,
+        string rollbackCandidate,
+        string publishedSha256,
+        bool published,
+        bool movedExisting)
+    {
+        if (published && Directory.Exists(destination)) {
+            Directory.Move(destination, rollbackCandidate);
+            var rollbackSha256 = AppleNotarizationService.ComputeArtifactSha256(rollbackCandidate);
+            if (rollbackSha256.Equals(publishedSha256, StringComparison.OrdinalIgnoreCase)) {
+                Directory.Delete(rollbackCandidate, recursive: true);
+            } else {
+                if (!Directory.Exists(destination) && !File.Exists(destination))
+                    Directory.Move(rollbackCandidate, destination);
+                throw new InvalidOperationException(
+                    $"Apple archive rollback found a concurrently replaced destination at '{destination}'. " +
+                    $"The previous artifact remains at '{backup}' and no unrecognized archive bytes were deleted.");
+            }
+        }
+        if (movedExisting)
+            AppleArtifactCopy.RestoreDirectoryBackup(destination, backup);
     }
 
     public void Dispose() {

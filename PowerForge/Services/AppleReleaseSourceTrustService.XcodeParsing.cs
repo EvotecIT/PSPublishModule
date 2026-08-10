@@ -12,7 +12,11 @@ internal sealed partial class AppleReleaseSourceTrustService
         IReadOnlyCollection<string> generatedOutputPaths,
         string source)
     {
-        foreach (var assignment in assignments)
+        var assignmentArray = assignments.ToArray();
+        var preprocessInfoPlist = assignmentArray.Any(static assignment =>
+            assignment.Key.Split('[')[0].Trim().Equals("INFOPLIST_PREPROCESS", StringComparison.OrdinalIgnoreCase) &&
+            assignment.Value.Trim().Equals("YES", StringComparison.OrdinalIgnoreCase));
+        foreach (var assignment in assignmentArray)
         {
             var key = assignment.Key.Trim();
             var baseKey = key.Split('[')[0].Trim();
@@ -80,12 +84,18 @@ internal sealed partial class AppleReleaseSourceTrustService
                 {
                     EnsureTrackedFile(repositoryRoot, candidate, $"Xcode build setting {key}");
                     if (baseKey.Equals("INFOPLIST_FILE", StringComparison.OrdinalIgnoreCase))
-                        ValidateInfoPlistBuildSettingReferences(candidate, source);
+                        ValidateInfoPlistBuildSettingReferences(repositoryRoot, candidate, source, preprocessInfoPlist);
                     else if (baseKey.Equals("CODE_SIGN_ENTITLEMENTS", StringComparison.OrdinalIgnoreCase))
                         ValidateEntitlementsBuildSettingReferences(candidate, source);
                 }
                 else if (Directory.Exists(candidate))
+                {
                     EnsureTrackedDirectoryTree(repositoryRoot, candidate, $"Xcode build setting {key}");
+                    if (baseKey.Equals("HEADER_SEARCH_PATHS", StringComparison.OrdinalIgnoreCase) ||
+                        baseKey.Equals("USER_HEADER_SEARCH_PATHS", StringComparison.OrdinalIgnoreCase) ||
+                        baseKey.Equals("SYSTEM_HEADER_SEARCH_PATHS", StringComparison.OrdinalIgnoreCase))
+                        _approvedHeaderSearchRoots.Add(candidate);
+                }
                 else
                     throw new FileNotFoundException(
                         $"Xcode build setting {key} references a missing exact-source input: {candidate}",
@@ -147,7 +157,11 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
     }
 
-    private static void ValidateInfoPlistBuildSettingReferences(string plistPath, string source)
+    private void ValidateInfoPlistBuildSettingReferences(
+        string repositoryRoot,
+        string plistPath,
+        string source,
+        bool preprocess)
     {
         var plistReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -165,6 +179,20 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
 
         var contents = DecodeTrackedText(bytes);
+        if (preprocess)
+        {
+            var logical = RemoveCComments(SpliceCPreprocessingLines(contents));
+            if (Regex.IsMatch(
+                    logical,
+                    "(?m)^[ \\t]*(?:#|%:)[ \\t]*(?:include|include_next|import|embed)(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])__has_include(?:_next)?[ \\t]*\\(",
+                    RegexOptions.CultureInvariant))
+            {
+                throw new InvalidOperationException(
+                    $"Preprocessed INFOPLIST_FILE '{plistPath}' uses a file-selecting preprocessor directive that cannot consume unbound host bytes. " +
+                    $"Move the input into tracked plist content before creating an exact-source checkpoint: {source}");
+            }
+            EnsureTrackedFile(repositoryRoot, plistPath, "preprocessed INFOPLIST_FILE");
+        }
         ValidateUnclassifiedBuildSettingReferences(
             "INFOPLIST_FILE contents",
             contents,

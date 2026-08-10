@@ -90,7 +90,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             {
                 if (segments.Any(static segment => segment == ".."))
                     throw new InvalidOperationException($"Source input '{fullSourcePath}' uses escaping system include '{include}'.");
-                if (IsApprovedAngledInclude(repositoryRoot, include))
+                if (IsApprovedAngledInclude(repositoryRoot, fullSourcePath, include))
                     continue;
                 throw new InvalidOperationException(
                     $"Source input '{fullSourcePath}' uses angled preprocessor include '{include}', whose selected bytes depend on unbound compiler search roots. " +
@@ -109,6 +109,8 @@ internal sealed partial class AppleReleaseSourceTrustService
             EnsureTrackedFile(repositoryRoot, candidate, $"preprocessor include from {fullSourcePath}");
         }
 
+        ValidatePreprocessorFileExistenceProbes(repositoryRoot, fullSourcePath, source);
+
         if (IsCInlineAssemblySource(extension))
             ValidateInlineAssemblerInputs(repositoryRoot, fullSourcePath, source);
 
@@ -126,31 +128,79 @@ internal sealed partial class AppleReleaseSourceTrustService
         return headers < 0 ? normalized : normalized.Substring(headers + "/Headers/".Length);
     }
 
-    private bool IsApprovedAngledInclude(string repositoryRoot, string include)
+    private bool IsApprovedAngledInclude(string repositoryRoot, string sourcePath, string include)
     {
         var normalized = include.Replace('\\', '/').TrimStart('/');
-        if (!_trackedSourceSuffixes.TryGetValue(repositoryRoot, out var trackedSuffixes))
-        {
-            trackedSuffixes = new HashSet<string>(GetPathComparer());
-            var tracked = RunGit(repositoryRoot, "ls-files", "-z").StdOut
-                .Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(static path => path.Replace('\\', '/'))
-                .ToArray();
-            foreach (var path in tracked)
-            {
-                trackedSuffixes.Add(path);
-                for (var index = path.IndexOf('/'); index >= 0; index = path.IndexOf('/', index + 1))
-                    trackedSuffixes.Add(path.Substring(index + 1));
-            }
-            _trackedSourceSuffixes[repositoryRoot] = trackedSuffixes;
-        }
-        if (trackedSuffixes.Contains(normalized))
+        if (_inactiveRemoteSystemLibraryRoots.Any(root => IsPathAtOrWithin(sourcePath, root)))
+            return true;
+        var slash = normalized.IndexOf('/');
+        if (slash < 0 && ApprovedToolchainHeaders.Contains(normalized))
+            return true;
+        if (slash >= 0 && ApprovedAppleSdkHeaderRoots.Contains(normalized.Substring(0, slash)))
             return true;
 
-        var slash = normalized.IndexOf('/');
-        if (slash < 0)
-            return ApprovedToolchainHeaders.Contains(normalized);
-        return ApprovedAppleSdkHeaderRoots.Contains(normalized.Substring(0, slash));
+        var roots = new HashSet<string>(_approvedHeaderSearchRoots, GetPathComparer());
+        for (var directory = Path.GetDirectoryName(sourcePath);
+             !string.IsNullOrWhiteSpace(directory) && IsPathAtOrWithin(directory, repositoryRoot);
+             directory = Path.GetDirectoryName(directory))
+        {
+            roots.Add(Path.Combine(directory, "include"));
+            roots.Add(Path.Combine(directory, "Headers"));
+            if (PathsEqual(new[] { directory }, new[] { repositoryRoot }))
+                break;
+        }
+
+        var matches = roots
+            .Where(Directory.Exists)
+            .Select(root => Path.GetFullPath(Path.Combine(root, normalized)))
+            .Where(File.Exists)
+            .Distinct(GetPathComparer())
+            .ToArray();
+        if (matches.Length != 1)
+            return false;
+        EnsurePathWithinRepository(repositoryRoot, matches[0], $"angled preprocessor include from {sourcePath}");
+        EnsureTrackedFile(repositoryRoot, matches[0], $"angled preprocessor include from {sourcePath}");
+        return true;
+    }
+
+    private void ValidatePreprocessorFileExistenceProbes(string repositoryRoot, string sourcePath, string source)
+    {
+        var syntax = MaskCStringAndCharacterLiterals(source);
+        foreach (Match probe in Regex.Matches(
+                     syntax,
+                     "(?<![A-Za-z0-9_])__has_include(?:_next)?[ \\t]*\\(",
+                     RegexOptions.CultureInvariant))
+        {
+            var opening = probe.Index + probe.Length - 1;
+            var closing = FindMatchingCDelimiter(source, opening, '(', ')');
+            var operand = source.Substring(opening + 1, closing - opening - 1).Trim();
+            var quoted = operand.Length >= 2 && operand[0] == '\"' && operand[operand.Length - 1] == '\"';
+            var angled = operand.Length >= 2 && operand[0] == '<' && operand[operand.Length - 1] == '>';
+            if (!quoted && !angled)
+            {
+                throw new InvalidOperationException(
+                    $"Source input '{sourcePath}' uses computed preprocessor file-existence probe '{operand}', which cannot be bound to exact source.");
+            }
+
+            var include = operand.Substring(1, operand.Length - 2).Trim();
+            if (Path.IsPathRooted(include))
+            {
+                throw new InvalidOperationException(
+                    $"Source input '{sourcePath}' probes absolute preprocessor input '{include}', which is outside the exact-source graph.");
+            }
+            if (angled)
+            {
+                if (!IsApprovedAngledInclude(repositoryRoot, sourcePath, include))
+                    throw new InvalidOperationException($"Source input '{sourcePath}' probes unbound angled preprocessor input '{include}'.");
+                continue;
+            }
+
+            var candidate = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourcePath)!, include));
+            EnsurePathWithinRepository(repositoryRoot, candidate, $"preprocessor file-existence probe from {sourcePath}");
+            if (!File.Exists(candidate))
+                throw new FileNotFoundException($"Preprocessor file-existence probe input was not found: {candidate}", candidate);
+            EnsureTrackedFile(repositoryRoot, candidate, $"preprocessor file-existence probe from {sourcePath}");
+        }
     }
 
     private static readonly HashSet<string> ApprovedToolchainHeaders = new(StringComparer.Ordinal)
@@ -207,7 +257,7 @@ internal sealed partial class AppleReleaseSourceTrustService
 
         foreach (Match directive in Regex.Matches(
                      source,
-                     "(?im)^[ \\t]*\\.(?<kind>include|incbin)(?![A-Za-z0-9_])[ \\t]+(?<operand>[^\\r\\n]+)",
+                     "(?im)^[ \\t]*(?:(?:[A-Za-z_.$][A-Za-z0-9_.$]*|[0-9]+):[ \\t]*)*\\.(?<kind>include|incbin)(?![A-Za-z0-9_])[ \\t]+(?<operand>[^\\r\\n]+)",
                      RegexOptions.CultureInvariant))
         {
             var operand = directive.Groups["operand"].Value.Trim();

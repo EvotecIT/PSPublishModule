@@ -30,7 +30,7 @@ internal sealed partial class AppleReleaseSourceTrustService
     private readonly HashSet<string> _validatedAssemblerInputFiles = new(GetPathComparer());
     private readonly HashSet<string> _validatedSourceSemanticInputs = new(StringComparer.Ordinal);
     private readonly HashSet<string> _inactiveRemoteSystemLibraryRoots = new(GetPathComparer());
-    private readonly Dictionary<string, HashSet<string>> _trackedSourceSuffixes = new(GetPathComparer());
+    private readonly HashSet<string> _approvedHeaderSearchRoots = new(GetPathComparer());
 
     internal AppleReleaseSourceTrustService(
         HomeAssistantReleaseGitService? git = null,

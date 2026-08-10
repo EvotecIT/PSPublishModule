@@ -195,6 +195,8 @@ internal sealed partial class AppleReleaseSourceTrustService
                 token.Equals("-fprofile-sample-use", StringComparison.Ordinal) ||
                 token.Equals("-fprofile-list", StringComparison.Ordinal) ||
                 token.Equals("-fprofile-remapping-file", StringComparison.Ordinal) ||
+                token.Equals("-profile-use", StringComparison.Ordinal) ||
+                token.Equals("-profile-sample-use", StringComparison.Ordinal) ||
                 token.Equals("-fsanitize-ignorelist", StringComparison.Ordinal) ||
                 token.Equals("-fsanitize-blacklist", StringComparison.Ordinal) ||
                 token.Equals("-fsanitize-system-ignorelist", StringComparison.Ordinal) ||
@@ -228,6 +230,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             {
                 "-iframeworkwithsysroot", "-iwithprefixbefore", "-fprofile-instr-use=",
                 "-fprofile-sample-use=", "-fprofile-remapping-file=", "-fprofile-list=",
+                "-profile-sample-use=", "-profile-use=",
                 "-fmodule-map-file=", "-working-directory=",
                 "-fsanitize-system-ignorelist=", "-fsanitize-system-blacklist=",
                 "-fsanitize-coverage-allowlist=", "-fsanitize-coverage-ignorelist=",
