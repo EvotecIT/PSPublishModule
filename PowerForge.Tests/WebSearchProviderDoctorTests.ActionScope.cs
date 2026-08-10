@@ -5,6 +5,18 @@ namespace PowerForge.Tests;
 public sealed partial class WebSearchProviderDoctorTests
 {
     [Fact]
+    public void Doctor_RejectsCloudflareZoneIdsWithNoncanonicalWhitespace()
+    {
+        var configuration = CreateCloudflareConfiguration(" abcdef0123456789abcdef0123456789 ");
+
+        var result = WebSearchProviderDoctor.Inspect(configuration, _ => "credential-value");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Checks, check => check.Code == "provider.cloudflare-zone-invalid");
+        Assert.Null(result.ConfigurationHash);
+    }
+
+    [Fact]
     public void ProviderActionDoctor_IgnoresUnrelatedRegistrationsAndKeepsScopedIdentity()
     {
         var configuration = CreateGoogleConfiguration();

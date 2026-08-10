@@ -8,6 +8,28 @@ namespace PowerForge.Tests;
 public sealed partial class WebCloudflareAnalyticsCollectorTests
 {
     [Theory]
+    [InlineData("/docs/page?draft=1")]
+    [InlineData("/docs/page#draft")]
+    public async Task Collect_RejectsQueryOrFragmentDelimitersInReturnedPathDimensions(string path)
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => TrafficResponse(TrafficRow(new DateOnly(2026, 8, 1), "officeimo.com", path, 10, 2, 1000, 1)),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectAsync(CreateOptions());
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid-response", result.ErrorCode);
+        Assert.False(result.Batch.ZeroDataConfirmed);
+        Assert.Empty(result.Batch.Observations);
+    }
+
+    [Theory]
     [InlineData(-1, 2_678_400)]
     [InlineData(0, 2_678_400)]
     [InlineData(86_400, -1)]

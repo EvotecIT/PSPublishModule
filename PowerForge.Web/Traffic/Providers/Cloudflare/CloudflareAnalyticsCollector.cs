@@ -300,7 +300,7 @@ public sealed class CloudflareAnalyticsCollector
     private static bool IsValidRequestPath(string path) =>
         path.Equals(path.Trim(), StringComparison.Ordinal) &&
         path.StartsWith("/", StringComparison.Ordinal) &&
-        !path.Contains('#') &&
+        path.IndexOfAny(['?', '#']) < 0 &&
         !path.Any(char.IsControl);
 
     private static bool TryNormalizeHostDimension(string value, out string host)

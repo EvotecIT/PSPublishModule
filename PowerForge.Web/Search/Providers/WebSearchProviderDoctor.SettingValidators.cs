@@ -116,7 +116,7 @@ public static partial class WebSearchProviderDoctor
     {
         if (settings.TryGetValue("zoneId", out var value) &&
             !string.IsNullOrWhiteSpace(value) &&
-            !CloudflareZoneRegex.IsMatch(value.Trim()))
+            (!value.Equals(value.Trim(), StringComparison.Ordinal) || !CloudflareZoneRegex.IsMatch(value)))
         {
             AddCheck(
                 checks,
