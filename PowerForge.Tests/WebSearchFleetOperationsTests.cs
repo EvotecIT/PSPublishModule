@@ -336,14 +336,21 @@ public sealed partial class WebSearchFleetOperationsTests
                     {
                         Date = date,
                         Page = "https://officeimo.com/image/",
-                        SearchType = "image",
+                        SearchType = null,
                         Clicks = 1,
                         Impressions = 2
                     }
                 ]
             };
-            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            var databasePath = Path.Combine(root, "fleet.db");
+            var store = new SqliteWebSearchObservationStore(databasePath);
             await store.ImportAsync(WebSearchObservationNormalizer.Normalize(batch));
+            await using (var sqlite = new SQLite())
+            {
+                await sqlite.ExecuteNonQueryAsync(
+                    databasePath,
+                    "UPDATE search_observations SET search_type = 'image' WHERE provider = 'gsc' AND site_id = 'officeimo' AND run_id = 'v2-image-scope';");
+            }
 
             var snapshot = await store.ReadFleetSnapshotAsync();
 
