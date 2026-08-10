@@ -84,7 +84,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             packageLockPaths,
             validatedPackageRoots,
             dependencyCalls);
-        ValidateLiteralSwiftPackagePaths(repositoryRoot, packageRoot, manifestWithoutComments);
+        ValidateLiteralSwiftPackagePaths(repositoryRoot, packageRoot, manifestWithoutComments, manifestSyntax);
     }
 
     private static void ValidateLocalPackageExecutableSafety(string packageRoot, string manifestSyntax)
@@ -158,20 +158,38 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
     }
 
-    private void ValidateLiteralSwiftPackagePaths(string repositoryRoot, string packageRoot, string manifest)
+    private void ValidateLiteralSwiftPackagePaths(
+        string repositoryRoot,
+        string packageRoot,
+        string manifest,
+        string manifestSyntax)
     {
-        var pathArguments = Regex.Matches(manifest, "(?:\\bpath\\b|`path`)\\s*:", RegexOptions.CultureInvariant);
-        var literalPathArguments = Regex.Matches(
-            manifest,
-            "(?:\\bpath\\b|`path`)\\s*:\\s*\"(?<path>[^\"\\\\\\r\\n]+)\"\\s*(?=[,)])",
-            RegexOptions.CultureInvariant);
-        if (pathArguments.Count != literalPathArguments.Count)
-            throw new InvalidOperationException(
-                $"Local Swift package '{packageRoot}' uses a computed, interpolated, or escaped path argument that cannot be bound to exact source. " +
-                "Use a simple literal path inside the tracked repository.");
-        foreach (Match match in literalPathArguments)
+        var pathBearingFactories = new HashSet<string>(StringComparer.Ordinal)
         {
-            var explicitPath = ResolvePbxPath(packageRoot, match.Groups["path"].Value, "Swift package manifest input");
+            "package", "target", "executableTarget", "testTarget", "binaryTarget",
+            "systemLibrary", "plugin", "macro"
+        };
+        foreach (Match reference in Regex.Matches(
+                     manifestSyntax,
+                     "\\.\\s*(?<name>[A-Za-z_][A-Za-z0-9_]*|`[A-Za-z_][A-Za-z0-9_]*`)\\s*\\(",
+                     RegexOptions.CultureInvariant))
+        {
+            var factory = reference.Groups["name"].Value.Trim('`');
+            if (!pathBearingFactories.Contains(factory))
+                continue;
+            var openingParenthesis = reference.Index + reference.Length - 1;
+            var closingParenthesis = FindMatchingSwiftDelimiter(manifestSyntax, openingParenthesis, '(', ')');
+            var arguments = ParseTopLevelSwiftArguments(
+                manifest.Substring(openingParenthesis + 1, closingParenthesis - openingParenthesis - 1),
+                manifestSyntax.Substring(openingParenthesis + 1, closingParenthesis - openingParenthesis - 1));
+            if (!arguments.TryGetValue("path", out var pathArgument))
+                continue;
+            if (!TryReadLiteralSwiftString(pathArgument, out var literalPath))
+                throw new InvalidOperationException(
+                    $"Local Swift package '{packageRoot}' uses a computed, interpolated, or escaped path argument that cannot be bound to exact source. " +
+                    "Use a simple literal path inside the tracked repository.");
+
+            var explicitPath = ResolvePbxPath(packageRoot, literalPath, "Swift package manifest input");
             EnsurePathWithinRepository(repositoryRoot, explicitPath, "Swift package manifest input");
             if (File.Exists(explicitPath))
                 EnsureTrackedFile(repositoryRoot, explicitPath, "Swift package manifest input");

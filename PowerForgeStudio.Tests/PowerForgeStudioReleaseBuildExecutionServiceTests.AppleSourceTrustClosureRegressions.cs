@@ -176,6 +176,83 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Equal(expected, actual);
     }
 
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_quoted_pbx_shell_phase_identifier()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("QuotedPbxIdentifierRepo");
+        var project = scope.CreateDirectory(Path.Combine("QuotedPbxIdentifierRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "\"000000000000000000000001\" = { isa = PBXShellScriptBuildPhase; shellScript = \"date > generated.txt\"; };");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("shell-script", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_external_input_hidden_in_nested_response_file()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("NestedResponseFileRepo");
+        var project = scope.CreateDirectory(Path.Combine("NestedResponseFileRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCBuildConfiguration; buildSettings = { OTHER_CFLAGS = @Flags.rsp; }; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Flags.rsp"), "@Nested.rsp");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Nested.rsp"), "-fplugin=/tmp/injected.dylib");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("OTHER_CFLAGS", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("/tmp/injected.dylib", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_accepts_tracked_safe_compiler_response_file()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("SafeResponseFileRepo");
+        var project = scope.CreateDirectory(Path.Combine("SafeResponseFileRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCBuildConfiguration; buildSettings = { OTHER_CFLAGS = @Flags.rsp; }; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Flags.rsp"), "-DRELEASE_BUILD=1");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var expected = CommitRepository(repositoryRoot);
+
+        var actual = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_ignores_nonargument_path_labels_in_swift_text()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, _, packageRoot) = CreateLocalPackageFixture(scope, "SwiftPathTextRepo");
+        File.WriteAllText(
+            Path.Combine(packageRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\n" +
+            "let help = \"use path: foo\"\nfunc explain(path: String) -> String { path }\n" +
+            "let package = Package(name: \"Shared\", targets: [.target(name: \"Shared\")])");
+        var sources = scope.CreateDirectory(Path.Combine("SwiftPathTextRepo", "Packages", "Shared", "Sources", "Shared"));
+        File.WriteAllText(Path.Combine(sources, "Shared.swift"), "public struct Shared {}");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        var expected = CommitRepository(repositoryRoot);
+
+        var actual = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.Equal(expected, actual);
+    }
+
     private static (string RepositoryRoot, string ProjectRoot, string PackageRoot) CreateLocalPackageFixture(
         TemporaryDirectoryScope scope,
         string repositoryName)

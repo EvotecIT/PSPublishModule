@@ -38,7 +38,15 @@ internal sealed partial class AppleReleaseSourceTrustService
             }
             else if (FlagBuildSettings.Contains(baseKey))
             {
-                values = ExtractBuildFlagInputPaths(assignment.Value, key);
+                ValidateBuildFlagInputPaths(
+                    repositoryRoot,
+                    projectDirectory,
+                    assignment.Value,
+                    key,
+                    generatedOutputPaths,
+                    source,
+                    new HashSet<string>(GetPathComparer()));
+                continue;
             }
             else
             {
@@ -68,6 +76,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
     }
 
+
     private static IEnumerable<KeyValuePair<string, string>> ReadXcconfigAssignments(string contents)
     {
         var logical = Regex.Replace(contents, "\\\\[ \\t]*\\r?\\n", " ");
@@ -95,235 +104,33 @@ internal sealed partial class AppleReleaseSourceTrustService
             $"Xcode build setting {key} selects a custom SDK path or expression that cannot be proven at the exact source commit: {source}");
     }
 
-    private static IEnumerable<string> ExtractBuildFlagInputPaths(string value, string key)
-    {
-        var tokens = ExpandForwardedBuildFlagTokens(SplitBuildSettingPaths(value), key);
-        var consumeNext = false;
-        for (var index = 0; index < tokens.Length; index++)
-        {
-            var token = tokens[index];
-            if (consumeNext)
-            {
-                consumeNext = false;
-                yield return token;
-                continue;
-            }
-
-            if (token.Equals("-I", StringComparison.Ordinal) ||
-                token.Equals("-F", StringComparison.Ordinal) ||
-                token.Equals("-L", StringComparison.Ordinal) ||
-                token.Equals("-include", StringComparison.Ordinal) ||
-                token.Equals("-force_load", StringComparison.Ordinal) ||
-                token.Equals("-filelist", StringComparison.Ordinal) ||
-                token.Equals("-ivfsoverlay", StringComparison.Ordinal) ||
-                token.Equals("-vfsoverlay", StringComparison.Ordinal) ||
-                token.Equals("-fplugin", StringComparison.Ordinal) ||
-                token.Equals("-fpass-plugin", StringComparison.Ordinal) ||
-                token.Equals("-load", StringComparison.Ordinal) ||
-                token.Equals("-plugin", StringComparison.Ordinal) ||
-                token.Equals("-plugin-path", StringComparison.Ordinal) ||
-                token.Equals("-module-map-file", StringComparison.Ordinal) ||
-                token.Equals("-isysroot", StringComparison.Ordinal) ||
-                token.Equals("-sdk", StringComparison.Ordinal))
-            {
-                consumeNext = true;
-                continue;
-            }
-
-            var prefixes = new[]
-            {
-                "-I", "-F", "-L", "-fmodule-map-file=", "-fplugin=", "-fpass-plugin=",
-                "-ivfsoverlay=", "-vfsoverlay=", "-plugin-path=", "-module-map-file=",
-                "-isysroot=", "-sdk="
-            };
-            var prefix = prefixes.FirstOrDefault(candidate =>
-                token.StartsWith(candidate, StringComparison.Ordinal) && token.Length > candidate.Length);
-            if (prefix is not null)
-            {
-                yield return token.Substring(prefix.Length);
-                continue;
-            }
-
-            if (token.StartsWith("-D", StringComparison.Ordinal) ||
-                token.StartsWith("-U", StringComparison.Ordinal) ||
-                token.StartsWith("-Werror=", StringComparison.Ordinal) ||
-                token.StartsWith("-Wno-", StringComparison.Ordinal) ||
-                token.Contains("@executable_path", StringComparison.Ordinal) ||
-                token.Contains("@loader_path", StringComparison.Ordinal) ||
-                token.Contains("@rpath", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (token.StartsWith("-", StringComparison.Ordinal) && IsPathLikeBuildFlagToken(token))
-            {
-                throw new InvalidOperationException(
-                    $"Path-bearing option in Xcode build setting {key} cannot be classified safely: {token}");
-            }
-
-            if (!token.StartsWith("-", StringComparison.Ordinal) &&
-                IsPathLikeBuildFlagToken(token))
-            {
-                throw new InvalidOperationException(
-                    $"Path-like token in Xcode build setting {key} cannot be classified safely: {token}");
-            }
-        }
-        if (consumeNext)
-            throw new InvalidOperationException($"Xcode build setting {key} ends with a path-consuming flag and no input.");
-    }
-
-    private static string[] ExpandForwardedBuildFlagTokens(string[] tokens, string key)
-    {
-        var expanded = new List<string>(tokens.Length);
-        for (var index = 0; index < tokens.Length; index++)
-        {
-            var token = tokens[index];
-            if (token.Equals("-Xcc", StringComparison.Ordinal) ||
-                token.Equals("-Xlinker", StringComparison.Ordinal) ||
-                token.Equals("-Xfrontend", StringComparison.Ordinal) ||
-                token.Equals("-Xswiftc", StringComparison.Ordinal))
-            {
-                if (++index >= tokens.Length)
-                    throw new InvalidOperationException($"Xcode build setting {key} ends with forwarding option '{token}' and no argument.");
-                expanded.Add(tokens[index]);
-                continue;
-            }
-
-            if (token.StartsWith("-Wl,", StringComparison.Ordinal))
-            {
-                expanded.AddRange(token.Substring(4).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries));
-                continue;
-            }
-
-            foreach (var wrapper in new[] { "-Xcc=", "-Xlinker=", "-Xfrontend=", "-Xswiftc=" })
-            {
-                if (!token.StartsWith(wrapper, StringComparison.Ordinal))
-                    continue;
-                expanded.Add(token.Substring(wrapper.Length));
-                token = string.Empty;
-                break;
-            }
-            if (!string.IsNullOrEmpty(token))
-                expanded.Add(token);
-        }
-        return expanded.ToArray();
-    }
-
-    private static bool IsPathLikeBuildFlagToken(string token)
-        => Path.IsPathRooted(token) ||
-           token.Contains('/') ||
-           token.Contains('\\') ||
-           token.Contains("$(", StringComparison.Ordinal) ||
-           token.Contains("${", StringComparison.Ordinal);
-
-    private static bool IsValidatedToolchainOrBuildProductPath(
-        string value,
-        string key,
-        string source)
-    {
-        var unownedBuildRoots = new[]
-        {
-            "$(BUILT_PRODUCTS_DIR)", "${BUILT_PRODUCTS_DIR}",
-            "$(CONFIGURATION_BUILD_DIR)", "${CONFIGURATION_BUILD_DIR}",
-            "$(TARGET_BUILD_DIR)", "${TARGET_BUILD_DIR}"
-        };
-        var unownedBuildRoot = unownedBuildRoots.FirstOrDefault(candidate =>
-            value.Equals(candidate, StringComparison.Ordinal) ||
-            (value.StartsWith(candidate, StringComparison.Ordinal) &&
-             value.Length > candidate.Length &&
-             (value[candidate.Length] == '/' || value[candidate.Length] == '\\')));
-        if (unownedBuildRoot is not null)
-        {
-            throw new InvalidOperationException(
-                $"Xcode build setting {key} consumes unowned build output '{unownedBuildRoot}', whose producing target and bytes cannot be proven at the exact source commit: {value} ({source})");
-        }
-
-        var known = new[]
-        {
-            "$(SDKROOT)", "${SDKROOT}",
-            "$(DEVELOPER_DIR)", "${DEVELOPER_DIR}",
-            "$(TOOLCHAIN_DIR)", "${TOOLCHAIN_DIR}"
-        };
-        var prefix = known.FirstOrDefault(candidate =>
-            value.Equals(candidate, StringComparison.Ordinal) ||
-            (value.StartsWith(candidate, StringComparison.Ordinal) &&
-             value.Length > candidate.Length &&
-             (value[candidate.Length] == '/' || value[candidate.Length] == '\\')));
-        if (prefix is null)
-            return false;
-
-        var suffix = value.Substring(prefix.Length).Replace('\\', '/');
-        if (suffix.Contains("$(", StringComparison.Ordinal) ||
-            suffix.Contains("${", StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException(
-                $"Xcode build setting {key} composes multiple build roots and cannot be proven safely: {value} ({source})");
-        }
-
-        var depth = 0;
-        foreach (var segment in suffix.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (segment == ".")
-                continue;
-            if (segment == "..")
-            {
-                if (depth == 0)
-                {
-                    throw new InvalidOperationException(
-                        $"Xcode build setting {key} escapes approved toolchain or build-product root '{prefix}': {value} ({source})");
-                }
-                depth--;
-                continue;
-            }
-            depth++;
-        }
-        return true;
-    }
 
     private static Dictionary<string, PbxObject> ParsePbxObjects(string text)
     {
         var objects = new Dictionary<string, PbxObject>(StringComparer.OrdinalIgnoreCase);
         var syntax = RemovePbxComments(text);
         var objectDictionary = ReadRootPbxObjectDictionary(syntax);
-        for (var index = 0; index < objectDictionary.Length; index++)
+        foreach (var assignment in ReadPbxAssignments(objectDictionary))
         {
-            index = SkipPbxTrivia(objectDictionary, index);
-            if (index >= objectDictionary.Length)
-                break;
-            if (!IsHexCharacter(objectDictionary[index]))
+            var objectValue = assignment.Value.Trim();
+            if (objectValue.Length < 2 || objectValue[0] != '{' || objectValue[objectValue.Length - 1] != '}')
                 continue;
-
-            var idStart = index;
-            while (index < objectDictionary.Length && IsHexCharacter(objectDictionary[index]))
-                index++;
-            var idLength = index - idStart;
-            if (idLength < 8 || idLength > 32)
-                continue;
-
-            var id = objectDictionary.Substring(idStart, idLength);
-            index = SkipPbxTrivia(objectDictionary, index);
-            if (index >= objectDictionary.Length || objectDictionary[index] != '=')
-                continue;
-            index = SkipPbxTrivia(objectDictionary, index + 1);
-            if (index >= objectDictionary.Length || objectDictionary[index] != '{')
-                continue;
-
-            var openingBrace = index;
-            var closingBrace = FindMatchingPbxBrace(objectDictionary, openingBrace);
-            var body = objectDictionary.Substring(openingBrace + 1, closingBrace - openingBrace - 1);
+            var id = ParsePbxObjectIdentifier(assignment.Key, "object dictionary key");
+            var body = objectValue.Substring(1, objectValue.Length - 2);
             var isa = ReadPbxScalar(body, "isa");
             if (!string.IsNullOrWhiteSpace(isa))
             {
-                objects[id] = new PbxObject
+                if (objects.ContainsKey(id))
+                    throw new InvalidOperationException($"Xcode project repeats PBX object identifier '{id}'.");
+                objects.Add(id, new PbxObject
                 {
                     Id = id,
                     Isa = isa!,
                     Path = ReadPbxScalar(body, "path"),
                     SourceTree = ReadPbxScalar(body, "sourceTree"),
                     Body = body
-                };
+                });
             }
-            index = closingBrace;
         }
         return objects;
     }
@@ -416,6 +223,16 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private static bool IsHexCharacter(char value)
         => value is >= '0' and <= '9' or >= 'A' and <= 'F' or >= 'a' and <= 'f';
+
+    private static string ParsePbxObjectIdentifier(string value, string context)
+    {
+        var identifier = value.Trim();
+        if (identifier.Length >= 2 && identifier[0] == '"' && identifier[identifier.Length - 1] == '"')
+            identifier = UnescapePbxString(identifier.Substring(1, identifier.Length - 2));
+        if (identifier.Length < 8 || identifier.Length > 32 || identifier.Any(character => !IsHexCharacter(character)))
+            throw new InvalidOperationException($"Xcode project contains an invalid PBX {context}: '{value}'.");
+        return identifier;
+    }
 
     private static int SkipPbxTrivia(string text, int index)
     {
@@ -617,9 +434,10 @@ internal sealed partial class AppleReleaseSourceTrustService
             RegexOptions.Singleline | RegexOptions.CultureInvariant);
         if (!match.Success)
             return Array.Empty<string>();
-        return Regex.Matches(match.Groups["items"].Value, "(?:^|,)[ \\t\\r\\n]*(?<id>[A-Fa-f0-9]{8,32})", RegexOptions.CultureInvariant)
-            .Cast<Match>()
-            .Select(value => value.Groups["id"].Value)
+        return match.Groups["items"].Value
+            .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => ParsePbxObjectIdentifier(value, $"reference in {name}"))
             .ToArray();
     }
 
