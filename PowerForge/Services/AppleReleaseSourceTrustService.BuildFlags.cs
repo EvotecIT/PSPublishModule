@@ -164,6 +164,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             if (token.Equals("-I", StringComparison.Ordinal) ||
                 token.Equals("-F", StringComparison.Ordinal) ||
                 token.Equals("-L", StringComparison.Ordinal) ||
+                token.Equals("-B", StringComparison.Ordinal) ||
                 token.Equals("-include", StringComparison.Ordinal) ||
                 token.Equals("-imacros", StringComparison.Ordinal) ||
                 token.Equals("-include-pch", StringComparison.Ordinal) ||
@@ -221,7 +222,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                 "-ivfsoverlay=", "-vfsoverlay=", "-plugin-path=", "-fpass-plugin=",
                 "-iframework", "-idirafter", "-imacros=", "-include=", "--sysroot=",
                 "-isystem-after", "-isystem", "-iquote", "-iprefix", "-fplugin=", "-isysroot=", "-sdk=",
-                "-I", "-F", "-L"
+                "-I", "-F", "-L", "-B"
             };
             var prefix = prefixes.FirstOrDefault(candidate =>
                 token.StartsWith(candidate, StringComparison.Ordinal) && token.Length > candidate.Length);

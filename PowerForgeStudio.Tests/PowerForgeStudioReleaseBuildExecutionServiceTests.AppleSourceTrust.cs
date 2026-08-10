@@ -631,6 +631,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 
     [Theory]
     [InlineData("OTHER_CFLAGS", "-fplugin=/tmp/injected.dylib")]
+    [InlineData("OTHER_CFLAGS", "-B/tmp/injected-tools")]
     [InlineData("OTHER_LDFLAGS", "-Wl,-force_load,/tmp/libInjected.a")]
     [InlineData("OTHER_SWIFT_FLAGS", "-Xcc -fplugin=/tmp/injected.dylib")]
     public void ResolveExactAppleSourceCommit_rejects_paths_hidden_in_compiler_option_tokens(

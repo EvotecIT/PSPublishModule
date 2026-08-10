@@ -381,6 +381,18 @@ internal sealed partial class PowerForgeReleaseService
             foreach (var configured in LoadAppleScreenshotSpecs(plan))
             {
                 var baseDirectory = Path.GetDirectoryName(configured.ConfigPath) ?? plan.ProjectRoot;
+                if (configured.Spec.Quality?.RequireApprovalManifest == true &&
+                    !string.IsNullOrWhiteSpace(configured.Spec.Quality.ApprovalManifestPath))
+                {
+                    var approvalManifestPath = ResolveOutputPath(
+                        baseDirectory,
+                        configured.Spec.Quality.ApprovalManifestPath!);
+                    EnsurePathWithinProjectRoot(
+                        plan.ProjectRoot,
+                        approvalManifestPath,
+                        "Apple screenshot approval manifest plan input");
+                    AddApplePlanInputFile(plan.ProjectRoot, approvalManifestPath, files);
+                }
                 foreach (var set in configured.Spec.ScreenshotSets)
                 {
                     if (string.IsNullOrWhiteSpace(set.Path))

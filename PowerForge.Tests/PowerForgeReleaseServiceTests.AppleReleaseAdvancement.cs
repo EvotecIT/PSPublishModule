@@ -380,6 +380,49 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void AppleVersionSource_UpdateDoesNotOverwriteAnAtomicEditorAfterComparison()
+    {
+        if (!OperatingSystem.IsMacOS())
+            return;
+        var root = CreateSandbox();
+        try
+        {
+            WriteXcodeGenVersionSource(root, "1.5.0", "13");
+            var sourcePath = Path.Combine(root, "project.yml");
+            var approvedContent = File.ReadAllText(sourcePath);
+            var editorContent = approvedContent.Replace(
+                "name: CasaRay",
+                "name: CasaRay-Edited",
+                StringComparison.Ordinal);
+            var service = new AppleReleaseVersionSourceService(path =>
+            {
+                var editorPath = path + ".editor";
+                File.WriteAllText(editorPath, editorContent);
+                File.Move(editorPath, path, overwrite: true);
+            });
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                service.Update(
+                    sourcePath,
+                    approvedContent,
+                    "1.6.0",
+                    "14",
+                    highestRemoteBuildNumber: 13,
+                    whatIf: false));
+
+            Assert.Contains("changed while", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(editorContent, File.ReadAllText(sourcePath));
+            var version = new AppleReleaseVersionSourceService().Read(sourcePath);
+            Assert.Equal("1.5.0", version.MarketingVersion);
+            Assert.Equal("13", version.BuildNumber);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleVersionPlan_WritesSeparatePlanReceiptWithoutChangingSource()
     {
         var root = CreateSandbox();

@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace PowerForge;
 
 /// <summary>
-/// Reads and atomically updates the shared version values in an XcodeGen project specification.
+/// Reads and compare-and-write updates the shared version values in an XcodeGen project specification.
 /// </summary>
 internal sealed class AppleReleaseVersionSourceService
 {
@@ -13,6 +13,12 @@ internal sealed class AppleReleaseVersionSourceService
     private static readonly Regex MarketingVersionValuePattern = new(
         "^\\d+\\.\\d+(?:\\.\\d+)?$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private readonly Action<string>? _onComparedVersionSource;
+
+    internal AppleReleaseVersionSourceService(Action<string>? onComparedVersionSource = null)
+    {
+        _onComparedVersionSource = onComparedVersionSource;
+    }
 
     internal PowerForgeAppleVersionReceipt Read(string sourcePath)
     {
@@ -57,13 +63,7 @@ internal sealed class AppleReleaseVersionSourceService
 
         if (changed && !whatIf)
         {
-            var currentContent = File.ReadAllText(fullPath);
-            if (!string.Equals(currentContent, approvedContent, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException(
-                    $"Apple version source changed after plan approval: {fullPath}");
-            }
-            WriteAtomic(fullPath, updated);
+            WriteIfUnchanged(fullPath, approvedContent, updated);
         }
 
         return new PowerForgeAppleVersionReceipt
@@ -113,22 +113,42 @@ internal sealed class AppleReleaseVersionSourceService
         return fullPath;
     }
 
-    private static void WriteAtomic(string path, string content)
+    private void WriteIfUnchanged(string path, string expectedContent, string content)
     {
-        var directory = Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory();
-        var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
-        try
+        var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(content);
+        using (var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
         {
-            File.WriteAllText(temporaryPath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            if (File.Exists(path))
-                File.Replace(temporaryPath, path, destinationBackupFileName: null, ignoreMetadataErrors: true);
-            else
-                File.Move(temporaryPath, path);
+            string currentContent;
+            using (var reader = new StreamReader(
+                       stream,
+                       Encoding.UTF8,
+                       detectEncodingFromByteOrderMarks: true,
+                       bufferSize: 4096,
+                       leaveOpen: true))
+            {
+                currentContent = reader.ReadToEnd();
+            }
+            if (!string.Equals(currentContent, expectedContent, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Apple version source changed after plan approval: {path}");
+            }
+
+            _onComparedVersionSource?.Invoke(path);
+
+            // Keep the same read/write handle from comparison through the durable
+            // write. Platforms with mandatory share modes exclude another writer;
+            // pathname-replacing editors are covered by the post-write check below.
+            stream.Position = 0;
+            stream.Write(bytes, 0, bytes.Length);
+            stream.SetLength(bytes.Length);
+            stream.Flush(flushToDisk: true);
         }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-                File.Delete(temporaryPath);
-        }
+
+        // On platforms where a pathname can be replaced while its old inode is
+        // open, ensure that the bytes currently named by the source path are the
+        // bytes we published. An atomic editor wins and is never overwritten.
+        if (!string.Equals(File.ReadAllText(path), content, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Apple version source changed while the approved update was being written: {path}");
     }
 }

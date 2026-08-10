@@ -284,6 +284,92 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void Execute_ApplePlan_BindsRequiredScreenshotApprovalManifestBytes()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var screenshotFolder = Directory.CreateDirectory(Path.Combine(root, "screenshots"));
+            var screenshotPath = Path.Combine(screenshotFolder.FullName, "home.png");
+            File.WriteAllBytes(screenshotPath, Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII="));
+            const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+            var screenshotSpec = new AppStoreConnectScreenshotSyncSpec
+            {
+                AppId = "6778025328",
+                VersionString = "1.2.0",
+                Platform = ApplePlatform.iOS,
+                Locale = "en-US",
+                ScreenshotSets =
+                [
+                    new AppStoreConnectScreenshotSetSyncSpec
+                    {
+                        ScreenshotDisplayType = "APP_IPHONE_67",
+                        Path = "screenshots",
+                        AllowedDimensions = ["1x1"]
+                    }
+                ],
+                Quality = new AppStoreConnectScreenshotQualitySpec
+                {
+                    Enabled = true,
+                    MinimumFileBytes = 1,
+                    MinimumKilobytesPerMegapixel = 0,
+                    RequireApprovalManifest = true,
+                    ApprovalManifestPath = "approval.json"
+                }
+            };
+            File.WriteAllText(
+                Path.Combine(root, "screenshots.json"),
+                System.Text.Json.JsonSerializer.Serialize(screenshotSpec));
+            var approval = new AppStoreConnectScreenshotApprovalService().Create(
+                new AppStoreConnectScreenshotApprovalRequest
+                {
+                    Spec = screenshotSpec,
+                    BaseDirectory = root,
+                    AllowedRoot = screenshotFolder.FullName,
+                    VersionString = "1.2.0",
+                    SourceCommit = sourceCommit,
+                    ApprovedBy = "release-owner"
+                });
+            var approvalPath = Path.Combine(root, "approval.json");
+            File.WriteAllText(approvalPath, System.Text.Json.JsonSerializer.Serialize(approval));
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.SyncScreenshots = true;
+            spec.AppleApps.ScreenshotConfigPath = "screenshots.json";
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, "VALID"),
+                checkAppleReleaseReadiness: (_, request) => CreateReadyReleaseReadiness(request));
+
+            var approved = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Screenshots,
+                AppleSourceCommit = sourceCommit,
+                PlanOnly = true
+            });
+            approval.ApprovalEvidence = "reviewed-evidence-changed";
+            File.WriteAllText(approvalPath, System.Text.Json.JsonSerializer.Serialize(approval));
+            var changed = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                AppleAction = PowerForgeAppleReleaseAction.Screenshots,
+                AppleSourceCommit = sourceCommit,
+                PlanOnly = true
+            });
+
+            Assert.NotEqual(approved.AppleReceipt!.MutationInputsSha256, changed.AppleReceipt!.MutationInputsSha256);
+            Assert.Contains("approval.json", approved.AppleReceipt.MutationInputFiles.Keys);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Theory]
     [InlineData("generate")]
     [InlineData("regenerate")]

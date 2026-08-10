@@ -18,7 +18,10 @@ internal sealed partial class AppleReleaseSourceTrustService
         if (!_validatedSourceIncludeFiles.Add(fullSourcePath))
             return;
 
-        var source = RemoveCComments(File.ReadAllText(fullSourcePath));
+        // C and Objective-C splice escaped physical lines before comments and
+        // preprocessing directives are interpreted. Scan that logical source so
+        // an include keyword cannot be split across lines to evade attestation.
+        var source = RemoveCComments(SpliceCPreprocessingLines(File.ReadAllText(fullSourcePath)));
         foreach (Match directive in Regex.Matches(
                      source,
                      "(?m)^[ \\t]*#[ \\t]*(?:include|include_next|import)[ \\t]+(?<operand>[^\\r\\n]+)",
@@ -53,6 +56,35 @@ internal sealed partial class AppleReleaseSourceTrustService
             if (File.Exists(candidate))
                 EnsureTrackedFile(repositoryRoot, candidate, $"preprocessor include from {fullSourcePath}");
         }
+    }
+
+    private static string SpliceCPreprocessingLines(string source)
+    {
+        var result = new System.Text.StringBuilder(source.Length);
+        for (var index = 0; index < source.Length; index++)
+        {
+            if (source[index] != '\\' || index + 1 >= source.Length)
+            {
+                result.Append(source[index]);
+                continue;
+            }
+
+            if (source[index + 1] == '\n')
+            {
+                index++;
+                continue;
+            }
+            if (source[index + 1] == '\r')
+            {
+                index++;
+                if (index + 1 < source.Length && source[index + 1] == '\n')
+                    index++;
+                continue;
+            }
+
+            result.Append(source[index]);
+        }
+        return result.ToString();
     }
 
     private static string RemoveCComments(string source)
