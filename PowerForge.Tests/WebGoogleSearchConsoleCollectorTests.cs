@@ -8,7 +8,7 @@ using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
 
-public sealed class WebGoogleSearchConsoleCollectorTests
+public sealed partial class WebGoogleSearchConsoleCollectorTests
 {
     private static readonly DateTimeOffset CompletionTime = new(2026, 8, 10, 12, 34, 56, TimeSpan.Zero);
 
@@ -133,6 +133,7 @@ public sealed class WebGoogleSearchConsoleCollectorTests
         {
             Assert.Equal("all", finalityDocument.RootElement.GetProperty("dataState").GetString());
             Assert.Equal(["date"], finalityDocument.RootElement.GetProperty("dimensions").EnumerateArray().Select(value => value.GetString()));
+            AssertPageScopeFilter(finalityDocument.RootElement, "^https://officeimo\\.com/");
         }
 
         var analyticsRequests = handler.Requests.Skip(2).ToArray();
@@ -148,6 +149,7 @@ public sealed class WebGoogleSearchConsoleCollectorTests
             Assert.Equal(
                 ["date", "page", "query", "country", "device"],
                 document.RootElement.GetProperty("dimensions").EnumerateArray().Select(value => value.GetString()));
+            AssertPageScopeFilter(document.RootElement, "^https://officeimo\\.com/");
         });
 
         var normalized = WebSearchObservationNormalizer.Normalize(result.Batch);

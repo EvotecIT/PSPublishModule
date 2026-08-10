@@ -226,7 +226,24 @@ internal sealed class SqliteWebSearchObservationStore
         }
 
         var sql = $"""
-            WITH ranked_observations AS (
+            WITH complete_coverage AS MATERIALIZED (
+                SELECT runs.provider,
+                       runs.site_id,
+                       runs.run_id,
+                       runs.collected_at_utc,
+                       completed_dates.value AS observation_date,
+                       COALESCE(
+                           NULLIF(LOWER(TRIM(json_extract(
+                               runs.normalized_manifest_json,
+                               '$.collectionCoverage.searchType'))), ''),
+                           'web') AS search_type
+                FROM search_observation_runs AS runs
+                INNER JOIN json_each(
+                    runs.normalized_manifest_json,
+                    '$.collectionCoverage.completedDates') AS completed_dates
+                WHERE runs.status = 'complete'
+            ),
+            ranked_observations AS (
                 SELECT observations.observation_key,
                        observations.provider,
                        observations.site_id,
@@ -262,22 +279,14 @@ internal sealed class SqliteWebSearchObservationStore
                 WHERE {string.Join(" AND ", clauses.Select(clause => "observations." + clause))}
                   AND NOT EXISTS (
                       SELECT 1
-                      FROM search_observation_runs AS zero_runs
-                      INNER JOIN json_each(
-                          zero_runs.normalized_manifest_json,
-                          '$.collectionCoverage.completedDates') AS completed_dates
-                      WHERE zero_runs.provider = observations.provider
-                        AND zero_runs.site_id = observations.site_id
-                        AND zero_runs.status = 'complete'
-                        AND completed_dates.value = observations.observation_date
-                        AND COALESCE(
-                                NULLIF(LOWER(TRIM(json_extract(
-                                    zero_runs.normalized_manifest_json,
-                                    '$.collectionCoverage.searchType'))), ''),
-                                'web') = COALESCE(NULLIF(LOWER(TRIM(observations.search_type)), ''), 'web')
+                      FROM complete_coverage AS coverage
+                      WHERE coverage.provider = observations.provider
+                        AND coverage.site_id = observations.site_id
+                        AND coverage.observation_date = observations.observation_date
+                        AND coverage.search_type = COALESCE(NULLIF(LOWER(TRIM(observations.search_type)), ''), 'web')
                         AND (
-                            zero_runs.collected_at_utc > runs.collected_at_utc OR
-                            (zero_runs.collected_at_utc = runs.collected_at_utc AND zero_runs.run_id > runs.run_id)
+                            coverage.collected_at_utc > runs.collected_at_utc OR
+                            (coverage.collected_at_utc = runs.collected_at_utc AND coverage.run_id > runs.run_id)
                         )
                   )
             )

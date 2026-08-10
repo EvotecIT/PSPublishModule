@@ -109,6 +109,12 @@ public static class WebSearchObservationNormalizer
         }
 
         var searchType = NormalizeDimension(coverage.SearchType);
+        if (searchType is null && observations.Any(observation =>
+                observation.SearchType is not null &&
+                !observation.SearchType.Equals("web", StringComparison.Ordinal)))
+        {
+            throw new ArgumentException("Typed search observations require collection coverage searchType.", nameof(coverage));
+        }
         var failureCategory = NormalizeDimension(coverage.FailureCategory);
         if (coverage.FailedDate is DateOnly boundedFailedDate && (boundedFailedDate < coverage.FromDate || boundedFailedDate > coverage.ThroughDate))
             throw new ArgumentException("Search collection coverage failed date must be inside the requested range.", nameof(coverage));

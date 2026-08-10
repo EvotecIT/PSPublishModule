@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Google.Apis.Auth.OAuth2.Responses;
 
 namespace PowerForge.Web;
@@ -146,7 +147,8 @@ public sealed class GoogleSearchConsoleCollector
                 Type = options.SearchType,
                 DataState = "all",
                 RowLimit = MaximumRowLimit,
-                StartRow = 0
+                StartRow = 0,
+                DimensionFilterGroups = CreatePageFilterGroups(options.SiteBaseUrl)
             };
             using var request = await CreateRequestAsync(HttpMethod.Post, endpoint, cancellationToken).ConfigureAwait(false);
             request.Content = JsonContent.Create(finalityBody, options: JsonOptions);
@@ -223,7 +225,8 @@ public sealed class GoogleSearchConsoleCollector
                     Type = options.SearchType,
                     DataState = "final",
                     RowLimit = options.RowLimit,
-                    StartRow = startRow
+                    StartRow = startRow,
+                    DimensionFilterGroups = CreatePageFilterGroups(options.SiteBaseUrl)
                 };
 
                 try
@@ -415,6 +418,26 @@ public sealed class GoogleSearchConsoleCollector
 
     private static string[] GetDimensions(string searchType) =>
         searchType is "discover" or "googleNews" ? DimensionsWithoutQuery : DimensionsWithQuery;
+
+    private static GoogleSearchConsoleDimensionFilterGroup[] CreatePageFilterGroups(string siteBaseUrl)
+    {
+        var site = new Uri(WebSearchProviderConfigurationFingerprint.NormalizeUrl(siteBaseUrl), UriKind.Absolute);
+        var authority = site.GetLeftPart(UriPartial.Authority);
+        var path = site.AbsolutePath;
+        var expression = path == "/"
+            ? "^" + Regex.Escape(authority) + "/"
+            : "^" + Regex.Escape(authority + path.TrimEnd('/')) + "(?:/|$)";
+        return
+        [
+            new GoogleSearchConsoleDimensionFilterGroup
+            {
+                Filters =
+                [
+                    new GoogleSearchConsoleDimensionFilter { Expression = expression }
+                ]
+            }
+        ];
+    }
 
     private static bool PageBelongsToSite(string page, string siteBaseUrl)
     {

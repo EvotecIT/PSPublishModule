@@ -130,6 +130,30 @@ internal sealed class GoogleSearchConsoleQueryRequest
 
     [JsonPropertyName("startRow")]
     public int StartRow { get; set; }
+
+    [JsonPropertyName("dimensionFilterGroups")]
+    public GoogleSearchConsoleDimensionFilterGroup[] DimensionFilterGroups { get; set; } = Array.Empty<GoogleSearchConsoleDimensionFilterGroup>();
+}
+
+internal sealed class GoogleSearchConsoleDimensionFilterGroup
+{
+    [JsonPropertyName("groupType")]
+    public string GroupType { get; set; } = "and";
+
+    [JsonPropertyName("filters")]
+    public GoogleSearchConsoleDimensionFilter[] Filters { get; set; } = Array.Empty<GoogleSearchConsoleDimensionFilter>();
+}
+
+internal sealed class GoogleSearchConsoleDimensionFilter
+{
+    [JsonPropertyName("dimension")]
+    public string Dimension { get; set; } = "page";
+
+    [JsonPropertyName("operator")]
+    public string Operator { get; set; } = "includingRegex";
+
+    [JsonPropertyName("expression")]
+    public string Expression { get; set; } = string.Empty;
 }
 
 internal sealed class GoogleSearchConsoleQueryResponse

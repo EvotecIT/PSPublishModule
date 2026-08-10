@@ -211,6 +211,24 @@ public sealed partial class WebSearchIntelligenceTests
     }
 
     [Fact]
+    public void Normalizer_RequiresCoverageSearchTypeForNonWebObservations()
+    {
+        var batch = CreateBatch();
+        batch.SchemaVersion = 2;
+        batch.Observations[0].SearchType = "image";
+        batch.CollectionCoverage = new WebSearchObservationCollectionCoverage
+        {
+            FromDate = batch.Observations[0].Date,
+            ThroughDate = batch.Observations[0].Date,
+            CompletedDates = [batch.Observations[0].Date]
+        };
+
+        var exception = Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(batch));
+
+        Assert.Contains("coverage searchType", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SqliteStore_ScopesExternalRunIdentifiersByProviderAndSite()
     {
         var root = CreateTemporaryDirectory();
