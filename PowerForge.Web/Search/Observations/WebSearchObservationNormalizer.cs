@@ -92,10 +92,12 @@ public static class WebSearchObservationNormalizer
     {
         if (coverage is null)
             return null;
+        if (coverage.CompletedDates is null)
+            throw new ArgumentException("Search collection coverage completedDates must be an array.", nameof(coverage));
         if (coverage.FromDate == default || coverage.ThroughDate == default || coverage.FromDate > coverage.ThroughDate)
             throw new ArgumentException("Search collection coverage has an invalid requested date range.", nameof(coverage));
 
-        var completedDates = (coverage.CompletedDates ?? Array.Empty<DateOnly>())
+        var completedDates = coverage.CompletedDates
             .OrderBy(date => date)
             .ToArray();
         if (completedDates.Distinct().Count() != completedDates.Length ||

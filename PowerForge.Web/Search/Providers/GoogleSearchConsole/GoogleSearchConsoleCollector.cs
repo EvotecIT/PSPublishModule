@@ -247,7 +247,11 @@ public sealed class GoogleSearchConsoleCollector
                         break;
 
                     foreach (var row in rows)
+                    {
+                        if (row is null)
+                            throw new InvalidOperationException("Google Search Console returned a null analytics row.");
                         observations.Add(MapRow(row, dimensions, date, options, probe.Property));
+                    }
                     startRow = checked(startRow + options.RowLimit);
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -376,13 +380,16 @@ public sealed class GoogleSearchConsoleCollector
         var dimensionValues = dimensions
             .Select((dimension, index) => (Dimension: dimension, Value: NullIfEmpty(row.Keys[index])))
             .ToDictionary(item => item.Dimension, item => item.Value, StringComparer.Ordinal);
+        var page = dimensionValues["page"];
+        if (page is null || !PageBelongsToSite(page, options.SiteBaseUrl))
+            throw new InvalidOperationException("Google Search Console returned a page outside the configured fleet site.");
 
         return new WebSearchObservation
         {
             Provider = options.ProviderId,
             SiteId = options.SiteId,
             Date = rowDate,
-            Page = dimensionValues["page"],
+            Page = page,
             Query = dimensionValues.GetValueOrDefault("query"),
             Country = dimensionValues["country"],
             Device = dimensionValues["device"],
@@ -397,6 +404,29 @@ public sealed class GoogleSearchConsoleCollector
 
     private static string[] GetDimensions(string searchType) =>
         searchType is "discover" or "googleNews" ? DimensionsWithoutQuery : DimensionsWithQuery;
+
+    private static bool PageBelongsToSite(string page, string siteBaseUrl)
+    {
+        if (!Uri.TryCreate(page, UriKind.Absolute, out var pageUri) ||
+            !Uri.TryCreate(siteBaseUrl, UriKind.Absolute, out var siteUri) ||
+            pageUri.Scheme is not ("http" or "https") ||
+            siteUri.Scheme is not ("http" or "https") ||
+            !pageUri.Scheme.Equals(siteUri.Scheme, StringComparison.OrdinalIgnoreCase) ||
+            !pageUri.IdnHost.TrimEnd('.').Equals(siteUri.IdnHost.TrimEnd('.'), StringComparison.OrdinalIgnoreCase) ||
+            pageUri.Port != siteUri.Port ||
+            !string.IsNullOrEmpty(pageUri.UserInfo) ||
+            !string.IsNullOrEmpty(pageUri.Fragment))
+        {
+            return false;
+        }
+
+        var sitePath = siteUri.AbsolutePath;
+        if (!sitePath.EndsWith('/'))
+            sitePath += "/";
+        var exactSitePath = sitePath.Length == 1 ? "/" : sitePath.TrimEnd('/');
+        return pageUri.AbsolutePath.Equals(exactSitePath, StringComparison.Ordinal) ||
+               pageUri.AbsolutePath.StartsWith(sitePath, StringComparison.Ordinal);
+    }
 
     private static long ConvertCount(double value, string metric)
     {
@@ -418,6 +448,11 @@ public sealed class GoogleSearchConsoleCollector
             throw new ArgumentException("Google Search Console provider id is required.", nameof(options));
         if (string.IsNullOrWhiteSpace(options.SiteId))
             throw new ArgumentException("Google Search Console site id is required.", nameof(options));
+        if (!Uri.TryCreate(options.SiteBaseUrl, UriKind.Absolute, out var siteUri) ||
+            siteUri.Scheme is not ("http" or "https"))
+        {
+            throw new ArgumentException("Google Search Console site base URL must be an absolute HTTP(S) URL.", nameof(options));
+        }
         if (string.IsNullOrWhiteSpace(options.Property))
             throw new ArgumentException("Google Search Console property is required.", nameof(options));
         if (options.FromDate == default || options.ThroughDate == default || options.FromDate > options.ThroughDate)

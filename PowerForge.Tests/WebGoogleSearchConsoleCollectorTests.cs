@@ -372,6 +372,109 @@ public sealed class WebGoogleSearchConsoleCollectorTests
     }
 
     [Fact]
+    public void Normalize_RejectsExplicitNullCompletedDates()
+    {
+        var document = JsonNode.Parse(JsonSerializer.Serialize(CreateEmptyBatch(zeroDataConfirmed: true, status: "complete")))!.AsObject();
+        document["collectionCoverage"]!.AsObject()["completedDates"] = null;
+        var deserialized = JsonSerializer.Deserialize<WebSearchObservationBatch>(document.ToJsonString())!;
+
+        var exception = Assert.Throws<ArgumentException>(() => WebSearchObservationNormalizer.Normalize(deserialized));
+
+        Assert.Contains("completedDates", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Collect_PreservesEarlierPageWhenLaterResponseContainsNullRow()
+    {
+        var handler = new ScriptedHandler((request, index) => index switch
+        {
+            0 => SitesResponse("sc-domain:officeimo.com"),
+            1 => QueryResponse(),
+            2 => QueryResponse(Row("2026-08-01", "https://officeimo.com/", "officeimo", "pol", "DESKTOP", 1, 10, 0.1, 1)),
+            3 => QueryResponse("null"),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var httpClient = new HttpClient(handler);
+        var collector = new GoogleSearchConsoleCollector(httpClient, new FakeTokenProvider());
+
+        var result = await collector.CollectAsync(CreateOptions(rowLimit: 1));
+
+        Assert.False(result.Success);
+        Assert.Equal("provider-response-invalid", result.ErrorCode);
+        Assert.Single(result.Batch.Observations);
+        Assert.Single(WebSearchObservationNormalizer.Normalize(result.Batch).Observations);
+    }
+
+    [Fact]
+    public async Task Collect_RejectsPagesOutsideConfiguredSiteBoundary()
+    {
+        var handler = new ScriptedHandler((request, index) => index switch
+        {
+            0 => SitesResponse("sc-domain:officeimo.com"),
+            1 => QueryResponse(),
+            2 => QueryResponse(Row("2026-08-01", "https://officeimo.com/other/", "officeimo", "pol", "DESKTOP", 1, 10, 0.1, 1)),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var httpClient = new HttpClient(handler);
+        var collector = new GoogleSearchConsoleCollector(httpClient, new FakeTokenProvider());
+        var options = CreateOptions();
+        options.SiteBaseUrl = "https://officeimo.com/docs/";
+
+        var result = await collector.CollectAsync(options);
+
+        Assert.False(result.Success);
+        Assert.Equal("provider-response-invalid", result.ErrorCode);
+        Assert.Empty(result.Batch.Observations);
+        WebSearchObservationNormalizer.Normalize(result.Batch);
+    }
+
+    [Fact]
+    public void SelectedProviderReadiness_DoesNotRequireUnrelatedCredentials()
+    {
+        const string selectedVariable = "POWERFORGE_TEST_GSC_SELECTED";
+        var previous = Environment.GetEnvironmentVariable(selectedVariable);
+        Environment.SetEnvironmentVariable(selectedVariable, "credential-present");
+        try
+        {
+            var configuration = CreateConfiguration(WebSearchProviderCapabilities.SearchAnalytics);
+            var site = Assert.Single(configuration.Sites);
+            var selected = Assert.Single(site.Providers);
+            selected.Credential!.EnvironmentVariable = selectedVariable;
+            site.Providers =
+            [
+                selected,
+                new WebSearchProviderRegistration
+                {
+                    Id = "unrelated-cloudflare",
+                    Kind = "cloudflare-analytics",
+                    Enabled = true,
+                    Capabilities = [WebSearchProviderCapabilities.TrafficAnalytics],
+                    Credential = new WebSearchCredentialReference
+                    {
+                        Kind = "cloudflare-api-token",
+                        EnvironmentVariable = "POWERFORGE_TEST_UNRELATED_MISSING"
+                    },
+                    Settings = new Dictionary<string, string?> { ["zoneId"] = new string('a', 32) }
+                }
+            ];
+
+            var result = WebCliCommandHandlers.InspectProviderAction(
+                configuration,
+                site,
+                selected,
+                WebSearchProviderCapabilities.SearchAnalytics,
+                useSelectedCredential: true);
+
+            Assert.True(result.Success);
+            Assert.NotNull(result.ConfigurationHash);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(selectedVariable, previous);
+        }
+    }
+
+    [Fact]
     public async Task Collect_RejectsMalformedProviderMetricsWithoutLosingRunEvidence()
     {
         var handler = new ScriptedHandler((request, index) => index switch
@@ -495,6 +598,7 @@ public sealed class WebGoogleSearchConsoleCollectorTests
     {
         ProviderId = "google-search-console",
         SiteId = "officeimo",
+        SiteBaseUrl = "https://officeimo.com/",
         Property = "sc-domain:officeimo.com",
         FromDate = new DateOnly(2026, 8, 1),
         ThroughDate = new DateOnly(2026, 8, 1),

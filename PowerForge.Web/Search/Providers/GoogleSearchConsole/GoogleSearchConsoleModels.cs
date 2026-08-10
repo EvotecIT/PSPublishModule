@@ -11,6 +11,9 @@ public sealed class GoogleSearchConsoleCollectionOptions
     /// <summary>Stable fleet site identifier written to the observation batch.</summary>
     public string SiteId { get; set; } = string.Empty;
 
+    /// <summary>Canonical fleet site boundary used to reject analytics rows owned by another site.</summary>
+    public string SiteBaseUrl { get; set; } = string.Empty;
+
     /// <summary>Search Console property, such as <c>sc-domain:example.com</c> or an HTTP(S) URL-prefix property.</summary>
     public string Property { get; set; } = string.Empty;
 

@@ -58,19 +58,6 @@ internal static partial class WebCliCommandHandlers
 
             var searchType = TryGetOptionValue(args, "--search-type") ?? "web";
             var loaded = WebSearchProviderConfigurationLoader.LoadWithPath(configPath, WebCliJson.Options);
-            var doctor = WebSearchProviderDoctor.InspectWithCapabilities(
-                loaded.Configuration,
-                WebSearchCollectorCatalog.AvailableCapabilities);
-            if (!doctor.Success || string.IsNullOrWhiteSpace(doctor.ConfigurationHash))
-            {
-                var firstError = doctor.Checks.FirstOrDefault(check => check.Severity == WebSearchProviderCheckSeverity.Error);
-                return FailSearch(
-                    firstError?.Message ?? "Search provider configuration has blocking capability errors.",
-                    outputJson,
-                    logger,
-                    "web.observe.collect");
-            }
-
             var site = loaded.Configuration.Sites.SingleOrDefault(candidate =>
                 string.Equals(candidate.Id, siteId, StringComparison.OrdinalIgnoreCase));
             if (site is null)
@@ -81,6 +68,12 @@ internal static partial class WebCliCommandHandlers
                 return FailSearch($"Search provider '{providerId}' is not configured for site '{siteId}'.", outputJson, logger, "web.observe.collect");
             if (!provider.Enabled)
                 return FailSearch($"Search provider '{providerId}' is disabled.", outputJson, logger, "web.observe.collect");
+            var doctor = InspectProviderAction(
+                loaded.Configuration,
+                site,
+                provider,
+                WebSearchProviderCapabilities.SearchAnalytics,
+                useSelectedCredential: true);
             if (!provider.Kind.Equals(GoogleSearchConsoleCollector.ProviderKind, StringComparison.Ordinal))
                 return FailSearch("Observe collect currently supports only Google Search Console providers.", outputJson, logger, "web.observe.collect");
             if (!provider.Capabilities.Contains(WebSearchProviderCapabilities.SearchAnalytics, StringComparer.Ordinal))
@@ -97,6 +90,7 @@ internal static partial class WebCliCommandHandlers
             {
                 ProviderId = provider.Id,
                 SiteId = site.Id,
+                SiteBaseUrl = site.BaseUrl,
                 Property = property,
                 FromDate = fromDate,
                 ThroughDate = throughDate,
