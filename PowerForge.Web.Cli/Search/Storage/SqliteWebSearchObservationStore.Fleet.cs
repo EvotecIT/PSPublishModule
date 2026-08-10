@@ -641,7 +641,10 @@ internal sealed partial class SqliteWebSearchObservationStore
 
         public string RetentionScopeKey => DimensionCompletedRanges.Length == 0
             ? string.Empty
-            : string.Join(",", DimensionScopes);
+            : string.Join("\u001e",
+                string.Join(",", DimensionScopes),
+                string.Join(";", DimensionCompletedRanges.Select(range =>
+                    $"{range.FromDate:yyyy-MM-dd}/{range.ThroughDate:yyyy-MM-dd}")));
     }
 
     private sealed record SearchFleetRunMetadata(

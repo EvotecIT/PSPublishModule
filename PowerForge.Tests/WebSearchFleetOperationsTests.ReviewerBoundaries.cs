@@ -257,11 +257,14 @@ public sealed partial class WebSearchFleetOperationsTests
         try
         {
             var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
-            var date = new DateOnly(2026, 1, 1);
-            foreach (var (runId, dimensionScope, collectedAt) in new[]
+            var firstDate = new DateOnly(2026, 1, 1);
+            var secondDate = firstDate.AddDays(1);
+            foreach (var (runId, dimensionScope, date, collectedAt) in new[]
                      {
-                         ("bing-page-old", "page", AsOf.AddDays(-60).AddMinutes(-1)),
-                         ("bing-query-old", "query", AsOf.AddDays(-60))
+                         ("bing-page-one", "page", firstDate, AsOf.AddDays(-60).AddMinutes(-3)),
+                         ("bing-query-one", "query", firstDate, AsOf.AddDays(-60).AddMinutes(-2)),
+                         ("bing-page-two", "page", secondDate, AsOf.AddDays(-60).AddMinutes(-1)),
+                         ("bing-query-two", "query", secondDate, AsOf.AddDays(-60))
                      })
             {
                 var batch = SearchBatch(runId, date, collectedAt);
@@ -283,7 +286,9 @@ public sealed partial class WebSearchFleetOperationsTests
             }, AsOf, apply: true);
 
             Assert.Equal(0, Assert.Single(result.Kinds, value => value.Kind == "search").DeletedRunCount);
-            Assert.Single(Assert.Single((await store.ReadFleetSnapshotAsync(AsOf)).Streams).CompletedRanges);
+            var range = Assert.Single(Assert.Single((await store.ReadFleetSnapshotAsync(AsOf)).Streams).CompletedRanges);
+            Assert.Equal(firstDate, range.FromDate);
+            Assert.Equal(secondDate, range.ThroughDate);
         }
         finally
         {
