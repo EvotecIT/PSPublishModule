@@ -29,6 +29,8 @@ public sealed class WebSearchFleetEvidenceStream
     public string? LatestFailureCategory { get; set; }
     /// <summary>Reporting partition that failed in the newest partial daily attempt.</summary>
     public DateOnly? LatestFailureDate { get; set; }
+    /// <summary>Latest durable permanent failure for every affected daily partition.</summary>
+    public WebSearchFleetFailurePartition[] PermanentFailures { get; set; } = Array.Empty<WebSearchFleetFailurePartition>();
     /// <summary>Whether completed coverage survives only as a compact retention summary.</summary>
     public bool HasRetainedCoverage { get; set; }
     /// <summary>Number of stored runs contributing to this stream.</summary>
@@ -42,6 +44,15 @@ public sealed class WebSearchFleetCompletedRange
     public DateOnly FromDate { get; set; }
     /// <summary>Inclusive last completed date.</summary>
     public DateOnly ThroughDate { get; set; }
+}
+
+/// <summary>One daily partition that cannot be retried without operator input.</summary>
+public sealed class WebSearchFleetFailurePartition
+{
+    /// <summary>Reporting date rejected by a permanent provider boundary.</summary>
+    public DateOnly Date { get; set; }
+    /// <summary>Stable non-secret failure category.</summary>
+    public string Category { get; set; } = string.Empty;
 }
 
 /// <summary>Read-only inventory of durable evidence used by fleet operations.</summary>
@@ -375,11 +386,16 @@ public static class WebSearchFleetPlanner
             .FirstOrDefault();
         if (nextCoveredRange is not null)
             through = nextCoveredRange.FromDate.AddDays(-1);
-        var failureCategory = evidence?.HasPartialEvidence == true &&
-                              evidence.LatestFailureDate == start &&
-                              PermanentDailyFailureCategories.Contains(evidence.LatestFailureCategory ?? string.Empty)
-            ? evidence.LatestFailureCategory
-            : null;
+        var failureCategory = evidence?.PermanentFailures
+            .FirstOrDefault(value => value.Date == start && PermanentDailyFailureCategories.Contains(value.Category))
+            ?.Category;
+        if (failureCategory is null &&
+            evidence?.HasPartialEvidence == true &&
+            evidence.LatestFailureDate == start &&
+            PermanentDailyFailureCategories.Contains(evidence.LatestFailureCategory ?? string.Empty))
+        {
+            failureCategory = evidence.LatestFailureCategory;
+        }
         var effectiveReadiness = failureCategory is not null && readiness == "ready" ? "input-required" : readiness;
         work.Add(new WebSearchFleetWorkItem
         {

@@ -122,6 +122,78 @@ public sealed partial class WebSearchFleetOperationsTests
     }
 
     [Fact]
+    public async Task Snapshot_PreservesPermanentFailuresForEveryDailyPartition()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            foreach (var (runId, date, collectedAt) in new[]
+                     {
+                         ("failure-one", new DateOnly(2026, 1, 1), AsOf.AddDays(-60)),
+                         ("failure-two", new DateOnly(2026, 1, 2), AsOf.AddDays(-50))
+                     })
+            {
+                var failure = TrafficBatch(runId, date, collectedAt);
+                failure.Status = "partial";
+                failure.Observations = Array.Empty<WebTrafficObservation>();
+                failure.CollectionCoverage!.CompletedDates = Array.Empty<DateOnly>();
+                failure.CollectionCoverage.FailedDate = date;
+                failure.CollectionCoverage.FailureCategory = "row-limit-reached";
+                await store.ImportTrafficAsync(WebTrafficObservationNormalizer.Normalize(failure));
+            }
+            var newerAttempt = TrafficBatch("newer-attempt", new DateOnly(2026, 1, 3), AsOf.AddDays(-40));
+            await store.ImportTrafficAsync(WebTrafficObservationNormalizer.Normalize(newerAttempt));
+            await store.ApplyFleetRetentionAsync(new WebSearchFleetOperationsConfiguration
+            {
+                SearchRunRetentionDays = 30,
+                TrafficRunRetentionDays = 30,
+                PerformanceRunRetentionDays = 30
+            }, AsOf, apply: true);
+
+            var stream = Assert.Single((await store.ReadFleetSnapshotAsync(AsOf)).Streams);
+
+            Assert.Equal([new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 2)],
+                stream.PermanentFailures.Select(value => value.Date).ToArray());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RetentionSummariesRemainVisibleBeforeTheirMaintenanceTimestamp()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            await store.ImportTrafficAsync(WebTrafficObservationNormalizer.Normalize(
+                TrafficBatch("older-coverage", new DateOnly(2026, 1, 1), AsOf.AddDays(-60))));
+            await store.ImportTrafficAsync(WebTrafficObservationNormalizer.Normalize(
+                TrafficBatch("newer-coverage", new DateOnly(2026, 1, 2), AsOf.AddDays(-50))));
+
+            await store.ApplyFleetRetentionAsync(new WebSearchFleetOperationsConfiguration
+            {
+                SearchRunRetentionDays = 30,
+                TrafficRunRetentionDays = 30,
+                PerformanceRunRetentionDays = 30
+            }, AsOf.AddYears(1), apply: true);
+            var stream = Assert.Single((await store.ReadFleetSnapshotAsync(AsOf)).Streams);
+
+            Assert.True(stream.HasRetainedCoverage);
+            var range = Assert.Single(stream.CompletedRanges);
+            Assert.Equal(new DateOnly(2026, 1, 1), range.FromDate);
+            Assert.Equal(new DateOnly(2026, 1, 2), range.ThroughDate);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void FleetCli_SucceedsWhenHealthyWorkSurvivesAnUnrelatedConfigurationError()
     {
         var root = CreateTempRoot();

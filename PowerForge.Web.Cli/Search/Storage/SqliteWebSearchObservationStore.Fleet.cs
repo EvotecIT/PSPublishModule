@@ -32,7 +32,6 @@ internal sealed partial class SqliteWebSearchObservationStore
             search = search.Where(value => value.CollectedAtUtc <= cutoff).ToArray();
             traffic = traffic.Where(value => value.CollectedAtUtc <= cutoff).ToArray();
             performance = performance.Where(value => value.CollectedAtUtc <= cutoff).ToArray();
-            retainedCoverage = retainedCoverage.Where(value => value.RetainedAtUtc <= cutoff).ToArray();
         }
         search = search.Concat(retainedCoverage.Where(value => value.Kind == "search").Select(ToCoverageFleetRun)).ToArray();
         traffic = traffic.Concat(retainedCoverage.Where(value => value.Kind == "traffic").Select(ToCoverageFleetRun)).ToArray();
@@ -348,6 +347,22 @@ internal sealed partial class SqliteWebSearchObservationStore
         var actualRuns = runs.Where(value => !value.IsCoverageSummary).ToArray();
         var latestActual = actualRuns.FirstOrDefault();
         var completed = actualRuns.Where(value => value.Status == "complete" || value.CompletedRanges.Length > 0).ToArray();
+        var permanentFailures = actualRuns
+            .Where(value => value.Status == "partial" &&
+                            value.FailureDate.HasValue &&
+                            PermanentFleetFailureCategories.Contains(value.FailureCategory ?? string.Empty))
+            .GroupBy(value => value.FailureDate!.Value)
+            .Select(group => group
+                .OrderByDescending(value => value.CollectedAtUtc)
+                .ThenByDescending(value => value.RunId, StringComparer.Ordinal)
+                .First())
+            .OrderBy(value => value.FailureDate)
+            .Select(value => new WebSearchFleetFailurePartition
+            {
+                Date = value.FailureDate!.Value,
+                Category = value.FailureCategory!
+            })
+            .ToArray();
         return new WebSearchFleetEvidenceStream
         {
             SiteId = latest.SiteId,
@@ -362,6 +377,7 @@ internal sealed partial class SqliteWebSearchObservationStore
             HasPartialEvidence = latestActual?.Status == "partial",
             LatestFailureCategory = latestActual?.Status == "partial" ? latestActual.FailureCategory : null,
             LatestFailureDate = latestActual?.Status == "partial" ? latestActual.FailureDate : null,
+            PermanentFailures = permanentFailures,
             HasRetainedCoverage = runs.Any(value => value.IsCoverageSummary),
             RunCount = actualRuns.Length
         };
@@ -426,13 +442,18 @@ internal sealed partial class SqliteWebSearchObservationStore
         var runs = values.ToArray();
         var primary = SelectRetentionPreservationRun(runs);
         yield return primary;
-        var permanentFailure = runs
+        var permanentFailures = runs
             .Where(value => value.Status == "partial" && PermanentFleetFailureCategories.Contains(value.FailureCategory ?? string.Empty))
-            .OrderByDescending(value => value.CollectedAtUtc)
-            .ThenByDescending(value => value.RunId, StringComparer.Ordinal)
-            .FirstOrDefault();
-        if (permanentFailure is not null && FleetRunIdentity(permanentFailure) != FleetRunIdentity(primary))
-            yield return permanentFailure;
+            .GroupBy(value => value.FailureDate)
+            .Select(group => group
+                .OrderByDescending(value => value.CollectedAtUtc)
+                .ThenByDescending(value => value.RunId, StringComparer.Ordinal)
+                .First());
+        foreach (var permanentFailure in permanentFailures)
+        {
+            if (FleetRunIdentity(permanentFailure) != FleetRunIdentity(primary))
+                yield return permanentFailure;
+        }
     }
 
     private async Task<int> CountFleetObservationsAsync(SQLite client, RetentionPlan plan, CancellationToken cancellationToken)
