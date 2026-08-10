@@ -46,9 +46,22 @@ public sealed partial class BingWebmasterCollector
         if (!TryNormalizeSiteUrl(siteUrl, out var normalizedSite))
             throw new ArgumentException("Bing Webmaster site URL must be an absolute HTTP(S) URL without user info, query or fragment.", nameof(siteUrl));
 
+        string apiKey;
         try
         {
-            var apiKey = await _apiKeyProvider.GetApiKeyAsync(cancellationToken).ConfigureAwait(false);
+            apiKey = await _apiKeyProvider.GetApiKeyAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return ProbeFailure(siteUrl, "credential-unavailable", "Bing Webmaster credential resolution failed.");
+        }
+
+        try
+        {
             var response = await SendAsync<BingWebmasterSite>("GetUserSites", null, apiKey, cancellationToken)
                 .ConfigureAwait(false);
             if (!response.Success)
@@ -88,7 +101,10 @@ public sealed partial class BingWebmasterCollector
         ValidateOptions(options);
         var probe = await ProbeAsync(options.SiteUrl, cancellationToken).ConfigureAwait(false);
         if (!probe.Success)
-            return BuildFailure(options, probe, 1, probe.ErrorCode!, probe.ErrorMessage!);
+        {
+            var probeRequestCount = string.Equals(probe.ErrorCode, "credential-unavailable", StringComparison.Ordinal) ? 0 : 1;
+            return BuildFailure(options, probe, probeRequestCount, probe.ErrorCode!, probe.ErrorMessage!);
+        }
 
         string apiKey;
         try
@@ -113,16 +129,16 @@ public sealed partial class BingWebmasterCollector
         requestCount++;
         if (!queryResponse.Success)
             return BuildFailure(options, probe, requestCount, queryResponse.ErrorCode!, queryResponse.ErrorMessage!);
-        if (!TryMapStats(queryResponse.Values, options, pageDimension: false, out var queryObservations))
+        if (!TryMapStats(queryResponse.Values, value => value.Query, options, pageDimension: false, out var queryObservations))
             return BuildFailure(options, probe, requestCount, "invalid-response", "Bing Webmaster returned invalid query statistics.");
         observations.AddRange(queryObservations);
 
-        var pageResponse = await SendAsync<BingWebmasterQueryStat>(
+        var pageResponse = await SendAsync<BingWebmasterPageStat>(
             "GetPageStats", parameters, apiKey, cancellationToken).ConfigureAwait(false);
         requestCount++;
         if (!pageResponse.Success)
             return BuildFailure(options, probe, requestCount, pageResponse.ErrorCode!, pageResponse.ErrorMessage!, observations);
-        if (!TryMapStats(pageResponse.Values, options, pageDimension: true, out var pageObservations))
+        if (!TryMapStats(pageResponse.Values, value => value.Page, options, pageDimension: true, out var pageObservations))
             return BuildFailure(options, probe, requestCount, "invalid-response", "Bing Webmaster returned invalid page statistics.", observations);
         observations.AddRange(pageObservations);
 
@@ -264,17 +280,20 @@ public sealed partial class BingWebmasterCollector
         }
     }
 
-    private static bool TryMapStats(
-        IEnumerable<BingWebmasterQueryStat> values,
+    private static bool TryMapStats<TStat>(
+        IEnumerable<TStat> values,
+        Func<TStat, string?> getDimension,
         BingWebmasterCollectionOptions options,
         bool pageDimension,
         out WebSearchObservation[] observations)
+        where TStat : BingWebmasterSearchStat
     {
         var mapped = new List<WebSearchObservation>();
         foreach (var value in values)
         {
+            var dimension = getDimension(value);
             var date = TryParseProviderDate(value.Date);
-            if (!date.HasValue || string.IsNullOrWhiteSpace(value.Query) ||
+            if (!date.HasValue || string.IsNullOrWhiteSpace(dimension) ||
                 !value.Clicks.HasValue || !value.Impressions.HasValue ||
                 value.Clicks.Value < 0 || value.Impressions.Value < 0 || value.Clicks.Value > value.Impressions.Value ||
                 value.AverageImpressionPosition is double position && (!double.IsFinite(position) || position < 0d))
@@ -283,7 +302,7 @@ public sealed partial class BingWebmasterCollector
                 return false;
             }
             if (pageDimension &&
-                (!Uri.TryCreate(value.Query, UriKind.Absolute, out var pageUri) ||
+                (!Uri.TryCreate(dimension, UriKind.Absolute, out var pageUri) ||
                  (pageUri.Scheme != Uri.UriSchemeHttp && pageUri.Scheme != Uri.UriSchemeHttps)))
             {
                 observations = Array.Empty<WebSearchObservation>();
@@ -295,8 +314,8 @@ public sealed partial class BingWebmasterCollector
             mapped.Add(new WebSearchObservation
             {
                 Date = date.Value,
-                Page = pageDimension ? value.Query : null,
-                Query = pageDimension ? null : value.Query,
+                Page = pageDimension ? dimension : null,
+                Query = pageDimension ? null : dimension,
                 SearchType = options.SearchType,
                 Clicks = value.Clicks.Value,
                 Impressions = value.Impressions.Value,

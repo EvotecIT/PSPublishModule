@@ -99,11 +99,8 @@ internal sealed class BingWebmasterSite
     public bool IsVerified { get; set; }
 }
 
-internal sealed class BingWebmasterQueryStat
+internal abstract class BingWebmasterSearchStat
 {
-    [JsonPropertyName("Query")]
-    public string? Query { get; set; }
-
     [JsonPropertyName("Date")]
     public string? Date { get; set; }
 
@@ -115,6 +112,18 @@ internal sealed class BingWebmasterQueryStat
 
     [JsonPropertyName("AvgImpressionPosition")]
     public double? AverageImpressionPosition { get; set; }
+}
+
+internal sealed class BingWebmasterQueryStat : BingWebmasterSearchStat
+{
+    [JsonPropertyName("Query")]
+    public string? Query { get; set; }
+}
+
+internal sealed class BingWebmasterPageStat : BingWebmasterSearchStat
+{
+    [JsonPropertyName("Page")]
+    public string? Page { get; set; }
 }
 
 internal sealed class BingWebmasterTrafficStat

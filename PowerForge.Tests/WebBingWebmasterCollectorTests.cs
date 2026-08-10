@@ -40,13 +40,31 @@ public sealed class WebBingWebmasterCollectorTests
     }
 
     [Fact]
+    public async Task Probe_AndCollect_ClassifyCredentialFailureWithoutClaimingAnHttpRequest()
+    {
+        var handler = new ScriptedHandler((_, _) => throw new InvalidOperationException("Transport must not be reached."));
+        using var httpClient = new HttpClient(handler);
+        var collector = new BingWebmasterCollector(httpClient, new FailingApiKeyProvider());
+
+        var probe = await collector.ProbeAsync("https://officeimo.com/");
+        var collection = await collector.CollectAsync(CreateOptions());
+
+        Assert.False(probe.Success);
+        Assert.Equal("credential-unavailable", probe.ErrorCode);
+        Assert.False(collection.Success);
+        Assert.Equal("credential-unavailable", collection.ErrorCode);
+        Assert.Equal(0, collection.RequestCount);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
     public async Task Collect_MapsDatedQueryAndPageRowsIntoTheNeutralContract()
     {
         var handler = new ScriptedHandler((_, index) => index switch
         {
             0 => SitesResponse("https://officeimo.com/", true),
             1 => StatsResponse(Stat("powerforge", 3, 30, 4.5)),
-            2 => StatsResponse(Stat("https://officeimo.com/docs/powerforge", 2, 20, 3.25)),
+            2 => StatsResponse(PageStat("https://officeimo.com/docs/powerforge", 2, 20, 3.25)),
             3 => TrafficResponse(5, 50),
             _ => throw new InvalidOperationException("Unexpected request.")
         });
@@ -591,6 +609,16 @@ public sealed class WebBingWebmasterCollectorTests
         AvgClickPosition = position
     };
 
+    private static object PageStat(string page, long clicks, long impressions, double position) => new
+    {
+        Page = page,
+        Date = ProviderDate(new DateOnly(2026, 8, 1)),
+        Clicks = clicks,
+        Impressions = impressions,
+        AvgImpressionPosition = position,
+        AvgClickPosition = position
+    };
+
     private static HttpResponseMessage TrafficResponse(long clicks, long impressions) => JsonResponse(new
     {
         d = new[]
@@ -619,6 +647,12 @@ public sealed class WebBingWebmasterCollectorTests
     {
         public Task<string> GetApiKeyAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult("test-api-key");
+    }
+
+    private sealed class FailingApiKeyProvider : IBingWebmasterApiKeyProvider
+    {
+        public Task<string> GetApiKeyAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Credential is unavailable.");
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset value) : TimeProvider

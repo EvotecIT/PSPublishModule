@@ -204,10 +204,13 @@ public sealed partial class WebSearchIntelligenceTests
         var documented = JsonNode.Parse(JsonSerializer.Serialize(batch))!;
         var missingCoverage = documented.DeepClone();
         missingCoverage.AsObject().Remove("collectionCoverage");
+        var modeFromVersionThree = documented.DeepClone();
+        modeFromVersionThree["collectionCoverage"]!["mode"] = "daily";
         var schema = LoadObservationSchema();
 
         Assert.True(schema.Evaluate(documented, new EvaluationOptions()).IsValid);
         Assert.False(schema.Evaluate(missingCoverage, new EvaluationOptions()).IsValid);
+        Assert.False(schema.Evaluate(modeFromVersionThree, new EvaluationOptions()).IsValid);
     }
 
     [Fact]
