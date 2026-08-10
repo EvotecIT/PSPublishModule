@@ -125,12 +125,7 @@ public sealed class CloudflareAnalyticsCollector
             {
                 zoneTag = options.ZoneId.ToLowerInvariant(),
                 limit = probe.MaxPageSize,
-                filter = new
-                {
-                    datetime_geq = start.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
-                    datetime_lt = end.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
-                    requestSource = "eyeball"
-                }
+                filter = BuildTrafficFilter(options.SiteBaseUrl, start, end)
             };
             var response = await SendAsync<CloudflareTrafficData>(TrafficQuery, variables, token, cancellationToken).ConfigureAwait(false);
             requestCount++;
@@ -139,7 +134,9 @@ public sealed class CloudflareAnalyticsCollector
             var zones = response.Value?.Viewer?.Zones ?? Array.Empty<CloudflareTrafficZone>();
             if (zones.Length != 1)
                 return Failure(options, probe, requestCount, observations, completedDates, date, "zone-not-visible", "Cloudflare did not return the configured zone.");
-            var rows = zones[0].Traffic ?? Array.Empty<CloudflareTrafficGroup>();
+            var rows = zones[0].Traffic;
+            if (rows is null)
+                return Failure(options, probe, requestCount, observations, completedDates, date, "invalid-response", "Cloudflare returned no traffic dataset for the configured zone.");
             if (!TryMapRows(rows, options, date, out var mapped))
                 return Failure(options, probe, requestCount, observations, completedDates, date, "invalid-response", "Cloudflare returned invalid traffic analytics rows.");
             observations.AddRange(mapped);
@@ -185,6 +182,9 @@ public sealed class CloudflareAnalyticsCollector
         out WebTrafficObservation[] observations)
     {
         var mapped = new List<WebTrafficObservation>(rows.Count);
+        var siteUri = new Uri(options.SiteBaseUrl, UriKind.Absolute);
+        var siteHost = siteUri.IdnHost.TrimEnd('.').ToLowerInvariant();
+        var sitePath = NormalizeSitePath(siteUri.AbsolutePath);
         foreach (var row in rows)
         {
             var dimensions = row.Dimensions;
@@ -193,6 +193,18 @@ public sealed class CloudflareAnalyticsCollector
                 string.IsNullOrWhiteSpace(dimensions.Host) || string.IsNullOrWhiteSpace(dimensions.Path) ||
                 row.Count > long.MaxValue || row.Sum.Visits > long.MaxValue || row.Sum.EdgeResponseBytes > long.MaxValue ||
                 !double.IsFinite(row.Average.SampleInterval.Value) || row.Average.SampleInterval.Value < 1d)
+            {
+                observations = Array.Empty<WebTrafficObservation>();
+                return false;
+            }
+            if (!Uri.TryCreate("https://" + dimensions.Host.TrimEnd('.') + "/", UriKind.Absolute, out var rowUri) ||
+                Uri.CheckHostName(rowUri.IdnHost) != UriHostNameType.Dns)
+            {
+                observations = Array.Empty<WebTrafficObservation>();
+                return false;
+            }
+            var rowHost = rowUri.IdnHost.TrimEnd('.').ToLowerInvariant();
+            if (!rowHost.Equals(siteHost, StringComparison.Ordinal) || !PathBelongsToSite(dimensions.Path, sitePath))
             {
                 observations = Array.Empty<WebTrafficObservation>();
                 return false;
@@ -211,6 +223,44 @@ public sealed class CloudflareAnalyticsCollector
         }
         observations = mapped.ToArray();
         return true;
+    }
+
+    private static Dictionary<string, object?> BuildTrafficFilter(string siteBaseUrl, DateTime start, DateTime end)
+    {
+        var siteUri = new Uri(siteBaseUrl, UriKind.Absolute);
+        var sitePath = NormalizeSitePath(siteUri.AbsolutePath);
+        var filter = new Dictionary<string, object?>
+        {
+            ["datetime_geq"] = start.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
+            ["datetime_lt"] = end.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
+            ["requestSource"] = "eyeball",
+            ["clientRequestHTTPHost"] = siteUri.IdnHost.TrimEnd('.').ToLowerInvariant()
+        };
+        if (sitePath != "/")
+        {
+            var exactPath = sitePath.TrimEnd('/');
+            filter["OR"] = new object[]
+            {
+                new Dictionary<string, string> { ["clientRequestPath"] = exactPath },
+                new Dictionary<string, string> { ["clientRequestPath_like"] = exactPath + "/%" }
+            };
+        }
+        return filter;
+    }
+
+    private static string NormalizeSitePath(string path)
+    {
+        if (string.IsNullOrEmpty(path) || path == "/")
+            return "/";
+        return "/" + path.Trim('/') + "/";
+    }
+
+    private static bool PathBelongsToSite(string path, string sitePath)
+    {
+        if (sitePath == "/")
+            return true;
+        var prefix = sitePath.TrimEnd('/');
+        return path.Equals(prefix, StringComparison.Ordinal) || path.StartsWith(prefix + "/", StringComparison.Ordinal);
     }
 
     private CloudflareAnalyticsCollectionResult Failure(

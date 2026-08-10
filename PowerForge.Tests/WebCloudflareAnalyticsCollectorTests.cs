@@ -66,8 +66,8 @@ public sealed class WebCloudflareAnalyticsCollectorTests
         {
             0 => ZoneResponse("officeimo.com"),
             1 => CapabilityResponse(),
-            2 => TrafficResponse(TrafficRow(new DateOnly(2026, 8, 1), "BÜCHER.de.", "/docs/", 100, 25, 5000, 2)),
-            3 => TrafficResponse(TrafficRow(new DateOnly(2026, 8, 2), "www.example.com", "/", 50, 10, 2000, 1)),
+            2 => TrafficResponse(TrafficRow(new DateOnly(2026, 8, 1), "OFFICEIMO.com.", "/docs/", 100, 25, 5000, 2)),
+            3 => TrafficResponse(TrafficRow(new DateOnly(2026, 8, 2), "officeimo.com", "/", 50, 10, 2000, 1)),
             _ => throw new InvalidOperationException("Unexpected request.")
         });
         using var client = new HttpClient(handler);
@@ -84,9 +84,66 @@ public sealed class WebCloudflareAnalyticsCollectorTests
         Assert.Equal(CompletionTime, normalized.CollectedAtUtc);
         Assert.Equal([new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 2)], normalized.CollectionCoverage.CompletedDates);
         var sampled = Assert.Single(normalized.Observations, value => value.Date == new DateOnly(2026, 8, 1));
-        Assert.Equal("xn--bcher-kva.de", sampled.Host);
+        Assert.Equal("officeimo.com", sampled.Host);
         Assert.Equal(2d, sampled.SampleInterval);
-        Assert.All(handler.Requests.Skip(2), request => Assert.Contains("\"requestSource\":\"eyeball\"", request.Body, StringComparison.Ordinal));
+        Assert.All(handler.Requests.Skip(2), request =>
+        {
+            Assert.Contains("\"requestSource\":\"eyeball\"", request.Body, StringComparison.Ordinal);
+            Assert.Contains("\"clientRequestHTTPHost\":\"officeimo.com\"", request.Body, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task Collect_ScopesSharedZoneTrafficToTheConfiguredHostAndPath()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => TrafficResponse(TrafficRow(new DateOnly(2026, 8, 1), "docs.officeimo.com", "/products/powerforge/", 10, 2, 1000, 1)),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+        var collector = new CloudflareAnalyticsCollector(client, new FakeTokenProvider());
+        var options = CreateOptions();
+        options.SiteBaseUrl = "https://docs.officeimo.com/products/powerforge/";
+
+        var result = await collector.CollectAsync(options);
+
+        Assert.True(result.Success);
+        var body = handler.Requests[2].Body;
+        Assert.Contains("\"clientRequestHTTPHost\":\"docs.officeimo.com\"", body, StringComparison.Ordinal);
+        Assert.Contains("\"clientRequestPath\":\"/products/powerforge\"", body, StringComparison.Ordinal);
+        Assert.Contains("\"clientRequestPath_like\":\"/products/powerforge/%\"", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Collect_RejectsNullOrOutOfScopeTrafficRowsInsteadOfConfirmingZero()
+    {
+        var nullHandler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => TrafficNullResponse(),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var nullClient = new HttpClient(nullHandler);
+        var nullResult = await new CloudflareAnalyticsCollector(nullClient, new FakeTokenProvider()).CollectAsync(CreateOptions());
+        Assert.False(nullResult.Success);
+        Assert.Equal("invalid-response", nullResult.ErrorCode);
+        Assert.False(nullResult.Batch.ZeroDataConfirmed);
+
+        var foreignHandler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => TrafficResponse(TrafficRow(new DateOnly(2026, 8, 1), "tactra.dev", "/", 10, 2, 1000, 1)),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var foreignClient = new HttpClient(foreignHandler);
+        var foreignResult = await new CloudflareAnalyticsCollector(foreignClient, new FakeTokenProvider()).CollectAsync(CreateOptions());
+        Assert.False(foreignResult.Success);
+        Assert.Equal("invalid-response", foreignResult.ErrorCode);
     }
 
     [Fact]
@@ -329,6 +386,75 @@ public sealed class WebCloudflareAnalyticsCollectorTests
     }
 
     [Fact]
+    public async Task TrafficReports_TreatCompletedPartitionsOfPartialRunsAsComplete()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-cloudflare-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            await store.ImportTrafficAsync(WebTrafficObservationNormalizer.Normalize(CreateTrafficBatch()));
+            var partial = CreateTrafficBatch();
+            partial.CollectedAtUtc = CompletionTime.AddMinutes(1);
+            partial.Status = "partial";
+            partial.CollectionCoverage.ThroughDate = new DateOnly(2026, 8, 2);
+            partial.CollectionCoverage.FailedDate = new DateOnly(2026, 8, 2);
+            partial.CollectionCoverage.FailureCategory = "provider-unavailable";
+            partial.Observations[0].Requests = 200;
+            await store.ImportTrafficAsync(WebTrafficObservationNormalizer.Normalize(partial));
+
+            var completed = await store.QueryTrafficEvidenceAsync(new WebTrafficObservationQuery
+            {
+                SiteId = "officeimo", Provider = "cloudflare",
+                FromDate = new DateOnly(2026, 8, 1), ThroughDate = new DateOnly(2026, 8, 1)
+            });
+            Assert.False(completed.HasPartialEvidence);
+            Assert.Equal("complete", Assert.Single(completed.SelectedRuns).Status);
+            Assert.Equal(200, Assert.Single(completed.Observations).Requests);
+
+            var failed = await store.QueryTrafficEvidenceAsync(new WebTrafficObservationQuery
+            {
+                SiteId = "officeimo", Provider = "cloudflare",
+                FromDate = new DateOnly(2026, 8, 2), ThroughDate = new DateOnly(2026, 8, 2)
+            });
+            Assert.True(failed.HasPartialEvidence);
+            Assert.Equal("partial", Assert.Single(failed.SelectedRuns).Status);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task TrafficReports_RequireProviderForBoundedCompleteness()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-cloudflare-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var databasePath = Path.Combine(root, "fleet.db");
+            var store = new SqliteWebSearchObservationStore(databasePath);
+            await store.ImportTrafficAsync(WebTrafficObservationNormalizer.Normalize(CreateTrafficBatch()));
+
+            var exception = await Assert.ThrowsAsync<ArgumentException>(() => store.QueryTrafficEvidenceAsync(new WebTrafficObservationQuery
+            {
+                SiteId = "officeimo", FromDate = new DateOnly(2026, 8, 1), ThroughDate = new DateOnly(2026, 8, 1)
+            }));
+
+            Assert.Contains("requires a provider", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(2, WebCliCommandHandlers.HandleSubCommand(
+                "traffic",
+                ["list", "--database", databasePath, "--site", "officeimo", "--from", "2026-08-01", "--to", "2026-08-01", "--output", "json"],
+                outputJson: true, logger: new WebConsoleLogger(), outputSchemaVersion: 1));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task EnvironmentTokenProvider_ResolvesOnlyTheReferencedSecret()
     {
         var provider = CloudflareEnvironmentApiTokenProvider.Create(
@@ -502,6 +628,12 @@ public sealed class WebCloudflareAnalyticsCollectorTests
     {
         errors = (object?)null,
         data = new { viewer = new { zones = new[] { new { traffic = rows } } } }
+    });
+
+    private static HttpResponseMessage TrafficNullResponse() => JsonResponse(new
+    {
+        errors = (object?)null,
+        data = new { viewer = new { zones = new[] { new { traffic = (object?)null } } } }
     });
 
     private static HttpResponseMessage JsonResponse(object value) => new(HttpStatusCode.OK)

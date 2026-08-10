@@ -35,6 +35,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web traffic collect --config <search-providers.json> --database <search.db> --site <id> --provider <id>");
         Console.WriteLine("                     --from <yyyy-MM-dd> --to <yyyy-MM-dd> [--evidence <reference>] [--output json]");
         Console.WriteLine("  powerforge-web traffic list --database <search.db> --site <id> [--provider <id>] [--from <yyyy-MM-dd>] [--to <yyyy-MM-dd>] [--output json]");
+        Console.WriteLine("                     (bounded --from/--to completeness queries require --provider)");
         Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");
         Console.WriteLine("  powerforge-web verify --config <site.json> [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
         Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");

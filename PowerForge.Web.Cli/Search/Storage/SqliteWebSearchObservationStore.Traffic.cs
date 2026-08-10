@@ -98,6 +98,8 @@ internal sealed partial class SqliteWebSearchObservationStore
             throw new ArgumentException("Traffic query requires a site identifier.", nameof(query));
         if (query.FromDate.HasValue && query.ThroughDate.HasValue && query.FromDate > query.ThroughDate)
             throw new ArgumentException("Traffic from date cannot be after through date.", nameof(query));
+        if (query.FromDate.HasValue && query.ThroughDate.HasValue && string.IsNullOrWhiteSpace(query.Provider))
+            throw new ArgumentException("A bounded traffic completeness query requires a provider identifier.", nameof(query));
         if (!File.Exists(_databasePath))
             return new WebTrafficObservationQueryResult { StoreExists = false };
 
@@ -123,12 +125,12 @@ internal sealed partial class SqliteWebSearchObservationStore
             .Select(WebTrafficObservationNormalizer.Normalize)
             .ToArray();
         var selectedByDate = batches
-            .SelectMany(batch => EvidenceDates(batch).Select(date => new SelectedTrafficDate(batch, date)))
+            .SelectMany(EvidencePartitions)
             .Where(value => (!query.FromDate.HasValue || value.Date >= query.FromDate.Value) &&
                             (!query.ThroughDate.HasValue || value.Date <= query.ThroughDate.Value))
             .GroupBy(value => (value.Batch.Provider, value.Batch.SiteId, value.Date))
             .Select(group => group
-                .OrderBy(value => value.Batch.Status == "complete" ? 0 : 1)
+                .OrderBy(value => value.IsComplete ? 0 : 1)
                 .ThenByDescending(value => value.Batch.CollectedAtUtc)
                 .ThenByDescending(value => value.Batch.RunId, StringComparer.Ordinal)
                 .First())
@@ -144,7 +146,7 @@ internal sealed partial class SqliteWebSearchObservationStore
                     Provider = batch.Provider,
                     SiteId = batch.SiteId,
                     CollectedAtUtc = batch.CollectedAtUtc,
-                    Status = batch.Status,
+                    Status = group.All(value => value.IsComplete) ? "complete" : "partial",
                     ZeroDataConfirmed = batch.ZeroDataConfirmed,
                     CollectionCoverage = batch.CollectionCoverage,
                     SelectedDates = group.Select(value => value.Date).Distinct().OrderBy(date => date).ToArray()
@@ -223,10 +225,13 @@ internal sealed partial class SqliteWebSearchObservationStore
         };
     }
 
-    private static IEnumerable<DateOnly> EvidenceDates(WebTrafficObservationBatch batch) =>
-        batch.CollectionCoverage.CompletedDates
-            .Concat(batch.CollectionCoverage.FailedDate is DateOnly failedDate ? [failedDate] : Array.Empty<DateOnly>())
-            .Distinct();
+    private static IEnumerable<SelectedTrafficDate> EvidencePartitions(WebTrafficObservationBatch batch)
+    {
+        foreach (var date in batch.CollectionCoverage.CompletedDates.Distinct())
+            yield return new SelectedTrafficDate(batch, date, true);
+        if (batch.CollectionCoverage.FailedDate is DateOnly failedDate)
+            yield return new SelectedTrafficDate(batch, failedDate, false);
+    }
 
     private static Dictionary<string, object?> TrafficRunParameters(WebTrafficObservationBatch batch, string manifest) => new()
     {
@@ -274,6 +279,6 @@ internal sealed partial class SqliteWebSearchObservationStore
             EvidenceReference = GetNullableString(record, 11)
         });
 
-    private sealed record SelectedTrafficDate(WebTrafficObservationBatch Batch, DateOnly Date);
+    private sealed record SelectedTrafficDate(WebTrafficObservationBatch Batch, DateOnly Date, bool IsComplete);
     private sealed record StoredTrafficObservation(string RunId, WebTrafficObservation Observation);
 }

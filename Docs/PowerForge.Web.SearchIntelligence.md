@@ -173,7 +173,7 @@ The fallback accepts comma-, semicolon- or tab-delimited CSV with a real date co
 
 ## Collect Cloudflare traffic observations
 
-Configure an API token with read access to the exact zone and expose it through the environment variable referenced by the provider's `cloudflare-api-token` credential. Before GraphQL collection, the collector reads the zone identity and requires its canonical name to own the configured fleet site's base host. It then reads the zone-specific dataset settings, including availability, retention and maximum row count. This prevents a valid token and a valid—but unrelated—zone ID from storing another site's traffic under the wrong fleet identity.
+Configure an API token with read access to the exact zone and expose it through the environment variable referenced by the provider's `cloudflare-api-token` credential. Before GraphQL collection, the collector reads the zone identity and requires its canonical name to own the configured fleet site's base host. It then reads the zone-specific dataset settings, including availability, retention and maximum row count. Every analytics request is constrained to the configured site's exact host and, when the base URL contains a path, that path subtree. This prevents a valid token, shared zone or unrelated zone ID from storing another site's traffic under the wrong fleet identity.
 
 ```powershell
 powerforge-web traffic collect `
@@ -201,7 +201,7 @@ powerforge-web traffic list `
     --output json
 ```
 
-`traffic list` selects one best run per provider, site and reporting date, preferring complete evidence before recency. Its JSON and human output distinguish a missing database, no matching evidence, partial evidence, missing dates inside a bounded range and an explicit complete-zero run; partial, incomplete or missing evidence returns a non-zero exit code instead of presenting ordinary-looking totals. The traffic contract is published at `Schemas/powerforge.web.traffic-observations.schema.json`; `Examples/PowerForge.Web/Search/traffic-observations.json` is a runnable example. Traffic and search runs share the transactional fleet database and deterministic revision rules but use independent tables and normalizers.
+`traffic list` selects one best partition per provider, site and reporting date, preferring completed partitions before recency. A date completed before a later failure remains complete evidence even though its parent run is partial. Bounded completeness queries require `--provider`, preventing several providers with complementary gaps from being presented as one complete series. Its JSON and human output distinguish a missing database, no matching evidence, partial evidence, missing dates inside a bounded range and an explicit complete-zero run; partial, incomplete or missing evidence returns a non-zero exit code instead of presenting ordinary-looking totals. The traffic contract is published at `Schemas/powerforge.web.traffic-observations.schema.json`; `Examples/PowerForge.Web/Search/traffic-observations.json` is a runnable example. Traffic and search runs share the transactional fleet database and deterministic revision rules but use independent tables and normalizers.
 
 ## List opportunities
 
