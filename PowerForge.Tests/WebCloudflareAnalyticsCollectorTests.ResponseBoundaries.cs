@@ -1,4 +1,7 @@
+using System.Text.Json;
+using DBAClientX;
 using PowerForge.Web;
+using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
 
@@ -39,6 +42,135 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         Assert.False(result.Success);
         Assert.Equal("invalid-response", result.ErrorCode);
         Assert.Empty(result.Batch.Observations);
+    }
+
+    [Fact]
+    public async Task Collect_RejectsNullZoneElementsAsInvalidResponses()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => TrafficNullZoneResponse(),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectAsync(CreateOptions());
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid-response", result.ErrorCode);
+        Assert.Empty(result.Batch.Observations);
+    }
+
+    [Fact]
+    public async Task Collect_RejectsPathsThatWouldChangeDuringNormalization()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => TrafficResponse(TrafficRow(new DateOnly(2026, 8, 1), "officeimo.com", "/docs ", 10, 2, 1000, 1)),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectAsync(CreateOptions());
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid-response", result.ErrorCode);
+        Assert.Empty(result.Batch.Observations);
+    }
+
+    [Theory]
+    [InlineData("https://officeimo.com//admin/")]
+    [InlineData("https://officeimo.com/admin//")]
+    public async Task Collect_RejectsRepeatedSeparatorsInSiteBasePaths(string siteBaseUrl)
+    {
+        using var client = new HttpClient(new ScriptedHandler((_, _) =>
+            throw new InvalidOperationException("Invalid site paths must fail before HTTP.")));
+        var options = CreateOptions();
+        options.SiteBaseUrl = siteBaseUrl;
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => CreateCollector(client).CollectAsync(options));
+
+        Assert.Contains("repeated path separators", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task TrafficStorage_BoundedQueryDoesNotMaterializeOutOfRangeRunManifests()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-cloudflare-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var databasePath = Path.Combine(root, "fleet.db");
+            var store = new SqliteWebSearchObservationStore(databasePath);
+            await store.ImportTrafficAsync(WebTrafficObservationNormalizer.Normalize(CreateTrafficBatch()));
+            var invalidOldManifest = JsonSerializer.Serialize(new WebTrafficObservationBatch
+            {
+                RunId = "invalid-old-run",
+                Provider = "cloudflare",
+                SiteId = "officeimo",
+                CollectedAtUtc = CompletionTime.AddYears(-1),
+                SourceKind = "fixture",
+                Status = "complete",
+                CollectionCoverage = new WebTrafficObservationCollectionCoverage
+                {
+                    FromDate = new DateOnly(2025, 8, 1),
+                    ThroughDate = new DateOnly(2025, 8, 1),
+                    CompletedDates = [new DateOnly(2025, 8, 1)]
+                },
+                Observations =
+                [
+                    new WebTrafficObservation
+                    {
+                        Date = new DateOnly(2025, 8, 1), Host = "officeimo.com", Path = "/",
+                        Requests = -1, Visits = 0, EdgeResponseBytes = 0, SampleInterval = 1
+                    }
+                ]
+            }, WebCliJson.Options);
+            await using (var sqlite = new SQLite())
+            {
+                await sqlite.ExecuteNonQueryAsync(
+                    databasePath,
+                    """
+                    INSERT INTO traffic_observation_runs (
+                        run_id, provider, site_id, collected_at_utc, source_kind, status,
+                        configuration_hash, evidence_reference, normalized_manifest_json
+                    ) VALUES (
+                        @run_id, @provider, @site_id, @collected_at_utc, @source_kind, @status,
+                        NULL, NULL, @manifest
+                    );
+                    """,
+                    new Dictionary<string, object?>
+                    {
+                        ["@run_id"] = "invalid-old-run",
+                        ["@provider"] = "cloudflare",
+                        ["@site_id"] = "officeimo",
+                        ["@collected_at_utc"] = CompletionTime.AddYears(-1).ToString("O"),
+                        ["@source_kind"] = "fixture",
+                        ["@status"] = "complete",
+                        ["@manifest"] = invalidOldManifest
+                    });
+            }
+
+            var result = await store.QueryTrafficEvidenceAsync(new WebTrafficObservationQuery
+            {
+                SiteId = "officeimo",
+                Provider = "cloudflare",
+                FromDate = new DateOnly(2026, 8, 1),
+                ThroughDate = new DateOnly(2026, 8, 1)
+            });
+
+            Assert.Single(result.Observations);
+            Assert.Single(result.SelectedRuns);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
     }
 
     [Theory]

@@ -168,6 +168,12 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         data = new { viewer = new { zones = new[] { new { traffic = (object?)null } } } }
     });
 
+    private static HttpResponseMessage TrafficNullZoneResponse() => JsonResponse(new
+    {
+        errors = (object?)null,
+        data = new { viewer = new { zones = new object?[] { null } } }
+    });
+
     private static HttpResponseMessage JsonResponse(object value) => new(HttpStatusCode.OK)
     {
         Content = new StringContent(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json")

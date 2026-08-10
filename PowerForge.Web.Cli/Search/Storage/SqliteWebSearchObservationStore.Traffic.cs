@@ -112,6 +112,45 @@ internal sealed partial class SqliteWebSearchObservationStore
             runClauses.Add("provider = @provider");
             parameters["@provider"] = query.Provider.Trim().ToLowerInvariant();
         }
+        var coverageDateClauses = new List<string>();
+        var observationDateClauses = new List<string>();
+        var failedDateClauses = new List<string>();
+        if (query.FromDate.HasValue)
+        {
+            parameters["@from_date"] = FormatDate(query.FromDate.Value);
+            coverageDateClauses.Add("dates.value >= @from_date");
+            observationDateClauses.Add("observations.observation_date >= @from_date");
+            failedDateClauses.Add("json_extract(traffic_observation_runs.normalized_manifest_json, '$.collectionCoverage.failedDate') >= @from_date");
+        }
+        if (query.ThroughDate.HasValue)
+        {
+            parameters["@through_date"] = FormatDate(query.ThroughDate.Value);
+            coverageDateClauses.Add("dates.value <= @through_date");
+            observationDateClauses.Add("observations.observation_date <= @through_date");
+            failedDateClauses.Add("json_extract(traffic_observation_runs.normalized_manifest_json, '$.collectionCoverage.failedDate') <= @through_date");
+        }
+        if (coverageDateClauses.Count > 0)
+        {
+            runClauses.Add($"""
+                (
+                    EXISTS (
+                        SELECT 1
+                        FROM json_each(traffic_observation_runs.normalized_manifest_json, '$.collectionCoverage.completedDates') AS dates
+                        WHERE {string.Join(" AND ", coverageDateClauses)}
+                    ) OR (
+                        json_extract(traffic_observation_runs.normalized_manifest_json, '$.collectionCoverage.failedDate') IS NOT NULL
+                        AND {string.Join(" AND ", failedDateClauses)}
+                    ) OR EXISTS (
+                        SELECT 1
+                        FROM traffic_observations AS observations
+                        WHERE observations.provider = traffic_observation_runs.provider
+                          AND observations.site_id = traffic_observation_runs.site_id
+                          AND observations.run_id = traffic_observation_runs.run_id
+                          AND {string.Join(" AND ", observationDateClauses)}
+                    )
+                )
+                """);
+        }
 
         var manifests = await client.QueryAsListAsync(
             _databasePath,
@@ -185,12 +224,10 @@ internal sealed partial class SqliteWebSearchObservationStore
         if (query.FromDate.HasValue)
         {
             observationClauses.Add("observation_date >= @from_date");
-            parameters["@from_date"] = FormatDate(query.FromDate.Value);
         }
         if (query.ThroughDate.HasValue)
         {
             observationClauses.Add("observation_date <= @through_date");
-            parameters["@through_date"] = FormatDate(query.ThroughDate.Value);
         }
 
         var sql = $"""

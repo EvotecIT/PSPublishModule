@@ -162,7 +162,7 @@ internal sealed class CloudflareTrafficData
 internal sealed class CloudflareTrafficViewer
 {
     [JsonPropertyName("zones")]
-    public CloudflareTrafficZone[] Zones { get; set; } = Array.Empty<CloudflareTrafficZone>();
+    public CloudflareTrafficZone?[] Zones { get; set; } = Array.Empty<CloudflareTrafficZone?>();
 }
 
 internal sealed class CloudflareTrafficZone

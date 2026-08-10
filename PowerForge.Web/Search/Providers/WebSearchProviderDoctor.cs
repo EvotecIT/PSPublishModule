@@ -317,13 +317,14 @@ public static partial class WebSearchProviderDoctor
             !TryGetHttpUrl(site?.BaseUrl, out var siteUri) ||
             siteUri is null ||
             !string.IsNullOrEmpty(siteUri.Query) ||
-            !string.IsNullOrEmpty(siteUri.Fragment))
+            !string.IsNullOrEmpty(siteUri.Fragment) ||
+            siteUri.AbsolutePath.Contains("//", StringComparison.Ordinal))
         {
             AddCheck(
                 checks,
                 "site.base-url-invalid",
                 WebSearchProviderCheckSeverity.Error,
-                "Site baseUrl must be an absolute HTTP(S) URL without user info, query or fragment.",
+                "Site baseUrl must be an absolute HTTP(S) URL without user info, query, fragment, or repeated path separators.",
                 siteId);
         }
 

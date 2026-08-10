@@ -144,10 +144,12 @@ public sealed class CloudflareAnalyticsCollector
             requestCount++;
             if (!response.Success)
                 return Failure(options, probe, requestCount, observations, completedDates, date, response.ErrorCode!, response.ErrorMessage!);
-            var zones = response.Value?.Viewer?.Zones ?? Array.Empty<CloudflareTrafficZone>();
+            var zones = response.Value?.Viewer?.Zones ?? Array.Empty<CloudflareTrafficZone?>();
             if (zones.Length != 1)
                 return Failure(options, probe, requestCount, observations, completedDates, date, "zone-not-visible", "Cloudflare did not return the configured zone.");
-            var rows = zones[0].Traffic;
+            if (zones[0] is not { } zone)
+                return Failure(options, probe, requestCount, observations, completedDates, date, "invalid-response", "Cloudflare returned an invalid zone result.");
+            var rows = zone.Traffic;
             if (rows is null)
                 return Failure(options, probe, requestCount, observations, completedDates, date, "invalid-response", "Cloudflare returned no traffic dataset for the configured zone.");
             if (!TryMapRows(rows, options, date, out var mapped))
@@ -292,7 +294,10 @@ public sealed class CloudflareAnalyticsCollector
     }
 
     private static bool IsValidRequestPath(string path) =>
-        path.StartsWith("/", StringComparison.Ordinal) && !path.Contains('#') && !path.Any(char.IsControl);
+        path.Equals(path.Trim(), StringComparison.Ordinal) &&
+        path.StartsWith("/", StringComparison.Ordinal) &&
+        !path.Contains('#') &&
+        !path.Any(char.IsControl);
 
     private static bool TryNormalizeHostDimension(string value, out string host)
     {
@@ -472,10 +477,11 @@ public sealed class CloudflareAnalyticsCollector
         if (!Uri.TryCreate(siteBaseUrl, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
             !uri.IsDefaultPort ||
-            !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
+            !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment) ||
+            uri.AbsolutePath.Contains("//", StringComparison.Ordinal))
         {
             throw new ArgumentException(
-                "Cloudflare site base URL must be absolute HTTP(S) on its default port without user info, query or fragment.",
+                "Cloudflare site base URL must be absolute HTTP(S) on its default port without user info, query, fragment, or repeated path separators.",
                 nameof(siteBaseUrl));
         }
 
