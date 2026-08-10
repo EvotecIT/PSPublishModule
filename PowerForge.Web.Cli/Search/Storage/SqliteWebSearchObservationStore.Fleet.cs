@@ -192,16 +192,24 @@ internal sealed partial class SqliteWebSearchObservationStore
             var identity = FleetRunIdentity(run.Provider, run.SiteId, run.RunId);
             if (run.FromDate.HasValue && run.ThroughDate.HasValue)
             {
-                var explicitDates = SearchSnapshotCoversFleetCapability(run, dimensionScopesByRun[identity])
-                    ? coverageByRun[identity].Select(value => value.Date)
+                var runDimensionScopes = dimensionScopesByRun[identity].Select(value => value.Scope).ToArray();
+                var explicitCoverageDates = coverageByRun[identity].Select(value => value.Date).ToArray();
+                var explicitCoverageRanges = MergeDates(explicitCoverageDates);
+                var coversFleetCapability = SearchSnapshotCoversFleetCapability(run, runDimensionScopes);
+                var explicitDates = coversFleetCapability
+                    ? explicitCoverageDates
                     : Enumerable.Empty<DateOnly>();
+                var dimensionRanges = coversFleetCapability
+                    ? Array.Empty<WebSearchFleetCompletedRange>()
+                    : explicitCoverageRanges;
                 if (!string.IsNullOrWhiteSpace(run.SearchType))
                 {
                     var ranges = run.Status == "complete" && string.Equals(run.CoverageMode, "daily", StringComparison.Ordinal)
                         ? [new WebSearchFleetCompletedRange { FromDate = run.FromDate.Value, ThroughDate = run.ThroughDate.Value }]
                         : MergeDates(explicitDates);
                     result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
-                        run.SearchType.Trim().ToLowerInvariant(), ranges, run.ConfigurationHash, run.FailureCategory, run.FailureDate));
+                        run.SearchType.Trim().ToLowerInvariant(), ranges, run.ConfigurationHash, run.FailureCategory, run.FailureDate,
+                        DimensionScopes: runDimensionScopes, DimensionCompletedRanges: dimensionRanges));
                 }
                 else
                 {
@@ -214,7 +222,8 @@ internal sealed partial class SqliteWebSearchObservationStore
                             ? [new WebSearchFleetCompletedRange { FromDate = run.FromDate.Value, ThroughDate = run.ThroughDate.Value }]
                             : MergeDates(explicitDates);
                         result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
-                            "web", ranges, run.ConfigurationHash, run.FailureCategory, run.FailureDate));
+                            "web", ranges, run.ConfigurationHash, run.FailureCategory, run.FailureDate,
+                            DimensionScopes: runDimensionScopes, DimensionCompletedRanges: dimensionRanges));
                     }
                     foreach (var scope in scopes)
                     {
@@ -224,7 +233,8 @@ internal sealed partial class SqliteWebSearchObservationStore
                         if (run.Status != "partial" && scope.Key == "web")
                             dates = dates.Concat(explicitDates);
                         result.Add(new FleetRun("search", run.Provider, run.SiteId, run.RunId, run.CollectedAtUtc, run.Status,
-                            scope.Key, MergeDates(dates), run.ConfigurationHash, run.FailureCategory, run.FailureDate));
+                            scope.Key, MergeDates(dates), run.ConfigurationHash, run.FailureCategory, run.FailureDate,
+                            DimensionScopes: runDimensionScopes, DimensionCompletedRanges: dimensionRanges));
                     }
                 }
                 continue;
@@ -337,7 +347,14 @@ internal sealed partial class SqliteWebSearchObservationStore
         IsCoverageSummary: true);
 
     private static IEnumerable<WebSearchFleetEvidenceStream> BuildSearchStreams(IEnumerable<FleetRun> runs) =>
-        BuildDailyStreams(runs, WebSearchProviderCapabilities.SearchAnalytics);
+        runs.GroupBy(value => (value.Provider, value.SiteId, value.StreamKey, value.ConfigurationHash))
+            .Select(group =>
+            {
+                var ranges = MergeRanges(group.SelectMany(value => value.CompletedRanges)
+                    .Concat(CombineSearchDimensionCoverage(group)));
+                return BuildStream(group, WebSearchProviderCapabilities.SearchAnalytics,
+                    ranges.LastOrDefault()?.ThroughDate, ranges);
+            });
 
     private static IEnumerable<WebSearchFleetEvidenceStream> BuildTrafficStreams(IEnumerable<FleetRun> runs) =>
         BuildDailyStreams(runs, WebSearchProviderCapabilities.TrafficAnalytics);
@@ -369,7 +386,9 @@ internal sealed partial class SqliteWebSearchObservationStore
         var latest = runs[0];
         var actualRuns = runs.Where(value => !value.IsCoverageSummary).ToArray();
         var latestActual = actualRuns.FirstOrDefault();
-        var completed = actualRuns.Where(value => value.Status == "complete" || value.CompletedRanges.Length > 0).ToArray();
+        var completed = actualRuns.Where(value => value.Status == "complete" ||
+                                                  value.CompletedRanges.Length > 0 ||
+                                                  value.DimensionCompletedRanges.Length > 0).ToArray();
         var permanentFailures = actualRuns
             .Where(value => value.Status == "partial" &&
                             value.FailureDate.HasValue &&
@@ -416,7 +435,7 @@ internal sealed partial class SqliteWebSearchObservationStore
     {
         var visibleRuns = runs.Where(value => value.CollectedAtUtc <= retainedAtUtc).ToArray();
         var preserved = visibleRuns
-            .GroupBy(value => (value.Provider, value.SiteId, value.StreamKey, value.ConfigurationHash))
+            .GroupBy(value => (value.Provider, value.SiteId, value.StreamKey, value.ConfigurationHash, value.RetentionScopeKey))
             .SelectMany(SelectRetentionPreservationRuns)
             .Select(FleetRunIdentity)
             .ToHashSet(StringComparer.Ordinal);
@@ -496,6 +515,34 @@ internal sealed partial class SqliteWebSearchObservationStore
     private static WebSearchFleetCompletedRange[] MergeDates(IEnumerable<DateOnly> dates) => MergeRanges(
         dates.Distinct().Select(value => new WebSearchFleetCompletedRange { FromDate = value, ThroughDate = value }));
 
+    private static WebSearchFleetCompletedRange[] CombineSearchDimensionCoverage(IEnumerable<FleetRun> values)
+    {
+        var runs = values.ToArray();
+        var pageRanges = MergeRanges(runs
+            .Where(value => value.DimensionScopes.Contains("page", StringComparer.Ordinal))
+            .SelectMany(value => value.DimensionCompletedRanges));
+        var queryRanges = MergeRanges(runs
+            .Where(value => value.DimensionScopes.Contains("query", StringComparer.Ordinal))
+            .SelectMany(value => value.DimensionCompletedRanges));
+        var combined = new List<WebSearchFleetCompletedRange>();
+        var pageIndex = 0;
+        var queryIndex = 0;
+        while (pageIndex < pageRanges.Length && queryIndex < queryRanges.Length)
+        {
+            var page = pageRanges[pageIndex];
+            var query = queryRanges[queryIndex];
+            var fromDate = page.FromDate > query.FromDate ? page.FromDate : query.FromDate;
+            var throughDate = page.ThroughDate < query.ThroughDate ? page.ThroughDate : query.ThroughDate;
+            if (fromDate <= throughDate)
+                combined.Add(new WebSearchFleetCompletedRange { FromDate = fromDate, ThroughDate = throughDate });
+            if (page.ThroughDate < query.ThroughDate)
+                pageIndex++;
+            else
+                queryIndex++;
+        }
+        return MergeRanges(combined);
+    }
+
     private static WebSearchFleetCompletedRange[] MergeRanges(IEnumerable<WebSearchFleetCompletedRange> values)
     {
         var ordered = values.OrderBy(value => value.FromDate).ThenBy(value => value.ThroughDate).ToArray();
@@ -527,11 +574,11 @@ internal sealed partial class SqliteWebSearchObservationStore
 
     private static string FleetScopeIdentity(FleetRunScope value) => FleetRunIdentity(value.Provider, value.SiteId, value.RunId);
 
-    private static bool SearchSnapshotCoversFleetCapability(SearchFleetRunMetadata run, IEnumerable<FleetRunScope> scopes)
+    private static bool SearchSnapshotCoversFleetCapability(SearchFleetRunMetadata run, IReadOnlyCollection<string> scopes)
     {
         if (!string.Equals(run.CoverageMode, "snapshot", StringComparison.Ordinal))
             return true;
-        var dimensionScopes = scopes.Select(value => value.Scope).ToHashSet(StringComparer.Ordinal);
+        var dimensionScopes = scopes.ToHashSet(StringComparer.Ordinal);
         return dimensionScopes.Count == 0 || dimensionScopes.Contains("page") && dimensionScopes.Contains("query");
     }
 
@@ -583,7 +630,19 @@ internal sealed partial class SqliteWebSearchObservationStore
         string? FailureCategory,
         DateOnly? FailureDate = null,
         bool IsCoverageSummary = false,
-        string? MeasurementKind = null);
+        string? MeasurementKind = null,
+        string[]? DimensionScopes = null,
+        WebSearchFleetCompletedRange[]? DimensionCompletedRanges = null)
+    {
+        public string[] DimensionScopes { get; } = DimensionScopes ?? Array.Empty<string>();
+
+        public WebSearchFleetCompletedRange[] DimensionCompletedRanges { get; } =
+            DimensionCompletedRanges ?? Array.Empty<WebSearchFleetCompletedRange>();
+
+        public string RetentionScopeKey => DimensionCompletedRanges.Length == 0
+            ? string.Empty
+            : string.Join(",", DimensionScopes);
+    }
 
     private sealed record SearchFleetRunMetadata(
         string RunId,

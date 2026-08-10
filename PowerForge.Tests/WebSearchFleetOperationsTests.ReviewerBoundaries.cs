@@ -214,6 +214,84 @@ public sealed partial class WebSearchFleetOperationsTests
     }
 
     [Fact]
+    public async Task Snapshot_CombinesComplementaryCompleteBingCsvDimensionCoverage()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            var date = new DateOnly(2026, 8, 1);
+            foreach (var (runId, dimensionScope, collectedAt) in new[]
+                     {
+                         ("bing-page", "page", AsOf.AddMinutes(-2)),
+                         ("bing-query", "query", AsOf.AddMinutes(-1))
+                     })
+            {
+                var batch = SearchBatch(runId, date, collectedAt);
+                batch.SchemaVersion = 3;
+                batch.Provider = "bing-export";
+                batch.CollectionCoverage!.Mode = "snapshot";
+                batch.CollectionCoverage.DimensionScopes = [dimensionScope];
+                batch.Observations = dimensionScope == "page"
+                    ? [new WebSearchObservation { Date = date, Page = "https://officeimo.com/", SearchType = "web", Clicks = 1, Impressions = 2 }]
+                    : [new WebSearchObservation { Date = date, Query = "office docs", SearchType = "web", Clicks = 1, Impressions = 2 }];
+                await store.ImportAsync(WebSearchObservationNormalizer.Normalize(batch));
+            }
+
+            var stream = Assert.Single((await store.ReadFleetSnapshotAsync()).Streams);
+
+            var range = Assert.Single(stream.CompletedRanges);
+            Assert.Equal(date, range.FromDate);
+            Assert.Equal(date, range.ThroughDate);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Retention_PreservesComplementaryBingCsvDimensionCoverage()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            var date = new DateOnly(2026, 1, 1);
+            foreach (var (runId, dimensionScope, collectedAt) in new[]
+                     {
+                         ("bing-page-old", "page", AsOf.AddDays(-60).AddMinutes(-1)),
+                         ("bing-query-old", "query", AsOf.AddDays(-60))
+                     })
+            {
+                var batch = SearchBatch(runId, date, collectedAt);
+                batch.SchemaVersion = 3;
+                batch.Provider = "bing-export";
+                batch.CollectionCoverage!.Mode = "snapshot";
+                batch.CollectionCoverage.DimensionScopes = [dimensionScope];
+                batch.Observations = dimensionScope == "page"
+                    ? [new WebSearchObservation { Date = date, Page = "https://officeimo.com/", SearchType = "web", Clicks = 1, Impressions = 2 }]
+                    : [new WebSearchObservation { Date = date, Query = "office docs", SearchType = "web", Clicks = 1, Impressions = 2 }];
+                await store.ImportAsync(WebSearchObservationNormalizer.Normalize(batch));
+            }
+
+            var result = await store.ApplyFleetRetentionAsync(new WebSearchFleetOperationsConfiguration
+            {
+                SearchRunRetentionDays = 30,
+                TrafficRunRetentionDays = 30,
+                PerformanceRunRetentionDays = 30
+            }, AsOf, apply: true);
+
+            Assert.Equal(0, Assert.Single(result.Kinds, value => value.Kind == "search").DeletedRunCount);
+            Assert.Single(Assert.Single((await store.ReadFleetSnapshotAsync(AsOf)).Streams).CompletedRanges);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Snapshot_ExcludesRunsCollectedAfterTheRequestedAsOfTime()
     {
         var root = CreateTempRoot();
