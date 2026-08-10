@@ -172,11 +172,20 @@ public static class WebPerformanceObservationNormalizer
             if (density < 1d - HistogramDensityTolerance || density > 1d + HistogramDensityTolerance)
                 throw new ArgumentException($"Metric '{metric}' histogram densities must sum to one.", nameof(value));
             var cumulativeDensity = 0d;
-            var percentileBin = histogram.First(bin =>
-                (cumulativeDensity += bin.Density) >= 0.75d - HistogramDensityTolerance);
             var tolerance = Math.Max(1e-9d, Math.Abs(value.Value) * 1e-12d);
-            if (percentileBin.Start is double percentileStart && value.Value < percentileStart - tolerance ||
-                percentileBin.End is double percentileEnd && value.Value > percentileEnd + tolerance)
+            var percentileConsistent = false;
+            for (var binIndex = 0; binIndex < histogram.Length; binIndex++)
+            {
+                cumulativeDensity += histogram[binIndex].Density;
+                if (cumulativeDensity < 0.75d - HistogramDensityTolerance)
+                    continue;
+
+                percentileConsistent = ValueBelongsToBin(value.Value, histogram[binIndex], tolerance);
+                if (Math.Abs(cumulativeDensity - 0.75d) <= HistogramDensityTolerance && binIndex + 1 < histogram.Length)
+                    percentileConsistent |= ValueBelongsToBin(value.Value, histogram[binIndex + 1], tolerance);
+                break;
+            }
+            if (!percentileConsistent)
             {
                 throw new ArgumentException($"Metric '{metric}' p75 value is inconsistent with its histogram.", nameof(value));
             }
@@ -211,6 +220,10 @@ public static class WebPerformanceObservationNormalizer
             Density = bin.Density == 0d ? 0d : bin.Density
         };
     }
+
+    private static bool ValueBelongsToBin(double value, WebPerformanceHistogramBin bin, double tolerance) =>
+        (bin.Start is not double start || value >= start - tolerance) &&
+        (bin.End is not double end || value <= end + tolerance);
 
     /// <summary>Returns a canonical HTTP(S) URL or origin suitable for durable identity.</summary>
     public static string CanonicalizeTarget(string? value, string targetKind)

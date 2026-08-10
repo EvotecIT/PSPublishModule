@@ -107,24 +107,37 @@ internal sealed partial class SqliteWebSearchObservationStore
             clauses.Add("target_url = @target_url");
             parameters["@target_url"] = targetUrl;
         }
+        var sql = $"""
+            WITH ranked AS (
+                SELECT normalized_manifest_json, measurement_kind, target_url, form_factor,
+                       provider, target_kind, run_id,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY provider, site_id, measurement_kind, target_kind, target_url, form_factor
+                           ORDER BY CASE WHEN status = 'complete' THEN 0 ELSE 1 END,
+                                    collected_at_utc DESC,
+                                    run_id ASC
+                       ) AS revision_rank
+                FROM performance_observation_runs
+                WHERE {string.Join(" AND ", clauses)}
+            )
+            SELECT normalized_manifest_json
+            FROM ranked
+            WHERE revision_rank = 1
+            ORDER BY measurement_kind, target_url, form_factor, provider, target_kind, run_id;
+            """;
         var manifests = await client.QueryAsListAsync(
             _databasePath,
-            $"SELECT normalized_manifest_json FROM performance_observation_runs WHERE {string.Join(" AND ", clauses)};",
+            sql,
             static record => record.GetString(0), parameters, cancellationToken: cancellationToken).ConfigureAwait(false);
-        var batches = manifests.Select(manifest => JsonSerializer.Deserialize<WebPerformanceObservationBatch>(manifest, WebCliJson.Options)
-                                               ?? throw new InvalidOperationException("Stored performance manifest is empty."))
+        var selected = manifests.Select(manifest => JsonSerializer.Deserialize<WebPerformanceObservationBatch>(manifest, WebCliJson.Options)
+                                                 ?? throw new InvalidOperationException("Stored performance manifest is empty."))
             .Select(WebPerformanceObservationNormalizer.Normalize)
-            .ToArray();
-        var selected = batches
-            .GroupBy(batch => string.Join("\u001f", batch.Provider, batch.SiteId, batch.MeasurementKind,
-                batch.TargetKind, batch.TargetUrl, batch.FormFactor), StringComparer.Ordinal)
-            .Select(group => group.OrderBy(batch => batch.Status == "complete" ? 0 : 1)
-                                  .ThenByDescending(batch => batch.CollectedAtUtc)
-                                  .ThenBy(batch => batch.RunId, StringComparer.Ordinal)
-                                  .First())
             .OrderBy(batch => batch.MeasurementKind, StringComparer.Ordinal)
             .ThenBy(batch => batch.TargetUrl, StringComparer.Ordinal)
             .ThenBy(batch => batch.FormFactor, StringComparer.Ordinal)
+            .ThenBy(batch => batch.Provider, StringComparer.Ordinal)
+            .ThenBy(batch => batch.TargetKind, StringComparer.Ordinal)
+            .ThenBy(batch => batch.RunId, StringComparer.Ordinal)
             .ToArray();
 
         var evidenceSets = selected.Select(batch => new WebPerformanceObservationEvidenceSet

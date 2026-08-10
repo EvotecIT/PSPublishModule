@@ -39,6 +39,24 @@ public sealed partial class WebPerformanceObservationTests
     }
 
     [Fact]
+    public void Normalizer_AllowsP75InFollowingBinWithinProviderDensityRoundingTolerance()
+    {
+        var batch = CreateFieldBatch();
+        batch.Observations[0].Value = 2700;
+        batch.Observations[0].Histogram =
+        [
+            new WebPerformanceHistogramBin { Start = 0, End = 2500, Density = 0.7501 },
+            new WebPerformanceHistogramBin { Start = 2500, End = 4000, Density = 0.1999 },
+            new WebPerformanceHistogramBin { Start = 4000, Density = 0.05 }
+        ];
+
+        var normalized = WebPerformanceObservationNormalizer.Normalize(batch);
+
+        Assert.Equal(2700, normalized.Observations[0].Value);
+    }
+
+
+    [Fact]
     public void Normalizer_RejectsP75OutsideTheCrossingHistogramBin()
     {
         var batch = CreateFieldBatch();
