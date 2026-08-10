@@ -165,3 +165,45 @@ public sealed class WebTrafficObservationQuery
     /// <summary>Optional inclusive end date.</summary>
     public DateOnly? ThroughDate { get; set; }
 }
+
+/// <summary>Traffic observations together with the selected collection evidence that makes their completeness interpretable.</summary>
+public sealed class WebTrafficObservationQueryResult
+{
+    /// <summary>Whether the configured durable store exists.</summary>
+    public bool StoreExists { get; set; }
+    /// <summary>Whether at least one collection run covers the requested filters.</summary>
+    public bool HasEvidence { get; set; }
+    /// <summary>Whether any selected date is represented only by partial collection evidence.</summary>
+    public bool HasPartialEvidence { get; set; }
+    /// <summary>Whether a bounded requested range contains dates with no matching selected run evidence.</summary>
+    public bool HasCoverageGaps { get; set; }
+    /// <summary>Dates missing from a bounded requested range.</summary>
+    public DateOnly[] MissingDates { get; set; } = Array.Empty<DateOnly>();
+    /// <summary>Whether a selected complete run explicitly confirms zero rows for its entire requested slice.</summary>
+    public bool HasExplicitZeroEvidence { get; set; }
+    /// <summary>Runs selected as the best available evidence for one or more reporting dates.</summary>
+    public WebTrafficObservationRunEvidence[] SelectedRuns { get; set; } = Array.Empty<WebTrafficObservationRunEvidence>();
+    /// <summary>Observations belonging to the selected run for each reporting date.</summary>
+    public WebTrafficObservation[] Observations { get; set; } = Array.Empty<WebTrafficObservation>();
+}
+
+/// <summary>Collection-run provenance selected for one or more traffic reporting dates.</summary>
+public sealed class WebTrafficObservationRunEvidence
+{
+    /// <summary>Stable normalized run identifier.</summary>
+    public string RunId { get; set; } = string.Empty;
+    /// <summary>Provider identifier.</summary>
+    public string Provider { get; set; } = string.Empty;
+    /// <summary>Fleet site identifier.</summary>
+    public string SiteId { get; set; } = string.Empty;
+    /// <summary>Collection completion time.</summary>
+    public DateTimeOffset CollectedAtUtc { get; set; }
+    /// <summary>Complete or partial run status.</summary>
+    public string Status { get; set; } = string.Empty;
+    /// <summary>Whether the whole requested slice was explicitly confirmed empty.</summary>
+    public bool ZeroDataConfirmed { get; set; }
+    /// <summary>Coverage recorded by the selected run.</summary>
+    public WebTrafficObservationCollectionCoverage CollectionCoverage { get; set; } = new();
+    /// <summary>Reporting dates for which this run won revision selection.</summary>
+    public DateOnly[] SelectedDates { get; set; } = Array.Empty<DateOnly>();
+}

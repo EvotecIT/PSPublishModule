@@ -77,6 +77,7 @@ internal static partial class WebCliCommandHandlers
                 ProviderId = provider.Id,
                 SiteId = site.Id,
                 ZoneId = zoneId,
+                SiteBaseUrl = site.BaseUrl,
                 FromDate = fromDate,
                 ThroughDate = throughDate,
                 ConfigurationHash = doctor.ConfigurationHash,
@@ -143,23 +144,47 @@ internal static partial class WebCliCommandHandlers
         try
         {
             var store = new SqliteWebSearchObservationStore(Path.GetFullPath(databasePath.Trim().Trim('"')));
-            var observations = store.QueryTrafficAsync(new WebTrafficObservationQuery
+            var evidence = store.QueryTrafficEvidenceAsync(new WebTrafficObservationQuery
             {
                 SiteId = siteId,
                 Provider = TryGetOptionValue(args, "--provider"),
                 FromDate = ParseOptionalTrafficDate(TryGetOptionValue(args, "--from"), "--from"),
                 ThroughDate = ParseOptionalTrafficDate(TryGetOptionValue(args, "--to"), "--to")
             }).GetAwaiter().GetResult();
+            var observations = evidence.Observations;
+            var evidenceState = !evidence.StoreExists
+                ? "missing-store"
+                : !evidence.HasEvidence
+                    ? "no-evidence"
+                    : evidence.HasPartialEvidence
+                        ? "partial"
+                        : evidence.HasCoverageGaps
+                            ? "incomplete"
+                            : "complete";
             var result = new WebTrafficListCommandResult
             {
                 SiteId = siteId.Trim().ToLowerInvariant(),
                 Provider = TryGetOptionValue(args, "--provider")?.Trim().ToLowerInvariant(),
-                ObservationCount = observations.Count,
+                EvidenceState = evidenceState,
+                StoreExists = evidence.StoreExists,
+                HasEvidence = evidence.HasEvidence,
+                HasPartialEvidence = evidence.HasPartialEvidence,
+                HasCoverageGaps = evidence.HasCoverageGaps,
+                MissingDates = evidence.MissingDates,
+                HasExplicitZeroEvidence = evidence.HasExplicitZeroEvidence,
+                ObservationCount = observations.Length,
                 Requests = observations.Sum(value => value.Requests),
                 Visits = observations.Sum(value => value.Visits),
                 EdgeResponseBytes = observations.Sum(value => value.EdgeResponseBytes),
                 ContainsSampledEstimates = observations.Any(value => value.SampleInterval > 1d),
+                SelectedRuns = evidence.SelectedRuns,
                 Observations = observations.ToArray()
+            };
+            var exitCode = evidenceState switch
+            {
+                "complete" => 0,
+                "missing-store" => 2,
+                _ => 1
             };
             if (outputJson)
             {
@@ -167,16 +192,26 @@ internal static partial class WebCliCommandHandlers
                 {
                     SchemaVersion = outputSchemaVersion,
                     Command = "web.traffic.list",
-                    Success = true,
-                    ExitCode = 0,
+                    Success = exitCode == 0,
+                    ExitCode = exitCode,
                     Result = WebCliJson.SerializeToElement(result, WebCliJson.Context.WebTrafficListCommandResult)
                 });
             }
             else
             {
+                if (!evidence.StoreExists)
+                    logger.Error("Traffic database does not exist.");
+                else if (!evidence.HasEvidence)
+                    logger.Warn("No traffic collection evidence matches the requested filters.");
+                else if (evidence.HasPartialEvidence)
+                    logger.Warn("Traffic totals include only partial collection evidence; inspect selected runs before comparison.");
+                else if (evidence.HasCoverageGaps)
+                    logger.Warn($"Traffic evidence is missing for {evidence.MissingDates.Length} requested reporting date(s).");
+                else if (evidence.HasExplicitZeroEvidence && observations.Length == 0)
+                    logger.Info("Traffic collection explicitly confirmed zero rows for the selected complete evidence.");
                 logger.Info($"Traffic observations: {result.ObservationCount}; requests: {result.Requests}; visits: {result.Visits}; bytes: {result.EdgeResponseBytes}.");
             }
-            return 0;
+            return exitCode;
         }
         catch (Exception ex)
         {
@@ -238,10 +273,18 @@ internal sealed class WebTrafficListCommandResult
 {
     public string SiteId { get; set; } = string.Empty;
     public string? Provider { get; set; }
+    public string EvidenceState { get; set; } = string.Empty;
+    public bool StoreExists { get; set; }
+    public bool HasEvidence { get; set; }
+    public bool HasPartialEvidence { get; set; }
+    public bool HasCoverageGaps { get; set; }
+    public DateOnly[] MissingDates { get; set; } = Array.Empty<DateOnly>();
+    public bool HasExplicitZeroEvidence { get; set; }
     public int ObservationCount { get; set; }
     public long Requests { get; set; }
     public long Visits { get; set; }
     public long EdgeResponseBytes { get; set; }
     public bool ContainsSampledEstimates { get; set; }
+    public WebTrafficObservationRunEvidence[] SelectedRuns { get; set; } = Array.Empty<WebTrafficObservationRunEvidence>();
     public WebTrafficObservation[] Observations { get; set; } = Array.Empty<WebTrafficObservation>();
 }

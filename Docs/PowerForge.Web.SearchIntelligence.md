@@ -173,7 +173,7 @@ The fallback accepts comma-, semicolon- or tab-delimited CSV with a real date co
 
 ## Collect Cloudflare traffic observations
 
-Configure an API token with read access to the exact zone and expose it through the environment variable referenced by the provider's `cloudflare-api-token` credential. The collector queries Cloudflare's current GraphQL Analytics endpoint and first reads the zone-specific dataset settings, including availability, retention and maximum row count.
+Configure an API token with read access to the exact zone and expose it through the environment variable referenced by the provider's `cloudflare-api-token` credential. Before GraphQL collection, the collector reads the zone identity and requires its canonical name to own the configured fleet site's base host. It then reads the zone-specific dataset settings, including availability, retention and maximum row count. This prevents a valid token and a valid—but unrelated—zone ID from storing another site's traffic under the wrong fleet identity.
 
 ```powershell
 powerforge-web traffic collect `
@@ -187,7 +187,7 @@ powerforge-web traffic collect `
     --output json
 ```
 
-Each UTC reporting date is queried separately through `httpRequestsAdaptiveGroups`, grouped by host and request path, filtered to `requestSource: eyeball`, and stored as requests, visits, edge response bytes and sampling interval. A later failed date preserves earlier completed partitions. Reaching the provider's row limit produces an explicit partial run because the collector cannot prove that every host/path row was returned.
+Each closed UTC reporting date is queried separately through `httpRequestsAdaptiveGroups`, grouped by host and request path, filtered to `requestSource: eyeball`, and stored as requests, visits, edge response bytes and sampling interval. The current UTC date and future dates are rejected before any provider request because they cannot support complete or zero-data claims. A later failed date preserves earlier completed partitions. Reaching the provider's row limit produces an explicit partial run because the collector cannot prove that every host/path row was returned.
 
 Cloudflare's request count is an HTTP traffic metric, not a browser page-view metric, and a visit is not a unique visitor. Adaptive datasets may return estimates; `sampleInterval` remains attached to every observation and `traffic list` reports when sampled estimates are present. This keeps future Cloudflare Web Analytics/RUM page views and CrUX field performance in their own truthful contracts.
 
@@ -201,7 +201,7 @@ powerforge-web traffic list `
     --output json
 ```
 
-The traffic contract is published at `Schemas/powerforge.web.traffic-observations.schema.json`; `Examples/PowerForge.Web/Search/traffic-observations.json` is a runnable example. Traffic and search runs share the transactional fleet database and deterministic revision rules but use independent tables and normalizers.
+`traffic list` selects one best run per provider, site and reporting date, preferring complete evidence before recency. Its JSON and human output distinguish a missing database, no matching evidence, partial evidence, missing dates inside a bounded range and an explicit complete-zero run; partial, incomplete or missing evidence returns a non-zero exit code instead of presenting ordinary-looking totals. The traffic contract is published at `Schemas/powerforge.web.traffic-observations.schema.json`; `Examples/PowerForge.Web/Search/traffic-observations.json` is a runnable example. Traffic and search runs share the transactional fleet database and deterministic revision rules but use independent tables and normalizers.
 
 ## List opportunities
 

@@ -86,6 +86,11 @@ internal sealed partial class SqliteWebSearchObservationStore
 
     internal async Task<IReadOnlyList<WebTrafficObservation>> QueryTrafficAsync(
         WebTrafficObservationQuery query,
+        CancellationToken cancellationToken = default) =>
+        (await QueryTrafficEvidenceAsync(query, cancellationToken).ConfigureAwait(false)).Observations;
+
+    internal async Task<WebTrafficObservationQueryResult> QueryTrafficEvidenceAsync(
+        WebTrafficObservationQuery query,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
@@ -94,60 +99,134 @@ internal sealed partial class SqliteWebSearchObservationStore
         if (query.FromDate.HasValue && query.ThroughDate.HasValue && query.FromDate > query.ThroughDate)
             throw new ArgumentException("Traffic from date cannot be after through date.", nameof(query));
         if (!File.Exists(_databasePath))
-            return Array.Empty<WebTrafficObservation>();
+            return new WebTrafficObservationQueryResult { StoreExists = false };
 
         await using var client = new SQLite();
         await EnsureSchemaAsync(client, cancellationToken).ConfigureAwait(false);
-        var clauses = new List<string> { "observations.site_id = @site_id" };
+        var runClauses = new List<string> { "site_id = @site_id" };
         var parameters = new Dictionary<string, object?> { ["@site_id"] = query.SiteId.Trim().ToLowerInvariant() };
         if (!string.IsNullOrWhiteSpace(query.Provider))
         {
-            clauses.Add("observations.provider = @provider");
+            runClauses.Add("provider = @provider");
             parameters["@provider"] = query.Provider.Trim().ToLowerInvariant();
         }
+
+        var manifests = await client.QueryAsListAsync(
+            _databasePath,
+            $"SELECT normalized_manifest_json FROM traffic_observation_runs WHERE {string.Join(" AND ", runClauses)};",
+            static record => record.GetString(0),
+            parameters,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        var batches = manifests
+            .Select(manifest => JsonSerializer.Deserialize<WebTrafficObservationBatch>(manifest, WebCliJson.Options)
+                ?? throw new InvalidOperationException("Stored traffic run manifest is empty."))
+            .Select(WebTrafficObservationNormalizer.Normalize)
+            .ToArray();
+        var selectedByDate = batches
+            .SelectMany(batch => EvidenceDates(batch).Select(date => new SelectedTrafficDate(batch, date)))
+            .Where(value => (!query.FromDate.HasValue || value.Date >= query.FromDate.Value) &&
+                            (!query.ThroughDate.HasValue || value.Date <= query.ThroughDate.Value))
+            .GroupBy(value => (value.Batch.Provider, value.Batch.SiteId, value.Date))
+            .Select(group => group
+                .OrderBy(value => value.Batch.Status == "complete" ? 0 : 1)
+                .ThenByDescending(value => value.Batch.CollectedAtUtc)
+                .ThenByDescending(value => value.Batch.RunId, StringComparer.Ordinal)
+                .First())
+            .ToDictionary(value => (value.Batch.Provider, value.Batch.SiteId, value.Date));
+        var selectedRuns = selectedByDate.Values
+            .GroupBy(value => (value.Batch.Provider, value.Batch.SiteId, value.Batch.RunId))
+            .Select(group =>
+            {
+                var batch = group.First().Batch;
+                return new WebTrafficObservationRunEvidence
+                {
+                    RunId = batch.RunId!,
+                    Provider = batch.Provider,
+                    SiteId = batch.SiteId,
+                    CollectedAtUtc = batch.CollectedAtUtc,
+                    Status = batch.Status,
+                    ZeroDataConfirmed = batch.ZeroDataConfirmed,
+                    CollectionCoverage = batch.CollectionCoverage,
+                    SelectedDates = group.Select(value => value.Date).Distinct().OrderBy(date => date).ToArray()
+                };
+            })
+            .OrderBy(value => value.Provider, StringComparer.Ordinal)
+            .ThenBy(value => value.SiteId, StringComparer.Ordinal)
+            .ThenBy(value => value.SelectedDates.FirstOrDefault())
+            .ThenBy(value => value.RunId, StringComparer.Ordinal)
+            .ToArray();
+        var requestedDates = query.FromDate.HasValue && query.ThroughDate.HasValue
+            ? Enumerable.Range(0, query.ThroughDate.Value.DayNumber - query.FromDate.Value.DayNumber + 1)
+                .Select(query.FromDate.Value.AddDays)
+                .ToArray()
+            : Array.Empty<DateOnly>();
+        var coveredDates = selectedByDate.Keys.Select(key => key.Date).ToHashSet();
+        var missingDates = requestedDates.Where(date => !coveredDates.Contains(date)).ToArray();
+        if (selectedByDate.Count == 0)
+        {
+            return new WebTrafficObservationQueryResult
+            {
+                StoreExists = true,
+                HasEvidence = false,
+                HasCoverageGaps = missingDates.Length > 0,
+                MissingDates = missingDates
+            };
+        }
+
+        var observationClauses = new List<string> { "site_id = @site_id" };
+        if (parameters.ContainsKey("@provider"))
+            observationClauses.Add("provider = @provider");
         if (query.FromDate.HasValue)
         {
-            clauses.Add("observations.observation_date >= @from_date");
+            observationClauses.Add("observation_date >= @from_date");
             parameters["@from_date"] = FormatDate(query.FromDate.Value);
         }
         if (query.ThroughDate.HasValue)
         {
-            clauses.Add("observations.observation_date <= @through_date");
+            observationClauses.Add("observation_date <= @through_date");
             parameters["@through_date"] = FormatDate(query.ThroughDate.Value);
         }
 
         var sql = $"""
-            WITH ranked AS (
-                SELECT observations.observation_key, observations.provider, observations.site_id,
-                       observations.observation_date, observations.host, observations.path,
-                       observations.requests, observations.visits, observations.edge_response_bytes,
-                       observations.sample_interval, observations.evidence_reference,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY observations.provider, observations.site_id,
-                                        observations.observation_date, observations.host, observations.path
-                           ORDER BY CASE WHEN runs.status = 'complete' THEN 0 ELSE 1 END,
-                                    runs.collected_at_utc DESC, observations.run_id DESC
-                       ) AS revision_rank
-                FROM traffic_observations AS observations
-                INNER JOIN traffic_observation_runs AS runs
-                    ON runs.provider = observations.provider
-                   AND runs.site_id = observations.site_id
-                   AND runs.run_id = observations.run_id
-                WHERE {string.Join(" AND ", clauses)}
-            )
-            SELECT observation_key, provider, site_id, observation_date, host, path,
+            SELECT observation_key, run_id, provider, site_id, observation_date, host, path,
                    requests, visits, edge_response_bytes, sample_interval, evidence_reference
-            FROM ranked
-            WHERE revision_rank = 1
+            FROM traffic_observations
+            WHERE {string.Join(" AND ", observationClauses)}
             ORDER BY observation_date, host, path;
             """;
-        return await client.QueryAsListAsync(
+        var stored = await client.QueryAsListAsync(
             _databasePath,
             sql,
-            MapTrafficObservation,
+            MapStoredTrafficObservation,
             parameters,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+        var observations = stored
+            .Where(value => selectedByDate.TryGetValue(
+                                (value.Observation.Provider, value.Observation.SiteId, value.Observation.Date),
+                                out var selected) &&
+                            string.Equals(selected.Batch.RunId, value.RunId, StringComparison.Ordinal))
+            .Select(value => value.Observation)
+            .OrderBy(value => value.Date)
+            .ThenBy(value => value.Host, StringComparer.Ordinal)
+            .ThenBy(value => value.Path, StringComparer.Ordinal)
+            .ToArray();
+        return new WebTrafficObservationQueryResult
+        {
+            StoreExists = true,
+            HasEvidence = true,
+            HasPartialEvidence = selectedRuns.Any(value => value.Status == "partial"),
+            HasCoverageGaps = missingDates.Length > 0,
+            MissingDates = missingDates,
+            HasExplicitZeroEvidence = selectedRuns.Any(value => value.ZeroDataConfirmed),
+            SelectedRuns = selectedRuns,
+            Observations = observations
+        };
     }
+
+    private static IEnumerable<DateOnly> EvidenceDates(WebTrafficObservationBatch batch) =>
+        batch.CollectionCoverage.CompletedDates
+            .Concat(batch.CollectionCoverage.FailedDate is DateOnly failedDate ? [failedDate] : Array.Empty<DateOnly>())
+            .Distinct();
 
     private static Dictionary<string, object?> TrafficRunParameters(WebTrafficObservationBatch batch, string manifest) => new()
     {
@@ -178,18 +257,23 @@ internal sealed partial class SqliteWebSearchObservationStore
         ["@evidence_reference"] = value.EvidenceReference
     };
 
-    private static WebTrafficObservation MapTrafficObservation(IDataRecord record) => new()
-    {
-        ObservationKey = record.GetString(0),
-        Provider = record.GetString(1),
-        SiteId = record.GetString(2),
-        Date = DateOnly.ParseExact(record.GetString(3), "yyyy-MM-dd", CultureInfo.InvariantCulture),
-        Host = record.GetString(4),
-        Path = record.GetString(5),
-        Requests = record.GetInt64(6),
-        Visits = record.GetInt64(7),
-        EdgeResponseBytes = record.GetInt64(8),
-        SampleInterval = record.GetDouble(9),
-        EvidenceReference = GetNullableString(record, 10)
-    };
+    private static StoredTrafficObservation MapStoredTrafficObservation(IDataRecord record) => new(
+        record.GetString(1),
+        new WebTrafficObservation
+        {
+            ObservationKey = record.GetString(0),
+            Provider = record.GetString(2),
+            SiteId = record.GetString(3),
+            Date = DateOnly.ParseExact(record.GetString(4), "yyyy-MM-dd", CultureInfo.InvariantCulture),
+            Host = record.GetString(5),
+            Path = record.GetString(6),
+            Requests = record.GetInt64(7),
+            Visits = record.GetInt64(8),
+            EdgeResponseBytes = record.GetInt64(9),
+            SampleInterval = record.GetDouble(10),
+            EvidenceReference = GetNullableString(record, 11)
+        });
+
+    private sealed record SelectedTrafficDate(WebTrafficObservationBatch Batch, DateOnly Date);
+    private sealed record StoredTrafficObservation(string RunId, WebTrafficObservation Observation);
 }

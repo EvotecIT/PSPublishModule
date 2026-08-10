@@ -37,9 +37,11 @@ public sealed class CloudflareAnalyticsCollector
     /// <summary>Checks token access and discovers plan-specific dataset limits for the configured zone.</summary>
     public async Task<CloudflareAnalyticsCapabilityProbeResult> ProbeAsync(
         string zoneId,
+        string siteBaseUrl,
         CancellationToken cancellationToken = default)
     {
         ValidateZoneId(zoneId);
+        var siteHost = NormalizeSiteHost(siteBaseUrl);
         string token;
         try
         {
@@ -51,26 +53,37 @@ public sealed class CloudflareAnalyticsCollector
         }
         catch
         {
-            return ProbeFailure("credential-unavailable", "Cloudflare analytics credential resolution failed.");
+            return ProbeFailure(0, "credential-unavailable", "Cloudflare analytics credential resolution failed.");
         }
+
+        var zoneResponse = await GetZoneAsync(zoneId, token, cancellationToken).ConfigureAwait(false);
+        if (!zoneResponse.Success)
+            return ProbeFailure(1, zoneResponse.ErrorCode!, zoneResponse.ErrorMessage!);
+        var zoneName = NormalizeZoneName(zoneResponse.Value?.Name);
+        if (zoneResponse.Value is null || !string.Equals(zoneResponse.Value.Id, zoneId, StringComparison.OrdinalIgnoreCase) || zoneName is null)
+            return ProbeFailure(1, "invalid-response", "Cloudflare returned invalid zone identity details.");
+        if (!HostBelongsToZone(siteHost, zoneName))
+            return ProbeFailure(1, "zone-site-mismatch", "The configured Cloudflare zone does not own the fleet site host.");
 
         var response = await SendAsync<CloudflareCapabilityData>(CapabilityQuery, new { zoneTag = zoneId.ToLowerInvariant() }, token, cancellationToken)
             .ConfigureAwait(false);
         if (!response.Success)
-            return ProbeFailure(response.ErrorCode!, response.ErrorMessage!);
+            return ProbeFailure(2, response.ErrorCode!, response.ErrorMessage!);
         var zones = response.Value?.Viewer?.Zones ?? Array.Empty<CloudflareCapabilityZone>();
         if (zones.Length != 1)
-            return ProbeFailure("zone-not-visible", "The configured Cloudflare zone is not visible to this credential.");
+            return ProbeFailure(2, "zone-not-visible", "The configured Cloudflare zone is not visible to this credential.");
         var settings = zones[0].Settings?.HttpRequestsAdaptiveGroups;
         if (settings?.Enabled != true)
-            return ProbeFailure("dataset-unavailable", "Cloudflare httpRequestsAdaptiveGroups is not enabled for this zone.");
+            return ProbeFailure(2, "dataset-unavailable", "Cloudflare httpRequestsAdaptiveGroups is not enabled for this zone.");
         if (settings.MaxPageSize is null or <= 0)
-            return ProbeFailure("invalid-response", "Cloudflare did not report a usable analytics page size.");
+            return ProbeFailure(2, "invalid-response", "Cloudflare did not report a usable analytics page size.");
 
         return new CloudflareAnalyticsCapabilityProbeResult
         {
             Success = true,
             DatasetEnabled = true,
+            ZoneName = zoneName,
+            RequestCount = 2,
             MaxPageSize = Math.Min(settings.MaxPageSize.Value, ClientMaximumRowsPerDay),
             MaxDurationSeconds = settings.MaxDuration,
             NotOlderThanSeconds = settings.NotOlderThan
@@ -83,9 +96,9 @@ public sealed class CloudflareAnalyticsCollector
         CancellationToken cancellationToken = default)
     {
         ValidateOptions(options);
-        var probe = await ProbeAsync(options.ZoneId, cancellationToken).ConfigureAwait(false);
+        var probe = await ProbeAsync(options.ZoneId, options.SiteBaseUrl, cancellationToken).ConfigureAwait(false);
         if (!probe.Success)
-            return Failure(options, probe, 1, Array.Empty<WebTrafficObservation>(), Array.Empty<DateOnly>(), options.FromDate, probe.ErrorCode!, probe.ErrorMessage!);
+            return Failure(options, probe, probe.RequestCount, Array.Empty<WebTrafficObservation>(), Array.Empty<DateOnly>(), options.FromDate, probe.ErrorCode!, probe.ErrorMessage!);
 
         string token;
         try
@@ -98,12 +111,12 @@ public sealed class CloudflareAnalyticsCollector
         }
         catch
         {
-            return Failure(options, probe, 1, Array.Empty<WebTrafficObservation>(), Array.Empty<DateOnly>(), options.FromDate, "credential-unavailable", "Cloudflare analytics credential resolution failed.");
+            return Failure(options, probe, probe.RequestCount, Array.Empty<WebTrafficObservation>(), Array.Empty<DateOnly>(), options.FromDate, "credential-unavailable", "Cloudflare analytics credential resolution failed.");
         }
 
         var observations = new List<WebTrafficObservation>();
         var completedDates = new List<DateOnly>();
-        var requestCount = 1;
+        var requestCount = probe.RequestCount;
         for (var date = options.FromDate;; date = date.AddDays(1))
         {
             var start = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
@@ -276,14 +289,52 @@ public sealed class CloudflareAnalyticsCollector
         }
     }
 
-    private static void ValidateOptions(CloudflareAnalyticsCollectionOptions options)
+    private async Task<ApiResult<CloudflareZoneDetails>> GetZoneAsync(
+        string zoneId,
+        string token,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var endpoint = new Uri(_endpoint, "zones/" + zoneId.ToLowerInvariant());
+            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                return ApiResult<CloudflareZoneDetails>.Failed(MapStatus(response.StatusCode), $"Cloudflare zone lookup returned HTTP {(int)response.StatusCode}.");
+            var envelope = await response.Content.ReadFromJsonAsync<CloudflareApiEnvelope<CloudflareZoneDetails>>(JsonOptions, cancellationToken)
+                .ConfigureAwait(false);
+            if (envelope?.Success != true || envelope.Result is null || envelope.Errors.Length > 0)
+                return ApiResult<CloudflareZoneDetails>.Failed("zone-lookup-error", "Cloudflare zone lookup returned errors or omitted the zone.");
+            return ApiResult<CloudflareZoneDetails>.Succeeded(envelope.Result);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (JsonException)
+        {
+            return ApiResult<CloudflareZoneDetails>.Failed("invalid-response", "Cloudflare zone lookup returned invalid JSON.");
+        }
+        catch
+        {
+            return ApiResult<CloudflareZoneDetails>.Failed("request-failed", "Cloudflare zone lookup request failed.");
+        }
+    }
+
+    private void ValidateOptions(CloudflareAnalyticsCollectionOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
         if (string.IsNullOrWhiteSpace(options.ProviderId) || string.IsNullOrWhiteSpace(options.SiteId))
             throw new ArgumentException("Cloudflare collection requires provider and site identifiers.", nameof(options));
         ValidateZoneId(options.ZoneId);
+        _ = NormalizeSiteHost(options.SiteBaseUrl);
         if (options.FromDate == default || options.ThroughDate == default || options.FromDate > options.ThroughDate)
             throw new ArgumentException("Cloudflare collection date range is invalid.", nameof(options));
+        var currentUtcDate = DateOnly.FromDateTime(_timeProvider.GetUtcNow().UtcDateTime);
+        if (options.ThroughDate >= currentUtcDate)
+            throw new ArgumentException("Cloudflare traffic collection requires closed UTC dates before the current day.", nameof(options));
     }
 
     private static void ValidateZoneId(string zoneId)
@@ -292,8 +343,36 @@ public sealed class CloudflareAnalyticsCollector
             throw new ArgumentException("Cloudflare zoneId must be a 32-character hexadecimal identifier.", nameof(zoneId));
     }
 
-    private static CloudflareAnalyticsCapabilityProbeResult ProbeFailure(string code, string message) => new()
+    private static string NormalizeSiteHost(string siteBaseUrl)
     {
+        if (!Uri.TryCreate(siteBaseUrl, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+            !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
+        {
+            throw new ArgumentException("Cloudflare site base URL must be absolute HTTP(S) without user info, query or fragment.", nameof(siteBaseUrl));
+        }
+
+        return uri.IdnHost.TrimEnd('.').ToLowerInvariant();
+    }
+
+    private static string? NormalizeZoneName(string? zoneName)
+    {
+        if (string.IsNullOrWhiteSpace(zoneName) ||
+            !Uri.TryCreate("https://" + zoneName.Trim().TrimEnd('.') + "/", UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        return uri.IdnHost.TrimEnd('.').ToLowerInvariant();
+    }
+
+    private static bool HostBelongsToZone(string host, string zoneName) =>
+        string.Equals(host, zoneName, StringComparison.Ordinal) ||
+        host.EndsWith("." + zoneName, StringComparison.Ordinal);
+
+    private static CloudflareAnalyticsCapabilityProbeResult ProbeFailure(int requestCount, string code, string message) => new()
+    {
+        RequestCount = requestCount,
         ErrorCode = code,
         ErrorMessage = message
     };

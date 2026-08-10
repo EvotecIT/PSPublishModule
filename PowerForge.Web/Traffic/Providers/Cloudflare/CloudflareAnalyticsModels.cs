@@ -18,6 +18,8 @@ public sealed class CloudflareAnalyticsCollectionOptions
     public string SiteId { get; set; } = string.Empty;
     /// <summary>Cloudflare zone identifier.</summary>
     public string ZoneId { get; set; } = string.Empty;
+    /// <summary>Owning fleet site base URL whose host must belong to the configured zone.</summary>
+    public string SiteBaseUrl { get; set; } = string.Empty;
     /// <summary>Inclusive first reporting date.</summary>
     public DateOnly FromDate { get; set; }
     /// <summary>Inclusive last reporting date.</summary>
@@ -35,6 +37,10 @@ public sealed class CloudflareAnalyticsCapabilityProbeResult
     public bool Success { get; set; }
     /// <summary>Whether the HTTP request adaptive group dataset is enabled.</summary>
     public bool DatasetEnabled { get; set; }
+    /// <summary>Canonical zone name verified against the owning fleet site.</summary>
+    public string? ZoneName { get; set; }
+    /// <summary>Number of Cloudflare HTTP requests attempted by the probe.</summary>
+    public int RequestCount { get; set; }
     /// <summary>Effective maximum rows requested by the collector.</summary>
     public int MaxPageSize { get; set; }
     /// <summary>Provider-reported maximum query duration, when available.</summary>
@@ -52,7 +58,7 @@ public sealed class CloudflareAnalyticsCollectionResult
 {
     /// <summary>Whether every requested daily partition completed.</summary>
     public bool Success { get; set; }
-    /// <summary>Total GraphQL request count, including the capability probe.</summary>
+    /// <summary>Total Cloudflare HTTP request count, including zone ownership and capability probes.</summary>
     public int RequestCount { get; set; }
     /// <summary>Number of completed daily partitions.</summary>
     public int CompletedDateCount { get; set; }
@@ -79,6 +85,33 @@ internal sealed class CloudflareGraphQlError
 {
     [JsonPropertyName("message")]
     public string? Message { get; set; }
+}
+
+internal sealed class CloudflareApiEnvelope<T>
+{
+    [JsonPropertyName("success")]
+    public bool? Success { get; set; }
+
+    [JsonPropertyName("result")]
+    public T? Result { get; set; }
+
+    [JsonPropertyName("errors")]
+    public CloudflareApiError[] Errors { get; set; } = Array.Empty<CloudflareApiError>();
+}
+
+internal sealed class CloudflareApiError
+{
+    [JsonPropertyName("message")]
+    public string? Message { get; set; }
+}
+
+internal sealed class CloudflareZoneDetails
+{
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
 }
 
 internal sealed class CloudflareCapabilityData
