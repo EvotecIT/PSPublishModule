@@ -139,15 +139,16 @@ internal static partial class WebCliCommandHandlers
             return FailSearch(optionError, outputJson, logger, "web.traffic.list");
         var databasePath = TryGetOptionValue(args, "--database");
         var siteId = TryGetOptionValue(args, "--site");
-        if (string.IsNullOrWhiteSpace(databasePath) || string.IsNullOrWhiteSpace(siteId))
-            return FailSearch("Traffic list requires --database and --site.", outputJson, logger, "web.traffic.list");
+        var providerId = TryGetOptionValue(args, "--provider");
+        if (string.IsNullOrWhiteSpace(databasePath) || string.IsNullOrWhiteSpace(siteId) || string.IsNullOrWhiteSpace(providerId))
+            return FailSearch("Traffic list requires --database, --site, and --provider so totals cannot combine providers.", outputJson, logger, "web.traffic.list");
         try
         {
             var store = new SqliteWebSearchObservationStore(Path.GetFullPath(databasePath.Trim().Trim('"')));
             var evidence = store.QueryTrafficEvidenceAsync(new WebTrafficObservationQuery
             {
                 SiteId = siteId,
-                Provider = TryGetOptionValue(args, "--provider"),
+                Provider = providerId,
                 FromDate = ParseOptionalTrafficDate(TryGetOptionValue(args, "--from"), "--from"),
                 ThroughDate = ParseOptionalTrafficDate(TryGetOptionValue(args, "--to"), "--to")
             }).GetAwaiter().GetResult();
@@ -164,7 +165,7 @@ internal static partial class WebCliCommandHandlers
             var result = new WebTrafficListCommandResult
             {
                 SiteId = siteId.Trim().ToLowerInvariant(),
-                Provider = TryGetOptionValue(args, "--provider")?.Trim().ToLowerInvariant(),
+                Provider = providerId.Trim().ToLowerInvariant(),
                 EvidenceState = evidenceState,
                 StoreExists = evidence.StoreExists,
                 HasEvidence = evidence.HasEvidence,

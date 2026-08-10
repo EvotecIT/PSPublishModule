@@ -197,6 +197,7 @@ public sealed class CloudflareAnalyticsCollector
         var mapped = new List<WebTrafficObservation>(rows.Count);
         var siteUri = new Uri(options.SiteBaseUrl, UriKind.Absolute);
         var siteHost = siteUri.IdnHost.TrimEnd('.').ToLowerInvariant();
+        var siteScheme = siteUri.Scheme.ToLowerInvariant();
         var sitePath = NormalizeSitePath(siteUri.AbsolutePath);
         foreach (var row in rows)
         {
@@ -204,6 +205,7 @@ public sealed class CloudflareAnalyticsCollector
             if (row.Count is null || row.Sum?.Visits is null || row.Sum.EdgeResponseBytes is null ||
                 row.Average?.SampleInterval is null || dimensions?.Date != requestedDate ||
                 string.IsNullOrWhiteSpace(dimensions.Host) || string.IsNullOrWhiteSpace(dimensions.Path) ||
+                string.IsNullOrWhiteSpace(dimensions.Scheme) ||
                 row.Count > long.MaxValue || row.Sum.Visits > long.MaxValue || row.Sum.EdgeResponseBytes > long.MaxValue ||
                 !double.IsFinite(row.Average.SampleInterval.Value) || row.Average.SampleInterval.Value < 1d)
             {
@@ -215,7 +217,9 @@ public sealed class CloudflareAnalyticsCollector
                 observations = Array.Empty<WebTrafficObservation>();
                 return false;
             }
-            if (!rowHost.Equals(siteHost, StringComparison.Ordinal) || !PathBelongsToSite(dimensions.Path, sitePath))
+            if (!rowHost.Equals(siteHost, StringComparison.Ordinal) ||
+                !dimensions.Scheme.Trim().Equals(siteScheme, StringComparison.OrdinalIgnoreCase) ||
+                !PathBelongsToSite(dimensions.Path, sitePath))
             {
                 observations = Array.Empty<WebTrafficObservation>();
                 return false;
@@ -247,7 +251,8 @@ public sealed class CloudflareAnalyticsCollector
             ["datetime_geq"] = start.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
             ["datetime_lt"] = end.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
             ["requestSource"] = "eyeball",
-            ["clientRequestHTTPHost"] = siteUri.IdnHost.TrimEnd('.').ToLowerInvariant()
+            ["clientRequestHTTPHost"] = siteUri.IdnHost.TrimEnd('.').ToLowerInvariant(),
+            ["clientRequestScheme"] = siteUri.Scheme.ToLowerInvariant()
         };
         if (sitePath != "/")
         {
@@ -514,7 +519,7 @@ public sealed class CloudflareAnalyticsCollector
                 count
                 avg { sampleInterval }
                 sum { visits edgeResponseBytes }
-                dimensions { date clientRequestHTTPHost clientRequestPath }
+                dimensions { date clientRequestHTTPHost clientRequestPath clientRequestScheme }
               }
             }
           }

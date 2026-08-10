@@ -134,12 +134,26 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         result = new { id = ZoneId, name }
     });
 
-    private static object TrafficRow(DateOnly date, string host, string path, ulong requests, ulong visits, ulong bytes, double sampleInterval) => new
+    private static object TrafficRow(
+        DateOnly date,
+        string host,
+        string path,
+        ulong requests,
+        ulong visits,
+        ulong bytes,
+        double sampleInterval,
+        string scheme = "https") => new
     {
         count = requests,
         avg = new { sampleInterval },
         sum = new { visits, edgeResponseBytes = bytes },
-        dimensions = new { date = date.ToString("yyyy-MM-dd"), clientRequestHTTPHost = host, clientRequestPath = path }
+        dimensions = new
+        {
+            date = date.ToString("yyyy-MM-dd"),
+            clientRequestHTTPHost = host,
+            clientRequestPath = path,
+            clientRequestScheme = scheme
+        }
     };
 
     private static HttpResponseMessage TrafficResponse(params object[] rows) => JsonResponse(new

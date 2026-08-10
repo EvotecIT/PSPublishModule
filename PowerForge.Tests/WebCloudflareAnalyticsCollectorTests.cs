@@ -91,7 +91,28 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
             Assert.Contains("ZoneHttpRequestsAdaptiveGroupsFilter_InputObject", request.Body, StringComparison.Ordinal);
             Assert.Contains("\"requestSource\":\"eyeball\"", request.Body, StringComparison.Ordinal);
             Assert.Contains("\"clientRequestHTTPHost\":\"officeimo.com\"", request.Body, StringComparison.Ordinal);
+            Assert.Contains("\"clientRequestScheme\":\"https\"", request.Body, StringComparison.Ordinal);
         });
+    }
+
+    [Fact]
+    public async Task Collect_RejectsRowsFromAnotherUrlScheme()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => TrafficResponse(TrafficRow(
+                new DateOnly(2026, 8, 1), "officeimo.com", "/", 10, 2, 100, 1, scheme: "http")),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectAsync(CreateOptions());
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid-response", result.ErrorCode);
+        Assert.Empty(result.Batch.Observations);
     }
 
     [Fact]
@@ -590,7 +611,7 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
     }
 
     [Fact]
-    public async Task TrafficReports_RequireProviderForBoundedCompleteness()
+    public async Task TrafficReports_RequireProviderForAllAggregateTotals()
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-cloudflare-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -609,6 +630,10 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
             Assert.Equal(2, WebCliCommandHandlers.HandleSubCommand(
                 "traffic",
                 ["list", "--database", databasePath, "--site", "officeimo", "--from", "2026-08-01", "--to", "2026-08-01", "--output", "json"],
+                outputJson: true, logger: new WebConsoleLogger(), outputSchemaVersion: 1));
+            Assert.Equal(2, WebCliCommandHandlers.HandleSubCommand(
+                "traffic",
+                ["list", "--database", databasePath, "--site", "officeimo", "--output", "json"],
                 outputJson: true, logger: new WebConsoleLogger(), outputSchemaVersion: 1));
         }
         finally

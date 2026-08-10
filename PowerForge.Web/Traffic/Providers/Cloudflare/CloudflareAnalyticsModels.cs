@@ -211,4 +211,7 @@ internal sealed class CloudflareTrafficDimensions
 
     [JsonPropertyName("clientRequestPath")]
     public string? Path { get; set; }
+
+    [JsonPropertyName("clientRequestScheme")]
+    public string? Scheme { get; set; }
 }
