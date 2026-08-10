@@ -2197,6 +2197,7 @@ internal sealed partial class PowerForgeReleaseService
                         Destination = app.Destination,
                         ArchivePath = archiveBuildSnapshot?.ArchivePath ?? app.ArchivePath,
                         XcodeBuildExecutable = plan.XcodeBuildExecutable,
+                        RequireExactPackageSnapshot = sourceSnapshot is not null,
                         AllowProvisioningUpdates = plan.AllowProvisioningUpdates,
                         AppStoreConnectApiKeyPath = directArchive ? null : plan.AppStoreConnectApiKeyPath,
                         AppStoreConnectApiKeyId = directArchive ? null : plan.AppStoreConnectApiKeyId,

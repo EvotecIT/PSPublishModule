@@ -14,7 +14,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         var expandedTokens = ExpandCompilerResponseFileTokens(
                 repositoryRoot,
                 projectDirectory,
-                SplitBuildSettingPaths(value),
+                ExpandForwardedBuildFlagTokens(SplitBuildSettingPaths(value).ToArray(), key),
                 key,
                 generatedOutputPaths,
                 source,
@@ -103,7 +103,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         string source,
         ISet<string> responseFiles)
     {
-        foreach (var token in tokens)
+        foreach (var token in ExpandForwardedBuildFlagTokens(tokens.ToArray(), key))
         {
             if (token.Length <= 1 ||
                 token[0] != '@' ||
@@ -149,6 +149,7 @@ internal sealed partial class AppleReleaseSourceTrustService
     private static IEnumerable<string> ExtractBuildFlagInputPaths(string[] inputTokens, string key)
     {
         var tokens = ExpandForwardedBuildFlagTokens(inputTokens, key);
+        var linkerFlags = key.Split('[')[0].Trim().Equals("OTHER_LDFLAGS", StringComparison.OrdinalIgnoreCase);
         var consumeNext = false;
         for (var index = 0; index < tokens.Length; index++)
         {
@@ -173,6 +174,8 @@ internal sealed partial class AppleReleaseSourceTrustService
                 token.Equals("-plugin", StringComparison.Ordinal) ||
                 token.Equals("-plugin-path", StringComparison.Ordinal) ||
                 token.Equals("-module-map-file", StringComparison.Ordinal) ||
+                token.Equals("-install_name", StringComparison.Ordinal) ||
+                token.Equals("-rpath", StringComparison.Ordinal) ||
                 token.Equals("-isysroot", StringComparison.Ordinal) ||
                 token.Equals("-sdk", StringComparison.Ordinal))
             {
@@ -227,6 +230,9 @@ internal sealed partial class AppleReleaseSourceTrustService
             if (IsAppleRuntimeRelativePath(token))
                 continue;
 
+            if (linkerFlags && TrySkipNonInputLinkerOption(tokens, ref index, token, key))
+                continue;
+
             if (token.StartsWith("-", StringComparison.Ordinal) && IsPathLikeBuildFlagToken(token))
             {
                 throw new InvalidOperationException(
@@ -239,9 +245,41 @@ internal sealed partial class AppleReleaseSourceTrustService
                 throw new InvalidOperationException(
                     $"Path-like token in Xcode build setting {key} cannot be classified safely: {token}");
             }
+
+            if (linkerFlags && !token.StartsWith("-", StringComparison.Ordinal))
+                yield return token;
         }
         if (consumeNext)
             throw new InvalidOperationException($"Xcode build setting {key} ends with a path-consuming flag and no input.");
+    }
+
+    private static bool TrySkipNonInputLinkerOption(string[] tokens, ref int index, string token, string key)
+    {
+        var argumentCount = token switch
+        {
+            "-framework" => 1,
+            "-weak_framework" => 1,
+            "-reexport_framework" => 1,
+            "-lazy_framework" => 1,
+            "-needed_framework" => 1,
+            "-compatibility_version" => 1,
+            "-current_version" => 1,
+            "-arch" => 1,
+            "-e" => 1,
+            "-macos_version_min" => 1,
+            "-ios_version_min" => 1,
+            "-iphoneos_version_min" => 1,
+            "-tvos_version_min" => 1,
+            "-watchos_version_min" => 1,
+            "-platform_version" => 3,
+            _ => 0
+        };
+        if (argumentCount == 0)
+            return false;
+        if (index + argumentCount >= tokens.Length)
+            throw new InvalidOperationException($"Xcode build setting {key} ends before linker option '{token}' receives all arguments.");
+        index += argumentCount;
+        return true;
     }
 
     private static void ValidatePreprocessorFlagPayload(string payload, string key)

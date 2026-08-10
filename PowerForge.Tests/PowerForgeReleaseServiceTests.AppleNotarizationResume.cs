@@ -296,6 +296,116 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_AppleDirectNotarizationResume_MissingRetainedArtifactFallsBackToFreshArchive()
+    {
+        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "EasyControlXAgent.xcodeproj", "1.0.0", "4");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.TeamId = "8ZPGZ79T7J";
+            spec.AppleApps.Automation.MinimumFreeSpaceGB = 0;
+            spec.AppleApps.Automation.CleanupBeforeArchive = false;
+            var app = Assert.Single(spec.AppleApps.Apps);
+            app.Name = "EasyControlX Agent";
+            app.ProjectPath = "EasyControlXAgent.xcodeproj";
+            app.Scheme = "EasyControlXAgent";
+            app.Platform = ApplePlatform.macOS;
+            app.DistributionRoute = AppleDistributionRoute.DirectNotarized;
+            app.AppStoreConnectAppId = null;
+
+            var interrupted = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Direct distribution must not query App Store release state."),
+                    archiveAppleApp: CreateSuccessfulArchive,
+                    uploadAppleApp: request =>
+                    {
+                        var artifact = Directory.CreateDirectory(Path.Combine(request.ExportPath!, "EasyControlX Agent.app"));
+                        File.WriteAllText(Path.Combine(artifact.FullName, "payload"), "accepted bytes that will be lost");
+                        return CreateSuccessfulUpload(request);
+                    },
+                    notarizeAppleArtifact: request =>
+                    {
+                        request.AcceptedCheckpoint!(new AppleNotarizationAcceptedCheckpoint
+                        {
+                            ArtifactPath = request.ArtifactPath,
+                            ArtifactSha256 = AppleNotarizationService.ComputeArtifactSha256(request.ArtifactPath),
+                            SubmissionPath = request.ArtifactPath + ".zip",
+                            SubmissionSha256 = new string('a', 64),
+                            SubmissionId = "missing-artifact-submission",
+                            Status = "Accepted"
+                        });
+                        throw new InvalidOperationException("simulated process loss after acceptance");
+                    })
+                .Execute(spec, new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Upload,
+                    AppleSourceCommit = sourceCommit
+                });
+            Assert.False(interrupted.Success);
+            var retainedArtifact = Path.Combine(
+                Assert.Single(interrupted.AppleAppPlan!.Apps).ExportPath,
+                "EasyControlX Agent.app");
+            Assert.True(Directory.Exists(retainedArtifact));
+            Directory.Delete(retainedArtifact, recursive: true);
+
+            var archiveCalls = 0;
+            var exportCalls = 0;
+            AppleNotarizationRequest? freshNotarization = null;
+            var resumed = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Direct distribution must not query App Store release state."),
+                    archiveAppleApp: request =>
+                    {
+                        archiveCalls++;
+                        return CreateSuccessfulArchive(request);
+                    },
+                    uploadAppleApp: request =>
+                    {
+                        exportCalls++;
+                        var artifact = Directory.CreateDirectory(Path.Combine(request.ExportPath!, "EasyControlX Agent.app"));
+                        File.WriteAllText(Path.Combine(artifact.FullName, "payload"), "fresh exported bytes");
+                        return CreateSuccessfulUpload(request);
+                    },
+                    notarizeAppleArtifact: request =>
+                    {
+                        freshNotarization = request;
+                        return new AppleNotarizationResult
+                        {
+                            ArtifactPath = request.ArtifactPath,
+                            ArtifactSha256 = AppleNotarizationService.ComputeArtifactSha256(request.ArtifactPath),
+                            SubmissionPath = request.ArtifactPath + ".zip",
+                            SubmissionId = "fresh-submission",
+                            Status = "Accepted",
+                            Submission = new ProcessRunResult(0, "accepted", string.Empty, "xcrun", TimeSpan.Zero, false),
+                            Staple = new ProcessRunResult(0, "stapled", string.Empty, "xcrun", TimeSpan.Zero, false),
+                            StapleValidation = new ProcessRunResult(0, "valid", string.Empty, "xcrun", TimeSpan.Zero, false),
+                            Assessment = new ProcessRunResult(0, "accepted", string.Empty, "spctl", TimeSpan.Zero, false)
+                        };
+                    })
+                .Execute(spec, new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Upload,
+                    AppleSourceCommit = sourceCommit
+                });
+
+            Assert.True(resumed.Success, resumed.ErrorMessage);
+            Assert.Equal(1, archiveCalls);
+            Assert.Equal(1, exportCalls);
+            Assert.NotNull(freshNotarization);
+            Assert.Null(freshNotarization!.AcceptedSubmissionId);
+            Assert.False(Assert.Single(resumed.AppleApps).ResumedAcceptedNotarization);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleDirectNotarizationResume_RejectsChainedReceiptOutsideCurrentExportRoot()
     {
         const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";

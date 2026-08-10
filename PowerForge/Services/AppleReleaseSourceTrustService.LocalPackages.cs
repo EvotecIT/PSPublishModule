@@ -179,9 +179,9 @@ internal sealed partial class AppleReleaseSourceTrustService
 
         foreach (Match import in Regex.Matches(
                      manifestSyntax,
-                     "(?m)^\\s*(?:@[A-Za-z_][A-Za-z0-9_]*(?:\\([^\\r\\n]*\\))?\\s+)*" +
-                     "import\\s+(?:(?:class|struct|enum|protocol|typealias|func|var|let)\\s+)?" +
-                     "(?<module>[A-Za-z_][A-Za-z0-9_]*)(?:\\.[^\\r\\n]+)?\\s*$",
+                     "(?<![A-Za-z0-9_])import[ \\t]+" +
+                     "(?:(?:class|struct|enum|protocol|typealias|func|var|let)[ \\t]+)?" +
+                     "(?<module>[A-Za-z_][A-Za-z0-9_]*)(?:\\.[A-Za-z_][A-Za-z0-9_]*)*",
                      RegexOptions.CultureInvariant))
         {
             var module = import.Groups["module"].Value;

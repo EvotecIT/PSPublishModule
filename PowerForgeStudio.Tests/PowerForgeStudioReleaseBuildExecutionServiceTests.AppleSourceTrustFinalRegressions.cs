@@ -113,6 +113,116 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains("Path-like token", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ResolveExactAppleSourceCommit_expands_forwarded_linker_response_files()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ForwardedResponseFileRepo");
+        var project = scope.CreateDirectory(Path.Combine("ForwardedResponseFileRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = XCBuildConfiguration; buildSettings = { OTHER_LDFLAGS = -Wl,@Injected.rsp; }; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Injected.rsp"), "/tmp/Injected.a");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("/tmp/Injected.a", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_validates_bare_positional_linker_inputs()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "BareLinkerInputRepo",
+            "OTHER_LDFLAGS = Injected.a\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("Injected.a", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_validates_forwarded_linker_runtime_paths()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "ForwardedRuntimePathRepo",
+            "OTHER_LDFLAGS = -Wl,-rpath,/tmp/InjectedFrameworks\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("/tmp/InjectedFrameworks", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_host_dependent_source_selection()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "HostSourceSelectionRepo",
+            "EXCLUDED_SOURCE_FILE_NAMES = $(USER).swift\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("EXCLUDED_SOURCE_FILE_NAMES", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("different tracked sources", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_parses_semicolon_terminated_swift_imports()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, _, packageRoot) = CreateLocalPackageFixture(scope, "SemicolonImportRepo");
+        File.WriteAllText(
+            Path.Combine(packageRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport Foundation; import PackageDescription\n" +
+            "let seed = NSData(contentsOfFile: \"/tmp/seed\")!.base64EncodedString()\n" +
+            "let package = Package(name: \"Shared\", targets: [.target(name: \"Shared\", swiftSettings: [.define(\"SEED\", to: seed)])])");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("imports 'Foundation'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_custom_xcodebuild_executable()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("CustomXcodeBuildRepo");
+        var project = scope.CreateDirectory(Path.Combine("CustomXcodeBuildRepo", "Sample.xcodeproj"));
+        File.WriteAllText(Path.Combine(project, "project.pbxproj"), "// project");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        File.WriteAllText(
+            configPath,
+            File.ReadAllText(configPath).Replace(
+                "\"AppleApps\": {",
+                "\"AppleApps\": { \"XcodeBuildExecutable\": \"/tmp/fake-xcodebuild\","));
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("/usr/bin/xcodebuild", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("not trusted", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string ReadFixtureHead(string repositoryRoot)
     {
         var startInfo = new System.Diagnostics.ProcessStartInfo("git")

@@ -47,6 +47,14 @@ internal sealed partial class AppleReleaseSourceTrustService
         "SWIFT_ACTIVE_COMPILATION_CONDITIONS"
     };
 
+    private static readonly HashSet<string> SourceSelectionBuildSettings = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "EXCLUDED_SOURCE_FILE_NAMES",
+        "INCLUDED_SOURCE_FILE_NAMES",
+        "EXCLUDED_RECURSIVE_SEARCH_PATH_SUBDIRECTORIES",
+        "INCLUDED_RECURSIVE_SEARCH_PATH_SUBDIRECTORIES"
+    };
+
     private static readonly HashSet<string> ExecutableBuildSettings = new(StringComparer.OrdinalIgnoreCase)
     {
         "ACTOOL", "AR", "AS", "BITCODE_STRIP", "CC", "CHMOD", "CHOWN", "CODE_SIGN", "CODESIGN_ALLOCATE",

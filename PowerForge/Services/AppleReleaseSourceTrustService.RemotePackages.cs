@@ -33,7 +33,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             if (_remotePackageCheckoutResolver is not null)
             {
                 var resolvedCheckout = Path.GetFullPath(_remotePackageCheckoutResolver(repositoryUrl, revision));
-                ValidateRemotePackageCheckout(resolvedCheckout, repositoryUrl, revision, packageLockPaths);
+                ValidateRemotePackageCheckout(resolvedCheckout, repositoryUrl, revision, packageLockPaths, validateRemoteDependencies: true);
                 _validatedRemotePackages.Add(identity);
                 return;
             }
@@ -57,7 +57,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             try
             {
                 RunGit(mirrorPath, "-c", "core.hooksPath=/dev/null", "worktree", "add", "--detach", checkoutPath, revision);
-                ValidateRemotePackageCheckout(checkoutPath, repositoryUrl, revision, packageLockPaths);
+                ValidateRemotePackageCheckout(checkoutPath, repositoryUrl, revision, packageLockPaths, validateRemoteDependencies: true);
                 _validatedRemotePackages.Add(identity);
             }
             finally
@@ -80,7 +80,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         string checkoutPath,
         string repositoryUrl,
         string revision,
-        IReadOnlyCollection<string> packageLockPaths)
+        IReadOnlyCollection<string> packageLockPaths,
+        bool validateRemoteDependencies)
     {
         var head = RunGit(checkoutPath, "rev-parse", "HEAD").StdOut.Trim();
         if (!head.Equals(revision, StringComparison.OrdinalIgnoreCase))
@@ -93,11 +94,41 @@ internal sealed partial class AppleReleaseSourceTrustService
             checkoutPath,
             checkoutPath,
             locks,
-            new HashSet<string>(GetPathComparer()));
+            new HashSet<string>(GetPathComparer()),
+            validateRemoteDependencies);
         _git.EnsureClean(checkoutPath);
         var headAfter = RunGit(checkoutPath, "rev-parse", "HEAD").StdOut.Trim();
         if (!headAfter.Equals(revision, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Remote Swift package '{repositoryUrl}' changed during source inspection.");
+    }
+
+    /// <summary>
+    /// Validates the exact Swift package checkouts that Xcode will consume for an archive.
+    /// </summary>
+    internal void ValidateMaterializedPackageCheckouts(string sourcePackagesRoot)
+    {
+        var root = Path.GetFullPath(sourcePackagesRoot);
+        var checkouts = Path.Combine(root, "checkouts");
+        if (!Directory.Exists(checkouts))
+            return;
+        EnsureNoLinkedTraversal(checkouts, checkouts, "Xcode materialized Swift package checkout root");
+
+        foreach (var entry in Directory.EnumerateFileSystemEntries(checkouts).OrderBy(static path => path, GetPathComparer()))
+        {
+            if (!Directory.Exists(entry))
+                throw new InvalidOperationException($"Xcode materialized Swift package checkout root contains an unsupported entry: {entry}");
+            EnsureNoLinkedTraversal(checkouts, entry, "Xcode materialized Swift package checkout");
+            var head = RunGit(entry, "rev-parse", "HEAD").StdOut.Trim();
+            var objectFormat = ReadGitObjectFormat(entry);
+            if (!GitObjectId.IsFullForObjectFormat(head, objectFormat))
+                throw new InvalidOperationException($"Xcode materialized Swift package checkout does not have an exact Git HEAD: {entry}");
+            ValidateRemotePackageCheckout(
+                entry,
+                Path.GetFileName(entry),
+                head,
+                Array.Empty<string>(),
+                validateRemoteDependencies: false);
+        }
     }
 
     private void EnsureRemotePackageHasNoGitLinks(string checkoutPath, string repositoryUrl)
@@ -124,7 +155,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         string checkoutRoot,
         string packageRoot,
         IReadOnlyCollection<string> effectiveLockPaths,
-        ISet<string> validatedRoots)
+        ISet<string> validatedRoots,
+        bool validateRemoteDependencies)
     {
         packageRoot = Path.GetFullPath(packageRoot);
         EnsureDirectoryWithinRepository(checkoutRoot, packageRoot, "remote Swift package root");
@@ -177,7 +209,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                     if (!TryReadLiteralSwiftString(pathArgument, out var nestedPath))
                         throw new InvalidOperationException($"Remote Swift package '{packageRoot}' uses a computed local dependency path.");
                     var nestedRoot = ResolvePbxPath(packageRoot, nestedPath, "remote Swift package local dependency");
-                    ValidateCheckedOutPackageRoot(checkoutRoot, nestedRoot, locks, validatedRoots);
+                    ValidateCheckedOutPackageRoot(checkoutRoot, nestedRoot, locks, validatedRoots, validateRemoteDependencies);
                     continue;
                 }
 
@@ -189,6 +221,8 @@ internal sealed partial class AppleReleaseSourceTrustService
                 {
                     throw new InvalidOperationException($"Remote Swift package '{packageRoot}' declares an uninspectable external dependency.");
                 }
+                if (!validateRemoteDependencies)
+                    continue;
                 var dependencyRevision = string.Empty;
                 var hasRevision = dependency.Arguments.TryGetValue("revision", out var revisionArgument) &&
                                   TryReadLiteralSwiftString(revisionArgument, out dependencyRevision) &&

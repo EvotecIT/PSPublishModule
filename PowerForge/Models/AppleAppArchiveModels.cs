@@ -35,6 +35,9 @@ public sealed class AppleAppArchiveRequest
     /// <summary>xcodebuild executable name or path.</summary>
     public string XcodeBuildExecutable { get; set; } = "xcodebuild";
 
+    /// <summary>Resolve, validate, and monitor the exact Swift package checkouts consumed by this archive.</summary>
+    public bool RequireExactPackageSnapshot { get; set; }
+
     /// <summary>Allows Xcode to create or update signing assets during archive.</summary>
     public bool AllowProvisioningUpdates { get; set; } = true;
 

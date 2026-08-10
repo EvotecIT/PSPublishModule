@@ -34,6 +34,11 @@ internal sealed partial class AppleReleaseSourceTrustService
                     ValidatePreprocessorFlagPayload(definition, key);
                 continue;
             }
+            if (SourceSelectionBuildSettings.Contains(baseKey))
+            {
+                ValidateSourceSelectionBuildSetting(key, assignment.Value, source);
+                continue;
+            }
             IEnumerable<string> values;
             if (FileValuedBuildSettings.Contains(baseKey) ||
                 SearchPathBuildSettings.Contains(baseKey) ||
@@ -78,6 +83,22 @@ internal sealed partial class AppleReleaseSourceTrustService
                     throw new FileNotFoundException(
                         $"Xcode build setting {key} references a missing exact-source input: {candidate}",
                         candidate);
+            }
+        }
+    }
+
+    private static void ValidateSourceSelectionBuildSetting(string key, string value, string source)
+    {
+        foreach (var token in SplitBuildSettingPaths(value))
+        {
+            if (token.Equals("$(inherited)", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (token.Contains("$(", StringComparison.Ordinal) ||
+                token.Contains("${", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Xcode source-selection setting {key} contains an unresolved build-setting or environment reference '{token}' " +
+                    $"and can select different tracked sources on another host: {source}");
             }
         }
     }

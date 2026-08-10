@@ -9,7 +9,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class AppleAppArchiveServiceTests
+public sealed partial class AppleAppArchiveServiceTests
 {
     [Fact]
     public async Task CreateArchiveAsync_resolves_default_xcodebuild_to_system_binary_on_macOS()

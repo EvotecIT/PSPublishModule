@@ -42,6 +42,13 @@ public sealed partial class AppleAppArchiveService
             throw new FileNotFoundException("Xcode project or workspace was not found.", projectPath);
 
         var archivePath = ResolveArchivePath(request);
+        var xcodeBuildExecutable = NormalizeExecutable(request.XcodeBuildExecutable);
+        if (request.RequireExactPackageSnapshot &&
+            !xcodeBuildExecutable.Equals("/usr/bin/xcodebuild", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Exact-source Apple archives require the system Xcode build tool '/usr/bin/xcodebuild'; received '{xcodeBuildExecutable}'.");
+        }
         var destination = string.IsNullOrWhiteSpace(request.Destination)
             ? GetGenericDestination(request.Platform, request.ArchiveVariant)
             : request.Destination!.Trim();
@@ -71,15 +78,43 @@ public sealed partial class AppleAppArchiveService
             request.AllowProvisioningUpdates,
             args);
         args.Add("archive");
-        args.AddRange(request.AdditionalArguments ?? Array.Empty<string>());
+        var additionalArguments = request.AdditionalArguments ?? Array.Empty<string>();
+        args.AddRange(additionalArguments);
 
-        var result = await _processRunner.RunAsync(
-            new ProcessRunRequest(
-                NormalizeExecutable(request.XcodeBuildExecutable),
-                Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
-                args,
-                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout),
-            cancellationToken).ConfigureAwait(false);
+        AppleSwiftPackageBuildSnapshot? packageSnapshot = null;
+        ProcessRunResult result;
+        try
+        {
+            var timeout = request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout;
+            if (request.RequireExactPackageSnapshot)
+            {
+                AppleSwiftPackageBuildSnapshot.RejectConflictingArguments(additionalArguments);
+                packageSnapshot = await AppleSwiftPackageBuildSnapshot.CreateAsync(
+                        _processRunner,
+                        xcodeBuildExecutable,
+                        projectPath,
+                        request.IsWorkspace,
+                        request.Scheme.Trim(),
+                        timeout,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                packageSnapshot.AppendArchiveArguments(args);
+            }
+
+            result = await _processRunner.RunAsync(
+                new ProcessRunRequest(
+                    xcodeBuildExecutable,
+                    Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
+                    args,
+                    timeout,
+                    packageSnapshot?.EnvironmentVariables),
+                cancellationToken).ConfigureAwait(false);
+            packageSnapshot?.ValidateUnchanged();
+        }
+        finally
+        {
+            packageSnapshot?.Dispose();
+        }
 
         return new AppleAppArchiveResult
         {

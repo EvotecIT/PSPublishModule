@@ -353,7 +353,6 @@ internal sealed partial class PowerForgeReleaseService
                 IsSha256(target.DirectArtifactSha256));
         if (prior is null)
             return false;
-        EnsureExplicitAppleRecoveryAdoption(plan, app, "an accepted direct notarization submission");
 
         var artifactPath = ValidateDirectRecoveryArtifactPath(plan, app, prior.DirectArtifactPath!);
         if (!File.Exists(artifactPath) && !Directory.Exists(artifactPath))
@@ -365,6 +364,7 @@ internal sealed partial class PowerForgeReleaseService
         var completed = stapleCompleted && assessmentCompleted;
         if (completed)
         {
+            EnsureExplicitAppleRecoveryAdoption(plan, app, "an accepted direct notarization submission");
             var artifactSha256 = AppleNotarizationService.ComputeArtifactSha256(artifactPath);
             if (!string.Equals(artifactSha256, prior.DirectArtifactSha256, StringComparison.OrdinalIgnoreCase))
             {
@@ -405,6 +405,8 @@ internal sealed partial class PowerForgeReleaseService
 
         if (string.IsNullOrWhiteSpace(prior.ErrorMessage))
             return false;
+
+        EnsureExplicitAppleRecoveryAdoption(plan, app, "an accepted direct notarization submission");
 
         result.Notarization = NotarizeDirectAppleExport(
             plan,
