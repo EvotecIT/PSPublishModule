@@ -129,6 +129,81 @@ internal sealed partial class AppleReleaseSourceTrustService
         return arguments;
     }
 
+    private static string ReadFirstTopLevelSwiftArgument(string source, string syntax)
+    {
+        var parentheses = 0;
+        var brackets = 0;
+        var braces = 0;
+        for (var index = 0; index < syntax.Length; index++)
+        {
+            switch (syntax[index])
+            {
+                case '(':
+                    parentheses++;
+                    break;
+                case ')':
+                    parentheses--;
+                    break;
+                case '[':
+                    brackets++;
+                    break;
+                case ']':
+                    brackets--;
+                    break;
+                case '{':
+                    braces++;
+                    break;
+                case '}':
+                    braces--;
+                    break;
+                case ',' when parentheses == 0 && brackets == 0 && braces == 0:
+                    return source.Substring(0, index).Trim();
+            }
+        }
+        return source.Trim();
+    }
+
+    private static IReadOnlyList<string> SplitTopLevelSwiftExpressions(string source, string syntax)
+    {
+        var expressions = new List<string>();
+        var start = 0;
+        var parentheses = 0;
+        var brackets = 0;
+        var braces = 0;
+        for (var index = 0; index <= syntax.Length; index++)
+        {
+            var current = index < syntax.Length ? syntax[index] : ',';
+            switch (current)
+            {
+                case '(':
+                    parentheses++;
+                    break;
+                case ')':
+                    parentheses--;
+                    break;
+                case '[':
+                    brackets++;
+                    break;
+                case ']':
+                    brackets--;
+                    break;
+                case '{':
+                    braces++;
+                    break;
+                case '}':
+                    braces--;
+                    break;
+            }
+            if (current != ',' || parentheses != 0 || brackets != 0 || braces != 0)
+                continue;
+            var expression = source.Substring(start, index - start).Trim();
+            if (!string.IsNullOrWhiteSpace(expression))
+                expressions.Add(expression);
+            start = index + 1;
+        }
+        return expressions;
+    }
+
     private static void AddTopLevelSwiftArgument(
         IDictionary<string, string> arguments,
         string source,

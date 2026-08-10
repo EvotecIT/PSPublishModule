@@ -77,6 +77,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         ValidateLocalPackageExecutableSafety(packageRoot, manifestWithoutComments, manifestSyntax);
         ValidateDirectSwiftPackageDependencyFactories(packageRoot, manifestSyntax);
         ValidatePackageDescriptionCalls(packageRoot, manifestSyntax);
+        ValidateSwiftPackageResources(repositoryRoot, packageRoot, manifestWithoutComments, manifestSyntax);
         var dependencyCalls = ParseDirectSwiftPackageDependencyCalls(manifestWithoutComments, manifestSyntax);
         ValidateRemotePackageDependencies(repositoryRoot, packageRoot, packageLockPaths, dependencyCalls);
         ValidateNestedLocalPackageDependencies(
@@ -284,6 +285,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             "pluginPermission", "define", "linkedLibrary", "linkedFramework", "headerSearchPath",
             "unsafeFlags", "when", "exact", "revision", "branch", "upToNextMajor", "upToNextMinor",
             "range", "Dependency", "Product", "Target", "SupportedPlatform", "SystemPackageProvider", "LanguageTag", "BuildSettingCondition",
+            "process", "copy",
             "iOS", "macOS", "macCatalyst", "watchOS", "tvOS", "visionOS", "driverKit",
             "apt", "brew", "yum"
         };
@@ -416,6 +418,103 @@ internal sealed partial class AppleReleaseSourceTrustService
                 EnsureTrackedDirectoryTree(repositoryRoot, explicitPath, "Swift package manifest input");
             else
                 throw new FileNotFoundException($"Swift package manifest input was not found: {explicitPath}", explicitPath);
+        }
+    }
+
+    private void ValidateSwiftPackageResources(
+        string repositoryRoot,
+        string packageRoot,
+        string manifest,
+        string manifestSyntax)
+    {
+        foreach (Match target in Regex.Matches(
+                     manifestSyntax,
+                     "\\.\\s*(?<factory>target|executableTarget|testTarget|`target`|`executableTarget`|`testTarget`)\\s*\\(",
+                     RegexOptions.CultureInvariant))
+        {
+            var opening = target.Index + target.Length - 1;
+            var closing = FindMatchingSwiftDelimiter(manifestSyntax, opening, '(', ')');
+            var argumentSource = manifest.Substring(opening + 1, closing - opening - 1);
+            var argumentSyntax = manifestSyntax.Substring(opening + 1, closing - opening - 1);
+            var arguments = ParseTopLevelSwiftArguments(argumentSource, argumentSyntax);
+            if (!arguments.TryGetValue("resources", out var resources))
+                continue;
+            if (!arguments.TryGetValue("name", out var nameArgument) ||
+                !TryReadLiteralSwiftString(nameArgument, out var targetName))
+            {
+                throw new InvalidOperationException(
+                    $"Local Swift package '{packageRoot}' declares resources for a target without a literal name, so their selected paths cannot be proven.");
+            }
+
+            var factory = target.Groups["factory"].Value.Trim('`');
+            var relativeTargetRoot = factory.Equals("testTarget", StringComparison.Ordinal)
+                ? Path.Combine("Tests", targetName)
+                : Path.Combine("Sources", targetName);
+            if (arguments.TryGetValue("path", out var pathArgument))
+            {
+                if (!TryReadLiteralSwiftString(pathArgument, out relativeTargetRoot))
+                {
+                    throw new InvalidOperationException(
+                        $"Local Swift package '{packageRoot}' uses a computed target path for resources, which cannot be bound to exact source.");
+                }
+            }
+            var targetRoot = Path.GetFullPath(Path.Combine(packageRoot, relativeTargetRoot));
+            if (!IsPathAtOrWithin(targetRoot, packageRoot))
+                throw new InvalidOperationException($"Swift package resource target path escapes the tracked package root: {targetRoot}");
+
+            var resourceSyntax = MaskSwiftStringLiterals(resources);
+            var first = 0;
+            while (first < resourceSyntax.Length && char.IsWhiteSpace(resourceSyntax[first]))
+                first++;
+            var last = resourceSyntax.Length - 1;
+            while (last >= first && char.IsWhiteSpace(resourceSyntax[last]))
+                last--;
+            if (first > last || resourceSyntax[first] != '[' || resourceSyntax[last] != ']')
+            {
+                throw new InvalidOperationException(
+                    $"Local Swift package '{packageRoot}' uses an indirect resource declaration, whose selected paths cannot be bound to exact source.");
+            }
+            var resourceSourceBody = resources.Substring(first + 1, last - first - 1);
+            var resourceSyntaxBody = resourceSyntax.Substring(first + 1, last - first - 1);
+            foreach (var resourceExpression in SplitTopLevelSwiftExpressions(resourceSourceBody, resourceSyntaxBody))
+            {
+                var resourceExpressionSyntax = MaskSwiftStringLiterals(resourceExpression);
+                var resource = Regex.Match(
+                    resourceExpressionSyntax,
+                    "^\\s*\\.\\s*(?<factory>process|copy|`process`|`copy`)\\s*\\(",
+                    RegexOptions.CultureInvariant);
+                if (!resource.Success)
+                {
+                    throw new InvalidOperationException(
+                        $"Local Swift package '{packageRoot}' uses an indirect resource declaration, whose selected paths cannot be bound to exact source.");
+                }
+                var resourceOpening = resource.Index + resource.Length - 1;
+                var resourceClosing = FindMatchingSwiftDelimiter(resourceExpressionSyntax, resourceOpening, '(', ')');
+                if (!string.IsNullOrWhiteSpace(resourceExpressionSyntax.Substring(resourceClosing + 1)))
+                {
+                    throw new InvalidOperationException(
+                        $"Local Swift package '{packageRoot}' composes a resource declaration with executable syntax, which cannot be bound to exact source.");
+                }
+                var resourceArguments = resourceExpression.Substring(resourceOpening + 1, resourceClosing - resourceOpening - 1);
+                var resourceArgumentSyntax = resourceExpressionSyntax.Substring(resourceOpening + 1, resourceClosing - resourceOpening - 1);
+                var resourcePathArgument = ReadFirstTopLevelSwiftArgument(resourceArguments, resourceArgumentSyntax);
+                if (!TryReadLiteralSwiftString(resourcePathArgument, out var resourcePath))
+                {
+                    throw new InvalidOperationException(
+                        $"Local Swift package '{packageRoot}' uses a computed resource path, which cannot be bound to exact source.");
+                }
+
+                var candidate = Path.GetFullPath(Path.Combine(targetRoot, resourcePath));
+                if (!IsPathAtOrWithin(candidate, packageRoot))
+                    throw new InvalidOperationException($"Swift package resource path escapes the tracked package root: {candidate}");
+                EnsurePathWithinRepository(repositoryRoot, candidate, "Swift package resource input");
+                if (File.Exists(candidate))
+                    EnsureTrackedFile(repositoryRoot, candidate, "Swift package resource input");
+                else if (Directory.Exists(candidate))
+                    EnsureTrackedDirectoryTree(repositoryRoot, candidate, "Swift package resource input");
+                else
+                    throw new FileNotFoundException($"Swift package resource input was not found: {candidate}", candidate);
+            }
         }
     }
 }

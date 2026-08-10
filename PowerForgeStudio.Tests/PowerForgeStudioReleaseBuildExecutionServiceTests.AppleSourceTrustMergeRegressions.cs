@@ -602,6 +602,131 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         Assert.Contains("Injected", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_external_inline_assembler_file_input()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("InlineAssemblerInputRepo");
+        var project = scope.CreateDirectory(Path.Combine("InlineAssemblerInputRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = Source.m; sourceTree = \"<group>\"; };");
+        File.WriteAllText(
+            Path.Combine(repositoryRoot, "Source.m"),
+            "void load(void) { __asm__(\".incbin \\\"/tmp/payload.bin\\\"\"); }\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("inline", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("absolute .incbin", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_computed_inline_assembler_text()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ComputedInlineAssemblerRepo");
+        var project = scope.CreateDirectory(Path.Combine("ComputedInlineAssemblerRepo", "Sample.xcodeproj"));
+        File.WriteAllText(
+            Path.Combine(project, "project.pbxproj"),
+            "000000000000000000000001 = { isa = PBXBuildFile; fileRef = 000000000000000000000002; }; " +
+            "000000000000000000000002 = { isa = PBXFileReference; path = Source.c; sourceTree = \"<group>\"; };");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Source.c"), "void load(const char *text) { asm(text); }\n");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("computed inline assembler", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("-fprofile-list=Rules")]
+    [InlineData("-fprofile-list Rules")]
+    [InlineData("-fprofile-remapping-file=Mappings")]
+    [InlineData("-fprofile-remapping-file Mappings")]
+    public void ResolveExactAppleSourceCommit_classifies_profile_configuration_files(string option)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, configPath) = CreateXcconfigFixture(
+            scope,
+            "ProfileInputRepo" + option.Length,
+            $"OTHER_CFLAGS = {option}\n");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("process")]
+    [InlineData("copy")]
+    public void ResolveExactAppleSourceCommit_accepts_tracked_swift_package_resources(string factory)
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, _, packageRoot) = CreateLocalPackageFixture(
+            scope,
+            "TrackedSwiftResourceRepo" + factory);
+        var resources = Directory.CreateDirectory(Path.Combine(packageRoot, "Sources", "Shared", "Resources"));
+        File.WriteAllText(Path.Combine(resources.FullName, "message.txt"), "approved");
+        File.WriteAllText(
+            Path.Combine(packageRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\n" +
+            $"let package = Package(name: \"Shared\", targets: [.target(name: \"Shared\", resources: [.{factory}(\"Resources\")])])");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var commit = ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath);
+
+        Assert.NotEmpty(commit);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_missing_swift_package_resource()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, _, packageRoot) = CreateLocalPackageFixture(scope, "MissingSwiftResourceRepo");
+        File.WriteAllText(
+            Path.Combine(packageRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\n" +
+            "let package = Package(name: \"Shared\", targets: [.target(name: \"Shared\", resources: [.process(\"Resources\")])])");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("resource input was not found", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveExactAppleSourceCommit_rejects_indirect_swift_package_resources()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var (repositoryRoot, _, packageRoot) = CreateLocalPackageFixture(scope, "IndirectSwiftResourceRepo");
+        var resources = Directory.CreateDirectory(Path.Combine(packageRoot, "Sources", "Shared", "Resources"));
+        File.WriteAllText(Path.Combine(resources.FullName, "message.txt"), "approved");
+        File.WriteAllText(
+            Path.Combine(packageRoot, "Package.swift"),
+            "// swift-tools-version: 6.0\nimport PackageDescription\n" +
+            "let assets: [Resource] = [.process(\"Resources\")]\n" +
+            "let package = Package(name: \"Shared\", targets: [.target(name: \"Shared\", resources: assets)])");
+        var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
+        CommitRepository(repositoryRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
+
+        Assert.Contains("indirect resource declaration", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void WriteTrackedPackageResolutionLock(string repositoryRoot, string url, string revision)
     {
         var project = Directory.EnumerateDirectories(repositoryRoot, "*.xcodeproj", SearchOption.AllDirectories).Single();

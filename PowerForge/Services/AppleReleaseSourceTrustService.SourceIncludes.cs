@@ -109,6 +109,9 @@ internal sealed partial class AppleReleaseSourceTrustService
             EnsureTrackedFile(repositoryRoot, candidate, $"preprocessor include from {fullSourcePath}");
         }
 
+        if (IsCInlineAssemblySource(extension))
+            ValidateInlineAssemblerInputs(repositoryRoot, fullSourcePath, source);
+
         if (extension.Equals(".s", StringComparison.OrdinalIgnoreCase))
             ValidateAssemblerInputs(repositoryRoot, fullSourcePath, source);
     }
@@ -195,6 +198,12 @@ internal sealed partial class AppleReleaseSourceTrustService
         var fullSourcePath = Path.GetFullPath(sourcePath);
         if (!_validatedAssemblerInputFiles.Add(fullSourcePath))
             return;
+
+        ValidateAssemblerDirectives(repositoryRoot, fullSourcePath, source);
+    }
+
+    private void ValidateAssemblerDirectives(string repositoryRoot, string sourcePath, string source)
+    {
 
         foreach (Match directive in Regex.Matches(
                      source,
