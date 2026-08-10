@@ -137,6 +137,28 @@ public static partial class WebSearchProviderDoctor
                 siteId,
                 providerId);
         }
+
+        if (siteUri is not null && siteUri.AbsolutePath.Contains("//", StringComparison.Ordinal))
+        {
+            AddCheck(
+                checks,
+                "provider.cloudflare-site-path-invalid",
+                WebSearchProviderCheckSeverity.Error,
+                "Cloudflare traffic collection does not support repeated path separators in the owning site baseUrl.",
+                siteId,
+                providerId);
+        }
+
+        if (siteUri is not null && siteUri.AbsolutePath.IndexOfAny(['%', '_']) >= 0)
+        {
+            AddCheck(
+                checks,
+                "provider.cloudflare-site-path-filter-unsupported",
+                WebSearchProviderCheckSeverity.Error,
+                "Cloudflare traffic collection cannot safely scope a site baseUrl whose path contains analytics wildcard metacharacters.",
+                siteId,
+                providerId);
+        }
     }
 
     private static bool DomainPropertyCoversSite(string domain, Uri siteUri)

@@ -480,10 +480,11 @@ public sealed class CloudflareAnalyticsCollector
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
             !uri.IsDefaultPort ||
             !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment) ||
-            uri.AbsolutePath.Contains("//", StringComparison.Ordinal))
+            uri.AbsolutePath.Contains("//", StringComparison.Ordinal) ||
+            uri.AbsolutePath.IndexOfAny(['%', '_']) >= 0)
         {
             throw new ArgumentException(
-                "Cloudflare site base URL must be absolute HTTP(S) on its default port without user info, query, fragment, or repeated path separators.",
+                "Cloudflare site base URL must be absolute HTTP(S) on its default port without user info, query, fragment, repeated path separators, or analytics wildcard metacharacters.",
                 nameof(siteBaseUrl));
         }
 

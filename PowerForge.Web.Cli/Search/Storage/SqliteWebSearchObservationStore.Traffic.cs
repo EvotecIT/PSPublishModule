@@ -170,6 +170,7 @@ internal sealed partial class SqliteWebSearchObservationStore
             .GroupBy(value => (value.Batch.Provider, value.Batch.SiteId, value.Date))
             .Select(group => group
                 .OrderBy(value => value.IsComplete ? 0 : 1)
+                .ThenBy(value => value.HasUsableObservations ? 0 : 1)
                 .ThenByDescending(value => value.Batch.CollectedAtUtc)
                 .ThenByDescending(value => value.Batch.RunId, StringComparer.Ordinal)
                 .First())
@@ -269,9 +270,11 @@ internal sealed partial class SqliteWebSearchObservationStore
     private static IEnumerable<SelectedTrafficDate> EvidencePartitions(WebTrafficObservationBatch batch)
     {
         foreach (var date in batch.CollectionCoverage.CompletedDates.Distinct())
-            yield return new SelectedTrafficDate(batch, date, true);
+            yield return new SelectedTrafficDate(batch, date, true,
+                batch.Observations.Any(observation => observation.Date == date));
         if (batch.CollectionCoverage.FailedDate is DateOnly failedDate)
-            yield return new SelectedTrafficDate(batch, failedDate, false);
+            yield return new SelectedTrafficDate(batch, failedDate, false,
+                batch.Observations.Any(observation => observation.Date == failedDate));
     }
 
     private static Dictionary<string, object?> TrafficRunParameters(WebTrafficObservationBatch batch, string manifest) => new()
@@ -320,6 +323,10 @@ internal sealed partial class SqliteWebSearchObservationStore
             EvidenceReference = GetNullableString(record, 11)
         });
 
-    private sealed record SelectedTrafficDate(WebTrafficObservationBatch Batch, DateOnly Date, bool IsComplete);
+    private sealed record SelectedTrafficDate(
+        WebTrafficObservationBatch Batch,
+        DateOnly Date,
+        bool IsComplete,
+        bool HasUsableObservations);
     private sealed record StoredTrafficObservation(string RunId, WebTrafficObservation Observation);
 }

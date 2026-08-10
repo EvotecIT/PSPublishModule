@@ -575,6 +575,49 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
     }
 
     [Fact]
+    public async Task TrafficReports_PreferInformativePartialEvidenceOverNewerEmptyFailures()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-cloudflare-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var store = new SqliteWebSearchObservationStore(Path.Combine(root, "fleet.db"));
+            var informative = CreateTrafficBatch();
+            informative.Status = "partial";
+            informative.CollectionCoverage.CompletedDates = Array.Empty<DateOnly>();
+            informative.CollectionCoverage.FailedDate = new DateOnly(2026, 8, 1);
+            informative.CollectionCoverage.FailureCategory = "row-limit-reached";
+            var normalizedInformative = WebTrafficObservationNormalizer.Normalize(informative);
+            await store.ImportTrafficAsync(normalizedInformative);
+
+            var emptyFailure = CreateTrafficBatch();
+            emptyFailure.CollectedAtUtc = CompletionTime.AddMinutes(1);
+            emptyFailure.Status = "partial";
+            emptyFailure.CollectionCoverage.CompletedDates = Array.Empty<DateOnly>();
+            emptyFailure.CollectionCoverage.FailedDate = new DateOnly(2026, 8, 1);
+            emptyFailure.CollectionCoverage.FailureCategory = "provider-unavailable";
+            emptyFailure.Observations = Array.Empty<WebTrafficObservation>();
+            await store.ImportTrafficAsync(WebTrafficObservationNormalizer.Normalize(emptyFailure));
+
+            var result = await store.QueryTrafficEvidenceAsync(new WebTrafficObservationQuery
+            {
+                SiteId = "officeimo",
+                Provider = "cloudflare",
+                FromDate = new DateOnly(2026, 8, 1),
+                ThroughDate = new DateOnly(2026, 8, 1)
+            });
+
+            Assert.Equal(normalizedInformative.RunId, Assert.Single(result.SelectedRuns).RunId);
+            Assert.Equal(100, Assert.Single(result.Observations).Requests);
+            Assert.True(result.HasPartialEvidence);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task TrafficReports_PreserveZeroEvidenceForACompletedPartitionInsideAPartialRun()
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-cloudflare-tests", Guid.NewGuid().ToString("N"));

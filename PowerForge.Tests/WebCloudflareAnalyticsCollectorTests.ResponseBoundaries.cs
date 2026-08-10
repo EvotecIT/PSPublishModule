@@ -115,6 +115,21 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         Assert.Contains("repeated path separators", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("https://officeimo.com/docs%20archive/")]
+    [InlineData("https://officeimo.com/docs_archive/")]
+    public async Task Collect_RejectsPathsWithAnalyticsWildcardMetacharacters(string siteBaseUrl)
+    {
+        using var client = new HttpClient(new ScriptedHandler((_, _) =>
+            throw new InvalidOperationException("Invalid site paths must fail before HTTP.")));
+        var options = CreateOptions();
+        options.SiteBaseUrl = siteBaseUrl;
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => CreateCollector(client).CollectAsync(options));
+
+        Assert.Contains("wildcard metacharacters", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task TrafficStorage_BoundedQueryDoesNotMaterializeOutOfRangeRunManifests()
     {
