@@ -114,6 +114,8 @@ public sealed class CruxCollector
 
     private static object CreateRequestBody(CruxCollectionOptions options)
     {
+        var targetKind = options.TargetKind.Trim().ToLowerInvariant();
+        var canonicalTarget = WebPerformanceObservationNormalizer.CanonicalizeTarget(options.TargetUrl, targetKind);
         var formFactor = options.FormFactor.Trim().ToLowerInvariant() switch
         {
             "all" => null,
@@ -124,7 +126,7 @@ public sealed class CruxCollector
         };
         var body = new Dictionary<string, object?>
         {
-            [options.TargetKind.Trim().Equals("origin", StringComparison.OrdinalIgnoreCase) ? "origin" : "url"] = options.TargetUrl,
+            [targetKind == "origin" ? "origin" : "url"] = canonicalTarget,
             ["metrics"] = RequestedMetrics
         };
         if (formFactor is not null)
@@ -263,6 +265,7 @@ public sealed class CruxCollector
     {
         HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => "authentication-failed",
         HttpStatusCode.TooManyRequests => "rate-limited",
+        HttpStatusCode.RequestTimeout => "provider-unavailable",
         _ when (int)statusCode >= 500 => "provider-unavailable",
         _ => "request-rejected"
     };

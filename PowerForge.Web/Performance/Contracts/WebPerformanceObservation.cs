@@ -80,6 +80,8 @@ public sealed class WebPerformanceObservationBatch
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class WebPerformanceObservation
 {
+    private WebPerformanceHistogramBin[]? _histogram = Array.Empty<WebPerformanceHistogramBin>();
+
     /// <summary>Deterministic identity assigned during normalization.</summary>
     [JsonPropertyName("observationKey")]
     public string ObservationKey { get; set; } = string.Empty;
@@ -110,7 +112,19 @@ public sealed class WebPerformanceObservation
 
     /// <summary>Optional provider histogram bins retained for field evidence.</summary>
     [JsonPropertyName("histogram")]
-    public WebPerformanceHistogramBin[] Histogram { get; set; } = Array.Empty<WebPerformanceHistogramBin>();
+    public WebPerformanceHistogramBin[] Histogram
+    {
+        get => _histogram!;
+        set
+        {
+            HistogramSpecified = true;
+            _histogram = value;
+        }
+    }
+
+    /// <summary>Whether histogram was explicitly supplied, including an explicit null JSON value.</summary>
+    [JsonIgnore]
+    internal bool HistogramSpecified { get; private set; }
 }
 
 /// <summary>One provider histogram bin.</summary>

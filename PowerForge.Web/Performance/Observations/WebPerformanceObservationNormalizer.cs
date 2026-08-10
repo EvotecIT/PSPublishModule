@@ -143,7 +143,9 @@ public static class WebPerformanceObservationNormalizer
         if (!double.IsFinite(value.Value) || value.Value < 0 || metric == "performance-score" && value.Value > 1)
             throw new ArgumentException($"Metric '{metric}' requires a finite value in its valid range.", nameof(value));
 
-        var histogram = (value.Histogram ?? Array.Empty<WebPerformanceHistogramBin>())
+        if (value.HistogramSpecified && value.Histogram is null)
+            throw new ArgumentException("Performance observation histogram must be an array when supplied.", nameof(value));
+        var histogram = value.Histogram
             .Select((bin, binIndex) => NormalizeBin(bin, metric, binIndex))
             .ToArray();
         if (measurementKind == "lab")
